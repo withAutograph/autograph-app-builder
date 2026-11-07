@@ -43,9 +43,9 @@ export default defineTool({
         : legacyCommand;
     const sandbox = withCandidateCommandEnvironment(await getSourceBoundSandbox(ctx));
     await attachCheckoutDependencyView({
-      sandbox,
-      checkoutRoot: `${candidate.workspaceRoot}/repository`,
       candidateRoot: candidate.root,
+      checkoutRoot: `${candidate.workspaceRoot}/repository`,
+      sandbox,
       workspaceRoot: candidate.workspaceRoot,
     });
     const before = await inspectDraftReconciliation({ prepared: candidate, sandbox });

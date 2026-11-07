@@ -6,6 +6,12 @@ import path from "node:path";
 import { BUILD_READY_APP_SPEC } from "./support/app-spec";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
 
+const QUALITY_CHECKS = "quality checks";
+const PASSED_LOCAL_QUALITY_CHECKS = `passed its local ${QUALITY_CHECKS}`;
+const READY_FOR_REVIEW = "ready for review";
+const CHANGES_READY_FOR_REVIEW = `completed app changes are ${READY_FOR_REVIEW}`;
+const INPUT_REQUESTED_EVENT = "input.requested";
+
 export default defineEval({
   description:
     "Internal product-plan validation and fixed read-only planning are automatic while target mutation remains approval-bound.",
@@ -47,8 +53,7 @@ export default defineEval({
       turn5.message,
       satisfies(
         (reply) =>
-          typeof reply === "string" &&
-          !/target identity|canonical proposal|digest-bound|target mutation/iu.test(reply),
+          !/target identity|canonical proposal|digest-bound|target mutation/iu.test(String(reply)),
         "planning result stays product-facing",
       ),
     );
@@ -80,36 +85,36 @@ export default defineEval({
     const turn9 = await session.respondAll("approve");
     t.succeeded();
     t.check(turn9.message, includes("private preview"));
-    t.check(turn9.message, includes("quality checks"));
+    t.check(turn9.message, includes(QUALITY_CHECKS));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
     const retryApply = await session.send("Retry target apply after a lost response.");
 
     t.succeeded();
-    retryApply.notEvent("input.requested");
+    retryApply.notEvent(INPUT_REQUESTED_EVENT);
     retryApply.calledTool("apply_app_creation", { count: 1 });
     t.check(retryApply.message, includes("prepared app is unchanged"));
 
     const validation = await session.send("Validate the applied creation.");
 
     t.succeeded();
-    validation.notEvent("input.requested");
-    t.check(validation.message, includes("quality checks"));
-    t.check(validation.message, includes("ready for review"));
+    validation.notEvent(INPUT_REQUESTED_EVENT);
+    t.check(validation.message, includes(QUALITY_CHECKS));
+    t.check(validation.message, includes(READY_FOR_REVIEW));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
     const retryValidation = await session.send("Retry target validation after a lost response.");
 
     t.succeeded();
-    retryValidation.notEvent("input.requested");
-    t.check(retryValidation.message, includes("passed its local quality checks"));
-    t.check(retryValidation.message, includes("ready for review"));
+    retryValidation.notEvent(INPUT_REQUESTED_EVENT);
+    t.check(retryValidation.message, includes(PASSED_LOCAL_QUALITY_CHECKS));
+    t.check(retryValidation.message, includes(READY_FOR_REVIEW));
     retryValidation.calledTool("validate_app_creation", {
       count: 1,
       output: {
-        commandCount: (value) => typeof value === "number" && value > 0,
+        commandCount: (value) => Number(value) > 0,
         reused: false,
         technicalStatus: "passed",
       },
@@ -118,15 +123,15 @@ export default defineEval({
     const turn10 = await session.send("Inspect the validated change set.");
     t.succeeded();
     t.calledTool("change_set_status", { count: 1 });
-    t.check(turn10.message, includes("completed app changes are ready for review"));
+    t.check(turn10.message, includes(CHANGES_READY_FOR_REVIEW));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
     const review = await session.send("Accept the displayed change set.");
 
     t.succeeded();
-    review.notEvent("input.requested");
-    t.check(review.message, includes("completed app changes are ready for review"));
+    review.notEvent(INPUT_REQUESTED_EVENT);
+    t.check(review.message, includes(CHANGES_READY_FOR_REVIEW));
     t.check(review.message, includes("draft pull request"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
@@ -134,7 +139,7 @@ export default defineEval({
     const retryReview = await session.send("Retry change-set acceptance after a lost response.");
 
     t.succeeded();
-    retryReview.notEvent("input.requested");
+    retryReview.notEvent(INPUT_REQUESTED_EVENT);
     t.check(retryReview.message, includes("same completed app changes remain ready"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
@@ -185,10 +190,7 @@ export default defineEval({
     t.check(
       turn16.message,
       satisfies(
-        (reply) =>
-          typeof reply === "string" &&
-          reply.includes('"review"') &&
-          reply.includes('"publication"'),
+        (reply) => String(reply).includes('"review"') && String(reply).includes('"publication"'),
         "published workflow retains exact review and publication receipts",
       ),
     );

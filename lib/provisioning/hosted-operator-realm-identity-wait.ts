@@ -64,10 +64,10 @@ const stateFor = (
   now: number,
 ): HostedRuntimeIdentityWaitState =>
   observation === undefined
-    ? { status: "waiting", checkAfter: new Date(now + 5000).toISOString() }
+    ? { checkAfter: new Date(now + 5000).toISOString(), status: "waiting" }
     : {
-        status: observation.reason.kind === "consumed-proof" ? "consumed" : "expired",
         eventId: realmContinuationDispatchId(observation),
+        status: observation.reason.kind === "consumed-proof" ? "consumed" : "expired",
       };
 
 /** An authored Workflow wait is tied to the existing approved invocation, never a human reply. */
@@ -132,11 +132,97 @@ export const createHostedOperatorRealmIdentityWait = (ports: {
   const decrypt = (context: HostedOperatorContext, wait: Wait) =>
     decryptVersionedVercelToken({
       ...wait.hook,
-      config: ports.config,
       associatedData: hookAad(context, wait),
+      config: ports.config,
     });
 
   return {
+    async acknowledge(
+      context: HostedOperatorContext,
+      invocation: HostedRuntimeIdentityWaitInvocation & { eventId: string },
+    ) {
+      const { current, observation } = await read(context);
+      const link = assertInvocation(context, current.record, invocation);
+      const state = stateFor(observation, now());
+      const wait = current.record.realmIdentityWait;
+      if (state.status === "waiting" || wait === undefined) {
+        throw denial();
+      }
+      if (
+        ![
+          state.eventId === invocation.eventId,
+          wait.callId === invocation.callId,
+          wait.nonceSha256 === link.nonceSha256,
+          wait.adapterSessionId === invocation.adapterSessionId,
+        ].every(Boolean)
+      ) {
+        throw denial();
+      }
+      await updateHostedRuntimeJournal({
+        ...context,
+        now,
+        store: ports.store,
+        update: (record) => {
+          const currentLink = assertInvocation(context, record, invocation);
+          if (currentLink.nonceSha256 !== wait.nonceSha256) {
+            throw denial();
+          }
+          if (observation === undefined) {
+            throw denial();
+          }
+          const currentObservation = observeRealmContinuationRecord({
+            context,
+            initiator: observation.initiator,
+            now: now(),
+            record,
+          });
+          if (
+            currentObservation === undefined ||
+            realmContinuationDispatchId(currentObservation) !== state.eventId
+          ) {
+            throw denial();
+          }
+          if (JSON.stringify(record.realmIdentityWait) !== JSON.stringify(wait)) {
+            throw denial();
+          }
+          return {
+            ...record,
+            realmIdentityWait: {
+              ...wait,
+              eventId: state.eventId,
+              observedAt: wait.observedAt ?? new Date(now()).toISOString(),
+            },
+          };
+        },
+      });
+      return state;
+    },
+    async delivery(
+      context: HostedOperatorContext,
+    ): Promise<{ token: string; eventId: string; observed: boolean } | undefined> {
+      const { current, observation } = await read(context);
+      const wait = current.record.realmIdentityWait;
+      if (wait === undefined || observation === undefined) {
+        return undefined;
+      }
+      if (
+        ![
+          wait.adapterSessionId === observation.adapterSessionId,
+          wait.operationRef === observation.operationRef,
+          wait.approvedPlanDigest === observation.approvedPlanDigest,
+          wait.nonceSha256 === observation.nonceSha256,
+        ].every(Boolean)
+      ) {
+        return undefined;
+      }
+      return {
+        eventId: realmContinuationDispatchId(observation),
+        observed:
+          wait.eventId === realmContinuationDispatchId(observation) &&
+          wait.observedAt !== undefined,
+        token: decrypt(context, wait),
+      };
+    },
     async register(
       context: HostedOperatorContext,
       invocation: HostedRuntimeIdentityWaitRegistration,
@@ -198,92 +284,6 @@ export const createHostedOperatorRealmIdentityWait = (ports: {
         throw new HostedOperatorError("operation_in_progress");
       }
       return stateFor(await ports.observe(context), now());
-    },
-    async acknowledge(
-      context: HostedOperatorContext,
-      invocation: HostedRuntimeIdentityWaitInvocation & { eventId: string },
-    ) {
-      const { current, observation } = await read(context);
-      const link = assertInvocation(context, current.record, invocation);
-      const state = stateFor(observation, now());
-      const wait = current.record.realmIdentityWait;
-      if (state.status === "waiting" || wait === undefined) {
-        throw denial();
-      }
-      if (
-        ![
-          state.eventId === invocation.eventId,
-          wait.callId === invocation.callId,
-          wait.nonceSha256 === link.nonceSha256,
-          wait.adapterSessionId === invocation.adapterSessionId,
-        ].every(Boolean)
-      ) {
-        throw denial();
-      }
-      await updateHostedRuntimeJournal({
-        ...context,
-        now,
-        store: ports.store,
-        update: (record) => {
-          const currentLink = assertInvocation(context, record, invocation);
-          if (currentLink.nonceSha256 !== wait.nonceSha256) {
-            throw denial();
-          }
-          if (observation === undefined) {
-            throw denial();
-          }
-          const currentObservation = observeRealmContinuationRecord({
-            context,
-            record,
-            initiator: observation.initiator,
-            now: now(),
-          });
-          if (
-            currentObservation === undefined ||
-            realmContinuationDispatchId(currentObservation) !== state.eventId
-          ) {
-            throw denial();
-          }
-          if (JSON.stringify(record.realmIdentityWait) !== JSON.stringify(wait)) {
-            throw denial();
-          }
-          return {
-            ...record,
-            realmIdentityWait: {
-              ...wait,
-              eventId: state.eventId,
-              observedAt: wait.observedAt ?? new Date(now()).toISOString(),
-            },
-          };
-        },
-      });
-      return state;
-    },
-    async delivery(
-      context: HostedOperatorContext,
-    ): Promise<{ token: string; eventId: string; observed: boolean } | undefined> {
-      const { current, observation } = await read(context);
-      const wait = current.record.realmIdentityWait;
-      if (wait === undefined || observation === undefined) {
-        return undefined;
-      }
-      if (
-        ![
-          wait.adapterSessionId === observation.adapterSessionId,
-          wait.operationRef === observation.operationRef,
-          wait.approvedPlanDigest === observation.approvedPlanDigest,
-          wait.nonceSha256 === observation.nonceSha256,
-        ].every(Boolean)
-      ) {
-        return undefined;
-      }
-      return {
-        token: decrypt(context, wait),
-        eventId: realmContinuationDispatchId(observation),
-        observed:
-          wait.eventId === realmContinuationDispatchId(observation) &&
-          wait.observedAt !== undefined,
-      };
     },
   };
 };

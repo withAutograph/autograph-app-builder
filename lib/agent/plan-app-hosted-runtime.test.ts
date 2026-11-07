@@ -9,8 +9,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./workflow-state", () => ({
   appBuilderWorkflowState: {
     get: () => ({
-      phase: "prepared",
       githubSource: { digest: "selected-source" },
+      phase: "prepared",
       sourceReceipt: { sourceKind: "existing-repository" },
       workspace: { workspacePath: "/workspace/repository" },
     }),
@@ -21,24 +21,24 @@ vi.mock("./acceptance-runtime-root", () => ({
 }));
 vi.mock("../provisioning/hosted-operator-client", () => ({
   hostedOperatorClientForSession: () => ({
-    resolvePreviewTarget: mocks.select,
     planContinuity: mocks.plan,
+    resolvePreviewTarget: mocks.select,
   }),
 }));
 
 describe("hosted continuity planning", () => {
   it("uses the verified target and selected checkout when the existing app has no app-spec marker", async () => {
-    const target = { appId: "inventory", projectId: "selected-project", branch: "feature" };
-    const planned = { status: "planned", plan: { intentId: "continuity" } };
+    const target = { appId: "inventory", branch: "feature", projectId: "selected-project" };
+    const planned = { plan: { intentId: "continuity" }, status: "planned" };
     mocks.select.mockResolvedValue(target);
     mocks.plan.mockResolvedValue(planned);
-    const signal = new AbortController().signal;
+    const { signal } = new AbortController();
     const context = {
       abortSignal: signal,
       callId: "continuity-call",
       getSandbox: vi.fn().mockResolvedValue({
         id: "selected-sandbox",
-        readTextFile: () => Promise.resolve(null),
+        readTextFile: vi.fn().mockResolvedValue(null),
       }),
       getToken: vi.fn(),
       requireAuth: (): never => {
@@ -59,7 +59,7 @@ describe("hosted continuity planning", () => {
     await expect(planAppHostedRuntime.execute(input, context)).resolves.toEqual(planned);
     expect(mocks.plan).toHaveBeenCalledWith(
       target,
-      { sandboxId: "selected-sandbox", root: "/workspace/repository" },
+      { root: "/workspace/repository", sandboxId: "selected-sandbox" },
       "continuity-call",
       signal,
       undefined,

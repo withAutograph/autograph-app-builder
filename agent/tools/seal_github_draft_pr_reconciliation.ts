@@ -53,14 +53,15 @@ export default defineTool({
       state.reviewReceipt.digest !== candidate.originalReviewDigest ||
       candidate.review.digest !== input.expectedReviewDigest
     ) {
+      const diagnosticInput: Parameters<typeof draftSealPrerequisiteDiagnostic>[0] = {
+        candidate,
+        expectedReviewDigest: input.expectedReviewDigest,
+        state,
+      };
+      if (githubSource !== undefined) diagnosticInput.resolvedSourceDigest = githubSource.digest;
       throw new Error(
         draftPrerequisiteMessage(
-          draftSealPrerequisiteDiagnostic({
-            candidate,
-            state,
-            expectedReviewDigest: input.expectedReviewDigest,
-            ...(githubSource === undefined ? {} : { resolvedSourceDigest: githubSource.digest }),
-          }),
+          draftSealPrerequisiteDiagnostic(diagnosticInput),
           "The selected app or resolved merge changed. Validate the candidate and review both current diffs before sealing.",
         ),
       );
@@ -95,17 +96,17 @@ export default defineTool({
     const request = {
       githubSource,
       pullRequestNumber: candidate.pullRequestNumber,
+      recovery: draftInspectionRecoveryForSession({
+        appId: state.appSpec.appId,
+        appSpecDigest: state.appSpec.digest,
+        ctx,
+        priorPublishedProposalDigest,
+        pullRequestNumber: candidate.pullRequestNumber,
+        root: candidate.root,
+      }),
       review: candidate.review,
       selectedCheckoutHeadSha: candidate.headSha,
       selectedCheckoutHeadTree: candidate.headTree,
-      recovery: draftInspectionRecoveryForSession({
-        ctx,
-        appId: state.appSpec.appId,
-        appSpecDigest: state.appSpec.digest,
-        root: candidate.root,
-        pullRequestNumber: candidate.pullRequestNumber,
-        priorPublishedProposalDigest,
-      }),
     };
     const proposal =
       priorPublishedProposalDigest === undefined
@@ -121,26 +122,27 @@ export default defineTool({
     });
     // This metadata becomes durable at the ensuing always()-approval checkpoint, before any Git write.
     // It records no approval grant; reconcile still validates its actual approved call and exact receipt.
-    retainDraftReconciliationCompletion({
-      preparation: "sealed-before-approval",
-      proposal,
-      review: candidate.review,
+    const completion: Parameters<typeof retainDraftReconciliationCompletion>[0] = {
+      appId: state.appSpec.appId,
       appReview: {
         appSpecDigest: state.reviewReceipt.appSpecDigest,
         changeSetDigest: state.reviewReceipt.changeSetDigest,
         digest: state.reviewReceipt.digest,
       },
-      appId: state.appSpec.appId,
-      githubSourceDigest: candidate.githubSourceDigest,
-      root: candidate.root,
       compilation,
-      ...(candidate.publishedOrigin === undefined
-        ? {}
-        : { publishedOrigin: candidate.publishedOrigin }),
-      ...(candidate.publicationScope === undefined
-        ? {}
-        : { publicationScope: candidate.publicationScope }),
-    });
+      githubSourceDigest: candidate.githubSourceDigest,
+      preparation: "sealed-before-approval",
+      proposal,
+      review: candidate.review,
+      root: candidate.root,
+    };
+    if (candidate.publishedOrigin !== undefined) {
+      completion.publishedOrigin = candidate.publishedOrigin;
+    }
+    if (candidate.publicationScope !== undefined) {
+      completion.publicationScope = candidate.publicationScope;
+    }
+    retainDraftReconciliationCompletion(completion);
     return { ...proposal, approvalReceipt: approvalReceiptForExistingDraftUpdate(proposal) };
   },
   inputSchema: z.strictObject({ expectedReviewDigest: digest }),

@@ -32,19 +32,21 @@ import type {
   TenantExportWorkerInput,
 } from "./hosted-operator-export-contract";
 
+const APP_EXPORT_KIND = "app-export";
+
 /** Private execution locator, retained before dispatch; no credentials or output bytes. */
 export const tenantExportWorkerLocatorSchema = z.strictObject({
-  sandboxId: z.string().min(1),
   commandId: z.string().min(1).optional(),
   descriptor: tenantExportWorkerDescriptorSchema,
+  sandboxId: z.string().min(1),
 });
 export type TenantExportWorkerLocator = z.infer<typeof tenantExportWorkerLocatorSchema>;
 // This deployment-only state extends the Builder journal, never the cross-repo worker wire.
 export const hostedTenantExportExecutionRecordSchema = z.strictObject({
-  kind: z.literal("app-export"),
-  originalTarget: hostedRuntimeTargetSchema,
-  journal: tenantExportJournalRecordSchema,
   approvalObservation: privateOperatorApprovalObservationSchema.optional(),
+  journal: tenantExportJournalRecordSchema,
+  kind: z.literal(APP_EXPORT_KIND),
+  originalTarget: hostedRuntimeTargetSchema,
   workers: z.array(
     z.strictObject({
       attemptId: z.uuid(),
@@ -177,37 +179,40 @@ const workerFor = (
   if (attempt?.snapshotId === undefined) {
     throw unavailable();
   }
-  const plan = record.plan;
+  const { plan } = record;
   return {
-    version: 1,
-    kind: "tenant-export-worker",
-    exportId: plan.exportId,
     attemptId,
-    snapshotId: attempt.snapshotId,
-    planDigest: record.planDigest,
-    scope: plan.scope,
-    resource: plan.resource,
-    release: plan.release,
-    selection: plan.selection,
+    exportId: plan.exportId,
     format: plan.format,
+    kind: "tenant-export-worker",
+    planDigest: record.planDigest,
+    release: plan.release,
+    resource: plan.resource,
+    scope: plan.scope,
+    selection: plan.selection,
+    snapshotId: attempt.snapshotId,
+    version: 1,
   };
 };
-export const tenantExportStatus = (record: TenantExportJournalRecord): TenantExportStatus =>
-  tenantExportStatusSchema.parse({
+export const tenantExportStatus = (record: TenantExportJournalRecord): TenantExportStatus => {
+  const status = {
     exportId: record.plan.exportId,
     planRef: record.plan.planRef,
     state: record.state,
-    ...(record.completion === undefined
-      ? {}
-      : {
-          counts: {
-            fileCount: record.completion.fileCount,
-            rowCount: record.completion.rowCount,
-            byteLength: record.completion.byteLength,
-          },
-          download: { indexPath: `/api/hosted-operator/exports/${record.plan.exportId}` },
-        }),
+  };
+  if (record.completion === undefined) {
+    return tenantExportStatusSchema.parse(status);
+  }
+  return tenantExportStatusSchema.parse({
+    ...status,
+    counts: {
+      byteLength: record.completion.byteLength,
+      fileCount: record.completion.fileCount,
+      rowCount: record.completion.rowCount,
+    },
+    download: { indexPath: `/api/hosted-operator/exports/${record.plan.exportId}` },
   });
+};
 export const createHostedTenantExportOperations = (deps: HostedTenantExportDependencies) => {
   const now = deps.now ?? (() => new Date());
   const read = async (context: HostedOperatorContext, exportId: string) => {
@@ -229,9 +234,9 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
     const changed = change(structuredClone(record));
     changed.journal.revision = record.journal.revision + 1;
     const result = await deps.store.compareAndSet({
-      record: hostedTenantExportExecutionRecordSchema.parse(changed),
       expectedRevision: record.journal.revision,
       now: now(),
+      record: hostedTenantExportExecutionRecordSchema.parse(changed),
     });
     if (result === undefined) {
       throw new HostedOperatorError("operation_in_progress");
@@ -240,12 +245,16 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
   };
   const approvalObservation = (
     record: HostedTenantExportExecutionRecord,
-  ): PrivateOperatorApprovalObservationPort => ({
-    ...(record.approvalObservation === undefined ? {} : { state: record.approvalObservation }),
-    save: async (state) => {
-      await update(record, (value) => ({ ...value, approvalObservation: state }));
-    },
-  });
+  ): PrivateOperatorApprovalObservationPort => {
+    const observation =
+      record.approvalObservation === undefined ? {} : { state: record.approvalObservation };
+    return {
+      ...observation,
+      save: async (state) => {
+        await update(record, (value) => ({ ...value, approvalObservation: state }));
+      },
+    };
+  };
   const assertApproval = async (
     context: HostedOperatorContext,
     record: HostedTenantExportExecutionRecord,
@@ -254,9 +263,9 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
     await deps.assertSetup(context, record.journal.plan);
     const request = {
       action: "export" as const,
-      planRef: record.journal.plan.planRef,
-      planDigest: record.journal.planDigest,
       idempotencyKey: record.journal.idempotencyKey,
+      planDigest: record.journal.planDigest,
+      planRef: record.journal.plan.planRef,
     };
     const approval =
       record.journal.approval ??
@@ -298,110 +307,6 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
     });
   };
   return {
-    async plan(
-      context: HostedOperatorContext,
-      customerId: string,
-      idempotencyKey: string,
-      observer?: ExportPlanningStageObserver,
-    ) {
-      const onPlanStage: ExportPlanningStageObserver | undefined =
-        observer === undefined
-          ? undefined
-          : (next) => {
-              advanceExportPlanningStage(observer, next);
-            };
-      advanceExportPlanningStage(onPlanStage, "plan_owner_authorization");
-      await deps.assertOwner(context);
-      advanceExportPlanningStage(onPlanStage, "plan_input_validation");
-      const exportId = exportIdFor(context, z.string().min(1).parse(idempotencyKey));
-      advanceExportPlanningStage(onPlanStage, "plan_prior_read");
-      const prior = await deps.store.read({ authority: context.authority, exportId });
-      if (prior !== undefined) {
-        advanceExportPlanningStage(onPlanStage, "plan_prior_validation");
-        parseHostedTenantExportPlanForOwner(prior.journal.plan, {
-          authority: context.authority,
-          target: context.target,
-        });
-        if (
-          prior.journal.plan.scope.customerId !== customerId ||
-          prior.journal.idempotencyKey !== idempotencyKey
-        ) {
-          throw mismatch();
-        }
-        return {
-          plan: prior.journal.plan,
-          request: {
-            action: "export" as const,
-            planRef: prior.journal.plan.planRef,
-            planDigest: prior.journal.planDigest,
-            idempotencyKey,
-          },
-          status: tenantExportStatus(prior.journal),
-        };
-      }
-      advanceExportPlanningStage(onPlanStage, "plan_input_validation");
-      const selection = await deps.resolvePlan(
-        context,
-        z.string().min(1).parse(customerId),
-        onPlanStage,
-      );
-      advanceExportPlanningStage(onPlanStage, "plan_construction");
-      const plan = hostedTenantExportPlanSchema.parse({
-        ...selection,
-        exportId,
-        planRef: `_protected-operator/export-plans/${exportId}`,
-        destination: {
-          kind: "owner-private-builder-artifact",
-          artifactPrefix: `_protected-operator/artifacts/tenant-export/${exportId}`,
-        },
-      });
-      advanceExportPlanningStage(onPlanStage, "plan_validation");
-      parseHostedTenantExportPlanForOwner(plan, {
-        authority: context.authority,
-        target: context.target,
-      });
-      await deps.assertSetup(context, plan, onPlanStage);
-      advanceExportPlanningStage(onPlanStage, "plan_reservation");
-      const record = await deps.store.reserve({
-        record: {
-          kind: "app-export",
-          originalTarget: context.target,
-          journal: {
-            kind: "app-export",
-            version: 1,
-            requestId: exportId,
-            authority: plan.authority,
-            target: plan.target,
-            plan,
-            planDigest: tenantExportPlanDigest(plan),
-            idempotencyKey,
-            revision: 1,
-            fenceGeneration: 0,
-            state: "planned",
-            attempts: [],
-          },
-          workers: [],
-        },
-        now: now(),
-      });
-      advanceExportPlanningStage(onPlanStage, "plan_reservation_match");
-      if (
-        !isDeepStrictEqual(record.journal.plan, plan) ||
-        record.journal.idempotencyKey !== idempotencyKey
-      ) {
-        throw mismatch();
-      }
-      return {
-        plan,
-        request: {
-          action: "export" as const,
-          planRef: plan.planRef,
-          planDigest: record.journal.planDigest,
-          idempotencyKey,
-        },
-        status: tenantExportStatus(record.journal),
-      };
-    },
     async approval(context: HostedOperatorContext, input: HostedTenantExportRequest) {
       const request = hostedTenantExportRequestSchema.parse(input);
       const exportId = z.uuid().parse(request.planRef.split("/").at(-1));
@@ -425,19 +330,6 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
         });
       }
       return { approved: approval !== null };
-    },
-    async readPlan(context: HostedOperatorContext, exportId: string) {
-      const current = await read(context, z.uuid().parse(exportId));
-      const { plan, planDigest, idempotencyKey } = current.journal;
-      const request = parseHostedTenantExportRequestForPlan(
-        { action: "export", planRef: plan.planRef, planDigest, idempotencyKey },
-        plan,
-      );
-      return { plan, request, status: tenantExportStatus(current.journal) };
-    },
-    async status(context: HostedOperatorContext, exportId: string) {
-      const current = await read(context, z.uuid().parse(exportId));
-      return tenantExportStatus(current.journal);
     },
     async execute(
       context: HostedOperatorContext,
@@ -467,14 +359,6 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
       }
       return await deps.withResourceLease(
         {
-          lockKeys: [
-            JSON.stringify([
-              "hosted_protected_operator_database_v1",
-              current.journal.plan.resource.projectId,
-              current.journal.plan.resource.branchId,
-              current.journal.plan.resource.database,
-            ]),
-          ],
           initializeUnderLock: async () => {
             current = await read(context, exportId);
             if (current.journal.state === "complete") {
@@ -517,9 +401,9 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
             current = await update(current, (value) => {
               value.journal.fenceGeneration += 1;
               value.journal.claim = {
+                attemptId,
                 claimId: randomUUID(),
                 fenceGeneration: value.journal.fenceGeneration,
-                attemptId,
               };
               value.journal.attempts.push({
                 attemptId,
@@ -530,14 +414,22 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
               return value;
             });
           },
+          lockKeys: [
+            JSON.stringify([
+              "hosted_protected_operator_database_v1",
+              current.journal.plan.resource.projectId,
+              current.journal.plan.resource.branchId,
+              current.journal.plan.resource.database,
+            ]),
+          ],
           readCurrentFence: async () => {
             const latest = await read(context, exportId);
-            const claim = latest.journal.claim;
+            const { claim } = latest.journal;
             if (latest.journal.state === "complete") {
               return {
-                operationRef: exportId,
-                leaseId: exportId,
                 fenceGeneration: latest.journal.fenceGeneration,
+                leaseId: exportId,
+                operationRef: exportId,
               };
             }
             if (claim === undefined || !isDeepStrictEqual(claim, current.journal.claim)) {
@@ -545,9 +437,9 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
             }
             await assertApproval(context, latest, callId);
             return {
-              operationRef: exportId,
-              leaseId: claim.claimId,
               fenceGeneration: claim.fenceGeneration,
+              leaseId: claim.claimId,
+              operationRef: exportId,
             };
           },
         },
@@ -555,7 +447,7 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
           if (current.journal.state === "complete") {
             return tenantExportStatus(current.journal);
           }
-          const claim = current.journal.claim;
+          const { claim } = current.journal;
           if (claim === undefined) {
             throw unavailable();
           }
@@ -632,6 +524,123 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
           }
         },
       );
+    },
+    async plan(
+      context: HostedOperatorContext,
+      customerId: string,
+      idempotencyKey: string,
+      observer?: ExportPlanningStageObserver,
+    ) {
+      const onPlanStage: ExportPlanningStageObserver | undefined =
+        observer === undefined
+          ? undefined
+          : (next) => {
+              advanceExportPlanningStage(observer, next);
+            };
+      advanceExportPlanningStage(onPlanStage, "plan_owner_authorization");
+      await deps.assertOwner(context);
+      advanceExportPlanningStage(onPlanStage, "plan_input_validation");
+      const exportId = exportIdFor(context, z.string().min(1).parse(idempotencyKey));
+      advanceExportPlanningStage(onPlanStage, "plan_prior_read");
+      const prior = await deps.store.read({ authority: context.authority, exportId });
+      if (prior !== undefined) {
+        advanceExportPlanningStage(onPlanStage, "plan_prior_validation");
+        parseHostedTenantExportPlanForOwner(prior.journal.plan, {
+          authority: context.authority,
+          target: context.target,
+        });
+        if (
+          prior.journal.plan.scope.customerId !== customerId ||
+          prior.journal.idempotencyKey !== idempotencyKey
+        ) {
+          throw mismatch();
+        }
+        return {
+          plan: prior.journal.plan,
+          request: {
+            action: "export" as const,
+            idempotencyKey,
+            planDigest: prior.journal.planDigest,
+            planRef: prior.journal.plan.planRef,
+          },
+          status: tenantExportStatus(prior.journal),
+        };
+      }
+      advanceExportPlanningStage(onPlanStage, "plan_input_validation");
+      const selection = await deps.resolvePlan(
+        context,
+        z.string().min(1).parse(customerId),
+        onPlanStage,
+      );
+      advanceExportPlanningStage(onPlanStage, "plan_construction");
+      const plan = hostedTenantExportPlanSchema.parse({
+        ...selection,
+        destination: {
+          artifactPrefix: `_protected-operator/artifacts/tenant-export/${exportId}`,
+          kind: "owner-private-builder-artifact",
+        },
+        exportId,
+        planRef: `_protected-operator/export-plans/${exportId}`,
+      });
+      advanceExportPlanningStage(onPlanStage, "plan_validation");
+      parseHostedTenantExportPlanForOwner(plan, {
+        authority: context.authority,
+        target: context.target,
+      });
+      await deps.assertSetup(context, plan, onPlanStage);
+      advanceExportPlanningStage(onPlanStage, "plan_reservation");
+      const record = await deps.store.reserve({
+        now: now(),
+        record: {
+          journal: {
+            attempts: [],
+            authority: plan.authority,
+            fenceGeneration: 0,
+            idempotencyKey,
+            kind: APP_EXPORT_KIND,
+            plan,
+            planDigest: tenantExportPlanDigest(plan),
+            requestId: exportId,
+            revision: 1,
+            state: "planned",
+            target: plan.target,
+            version: 1,
+          },
+          kind: APP_EXPORT_KIND,
+          originalTarget: context.target,
+          workers: [],
+        },
+      });
+      advanceExportPlanningStage(onPlanStage, "plan_reservation_match");
+      if (
+        !isDeepStrictEqual(record.journal.plan, plan) ||
+        record.journal.idempotencyKey !== idempotencyKey
+      ) {
+        throw mismatch();
+      }
+      return {
+        plan,
+        request: {
+          action: "export" as const,
+          idempotencyKey,
+          planDigest: record.journal.planDigest,
+          planRef: plan.planRef,
+        },
+        status: tenantExportStatus(record.journal),
+      };
+    },
+    async readPlan(context: HostedOperatorContext, exportId: string) {
+      const current = await read(context, z.uuid().parse(exportId));
+      const { plan, planDigest, idempotencyKey } = current.journal;
+      const request = parseHostedTenantExportRequestForPlan(
+        { action: "export", idempotencyKey, planDigest, planRef: plan.planRef },
+        plan,
+      );
+      return { plan, request, status: tenantExportStatus(current.journal) };
+    },
+    async status(context: HostedOperatorContext, exportId: string) {
+      const current = await read(context, z.uuid().parse(exportId));
+      return tenantExportStatus(current.journal);
     },
   };
 };

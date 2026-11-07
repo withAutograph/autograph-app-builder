@@ -53,12 +53,50 @@ jobs:
           path: .artifacts/protected-operator-recovery
           if-no-files-found: warn
 
-  repository:
+  repository-quality:
     runs-on: ubuntu-24.04
-    # Repository validation normally completes in a few minutes. Bound an
-    # unresponsive formatter, browser harness, or runner so the PR receives a
-    # terminal result rather than staying pending indefinitely.
-    timeout-minutes: 25
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          version: ${{ env.CI_MISE_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: mise run dependencies:install
+      - run: mise run package:test-portable
+      - run: mise run format-check
+      - run: mise run lint
+      - run: mise run typecheck
+      - run: mise run package:validate
+
+  repository-unit:
+    name: repository unit (shard ${{ matrix.shard }}/4)
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          version: ${{ env.CI_MISE_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: mise run dependencies:install
+      - run: mise run test:unit -- --project=unit --shard=${{ matrix.shard }}/4
+
+  repository-storybook:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v3
@@ -71,7 +109,40 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
       - run: mise run dependencies:install
       - run: mise run storybook:install-browser
-      - run: mise run ci-repository
+      - run: mise run storybook:visual
+      - run: mise run storybook:test
+
+  repository-postgres:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          version: ${{ env.CI_MISE_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: mise run dependencies:install
+      - run: mise run test:postgres-sandbox-leases
+
+  repository:
+    if: ${{ always() }}
+    needs:
+      - repository-quality
+      - repository-unit
+      - repository-storybook
+      - repository-postgres
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every repository lane
+        run: |
+          test "${{ needs.repository-quality.result }}" = success
+          test "${{ needs.repository-unit.result }}" = success
+          test "${{ needs.repository-storybook.result }}" = success
+          test "${{ needs.repository-postgres.result }}" = success
 
   eve-general:
     runs-on: ubuntu-24.04

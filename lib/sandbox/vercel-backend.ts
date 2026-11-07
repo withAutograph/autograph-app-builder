@@ -125,7 +125,7 @@ const ambiguousCreateFailure = (error: unknown): boolean => {
     if (!(error instanceof APIError)) {
       return retryableProviderFailure(error);
     }
-    const status = error.response.status;
+    const { status } = error.response;
     // Vercel reports an existing named sandbox as HTTP 400 as well as 409.
     if (
       (status === 400 &&
@@ -279,8 +279,8 @@ export const createBuilderVercelProvider = (
       ...transport,
       namePrefix: binding.name,
       projectId: binding.projectId,
-      sortBy: "name",
       signal,
+      sortBy: "name",
     });
     for await (const drive of drives) {
       if (drive.driveId !== binding.id && drive.name !== binding.name) {
@@ -342,11 +342,17 @@ export const createBuilderVercelProvider = (
       }
     };
     return {
-      onRuntimeShutdown: () => close("stop"),
-      onSessionDelete: (input) => close("delete", input?.abortSignal),
-      onSessionStop: () => close("stop"),
+      onRuntimeShutdown: async () => {
+        await close("stop");
+      },
+      onSessionDelete: async (input) => {
+        await close("delete", input?.abortSignal);
+      },
+      onSessionStop: async () => {
+        await close("stop");
+      },
       sandbox: createAuthorizedSandboxSession({
-        authorize: () => assertHostedSandboxCommandAuthority({ sessionId }),
+        authorize: async () => await assertHostedSandboxCommandAuthority({ sessionId }),
         session: createVercelSdkSession(
           native,
           () => registration.current,
@@ -359,7 +365,7 @@ export const createBuilderVercelProvider = (
     };
   };
   return {
-    prepare(context) {
+    async prepare(context) {
       // Only public resource targets are persisted. Preparation does not contact
       // Vercel or freeze live repository bytes into a provider snapshot.
       const files: SandboxProviderTargetFile[] = [];
@@ -372,12 +378,12 @@ export const createBuilderVercelProvider = (
           });
         }
       }
-      return Promise.resolve({
+      return {
         files: files.map((file) => ({
           content: Buffer.from(file.content).toString("base64"),
           path: file.path,
         })),
-      });
+      };
     },
     async resume(context, _artifact, state) {
       // Reconnect only: do not recreate source selection or initialization.
@@ -406,21 +412,21 @@ export const createBuilderVercelProvider = (
         throw new Error("The Builder workspace drive belongs to another sandbox.");
       }
       const { native, recovered } = await createOrRecoverSandbox({
-        name,
-        drive,
         create: async () =>
           await Sandbox.create({
             ...transport,
             image: "vcr.vercel.com/vercel/eve/base:0.68.0",
+            mounts: { "/workspace": drive },
             name,
             networkPolicy: "allow-all",
             persistent: true,
             region: DEFAULT_SANDBOX_REGION,
-            mounts: { "/workspace": drive },
             ...(options?.sandboxEnvironment === undefined
               ? {}
               : { env: { ...options.sandboxEnvironment } }),
           }),
+        drive,
+        name,
       });
       const workspaceDrive: WorkspaceDriveBinding = {
         id: drive.driveId,
@@ -436,14 +442,14 @@ export const createBuilderVercelProvider = (
           throw new Error("Vercel Sandbox did not expose its managed home directory.");
         const homeOutput = await home.stdout();
         const homePath = homeOutput.trim();
-        await initializeSeeds({ native, files: artifact.files, homePath, recovered });
+        await initializeSeeds({ files: artifact.files, homePath, native, recovered });
         // Last initialization step: source stays on the mounted filesystem and
         // a retry can recognize its completed checkout without rewriting edits.
         if (source !== undefined) {
           await materializeVercelGitSource({
             current: () => native,
-            source,
             reuseOwnedCheckout: true,
+            source,
           });
         }
         return {

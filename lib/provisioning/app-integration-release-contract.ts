@@ -21,8 +21,8 @@ export const preparedIntegrationScopeDigest = (
 export const appIntegrationReleaseAttachmentSchema = appIntegrationCapabilityPointerSchema
   .extend({
     capability: preparedAppIntegrationCapabilitySchema,
-    scopeSha256: digest,
     readinessPath: z.string().min(1),
+    scopeSha256: digest,
   })
   .superRefine((entry, context) => {
     if (
@@ -44,8 +44,8 @@ export const appIntegrationOptionalEnvironmentKeys = [
 export const retainedOptionalIntegrationBindingsSchema = z
   .array(
     z.strictObject({
-      key: z.enum(appIntegrationOptionalEnvironmentKeys),
       acceptedEnvId: z.string().min(1),
+      key: z.enum(appIntegrationOptionalEnvironmentKeys),
       sha256: digest,
       sourceOperationRef: z.uuid(),
       sourcePlanDigest: digest,
@@ -61,22 +61,22 @@ export type RetainedOptionalIntegrationBindings = z.infer<
 /** New explicit app-only fence; old capability ciphertext and both provider rows remain retained. */
 export const appIntegrationRemovalSchema = z
   .strictObject({
+    authority: z.strictObject({
+      active: z.literal(true),
+      configurationRef: z.uuid(),
+      configurationSha256: digest,
+      expectedFencedGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+      principalGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+      principalName: z.string().min(1),
+    }),
+    bindingCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     kind: z.literal("disabled-app-integration-tombstone-v1"),
+    scopeSha256: digest,
     sourceCapability: appIntegrationCapabilityPointerSchema,
+    stoppedBindingsSha256: digest,
     worker: z.strictObject({
       reference: z.literal("app-integration-bootstrap-v1"),
       sha256: digest,
-    }),
-    scopeSha256: digest,
-    stoppedBindingsSha256: digest,
-    bindingCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-    authority: z.strictObject({
-      principalName: z.string().min(1),
-      active: z.literal(true),
-      expectedFencedGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-      principalGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-      configurationRef: z.uuid(),
-      configurationSha256: digest,
     }),
   })
   .superRefine((value, context) => {
@@ -89,8 +89,8 @@ export const appIntegrationRemovalSchema = z
   });
 export const appIntegrationRemovalFenceProofSchema = z
   .strictObject({
-    operationRef: z.uuid(),
     active: z.literal(false),
+    operationRef: z.uuid(),
     principalGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
     priorGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
     stoppedBindingsSha256: digest,

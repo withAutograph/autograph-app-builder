@@ -160,7 +160,7 @@ describe("prepared provider continuity", () => {
       readHandoff: async () => intent,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
       vercel: async () =>
-        readPreparedVercelAccess({
+        await readPreparedVercelAccess({
           authority,
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
           fetch: async () =>
@@ -206,7 +206,7 @@ describe("prepared provider continuity", () => {
     expect(
       withPreparedGitHubSelection(
         { repository: "acme/stock" },
-        undefined as typeof intent | undefined,
+        undefined,
       ),
     ).toEqual({
       repository: "acme/stock",
@@ -221,8 +221,8 @@ describe("prepared provider continuity", () => {
       Response.json({
         env: [credential.token],
         id: "prj_1",
-        name: "renamed-stock",
         link: { productionBranch: "release/published-app" },
+        name: "renamed-stock",
         token: credential.token,
       }),
     );
@@ -449,11 +449,11 @@ describe("prepared provider continuity", () => {
 
 describe("normal app public configuration proof", () => {
   const project = {
+    accountId: "team_1",
     id: "prj_1",
     name: "apps-stock",
-    accountId: "team_1",
-    ssoProtection: { deploymentType: "prod_deployment_urls_and_all_previews" },
     oidcTokenConfig: { enabled: true, issuerMode: "team" },
+    ssoProtection: { deploymentType: "prod_deployment_urls_and_all_previews" },
   };
   it.each([
     [project, "ready"],
@@ -475,10 +475,10 @@ describe("normal app public configuration proof", () => {
     async (observed, status) => {
       const result = await readPreparedVercelAccess({
         authority,
-        intent,
-        requirePublicAppConfiguration: true,
         fetch: vi.fn().mockResolvedValue(Response.json(observed)),
+        intent,
         readCredential: vi.fn().mockResolvedValue(credential),
+        requirePublicAppConfiguration: true,
       });
       expect(result.status).toBe(status);
     },

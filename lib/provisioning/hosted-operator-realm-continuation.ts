@@ -20,40 +20,40 @@ import type {
 } from "./hosted-operator-realm-identity-wait";
 
 export const realmContinuationRequestSchema = z.strictObject({
-  version: z.literal(1),
-  dispatchId: z.string().regex(/^[a-f0-9]{64}$/u),
   authority: z.string().min(1).max(32_768),
+  dispatchId: z.string().regex(/^[a-f0-9]{64}$/u),
+  version: z.literal(1),
 });
 export const realmContinuationReceiptSchema = z.strictObject({
-  version: z.literal(1),
-  dispatchId: realmContinuationRequestSchema.shape.dispatchId,
   adapterSessionId: z.string().min(1).max(200),
+  dispatchId: realmContinuationRequestSchema.shape.dispatchId,
   status: z.enum(["accepted", "unknown", "not-submitted"]),
+  version: z.literal(1),
 });
 export type RealmContinuationRequest = z.infer<typeof realmContinuationRequestSchema>;
 export type RealmContinuationReceipt = z.infer<typeof realmContinuationReceiptSchema>;
 export type RealmContinuationObservation = Omit<RealmContinuationAuthority, "purpose" | "service">;
 export const realmContinuationPath = "/eve/v1/internal/hosted-operator/realm-continuation";
 const technicalWaitSchema = z.object({
-  kind: z.literal("question"),
-  requestId: z.string().min(1),
-  prompt: z.string(),
   action: z.object({
-    kind: z.literal("tool-call"),
-    toolName: z.literal("prepare-app-hosted-runtime"),
     callId: z.string().min(1),
     input: z
       .object({
-        operationRef: z.string(),
-        planDigest: z.string(),
-        plan: hostedOperatorPlanSchema,
         appId: z.string(),
         branch: z.string(),
-        projectId: z.string(),
         environment: z.literal("preview"),
+        operationRef: z.string(),
+        plan: hostedOperatorPlanSchema,
+        planDigest: z.string(),
+        projectId: z.string(),
       })
       .optional(),
+    kind: z.literal("tool-call"),
+    toolName: z.literal("prepare-app-hosted-runtime"),
   }),
+  kind: z.literal("question"),
+  prompt: z.string(),
+  requestId: z.string().min(1),
 });
 
 /** Raw framework provenance and the frozen challenge identify the technical wait, independent of prose. */
@@ -182,20 +182,20 @@ export const observeRealmContinuationRecord = (input: {
   ) {
     reason = { kind: "consumed-proof", proofRef: link.proofRef, proofSha256: link.proofSha256 };
   } else if (Date.parse(link.expiresAt) <= input.now) {
-    reason = { kind: "expired-technical-wait", expiresAt: link.expiresAt };
+    reason = { expiresAt: link.expiresAt, kind: "expired-technical-wait" };
   }
   if (reason === undefined) {
     return undefined;
   }
   return {
-    authority: context.authority,
-    initiator: input.initiator,
-    ownerSessionId: owner.sessionId,
     adapterSessionId: owner.adapterSessionId,
     appId: context.target.appId,
-    operationRef: operator.operationRef,
     approvedPlanDigest: operator.planDigest,
+    authority: context.authority,
+    initiator: input.initiator,
     nonceSha256: link.nonceSha256,
+    operationRef: operator.operationRef,
+    ownerSessionId: owner.sessionId,
     reason,
   };
 };
@@ -250,7 +250,7 @@ export const createHostedOperatorRealmContinuation = (ports: RealmContinuationPo
     if (state?.dispatchId === dispatchId && state.status === "accepted") {
       return "accepted";
     }
-    const request = { version: 1 as const, dispatchId, authority: ports.seal(observed) };
+    const request = { authority: ports.seal(observed), dispatchId, version: 1 as const };
     let receipt: RealmContinuationReceipt;
     if (state?.dispatchId === dispatchId) {
       receipt = realmContinuationReceiptSchema.parse(await ports.reconcile(request));
@@ -266,19 +266,19 @@ export const createHostedOperatorRealmContinuation = (ports: RealmContinuationPo
       }
     } else {
       state = {
-        dispatchId,
-        operationRef: observed.operationRef,
-        approvedPlanDigest: observed.approvedPlanDigest,
-        nonceSha256: observed.nonceSha256,
         adapterSessionId: observed.adapterSessionId,
+        approvedPlanDigest: observed.approvedPlanDigest,
         claimedAt: new Date(now()).toISOString(),
+        dispatchId,
+        nonceSha256: observed.nonceSha256,
+        operationRef: observed.operationRef,
         status: "claimed",
       };
       const claimed = await ports.store.compareAndSet({
         ...context,
         expectedRevision: snapshot.revision,
-        record: { ...snapshot.record, realmContinuation: state },
         now: new Date(now()),
+        record: { ...snapshot.record, realmContinuation: state },
       });
       if (claimed === undefined) {
         return "unknown";
@@ -346,15 +346,15 @@ const identityWaitContext = async (
   const resources = await openHostedOperatorCompositionResources();
   try {
     const context = await resources.controlPlane.resolveOwnerRealmContinuationContext({
+      adapterSessionId: owner.adapterSessionId,
       principal: owner.principal,
       sessionId: owner.sessionId,
-      adapterSessionId: owner.adapterSessionId,
       ...(owner.kind === "handoff" ? { sourceHandoffId: owner.sourceHandoffId } : {}),
     });
     if (context === undefined) {
       throw new HostedOperatorError("authorization_required");
     }
-    return { context, resources, adapterSessionId: owner.adapterSessionId };
+    return { adapterSessionId: owner.adapterSessionId, context, resources };
   } catch (error) {
     await resources.controlPlane.close();
     throw error;

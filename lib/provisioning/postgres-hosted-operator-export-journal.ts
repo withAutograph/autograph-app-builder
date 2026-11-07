@@ -43,6 +43,30 @@ export const createPostgresTenantExportJournalStore = (
     return record;
   };
   return {
+    async compareAndSet(input) {
+      const record = hostedTenantExportExecutionRecordSchema.parse(input.record);
+      if (record.journal.revision !== input.expectedRevision + 1) {
+        throw new Error("Export journal revision differs.");
+      }
+      const [row] = await database
+        .update(builderProvisioningJournals)
+        .set({
+          record,
+          revision: record.journal.revision,
+          state: record.journal.state === "complete" ? "settled" : "pending",
+          updatedAt: input.now,
+        })
+        .where(
+          and(
+            predicate(record.journal.authority, record.journal.requestId),
+            eq(builderProvisioningJournals.revision, input.expectedRevision),
+          ),
+        )
+        .returning();
+      return row === undefined
+        ? undefined
+        : hostedTenantExportExecutionRecordSchema.parse(row.record);
+    },
     read,
     async reserve(input) {
       const record = hostedTenantExportExecutionRecordSchema.parse(input.record);
@@ -50,12 +74,12 @@ export const createPostgresTenantExportJournalStore = (
         .insert(builderProvisioningJournals)
         .values({
           ...record.journal.authority,
-          requestId: record.journal.requestId,
-          requestDigest: record.journal.planDigest,
+          createdAt: input.now,
           record,
+          requestDigest: record.journal.planDigest,
+          requestId: record.journal.requestId,
           revision: record.journal.revision,
           state: "pending",
-          createdAt: input.now,
           updatedAt: input.now,
         })
         .onConflictDoNothing()
@@ -68,30 +92,6 @@ export const createPostgresTenantExportJournalStore = (
         throw new Error("Export journal reservation is unavailable.");
       }
       return observed;
-    },
-    async compareAndSet(input) {
-      const record = hostedTenantExportExecutionRecordSchema.parse(input.record);
-      if (record.journal.revision !== input.expectedRevision + 1) {
-        throw new Error("Export journal revision differs.");
-      }
-      const [row] = await database
-        .update(builderProvisioningJournals)
-        .set({
-          record,
-          revision: record.journal.revision,
-          updatedAt: input.now,
-          state: record.journal.state === "complete" ? "settled" : "pending",
-        })
-        .where(
-          and(
-            predicate(record.journal.authority, record.journal.requestId),
-            eq(builderProvisioningJournals.revision, input.expectedRevision),
-          ),
-        )
-        .returning();
-      return row === undefined
-        ? undefined
-        : hostedTenantExportExecutionRecordSchema.parse(row.record);
     },
   };
 };

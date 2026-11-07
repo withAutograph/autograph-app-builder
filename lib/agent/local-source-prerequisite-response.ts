@@ -16,11 +16,11 @@ export const localSourcePrerequisiteResponse = async (error: unknown, ctx: ToolC
   }
   await emitCurrentBuildWorkflowProjection(ctx);
   return {
-    status: "blocked" as const,
     code: error.code,
-    sourcePrerequisite: observation,
-    problem: error.message,
     nextAction:
       "Recover the original immutable local source artifact for this saved app, then prepare a fresh source plan through Builder. Existing app bytes, approvals and data remain retained.",
+    problem: error.message,
+    sourcePrerequisite: observation,
+    status: "blocked" as const,
   };
 };

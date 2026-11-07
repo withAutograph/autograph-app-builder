@@ -8,11 +8,11 @@ import type { HostedOperationRecord } from "./hosted-store";
 import { createPostgresHostedEveStore } from "./postgres-hosted-store";
 
 const principal = {
-  issuer: "https://identity.example.test",
   audience: "builder",
-  workspaceId: "workspace",
+  issuer: "https://identity.example.test",
   ownerUserId: "owner",
   scopes: Object.values(hostedEveOperationScopes),
+  workspaceId: "workspace",
 };
 const foreignOwner = { ...principal, ownerUserId: "other-owner" };
 const foreignWorkspace = { ...principal, workspaceId: "other-workspace" };
@@ -20,17 +20,17 @@ const foreignIssuer = { ...principal, issuer: "https://other.example.test" };
 const foreignAudience = { ...principal, audience: "other-audience" };
 const operation = (id: string, options: Partial<HostedOperationRecord> = {}) => {
   const candidate = {
-    version: 1,
-    principal,
-    kind: "respond",
-    state: "submission_unknown",
-    safeErrorCode: "submission_unknown",
-    operationId: id,
     clientRequestId: `request-${id}`,
-    requestDigest: `sha256:${"a".repeat(64)}`,
-    sessionId: "session-1",
     createdAtEpochMs: 1000,
+    kind: "respond",
+    operationId: id,
+    principal,
+    requestDigest: `sha256:${"a".repeat(64)}`,
+    safeErrorCode: "submission_unknown",
+    sessionId: "session-1",
+    state: "submission_unknown",
     updatedAtEpochMs: 1000,
+    version: 1,
     ...options,
   };
   if (candidate.state === "reserved") {
@@ -51,36 +51,36 @@ const examples = [
   operation("foreign-audience", { principal: foreignAudience }),
   operation("other-kind", { kind: "send" }),
   operation("reserved", { state: "reserved" }),
-  operation("rejected", { state: "rejected", safeErrorCode: "rejected" }),
+  operation("rejected", { safeErrorCode: "rejected", state: "rejected" }),
 ];
 const asRow = (record: HostedOperationRecord) => ({
-  issuer: record.principal.issuer,
   audience: record.principal.audience,
-  workspaceId: record.principal.workspaceId,
-  ownerUserId: record.principal.ownerUserId,
-  operationId: record.operationId,
   clientRequestId: record.clientRequestId,
-  sessionId: record.sessionId ?? null,
-  kind: record.kind,
-  state: record.state,
-  requestDigest: record.requestDigest,
-  record,
   createdAt: new Date(record.createdAtEpochMs),
-  updatedAt: new Date(record.updatedAtEpochMs),
+  issuer: record.principal.issuer,
+  kind: record.kind,
+  operationId: record.operationId,
+  ownerUserId: record.principal.ownerUserId,
+  record,
+  requestDigest: record.requestDigest,
   sendCancellationRevisionAtDispatch: null,
+  sessionId: record.sessionId ?? null,
+  state: record.state,
+  updatedAt: new Date(record.updatedAtEpochMs),
+  workspaceId: record.principal.workspaceId,
 });
 const postgresFixture = () => {
   const dialect = new PgDialect();
   const rows = examples.map(asRow);
   const fields = {
-    issuer: "issuer",
     audience: "audience",
-    workspace_id: "workspaceId",
+    issuer: "issuer",
+    kind: "kind",
+    operation_id: "operationId",
     owner_user_id: "ownerUserId",
     session_id: "sessionId",
-    kind: "kind",
     state: "state",
-    operation_id: "operationId",
+    workspace_id: "workspaceId",
   } satisfies Record<string, keyof ReturnType<typeof asRow>>;
   const select = () => ({
     from: () => ({
@@ -119,7 +119,9 @@ const postgresFixture = () => {
               a.operationId.localeCompare(b.operationId),
           );
         return {
-          orderBy: () => ({ limit: (limit: number) => Promise.resolve(matching.slice(0, limit)) }),
+          orderBy: () => ({
+            limit: async (limit: number) => matching.slice(0, limit),
+          }),
         };
       },
     }),
@@ -140,7 +142,7 @@ const memoryFixture = async () => {
 
 describe.each([
   ["memory", memoryFixture],
-  ["Postgres query", () => Promise.resolve(postgresFixture())],
+  ["Postgres query", async () => postgresFixture()],
 ] as const)("unsettled RESPOND lookup: %s", (_label, build) => {
   it("scopes by exact tenant, owner and session and paginates deterministically with equal timestamps", async () => {
     const store = await build();
@@ -148,11 +150,11 @@ describe.each([
       throw new Error("missing response reader");
     }
     const reader = store.readUnsettledResponseOperations.bind(store);
-    const read = (cursor?: { createdAtEpochMs: number; operationId: string }) =>
-      reader({
+    const read = async (cursor?: { createdAtEpochMs: number; operationId: string }) =>
+      await reader({
+        limit: 1,
         principal,
         sessionId: "session-1",
-        limit: 1,
         ...(cursor ? { cursor } : {}),
       });
     const first = await read();
@@ -165,15 +167,15 @@ describe.each([
     ]).toEqual(["a", "b", "c"]);
     expect(third.nextCursor).toBeUndefined();
     const other = await store.readUnsettledResponseOperations({
+      limit: 5,
       principal: foreignOwner,
       sessionId: "session-1",
-      limit: 5,
     });
     expect(other.operations.map((item) => item.operationId)).toEqual(["foreign-owner"]);
     const session = await store.readUnsettledResponseOperations({
+      limit: 5,
       principal,
       sessionId: "session-2",
-      limit: 5,
     });
     expect(session.operations.map((item) => item.operationId)).toEqual(["other-session"]);
   });
@@ -183,17 +185,17 @@ describe.each([
       throw new Error("missing response reader");
     }
     await expect(
-      store.readUnsettledResponseOperations({ principal, sessionId: "", limit: 1 }),
+      store.readUnsettledResponseOperations({ limit: 1, principal, sessionId: "" }),
     ).rejects.toThrow();
     await expect(
-      store.readUnsettledResponseOperations({ principal, sessionId: "session-1", limit: 0 }),
+      store.readUnsettledResponseOperations({ limit: 0, principal, sessionId: "session-1" }),
     ).rejects.toThrow();
     await expect(
       store.readUnsettledResponseOperations({
+        cursor: { createdAtEpochMs: -1, operationId: "a" },
+        limit: 1,
         principal,
         sessionId: "session-1",
-        limit: 1,
-        cursor: { createdAtEpochMs: -1, operationId: "a" },
       }),
     ).rejects.toThrow();
   });

@@ -12,7 +12,6 @@ export default defineWorkflowTool({
   availableInSubagents: false,
   description:
     "After explicit approval, mark the reviewed pull request ready and merge that exact revision once its required checks pass. Pass the approval input returned by read_github_pr_delivery. Changes to the reviewed revision or ready cycle stop this operation. Hosted verification has its own result.",
-  inputSchema: githubPrDeliveryApprovalSchema,
   async execute(input, ctx) {
     "use workflow";
     let result = await continueGitHubPrDelivery(input, ctx);
@@ -24,4 +23,5 @@ export default defineWorkflowTool({
     }
     return result;
   },
+  inputSchema: githubPrDeliveryApprovalSchema,
 });

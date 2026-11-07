@@ -703,7 +703,7 @@ export const resolveAllowedRepository = async function resolveAllowedRepository(
   input: string,
 ): Promise<string> {
   const candidate = await realpath(nodePath.resolve(input));
-  const roots = await Promise.all(allowedRoots().map((root) => realpath(root)));
+  const roots = await Promise.all(allowedRoots().map(async (root) => await realpath(root)));
   if (!roots.some((root) => within(root, candidate))) {
     throw new Error("The repository path is outside REPOSITORY_LOCAL_ROOTS.");
   }
@@ -1549,13 +1549,13 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
   // Retain actual selected live bytes before effects or an immutable workspace
   // receipt; the launcher's earlier snapshot can describe different input.
   await retainPreparedLocalSourceBaseline({
-    sourcePath,
-    sourceSha,
     eligibilityDigest,
+    generation,
     names,
     sourceFiles,
+    sourcePath,
+    sourceSha,
     workspaceDigest,
-    generation,
   });
 
   // The previous manifest describes only files managed by the live source
@@ -1704,8 +1704,8 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
     // bytes actually transferred by this refresh are transfer readback inputs.
     const transferChecksumsPath = ".app-builder/development-transfer-checksums.sha256";
     await sandbox.writeTextFile({
-      path: transferChecksumsPath,
       content: preparedSourceChecksums(changedFiles),
+      path: transferChecksumsPath,
     });
     await verifyPreparedSandboxFiles(sandbox, changedFiles, transferChecksumsPath);
   }
@@ -1718,14 +1718,14 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
 
 /** Materializes a source only after the canonical clone transport has proven it. */
 export const prepareBuilderOwnedSupportedSandboxWorkspace =
-  function prepareBuilderOwnedSupportedSandboxWorkspace(
+  async function prepareBuilderOwnedSupportedSandboxWorkspace(
     sourcePathInput: string,
     expectedSha: string,
     expectedEligibilityDigest: string,
     sandbox: SandboxSession,
     callId: string,
   ): Promise<PreparedSandboxWorkspace> {
-    return prepareSupportedSandboxWorkspace(
+    return await prepareSupportedSandboxWorkspace(
       sourcePathInput,
       expectedSha,
       expectedEligibilityDigest,

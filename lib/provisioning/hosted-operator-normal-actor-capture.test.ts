@@ -23,8 +23,8 @@ import { realmIdentityNonceSha256 } from "./hosted-operator-auth-identity";
 
 const accountOperationRef = "11111111-1111-4111-8111-111111111111";
 const authority = {
-  issuer: "https://builder.example.test/api/auth",
   audience: "https://builder.example.test/mcp",
+  issuer: "https://builder.example.test/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
@@ -32,56 +32,68 @@ const target = {
   appId: "normal-app",
   branch: "preview",
   environment: "preview" as const,
-  projectId: "prj_app",
-  sessionId: "owner-session",
   installationId: "installation",
+  projectId: "prj_app",
   scopeId: "team",
   scopeType: "team" as const,
+  sessionId: "owner-session",
 };
 const context = { authority, target };
 const program = normalActorProgramSchema.parse({
-  version: 1,
-  appId: target.appId,
-  origin: "https://apps.example.test",
   actors: [
-    { actorKey: "owner", email: "owner@example.test", name: "Owner", account: "capture-existing" },
+    { account: "capture-existing", actorKey: "owner", email: "owner@example.test", name: "Owner" },
   ],
-  organizations: [],
-  memberships: [],
   appAccess: [],
+  appId: target.appId,
+  memberships: [],
+  organizations: [],
+  origin: "https://apps.example.test",
+  version: 1,
 });
 const plan = hostedOperatorPlanSchema.parse({
-  version: 1,
-  stage: "auth-participants",
-  action: "prepare",
   access: [],
-  normalActorProgram: program,
-  selection: {
-    appId: target.appId,
-    branch: target.branch,
-    environment: target.environment,
-    projectId: target.projectId,
-    sessionId: target.sessionId,
-  },
+  action: "prepare",
   appDatabase: {
-    resourceId: "app-resource",
     database: "normal",
     migratorRole: "normal_owner",
+    resourceId: "app-resource",
     runtimeRole: "normal_runtime",
   },
   authDatabase: {
-    resourceId: "auth-resource",
     database: "auth",
     migratorRole: "auth_owner",
+    resourceId: "auth-resource",
     runtimeRole: "auth_runtime",
   },
   contextId: "accepted-spec",
   cost: { class: "shared-recovery-group", description: "Approved normal accounts", owner: "owner" },
+  deploymentBoundary: {
+    app: {
+      branch: target.branch,
+      deploymentId: "dpl_app",
+      environment: "preview",
+      projectId: target.projectId,
+    },
+    authority,
+    gateway: {
+      branch: target.branch,
+      deploymentId: "dpl_gateway",
+      environment: "preview",
+      projectId: "prj_gateway",
+    },
+    operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
+    teamId: "team",
+    verification: {
+      gatewayOrigin: "https://gateway.example.test",
+      jwksUrl: "https://gateway.example.test/_platform/jwks.json",
+      publicOrigin: program.origin,
+    },
+  },
   effects: [
     {
+      description: "Capture approved actual accounts",
       id: "normal-accounts",
       kind: "normal-accounts",
-      description: "Capture approved actual accounts",
     },
   ],
   installer: { reference: "owned-worker", sha256: "a".repeat(64) },
@@ -92,69 +104,52 @@ const plan = hostedOperatorPlanSchema.parse({
     projectId: "neon-owned",
     source: "synthetic-only",
   },
+  normalActorProgram: program,
+  publicGateway: { branch: target.branch, origin: program.origin, projectId: "prj_gateway" },
   release: { artifactRef: "owned-release", id: "release", sha256: "b".repeat(64) },
   retention: { expiresAt: "2030-01-01T00:00:00.000Z", policy: "Retain Auth" },
-  publicGateway: { branch: target.branch, origin: program.origin, projectId: "prj_gateway" },
-  deploymentBoundary: {
-    authority,
-    teamId: "team",
-    app: {
-      branch: target.branch,
-      deploymentId: "dpl_app",
-      environment: "preview",
-      projectId: target.projectId,
-    },
-    gateway: {
-      branch: target.branch,
-      deploymentId: "dpl_gateway",
-      environment: "preview",
-      projectId: "prj_gateway",
-    },
-    operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
-    verification: {
-      gatewayOrigin: "https://gateway.example.test",
-      jwksUrl: "https://gateway.example.test/_platform/jwks.json",
-      publicOrigin: program.origin,
-    },
+  selection: {
+    appId: target.appId,
+    branch: target.branch,
+    environment: target.environment,
+    projectId: target.projectId,
+    sessionId: target.sessionId,
   },
+  stage: "auth-participants",
+  version: 1,
 });
 const preparationInput = {
-  program,
-  programDigest: normalActorProgramDigest(program),
+  accountApprovalId: "initial-approval",
+  accountApprovedByCallId: "initial-call",
   accountOperationRef,
   accountPlan: plan,
   accountPlanDigest: operatorPlanDigest(plan),
-  accountApprovalId: "initial-approval",
-  accountApprovedByCallId: "initial-call",
+  program,
+  programDigest: normalActorProgramDigest(program),
 };
 const normalCookie = {
-  name: "__Secure-session",
-  value: "actual%2Fencoded%3Dcookie",
   domain: "apps.example.test",
-  path: "/",
   expires: -1 as const,
-  httpOnly: true as const,
-  secure: true as const,
-  sameSite: "Lax" as const,
   hostOnly: true,
+  httpOnly: true as const,
+  name: "__Secure-session",
+  path: "/",
+  sameSite: "Lax" as const,
+  secure: true as const,
+  value: "actual%2Fencoded%3Dcookie",
 };
 const fixture = () => {
   let row: HostedRuntimeJournalRow = {
-    revision: 1,
     record: hostedRuntimeJournalRecordSchema.parse({
-      kind: "app-runtime",
-      version: 1,
-      request: target,
       approvedByCallId: "initial-call",
-      status: "pending",
-      step: "reserved",
+      kind: "app-runtime",
       leaseId: "44444444-4444-4444-8444-444444444444",
       operator: {
+        approvalId: "initial-approval",
         mode: "protected-operator-v1",
         operationRef: accountOperationRef,
         plan,
         planDigest: operatorPlanDigest(plan),
-        approvalId: "initial-approval",
         receipts: [],
       },
       privateState: {
@@ -163,7 +158,12 @@ const fixture = () => {
         tokenIv: "resource-iv",
         tokenTag: "resource-tag",
       },
+      request: target,
+      status: "pending",
+      step: "reserved",
+      version: 1,
     }),
+    revision: 1,
   };
   let approved = true;
   let owned = true;
@@ -171,17 +171,6 @@ const fixture = () => {
   let writes = 0;
   let approvals = 0;
   const journal = createNormalActorJournal({
-    keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
-    now: () => Date.now(),
-    assertAuthorized: async (input) => {
-      if (
-        !owned ||
-        input.authority.ownerUserId !== authority.ownerUserId ||
-        input.target.sessionId !== target.sessionId
-      ) {
-        throw new Error("owner_revoked");
-      }
-    },
     assertAccountApproval: async (_context, preparation) => {
       approvals += 1;
       if (
@@ -193,13 +182,23 @@ const fixture = () => {
         throw new Error("approval_revoked");
       }
     },
+    assertAuthorized: async (input) => {
+      if (
+        !owned ||
+        input.authority.ownerUserId !== authority.ownerUserId ||
+        input.target.sessionId !== target.sessionId
+      ) {
+        throw new Error("owner_revoked");
+      }
+    },
     assertMutationAuthority: async (_context, current) => {
       if (current.record.leaseId !== row.record.leaseId || current.revision !== row.revision) {
         throw new Error("lease_changed");
       }
     },
+    keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
+    now: () => Date.now(),
     store: {
-      read: async () => structuredClone(row),
       compareAndSet: async (input): Promise<HostedRuntimeJournalRow | undefined> => {
         if (conflict) {
           conflict = false;
@@ -216,10 +215,23 @@ const fixture = () => {
         };
         return structuredClone(row);
       },
+      read: async () => structuredClone(row),
     },
   });
   return {
+    get approvals() {
+      return approvals;
+    },
+    conflictOnce() {
+      conflict = true;
+    },
     journal,
+    revokeApproval() {
+      approved = false;
+    },
+    revokeOwner() {
+      owned = false;
+    },
     get row() {
       return row;
     },
@@ -228,18 +240,6 @@ const fixture = () => {
     },
     get writes() {
       return writes;
-    },
-    get approvals() {
-      return approvals;
-    },
-    revokeApproval() {
-      approved = false;
-    },
-    revokeOwner() {
-      owned = false;
-    },
-    conflictOnce() {
-      conflict = true;
     },
   };
 };
@@ -251,30 +251,30 @@ const captureFixture = async () => {
   const nonce = "e".repeat(64);
   const seconds = Math.floor(Date.now() / 1000);
   const resource = {
-    version: 1 as const,
     database: "auth",
     environment: "preview" as const,
     hostname: "ep-owned.neon.tech",
     migratorRole: "auth_owner",
-    runtimeRole: "auth_runtime",
-    port: 5432,
-    schema: "public" as const,
     neon: { branchId: "br_fixture", projectId: "neon-owned" },
+    port: 5432,
+    runtimeRole: "auth_runtime",
+    schema: "public" as const,
+    version: 1 as const,
   };
   const proof = await new SignJWT({
     authResourceId: "auth-resource",
     bootstrapPlanDigest: preparationInput.accountPlanDigest,
+    browserSession: {
+      normalCookieSha256: normalActorCaptureCookieDigest(normalCookie),
+      operationRef: accountOperationRef,
+      participantProgramDigest: preparationInput.programDigest,
+    },
     nonceSha256: realmIdentityNonceSha256(nonce),
+    organizationId: null,
     ownerSessionId: target.sessionId,
     purpose: "realm-operator-link-v1",
     resource,
-    organizationId: null,
     sessionId: "actual-session",
-    browserSession: {
-      operationRef: accountOperationRef,
-      participantProgramDigest: preparationInput.programDigest,
-      normalCookieSha256: normalActorCaptureCookieDigest(normalCookie),
-    },
   })
     .setProtectedHeader({ alg: "EdDSA", typ: "platform-realm-operator-link+jwt" })
     .setIssuer("https://gateway.example.test")
@@ -289,115 +289,116 @@ const captureFixture = async () => {
   let pendingConsumed = false;
   const ports: NormalActorCapturePorts = {
     builderOrigin: "https://builder.example.test",
-    sender: {
-      issuer: "https://oidc.vercel.example",
-      audience: "audience",
-      ownerId: "team",
-      projectId: "prj_auth",
-      environment: "preview",
-      subject: "auth-subject",
-    },
-    verifySender: async () => ({
-      iss: "https://oidc.vercel.example",
-      aud: "audience",
-      owner_id: "team",
-      project_id: senderProject,
-      environment: "preview",
-      sub: "auth-subject",
-    }),
+    journal: value.journal,
+    now: () => Date.now(),
     pending: async () => ({
-      context,
       actorKey: "owner",
-      resource,
-      getKey: async () => keys.publicKey,
       assertCurrent: async () => {
         if (pendingConsumed) {
           throw new Error("consumed");
         }
       },
+      context,
+      getKey: async () => keys.publicKey,
       link: {
         audience: "https://builder.example.test",
         authResourceId: "auth-resource",
         bootstrapPlanDigest: preparationInput.accountPlanDigest,
         browserOrigin: program.origin,
+        browserSession: {
+          operationRef: accountOperationRef,
+          participantProgramDigest: preparationInput.programDigest,
+        },
         endpointOrigin: "https://gateway.example.test",
         expiresAt: new Date((seconds + 240) * 1000).toISOString(),
         issuer: "https://gateway.example.test",
         nonceSha256: realmIdentityNonceSha256(nonce),
         organizationId: null,
         ownerSessionId: target.sessionId,
-        browserSession: {
-          operationRef: accountOperationRef,
-          participantProgramDigest: preparationInput.programDigest,
-        },
       },
       readback: async () => {
         readbacks += 1;
         return Response.json({
-          resource,
           identity: {
-            version: 1,
             actorId: "actual-actor",
+            expiresAt: "2030-01-01T00:00:00.000Z",
             organizationId: null,
             sessionId: "actual-session",
-            expiresAt: "2030-01-01T00:00:00.000Z",
+            version: 1,
           },
+          resource,
         });
       },
+      resource,
     }),
-    journal: value.journal,
+    sender: {
+      audience: "audience",
+      environment: "preview",
+      issuer: "https://oidc.vercel.example",
+      ownerId: "team",
+      projectId: "prj_auth",
+      subject: "auth-subject",
+    },
     verifyCapturedActor: async (input) => {
       expect(input.normalCookie.value).toBe(normalCookie.value);
       return {
         actorId: "actual-actor",
-        sessionId: "actual-session",
         email: actualEmail,
         expiresAt: "2030-01-01T00:00:00.000Z",
+        sessionId: "actual-session",
       };
     },
-    now: () => Date.now(),
+    verifySender: async () => ({
+      aud: "audience",
+      environment: "preview",
+      iss: "https://oidc.vercel.example",
+      owner_id: "team",
+      project_id: senderProject,
+      sub: "auth-subject",
+    }),
   };
   const handler = createNormalActorCaptureHandler(ports);
   const body = {
-    version: 1,
-    purpose: "realm-normal-browser-session-v1",
-    ownerSessionId: target.sessionId,
     operationRef: accountOperationRef,
-    participantProgramDigest: preparationInput.programDigest,
-    reviewedNonce: nonce,
-    proof,
     origin: program.origin,
+    ownerSessionId: target.sessionId,
+    participantProgramDigest: preparationInput.programDigest,
+    proof,
+    purpose: "realm-normal-browser-session-v1",
+    reviewedNonce: nonce,
+    version: 1,
   };
   const request = (
     phase: "authorize" | "capture",
     extra: Record<string, z.infer<ReturnType<typeof z.json>>> = {},
-  ) =>
-    new Request(`https://builder.example.test${NORMAL_ACTOR_CAPTURE_PATH}`, {
-      method: "POST",
+  ) => {
+    const requestBody: typeof body & { phase: typeof phase; normalCookie?: typeof normalCookie } = {
+      ...body,
+      phase,
+    };
+    if (phase === "capture") requestBody.normalCookie = normalCookie;
+    return new Request(`https://builder.example.test${NORMAL_ACTOR_CAPTURE_PATH}`, {
+      body: JSON.stringify({ ...requestBody, ...extra }),
       headers: { authorization: "Bearer signed.oidc.token", "content-type": "application/json" },
-      body: JSON.stringify({
-        ...body,
-        phase,
-        ...(phase === "capture" ? { normalCookie } : {}),
-        ...extra,
-      }),
+      method: "POST",
     });
+  };
   return {
-    value,
+    consume() {
+      pendingConsumed = true;
+    },
     handler,
-    request,
     get readbacks() {
       return readbacks;
     },
+    request,
     swapEmail() {
       actualEmail = "other@example.test";
     },
     swapSender() {
       senderProject = "wrong-auth-project";
     },
-    consume() {
-      pendingConsumed = true;
-    },
+    value,
   };
 };
 
@@ -448,9 +449,9 @@ describe("normal Auth two-phase private capture", () => {
         value.consume();
       }
       const extras = {
+        cookie: { normalCookie: { ...normalCookie, value: "different%2Fcredential" } },
         nonce: { reviewedNonce: "d".repeat(64) },
         operation: { operationRef: "33333333-3333-4333-8333-333333333333" },
-        cookie: { normalCookie: { ...normalCookie, value: "different%2Fcredential" } },
         proof: { proof: "forged.private.proof" },
       };
       const extra = Object.entries(extras).find(([key]) => key === kind)?.[1] ?? {};

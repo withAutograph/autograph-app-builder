@@ -81,8 +81,8 @@ export type PublicInputRequest = z.infer<typeof publicInputRequestSchema>;
 
 export const publicIdentityInvitationSchema = z.object({
   callId: z.string().min(1),
-  url: z.url().startsWith("https://"),
   expiresAt: z.iso.datetime(),
+  url: z.url().startsWith("https://"),
 });
 export type PublicIdentityInvitation = z.infer<typeof publicIdentityInvitationSchema>;
 
@@ -230,11 +230,11 @@ export type PublicWorkingPreview = z.infer<typeof publicWorkingPreviewSchema>;
 export const eveSessionResultSchema = z
   .object({
     appAccessUrl: z.url().startsWith("https://").optional(),
+    applicationSource: applicationSourceExportReferenceSchema.optional(),
     cursor: z.number().int().nonnegative(),
     error: z.object({ code: z.string(), message: z.string() }).strict().optional(),
     events: z.array(publicEveEventSchema),
     inputRequests: z.array(publicInputRequestSchema).optional(),
-    applicationSource: applicationSourceExportReferenceSchema.optional(),
     prototype: publicPrototypeSchema.optional(),
     prototypeRef: publicPrototypeReferenceSchema.optional(),
     sessionId: z.string(),
@@ -308,8 +308,8 @@ export const eveStartInputSchema = z
     clientRequestId: z.string().min(1).max(200),
     handoffId: z.string().uuid().optional(),
     prompt: z.string().trim().min(1).max(32_000).optional(),
-    resumeSessionId: z.string().min(1).max(200).optional(),
     resumeMode: z.enum(["recover", "recover-idle"]).optional(),
+    resumeSessionId: z.string().min(1).max(200).optional(),
   })
   .strict()
   .superRefine(({ prompt, handoffId, resumeSessionId, resumeMode }, context) => {
@@ -340,9 +340,9 @@ export const eveGetInputSchema = z
     }
   });
 export const eveSendInputSchema = z.object({
-  observationCursor: eveGetInputSchema.shape.cursor.removeDefault().optional(),
   clientRequestId: z.string().min(1).max(200),
   message: z.string().trim().min(1).max(32_000),
+  observationCursor: eveGetInputSchema.shape.cursor.removeDefault().optional(),
   sessionId: z.string().min(1),
 });
 export const eveResponseSchema = z.discriminatedUnion("kind", [

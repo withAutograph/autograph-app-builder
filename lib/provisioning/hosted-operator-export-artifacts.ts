@@ -198,7 +198,7 @@ const readManifestEnvelope = async (input: {
   ) {
     throw operatorArtifactUnavailable();
   }
-  return { manifest, bytes };
+  return { bytes, manifest };
 };
 
 export const readTenantExportManifest = async (
@@ -288,12 +288,12 @@ export const inspectTenantExportCompletion = async (input: {
     const completion = completionSchema.parse(raw);
     // A marker attests all page readbacks before publication. Reconciliation
     // checks it and the exact manifest, without rereading the full dataset.
-    const envelope = await readManifestEnvelope({ ...input, worker, completion });
+    const envelope = await readManifestEnvelope({ ...input, completion, worker });
     return {
-      status: "complete",
       completion,
       manifest: envelope.manifest,
       manifestBytes: envelope.bytes,
+      status: "complete",
     };
   } catch {
     return { status: "unknown" };
@@ -318,7 +318,7 @@ export const createTenantExportArtifacts = (dependencies: {
       ...input,
     });
     return result.status === "complete"
-      ? { status: "complete", completion: result.completion }
+      ? { completion: result.completion, status: "complete" }
       : result;
   };
   return {
@@ -331,7 +331,7 @@ export const createTenantExportArtifacts = (dependencies: {
     }): Promise<TenantExportCompletion> {
       const worker = tenantExportWorkerInputSchema.parse(input.worker);
       assertScope(input.context, worker);
-      const assertCurrent = input.assertCurrent;
+      const { assertCurrent } = input;
       await assertCurrent();
       const existing = await inspect({ ...input, worker });
       if (existing.status === "unknown") {
@@ -349,44 +349,44 @@ export const createTenantExportArtifacts = (dependencies: {
         tenantExportArtifactManifestSchema.parse(parsedJson(bytes)),
       );
       for (const file of manifest.files) {
-        await publishMember({ ...dependencies, ...input, file, assertCurrent });
+        await publishMember({ ...dependencies, ...input, assertCurrent, file });
       }
       const manifestDigest = hash(bytes);
       const manifestMember: TenantExportCompletion["manifest"] = {
+        artifactRef: `_protected-operator/artifacts/tenant-export/${worker.exportId}/${worker.attemptId}/manifest/${manifestDigest}`,
+        byteLength: String(bytes.byteLength),
         kind: "manifest",
         name: "manifest.json",
-        byteLength: String(bytes.byteLength),
         sha256: manifestDigest,
-        artifactRef: `_protected-operator/artifacts/tenant-export/${worker.exportId}/${worker.attemptId}/manifest/${manifestDigest}`,
       };
       await publishBytes({
         ...dependencies,
         ...input,
         ...manifestMember,
-        bytes: singleBytes(bytes),
         assertCurrent,
+        bytes: singleBytes(bytes),
       });
       const completion: TenantExportCompletion = {
         attemptId: worker.attemptId,
-        snapshotId: worker.snapshotId,
-        manifest: manifestMember,
-        fileCount: String(manifest.files.length),
-        rowCount: manifest.rowCount,
         byteLength: manifest.byteLength,
+        fileCount: String(manifest.files.length),
+        manifest: manifestMember,
+        rowCount: manifest.rowCount,
+        snapshotId: worker.snapshotId,
       };
       await readTenantExportManifest({
         ...dependencies,
         ...input,
-        worker,
         completion,
+        worker,
       });
       await writeVerified({
         ...dependencies,
         ...input,
         artifactRef: markerRef(worker),
+        assertCurrent,
         chunkIndex: 0,
         content: JSON.stringify(completionSchema.parse(completion)),
-        assertCurrent,
       });
       return completion;
     },

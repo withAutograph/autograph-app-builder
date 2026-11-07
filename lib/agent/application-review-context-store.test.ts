@@ -16,32 +16,28 @@ import { parsePrototypeArtifactPath } from "./prototype-artifacts";
 
 const context: OperatorArtifactContext = {
   authority: {
-    issuer: "https://builder.example/api/auth",
     audience: "https://builder.example/mcp",
-    workspaceId: "workspace",
+    issuer: "https://builder.example/api/auth",
     ownerUserId: "owner",
+    workspaceId: "workspace",
   },
   target: { appId: "independent-app", sessionId: "original-native-parent" },
 };
 const prepared = (): PreparedApplicationReviewContext => ({
-  version: 1,
   appId: context.target.appId,
-  parentSessionId: context.target.sessionId,
-  sandboxName: "server-captured-sandbox",
   applyRoot: "/workspace/repository",
-  observed: {
-    treeDigest: "observed-tree",
-    files: [{ path: "new-folder/source.ts", mode: "644", digest: "observed-file" }],
-  },
   normalizedChanges: [
     {
+      after: { digest: "observed-file", mode: "644" },
       kind: "added",
       path: "new-folder/source.ts",
-      after: { mode: "644", digest: "observed-file" },
     },
   ],
-  visiblePaths: ["new-folder/source.ts"],
-  reviewKey: "a".repeat(64),
+  observed: {
+    files: [{ digest: "observed-file", mode: "644", path: "new-folder/source.ts" }],
+    treeDigest: "observed-tree",
+  },
+  parentSessionId: context.target.sessionId,
   reviewInput: {
     appSpec: "Complete specification with arbitrary customer business content.",
     appSpecDigest: "spec-digest",
@@ -50,27 +46,31 @@ const prepared = (): PreparedApplicationReviewContext => ({
     originalRequest: "Review the complete original requirement.",
     sourceDigest: "observed-tree",
   },
+  reviewKey: "a".repeat(64),
+  sandboxName: "server-captured-sandbox",
+  version: 1,
+  visiblePaths: ["new-folder/source.ts"],
 });
 const assessment = (value = prepared()): ProductSourceAssessment => ({
   basis: "source-review",
   bindingDigest: sourceReviewBindingDigest(value.reviewInput),
   evidenceDigest: "b".repeat(64),
   evidenceNote: "Source evidence only.",
-  modelId: "independent-model",
-  status: "unassessed",
   findings: [],
-  reviewCompleted: true,
-  reason: "Independent source review completed; native behavior remains unassessed.",
-  omissions: [],
-  remainingRuntimeChecks: ["Observe actual persistence."],
   invocation: {
-    requestAttempts: 2,
-    successfulRequests: 2,
-    journalReuses: 0,
-    splits: 0,
-    requestsWithIncompleteUsage: 0,
     freshUsage: { inputTokens: 10, outputTokens: 3, totalTokens: 13 },
+    journalReuses: 0,
+    requestAttempts: 2,
+    requestsWithIncompleteUsage: 0,
+    splits: 0,
+    successfulRequests: 2,
   },
+  modelId: "independent-model",
+  omissions: [],
+  reason: "Independent source review completed; native behavior remains unassessed.",
+  remainingRuntimeChecks: ["Observe actual persistence."],
+  reviewCompleted: true,
+  status: "unassessed",
 });
 const fixture = () => {
   let owned = true;
@@ -100,26 +100,30 @@ const fixture = () => {
   };
   const factory = (current = context, abortSignal?: AbortSignal) =>
     createApplicationReviewContextStore({
-      store,
-      context: current,
-      assertCurrentOwner,
       abortSignal,
+      assertCurrentOwner,
+      context: current,
+      store,
     });
   return {
-    rows,
-    writes,
-    key,
-    store,
-    factory,
     assertCurrentOwner,
+    factory,
+    key,
     revoke: () => {
       owned = false;
     },
+    rows,
+    store,
+    writes,
   };
 };
 const roots: string[] = [];
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(
+    roots.splice(0).map(async (root) => {
+      await rm(root, { force: true, recursive: true });
+    }),
+  );
 });
 
 describe("private prepared application-review context and outcomes", () => {
@@ -149,15 +153,15 @@ describe("private prepared application-review context and outcomes", () => {
     const contextRef = await store.publishContext(value);
     const advisory: ProductSourceAssessment = {
       ...assessment(value),
+      reason: "Independent evidence was unavailable.",
       reviewCompleted: false,
       status: "blocked",
-      reason: "Independent evidence was unavailable.",
     };
     const outcomeRef = await store.publishOutcome(contextRef, advisory);
     expect(await f.factory().readOutcome(outcomeRef)).toEqual({
+      assessment: advisory,
       contextRef,
       reviewKey: value.reviewKey,
-      assessment: advisory,
     });
     await expect(store.readContext(outcomeRef)).rejects.toThrow();
     await expect(store.readOutcome(contextRef)).rejects.toThrow();
@@ -180,10 +184,10 @@ describe("private prepared application-review context and outcomes", () => {
     const foreignOwner: OperatorArtifactContext = {
       ...context,
       authority: {
-        issuer: "https://builder.example/api/auth",
         audience: "https://builder.example/mcp",
-        workspaceId: "workspace",
+        issuer: "https://builder.example/api/auth",
         ownerUserId: "other-owner",
+        workspaceId: "workspace",
       },
     };
     const foreignSession: OperatorArtifactContext = {
@@ -218,7 +222,7 @@ describe("private prepared application-review context and outcomes", () => {
 
   it("keeps an interrupted partial context unavailable without completion metadata", async () => {
     const f = fixture();
-    const put = f.store.put;
+    const { put } = f.store;
     f.store.put = async (current, chunk) => {
       if (chunk.chunkIndex === 0) {
         throw new Error("completion interrupted");
@@ -262,7 +266,7 @@ describe("private prepared application-review context and outcomes", () => {
   it("requires current ownership before I/O and after a private chunk read", async () => {
     const f = fixture();
     const ref = await f.factory().publishContext(prepared());
-    const read = f.store.read;
+    const { read } = f.store;
     f.store.read = async (current, value, index) => {
       const result = await read(current, value, index);
       f.revoke();
@@ -277,7 +281,7 @@ describe("private prepared application-review context and outcomes", () => {
   it("honors Stop before and after a chunk write without publishing a completion", async () => {
     const f = fixture();
     const controller = new AbortController();
-    const put = f.store.put;
+    const { put } = f.store;
     f.store.put = async (current, chunk) => {
       await put(current, chunk);
       controller.abort(new Error("Stop"));
@@ -301,9 +305,9 @@ describe("private prepared application-review context and outcomes", () => {
     const assertCurrentOwner = async () => {
       await Promise.resolve();
     };
-    const { store } = await createLocalOperatorArtifactStorage({ authority, assertCurrentOwner });
+    const { store } = await createLocalOperatorArtifactStorage({ assertCurrentOwner, authority });
     const adapter = () =>
-      createApplicationReviewContextStore({ store, context: owned, assertCurrentOwner });
+      createApplicationReviewContextStore({ assertCurrentOwner, context: owned, store });
     const ref = await adapter().publishContext(prepared());
     const restored = await adapter().readContext(ref);
     expect(restored.sandboxName).toBe(prepared().sandboxName);

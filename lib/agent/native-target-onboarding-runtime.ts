@@ -62,11 +62,11 @@ export interface NativeTargetCapturedRelease {
 /** All ports are private server capabilities; none are constructed from tool input. */
 export type NativeTargetNonCreationReason = NativeTargetNoCreationReason;
 const nonCreationReason = {
+  authorization_denied: "not_dispatched",
   collision: "name_conflict",
   permission_denied: "provider_permission_denied",
   provider_rejected: "provider_validation_failed",
   rate_limited: "provider_rate_limited",
-  authorization_denied: "not_dispatched",
 } as const;
 export interface NativeTargetOnboardingRuntimePorts {
   /** Reauthorizes current owner/app and reads captured immutable release metadata. */
@@ -175,8 +175,8 @@ const invalid = () => new Error("native_target_onboarding_mismatch");
 const envelope = (row: NativeTargetOnboardingRow): NativeTargetPreparationRequest => ({
   appId: row.appId,
   operationRef: row.requestId,
-  planDigest: row.record.planDigest,
   plan: structuredClone(row.record.plan),
+  planDigest: row.record.planDigest,
 });
 const publicStatus = (stage: NativeTargetOnboardingRow["record"]["stage"]) => {
   if (stage === "ready" || stage === "cancelled" || stage === "planned") {
@@ -184,12 +184,22 @@ const publicStatus = (stage: NativeTargetOnboardingRow["record"]["stage"]) => {
   }
   return "pending" as const;
 };
-const publicResult = (row: NativeTargetOnboardingRow) => ({
-  ...envelope(row),
-  status: publicStatus(row.record.stage),
-  ...(row.record.stage === "ready"
-    ? { projectId: row.record.registration.observed.projectId }
-    : {}),
+const publicResult = (row: NativeTargetOnboardingRow) => {
+  const result = {
+    ...envelope(row),
+    status: publicStatus(row.record.stage),
+  };
+  if (row.record.stage === "ready") {
+    return { ...result, projectId: row.record.registration.observed.projectId };
+  }
+  return result;
+};
+
+const resourceIdentity = (plan: NativeTargetOnboardingPlan) => ({
+  authority: plan.resourceProfileAuthorityDigest,
+  nativeNeon: plan.nativeNeon,
+  profile: plan.resourceProfileId,
+  resourceId: plan.appDatabase.resourceId,
 });
 
 /** Source provenance is checked at planning; later execution resumes the frozen operation. */
@@ -258,7 +268,7 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
     row: NativeTargetOnboardingRow,
     observed: NativeTargetVercelProjectObservation,
   ) => {
-    const record = row.record;
+    const { record } = row;
     if (!("attempt" in record)) {
       throw invalid();
     }
@@ -271,12 +281,12 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
       await ports.journal.recordReady(ctx, row.appId, {
         attemptId: record.attempt.attemptId,
         observed: {
-          projectId: observed.projectId,
-          name: observed.name,
-          teamId: observed.scopeId,
           installationId: record.plan.project.installationId,
+          name: observed.name,
+          projectId: observed.projectId,
           projectSettings: observed.settings,
           protection: observed.protection,
+          teamId: observed.scopeId,
         },
         observedAt: now().toISOString(),
       }),
@@ -302,18 +312,23 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
     const started = now();
     const attempt: NativeTargetOnboardingAttempt = {
       attemptId: uuid(),
-      leaseId: uuid(),
       candidateName,
-      startedAt: started.toISOString(),
       leaseExpiresAt: new Date(started.getTime() + 300_000).toISOString(),
+      leaseId: uuid(),
+      startedAt: started.toISOString(),
     };
     ctx.abortSignal.throwIfAborted();
     row = await ports.journal.claimAttempt(ctx, record.appId, attempt);
     let result: NativeTargetVercelProjectCreation;
     try {
       result = await ports.createProject(ctx, {
-        plan: record.plan,
-        candidateName,
+        acceptProjectId: async (projectId) => {
+          await ports.journal.acceptProjectId(ctx, record.appId, attempt.leaseId, {
+            acceptedAt: now().toISOString(),
+            attemptId: attempt.attemptId,
+            projectId,
+          });
+        },
         authorizeAttempt: async () => {
           ctx.abortSignal.throwIfAborted();
           await ports.journal.authorizeAttempt(
@@ -323,13 +338,8 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
             attempt.leaseId,
           );
         },
-        acceptProjectId: async (projectId) => {
-          await ports.journal.acceptProjectId(ctx, record.appId, attempt.leaseId, {
-            attemptId: attempt.attemptId,
-            projectId,
-            acceptedAt: now().toISOString(),
-          });
-        },
+        candidateName,
+        plan: record.plan,
       });
     } catch {
       return publicResult(await ports.journal.recordUnknown(ctx, record.appId, attempt.attemptId));
@@ -341,7 +351,7 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
         attempt.attemptId,
         nonCreationReason[result.reason],
       );
-      return { ...publicResult(retired), status: "blocked" as const, reason: result.reason };
+      return { ...publicResult(retired), reason: result.reason, status: "blocked" as const };
     }
     if (result.status !== "verified") {
       return publicResult(await ports.journal.recordUnknown(ctx, record.appId, attempt.attemptId));
@@ -367,10 +377,10 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
     // manufacture cancellation or settle the previous public response.
     if (
       !isDeepStrictEqual(proposal.project, {
-        name: prior.plan.project.name,
-        teamId: prior.plan.project.teamId,
         installationId: prior.plan.project.installationId,
+        name: prior.plan.project.name,
         projectSettings: prior.plan.project.projectSettings,
+        teamId: prior.plan.project.teamId,
       }) ||
       proposal.branch !== prior.plan.branch ||
       proposal.conflictPolicy !== prior.plan.conflictPolicy
@@ -390,12 +400,6 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
     if (candidate.resourceProfileId !== proposal.resourceProfileId) {
       throw invalid();
     }
-    const resourceIdentity = (plan: NativeTargetOnboardingPlan) => ({
-      profile: plan.resourceProfileId,
-      authority: plan.resourceProfileAuthorityDigest,
-      nativeNeon: plan.nativeNeon,
-      resourceId: plan.appDatabase.resourceId,
-    });
     if (isDeepStrictEqual(resourceIdentity(candidate), resourceIdentity(prior.plan))) {
       return publicResult(retained);
     }
@@ -412,6 +416,36 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
     );
   };
   return {
+    async authorizeApprovalResponse(ctx: ApprovalResponseContext<NativeTargetPreparationRequest>) {
+      if (
+        ctx.request.toolName !== "prepare-app-native-target" ||
+        ctx.request.toolInput === undefined
+      ) {
+        throw invalid();
+      }
+      const input = nativeTargetPreparationRequestSchema.parse(ctx.request.toolInput);
+      if (
+        input.appId !== input.plan.appId ||
+        nativeTargetOnboardingPlanDigest(input.plan) !== input.planDigest
+      ) {
+        throw invalid();
+      }
+      await ports.authorizeApprovalResponse(ctx);
+    },
+    async hasApproval(input: NativeTargetPreparationRequest, ctx: NativeTargetInvocation) {
+      const row = await readExact(input, ctx);
+      if (
+        row.record.stage === "cancelled" ||
+        ("cancelledBy" in row.record && row.record.cancelledBy !== undefined)
+      ) {
+        throw invalid();
+      }
+      const terminal = await readTerminalApproval(input, ctx, row);
+      if (terminal?.outcome === "cancelled") {
+        throw invalid();
+      }
+      return terminal !== null;
+    },
     async plan(
       raw: NativeTargetPlanRequest,
       ctx: NativeTargetInvocation,
@@ -475,36 +509,6 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
       ctx.abortSignal.throwIfAborted();
       return publicResult(await ports.journal.reservePlan(ctx, plan));
     },
-    async hasApproval(input: NativeTargetPreparationRequest, ctx: NativeTargetInvocation) {
-      const row = await readExact(input, ctx);
-      if (
-        row.record.stage === "cancelled" ||
-        ("cancelledBy" in row.record && row.record.cancelledBy !== undefined)
-      ) {
-        throw invalid();
-      }
-      const terminal = await readTerminalApproval(input, ctx, row);
-      if (terminal?.outcome === "cancelled") {
-        throw invalid();
-      }
-      return terminal !== null;
-    },
-    async authorizeApprovalResponse(ctx: ApprovalResponseContext<NativeTargetPreparationRequest>) {
-      if (
-        ctx.request.toolName !== "prepare-app-native-target" ||
-        ctx.request.toolInput === undefined
-      ) {
-        throw invalid();
-      }
-      const input = nativeTargetPreparationRequestSchema.parse(ctx.request.toolInput);
-      if (
-        input.appId !== input.plan.appId ||
-        nativeTargetOnboardingPlanDigest(input.plan) !== input.planDigest
-      ) {
-        throw invalid();
-      }
-      await ports.authorizeApprovalResponse(ctx);
-    },
     async prepare(
       input: NativeTargetPreparationRequest,
       ctx: NativeTargetInvocation,
@@ -536,8 +540,8 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
           ctx,
           row,
           await ports.observeProject(ctx, {
-            plan: row.record.plan,
             candidateName: row.record.attempt.candidateName,
+            plan: row.record.plan,
             projectId: row.record.acceptedCreation.projectId,
           }),
         );
@@ -547,7 +551,7 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
       }
       const candidate = nextCandidate(row.record);
       if (candidate === null) {
-        return { ...publicResult(row), status: "blocked" as const, reason: "collision" as const };
+        return { ...publicResult(row), reason: "collision" as const, status: "blocked" as const };
       }
       const result = await runAttempt(ctx, row, candidate);
       if (

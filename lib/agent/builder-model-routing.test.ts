@@ -212,10 +212,10 @@ describe("native Gateway reporting metadata", () => {
         only: ["openai"],
         order: ["openai"],
         sessionId: "existing-affinity",
-        user: "existing-user",
         tags: ["retained", "retained"],
+        user: "existing-user",
       },
-      openai: { reasoningEffort: "high", nested: { retained: true } },
+      openai: { nested: { retained: true }, reasoningEffort: "high" },
     };
     Object.freeze(options.gateway.tags);
     Object.freeze(options.gateway);
@@ -260,9 +260,9 @@ describe("native Gateway reporting metadata", () => {
         "main",
       ),
     ).toBe(options);
-    const unsupported = { gateway: { tags: [1], sessionId: "retained-affinity" } };
+    const unsupported = { gateway: { sessionId: "retained-affinity", tags: [1] } };
     expect(withBuilderGatewayReporting(unsupported, () => "native-one", "main")).toBe(unsupported);
-    const nullTags = { gateway: { tags: null, sessionId: "retained-affinity" } };
+    const nullTags = { gateway: { sessionId: "retained-affinity", tags: null } };
     expect(withBuilderGatewayReporting(nullTags, () => "native-one", "main")).toBe(nullTags);
     const hostile: NonNullable<AgentModelOptionsDefinition["providerOptions"]> = {
       get gateway(): NonNullable<AgentModelOptionsDefinition["providerOptions"]>["gateway"] {
@@ -291,8 +291,8 @@ describe("native Gateway reporting metadata", () => {
     const eight = Array.from({ length: 8 }, (_, index) => `caller-${index}`);
     const options = {
       gateway: {
-        tags: [...eight, ...eight],
         sessionId: "retained-affinity",
+        tags: [...eight, ...eight],
         user: "retained-user",
       },
     };
@@ -303,7 +303,7 @@ describe("native Gateway reporting metadata", () => {
       nativeTagFor("native-one"),
       "builder-callsite:main",
     ]);
-    const tags = tagged.gateway.tags;
+    const { tags } = tagged.gateway;
     if (!Array.isArray(tags)) {
       throw new TypeError("Missing controlled reporting tags");
     }
@@ -328,7 +328,7 @@ describe("native Gateway reporting metadata", () => {
     ]);
     for (const tag of ["", "a".repeat(65)]) {
       const invalid = {
-        gateway: { tags: [tag], sessionId: "retained-affinity", user: "retained-user" },
+        gateway: { sessionId: "retained-affinity", tags: [tag], user: "retained-user" },
       };
       expect(withBuilderGatewayReporting(invalid, () => "native-one", "main")).toBe(invalid);
     }
@@ -348,8 +348,8 @@ describe("native Gateway reporting metadata", () => {
     };
     expect(await handler({ type: "step.started" }, unavailableContext)).toMatchObject({
       model: activeBuilderModelId,
-      reasoning: "low",
       modelOptions: { providerOptions: { gateway: { only: ["openai"], order: ["openai"] } } },
+      reasoning: "low",
     });
     expect(console.info).not.toHaveBeenCalled();
   });

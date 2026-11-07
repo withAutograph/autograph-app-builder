@@ -152,11 +152,10 @@ export function StoreInSection({
 }) {
   const githubView = githubStoreInViewModel({
     action: connected ? "update" : "connect",
-    scopes: gitScopeOptions.map((scope) => ({
-      id: scope.value,
-      label: scope.label,
-      ...(scope.detail === undefined ? {} : { detail: scope.detail }),
-    })),
+    scopes: gitScopeOptions.map((scope) => {
+      const option = { id: scope.value, label: scope.label };
+      return scope.detail === undefined ? option : { ...option, detail: scope.detail };
+    }),
   });
   return (
     <ProviderChoiceSection
@@ -230,14 +229,18 @@ export function StoreInSection({
                         autoComplete="off"
                         spellCheck={false}
                         value={repository}
-                        onChange={(event) => onRepositoryChange(event.target.value)}
+                        onChange={(event) => {
+                          onRepositoryChange(event.target.value);
+                        }}
                         placeholder="my-app"
                       />
                       <label className={styles.privacyToggle} aria-label="Private repository">
                         <input
                           type="checkbox"
                           checked={privateRepository}
-                          onChange={(event) => onPrivacyChange(event.target.checked)}
+                          onChange={(event) => {
+                            onPrivacyChange(event.target.checked);
+                          }}
                         />
                         <span>
                           <i>

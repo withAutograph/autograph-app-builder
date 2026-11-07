@@ -25,61 +25,61 @@ const principal = {
   workspaceId: "workspace_1",
 };
 const nativePlan = nativeTargetOnboardingPlanSchema.parse({
-  version: 1,
+  appDatabase: {
+    database: "requests_data",
+    migratorRole: "requests_owner",
+    resourceId: "resource",
+    runtimeRole: "requests_runtime",
+  },
   appId: "requests-app",
+  branch: "preview",
+  conflictPolicy: "stop-on-conflict",
+  cost: { description: "Preview usage", ownership: "current-owner" },
+  nativeNeon: {
+    approvalReference: "scope",
+    nativeStore: { configurationId: "config", resourceId: "store", sourceProjectId: "source" },
+    scope: {
+      branchId: "branch",
+      endpointId: "endpoint",
+      hostname: "ep-fixture.neon.tech",
+      maintenanceDatabase: "maintenance",
+      maintenanceRole: "installer",
+      projectId: "project",
+    },
+  },
   origin: {
-    publicSessionId: "session_fixture",
-    adapterSessionId: "adapter_1",
     adapterGeneration: 1,
+    adapterSessionId: "adapter_1",
     appSpecDigest: "a".repeat(64),
+    publicSessionId: "session_fixture",
     release: {
-      id: "release",
       artifactRef: "artifact",
+      id: "release",
       manifestSha256: "b".repeat(64),
       schemaSha256: "c".repeat(64),
     },
   },
+  productRoles: [],
   project: {
-    name: "requests-app",
-    teamId: "team",
     installationId: "installation",
+    name: "requests-app",
     projectSettings: {
       framework: "nextjs",
       rootDirectory: "apps/requests",
       sourceFilesOutsideRootDirectory: true,
     },
     protection: nativeTargetRequiredProjectProtection,
+    teamId: "team",
   },
-  branch: "preview",
-  appDatabase: {
-    resourceId: "resource",
-    database: "requests_data",
-    migratorRole: "requests_owner",
-    runtimeRole: "requests_runtime",
-  },
-  productRoles: [],
-  nativeNeon: {
-    approvalReference: "scope",
-    nativeStore: { configurationId: "config", resourceId: "store", sourceProjectId: "source" },
-    scope: {
-      projectId: "project",
-      branchId: "branch",
-      endpointId: "endpoint",
-      hostname: "ep-fixture.neon.tech",
-      maintenanceDatabase: "maintenance",
-      maintenanceRole: "installer",
-    },
-  },
+  retention: { policy: "Until approved cleanup" },
+  version: 1,
   worker: {
-    id: "worker",
     executablePath: "/trusted/worker",
-    sha256: "d".repeat(64),
+    id: "worker",
     operationScope: "generated-app-release-install-v1",
+    sha256: "d".repeat(64),
     subcommand: "protected-generated-app-install",
   },
-  cost: { ownership: "current-owner", description: "Preview usage" },
-  retention: { policy: "Until approved cleanup" },
-  conflictPolicy: "stop-on-conflict",
 });
 
 const sessionId = "session_fixture";
@@ -102,14 +102,13 @@ const batch = {
 };
 const request = {
   clientRequestId: "original-response",
-  sessionId,
   responses: ["one", "two"].map((requestId) => ({
     requestId,
     response: { kind: "approve" as const },
   })),
+  sessionId,
 };
 const state = {
-  version: 1 as const,
   pending: [],
   resolved: [
     {
@@ -121,6 +120,7 @@ const state = {
       })),
     },
   ],
+  version: 1 as const,
 };
 const nativeState = (nextNativeIndex: number) => ({
   adapterSessionId: "adapter_1",
@@ -143,36 +143,36 @@ const nativeState = (nextNativeIndex: number) => ({
   version: 1 as const,
 });
 const requested: MessageStreamEvent = {
-  type: "input.requested",
-  meta: { at: "2026-10-21T15:00:00Z", id: "requested" },
   data: {
+    requests: ["one", "two"].map((requestId) => ({
+      action: {
+        callId: `call-${requestId}`,
+        input: toolInput,
+        kind: "tool-call" as const,
+        toolName: "prepare-app-native-target",
+      },
+      kind: "tool-approval" as const,
+      prompt: "Approve",
+      requestId,
+    })),
     sequence: 1,
     stepIndex: 0,
     turnId: "turn",
-    requests: ["one", "two"].map((requestId) => ({
-      kind: "tool-approval" as const,
-      requestId,
-      prompt: "Approve",
-      action: {
-        kind: "tool-call" as const,
-        toolName: "prepare-app-native-target",
-        callId: `call-${requestId}`,
-        input: toolInput,
-      },
-    })),
   },
+  meta: { at: "2026-10-21T15:00:00Z", id: "requested" },
+  type: "input.requested",
 };
 const settled: MessageStreamEvent = {
-  type: "approval.settled",
-  meta: { at: "2026-10-21T15:00:01Z", id: "settled" },
   data: {
+    outcome: "approved",
+    requestId: "one",
+    responderPrincipalId: principal.ownerUserId,
     sequence: 2,
     stepIndex: 0,
     turnId: "turn",
-    requestId: "one",
-    responderPrincipalId: principal.ownerUserId,
-    outcome: "approved",
   },
+  meta: { at: "2026-10-21T15:00:01Z", id: "settled" },
+  type: "approval.settled",
 };
 
 describe("service recovery of historical native approval", () => {
@@ -189,41 +189,40 @@ describe("service recovery of historical native approval", () => {
       const staleCapture = previousCapture.snapshot();
       const base = new InMemoryHostedEveStore();
       let current = durableHostedSessionRecordSchema.parse({
-        adapterSessionId: "adapter_1",
         adapterGeneration: 1,
-        originAdapterSessionId: "adapter_1",
-        createdAtEpochMs: 1,
-        updatedAtEpochMs: 1,
-        lastProgressAtEpochMs: 1,
-        principal,
-        sessionId,
-        status: "waiting",
-        resumability: "live",
-        stage: "ready",
-        title: "App",
-        version: 2,
+        adapterSessionId: "adapter_1",
         checkpointDigest: `sha256:${"c".repeat(64)}`,
         checkpointProgressDigest: `sha256:${"d".repeat(64)}`,
         checkpointRef: {
-          id: "123e4567-e89b-42d3-a456-426614174001",
           digest: `sha256:${"c".repeat(64)}`,
           eventCount: 0,
+          id: "123e4567-e89b-42d3-a456-426614174001",
         },
+        createdAtEpochMs: 1,
+        lastProgressAtEpochMs: 1,
+        originAdapterSessionId: "adapter_1",
+        principal,
         privateApprovalReceipts: stale ? staleCapture.receipts : [],
+        resumability: "live",
+        sessionId,
+        stage: "ready",
+        status: "waiting",
+        title: "App",
+        updatedAtEpochMs: 1,
+        version: 2,
       });
       let metadata: HostedPagedCheckpointMetadata = {
-        version: 1,
         capturedAtEpochMs: 1,
-        status: "waiting",
         nativeObservationState: nativeState(10),
         privateApprovalCaptureState: stale
           ? staleCapture
-          : { version: 1, sessionId, pendingRequests: [], receipts: [] },
+          : { pendingRequests: [], receipts: [], sessionId, version: 1 },
+        status: "waiting",
+        version: 1,
       };
       const operation = hostedOperationRecordSchema.parse({
         clientRequestId: request.clientRequestId,
         createdAtEpochMs: 1,
-        updatedAtEpochMs: 1,
         kind: "respond",
         operationId: stableId("op", {
           clientRequestId: request.clientRequestId,
@@ -237,9 +236,10 @@ describe("service recovery of historical native approval", () => {
         }),
         principal,
         requestDigest: digest({ kind: "respond", request, sessionId }),
+        safeErrorCode: "submission_unknown",
         sessionId,
         state: "submission_unknown",
-        safeErrorCode: "submission_unknown",
+        updatedAtEpochMs: 1,
         version: 1,
       });
       const respond = vi.fn();
@@ -258,12 +258,12 @@ describe("service recovery of historical native approval", () => {
             return {
               artifactProjectionRequiresLegacyReadback: false,
               installedEventCount: 0,
-              observationComplete: false,
+              nativeObservationState: nativeState(3),
               nativeTailIndex: 8,
               nextNativeIndex: 3,
-              nativeObservationState: nativeState(3),
-              publicEventCount: 0,
+              observationComplete: false,
               pendingRequests: [],
+              publicEventCount: 0,
               status: "waiting" as const,
             };
           }
@@ -276,17 +276,17 @@ describe("service recovery of historical native approval", () => {
           return {
             artifactProjectionRequiresLegacyReadback: false,
             installedEventCount: 0,
-            observationComplete: true,
+            nativeObservationState: nativeState(10),
             nativeTailIndex: 9,
             nextNativeIndex: 10,
-            nativeObservationState: nativeState(10),
-            publicEventCount: 0,
+            observationComplete: true,
             pendingRequests: [],
+            publicEventCount: 0,
             status: "waiting" as const,
           };
         },
       );
-      const getSession = vi.fn(() => Promise.resolve(current));
+      const getSession = vi.fn(async () => current);
       const observeSessionPaged = vi.fn<NonNullable<HostedEveStore["observeSessionPaged"]>>(
         async (input) => {
           expect(input.expectedCheckpointDigest).toBe(current.checkpointDigest);
@@ -299,7 +299,7 @@ describe("service recovery of historical native approval", () => {
             eventCount += 1;
           }
           expect(eventCount).toBe(0);
-          metadata = input.metadata;
+          ({ metadata } = input);
           revision += 1;
           const next = `sha256:${revision.toString(16).padStart(64, "0")}`;
           current = durableHostedSessionRecordSchema.parse({
@@ -314,8 +314,8 @@ describe("service recovery of historical native approval", () => {
           return current;
         },
       );
-      const readCheckpointPage = vi.fn<NonNullable<HostedEveStore["readCheckpointPage"]>>((input) =>
-        Promise.resolve({
+      const readCheckpointPage = vi.fn<NonNullable<HostedEveStore["readCheckpointPage"]>>(
+        async (input) => ({
           checkpointDigest: input.checkpointRef.digest,
           cursor: 0,
           events: [],
@@ -326,34 +326,30 @@ describe("service recovery of historical native approval", () => {
       const store: HostedEveStore = {
         getSession,
         listSessions: base.listSessions.bind(base),
-        reserveOperation: vi.fn(() =>
-          Promise.resolve({ disposition: "existing" as const, operation }),
-        ),
-        settleSucceeded: vi.fn<HostedEveStore["settleSucceeded"]>((input) =>
-          Promise.resolve(
-            hostedOperationRecordSchema.parse({
-              ...withoutHostedOperationError(operation),
-              state: "succeeded",
-              result: input.result,
-            }),
-          ),
-        ),
-        settleUnsuccessful: vi.fn(),
         observeSessionPaged,
         readCheckpointPage,
+        reserveOperation: vi.fn(async () => ({ disposition: "existing" as const, operation })),
+        settleSucceeded: vi.fn<HostedEveStore["settleSucceeded"]>(async (input) =>
+          hostedOperationRecordSchema.parse({
+            ...withoutHostedOperationError(operation),
+            result: input.result,
+            state: "succeeded",
+          }),
+        ),
+        settleUnsuccessful: vi.fn(),
       };
       const service = createHostedEveSessionService({
+        assertSendDeliveryOwner: async () => {},
+        now: () => 50,
         principal,
         store,
-        now: () => 50,
-        assertSendDeliveryOwner: () => Promise.resolve(),
         transport: {
-          observe,
-          get: vi.fn(),
-          start: vi.fn(),
-          send: vi.fn(),
-          respond,
           cancel: vi.fn(),
+          get: vi.fn(),
+          observe,
+          respond,
+          send: vi.fn(),
+          start: vi.fn(),
         },
       });
       await expect(service.respond(request)).rejects.toThrow();

@@ -1045,7 +1045,7 @@ export const builderProvisioningJournals = pgTable(
     requestDigest: text("request_digest").notNull(),
     requestId: text("request_id").notNull(),
     revision: integer("revision").notNull().default(1),
-    state: text("state").notNull(),
+    state: text("state", { enum: ["pending", "settled"] }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [
@@ -1411,12 +1411,12 @@ export const hostedGitHubPrEffectJournals = pgTable(
   "hosted_github_pr_effect_journal",
   {
     ...hostedGitHubTenantColumns,
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     intentDigest: text("intent_digest").notNull(),
     kind: text("kind").notNull(),
     receiptDigest: text("receipt_digest").notNull(),
     record: jsonb("record").notNull(),
     status: text("status").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [

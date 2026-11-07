@@ -16,15 +16,13 @@ const principal: HostedPrincipal = {
   audience: "builder-observation",
   issuer: "https://identity.example.test",
   ownerUserId: "owner",
-  workspaceId: "workspace",
   scopes: Object.values(hostedEveOperationScopes),
+  workspaceId: "workspace",
 };
 
 const fixture = async (id: string) => {
   const store = new InMemoryHostedEveStore();
-  const observeRecovery = vi.fn<NonNullable<HostedEveTransport["observeRecovery"]>>(() =>
-    Promise.resolve(),
-  );
+  const observeRecovery = vi.fn<NonNullable<HostedEveTransport["observeRecovery"]>>(async () => {});
   const activateRecovery = vi.fn<NonNullable<HostedEveTransport["activateRecovery"]>>();
   const start = vi
     .fn<HostedEveTransport["start"]>()
@@ -34,20 +32,20 @@ const fixture = async (id: string) => {
     })
     .mockRejectedValueOnce(new SubmissionOutcomeUnknownError());
   const adapter: HostedEveTransport = {
-    start,
-    observeRecovery,
     activateRecovery,
-    get: vi.fn(() => Promise.resolve({ events: [], status: "failed" as const })),
-    send: vi.fn(),
-    respond: vi.fn(),
     cancel: vi.fn(),
+    get: vi.fn(async () => ({ events: [], status: "failed" as const })),
+    observeRecovery,
+    respond: vi.fn(),
+    send: vi.fn(),
+    start,
   };
-  const assertOwner = vi.fn(() => Promise.resolve());
+  const assertOwner = vi.fn(async () => {});
   const service = createHostedEveSessionService({
+    assertNativeRecoveryOwner: assertOwner,
     principal,
     store,
     transport: adapter,
-    assertNativeRecoveryOwner: assertOwner,
   });
   const first = await service.start({ clientRequestId: `${id}-initial`, prompt: "Build" });
   const readSession = store.getSession.bind(store);
@@ -66,12 +64,12 @@ const fixture = async (id: string) => {
   await expect(
     service.start({ clientRequestId, resumeSessionId: first.sessionId }),
   ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
-  const getStart = service.getStart;
+  const { getStart } = service;
   if (getStart === undefined) {
     throw new Error("Expected public start lookup.");
   }
-  const lookup = () => getStart({ clientRequestId, cursor: 0, limit: 20 });
-  return { store, service, adapter, assertOwner, lookup, clientRequestId, observeRecovery };
+  const lookup = async () => await getStart({ clientRequestId, cursor: 0, limit: 20 });
+  return { adapter, assertOwner, clientRequestId, lookup, observeRecovery, service, store };
 };
 
 describe("normal public recovery observation", () => {
@@ -79,9 +77,9 @@ describe("normal public recovery observation", () => {
     const f = await fixture("coalesced");
     const before = await f.store.getStartOperation(principal, f.clientRequestId);
     await Promise.all(
-      [f.lookup(), f.lookup()].map((read) =>
-        expect(read).rejects.toBeInstanceOf(HostedSubmissionUnknownError),
-      ),
+      [f.lookup(), f.lookup()].map(async (read) => {
+        await expect(read).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+      }),
     );
     await expect(f.lookup()).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     expect(f.adapter.observeRecovery).toHaveBeenCalledOnce();
@@ -102,20 +100,20 @@ describe("normal public recovery observation", () => {
       throw new Error("Missing canonical recovery.");
     }
     await f.store.commitNativeRecoveryReceipt({
-      principal,
       descriptor: operation.nativeRecovery,
+      nowEpochMs: Date.now(),
+      principal,
       recoveryBinding: {
         ...operation.nativeRecovery,
         ownerRunId: "already-failed-recovered-owner",
         provenance: {
+          checkpointVersion: 1,
           kind: "failed-turn-input",
-          sourceStepId: "step",
           sourceEventId: "event",
           sourceSlot: 0,
-          checkpointVersion: 1,
+          sourceStepId: "step",
         },
       },
-      nowEpochMs: Date.now(),
     });
     await expect(f.lookup()).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     expect(f.adapter.observeRecovery).toHaveBeenLastCalledWith(
@@ -147,61 +145,57 @@ describe("normal public recovery observation", () => {
 
 it("uses the authenticated existing observation route once without session start or stream read", async () => {
   const recovery = {
-    version: 1 as const,
-    operationId: "observation-operation",
-    sourcePublicSessionId: "public-parent",
-    sourceOwnerRunId: "physical-parent",
-    sourceAdapterGeneration: 1,
     logicalSessionId: "logical-parent",
+    operationId: "observation-operation",
     originalAuthoritySessionId: "public-parent",
     parentCancellationRevision: 0,
+    sourceAdapterGeneration: 1,
+    sourceOwnerRunId: "physical-parent",
+    sourcePublicSessionId: "public-parent",
+    version: 1 as const,
   };
-  const request = vi.fn<typeof fetch>(() =>
-    Promise.resolve(
-      Response.json(
-        { ok: true, status: "accepted", sessionId: "failed-receipt-owner" },
-        { status: 202 },
-      ),
+  const request = vi.fn<typeof fetch>(async () =>
+    Response.json(
+      { ok: true, sessionId: "failed-receipt-owner", status: "accepted" },
+      { status: 202 },
     ),
   );
   const adapter = createSameOriginEveTransport({
     config: { baseUrl: "https://builder.example.test" },
-    workloadIdentity: { token: () => Promise.resolve("synthetic-project-token") },
     fetchImplementation: request,
+    workloadIdentity: { token: async () => "synthetic-project-token" },
   });
   await adapter.observeRecovery?.({
-    principal,
-    operationId: recovery.operationId,
-    recovery,
     expectedOwnerRunId: "failed-receipt-owner",
+    operationId: recovery.operationId,
+    principal,
+    recovery,
   });
   expect(request).toHaveBeenCalledOnce();
   const [url, init] = request.mock.calls[0];
   expect(url).toBe("https://builder.example.test/eve/v1/session");
   expect(JSON.parse(z.string().parse(init?.body))).toMatchObject({
-    recoveryPhase: "observe",
-    recovery,
     forwardedPrincipal: { current: { principalId: principal.ownerUserId } },
+    recovery,
+    recoveryPhase: "observe",
   });
   expect(init?.redirect).toBe("manual");
 });
 
 it("observes exact source coordinates through the protected route without recovery authority", async () => {
   const source = {
-    sourcePublicSessionId: "source",
-    sourceAdapterSessionId: "anchor",
-    sourceAdapterGeneration: 1,
     cancellationRevision: 0,
+    sourceAdapterGeneration: 1,
+    sourceAdapterSessionId: "anchor",
+    sourcePublicSessionId: "source",
   };
-  const request = vi.fn<typeof fetch>(() =>
-    Promise.resolve(
-      Response.json({ ok: true, status: "accepted", sessionId: "anchor" }, { status: 202 }),
-    ),
+  const request = vi.fn<typeof fetch>(async () =>
+    Response.json({ ok: true, sessionId: "anchor", status: "accepted" }, { status: 202 }),
   );
   const adapter = createSameOriginEveTransport({
     config: { baseUrl: "https://builder.example.test" },
-    workloadIdentity: { token: () => Promise.resolve("synthetic-project-token") },
     fetchImplementation: request,
+    workloadIdentity: { token: async () => "synthetic-project-token" },
   });
   await adapter.observeSource?.({ principal, source });
   expect(request).toHaveBeenCalledOnce();
@@ -212,14 +206,12 @@ it("observes exact source coordinates through the protected route without recove
   expect(body).not.toHaveProperty("recovery");
 });
 it("coalesces identical source observations and re-inspects changed cancellation", async () => {
-  const observeSource = vi.fn<NonNullable<HostedEveTransport["observeSource"]>>(() =>
-    Promise.resolve(),
-  );
+  const observeSource = vi.fn<NonNullable<HostedEveTransport["observeSource"]>>(async () => {});
   const source = {
-    sourcePublicSessionId: "coalesced-source",
-    sourceAdapterSessionId: "anchor",
-    sourceAdapterGeneration: 1,
     cancellationRevision: 0,
+    sourceAdapterGeneration: 1,
+    sourceAdapterSessionId: "anchor",
+    sourcePublicSessionId: "coalesced-source",
   };
   await Promise.all([
     observeNativeSource({ principal, source, transport: { observeSource } }),

@@ -1,5 +1,6 @@
 /* oxlint-disable eslint/require-await -- async fixtures implement Sandbox and browser APIs. */
 import { describe, expect, it, vi } from "vitest";
+import type { SandboxSession, SandboxWriteTextFileOptions } from "eve/sandbox";
 import { runSandboxRuntimeComparison } from "./self-reproduction-runtime-comparison";
 
 const fixture = (exitCode = 0) => ({
@@ -10,7 +11,7 @@ const fixture = (exitCode = 0) => ({
     stderr: "diagnostic stderr",
     stdout: "diagnostic stdout",
   })),
-  writeTextFile: vi.fn(async () => {}),
+  writeTextFile: vi.fn(async (_options: SandboxWriteTextFileOptions) => {}),
 });
 
 describe("live sandbox comparison", () => {
@@ -22,15 +23,14 @@ describe("live sandbox comparison", () => {
       artifactPaths: ["screenshots/root.png"],
       payload,
       script: "// evaluator",
-      session: session as never,
+      session,
     });
     expect(result.status).toBe("completed");
     expect(result.output).toEqual({ observations: [] });
     expect(result.artifacts[0]?.content).toEqual(new Uint8Array([1, 2]));
-    expect(session.writeTextFile).toHaveBeenCalledWith({
-      content: JSON.stringify(payload),
-      path: expect.stringMatching(/^\.self-reproduction-comparison\/[^/]+\/input\.json$/u),
-    });
+    const inputWrite = session.writeTextFile.mock.calls[1]?.[0];
+    expect(inputWrite?.content).toBe(JSON.stringify(payload));
+    expect(inputWrite?.path).toMatch(/^\.self-reproduction-comparison\/[^/]+\/input\.json$/u);
     expect(session.run.mock.calls[0]).not.toContain(payload.text);
   });
 
@@ -42,7 +42,7 @@ describe("live sandbox comparison", () => {
       artifactPaths: ["missing.png", "present.png"],
       payload: {},
       script: "// evaluator",
-      session: session as never,
+      session,
     });
     expect(result.status).toBe("failed");
     expect(result.command.stderr).toBe("diagnostic stderr");
@@ -67,7 +67,7 @@ describe("live sandbox comparison", () => {
           throw new Error("second probe failed before writing");
         }
         const outputPath = command.split(" ").at(-1);
-        if (!outputPath) {
+        if (outputPath === undefined || outputPath === "") {
           throw new Error("Comparison output path is missing.");
         }
         files.set(outputPath, JSON.stringify({ probe: invocation }));
@@ -83,7 +83,10 @@ describe("live sandbox comparison", () => {
       artifactPaths: ["capture.png"],
       payload: {},
       script: "// evaluator",
-      session: session as never,
+      session: session satisfies Pick<
+        SandboxSession,
+        "writeTextFile" | "run" | "readTextFile" | "readBinaryFile"
+      >,
     };
     const first = await runSandboxRuntimeComparison(input);
     const second = await runSandboxRuntimeComparison(input);
@@ -108,7 +111,7 @@ describe("live sandbox comparison", () => {
         artifactPaths: ["../credential"],
         payload: {},
         script: "",
-        session: session as never,
+        session,
       }),
     ).rejects.toThrow("relative child path");
     expect(session.run).not.toHaveBeenCalled();

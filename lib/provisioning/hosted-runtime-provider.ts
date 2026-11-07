@@ -283,8 +283,8 @@ export const createHostedRuntimeVercelProvider = (input: {
         accountId: z.string(),
         framework: z.literal("services"),
         id: z.string(),
-        rootDirectory: z.string().nullable(),
         link: z.unknown().optional(),
+        rootDirectory: z.string().nullable(),
       })
       .safeParse(await request(`/v9/projects/${projectPath}`));
     if (
@@ -301,16 +301,6 @@ export const createHostedRuntimeVercelProvider = (input: {
     assertEnvironmentAvailability,
     assertEnvironmentBindings,
     assertProject,
-    async resolveEnvironmentGitBranch() {
-      if (observedProject === undefined) {
-        await assertProject();
-      }
-      environmentGitBranch = resolveNativePreviewEnvironmentGitBranch(
-        input.target.branch,
-        observedProject,
-      );
-      return environmentGitBranch;
-    },
     async bindEnvironment(
       values: Readonly<Record<string, string>>,
       options?: { runtimeId: string },
@@ -327,17 +317,23 @@ export const createHostedRuntimeVercelProvider = (input: {
         await request(
           `/v10/projects/${projectPath}/env`,
           { upsert: String(upsert) },
-          selectedKeys.map((key) => ({
-            comment:
+          selectedKeys.map((key) => {
+            const comment =
               options === undefined
                 ? `App Builder isolated runtime for ${input.target.appId}`
-                : runtimeComment(options.runtimeId),
-            ...(environmentGitBranch === null ? {} : { gitBranch: environmentGitBranch }),
-            key,
-            target: ["preview"],
-            type: "encrypted",
-            value: values[key],
-          })),
+                : runtimeComment(options.runtimeId);
+            const prefix =
+              environmentGitBranch === null
+                ? { comment }
+                : { comment, gitBranch: environmentGitBranch };
+            return {
+              ...prefix,
+              key,
+              target: ["preview"],
+              type: "encrypted",
+              value: values[key],
+            };
+          }),
         );
       };
       if (options === undefined) {
@@ -481,6 +477,16 @@ export const createHostedRuntimeVercelProvider = (input: {
         throw new HostedRuntimeProviderError("resource_mismatch");
       }
       return options.preserveForeign === true ? [...selected.keys()] : keys;
+    },
+    async resolveEnvironmentGitBranch() {
+      if (observedProject === undefined) {
+        await assertProject();
+      }
+      environmentGitBranch = resolveNativePreviewEnvironmentGitBranch(
+        input.target.branch,
+        observedProject,
+      );
+      return environmentGitBranch;
     },
   };
 };

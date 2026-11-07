@@ -23,12 +23,15 @@ export default defineEval({
     try {
       const destination = path.join(fixture.allowedRoot, "exact-empty");
       await mkdir(destination, { mode: 0o700 });
-      await withFreshBootstrapTestCapability(fixture.capability, () =>
-        session.send(`Publish fresh repository bootstrap at ${destination} exact-empty.`),
+      await withFreshBootstrapTestCapability(
+        fixture.capability,
+        async () =>
+          await session.send(`Publish fresh repository bootstrap at ${destination} exact-empty.`),
       );
       session.requireInputRequest({ toolName: "publish_fresh_repository" });
-      const turn1 = await withFreshBootstrapTestCapability(fixture.capability, () =>
-        session.respondAll("approve"),
+      const turn1 = await withFreshBootstrapTestCapability(
+        fixture.capability,
+        async () => await session.respondAll("approve"),
       );
       t.succeeded();
       t.check(turn1.message, includes("one parentless SHA-1 local repository"));

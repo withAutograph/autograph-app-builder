@@ -212,8 +212,37 @@ const draftReadBack = (
 ): DraftPublicationReadBack => {
   const branchSha = "5".repeat(40);
   const body: Omit<DraftPublicationReadBack, "digest"> = {
-    version: GITHUB_PUBLICATION_VERSION,
+    branch:
+      observation === "absent"
+        ? { status: "absent" }
+        : {
+            branchName: proposal.branchName,
+            branchSha,
+            branchTree: "6".repeat(40),
+            changedContentDigest: proposal.changedContentDigest,
+            idempotencyKey: proposal.idempotencyKey,
+            normalizedChangedPaths: proposal.approvedPaths,
+            status: "present",
+          },
+    changedPathsSinceBase: [],
     idempotencyKey: proposal.idempotencyKey,
+    pullRequest:
+      observation === "exact" || observation === "different-head"
+        ? {
+            baseBranch: proposal.baseBranch,
+            baseRepositoryId: proposal.repositoryId,
+            baseSha: repository.headSha,
+            changeSetDigest: proposal.changeSetDigest,
+            draft: true,
+            headBranch: proposal.branchName,
+            headRepositoryId: proposal.repositoryId,
+            headSha: observation === "exact" ? branchSha : "7".repeat(40),
+            idempotencyKey: proposal.idempotencyKey,
+            pullRequestId: "1234",
+            pullRequestNumber: 42,
+            status: "present",
+          }
+        : { status: "absent" },
     repository: createRepositoryObservation({
       defaultBranch: repository.defaultBranch,
       headSha: repository.headSha,
@@ -225,36 +254,7 @@ const draftReadBack = (
       repositoryId: repository.repositoryId,
       visibility: repository.visibility,
     }),
-    changedPathsSinceBase: [],
-    branch:
-      observation === "absent"
-        ? { status: "absent" }
-        : {
-            status: "present",
-            branchName: proposal.branchName,
-            branchSha,
-            branchTree: "6".repeat(40),
-            normalizedChangedPaths: proposal.approvedPaths,
-            changedContentDigest: proposal.changedContentDigest,
-            idempotencyKey: proposal.idempotencyKey,
-          },
-    pullRequest:
-      observation === "exact" || observation === "different-head"
-        ? {
-            status: "present",
-            pullRequestId: "1234",
-            pullRequestNumber: 42,
-            draft: true,
-            headRepositoryId: proposal.repositoryId,
-            headBranch: proposal.branchName,
-            headSha: observation === "exact" ? branchSha : "7".repeat(40),
-            baseRepositoryId: proposal.repositoryId,
-            baseBranch: proposal.baseBranch,
-            baseSha: repository.headSha,
-            changeSetDigest: proposal.changeSetDigest,
-            idempotencyKey: proposal.idempotencyKey,
-          }
-        : { status: "absent" },
+    version: GITHUB_PUBLICATION_VERSION,
   };
   return { ...body, digest: createHash("sha256").update(JSON.stringify(body)).digest("hex") };
 };
@@ -307,7 +307,7 @@ describe("initial draft destination runtime", () => {
       readable: true,
       side: "after",
     });
-    expect(bothRead).toMatchObject({ beforeComplete: true, afterComplete: true });
+    expect(bothRead).toMatchObject({ afterComplete: true, beforeComplete: true });
     const proposal = await f.runtime.sealDraftPullRequestProposal({
       destinationReview: destination,
       githubSource: source,
@@ -399,8 +399,8 @@ describe("initial draft destination runtime", () => {
       branchName: proposal.branchName,
       branchSha: "5".repeat(40),
       branchTree: "6".repeat(40),
-      changedContentDigest: review.changedContentDigest,
       changeSetDigest: review.changeSetDigest,
+      changedContentDigest: review.changedContentDigest,
       draft: true,
       idempotencyKey: proposal.idempotencyKey,
       installationIdentityDigest: proposal.installationIdentityDigest,

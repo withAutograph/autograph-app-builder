@@ -1,9 +1,12 @@
 import { expect, test } from "playwright/test";
+import type { Response } from "playwright/test";
 
 import { finishOAuth, resetApplicationState, waitForBuilderReady } from "../support/harness";
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-test.beforeEach(async () => resetApplicationState());
+test.beforeEach(async () => {
+  await resetApplicationState();
+});
 
 test("editing and autosave never start a view transition around the live form", async ({
   page,
@@ -29,15 +32,25 @@ test("editing and autosave never start a view transition around the live form", 
     ["App Brief", "Keep both edits through autosave."],
   ]) {
     // Do not let the previous edit's Saved status satisfy this checkpoint.
-    const saved = page.waitForResponse((response) => {
+    const matchesExpectedMutation = (response: Response) => {
       const request = response.request();
       const body = request.postData();
-      return (
-        request.method() === "POST" &&
-        Boolean(request.headers()["next-action"]) &&
-        Boolean(body?.includes("clientMutationId") && body.includes(JSON.stringify(value)))
-      );
-    });
+      const action = request.headers()["next-action"];
+      if (request.method() !== "POST") {
+        return false;
+      }
+      if (!action) {
+        return false;
+      }
+      if (body === null) {
+        return false;
+      }
+      if (!body.includes("clientMutationId")) {
+        return false;
+      }
+      return body.includes(JSON.stringify(value));
+    };
+    const saved = page.waitForResponse((response) => matchesExpectedMutation(response));
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await page.getByLabel(label, { exact: true }).fill(value);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow

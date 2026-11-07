@@ -63,33 +63,35 @@ export function createBuilderDraftService(input: { store: BuilderDraftStore; now
       draftId: string,
       expectedRevision?: number,
     ) {
-      return input.store.archive({
+      const archiveInput = {
         authority: hostedTenantAuthoritySchema.parse(authorityInput),
         draftId: saveActiveBuilderDraftInputSchema.shape.draftId.parse(draftId),
         now: now(),
-        ...(expectedRevision === undefined
-          ? {}
-          : {
-              expectedRevision:
-                saveActiveBuilderDraftInputSchema.shape.expectedRevision.parse(expectedRevision),
-            }),
-      });
+      };
+      if (expectedRevision !== undefined) {
+        return await input.store.archive({
+          ...archiveInput,
+          expectedRevision:
+            saveActiveBuilderDraftInputSchema.shape.expectedRevision.parse(expectedRevision),
+        });
+      }
+      return await input.store.archive(archiveInput);
     },
     /** Invoke only from scheduled maintenance; request paths must never purge drafts. */
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async deleteInactiveSince(maxAgeMs?: number) {
-      return input.store.deleteInactiveSince({ maxAgeMs, now: now() });
+      return await input.store.deleteInactiveSince({ maxAgeMs, now: now() });
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async read(authorityInput: BuilderDraftAuthority, draftId: string) {
-      return input.store.read({
+      return await input.store.read({
         authority: hostedTenantAuthoritySchema.parse(authorityInput),
         draftId: saveActiveBuilderDraftInputSchema.shape.draftId.parse(draftId),
       });
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async readActive(authorityInput: BuilderDraftAuthority) {
-      return input.store.readActive({
+      return await input.store.readActive({
         authority: hostedTenantAuthoritySchema.parse(authorityInput),
       });
     },
@@ -100,7 +102,7 @@ export function createBuilderDraftService(input: { store: BuilderDraftStore; now
     ) {
       const authority = hostedTenantAuthoritySchema.parse(authorityInput);
       const parsed = saveActiveBuilderDraftInputSchema.parse(saveInput);
-      return input.store.saveActive({
+      return await input.store.saveActive({
         authority,
         clientMutationId: parsed.clientMutationId,
         draftId: parsed.draftId,

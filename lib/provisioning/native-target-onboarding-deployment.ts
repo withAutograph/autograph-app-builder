@@ -130,9 +130,9 @@ export const nativeTargetApprovalCheckpointId = (
 };
 const approvalCheckpointRecordSchema = z.strictObject({
   kind: z.literal("native-target-approval-observation"),
-  version: z.literal(1),
-  planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   observation: privateNativeTargetApprovalObservationSchema,
+  planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  version: z.literal(1),
 });
 
 /** Checkpoint only incomplete native tails. The authenticated stream remains settlement authority. */
@@ -175,7 +175,7 @@ export const createNativeTargetApprovalCheckpoint = (
     if (row.requestDigest !== planDigest || parsed.planDigest !== planDigest) {
       throw mismatch();
     }
-    expected = { revision: row.revision, observation: structuredClone(parsed.observation) };
+    expected = { observation: structuredClone(parsed.observation), revision: row.revision };
     return parsed.observation;
   };
   const assertObservationBinding = (parsed: PrivateNativeTargetApprovalObservation) => {
@@ -205,12 +205,12 @@ export const createNativeTargetApprovalCheckpoint = (
       .insert(builderProvisioningJournals)
       .values({
         ...key,
-        requestId,
-        requestDigest: planDigest,
+        createdAt: now,
         record: value,
+        requestDigest: planDigest,
+        requestId,
         revision: 1,
         state: "pending",
-        createdAt: now,
         updatedAt: now,
       })
       .onConflictDoNothing();
@@ -229,7 +229,7 @@ export const createNativeTargetApprovalCheckpoint = (
     if (stored.planDigest !== planDigest || !isDeepStrictEqual(stored.observation, parsed)) {
       throw unavailable();
     }
-    expected = { revision: inserted.revision, observation: structuredClone(parsed) };
+    expected = { observation: structuredClone(parsed), revision: inserted.revision };
   };
   const assertForwardObservation = (
     previous: PrivateNativeTargetApprovalObservation,
@@ -262,9 +262,9 @@ export const createNativeTargetApprovalCheckpoint = (
     }
     const value = approvalCheckpointRecordSchema.parse({
       kind: "native-target-approval-observation",
-      version: 1,
-      planDigest,
       observation: parsed,
+      planDigest,
+      version: 1,
     });
     const now = new Date();
     if (expected === null) {
@@ -291,8 +291,8 @@ export const createNativeTargetApprovalCheckpoint = (
     }
     if ((expected?.revision ?? 0) <= expectedSnapshot.revision) {
       expected = {
-        revision: expectedSnapshot.revision + 1,
         observation: structuredClone(parsed),
+        revision: expectedSnapshot.revision + 1,
       };
     }
   };
@@ -313,12 +313,11 @@ export const createNativeTargetApprovalHistoryTransport = (input: {
   }
   return createSameOriginEveTransport({
     config: { baseUrl: input.builderOrigin },
-    workloadIdentity: { token: () => Promise.resolve(carrier.slice(7)) },
     fetchImplementation: createBuilderApprovalStreamFetch({
-      origin: input.builderOrigin,
       adapterSessionId: input.owner.adapterSessionId,
-      signal: input.workload.signal,
       fetchImplementation: input.fetch ?? fetch,
+      origin: input.builderOrigin,
+      signal: input.workload.signal,
     }),
     verifyReadAuthority: async ({ adapterSessionId, principal, sessionId }) => {
       if (
@@ -335,6 +334,7 @@ export const createNativeTargetApprovalHistoryTransport = (input: {
       });
       return true;
     },
+    workloadIdentity: { token: async () => carrier.slice(7) },
   });
 };
 
@@ -373,11 +373,11 @@ export const createNativeTargetOnboardingDeployment = (input: {
       throw denied();
     }
     return {
-      authority: historyOwner.authority,
-      publicSessionId: historyOwner.sessionId,
-      adapterSessionId: historyOwner.adapterSessionId,
       adapterGeneration: historyOwner.adapterGeneration,
+      adapterSessionId: historyOwner.adapterSessionId,
+      authority: historyOwner.authority,
       historyOwner,
+      publicSessionId: historyOwner.sessionId,
     };
   };
   const artifactContext = (owner: Current, appId: string) => ({
@@ -397,8 +397,8 @@ export const createNativeTargetOnboardingDeployment = (input: {
         target: context.target,
       });
     };
-    const artifactStore = createPostgresOperatorArtifactStore({ database, assertCurrentOwner });
-    const selections = createPostgresOperatorArtifactSelections({ database, assertCurrentOwner });
+    const artifactStore = createPostgresOperatorArtifactStore({ assertCurrentOwner, database });
+    const selections = createPostgresOperatorArtifactSelections({ assertCurrentOwner, database });
     const selection = await selections.read(context, appSpecDigest);
     if (
       selection === undefined ||
@@ -408,8 +408,8 @@ export const createNativeTargetOnboardingDeployment = (input: {
       throw mismatch();
     }
     const publication = createOperatorArtifactPublication({
-      store: artifactStore,
       assertCurrentOwner,
+      store: artifactStore,
     });
     const captured = await publication.readGeneratedRelease(context, selection);
     if (
@@ -421,8 +421,8 @@ export const createNativeTargetOnboardingDeployment = (input: {
     return {
       description: captured.description,
       release: {
-        id: selection.releaseId,
         artifactRef: selection.artifactRef,
+        id: selection.releaseId,
         manifestSha256: selection.manifestSha256,
         schemaSha256: selection.schemaSha256,
       },
@@ -430,9 +430,9 @@ export const createNativeTargetOnboardingDeployment = (input: {
   };
   const readInstallation = async (owner: Current, installationId: string, teamId: string) => {
     const credential = await readActiveVercelInstallationToken({
-      database,
-      config: keyring,
       authority: owner.authority,
+      config: keyring,
+      database,
       installationId,
     });
     if (
@@ -456,11 +456,11 @@ export const createNativeTargetOnboardingDeployment = (input: {
     let selectedConfiguration: HostedOperatorSourceConfiguration;
     try {
       selectedConfiguration = resolveNativeTargetResourceProfile({
-        base: configuration,
-        resourceProfileId: proposal.resourceProfileId,
-        authority: owner.authority,
         appId: proposal.appId,
+        authority: owner.authority,
+        base: configuration,
         environment: input.environment,
+        resourceProfileId: proposal.resourceProfileId,
       });
     } catch {
       throw mismatch();
@@ -475,22 +475,22 @@ export const createNativeTargetOnboardingDeployment = (input: {
       proposal.appId,
       selectedConfiguration.sandbox.genericInstallerWorker,
     );
-    const nativeNeon = selectedConfiguration.nativeNeon;
+    const { nativeNeon } = selectedConfiguration;
     return nativeTargetOnboardingPlanSchema.parse({
       version: 1,
       appId: proposal.appId,
       ...(proposal.resourceProfileId === undefined
         ? {}
         : {
-            resourceProfileId: proposal.resourceProfileId,
             resourceProfileAuthorityDigest:
               nativeTargetResourceProfileAuthorityDigest(selectedConfiguration),
+            resourceProfileId: proposal.resourceProfileId,
           }),
       origin: {
-        publicSessionId: owner.publicSessionId,
-        adapterSessionId: owner.adapterSessionId,
         adapterGeneration: owner.adapterGeneration,
+        adapterSessionId: owner.adapterSessionId,
         appSpecDigest: source.appSpecDigest,
+        publicSessionId: owner.publicSessionId,
         release: source.captured.release,
       },
       project: {
@@ -518,9 +518,9 @@ export const createNativeTargetOnboardingDeployment = (input: {
       },
       worker,
       cost: {
-        ownership: "current-owner",
         description:
           "Vercel Preview usage is billed to the approved team under its current plan; no fixed credit purchase or subscription upgrade is included.",
+        ownership: "current-owner",
       },
       retention: {
         policy:
@@ -546,8 +546,8 @@ export const createNativeTargetOnboardingDeployment = (input: {
       record.appId,
       record.planDigest,
       {
-        adapterSessionId: owner.adapterSessionId,
         adapterGeneration: owner.adapterGeneration,
+        adapterSessionId: owner.adapterSessionId,
         assertCurrent: async () => {
           await input.owner.assertCanonicalAppOwner({
             authority: owner.authority,
@@ -559,11 +559,11 @@ export const createNativeTargetOnboardingDeployment = (input: {
     );
     const observation = await checkpoint.read();
     const transport = createNativeTargetApprovalHistoryTransport({
+      appId: record.appId,
+      assertCanonicalAppOwner: input.owner.assertCanonicalAppOwner,
       builderOrigin: input.builderOrigin,
       owner,
-      appId: record.appId,
       workload,
-      assertCanonicalAppOwner: input.owner.assertCanonicalAppOwner,
       ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
     });
     if (transport.observePrivateHistory === undefined) {
@@ -580,11 +580,11 @@ export const createNativeTargetOnboardingDeployment = (input: {
       },
       readHistory: async (startIndex, onEvent) =>
         (await transport.observePrivateHistory?.({
-          principal: owner.historyOwner.principal,
           adapterSessionId: owner.adapterSessionId,
+          onEvent,
+          principal: owner.historyOwner.principal,
           sessionId: owner.publicSessionId,
           startIndex,
-          onEvent,
         })) ?? { complete: false, nativeTailIndex: startIndex, nextNativeIndex: startIndex },
       assertOwner: async () => {
         await input.owner.assertCanonicalAppOwner({
@@ -597,27 +597,7 @@ export const createNativeTargetOnboardingDeployment = (input: {
     return result.status === "pending" ? null : result.proof;
   };
   return createNativeTargetOnboardingService({
-    store,
-    verifyWorkload: input.owner.verifyWorkload,
     authorize,
-    readCapturedRelease,
-    resolvePlan,
-    readApproval,
-    inspectProviderAuthorization: async ({ owner, plan, signal }) =>
-      await inspectNativeTargetVercelAuthorization({
-        expectedInstallationId: plan.project.installationId,
-        expectedTeamId: plan.project.teamId,
-        readInstallationToken: async () => {
-          const credential = await readInstallation(
-            owner,
-            plan.project.installationId,
-            plan.project.teamId,
-          );
-          return credential.token;
-        },
-        fetch: input.fetch ?? fetch,
-        signal,
-      }),
     createProject: async ({ owner, plan, name, authorizeAttempt, acceptProjectId }) => {
       let credential: Awaited<ReturnType<typeof readInstallation>>;
       try {
@@ -628,19 +608,34 @@ export const createNativeTargetOnboardingDeployment = (input: {
         );
       } catch {
         // This failure precedes the provider dispatch and is a definite non-creation.
-        return { status: "rejected", reason: "authorization_denied" };
+        return { reason: "authorization_denied", status: "rejected" };
       }
       return await createNativeTargetVercelProject({
-        installation: credential.binding,
-        token: credential.token,
-        name,
-        settings: plan.project.projectSettings,
-        protection: plan.project.protection,
-        authorizeAttempt,
         acceptProjectId,
+        authorizeAttempt,
+        installation: credential.binding,
+        name,
+        protection: plan.project.protection,
+        settings: plan.project.projectSettings,
+        token: credential.token,
         ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
       });
     },
+    inspectProviderAuthorization: async ({ owner, plan, signal }) =>
+      await inspectNativeTargetVercelAuthorization({
+        expectedInstallationId: plan.project.installationId,
+        expectedTeamId: plan.project.teamId,
+        fetch: input.fetch ?? fetch,
+        readInstallationToken: async () => {
+          const credential = await readInstallation(
+            owner,
+            plan.project.installationId,
+            plan.project.teamId,
+          );
+          return credential.token;
+        },
+        signal,
+      }),
     observeProject: async ({ owner, plan, name, projectId }) => {
       const credential = await readInstallation(
         owner,
@@ -649,13 +644,18 @@ export const createNativeTargetOnboardingDeployment = (input: {
       );
       return await observeNativeTargetVercelProject({
         installation: credential.binding,
-        token: credential.token,
         name,
-        settings: plan.project.projectSettings,
-        protection: plan.project.protection,
         projectId,
+        protection: plan.project.protection,
+        settings: plan.project.projectSettings,
+        token: credential.token,
         ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
       });
     },
+    readApproval,
+    readCapturedRelease,
+    resolvePlan,
+    store,
+    verifyWorkload: input.owner.verifyWorkload,
   });
 };

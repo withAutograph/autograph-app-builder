@@ -19,11 +19,23 @@ const configuration: NormalAuthTransportConfiguration = {
       appDatabase: {
         database: "app_db",
         migratorRole: "app_migrator",
-        runtimeRole: "app_runtime",
         resourceId: "app-resource",
+        runtimeRole: "app_runtime",
       },
       branch: "feature",
       projectId: "app-project",
+    },
+  },
+  gateway: { publicOrigin: origin },
+  nativeNeon: {
+    configuration: {
+      operator: {
+        audience: "https://vercel.com/team",
+        environment: "preview",
+        issuer: "https://oidc.vercel.com/team",
+        ownerId: "team",
+        projectId: "operator-project",
+      },
     },
   },
   operator: {
@@ -31,18 +43,6 @@ const configuration: NormalAuthTransportConfiguration = {
     environment: "preview",
     origin: "https://operator.example.com",
     projectId: "operator-project",
-  },
-  gateway: { publicOrigin: origin },
-  nativeNeon: {
-    configuration: {
-      operator: {
-        audience: "https://vercel.com/team",
-        issuer: "https://oidc.vercel.com/team",
-        ownerId: "team",
-        projectId: "operator-project",
-        environment: "preview",
-      },
-    },
   },
   teamId: "team",
 };
@@ -55,10 +55,10 @@ const authority = {
 const context: HostedOperatorContext = {
   authority,
   ownerContext: {
-    kind: "direct",
     adapterGeneration: 1,
     adapterSessionId: "adapter",
     authority,
+    kind: "direct",
     principal: { ...authority, scopes: ["autograph:get"] },
     sessionId: "session",
   },
@@ -74,10 +74,6 @@ const context: HostedOperatorContext = {
   },
 };
 const io = () => ({
-  getOidc: vi.fn(async () => await Promise.resolve("private-native-token")),
-  verifyOidc: vi.fn(async () => {
-    await Promise.resolve();
-  }),
   fetch: vi.fn<typeof fetch>(
     async () =>
       await Promise.resolve(
@@ -87,22 +83,26 @@ const io = () => ({
         ),
       ),
   ),
-});
-const dependencies = () => ({
-  configuration,
-  context,
-  origin,
-  assertPlanningAuthorized: vi.fn(async () => {
+  getOidc: vi.fn(async () => await Promise.resolve("private-native-token")),
+  verifyOidc: vi.fn(async () => {
     await Promise.resolve();
   }),
+});
+const dependencies = () => ({
   assertCurrentOwner: vi.fn(async () => {
     await Promise.resolve();
   }),
+  assertPlanningAuthorized: vi.fn(async () => {
+    await Promise.resolve();
+  }),
+  configuration,
+  context,
+  origin,
 });
 const requestHeaders = {
-  origin,
   accept: "application/json",
   cookie: "normal-session=private-cookie",
+  origin,
 };
 const getSession = `${origin}/api/auth/get-session?disableRefresh=true&disableCookieCache=true`;
 
@@ -111,10 +111,10 @@ describe("private Realm readback native transport", () => {
   const readback = `${endpointOrigin}/api/auth/platform/operator-identity/readback`;
   const builderWorkload = {
     audience: "https://vercel.com/team",
+    environment: "production" as const,
     issuer: "https://oidc.vercel.com/team",
     ownerId: "team",
     projectId: "builder-project",
-    environment: "production" as const,
     subject: "owner:team:project:builder:environment:production",
   };
   // SAFETY: The private transport reads only gatewayOrigin and the two native workload policies supplied here.
@@ -140,24 +140,24 @@ describe("private Realm readback native transport", () => {
     const { publicKey } = generateKeyPairSync("ed25519");
     const key = {
       ...publicKey.export({ format: "jwk" }),
-      kid: "gateway-key",
       alg: "EdDSA",
+      kid: "gateway-key",
       use: "sig",
     };
     native.fetch.mockResolvedValue(Response.json({ keys: [key] }));
     const owner = dependencies();
     const reader = createHostedOperatorPublicJwksReader(
       {
-        configuration: realmConfiguration,
-        assertPlanningAuthorized: owner.assertPlanningAuthorized,
         assertCurrentOwner: owner.assertCurrentOwner,
+        assertPlanningAuthorized: owner.assertPlanningAuthorized,
+        configuration: realmConfiguration,
       },
       native,
     );
     const result = await readManagedRuntimePublicProfile({
       appId: context.target.appId,
       publicOrigin: origin,
-      readPublicJwks: (url) => reader(context, url),
+      readPublicJwks: async (url) => await reader(context, url),
     });
     expect(result.keys).toEqual([key]);
     expect(result.jwksUrl).toBe(`${origin}/_platform/jwks.json`);
@@ -197,9 +197,9 @@ describe("private Realm readback native transport", () => {
     const owner = dependencies();
     const reader = createHostedOperatorPublicJwksReader(
       {
-        configuration: realmConfiguration,
-        assertPlanningAuthorized: owner.assertPlanningAuthorized,
         assertCurrentOwner: owner.assertCurrentOwner,
+        assertPlanningAuthorized: owner.assertPlanningAuthorized,
+        configuration: realmConfiguration,
       },
       native,
     );
@@ -213,9 +213,9 @@ describe("private Realm readback native transport", () => {
     owner.assertCurrentOwner.mockRejectedValue(new Error("Owner revoked"));
     const reader = createHostedOperatorPublicJwksReader(
       {
-        configuration: realmConfiguration,
-        assertPlanningAuthorized: owner.assertPlanningAuthorized,
         assertCurrentOwner: owner.assertCurrentOwner,
+        assertPlanningAuthorized: owner.assertPlanningAuthorized,
+        configuration: realmConfiguration,
       },
       native,
     );
@@ -256,17 +256,17 @@ describe("private Realm readback native transport", () => {
         endpointOrigin,
       );
       const headers = new Headers({
-        "content-type": "application/x-www-form-urlencoded",
         authorization: "Bearer untrusted-caller-value",
+        "content-type": "application/x-www-form-urlencoded",
       });
       if (callerOrigin !== undefined) {
         headers.set("origin", callerOrigin);
       }
       await transport(
         new Request(readback, {
-          method: "POST",
-          headers,
           body: new URLSearchParams({ proof: "private-proof" }),
+          headers,
+          method: "POST",
         }),
       );
       const [sent] = native.fetch.mock.calls;
@@ -329,8 +329,8 @@ describe("private Realm readback native transport", () => {
     );
     await expect(
       transport(readback, {
-        method: "POST",
         headers: { cookie: "normal-session=private-cookie" },
+        method: "POST",
       }),
     ).rejects.toThrow();
     expect(native.fetch).not.toHaveBeenCalled();
@@ -369,17 +369,17 @@ describe("normal Auth native transport", () => {
     const native = io();
     const builderWorkload = {
       audience: "https://vercel.com/team",
+      environment: "production" as const,
       issuer: "https://oidc.vercel.com/team",
       ownerId: "team",
       projectId: "builder-project",
-      environment: "production" as const,
       subject: "owner:team:project:builder:environment:production",
     };
     const transport = await createHostedOperatorNormalAuthTransport(
       {
         ...dependencies(),
-        sourceHost: "builder",
         configuration: { ...configuration, workloadPolicy: builderWorkload },
+        sourceHost: "builder",
       },
       native,
     );
@@ -393,10 +393,10 @@ describe("normal Auth native transport", () => {
     });
     expect(native.verifyOidc).toHaveBeenCalledWith("private-native-token", {
       audience: builderWorkload.audience,
+      environment: builderWorkload.environment,
       issuer: builderWorkload.issuer,
       ownerId: builderWorkload.ownerId,
       projectId: builderWorkload.projectId,
-      environment: builderWorkload.environment,
     });
   });
   it("requires a configured Builder workload rather than borrowing Operator identity", async () => {
@@ -463,9 +463,9 @@ describe("normal Auth native transport", () => {
     const transport = await createHostedOperatorNormalAuthTransport(dependencies(), calls);
     await expect(
       transport(url, {
-        method: "POST",
-        headers: { ...requestHeaders, "content-type": "application/json" },
         body: "{}",
+        headers: { ...requestHeaders, "content-type": "application/json" },
+        method: "POST",
       }),
     ).rejects.toThrow("resource_mismatch");
     expect(calls.getOidc).not.toHaveBeenCalled();
@@ -491,18 +491,18 @@ describe("normal Auth native transport", () => {
     const calls = io();
     const transport = await createHostedOperatorNormalAuthTransport(dependencies(), calls);
     const form = new URLSearchParams({
+      authResourceId: "approved-auth-resource",
+      bootstrapPlanDigest: "sha256:approved-auth-bootstrap",
       nonce: "a".repeat(64),
       ownerSessionId: "builder-owner-session",
-      bootstrapPlanDigest: "sha256:approved-auth-bootstrap",
-      authResourceId: "approved-auth-resource",
     });
     await transport(`${origin}/api/auth/platform/operator-link`, {
-      method: "POST",
+      body: form,
       headers: {
         ...requestHeaders,
         "content-type": "application/x-www-form-urlencoded",
       },
-      body: form,
+      method: "POST",
     });
     const sent = new Request(
       calls.fetch.mock.calls[0]?.[0] ?? "https://unused.example.com",
@@ -514,9 +514,9 @@ describe("normal Auth native transport", () => {
     expect(sent.redirect).toBe("error");
     await expect(
       transport(`${origin}/api/auth/platform/operator-link?callback=https://other.example.com`, {
-        method: "POST",
-        headers: requestHeaders,
         body: form,
+        headers: requestHeaders,
+        method: "POST",
       }),
     ).rejects.toThrow("resource_mismatch");
     expect(calls.fetch).toHaveBeenCalledTimes(1);
@@ -544,13 +544,13 @@ describe("normal Auth native transport", () => {
     const transport = await createHostedOperatorNormalAuthTransport(dependencies(), calls);
     const privateRequest = () =>
       new Request(`${origin}/api/auth/platform/operator-link`, {
-        method: "POST",
+        body: new URLSearchParams({ nonce: "synthetic-proof-nonce" }),
         headers: {
           ...requestHeaders,
           accept: "application/vnd.realm-operator-proof+json",
           "content-type": "application/x-www-form-urlencoded",
         },
-        body: new URLSearchParams({ nonce: "synthetic-proof-nonce" }),
+        method: "POST",
       });
     const first = await transport(privateRequest());
     await expect(first.json()).resolves.toEqual({ privateProofAccepted: true });
@@ -585,7 +585,7 @@ describe("normal Auth native transport", () => {
     async (method, route, accept) => {
       const calls = io();
       const transport = await createHostedOperatorNormalAuthTransport(dependencies(), calls);
-      await transport(`${origin}${route}`, { method, headers: { ...requestHeaders, accept } });
+      await transport(`${origin}${route}`, { headers: { ...requestHeaders, accept }, method });
       const sent = new Headers(calls.fetch.mock.calls[0]?.[1]?.headers);
       expect(sent.has("authorization")).toBe(false);
       expect(sent.get("cookie")).toBe(requestHeaders.cookie);
@@ -604,12 +604,12 @@ describe("normal Auth native transport", () => {
       const transport = await createHostedOperatorNormalAuthTransport(dependencies(), calls);
       await expect(
         transport(`${origin}/api/auth/platform/operator-link`, {
-          method: "POST",
           headers: {
             ...requestHeaders,
             accept: "application/vnd.realm-operator-proof+json",
             [name]: value,
           },
+          method: "POST",
         }),
       ).rejects.toThrow("resource_mismatch");
       expect(calls.getOidc).not.toHaveBeenCalled();
@@ -623,8 +623,8 @@ describe("normal Auth native transport", () => {
     const transport = await createHostedOperatorNormalAuthTransport(dependencies(), calls);
     await expect(
       transport(`${origin}/api/auth/platform/operator-link`, {
-        method: "POST",
         headers: { ...requestHeaders, accept: "application/vnd.realm-operator-proof+json" },
+        method: "POST",
       }),
     ).rejects.toThrow("native_source_mismatch");
     expect(calls.fetch).not.toHaveBeenCalled();
@@ -634,9 +634,9 @@ describe("normal Auth native transport", () => {
     const calls = io();
     const transport = await createHostedOperatorNormalAuthTransport(dependencies(), calls);
     const request = new Request(`${origin}/api/auth/organization/set-active`, {
-      method: "POST",
-      headers: { ...requestHeaders, "content-type": "application/json" },
       body: JSON.stringify({ organizationId: "org-one" }),
+      headers: { ...requestHeaders, "content-type": "application/json" },
+      method: "POST",
     });
     await transport(request);
     const sent = new Request(

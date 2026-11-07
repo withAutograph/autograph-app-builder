@@ -32,5 +32,5 @@ it("redacts raw credentials in nested commands, startup and probe errors", () =>
     [secret],
   );
   expect(JSON.stringify(result)).not.toContain(secret);
-  expect(result.reason).toBe("[REDACTED]");
+  expect(result).toHaveProperty("reason", "[REDACTED]");
 });

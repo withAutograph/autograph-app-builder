@@ -4,14 +4,25 @@ import type { BrowserContext, Page } from "playwright/test";
 
 import { VirtualAuthenticator } from "../auth/virtual-authenticator";
 
-const databasePort = process.env.APP_BUILDER_DATABASE_PORT || "54329";
-const appPort = process.env.APP_BUILDER_LOCAL_PORT || "3001";
+const databasePort = process.env.APP_BUILDER_DATABASE_PORT ?? "54329";
+const appPort = process.env.APP_BUILDER_LOCAL_PORT ?? "3001";
 const appProtocol = "https";
-const emulateBasePort = Number(process.env.EMULATE_BASE_PORT || "4000");
+const emulateBasePort = Number(process.env.EMULATE_BASE_PORT ?? "4000");
 export const appOrigin = `${appProtocol}://localhost:${appPort}`;
 export const vercelEmulatorOrigin = `http://localhost:${emulateBasePort}`;
 export const githubEmulatorOrigin = `http://localhost:${emulateBasePort + 1}`;
 export const databaseUrl = `postgresql://postgres@127.0.0.1:${databasePort}/autograph_app_builder`;
+
+interface BrowserBoundaryState {
+  clipboard: string[];
+  opened: string[];
+}
+
+declare global {
+  interface Window {
+    __e2eBoundaries: BrowserBoundaryState;
+  }
+}
 
 export const emulatedProviders = ["GitHub", "Vercel"] as const;
 export type EmulatedProvider = (typeof emulatedProviders)[number];
@@ -121,7 +132,8 @@ export async function currentSession(page: Page) {
   try {
     const response = await page.request.get("/api/auth/get-session");
     if (!response.ok()) return null;
-    return response.json();
+    const session: unknown = await response.json();
+    return session;
   } catch {
     return null;
   }
@@ -131,7 +143,7 @@ export async function currentSession(page: Page) {
 export async function signOut(page: Page) {
   await page.goto("/auth/sign-out");
   await expect(page).toHaveURL(/\/auth\/sign-in/u);
-  await expect.poll(() => currentSession(page)).toBeNull();
+  await expect.poll(async () => await currentSession(page)).toBeNull();
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -152,7 +164,7 @@ export async function finishOAuth(page: Page, provider: EmulatedProvider, callba
   );
   await page.getByRole("button", { name: `Continue with ${provider}` }).click();
   await expect
-    .poll(() => currentSession(page), { timeout: 30_000 })
+    .poll(async () => await currentSession(page), { timeout: 30_000 })
     .toMatchObject({ user: { email: "dev@autograph.local" } });
   // Session creation precedes the setting-up route's final navigation. Do not
   // let a caller's goto interrupt that still-running OAuth continuation.
@@ -191,7 +203,7 @@ export async function registerPasskey(context: BrowserContext, page: Page, callb
   await page.goto(`/auth/sign-up?callbackURL=${encodeURIComponent(callbackURL)}`);
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
   await expect
-    .poll(() => currentSession(page), { timeout: 30_000 })
+    .poll(async () => await currentSession(page), { timeout: 30_000 })
     .toMatchObject({ user: { emailVerified: false } });
   // Session creation precedes the setting-up route's final navigation. Wait
   // for the callback before a caller navigates away, as finishOAuth does.
@@ -290,9 +302,9 @@ export async function installBrowserBoundaries(
   mode: "success" | "blocked" = "success",
 ) {
   await context.addInitScript((boundaryMode) => {
-    const state = {
-      clipboard: [] as string[],
-      opened: [] as string[],
+    const state: BrowserBoundaryState = {
+      clipboard: [],
+      opened: [],
     };
     Object.defineProperty(window, "__e2eBoundaries", {
       configurable: false,
@@ -308,36 +320,35 @@ export async function installBrowserBoundaries(
         },
       },
     });
-    window.open = ((url?: string | URL) => {
-      if (boundaryMode === "blocked") throw new Error("Protocol blocked");
-      const value = String(url ?? "");
-      if (value !== "about:blank") state.opened.push(value);
-      return {
-        close() {
-          // The emulated window has no resources to close.
-        },
-        location: {
-          get href() {
-            return state.opened.at(-1) ?? "";
+    Object.defineProperty(window, "open", {
+      configurable: true,
+      value: (url?: string | URL) => {
+        if (boundaryMode === "blocked") throw new Error("Protocol blocked");
+        const value = String(url ?? "");
+        if (value !== "about:blank") state.opened.push(value);
+        return {
+          close() {
+            // The emulated window has no resources to close.
           },
-          set href(next: string) {
-            state.opened.push(next);
+          location: {
+            get href() {
+              return state.opened.at(-1) ?? "";
+            },
+            set href(next: string) {
+              state.opened.push(next);
+            },
           },
-        },
-        opener: null,
-      } as unknown as Window;
-    }) as typeof window.open;
+          opener: null,
+        };
+      },
+    });
   }, mode);
 }
 
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 export async function browserBoundaryState(page: Page) {
-  return page.evaluate(() => {
-    const state = (
-      window as typeof window & {
-        __e2eBoundaries: { clipboard: string[]; opened: string[] };
-      }
-    ).__e2eBoundaries;
+  return await page.evaluate(() => {
+    const state = window.__e2eBoundaries;
     return structuredClone(state);
   });
 }

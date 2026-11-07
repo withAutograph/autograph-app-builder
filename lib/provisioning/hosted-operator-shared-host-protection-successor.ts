@@ -22,10 +22,18 @@ const sameAppNarrowedPlan = (prior: HostedOperatorPlan, next: HostedOperatorPlan
     prior.stage !== "app" ||
     next.stage !== "app" ||
     prior.action !== "prepare" ||
-    policy === undefined ||
+    policy === undefined
+  ) {
+    return false;
+  }
+  if (
     boundary === undefined ||
     prior.publicGateway === undefined ||
-    prior.gatewayBindings === undefined ||
+    prior.gatewayBindings === undefined
+  ) {
+    return false;
+  }
+  if (
     (prior.appTrustedSources === undefined && prior.gatewayBindings.trustedSources === undefined) ||
     !matchesExternalTrustedSources(
       policy,
@@ -44,13 +52,10 @@ const sameNarrowedPlan = (prior: HostedOperatorPlan, next: HostedOperatorPlan): 
     return sameAppNarrowedPlan(prior, next);
   }
   const binding = prior.effects.find((effect) => effect.kind === GATEWAY_BINDINGS);
-  if (
-    prior.stage !== AUTH_BOOTSTRAP ||
-    next.stage !== AUTH_BOOTSTRAP ||
-    binding === undefined ||
-    prior.gatewayBindings?.trustedSources === undefined ||
-    next.gatewayBindings === undefined
-  ) {
+  if (prior.stage !== AUTH_BOOTSTRAP || next.stage !== AUTH_BOOTSTRAP || binding === undefined) {
+    return false;
+  }
+  if (prior.gatewayBindings?.trustedSources === undefined || next.gatewayBindings === undefined) {
     return false;
   }
   if (
@@ -62,13 +67,13 @@ const sameNarrowedPlan = (prior: HostedOperatorPlan, next: HostedOperatorPlan): 
   }
   return sameOperatorPlanExceptExpiry(prior, {
     ...next,
+    effects: next.effects.map((effect) =>
+      effect.id === binding.id ? { ...effect, description: binding.description } : effect,
+    ),
     gatewayBindings: {
       ...next.gatewayBindings,
       trustedSources: prior.gatewayBindings.trustedSources,
     },
-    effects: next.effects.map((effect) =>
-      effect.id === binding.id ? { ...effect, description: binding.description } : effect,
-    ),
   });
 };
 
@@ -267,11 +272,11 @@ export const sharedHostProtectionDeliveryProvenance = (
       return [];
     }
     const provenance = {
+      approvalId: original.approvalId,
+      approvedByCallId: retained.approvedByCallId,
       operationRef: original.operationRef,
       plan: original.plan,
       planDigest: original.planDigest,
-      approvalId: original.approvalId,
-      approvedByCallId: retained.approvedByCallId,
     };
     return isSharedHostProtectionDeliveryProvenance(provenance, current.plan, current.operationRef)
       ? [provenance]

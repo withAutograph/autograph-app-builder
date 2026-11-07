@@ -30,8 +30,8 @@ import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source
 
 const unavailable = () => new Error("public_realm_callback_unavailable");
 const publicKeySchema = z.object({
-  kty: z.literal("OKP"),
   crv: z.literal("Ed25519"),
+  kty: z.literal("OKP"),
   x: z.string().min(1),
 });
 export interface PublicRealmCallbackCandidate {
@@ -139,15 +139,15 @@ export const createPublicRealmCallbackResolver =
     const enrollment = publicRealmEnrollmentSchema.parse(linkConfiguration.publicEnrollment);
     const auth = source.plan.authDatabase;
     const physical = {
-      version: 1,
+      database: auth.database,
       environment: source.plan.selection.environment,
       hostname: source.plan.neon.endpoint,
-      port: 5432,
-      database: auth.database,
-      schema: "public",
-      runtimeRole: auth.runtimeRole,
       migratorRole: auth.migratorRole,
-      neon: { projectId: source.plan.neon.projectId, branchId: source.plan.neon.branchId },
+      neon: { branchId: source.plan.neon.branchId, projectId: source.plan.neon.projectId },
+      port: 5432,
+      runtimeRole: auth.runtimeRole,
+      schema: "public",
+      version: 1,
     };
     const bound = [
       enrollment.enrollmentRef === enrollmentRef,
@@ -174,9 +174,6 @@ export const createPublicRealmCallbackResolver =
       appId: context.target.appId,
       appResource: source.plan.appDatabase,
       authResource: auth,
-      neon: source.plan.neon,
-      profile,
-      publicOrigin: plan.publicOrigin,
       bindings: {
         appDatabase: {
           runtimeUrl:
@@ -184,6 +181,9 @@ export const createPublicRealmCallbackResolver =
         },
         authDatabase: { runtimeUrl: values.PLATFORM_AUTH_DATABASE_URL ?? "" },
       },
+      neon: source.plan.neon,
+      profile,
+      publicOrigin: plan.publicOrigin,
     });
     if (
       !isDeepStrictEqual(
@@ -206,8 +206,8 @@ export const createPublicRealmCallbackResolver =
     );
     const publicJwk = {
       ...key,
-      kid: z.string().min(1).parse(values.PLATFORM_GATEWAY_IDENTITY_KEY_ID),
       alg: "EdDSA",
+      kid: z.string().min(1).parse(values.PLATFORM_GATEWAY_IDENTITY_KEY_ID),
       use: "sig",
     };
     await deps.assertCurrentOwner(context);
@@ -215,7 +215,7 @@ export const createPublicRealmCallbackResolver =
     if (latest.length !== 1 || !isDeepStrictEqual(latest[0], selected)) {
       throw unavailable();
     }
-    return { binding, plan, enrollment, linkConfiguration, publicJwk };
+    return { binding, enrollment, linkConfiguration, plan, publicJwk };
   };
 
 export const createPostgresPublicRealmCallbackResolver = (input: {
@@ -233,12 +233,22 @@ export const createPostgresPublicRealmCallbackResolver = (input: {
 }) =>
   createPublicRealmCallbackResolver({
     ...input,
+    readEnrollment: async (context, enrollmentRef) =>
+      await readPublicRealmLinkConfiguration({
+        assertCurrentOwner: async () => {
+          await input.assertCurrentOwner(context);
+        },
+        authority: context.authority,
+        database: input.database,
+        enrollmentRef,
+        keyring: input.keyring,
+      }),
     readReleases: async (context, binding) =>
       await input.database
         .select({
-          requestId: builderProvisioningJournals.requestId,
-          requestDigest: builderProvisioningJournals.requestDigest,
           record: builderProvisioningJournals.record,
+          requestDigest: builderProvisioningJournals.requestDigest,
+          requestId: builderProvisioningJournals.requestId,
         })
         .from(builderProvisioningJournals)
         .where(
@@ -259,43 +269,34 @@ export const createPostgresPublicRealmCallbackResolver = (input: {
           ),
         )
         .limit(2),
-    readEnrollment: async (context, enrollmentRef) =>
-      await readPublicRealmLinkConfiguration({
-        database: input.database,
-        keyring: input.keyring,
-        authority: context.authority,
-        enrollmentRef,
+    readValues: async (context, plan) => {
+      const store = createPublicReleaseRuntimeConfigurationStore({
         assertCurrentOwner: async () => {
           await input.assertCurrentOwner(context);
         },
-      }),
-    readValues: async (context, plan) => {
-      const store = createPublicReleaseRuntimeConfigurationStore({
         database: input.database,
         keyring: input.keyring,
         target: {
-          authority: context.authority,
           appId: context.target.appId,
-          sessionId: context.target.sessionId,
+          authority: context.authority,
           projectId: context.target.projectId,
-        },
-        assertCurrentOwner: async () => {
-          await input.assertCurrentOwner(context);
+          sessionId: context.target.sessionId,
         },
       });
-      const scope = {
-        authority: context.authority,
+      const scopeBase = {
         appId: context.target.appId,
-        sessionId: context.target.sessionId,
+        authority: context.authority,
         projectId: context.target.projectId,
+        publicOrigin: plan.publicOrigin,
+        releaseId: plan.runtime.releaseId,
         runtimeOperationRef: plan.runtime.operationRef,
         runtimePlanDigest: plan.runtime.planDigest,
-        releaseId: plan.runtime.releaseId,
-        publicOrigin: plan.publicOrigin,
-        ...(plan.runtime.realmEnrollmentRef === undefined
-          ? {}
-          : { realmEnrollmentRef: plan.runtime.realmEnrollmentRef }),
+        sessionId: context.target.sessionId,
       };
+      const scope =
+        plan.runtime.realmEnrollmentRef === undefined
+          ? scopeBase
+          : { ...scopeBase, realmEnrollmentRef: plan.runtime.realmEnrollmentRef };
       if (store.reference(scope) !== plan.runtime.configurationRef) {
         throw unavailable();
       }

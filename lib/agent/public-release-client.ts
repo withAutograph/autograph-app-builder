@@ -41,13 +41,13 @@ export const publicReleaseClientForContext = async (ctx: WorkflowStepToolContext
   const ownerContext = await resolveHostedOperatorOwnerContext({
     adapterSessionId: ctx.session.id,
     authority,
-    principal,
-    sessionAuth: ctx.session.auth,
     environment: process.env,
     execution,
+    principal,
+    sessionAuth: ctx.session.auth,
   });
-  const common = { ownerContext, adapterSessionId: ctx.session.id, callId: ctx.callId, execution };
-  const token = createVercelWorkloadIdentity().token;
+  const common = { adapterSessionId: ctx.session.id, callId: ctx.callId, execution, ownerContext };
+  const { token } = createVercelWorkloadIdentity();
   const send = async <T>(
     input: z.infer<typeof publicReleaseTransportRequestSchema>,
     schema: z.ZodType<T>,
@@ -55,15 +55,15 @@ export const publicReleaseClientForContext = async (ctx: WorkflowStepToolContext
     ctx.abortSignal.throwIfAborted();
     const workload = await token();
     const response = await fetch(new URL("/v1/public-release", endpoint), {
-      method: "POST",
-      redirect: "error",
-      signal: ctx.abortSignal,
+      body: JSON.stringify(publicReleaseTransportRequestSchema.parse(input)),
       headers: {
         authorization: `Bearer ${workload}`,
         "content-type": "application/json",
         "x-vercel-trusted-oidc-idp-token": workload,
       },
-      body: JSON.stringify(publicReleaseTransportRequestSchema.parse(input)),
+      method: "POST",
+      redirect: "error",
+      signal: ctx.abortSignal,
     });
     ctx.abortSignal.throwIfAborted();
     if (response.status === 409) {
@@ -79,23 +79,24 @@ export const publicReleaseClientForContext = async (ctx: WorkflowStepToolContext
     return schema.parse(await response.json());
   };
   return {
-    sessionId: ownerContext.sessionId,
+    observe: async (input: PublicReleaseApprovalInput) =>
+      await send({ ...common, action: "public-release-observe", input }, publicReleaseResultSchema),
     plan: async (
       appId: string,
       integrationCapability?: z.infer<typeof appIntegrationCapabilityPointerSchema>,
-    ) =>
-      await send(
-        {
-          ...common,
-          action: "public-release-plan",
-          appId,
-          ...(integrationCapability === undefined ? {} : { integrationCapability }),
-        },
-        publicReleasePlanResultSchema,
-      ),
+    ) => {
+      const request = {
+        ...common,
+        action: "public-release-plan" as const,
+        appId,
+      };
+      if (integrationCapability === undefined) {
+        return await send(request, publicReleasePlanResultSchema);
+      }
+      return await send({ ...request, integrationCapability }, publicReleasePlanResultSchema);
+    },
     release: async (input: PublicReleaseApprovalInput) =>
       await send({ ...common, action: "public-release-run", input }, publicReleaseResultSchema),
-    observe: async (input: PublicReleaseApprovalInput) =>
-      await send({ ...common, action: "public-release-observe", input }, publicReleaseResultSchema),
+    sessionId: ownerContext.sessionId,
   };
 };

@@ -6,22 +6,22 @@ import type {
 } from "./hosted-runtime-marketplace-resource";
 
 const input = {
-  sourceProjectId: "prj_source",
   configurationId: "icfg_neon",
-  resourceId: "store_neon",
   neonProjectId: "synthetic-project",
+  resourceId: "store_neon",
+  sourceProjectId: "prj_source",
 };
 const row = {
-  id: "env_identity",
-  key: "AUTOGRAPH_PREVIEW_SOURCE_NEON_PROJECT_ID",
   configurationId: null,
   contentHint: {
-    type: "integration-store-secret",
-    storeId: input.resourceId,
     integrationConfigurationId: input.configurationId,
     integrationId: "oac_neon",
     integrationProductId: "iap_neon",
+    storeId: input.resourceId,
+    type: "integration-store-secret",
   },
+  id: "env_identity",
+  key: "AUTOGRAPH_PREVIEW_SOURCE_NEON_PROJECT_ID",
   target: ["preview"],
 };
 const identityDetail = { ...row, value: input.neonProjectId };
@@ -39,8 +39,8 @@ const fixture = (
     return detail;
   });
   return {
+    read: async () => await readVercelNativeNeonBinding({ ...input, fail, request }),
     request,
-    read: async () => await readVercelNativeNeonBinding({ ...input, request, fail }),
   };
 };
 
@@ -105,7 +105,7 @@ describe("native Neon binding through provider-maintained project metadata", () 
   it("allows additional environments and ignores nonapplicable branch rows", async () => {
     const f = fixture(
       [
-        { ...row, id: "env_branch", gitBranch: "another-branch" },
+        { ...row, gitBranch: "another-branch", id: "env_branch" },
         { ...row, target: ["preview", "production"] },
       ],
       { ...row, target: ["preview", "production"], value: input.neonProjectId },

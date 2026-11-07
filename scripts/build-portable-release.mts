@@ -111,8 +111,8 @@ await writeFile(
 const clientRoot = path.join(output, "clients");
 await mkdir(clientRoot);
 await Promise.all(
-  (["vscode", "cursor", "codex"] as const).map((client) =>
-    writeFile(
+  (["vscode", "cursor", "codex"] as const).map(async (client) => {
+    await writeFile(
       path.join(clientRoot, `${client}.client-harness.json`),
       `${JSON.stringify(
         {
@@ -128,8 +128,8 @@ await Promise.all(
         null,
         2,
       )}\n`,
-    ),
-  ),
+    );
+  }),
 );
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -140,7 +140,7 @@ async function collectFiles(root: string, directory: string): Promise<Map<string
       const filePath = path.join(directory, entry);
       const fileStatus = await stat(filePath);
       if (fileStatus.isDirectory()) {
-        return collectFiles(root, filePath);
+        return await collectFiles(root, filePath);
       }
       return new Map([[path.relative(root, filePath), await readFile(filePath)]]);
     }),

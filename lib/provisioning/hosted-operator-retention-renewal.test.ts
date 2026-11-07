@@ -38,11 +38,43 @@ const originalPlan = (): HostedOperatorPlan =>
       resourceId: "auth-resource",
       runtimeRole: "auth_runtime",
     },
+    authMembership: {
+      actorId: "owner_actor",
+      bootstrapPlanDigest: "8".repeat(64),
+      identityCapture: {
+        capturedAt: "2026-10-17T19:00:00.000Z",
+        realmSessionId: "fixture-realm-session",
+      },
+      identityNonceSha256: "5".repeat(64),
+      identityProof: { reference: "fixture-proof", sha256: "6".repeat(64) },
+      identityVerification: {
+        audience: "https://app.example.test",
+        issuer: "https://app.example.test",
+        jwksUrl: "https://app.example.test/jwks",
+        transportSource: {
+          audience: "https://vercel.com/team_fixture",
+          environment: "preview",
+          issuer: "https://oidc.vercel.com/team_fixture",
+          ownerId: "team_fixture",
+          projectId: "prj_gateway",
+        },
+      },
+      kind: "create-owned-organization",
+      name: "Fixture organization",
+      organizationId: "org_fixture",
+      slug: "fixture-organization",
+    },
     contextId: "accepted-spec",
     cost: {
       class: "shared-recovery-group",
       description: "Preview resources",
       owner: "owner_fixture",
+    },
+    delivery: {
+      branch: "preview",
+      gitSha: "1".repeat(40),
+      projectId: "prj_app",
+      repoId: "app-repository",
     },
     deploymentBoundary: {
       app: {
@@ -69,12 +101,6 @@ const originalPlan = (): HostedOperatorPlan =>
         jwksUrl: "https://gateway.example.test/_platform/jwks.json",
         publicOrigin: "https://app.example.test",
       },
-    },
-    delivery: {
-      branch: "preview",
-      gitSha: "1".repeat(40),
-      projectId: "prj_app",
-      repoId: "app-repository",
     },
     effects: [
       { description: "Prepare resources", id: "resources", kind: "resources" },
@@ -113,32 +139,6 @@ const originalPlan = (): HostedOperatorPlan =>
       gitSha: "2".repeat(40),
       projectId: "prj_gateway",
       repoId: "gateway-repository",
-    },
-    authMembership: {
-      actorId: "owner_actor",
-      bootstrapPlanDigest: "8".repeat(64),
-      identityCapture: {
-        capturedAt: "2026-10-17T19:00:00.000Z",
-        realmSessionId: "fixture-realm-session",
-      },
-      identityNonceSha256: "5".repeat(64),
-      identityProof: { reference: "fixture-proof", sha256: "6".repeat(64) },
-      identityVerification: {
-        audience: "https://app.example.test",
-        issuer: "https://app.example.test",
-        jwksUrl: "https://app.example.test/jwks",
-        transportSource: {
-          audience: "https://vercel.com/team_fixture",
-          environment: "preview",
-          issuer: "https://oidc.vercel.com/team_fixture",
-          ownerId: "team_fixture",
-          projectId: "prj_gateway",
-        },
-      },
-      kind: "create-owned-organization",
-      name: "Fixture organization",
-      organizationId: "org_fixture",
-      slug: "fixture-organization",
     },
     installer: { reference: "app-installer", sha256: "3".repeat(64) },
     neon: {
@@ -326,8 +326,8 @@ describe("approved retention renewal", () => {
       expect(createRetentionRenewalPlan(missingReceipt, now)).toBeUndefined();
       const activeLease = {
         ...prior,
-        leaseId: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
         leaseExpiresAt: new Date(now + 1000).toISOString(),
+        leaseId: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
       };
       expect(createRetentionRenewalPlan(activeLease, now)).toBeUndefined();
     },
@@ -355,10 +355,10 @@ describe("approved retention renewal", () => {
         operator: {
           ...originalOperator,
           approvalId: "renewed-approval",
+          pendingEffectAttempt: undefined,
+          pendingEffectId: undefined,
           plan: firstPlan,
           planDigest: operatorPlanDigest(firstPlan),
-          pendingEffectId: undefined,
-          pendingEffectAttempt: undefined,
           retainedRenewalOperations: [
             { approvedByCallId: original.approvedByCallId, operator: originalOperator },
           ],
@@ -473,13 +473,13 @@ describe("approved retention renewal", () => {
       ...original,
       operator: {
         ...originalOperator,
+        deliveredGatewayDeploymentId: gatewayCandidate.deploymentId,
         gatewayDeliveryCandidates: [
           {
             ...gatewayCandidate,
             operationRef: "f5e1999a-bb1e-44d1-a5f3-6a68ef53897c",
           },
         ],
-        deliveredGatewayDeploymentId: gatewayCandidate.deploymentId,
         identityLink: {
           audience: "https://app.example.test",
           authResourceId: originalOperator.plan.authDatabase.resourceId,
@@ -516,13 +516,13 @@ describe("approved retention renewal", () => {
       operator: {
         ...previousOperator,
         approvalId: undefined,
-        plan: renewedPlan,
-        planDigest: operatorPlanDigest(renewedPlan),
-        pendingEffectId: undefined,
-        pendingEffectAttempt: undefined,
+        deliveredGatewayDeploymentId: undefined,
         deliveryCandidates: [],
         gatewayDeliveryCandidates: [],
-        deliveredGatewayDeploymentId: undefined,
+        pendingEffectAttempt: undefined,
+        pendingEffectId: undefined,
+        plan: renewedPlan,
+        planDigest: operatorPlanDigest(renewedPlan),
         receipts: previousOperator.receipts.filter((receipt) =>
           immutableEffectIds.has(receipt.effectId),
         ),
@@ -681,12 +681,12 @@ describe("approved retention renewal", () => {
       operator: {
         ...prior.operator,
         approvalId: undefined,
-        plan: renewedPlan,
-        planDigest: operatorPlanDigest(renewedPlan),
-        pendingEffectId: undefined,
-        pendingEffectAttempt: undefined,
         deliveryCandidates: [],
         gatewayDeliveryCandidates: [],
+        pendingEffectAttempt: undefined,
+        pendingEffectId: undefined,
+        plan: renewedPlan,
+        planDigest: operatorPlanDigest(renewedPlan),
         receipts: prior.operator.receipts.filter((receipt) =>
           immutableEffectIds.has(receipt.effectId),
         ),
@@ -702,12 +702,12 @@ describe("approved retention renewal", () => {
       throw new Error("Expected retained delivery provenance");
     }
     expect(provenance).toMatchObject({
-      approvedByCallId: "call_old",
       approvalId: "approval_old",
-      operationRef,
-      planDigest: operatorPlanDigest(prior.operator.plan),
+      approvedByCallId: "call_old",
       deliveryCandidates: [appCandidate],
       gatewayDeliveryCandidates: [gatewayCandidate],
+      operationRef,
+      planDigest: operatorPlanDigest(prior.operator.plan),
     });
     expect(isRetentionRenewalDeliveryProvenance(provenance, renewedPlan, operationRef)).toBe(true);
     expect(prior.operator.gatewayDeliveryCandidates).toEqual([

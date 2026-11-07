@@ -128,14 +128,14 @@ const readVerifiedOwnerNativeStore = async (
                     input.diagnosticSink,
                   )({
                     boundary: "operator",
-                    phase: "inline",
-                    stage: "operator_request",
-                    outcome: "setup_unavailable",
                     httpStatus: response.status,
+                    outcome: "setup_unavailable",
+                    phase: "inline",
                     planningFailure: {
-                      stage: "neon_source_project_access",
                       errorClass: "unexpected",
+                      stage: "neon_source_project_access",
                     },
+                    stage: "operator_request",
                   });
                 } catch {
                   /* Diagnostics never change the provider request or response. */
@@ -177,8 +177,8 @@ const readVerifiedOwnerNativeStore = async (
         outcome: "setup_unavailable",
         ...(httpStatus === undefined ? {} : { httpStatus }),
         planningFailure: {
-          stage: "neon_native_store",
           errorClass: "unexpected",
+          stage: "neon_native_store",
           ...(nativeStoreFailure === undefined ? {} : { nativeStoreFailure }),
         },
       });
@@ -196,8 +196,6 @@ const readVerifiedOwnerNativeStore = async (
           reportStoreFailure(reason);
           return fail();
         },
-        sourceProjectId: binding.sourceProjectId,
-        resourceId: binding.resourceId,
         neonProjectId: input.neonProjectId,
         request: async (pathname) => {
           await input.assertCurrentOwner(context);
@@ -228,6 +226,8 @@ const readVerifiedOwnerNativeStore = async (
             }
           }
         },
+        resourceId: binding.resourceId,
+        sourceProjectId: binding.sourceProjectId,
       }),
     input.diagnosticSink,
   );
@@ -408,8 +408,8 @@ const createAuthority = (
       return await readVerifiedOwnerNativeStore(
         {
           assertCurrentOwner: assertApprovedObservationPhase ?? assertPhase,
-          fetch: input.fetch,
           diagnosticSink: input.diagnosticSink,
+          fetch: input.fetch,
           nativeStore: expectedStore,
           neonProjectId: plan.neon.projectId,
           readCredential: input.controlPlane.readCredential,
@@ -511,14 +511,6 @@ export const createNativePreviewNeonPlanningAuthority = (input: {
     await assertCanonicalOwner(requested);
   };
   return {
-    async assertPlanningScope(
-      requested: HostedOperatorContext,
-      requestedScope: NativePreviewNeonScope,
-    ) {
-      await assertCurrentOwner(requested);
-      assertScope(requestedScope);
-      await assertCurrentOwner(requested);
-    },
     /** Every metadata guard refreshes canonical ownership and the active installation without provider HTTP. */
     async assertPlanningOwner(
       requested: HostedOperatorContext,
@@ -535,6 +527,14 @@ export const createNativePreviewNeonPlanningAuthority = (input: {
       }
       await assertCanonicalOwnerAndCredential(requested);
     },
+    async assertPlanningScope(
+      requested: HostedOperatorContext,
+      requestedScope: NativePreviewNeonScope,
+    ) {
+      await assertCurrentOwner(requested);
+      assertScope(requestedScope);
+      await assertCurrentOwner(requested);
+    },
     async readCurrentOwnerNativeStore(
       requested: HostedOperatorContext,
       binding: NativePreviewNeonStoreBinding,
@@ -542,8 +542,8 @@ export const createNativePreviewNeonPlanningAuthority = (input: {
       return await readVerifiedOwnerNativeStore(
         {
           assertCurrentOwner,
-          fetch: input.fetch,
           diagnosticSink: input.diagnosticSink,
+          fetch: input.fetch,
           nativeStore,
           neonProjectId: scope.projectId,
           readCredential: input.controlPlane.readCredential,

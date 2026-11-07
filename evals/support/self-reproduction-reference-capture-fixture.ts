@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { Page } from "playwright";
 import { expect } from "playwright/test";
 import postgres from "postgres";
+import { z } from "zod";
 import { selfReproductionDraft } from "./self-reproduction-draft-fixture";
 
 export interface ReferenceCaptureFixtureReceipt {
@@ -47,9 +48,10 @@ export const prepareReferenceCaptureFixture = async (
     await finishOAuth(page, "GitHub");
     receipt.stage = "builder-readiness";
     await waitForBuilderReady(page);
-    const session = await currentSession(page);
-    const ownerId = session?.user?.id;
-    if (typeof ownerId !== "string") {
+    const sessionSchema = z.object({ user: z.object({ id: z.string().min(1) }) }).nullable();
+    const session = sessionSchema.parse(await currentSession(page));
+    const ownerId = session?.user.id;
+    if (ownerId === undefined) {
       throw new TypeError("Emulated OAuth did not establish an owner.");
     }
     receipt.stage = "draft-inputs";

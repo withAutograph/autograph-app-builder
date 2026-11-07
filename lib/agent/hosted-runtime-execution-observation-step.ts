@@ -64,9 +64,9 @@ export const assertHostedRuntimeExecutionObservationAuthority = async (input: {
     throw new HostedOperatorError("resource_mismatch");
   }
   const { authoritySession: session, currentSession } = await readHostedOperatorCallbackOwner({
-    store: input.store,
-    owner,
     execution: hostedOperatorCallbackExecution(ctx.session),
+    owner,
+    store: input.store,
   });
   ctx.abortSignal.throwIfAborted();
   if (
@@ -161,8 +161,8 @@ export const createHostedRuntimeExecutionObserver =
     delayMs: number,
   ): Promise<HostedRuntimeExecutionState> => {
     const waiting = () => ({
-      status: "waiting" as const,
       checkAfter: new Date(ports.now() + delayMs).toISOString(),
+      status: "waiting" as const,
     });
     await ports.assertAuthority(input, ctx, snapshot);
     let result: OperatorPublicResult;
@@ -185,7 +185,7 @@ export const createHostedRuntimeExecutionObserver =
     const preparation = await ports.prepareObserved(input, ctx, terminal);
     await ports.assertAuthority(input, ctx, snapshot);
     ports.commitObserved?.(preparation);
-    return { status: "done", preparation };
+    return { preparation, status: "done" };
   };
 
 export const readHostedRuntimeExecution = async (
@@ -212,17 +212,6 @@ export const readHostedRuntimeExecution = async (
   ]);
   let selected: PreparedRuntimeSelection | undefined;
   const read = createHostedRuntimeExecutionObserver({
-    now: Date.now,
-    isTransportUnknown: client.isHostedOperatorTransportUnknown,
-    commitObserved: () => {
-      if (selected !== undefined) {
-        const committed = selected;
-        state.preparedRuntimeSelections.update((selections) => ({
-          ...selections,
-          [input.appId]: committed,
-        }));
-      }
-    },
     assertAuthority: async (approved, context, expected) => {
       await assertHostedRuntimeExecutionObservationAuthority({
         approved,
@@ -232,15 +221,17 @@ export const readHostedRuntimeExecution = async (
         store,
       });
     },
-    readStatus: async (approved, context) =>
-      await operator.request(
-        {
-          action: "status",
-          operationRef: approved.operationRef,
-          selection: approval.hostedRuntimePreparationInputSchema.parse(approved).plan.selection,
-        },
-        context.abortSignal,
-      ),
+    commitObserved: () => {
+      if (selected !== undefined) {
+        const committed = selected;
+        state.preparedRuntimeSelections.update((selections) => ({
+          ...selections,
+          [input.appId]: committed,
+        }));
+      }
+    },
+    isTransportUnknown: client.isHostedOperatorTransportUnknown,
+    now: Date.now,
     prepareObserved: async (approved, context, result) =>
       await preparation.prepareHostedRuntimeWithOperator(
         approval.hostedRuntimePreparationInputSchema.parse(approved),
@@ -257,6 +248,15 @@ export const readHostedRuntimeExecution = async (
           sameSelection: contract.sameOperatorSelection,
         },
         result,
+      ),
+    readStatus: async (approved, context) =>
+      await operator.request(
+        {
+          action: "status",
+          operationRef: approved.operationRef,
+          selection: approval.hostedRuntimePreparationInputSchema.parse(approved).plan.selection,
+        },
+        context.abortSignal,
       ),
   });
   return await read(input, ctx, snapshot, delayMs);

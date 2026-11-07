@@ -62,15 +62,15 @@ const d = "a".repeat(64);
 const sha = "b".repeat(40);
 export const fixture = () => {
   const execution = {
-    sourceSha: sha,
-    sourceTree: sha,
-    sourceReceiptDigest: d,
-    eligibilityDigest: d,
-    workspaceDigest: d,
-    imageDigest: d,
-    dependencyCacheDigest: d,
     appSpecDigest: d,
     artifactRevision: "revision",
+    dependencyCacheDigest: d,
+    eligibilityDigest: d,
+    imageDigest: d,
+    sourceReceiptDigest: d,
+    sourceSha: sha,
+    sourceTree: sha,
+    workspaceDigest: d,
   };
   const appSpecPath = ".config/app-specs/orchard.cue";
   const identity = targetIdentitySchema.parse({
@@ -107,34 +107,34 @@ export const fixture = () => {
   });
   const apply: TargetApplyReceipt = {
     ...execution,
-    version: 2,
-    status: "applied",
     appSpecPath,
+    appliedByCallId: "apply",
+    applyRoot: "/workspace/original",
     changedContentDigest: d,
-    changes: [{ kind: "added", path: "apps/orchard/page.ts", after: { mode: "644", digest: d } }],
+    changes: [{ after: { digest: d, mode: "644" }, kind: "added", path: "apps/orchard/page.ts" }],
+    command: { exitCode: 0, name: "iterate-existing-app", stderrDigest: d, stdoutDigest: d },
     dependencyCacheContentDigest: d,
     dependencyReceiptDigest: d,
+    digest: d,
     identityDigest: d,
+    planningTreeDigest: d,
+    postTree: [],
     postTreeDigest: d,
+    preTree: [],
     preTreeDigest: d,
+    preparedTreeDigest: d,
     proposalDigest: d,
+    status: "applied",
     targetReceipt: {
       appId: "orchard",
       mutations: ["apps/orchard", "microfrontends.json"],
       omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
       recovered: false,
-      topology: { path: "microfrontends.json", oldDigest: d, newDigest: d },
+      topology: { newDigest: d, oldDigest: d, path: "microfrontends.json" },
       version: 1,
       workspacePath: "apps/orchard",
     },
-    planningTreeDigest: d,
-    preparedTreeDigest: d,
-    preTree: [],
-    postTree: [],
-    appliedByCallId: "apply",
-    command: { name: "iterate-existing-app", exitCode: 0, stdoutDigest: d, stderrDigest: d },
-    digest: d,
-    applyRoot: "/workspace/original",
+    version: 2,
   };
   const validation: TargetValidationReceipt = {
     appId: "orchard",
@@ -144,13 +144,13 @@ export const fixture = () => {
     status: "passed",
     commands: [
       {
-        name: "check-build",
         command: "mise run --no-deps --skip-tools app:check orchard",
-        validationRoot: apply.applyRoot,
-        inputTreeDigest: d,
         exitCode: 0,
-        stdoutDigest: d,
+        inputTreeDigest: d,
+        name: "check-build",
         stderrDigest: d,
+        stdoutDigest: d,
+        validationRoot: apply.applyRoot,
       },
     ],
     testShards: ["1/1"],
@@ -171,109 +171,109 @@ export const fixture = () => {
     "original-review",
   );
   const reviewed: DraftReviewedWorkflow = {
-    version: 17,
-    phase: "reviewed",
     appSpec: {
+      acceptedByCallId: "accept",
       appId: "orchard",
-      digest: d,
       artifactPath: "apps/orchard/spec.md",
       artifactRevision: "revision",
-      acceptedByCallId: "accept",
+      digest: d,
     },
     applyReceipt: apply,
-    validationReceipt: validation,
-    reviewReceipt: receipt,
-    sourceReceipt: {
-      version: 3,
+    artifacts: [],
+    dependencyReceipt: {
+      ...execution,
+      cacheContentDigest: d,
+      cacheManifestDigest: d,
+      dependencyLayout: { kind: "fixture", roots: [], version: 1, workspaceLinks: [] },
       digest: d,
-      sourceKind: "existing-repository",
-      sourceSha: sha,
-      sourceTree: sha,
-      adapter: "arrusted-development-v0",
-      eligibilityDigest: d,
-      contractDigest: d,
-      releaseEnabled: false,
-      sourcePath: "/source",
+      preparedByCallId: "dependencies",
+      targetSha: sha,
+      targetTree: sha,
+      version: 2,
     },
     githubSource: {
-      version: 2,
       digest: d,
       installationIdentityDigest: d,
+      repository: {
+        defaultBranch: "main",
+        digest: d,
+        headSha: sha,
+        headTree: sha,
+        installationIdentityDigest: d,
+        name: "repository",
+        owner: "owner",
+        releaseGate: { configured: false, name: "REPOSITORY_RELEASE_ENABLED" },
+        repositoryId: "repo",
+        version: 2,
+        visibility: "private",
+      },
       resolvedByCallId: "source",
       resolvedRef: "main",
       resolvedSha: sha,
       resolvedTree: sha,
-      repository: {
-        version: 2,
-        repositoryId: "repo",
-        owner: "owner",
-        name: "repository",
-        headSha: sha,
-        headTree: sha,
-        defaultBranch: "main",
-        visibility: "private",
-        releaseGate: { configured: false, name: "REPOSITORY_RELEASE_ENABLED" },
-        installationIdentityDigest: d,
-        digest: d,
-      },
+      version: 2,
     },
     identityReceipt: {
       ...execution,
-      version: 1,
+      digest: d,
       identity,
       resolvedByCallId: "identity",
-      digest: d,
+      version: 1,
     },
+    phase: "reviewed",
+    preparedByCallId: "prepare",
     proposal: {
       ...execution,
-      version: 1,
-      digest: d,
       contractDigest: d,
+      digest: d,
       identityDigest: d,
-      target,
       plannedByCallId: "plan",
+      target,
+      version: 1,
     },
+    reviewReceipt: receipt,
+    sourceReceipt: {
+      adapter: "arrusted-development-v0",
+      contractDigest: d,
+      digest: d,
+      eligibilityDigest: d,
+      releaseEnabled: false,
+      sourceKind: "existing-repository",
+      sourcePath: "/source",
+      sourceSha: sha,
+      sourceTree: sha,
+      version: 3,
+    },
+    validationReceipt: validation,
+    version: 17,
     workspace: {
-      workspaceId: "workspace",
-      workspacePath: "/workspace/repository",
+      adapter: "arrusted-development-v0",
+      eligibilityDigest: d,
       sourcePath: "/source",
       sourceSha: sha,
       sourceTree: sha,
       workspaceDigest: d,
-      adapter: "arrusted-development-v0",
-      eligibilityDigest: d,
+      workspaceId: "workspace",
+      workspacePath: "/workspace/repository",
     },
-    dependencyReceipt: {
-      ...execution,
-      version: 2,
-      targetSha: sha,
-      targetTree: sha,
-      cacheManifestDigest: d,
-      cacheContentDigest: d,
-      dependencyLayout: { kind: "fixture", roots: [], version: 1, workspaceLinks: [] },
-      preparedByCallId: "dependencies",
-      digest: d,
-    },
-    artifacts: [],
-    preparedByCallId: "prepare",
   };
   const { reviewReceipt: _review, ...baseline } = reviewed;
   void _review;
   const candidate = {
-    workspaceRoot: "/workspace",
-    headSha: sha,
-    headTree: sha,
+    appId: "orchard",
     baseSha: sha,
     baseTree: sha,
     conflicts: [],
-    version: 1,
-    appId: "orchard",
     githubSourceDigest: d,
+    headSha: sha,
+    headTree: sha,
     originalReviewDigest: receipt.digest,
-    repositoryId: "repo",
     pullRequestNumber: 42,
+    repositoryId: "repo",
     root: "/workspace/same-draft",
     unpublished: "actual unchanged edits",
+    version: 1,
+    workspaceRoot: "/workspace",
   } satisfies DraftReconciliationCandidate & { unpublished: string };
   const olderContext = {
     "eve.sessionId": logical,
@@ -294,32 +294,32 @@ export const fixture = () => {
     serializedContext: Parameters<typeof recoverDraftReviewedLineage>[0]["serializedContext"],
   ) => ({
     kind: "terminal-finalizer-input",
-    origin: { slot, stepId: `step-${slot}`, eventId: `event-${slot}` },
+    origin: { eventId: `event-${slot}`, slot, stepId: `step-${slot}` },
     serializedContext,
     sessionState: { snapshot: { session: { sessionId: logical } } },
   });
   const old = checkpoint(1, olderContext);
   const current = checkpoint(7, currentContext);
   const descriptor = {
-    version: 1,
-    operationId: "recover",
-    sourcePublicSessionId: "public-original",
-    sourceOwnerRunId: owner,
-    sourceAdapterGeneration: 1,
     logicalSessionId: logical,
+    operationId: "recover",
     originalAuthoritySessionId: "public-original",
     parentCancellationRevision: 0,
+    sourceAdapterGeneration: 1,
+    sourceOwnerRunId: owner,
+    sourcePublicSessionId: "public-original",
+    version: 1,
   };
-  const binding = { ownerRunId: owner, logicalSessionId: logical };
+  const binding = { logicalSessionId: logical, ownerRunId: owner };
   const payload = { binding, candidates: [old, current] };
   const input = {
-    descriptor,
     binding,
+    descriptor,
     payload,
     selectedOrigin: current.origin,
     serializedContext: currentContext,
   };
-  return { input, reviewed, candidate, currentContext, old, current };
+  return { candidate, current, currentContext, input, old, reviewed };
 };
 
 /** Construct real provider-bound owned-publication receipts against a controlled provider. */
@@ -384,28 +384,25 @@ export const freshFixture = async () => {
   const publicationRepository = repository(publicationInstallation.digest);
   const resolutionRepository = repository(resolutionInstallation.digest);
   const proposal = createDraftPullRequestProposal({
+    changedPathsSinceBase: [],
     installation: publicationInstallation,
     repository: publicationRepository,
     review: f.reviewed.reviewReceipt,
-    changedPathsSinceBase: [],
     title: "Owned draft",
   });
   const unsigned = {
-    version: GITHUB_PUBLICATION_VERSION,
-    idempotencyKey: proposal.idempotencyKey,
-    repository: publicationRepository,
-    changedPathsSinceBase: [],
     branch: {
-      status: "present" as const,
       branchName: proposal.branchName,
       branchSha: sha,
       branchTree: sha,
       changedContentDigest: proposal.changedContentDigest,
       idempotencyKey: proposal.idempotencyKey,
       normalizedChangedPaths: proposal.approvedPaths,
-    },
-    pullRequest: {
       status: "present" as const,
+    },
+    changedPathsSinceBase: [],
+    idempotencyKey: proposal.idempotencyKey,
+    pullRequest: {
       baseBranch: proposal.baseBranch,
       baseRepositoryId: "100",
       baseSha: sha,
@@ -417,7 +414,10 @@ export const freshFixture = async () => {
       idempotencyKey: proposal.idempotencyKey,
       pullRequestId: "400",
       pullRequestNumber: 42,
+      status: "present" as const,
     },
+    repository: publicationRepository,
+    version: GITHUB_PUBLICATION_VERSION,
   };
   const readBack = {
     ...unsigned,
@@ -427,73 +427,73 @@ export const freshFixture = async () => {
     throw new Error("Unexpected provider effect");
   };
   const adapter: GitHubPublicationAdapter = {
+    createPrivateFreshHistoryRepository: unavailable,
+    inspectDestination: unavailable,
+    inspectDraftPublication: async () => readBack,
+    inspectExistingDraft: unavailable,
+    inspectFreshRepositoryOutcome: unavailable,
     inspectInstallation: async (operation) =>
       operation === "resolve-existing-source" ? resolutionInstallation : publicationInstallation,
     inspectRepository: async () => resolutionRepository,
-    inspectDraftPublication: async () => readBack,
-    inspectExistingDraft: unavailable,
-    updateExistingDraft: unavailable,
-    inspectDestination: unavailable,
-    inspectFreshRepositoryOutcome: unavailable,
-    createPrivateFreshHistoryRepository: unavailable,
     publishDraftPullRequest: unavailable,
+    updateExistingDraft: unavailable,
   };
   const [publication, source] = await Promise.all([
     publishApprovedDraftPullRequest({
       adapter,
-      store: new GitHubPublicationTestStore(),
-      proposal,
-      review: f.reviewed.reviewReceipt,
       approvedByCallId: "retained-fixture-approval",
       contentSource: { readFile: unavailable },
+      proposal,
+      review: f.reviewed.reviewReceipt,
+      store: new GitHubPublicationTestStore(),
     }),
     resolveImmutableExistingSource({
       adapter,
       expectedInstallationId: "10",
-      repositoryId: "100",
-      ref: `refs/heads/${proposal.branchName}`,
       expectedSha: sha,
       expectedTree: sha,
+      ref: `refs/heads/${proposal.branchName}`,
+      repositoryId: "100",
       resolvedByCallId: "resolve-owned-draft",
     }),
   ]);
   const repair = createPublishedDraftRepairSource({
     appId: f.reviewed.appSpec.appId,
     appSpecDigest: f.reviewed.appSpec.digest,
-    originSourceReceiptDigest: f.reviewed.sourceReceipt.digest,
-    publicationProposalDigest: proposal.digest,
-    publicationDigest: publication.digest,
-    installationId: "10",
-    source,
     draft: {
-      repositoryId: "100",
-      owner: "owner",
-      name: "repository",
-      number: 42,
-      pullRequestId: "400",
+      baseBranch: "main",
+      baseRepositoryId: "100",
       draft: true,
-      state: "open",
-      headRepositoryId: "100",
       headBranch: proposal.branchName,
+      headRepositoryId: "100",
       headSha: sha,
       headTree: sha,
-      baseRepositoryId: "100",
-      baseBranch: "main",
+      name: "repository",
+      number: 42,
+      owner: "owner",
+      pullRequestId: "400",
+      repositoryId: "100",
+      state: "open",
       verifiedBuilderOrigin: { appId: "builder", authorId: "builder-user", marker: "owned" },
     },
+    installationId: "10",
+    originSourceReceiptDigest: f.reviewed.sourceReceipt.digest,
+    publicationDigest: publication.digest,
+    publicationProposalDigest: proposal.digest,
+    source,
   });
   const publicationScope = {
+    automaticMergeNonAppDigest: d,
     kind: "owned-publication" as const,
     proposal,
     publication,
-    automaticMergeNonAppDigest: d,
   };
   const candidate = Object.assign(f.candidate, {
-    kind: "reconciliation" as const,
-    repositoryId: "100",
     githubSourceDigest: source.digest,
-    publishedOrigin: repair,
+    kind: "reconciliation" as const,
     publicationScope,
+    publishedOrigin: repair,
+    repositoryId: "100",
   });
   Reflect.set(f.old.serializedContext, draftReviewedLineageContextKey, {
     ...candidate,
@@ -520,29 +520,29 @@ export const nativeFixture = async (
 ) => {
   const f = options.fresh === true ? await freshFixture() : fixture();
   let session = {
-    sessionId: logical,
-    rootSessionId: logical,
-    continuationToken: "same-continuation",
     agent: {
+      modelReference: { id: "synthetic", provider: "test" },
       system: "Original brief",
       tools: [],
-      modelReference: { id: "synthetic", provider: "test" },
     },
-    compaction: { threshold: 1e6, recentWindowSize: 10 },
+    compaction: { recentWindowSize: 10, threshold: 1e6 },
+    continuationToken: "same-continuation",
+    history: [
+      { content: "Continue the same app", role: "user" },
+      { content: "Ready", role: "assistant" },
+    ],
+    rootSessionId: logical,
+    sessionId: logical,
     state: {
       "eve.harness.emission": {
-        sessionStarted: true,
         sequence: 2,
+        sessionStarted: true,
         stepIndex: 0,
         ...(options.live === true
           ? { turnId: options.activeTurn === true ? "active-turn" : "" }
           : {}),
       },
     },
-    history: [
-      { role: "user", content: "Continue the same app" },
-      { role: "assistant", content: "Ready" },
-    ],
   };
   if (options.live === true && options.activeTurn !== true) {
     const emission = await emitTurnEpilogue(
@@ -550,8 +550,8 @@ export const nativeFixture = async (
         /* Native event delivery is external to this checkpoint-construction fixture. */
       },
       {
-        sessionStarted: true,
         sequence: 1,
+        sessionStarted: true,
         stepIndex: 0,
         turnId: "completed-native-turn",
       },
@@ -561,22 +561,22 @@ export const nativeFixture = async (
   if (options.pendingApproval === true) {
     const { appendPendingInputBatch } = await load("harness/pending-input-batches.js");
     session = appendPendingInputBatch({
-      session,
       requests: [
         {
-          kind: "tool-approval",
-          requestId: "pending-original-approval",
-          prompt: "Approve resource",
           action: {
-            kind: "tool-call",
-            toolName: "provision-original",
             callId: "pending-original-call",
             input: {},
+            kind: "tool-call",
+            toolName: "provision-original",
           },
+          kind: "tool-approval",
+          prompt: "Approve resource",
+          requestId: "pending-original-approval",
         },
       ],
       responseAuthRequiredRequestIds: ["pending-original-approval"],
       responseMessages: [],
+      session,
     });
   }
   let nativeStatus = options.live === true ? "running" : "completed";
@@ -593,7 +593,7 @@ export const nativeFixture = async (
       : f.old;
   const priorCutoff = {
     ...f.current,
-    origin: { slot: 2, stepId: "step-prior-cutoff", eventId: "event-prior-cutoff" },
+    origin: { eventId: "event-prior-cutoff", slot: 2, stepId: "step-prior-cutoff" },
     serializedContext: {
       ...f.currentContext,
       [draftReviewedLineageContextKey]: f.old.serializedContext[draftReviewedLineageContextKey],
@@ -601,7 +601,7 @@ export const nativeFixture = async (
   };
   const afterCutoff = {
     ...f.old,
-    origin: { slot: 3, stepId: "step-after-cutoff", eventId: "event-after-cutoff" },
+    origin: { eventId: "event-after-cutoff", slot: 3, stepId: "step-after-cutoff" },
     serializedContext: { ...f.old.serializedContext, [workflowKey]: fixture().reviewed },
   };
   const priorEntries = [earlier, priorCutoff];
@@ -630,10 +630,10 @@ export const nativeFixture = async (
   const steps = await Promise.all(
     entries.map(async (entry, index) => ({
       runId: priorEntry(index) ? "physical-ancestor" : owner,
+      status: "completed",
       stepId: entry.origin.stepId,
       stepName:
         options.live === true ? "step//eve//turnStep" : "step//eve//terminateChildSessionsStep",
-      status: "completed",
       ...(options.live === true
         ? {
             output: await serialization.dehydrateStepReturnValue(
@@ -641,8 +641,8 @@ export const nativeFixture = async (
                 action: "park",
                 hasPendingAuthorization: false,
                 hasPendingInputBatch: options.pendingApproval ?? false,
-                sessionState: createDurableSessionState({ session }),
                 serializedContext: entry.serializedContext,
+                sessionState: createDurableSessionState({ session }),
               },
               priorEntry(index) ? "physical-ancestor" : owner,
             ),
@@ -652,8 +652,8 @@ export const nativeFixture = async (
               {
                 args: [
                   {
-                    sessionState: createDurableSessionState({ session }),
                     serializedContext: entry.serializedContext,
+                    sessionState: createDurableSessionState({ session }),
                   },
                 ],
                 closureVars: [],
@@ -664,11 +664,11 @@ export const nativeFixture = async (
     })),
   );
   const nativeEvents = steps.map((step, index) => ({
-    runId: step.runId,
-    eventId: `evnt_${String(options.priorOwnerReview === true && step.runId === owner ? index - priorEntries.length + 1 : index + 1).padStart(26, "0")}`,
     correlationId: step.stepId,
-    eventType: "step_completed",
     eventData: { stepName: step.stepName },
+    eventId: `evnt_${String(options.priorOwnerReview === true && step.runId === owner ? index - priorEntries.length + 1 : index + 1).padStart(26, "0")}`,
+    eventType: "step_completed",
+    runId: step.runId,
   }));
   const paginate = <T>(
     values: T[],
@@ -690,13 +690,16 @@ export const nativeFixture = async (
     };
   };
   const world = {
-    runs: {
-      get: async (runId: string) => ({
-        runId,
-        status: runId === owner ? nativeStatus : "cancelled",
-      }),
-    },
     events: {
+      get: async (runId: string, eventId: string) => {
+        const event = nativeEvents.find(
+          (entry) => entry.runId === runId && entry.eventId === eventId,
+        );
+        if (event === undefined) {
+          throw new Error("Unknown native event");
+        }
+        return event;
+      },
       list: async ({
         runId,
         pagination,
@@ -709,15 +712,6 @@ export const nativeFixture = async (
           runId,
           pagination,
         ),
-      get: async (runId: string, eventId: string) => {
-        const event = nativeEvents.find(
-          (entry) => entry.runId === runId && entry.eventId === eventId,
-        );
-        if (event === undefined) {
-          throw new Error("Unknown native event");
-        }
-        return event;
-      },
       listByCorrelationId: async ({
         runId,
         correlationId,
@@ -735,6 +729,12 @@ export const nativeFixture = async (
           pagination,
         ),
     },
+    runs: {
+      get: async (runId: string) => ({
+        runId,
+        status: runId === owner ? nativeStatus : "cancelled",
+      }),
+    },
     steps: {
       get: async (runId: string, step: string) =>
         steps.find((entry) => entry.runId === runId && entry.stepId === step),
@@ -745,9 +745,9 @@ export const nativeFixture = async (
             ? [
                 {
                   runId: owner,
+                  status: "running",
                   stepId: "unsettled-provider-effect",
                   stepName: "step//eve//dispatchCoordinationStep",
-                  status: "running",
                 },
               ]
             : []),
@@ -758,36 +758,36 @@ export const nativeFixture = async (
   };
   const collectorPorts = {
     getWorld: async () => world,
-    resolveRunEncryptionKey: async () => {
-      /* Controlled fixture checkpoints are not encrypted. */
-    },
     hydrateStepArguments: (value: unknown, run: string, key: unknown) =>
       serialization.hydrateStepArguments(value, run, key, []),
     hydrateStepReturnValue: (value: unknown, run: string, key: unknown) =>
       serialization.hydrateStepReturnValue(value, run, key),
+    now: () => 0,
     readDurableSession,
-    requireEventSlot: (id: string) => Number(id.slice(5)),
     async *readNativeEvents() {
       yield* [];
     },
-    now: () => 0,
+    requireEventSlot: (id: string) => Number(id.slice(5)),
+    resolveRunEncryptionKey: async () => {
+      /* Controlled fixture checkpoints are not encrypted. */
+    },
   };
   const { createHistoricalCheckpointVisitor } = await load(
     "execution/session/historical-checkpoints.js",
   );
   const historicalPorts = {
     ...collectorPorts,
-    hydrateWorkflowArguments: (value: unknown, run: string, key: unknown) =>
-      serialization.hydrateWorkflowArguments(value, run, key),
-    hydrateHookPayload: async (value: unknown, _run: string, key: unknown) =>
-      serialization.deserializePreparedReplayPayload(
-        await serialization.prepareReplayPayload(value, key),
-      ),
     guardWorld: (value: typeof world) => value,
     guardedDependencies: (_authorize: unknown, value: typeof world) => ({
       ...collectorPorts,
       getWorld: async () => value,
     }),
+    hydrateHookPayload: async (value: unknown, _run: string, key: unknown) =>
+      serialization.deserializePreparedReplayPayload(
+        await serialization.prepareReplayPayload(value, key),
+      ),
+    hydrateWorkflowArguments: (value: unknown, run: string, key: unknown) =>
+      serialization.hydrateWorkflowArguments(value, run, key),
   };
   const visitHistoricalCheckpoints = createHistoricalCheckpointVisitor(historicalPorts);
   const collect = createTerminalRecoveryCandidateCollector(collectorPorts);
@@ -796,35 +796,77 @@ export const nativeFixture = async (
   let denied = false;
   const starts: unknown[] = [];
   const ports = {
-    authorize: async () => {
-      if (denied) {
-        throw new Error("owner revoked");
-      }
-    },
-    readReceipt: async () => receipt,
-    commitReceipt: async ({ recoveryBinding }: { recoveryBinding: unknown }) => {
-      receipt = recoveryBinding;
-      return recoveryBinding;
-    },
-    authorizeActivation: async () => {
-      throw new Error("unexpected activation");
-    },
     applicationStateRecovery: {
       contextKey: draftReviewedLineageContextKey,
       field: "reviewedLineage",
       recover: async (input: Parameters<typeof recoverDraftReviewedLineage>[0]) =>
         recoverDraftReviewedLineage(input),
     },
+    authorize: async () => {
+      if (denied) {
+        throw new Error("owner revoked");
+      }
+    },
+    authorizeActivation: async () => {
+      throw new Error("unexpected activation");
+    },
+    commitReceipt: async ({ recoveryBinding }: { recoveryBinding: unknown }) => {
+      receipt = recoveryBinding;
+      return recoveryBinding;
+    },
+    readReceipt: async () => receipt,
   };
   const stopReceipts = new Set<string>();
   const activatedHooks = new Set<string>();
   const deps = {
     collect,
-    visitHistoricalCheckpoints,
     collectLineagePreflight: createOwnedLineagePreflightCollector(collectorPorts),
-    readLineagePreflight: readOwnedLineagePreflight,
-    reconcileLineagePreflight: reconcileOwnedLineagePreflight,
+    getHook: async () => {
+      if (hook === undefined) {
+        throw new Error("missing hook");
+      }
+      return hook;
+    },
     inspectSource: async (id: string) => await inspectNativeRecoverySource(world, id),
+    isHookNotFound: (error: Error) => error.message === "missing hook",
+    now: () => 0,
+    readCandidate: readTerminalRecoveryCandidate,
+    readEntry: async () => ({
+      kind: "initial",
+      serializedContext: { "eve.capabilities": { original: true } },
+      sessionTimeoutMs: false,
+    }),
+    readLineagePreflight: readOwnedLineagePreflight,
+    readLogicalInboxOwner: async (): Promise<
+      { runId: string; logicalSessionId: string } | undefined
+    > => {
+      if (hook !== undefined) {
+        return { logicalSessionId: logical, runId: hook.runId };
+      }
+      if (nativeStatus === "running") {
+        return { logicalSessionId: logical, runId: owner };
+      }
+      return undefined;
+    },
+    readStopReceipt: async (id: string, reason: string) => id === owner && stopReceipts.has(reason),
+    reconcile: reconcileTerminalRecoveryCandidate,
+    reconcileLineagePreflight: reconcileOwnedLineagePreflight,
+    resumeHook: async (token: string) => {
+      activatedHooks.add(token);
+    },
+    start: async (input: { descriptor: typeof f.input.descriptor; provenance: unknown }) => {
+      starts.push(input);
+      hook = {
+        metadata: Promise.resolve({
+          recoveryBinding: {
+            ...input.descriptor,
+            ownerRunId: "physical-child",
+            provenance: input.provenance,
+          },
+        }),
+        runId: "physical-child",
+      };
+    },
     stopSource: async (id: string, reason: string) => {
       if (id !== owner) {
         throw new Error("Foreign owner stop");
@@ -832,69 +874,27 @@ export const nativeFixture = async (
       nativeStatus = "cancelled";
       stopReceipts.add(reason);
     },
-    readStopReceipt: async (id: string, reason: string) => id === owner && stopReceipts.has(reason),
-    readLogicalInboxOwner: async (): Promise<
-      { runId: string; logicalSessionId: string } | undefined
-    > => {
-      if (hook !== undefined) {
-        return { runId: hook.runId, logicalSessionId: logical };
-      }
-      if (nativeStatus === "running") {
-        return { runId: owner, logicalSessionId: logical };
-      }
-      return undefined;
-    },
-    resumeHook: async (token: string) => {
-      activatedHooks.add(token);
-    },
-    readCandidate: readTerminalRecoveryCandidate,
-    reconcile: reconcileTerminalRecoveryCandidate,
-    readEntry: async () => ({
-      kind: "initial",
-      serializedContext: { "eve.capabilities": { original: true } },
-      sessionTimeoutMs: false,
-    }),
-    start: async (input: { descriptor: typeof f.input.descriptor; provenance: unknown }) => {
-      starts.push(input);
-      hook = {
-        runId: "physical-child",
-        metadata: Promise.resolve({
-          recoveryBinding: {
-            ...input.descriptor,
-            provenance: input.provenance,
-            ownerRunId: "physical-child",
-          },
-        }),
-      };
-    },
-    getHook: async () => {
-      if (hook === undefined) {
-        throw new Error("missing hook");
-      }
-      return hook;
-    },
-    isHookNotFound: (error: Error) => error.message === "missing hook",
-    now: () => 0,
+    visitHistoricalCheckpoints,
     wait: async () => {
       throw new Error("unexpected wait");
     },
   };
   return {
     ...f,
-    ports,
-    deps,
-    starts,
-    world,
-    stopReceipts,
     activations: () => activatedHooks.size,
+    deps,
+    ports,
+    revoke: () => {
+      denied = true;
+    },
     setEffectConflict: (value: boolean) => {
       effectConflict = value;
     },
     setNativeStatus: (value: string) => {
       nativeStatus = value;
     },
-    revoke: () => {
-      denied = true;
-    },
+    starts,
+    stopReceipts,
+    world,
   };
 };

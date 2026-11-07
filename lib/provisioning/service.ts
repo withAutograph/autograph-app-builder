@@ -207,8 +207,12 @@ export async function executeBuilderProvisioning(input: {
             fetch: input.dependencies.fetch,
             installation,
             now,
-            persistAbsent: (candidate) => persist("absent", candidate),
-            persistCandidate: (candidate) => persist("candidate", candidate),
+            persistAbsent: async (candidate) => {
+              await persist("absent", candidate);
+            },
+            persistCandidate: async (candidate) => {
+              await persist("candidate", candidate);
+            },
             persistedAbsentCandidates: current.record.operations.github.absentCandidates,
             persistedCandidates: current.record.operations.github.candidates,
             private: request.repository.private,
@@ -260,8 +264,12 @@ export async function executeBuilderProvisioning(input: {
           github: current.record.response.github,
           githubSelected: request.providers.githubInstallationId !== undefined,
           installation: credential.binding,
-          persistAbsent: (candidate) => persist("absent", candidate),
-          persistCandidate: (candidate) => persist("candidate", candidate),
+          persistAbsent: async (candidate) => {
+            await persist("absent", candidate);
+          },
+          persistCandidate: async (candidate) => {
+            await persist("candidate", candidate);
+          },
           persistedAbsentCandidates: current.record.operations.vercel.absentCandidates,
           persistedCandidates: current.record.operations.vercel.candidates,
           reconcilePriorWrite,

@@ -3,11 +3,13 @@ import type { Locator, Page } from "playwright";
 import type { CaptureAdapter, CaptureState } from "../support/self-reproduction-captures";
 
 const firstVisible = async (locators: Locator[]): Promise<Locator | undefined> => {
-  const counts = await Promise.all(locators.map((locator) => locator.count()));
+  const counts = await Promise.all(locators.map(async (locator) => await locator.count()));
   const candidates = locators.flatMap((locator, locatorIndex) =>
     Array.from({ length: counts[locatorIndex] ?? 0 }, (_, index) => locator.nth(index)),
   );
-  const visibility = await Promise.all(candidates.map((candidate) => candidate.isVisible()));
+  const visibility = await Promise.all(
+    candidates.map(async (candidate) => await candidate.isVisible()),
+  );
   return candidates.find((_, index) => visibility[index]);
 };
 
@@ -16,29 +18,32 @@ const signature = async (page: Page) => {
   return `${page.url()}\n${text?.slice(0, 4000) ?? ""}`;
 };
 
-const stateTarget = (page: Page, state: CaptureState) => {
+const stateTarget = async (page: Page, state: CaptureState) => {
   if (state === "panel-resize") {
-    return firstVisible([page.getByRole("separator"), page.locator("[data-panel-resize-handle]")]);
+    return await firstVisible([
+      page.getByRole("separator"),
+      page.locator("[data-panel-resize-handle]"),
+    ]);
   }
   if (state === "loading") {
-    return firstVisible([
+    return await firstVisible([
       page.getByRole("progressbar"),
       page.locator('[aria-busy="true"]'),
       page.getByText(/building|creating|generating|loading|preparing/iu),
     ]);
   }
   if (state === "empty") {
-    return firstVisible([
+    return await firstVisible([
       page.getByText(/no apps|no drafts|create your first|get started|what should this app do/iu),
     ]);
   }
   if (state === "error") {
-    return firstVisible([
+    return await firstVisible([
       page.getByRole("alert"),
       page.getByText(/failed|error|could not|try again/iu),
     ]);
   }
-  return firstVisible([
+  return await firstVisible([
     page.getByRole("button", { name: /build|create|continue|connect|documentation|docs/iu }),
     page.getByRole("link", { name: /build|create|continue|connect|documentation|docs/iu }),
   ]);
@@ -103,9 +108,10 @@ export const createSemanticCaptureAdapter = (
       await target.focus();
       const focused = await target.evaluate((element) => element === document.activeElement);
       const before = await signature(page);
-      await capture();
+      const captured = capture();
       await page.keyboard.press("Enter");
       await page.waitForTimeout(100);
+      await captured;
       return [
         { detail: "Semantic control received focus.", id: "focus-visible", passed: focused },
         {
@@ -117,7 +123,12 @@ export const createSemanticCaptureAdapter = (
     }
     if (state === "loading") {
       await capture();
-      const text = (await target.textContent().catch(() => "")) ?? "";
+      let text = "";
+      try {
+        text = (await target.textContent()) ?? "";
+      } catch {
+        // The loading target may disappear while the capture is being taken.
+      }
       return [
         {
           detail: "Pending UI stayed visible.",
@@ -135,9 +146,10 @@ export const createSemanticCaptureAdapter = (
       page.getByRole("button", { name: /build|create|continue|get started|retry|try again/iu }),
       page.getByRole("link", { name: /build|create|continue|get started|retry|try again/iu }),
     ]);
-    const before = await signature(page);
-    await capture();
-    await recovery?.click();
+    const [before] = await Promise.all([
+      signature(page),
+      Promise.all([capture(), recovery?.click()]),
+    ]);
     await page.waitForTimeout(100);
     const changed = Boolean(recovery) && (await signature(page)) !== before;
     return state === "empty"
@@ -176,8 +188,7 @@ export const createSemanticCaptureAdapter = (
   },
 });
 
-export const createCaptureAdapters = (input: { referenceURL: string; candidateURL: string }) =>
-  Promise.resolve({
-    candidate: createSemanticCaptureAdapter(new URL(input.candidateURL).href, "candidate"),
-    reference: createSemanticCaptureAdapter(new URL(input.referenceURL).href, "reference"),
-  });
+export const createCaptureAdapters = (input: { referenceURL: string; candidateURL: string }) => ({
+  candidate: createSemanticCaptureAdapter(new URL(input.candidateURL).href, "candidate"),
+  reference: createSemanticCaptureAdapter(new URL(input.referenceURL).href, "reference"),
+});

@@ -89,8 +89,6 @@ const fixture = () => {
       .replaceAll("/vercel/sandbox", path.join(directory, "missing-provider-root"));
   const native = {
     delete: vi.fn().mockResolvedValue(null),
-    mounts: { "/workspace": { drive: "source-drive", mode: "read-write" } },
-    stop: vi.fn().mockResolvedValue(null),
     expiresAt: new Date(Date.now() + 30_000),
     extendTimeout: vi.fn(async () => {
       events.push("extend");
@@ -106,6 +104,7 @@ const fixture = () => {
       rm: vi.fn().mockResolvedValue(null),
       writeFile: vi.fn().mockResolvedValue(null),
     },
+    mounts: { "/workspace": { drive: "source-drive", mode: "read-write" } },
     name: "same-existing-vm",
     readFile: vi.fn(),
     readFileToBuffer: vi.fn(),
@@ -123,9 +122,9 @@ const fixture = () => {
           return {
             exitCode: 0,
             kill: vi.fn().mockResolvedValue(null),
-            stderr: () => Promise.resolve(""),
-            stdout: () => Promise.resolve("/home/vercel\n"),
-            wait: () => Promise.resolve({ exitCode: 0 }),
+            stderr: vi.fn().mockResolvedValue(""),
+            stdout: vi.fn().mockResolvedValue("/home/vercel\n"),
+            wait: async () => ({ exitCode: 0 }),
           };
         }
         const cloned = options.cmd === "git" && args.includes("clone");
@@ -162,6 +161,7 @@ fs.renameSync(process.argv[1],process.argv[2]);`;
         };
       },
     ),
+    stop: vi.fn().mockResolvedValue(null),
     update: vi.fn().mockResolvedValue(null),
     writeFiles: vi.fn().mockResolvedValue(null),
   };
@@ -173,14 +173,12 @@ fs.renameSync(process.argv[1],process.argv[2]);`;
     ...native,
     runCommand: vi.fn().mockImplementation(native.runCommand),
   } satisfies VercelSdkSessionNative;
-  drives.getOrCreate.mockImplementation((options: { name: string }) =>
-    Promise.resolve({
-      driveId: "source-drive",
-      name: options.name,
-      projectId: "source-project",
-      region: "iad1",
-    }),
-  );
+  drives.getOrCreate.mockImplementation(async (options: { name: string }) => ({
+    driveId: "source-drive",
+    name: options.name,
+    projectId: "source-project",
+    region: "iad1",
+  }));
   return { authorize, directory, events, native, sdkNative, sha, tree, workspace };
 };
 
@@ -294,8 +292,8 @@ describe("late source acquisition on an existing Builder VM", () => {
     expect(
       JSON.stringify(
         f.native.runCommand.mock.calls.map(([options]) => ({
-          cmd: options.cmd,
           args: options.args,
+          cmd: options.cmd,
         })),
       ),
     ).not.toContain(token);

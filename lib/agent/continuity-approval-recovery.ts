@@ -21,7 +21,8 @@ export const readContinuityApprovalWithRecovery = async (
   signal: AbortSignal,
   options: { deferPendingSettlement?: true } = {},
 ) => {
-  while (true) {
+  let deferredRead: [code: string, recoveryStage: string | undefined] | undefined;
+  while (deferredRead === undefined) {
     signal.throwIfAborted();
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Continue only after server-confirmed durable native history progress.
@@ -36,22 +37,23 @@ export const readContinuityApprovalWithRecovery = async (
       signal.throwIfAborted();
       if (error instanceof HostedSessionReadTimeoutError) {
         if (error.progressPersisted) {
-          continue;
+          // Continue after confirmed durable native history progress.
+        } else {
+          deferredRead = ["approval_history_incomplete", "native_history"];
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Defer this failed sequential read through the workflow retry boundary.
-        return await deferApprovalRead("approval_history_incomplete", "native_history");
-      }
-      if (
+      } else if (
         error instanceof HostedOperatorError &&
         ["operator_unavailable", "operation_in_progress"].includes(error.code)
       ) {
         if (error.recoveryProgressAdvanced === true) {
-          continue;
+          // Continue after confirmed durable native history progress.
+        } else {
+          deferredRead = [error.code, error.recoveryStage];
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Defer this failed sequential read through the workflow retry boundary.
-        return await deferApprovalRead(error.code, error.recoveryStage);
+      } else {
+        throw error;
       }
-      throw error;
     }
   }
+  return await deferApprovalRead(...deferredRead);
 };

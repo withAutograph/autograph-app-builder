@@ -15,10 +15,10 @@ const boundary = defineState<{
   blocked: boolean;
   observedIntent: boolean;
 }>("autograph-app-builder.preapproval-authoring-boundary.v1", () => ({
-  pendingInputs: [],
-  pendingCalls: [],
   blocked: false,
   observedIntent: false,
+  pendingCalls: [],
+  pendingInputs: [],
 }));
 const record = async (ctx: HookContext, completed = false, blocked = false, cancelled = false) => {
   if ("appSpec" in appBuilderWorkflowState.get()) {
@@ -29,9 +29,9 @@ const record = async (ctx: HookContext, completed = false, blocked = false, canc
     return;
   }
   const decision = currentAuthoringDecision(ctx, {
+    blocked: blocked || state.blocked || state.pendingCalls.length > 0,
     completed,
     pendingInput: state.pendingInputs.length > 0,
-    blocked: blocked || state.blocked || state.pendingCalls.length > 0,
   });
   if (cancelled) {
     decision.reason = "authoring_cancelled";
@@ -51,8 +51,16 @@ const record = async (ctx: HookContext, completed = false, blocked = false, canc
 /** Drafting is distinct from execution: this hook only records actual native boundaries. */
 export default defineHook({
   events: {
-    async "turn.started"(_event, ctx) {
-      boundary.update((current) => ({ ...current, blocked: false, pendingCalls: [] }));
+    async "action.result"(event, ctx) {
+      observePlannedAuthoringInspection(event, ctx);
+      const resultFailed =
+        event.data.error !== undefined ||
+        (event.data.result.kind === "tool-result" && event.data.result.isError === true);
+      boundary.update((current) => ({
+        ...current,
+        pendingCalls: current.pendingCalls.filter((callId) => callId !== event.data.result.callId),
+        blocked: current.blocked || event.data.status !== "completed" || resultFailed,
+      }));
       await record(ctx);
     },
     "actions.requested"(event) {
@@ -65,18 +73,6 @@ export default defineHook({
           ]),
         ],
       }));
-    },
-    async "action.result"(event, ctx) {
-      observePlannedAuthoringInspection(event, ctx);
-      const resultFailed =
-        event.data.error !== undefined ||
-        (event.data.result.kind === "tool-result" && event.data.result.isError === true);
-      boundary.update((current) => ({
-        ...current,
-        pendingCalls: current.pendingCalls.filter((callId) => callId !== event.data.result.callId),
-        blocked: current.blocked || event.data.status !== "completed" || resultFailed,
-      }));
-      await record(ctx);
     },
     "input.requested"(event) {
       boundary.update((current) => ({
@@ -99,14 +95,18 @@ export default defineHook({
     "step.failed"() {
       boundary.update((current) => ({ ...current, blocked: true }));
     },
+    async "turn.cancelled"(_event, ctx) {
+      await record(ctx, false, true, true);
+    },
     async "turn.completed"(_event, ctx) {
       await record(ctx, true);
     },
     async "turn.failed"(_event, ctx) {
       await record(ctx, false, true);
     },
-    async "turn.cancelled"(_event, ctx) {
-      await record(ctx, false, true, true);
+    async "turn.started"(_event, ctx) {
+      boundary.update((current) => ({ ...current, blocked: false, pendingCalls: [] }));
+      await record(ctx);
     },
   },
 });

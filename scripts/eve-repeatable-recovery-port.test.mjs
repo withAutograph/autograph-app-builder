@@ -8,49 +8,50 @@ import { test } from "vitest";
 
 const require = createRequire(import.meta.url);
 const sdk = path.dirname(require.resolve("eve/package.json"));
+const originalCallId = "original-call";
 const { recoverTerminalSession } = await import(
   pathToFileURL(path.join(sdk, "dist/src/execution/session/terminal-recovery.js")).href
 );
 const fixture = () => {
   const descriptor = {
-    version: 1,
-    operationId: "repeatable-operation",
-    sourcePublicSessionId: "public-source",
-    sourceOwnerRunId: "physical-source",
-    sourceAdapterGeneration: 1,
     logicalSessionId: "logical-original",
+    operationId: "repeatable-operation",
     originalAuthoritySessionId: "public-original",
     parentCancellationRevision: 0,
+    sourceAdapterGeneration: 1,
+    sourceOwnerRunId: "physical-source",
+    sourcePublicSessionId: "public-source",
+    version: 1,
   };
-  const auth = { authenticator: "test", principalType: "user", principalId: "owner" };
+  const auth = { authenticator: "test", principalId: "owner", principalType: "user" };
   const provenance = {
+    checkpointVersion: 1,
     kind: "committed-turn-output",
-    sourceStepId: "step-retained",
     sourceEventId: "event-retained",
     sourceSlot: 4,
-    checkpointVersion: 1,
+    sourceStepId: "step-retained",
   };
   const accepted = { ...descriptor, ownerRunId: "physical-child", provenance };
-  const origin = { stepId: "step-retained", eventId: "event-retained", slot: 4 };
+  const origin = { eventId: "event-retained", slot: 4, stepId: "step-retained" };
   const payload = {
     binding: {
-      ownerRunId: descriptor.sourceOwnerRunId,
       logicalSessionId: descriptor.logicalSessionId,
+      ownerRunId: descriptor.sourceOwnerRunId,
     },
-    run: { runId: descriptor.sourceOwnerRunId },
     candidates: [{ kind: provenance.kind, origin }],
     nativeEvents: [],
+    run: { runId: descriptor.sourceOwnerRunId },
   };
   const checkpointCore = {
     serializedContext: { "eve.sessionId": descriptor.logicalSessionId, originalGrant: "unchanged" },
-    sessionState: { sessionId: descriptor.logicalSessionId, originalState: "unchanged" },
+    sessionState: { originalState: "unchanged", sessionId: descriptor.logicalSessionId },
   };
   const state = {
     calls: [],
-    receipt: undefined,
-    hook: undefined,
     denied: false,
+    hook: undefined,
     options: undefined,
+    receipt: undefined,
   };
   const ports = {
     async authorize() {
@@ -59,48 +60,24 @@ const fixture = () => {
         throw new Error("authority revoked");
       }
     },
-    async readReceipt() {
-      state.calls.push("read-receipt");
-      return state.receipt;
+    async authorizeActivation() {
+      throw new Error("unexpected activation");
     },
     async commitReceipt({ recoveryBinding }) {
       state.calls.push("commit");
       state.receipt = recoveryBinding;
       return recoveryBinding;
     },
-    async authorizeActivation() {
-      throw new Error("unexpected activation");
+    async readReceipt() {
+      state.calls.push("read-receipt");
+      return state.receipt;
     },
   };
   const deps = {
     async collect({ binding, authorizeOwner }) {
       state.calls.push("collect");
       await authorizeOwner(binding);
-      return { kind: "candidate", candidate: payload };
-    },
-    readCandidate: (candidate) => candidate,
-    async reconcile(candidate, options) {
-      assert.equal(candidate, payload);
-      state.calls.push("reconcile");
-      state.options = options;
-      return options?.repeatableCallIds?.includes("original-call") === true
-        ? { kind: "ready", checkpointCore, provenance: { selectedOrigin: origin } }
-        : { kind: "uncertain", reason: "approval-transcript-unavailable" };
-    },
-    async readEntry() {
-      return {
-        kind: "handoff",
-        checkpoint: { sessionTimeoutMs: false, capabilities: { original: true } },
-      };
-    },
-    async start(input) {
-      state.calls.push("start");
-      assert.equal(input.checkpoint.serializedContext, checkpointCore.serializedContext);
-      assert.equal(input.checkpoint.sessionState, checkpointCore.sessionState);
-      state.hook = {
-        runId: accepted.ownerRunId,
-        metadata: Promise.resolve({ recoveryBinding: accepted }),
-      };
+      return { candidate: payload, kind: "candidate" };
     },
     async getHook() {
       if (state.hook === undefined) {
@@ -110,11 +87,35 @@ const fixture = () => {
     },
     isHookNotFound: (error) => error.message === "hook missing",
     now: () => 0,
+    readCandidate: (candidate) => candidate,
+    async readEntry() {
+      return {
+        checkpoint: { capabilities: { original: true }, sessionTimeoutMs: false },
+        kind: "handoff",
+      };
+    },
+    async reconcile(candidate, options) {
+      assert.equal(candidate, payload);
+      state.calls.push("reconcile");
+      state.options = options;
+      return options?.repeatableCallIds?.includes(originalCallId) === true
+        ? { checkpointCore, kind: "ready", provenance: { selectedOrigin: origin } }
+        : { kind: "uncertain", reason: "approval-transcript-unavailable" };
+    },
+    async start(input) {
+      state.calls.push("start");
+      assert.equal(input.checkpoint.serializedContext, checkpointCore.serializedContext);
+      assert.equal(input.checkpoint.sessionState, checkpointCore.sessionState);
+      state.hook = {
+        metadata: Promise.resolve({ recoveryBinding: accepted }),
+        runId: accepted.ownerRunId,
+      };
+    },
     async wait() {
       throw new Error("unexpected wait");
     },
   };
-  return { input: { auth, descriptor, ports }, deps, state, payload, accepted };
+  return { accepted, deps, input: { auth, descriptor, ports }, payload, state };
 };
 
 test("only exact trusted IDs reach reconciliation after current authority and receipt revalidation", async () => {
@@ -126,13 +127,13 @@ test("only exact trusted IDs reach reconciliation after current authority and re
     assert.equal(input.descriptor, f.input.descriptor);
     assert.equal(input.payload, f.payload);
     assert.deepEqual(input.binding, f.payload.binding);
-    return ["original-call", "original-call"];
+    return [originalCallId, originalCallId];
   };
   assert.deepEqual(await recoverTerminalSession(f.input, f.deps), {
     kind: "accepted",
     recoveryBinding: f.accepted,
   });
-  assert.deepEqual(f.state.options, { repeatableCallIds: ["original-call"] });
+  assert.deepEqual(f.state.options, { repeatableCallIds: [originalCallId] });
   const decision = f.state.calls.indexOf("decision");
   const reconcile = f.state.calls.indexOf("reconcile");
   assert.deepEqual(f.state.calls.slice(decision + 1, reconcile), ["authorize", "read-receipt"]);
@@ -145,7 +146,7 @@ test("missing, failed or malformed app decisions grant no IDs and cannot start a
     async () => {
       throw new Error("unavailable");
     },
-    async () => ["original-call", null],
+    async () => [originalCallId, null],
   ];
   await Promise.all(
     decisions.map(async (decision) => {
@@ -165,7 +166,7 @@ test("revocation during the trusted decision prevents reconciliation and owner c
   const f = fixture();
   f.input.ports.authorizeRepeatableRecoveryCalls = async () => {
     f.state.denied = true;
-    return ["original-call"];
+    return [originalCallId];
   };
   await assert.rejects(recoverTerminalSession(f.input, f.deps), /authority revoked/u);
   assert.equal(f.state.calls.includes("reconcile"), false);
@@ -177,7 +178,7 @@ test("a concurrently committed receipt prevents replay planning and exact retry 
   f.input.ports.authorizeRepeatableRecoveryCalls = async () => {
     decisions += 1;
     f.state.receipt = f.accepted;
-    return ["original-call"];
+    return [originalCallId];
   };
   await assert.rejects(recoverTerminalSession(f.input, f.deps), /receipt changed/u);
   assert.deepEqual(await recoverTerminalSession(f.input, f.deps), {
@@ -194,7 +195,7 @@ test("a foreign candidate binding cannot reach the trusted policy", async () => 
   f.payload.binding.ownerRunId = "foreign-owner";
   f.input.ports.authorizeRepeatableRecoveryCalls = async () => {
     decisions += 1;
-    return ["original-call"];
+    return [originalCallId];
   };
   await assert.rejects(recoverTerminalSession(f.input, f.deps), /source binding changed/u);
   assert.equal(decisions, 0);
@@ -203,8 +204,8 @@ test("a foreign candidate binding cannot reach the trusted policy", async () => 
 test("an existing parked owner is committed without recollecting or invoking the policy", async () => {
   const f = fixture();
   f.state.hook = {
-    runId: f.accepted.ownerRunId,
     metadata: Promise.resolve({ recoveryBinding: f.accepted }),
+    runId: f.accepted.ownerRunId,
   };
   f.input.ports.authorizeRepeatableRecoveryCalls = async () => {
     throw new Error("unexpected policy");

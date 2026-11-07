@@ -14,9 +14,11 @@ const portableEntries = ["plugin.json", "mcp.json", "skills", "LICENSE"];
 const copyPortablePackage = async () => {
   const root = await mkdtemp(path.resolve(tmpdir(), "agent-plugin-package-"));
   await Promise.all(
-    portableEntries.map((entry) =>
-      cp(path.resolve(repositoryRoot, entry), path.resolve(root, entry), { recursive: true }),
-    ),
+    portableEntries.map(async (entry) => {
+      await cp(path.resolve(repositoryRoot, entry), path.resolve(root, entry), {
+        recursive: true,
+      });
+    }),
   );
   return root;
 };
@@ -274,9 +276,11 @@ allowed-tools: "autograph_start autograph_get"
     const root = await mkdtemp(path.resolve(tmpdir(), "agent-plugin-output-"));
     const outside = await mkdtemp(path.resolve(tmpdir(), "agent-plugin-outside-"));
     await Promise.all(
-      portableEntries.map((entry) =>
-        cp(path.resolve(repositoryRoot, entry), path.resolve(root, entry), { recursive: true }),
-      ),
+      portableEntries.map(async (entry) => {
+        await cp(path.resolve(repositoryRoot, entry), path.resolve(root, entry), {
+          recursive: true,
+        });
+      }),
     );
     await symlink(outside, path.resolve(root, ".artifacts"));
     await expect(

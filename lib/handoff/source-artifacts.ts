@@ -37,10 +37,10 @@ export interface SourceArtifactChunkStorage {
 }
 const reference = (header: Header): Reference =>
   sourceCandidateReferenceSchema.parse({
-    kind: header.kind,
-    uploadId: header.uploadId,
     appId: header.appId,
+    kind: header.kind,
     manifestDigest: header.manifestDigest,
+    uploadId: header.uploadId,
   });
 const key = (
   authority: Authority,
@@ -50,10 +50,10 @@ const key = (
   transferDigest = sha(`source-upload:v1:${uploadId}`),
 ): SourceArtifactChunkKey => ({
   authority: hostedTenantAuthoritySchema.parse(authority),
-  uploadId: z.uuid().parse(uploadId),
-  path,
   chunkIndex,
+  path,
   transferDigest,
+  uploadId: z.uuid().parse(uploadId),
 });
 const same = (a: Reference, b: Reference) => JSON.stringify(a) === JSON.stringify(b);
 export class SourceUploadError extends Error {
@@ -136,6 +136,18 @@ export const createImmutableSourceArtifactStore = (storage: SourceArtifactChunkS
       await headerFor(input.authority, reference(header));
       return reference(header);
     },
+    async complete(input: { authority: Authority; reference: Reference }) {
+      const header = await headerFor(input.authority, input.reference);
+      await readArtifact(input.authority, header);
+      await storage.put(
+        key(input.authority, header.uploadId, "source-handoff/completion"),
+        JSON.stringify(header),
+      );
+      if ((await readComplete(input.authority, input.reference)) === undefined) {
+        throw new SourceUploadError("source_upload_incomplete");
+      }
+      return reference(header);
+    },
     async put(input: {
       authority: Authority;
       reference: Reference;
@@ -143,9 +155,9 @@ export const createImmutableSourceArtifactStore = (storage: SourceArtifactChunkS
       contentBase64: string;
     }) {
       const chunk = sourceUploadChunkSchema.parse({
-        reference: input.reference,
         chunkIndex: input.chunkIndex,
         contentBase64: input.contentBase64,
+        reference: input.reference,
       });
       const header = await headerFor(input.authority, chunk.reference);
       const bytes = Buffer.from(chunk.contentBase64, "base64");
@@ -172,54 +184,43 @@ export const createImmutableSourceArtifactStore = (storage: SourceArtifactChunkS
       );
       return { chunkIndex: chunk.chunkIndex };
     },
-    async complete(input: { authority: Authority; reference: Reference }) {
-      const header = await headerFor(input.authority, input.reference);
-      await readArtifact(input.authority, header);
-      await storage.put(
-        key(input.authority, header.uploadId, "source-handoff/completion"),
-        JSON.stringify(header),
-      );
-      if ((await readComplete(input.authority, input.reference)) === undefined) {
-        throw new SourceUploadError("source_upload_incomplete");
-      }
-      return reference(header);
-    },
     async readCompleted(input: { authority: Authority; reference: Reference }) {
       const header = await readComplete(input.authority, input.reference);
       return header === undefined ? undefined : await readArtifact(input.authority, header);
     },
     async status(input: { authority: Authority; reference: Reference }) {
       return {
+        reference: input.reference,
         status:
           (await readComplete(input.authority, input.reference)) === undefined
             ? ("uploading" as const)
             : ("complete" as const),
-        reference: input.reference,
       };
     },
   };
 };
 
+const sourceArtifactChunkPredicate = (k: SourceArtifactChunkKey) =>
+  and(
+    eq(prototypeArtifactChunks.issuer, k.authority.issuer),
+    eq(prototypeArtifactChunks.audience, k.authority.audience),
+    eq(prototypeArtifactChunks.workspaceId, k.authority.workspaceId),
+    eq(prototypeArtifactChunks.ownerUserId, k.authority.ownerUserId),
+    eq(prototypeArtifactChunks.sessionId, `source-upload:v1:${k.uploadId}`),
+    eq(prototypeArtifactChunks.path, k.path),
+    eq(prototypeArtifactChunks.transferDigest, k.transferDigest),
+    eq(prototypeArtifactChunks.chunkIndex, k.chunkIndex),
+  );
+
 export const createSourceArtifactStore = (db: PostgresJsDatabase<typeof schema>) => {
-  const predicate = (k: SourceArtifactChunkKey) =>
-    and(
-      eq(prototypeArtifactChunks.issuer, k.authority.issuer),
-      eq(prototypeArtifactChunks.audience, k.authority.audience),
-      eq(prototypeArtifactChunks.workspaceId, k.authority.workspaceId),
-      eq(prototypeArtifactChunks.ownerUserId, k.authority.ownerUserId),
-      eq(prototypeArtifactChunks.sessionId, `source-upload:v1:${k.uploadId}`),
-      eq(prototypeArtifactChunks.path, k.path),
-      eq(prototypeArtifactChunks.transferDigest, k.transferDigest),
-      eq(prototypeArtifactChunks.chunkIndex, k.chunkIndex),
-    );
   const get = async (k: SourceArtifactChunkKey) => {
     const [row] = await db
       .select({
-        content: prototypeArtifactChunks.content,
         chunkDigest: prototypeArtifactChunks.chunkDigest,
+        content: prototypeArtifactChunks.content,
       })
       .from(prototypeArtifactChunks)
-      .where(predicate(k));
+      .where(sourceArtifactChunkPredicate(k));
     if (row === undefined) {
       return globalThis.undefined;
     }
@@ -235,13 +236,13 @@ export const createSourceArtifactStore = (db: PostgresJsDatabase<typeof schema>)
         .insert(prototypeArtifactChunks)
         .values({
           ...k.authority,
-          sessionId: `source-upload:v1:${k.uploadId}`,
-          path: k.path,
-          transferDigest: k.transferDigest,
-          chunkIndex: k.chunkIndex,
           chunkDigest: sha(content),
+          chunkIndex: k.chunkIndex,
           content,
           createdAt: new Date(),
+          path: k.path,
+          sessionId: `source-upload:v1:${k.uploadId}`,
+          transferDigest: k.transferDigest,
         })
         .onConflictDoNothing();
       if ((await get(k)) !== content) {

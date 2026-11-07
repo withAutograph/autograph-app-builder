@@ -14,7 +14,6 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-
 import {
   applyCandidateCatalogProgram,
   catalogDependencyName,
@@ -22,24 +21,32 @@ import {
   normalizeCandidateDependencyCatalog,
 } from "./candidate-dependency-catalog";
 
+const byteStream = (bytes: Uint8Array) =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    },
+  });
+
 const roots: string[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { force: true, recursive: true });
   }
 });
 const fixture = (peerVersion = "1.2.3") => {
   const root = realpathSync(mkdtempSync(path.join(tmpdir(), "builder-catalog-")));
   roots.push(root);
   const manifests = {
+    "apps/example/package.json": { devDependencies: { "fixture-tool": "1.2.3" }, name: "example" },
     "package.json": {
-      private: true,
-      workspaces: ["apps/*", "packages/*"],
       devDependencies: { "fixture-tool": "1.2.3", unchanged: "9.0.0" },
+      private: true,
       scripts: { check: "keep this" },
+      workspaces: ["apps/*", "packages/*"],
     },
-    "apps/example/package.json": { name: "example", devDependencies: { "fixture-tool": "1.2.3" } },
-    "packages/peer/package.json": { name: "peer", dependencies: { "fixture-tool": peerVersion } },
+    "packages/peer/package.json": { dependencies: { "fixture-tool": peerVersion }, name: "peer" },
   };
   for (const [file, value] of Object.entries(manifests)) {
     mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
@@ -66,8 +73,8 @@ const fixture = (peerVersion = "1.2.3") => {
         encoding: "utf-8",
         env: {
           ...process.env,
-          PATH: path.join(root, "bin") + path.delimiter + process.env.PATH,
           CATALOG_COMMAND_PATH: path.join(root, "lock-command.json"),
+          PATH: path.join(root, "bin") + path.delimiter + process.env.PATH,
           ...extra,
         },
       },
@@ -101,7 +108,7 @@ const fixture = (peerVersion = "1.2.3") => {
     };
   };
   const read = (file: string) => JSON.parse(readFileSync(path.join(root, file), "utf-8"));
-  return { root, run: normalize, plan: run, apply, read };
+  return { apply, plan: run, read, root, run: normalize };
 };
 
 describe("candidate-bound same-version dependency catalog", () => {
@@ -113,8 +120,8 @@ describe("candidate-bound same-version dependency catalog", () => {
     const receipt = JSON.parse(result.stdout);
     expect(receipt).toMatchObject({
       dependency: "fixture-tool",
-      version: "1.2.3",
       lockGenerated: true,
+      version: "1.2.3",
     });
     expect(f.read("package.json")).toMatchObject({
       catalog: { "fixture-tool": "1.2.3" },
@@ -157,7 +164,7 @@ describe("candidate-bound same-version dependency catalog", () => {
     const result = f.run({ CATALOG_LOCK_FAIL: "1" });
     expect(result.status).toBe(0);
     const receipt = JSON.parse(result.stdout);
-    expect(receipt).toMatchObject({ lockGenerated: false, lockExitCode: 7 });
+    expect(receipt).toMatchObject({ lockExitCode: 7, lockGenerated: false });
     expect(receipt.files.some((file: { path: string }) => file.path === "bun.lock")).toBe(false);
     const retry = f.run();
     expect(retry.status).toBe(0);
@@ -257,17 +264,14 @@ describe("candidate-bound same-version dependency catalog", () => {
     // SAFETY: This filesystem adapter implements only the sandbox APIs called by the real helper.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- Focused adapter intentionally implements only the exercised sandbox ports.
     const sandbox = {
-      run: async ({ command }: { command: string }) => ({
-        exitCode: 0,
-        stdout: execFileSync("/bin/sh", ["-c", command], { cwd: f.root, encoding: "utf-8" }),
-        stderr: "",
-      }),
-      writeTextFile: async ({ path: file, content }: { path: string; content: string }) => {
-        writeFileSync(filePath(file), content);
-      },
       removePath: async ({ path: file }: { path: string }) => {
         rmSync(filePath(file), { force: true });
       },
+      run: async ({ command }: { command: string }) => ({
+        exitCode: 0,
+        stderr: "",
+        stdout: execFileSync("/bin/sh", ["-c", command], { cwd: f.root, encoding: "utf-8" }),
+      }),
       spawn: async ({ command }: { command: string }) => {
         const result = spawnSync("/bin/sh", ["-c", command], {
           cwd: f.root,
@@ -276,34 +280,30 @@ describe("candidate-bound same-version dependency catalog", () => {
             PATH: path.dirname(process.execPath) + path.delimiter + process.env.PATH,
           },
         });
-        const stream = (bytes: Uint8Array) =>
-          new ReadableStream<Uint8Array>({
-            start(controller) {
-              controller.enqueue(bytes);
-              controller.close();
-            },
-          });
         return {
-          stdout: stream(result.stdout),
-          stderr: stream(result.stderr),
+          stderr: byteStream(result.stderr),
+          stdout: byteStream(result.stdout),
           wait: async () => ({ exitCode: result.status }),
         };
+      },
+      writeTextFile: async ({ path: file, content }: { path: string; content: string }) => {
+        writeFileSync(filePath(file), content);
       },
     } as unknown as SandboxSession;
     await expect(
       normalizeCandidateDependencyCatalog({
-        sandbox,
+        intent,
         prepared: {
-          root: f.root,
-          workspaceRoot: f.root,
           appId: "example",
           baseSha: "base",
           baseTree: "base",
+          conflicts: [],
           headSha: "head",
           headTree: "head",
-          conflicts: [],
+          root: f.root,
+          workspaceRoot: f.root,
         },
-        intent,
+        sandbox,
       }),
     ).resolves.toMatchObject({
       lockGenerated: true,

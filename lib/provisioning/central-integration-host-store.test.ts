@@ -20,105 +20,105 @@ const fixture = () => {
   };
   const setup: CentralHostRow = {
     operationRef: centralHostOperationRef(setupPlan),
-    revision: 8,
     record: centralHostRecordSchema.parse({
-      kind: "central-integration-host-journal-v1",
-      plan: setupPlan,
-      planDigest: centralHostPlanDigest(setupPlan),
+      approvalReceipts: [
+        { approvedAt: "2026-11-03T00:00:00Z", approvedByCallId: "global-setup-call" },
+      ],
       effects: Object.fromEntries(setupPlan.effects.map((effect) => [effect, "applied"])),
+      kind: "central-integration-host-journal-v1",
       nativeDeployment: {
-        status: "accepted",
-        providerDeploymentId: originalReady.deployment.providerDeploymentId,
-        immutableOrigin: originalReady.deployment.immutableOrigin,
         events: [
           {
+            bodySha256: "a".repeat(64),
             eventId: "actual-native-created",
             eventType: "deployment.created",
-            bodySha256: "a".repeat(64),
-            projectId: setupPlan.target.projectId,
-            teamId: setupPlan.target.teamId,
-            providerDeploymentId: originalReady.deployment.providerDeploymentId,
             immutableOrigin: originalReady.deployment.immutableOrigin,
+            projectId: setupPlan.target.projectId,
+            providerDeploymentId: originalReady.deployment.providerDeploymentId,
+            teamId: setupPlan.target.teamId,
           },
         ],
+        immutableOrigin: originalReady.deployment.immutableOrigin,
+        providerDeploymentId: originalReady.deployment.providerDeploymentId,
+        status: "accepted",
       },
-      approvalReceipts: [
-        { approvedByCallId: "global-setup-call", approvedAt: "2026-11-03T00:00:00Z" },
-      ],
+      plan: setupPlan,
+      planDigest: centralHostPlanDigest(setupPlan),
     }),
+    revision: 8,
   };
   const callerPlan = centralHostCallerPlanSchema.parse({
-    version: 1,
-    kind: "central-integration-host-caller-v1",
     authority: original.authority,
-    selection: original.selection,
-    profile: original.profile,
-    setup: { operationRef: setup.operationRef, planDigest: setup.record.planDigest },
-    setupAuthority: setupPlan.authority,
-    central: {
-      projectId: original.target.projectId,
-      teamId: original.target.teamId,
-      installationId: original.target.installationId,
-      providerDeploymentId: originalReady.deployment.providerDeploymentId,
-      immutableOrigin: originalReady.deployment.immutableOrigin,
-      configurationSha256: originalReady.deployment.configurationSha256,
-    },
     caller: {
-      projectId: originalReady.caller.projectId,
-      ownerId: originalReady.caller.ownerId,
       environment: "production",
-      targetEnvironment: "preview",
-      provisioningRequestId: "11111111-1111-4111-a111-111111111111",
-      provisioningDigest: "a".repeat(64),
+      ownerId: originalReady.caller.ownerId,
       priorGrantSha256: "b".repeat(64),
+      projectId: originalReady.caller.projectId,
+      provisioningDigest: "a".repeat(64),
+      provisioningRequestId: "11111111-1111-4111-a111-111111111111",
+      targetEnvironment: "preview",
+    },
+    central: {
+      configurationSha256: originalReady.deployment.configurationSha256,
+      immutableOrigin: originalReady.deployment.immutableOrigin,
+      installationId: original.target.installationId,
+      projectId: original.target.projectId,
+      providerDeploymentId: originalReady.deployment.providerDeploymentId,
+      teamId: original.target.teamId,
     },
     effects: ["authorize-app-central-caller"],
+    kind: "central-integration-host-caller-v1",
+    profile: original.profile,
+    selection: original.selection,
+    setup: { operationRef: setup.operationRef, planDigest: setup.record.planDigest },
+    setupAuthority: setupPlan.authority,
+    version: 1,
   });
   const actual = centralHostReadyReceiptSchema.parse({
     ...originalReady,
-    setup: callerPlan.setup,
     callerSetup: {
       operationRef: centralHostOperationRef(callerPlan),
       planDigest: centralHostPlanDigest(callerPlan),
     },
+    setup: callerPlan.setup,
   });
   const caller: CentralHostRow = {
     operationRef: centralHostOperationRef(callerPlan),
-    revision: 3,
     record: centralHostRecordSchema.parse({
+      approvalReceipts: [
+        { approvedAt: "2026-11-03T00:00:00Z", approvedByCallId: "app-caller-call" },
+      ],
+      effects: { "authorize-app-central-caller": "applied" },
       kind: "central-integration-host-journal-v1",
+      observation: actual,
       plan: callerPlan,
       planDigest: centralHostPlanDigest(callerPlan),
-      effects: { "authorize-app-central-caller": "applied" },
-      approvalReceipts: [
-        { approvedByCallId: "app-caller-call", approvedAt: "2026-11-03T00:00:00Z" },
-      ],
-      observation: actual,
     }),
+    revision: 3,
   };
   const request = {
-    authority: callerPlan.authority,
     appId: callerPlan.selection.initiatingAppId,
     appProjectId: callerPlan.caller.projectId,
-    teamId: callerPlan.central.teamId,
-    assertCurrentOwner: vi.fn(async () => {}),
+    assertCurrentOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    authority: callerPlan.authority,
     signal: new AbortController().signal,
+    teamId: callerPlan.central.teamId,
   };
   const ports = {
+    assertSetupAuthorized: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    observe: vi.fn(async () => structuredClone(actual)),
     store: {
       read: vi.fn(async () => structuredClone(setup)),
       readReadyCaller: vi.fn(async () => structuredClone(caller)),
     },
-    assertSetupAuthorized: vi.fn(async () => {}),
-    observe: vi.fn(async () => structuredClone(actual)),
   };
   return {
-    setup,
-    caller,
-    request,
-    ports,
     actual,
+    caller,
+    ports,
     read: createReadCentralIntegrationHostReady(ports),
+    request,
+    setup,
   };
 };
 it("requires independently current setup and app-caller authority with separate global ownership", async () => {

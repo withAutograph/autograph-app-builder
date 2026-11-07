@@ -45,14 +45,13 @@ export const DEVELOPMENT_SANDBOX_ENVIRONMENT = {
   CARGO_HOME: "/workspace/.app-builder/toolchain/cargo-home",
   LD_LIBRARY_PATH: "/workspace/.app-builder/toolchain/rust/lib",
   MISE_AUTO_INSTALL: "false",
-  MISE_DATA_DIR: "/workspace/.app-builder/toolchain/mise-data",
   MISE_CARGO_HOME: "/workspace/.app-builder/toolchain/cargo-home",
-  MISE_RUSTUP_HOME: "/workspace/.app-builder/toolchain/rustup-home",
-  RUSTUP_HOME: "/workspace/.app-builder/toolchain/rustup-home",
-
+  MISE_DATA_DIR: "/workspace/.app-builder/toolchain/mise-data",
   MISE_EXEC_AUTO_INSTALL: "false",
+  MISE_RUSTUP_HOME: "/workspace/.app-builder/toolchain/rustup-home",
   MISE_TASK_RUN_AUTO_INSTALL: "false",
   PATH: "/workspace/.app-builder/toolchain/bin:/workspace/.app-builder/toolchain/rust/bin:/usr/bin:/bin",
+  RUSTUP_HOME: "/workspace/.app-builder/toolchain/rustup-home",
   TERM: "xterm-256color",
 } as const;
 

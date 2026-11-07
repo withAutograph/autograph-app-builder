@@ -89,19 +89,32 @@ const repositoryFilePage = (input: {
     } else if (index + 1 < pathCount) {
       continuation = { offsetBytes: 0, pathIndex: index + 1 };
     }
-    const file = {
+    interface InspectionFile {
+      content: string;
+      path: string;
+      offsetBytes?: number;
+      restartedFromOffsetBytes?: number;
+    }
+    const file: InspectionFile = {
       content: chunkContent,
       path: requestedPath,
-      ...(offset === 0 && nextOffsetBytes === contentBytes && restartedFromOffsetBytes === undefined
-        ? {}
-        : { offsetBytes: offset }),
-      ...(restartedFromOffsetBytes === undefined ? {} : { restartedFromOffsetBytes }),
     };
-    return {
+    if (
+      !(offset === 0 && nextOffsetBytes === contentBytes && restartedFromOffsetBytes === undefined)
+    ) {
+      file.offsetBytes = offset;
+    }
+    if (restartedFromOffsetBytes !== undefined) {
+      file.restartedFromOffsetBytes = restartedFromOffsetBytes;
+    }
+    const output: RepositoryInspectionPage = {
       files: content === null ? prefix.files : [...prefix.files, file],
       missingPaths:
         content === null ? [...prefix.missingPaths, requestedPath] : prefix.missingPaths,
-      ...(continuation === undefined ? {} : { continuation }),
+    };
+    if (continuation !== undefined) output.continuation = continuation;
+    return {
+      ...output,
     };
   };
   const measure = (output: RepositoryInspectionPage) =>
@@ -162,16 +175,11 @@ export const readRepositoryInspectionPage = async (input: {
     );
   }
   let page: RepositoryInspectionPage = { files: [], missingPaths: [] };
-  const finish = (continuation?: RepositoryInspectionContinuation) =>
-    fitOutputNativeFrame(
-      {
-        files: page.files,
-        missingPaths: page.missingPaths,
-        ...(continuation === undefined ? {} : { continuation }),
-      },
-      metadata,
-      EVE_NATIVE_RESULT_PAGE_BYTES,
-    );
+  const finish = (continuation?: RepositoryInspectionContinuation) => {
+    const output: RepositoryInspectionPage = { files: page.files, missingPaths: page.missingPaths };
+    if (continuation !== undefined) output.continuation = continuation;
+    return fitOutputNativeFrame(output, metadata, EVE_NATIVE_RESULT_PAGE_BYTES);
+  };
   for (let index = pathIndex; index < paths.length; index += 1) {
     const requestedPath = paths[index];
     if (requestedPath === undefined) {
@@ -212,7 +220,7 @@ const inspectionNamespace = (input: {
   mode?: "repository" | "workspace";
   directoryOffset?: number;
 }) => {
-  const files = input.paths?.length ? input.paths : undefined;
+  const files = (input.paths?.length ?? 0) > 0 ? input.paths : undefined;
   const virtualChild = isWorkspaceDescendant(input.path);
   const explicitWorkspaceRoot =
     input.mode === "workspace" && input.path === developmentWorkspacePath;
@@ -251,14 +259,14 @@ export default defineTool({
         "Select the app source before repository inspection: source_status for a new app or resolve_github_source for an existing GitHub app.",
       );
     }
-    const namespace = inspectionNamespace({ path, paths, mode, directoryOffset });
+    const namespace = inspectionNamespace({ directoryOffset, mode, path, paths });
     if (namespace.kind === "repository") {
       if (!canAutoSelectDevelopmentSource()) {
         throw new Error(
           "Host repository inspection is available only in the configured local development source mode.",
         );
       }
-      return inspectSupportedRepository(namespace.path);
+      return await inspectSupportedRepository(namespace.path);
     }
     if (namespace.kind === "files") {
       const sandbox = await getSourceBoundSandbox(ctx);
@@ -278,15 +286,15 @@ export default defineTool({
     if (namespace.kind === "entry") {
       const sandbox = await getSourceBoundSandbox(ctx);
       return await inspectWorkspacePath({
-        path: namespace.path,
-        directoryOffset,
-        sandbox,
         baseline: appBaselineState.get()?.selection,
+        directoryOffset,
         metadata: {
           callId: ctx.callId,
           toolName: "inspect_repository",
           turnId: ctx.session.turn.id,
         },
+        path: namespace.path,
+        sandbox,
         signal: ctx.abortSignal,
       });
     }
@@ -329,10 +337,10 @@ export default defineTool({
           }),
         });
       }
-      return inspectSupportedRepository(receipt.sourcePath);
+      return await inspectSupportedRepository(receipt.sourcePath);
     }
     if (canAutoSelectDevelopmentSource()) {
-      return inspectSupportedRepository(selectedPath);
+      return await inspectSupportedRepository(selectedPath);
     }
 
     const sandbox = await ctx.getSandbox();
@@ -354,32 +362,19 @@ export default defineTool({
       await readOverviewPath(index + 1);
     };
     await readOverviewPath(0);
-    return {
+    interface OverviewResult {
+      availablePaths: string[];
+      workspacePath: string;
+      missingPaths?: string[];
+    }
+    const result: OverviewResult = {
       availablePaths,
       workspacePath: developmentWorkspacePath,
-      ...(missingPaths.length === 0 ? {} : { missingPaths }),
     };
+    if (missingPaths.length > 0) result.missingPaths = missingPaths;
+    return result;
   },
   inputSchema: z.object({
-    mode: z
-      .enum(["repository", "workspace"])
-      .optional()
-      .describe(
-        "Explicit namespace when needed: repository inspects an allowed local host repository root; workspace inspects the selected Sandbox entry. Omitted mode preserves the root overview and routes virtual descendants to the Sandbox.",
-      ),
-    path: z
-      .string()
-      .min(1)
-      .default(developmentWorkspacePath)
-      .describe(
-        "Repository root for overview, or an absolute /workspace/repository descendant for selected Sandbox entry inspection. Explicit local host repository roots retain their existing meaning.",
-      ),
-    paths: z
-      .array(z.string().min(1))
-      .optional()
-      .describe(
-        "Text files relative to the selected repository, or absolute /workspace/repository file paths. Read package.json exports to resolve actual file names.",
-      ),
     directoryOffset: z
       .number()
       .int()
@@ -388,7 +383,26 @@ export default defineTool({
       .describe(
         "Repeat the same workspace directory path with the returned continuation.directoryOffset; do not combine with paths.",
       ),
-    pathIndex: z.number().int().nonnegative().optional(),
+    mode: z
+      .enum(["repository", "workspace"])
+      .optional()
+      .describe(
+        "Explicit namespace when needed: repository inspects an allowed local host repository root; workspace inspects the selected Sandbox entry. Omitted mode preserves the root overview and routes virtual descendants to the Sandbox.",
+      ),
     offsetBytes: z.number().int().nonnegative().optional(),
+    path: z
+      .string()
+      .min(1)
+      .default(developmentWorkspacePath)
+      .describe(
+        "Repository root for overview, or an absolute /workspace/repository descendant for selected Sandbox entry inspection. Explicit local host repository roots retain their existing meaning.",
+      ),
+    pathIndex: z.number().int().nonnegative().optional(),
+    paths: z
+      .array(z.string().min(1))
+      .optional()
+      .describe(
+        "Text files relative to the selected repository, or absolute /workspace/repository file paths. Read package.json exports to resolve actual file names.",
+      ),
   }),
 });

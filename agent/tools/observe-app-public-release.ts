@@ -9,7 +9,6 @@ export default defineTool({
   availableInSubagents: false,
   description:
     "Check the native deployment for the same public release plan after publication. Pass the exact plan, operation reference, and plan digest already returned by planning. A pending result means the selected deployment is still unverified. A ready result identifies the active public origin. This reads provider status without repeating publication or requesting another approval.",
-  inputSchema: publicReleaseApprovalInputSchema,
   async execute(input, ctx) {
     const { publicReleaseClientForContext } = await import("../../lib/agent/public-release-client");
     const client = await publicReleaseClientForContext(ctx);
@@ -22,4 +21,5 @@ export default defineTool({
       throw error;
     }
   },
+  inputSchema: publicReleaseApprovalInputSchema,
 });

@@ -13,7 +13,7 @@ const authorizationFields = [
 ] as const;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function GET(request: Request, context: { params: Promise<{ provider: string }> }) {
+async function getApproval(request: Request, context: { params: Promise<{ provider: string }> }) {
   try {
     const emulation = readProviderEmulation(process.env);
     if (!emulation || emulation.mode !== "preview") {
@@ -28,7 +28,7 @@ export async function GET(request: Request, context: { params: Promise<{ provide
       throw new Error("Invalid approval referer.");
     }
     const { searchParams } = new URL(request.url);
-    return completeAuthorization(
+    return await completeAuthorization(
       { params: Promise.resolve({ provider }) },
       Object.fromEntries(
         authorizationFields.map((name) => [
@@ -47,21 +47,23 @@ export async function GET(request: Request, context: { params: Promise<{ provide
   }
 }
 
+export { getApproval as GET };
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function POST(request: Request, context: { params: Promise<{ provider: string }> }) {
+async function postApproval(request: Request, context: { params: Promise<{ provider: string }> }) {
   try {
     const emulation = readProviderEmulation(process.env);
     if (!emulation || request.headers.get("origin") !== emulation.canonicalOrigin) {
       throw new Error("Invalid approval origin.");
     }
     const form = await request.formData();
-    return completeAuthorization(
+    return await completeAuthorization(
       context,
       Object.fromEntries(
-        authorizationFields.map((name) => [
-          name,
-          typeof form.get(name) === "string" ? String(form.get(name)) : undefined,
-        ]),
+        authorizationFields.map((name) => {
+          const value = form.get(name);
+          return [name, value instanceof File ? undefined : (value ?? undefined)];
+        }),
       ),
     );
   } catch {
@@ -71,3 +73,5 @@ export async function POST(request: Request, context: { params: Promise<{ provid
     });
   }
 }
+
+export { postApproval as POST };

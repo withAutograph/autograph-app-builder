@@ -11,6 +11,8 @@ import {
 import type { NativeActionResultMetadata } from "../eve/payload-envelope";
 
 export const WORKSPACE_REPOSITORY_ROOT = "/workspace/repository";
+const WORKSPACE_PATH_DENIED = "workspace-path-denied";
+const WORKSPACE_DIRECTORY = "workspace-directory";
 export const isWorkspaceDescendant = (input: string): boolean =>
   input.startsWith(`${WORKSPACE_REPOSITORY_ROOT}/`);
 export const normalizedWorkspacePath = (input: string): string => {
@@ -23,25 +25,25 @@ export const normalizedWorkspacePath = (input: string): string => {
   return selected;
 };
 const entrySchema = z.strictObject({
-  path: z.string(),
   kind: z.enum(["file", "directory", "symlink", "other"]),
+  path: z.string(),
 });
 const resultSchema = z.discriminatedUnion("kind", [
   z.strictObject({
-    kind: z.literal("workspace-directory"),
+    continuation: z.strictObject({ directoryOffset: z.number().int().nonnegative() }).optional(),
+    entries: z.array(entrySchema),
+    kind: z.literal(WORKSPACE_DIRECTORY),
     path: z.string(),
     resolvedPath: z.string(),
-    entries: z.array(entrySchema),
-    continuation: z.strictObject({ directoryOffset: z.number().int().nonnegative() }).optional(),
   }),
   z.strictObject({
+    entryKind: z.enum(["file", "other"]),
     kind: z.literal("workspace-entry"),
     path: z.string(),
     resolvedPath: z.string(),
-    entryKind: z.enum(["file", "other"]),
   }),
   z.strictObject({ kind: z.literal("workspace-missing"), path: z.string() }),
-  z.strictObject({ kind: z.literal("workspace-path-denied") }),
+  z.strictObject({ kind: z.literal(WORKSPACE_PATH_DENIED) }),
 ]);
 const quote = (input: string) => {
   const escaped = input.replaceAll("'", "'\"'\"'");
@@ -58,15 +60,16 @@ export const workspaceInspectionProgram = (input: {
 }): string => String.raw`
 const fs=require("node:fs");const path=require("node:path");
 const input=${JSON.stringify(input)};
+const denied=${JSON.stringify(WORKSPACE_PATH_DENIED)};
 const emit=value=>process.stdout.write(JSON.stringify(value));
 const within=(root,value)=>value===root||value.startsWith(root+path.sep);
 try{
  const root=fs.realpathSync(input.root);
- if(root!==path.resolve(input.root)||fs.lstatSync(input.root).isSymbolicLink()){emit({kind:"workspace-path-denied"});process.exit(0);}
+ if(root!==path.resolve(input.root)||fs.lstatSync(input.root).isSymbolicLink()){emit({kind:denied});process.exit(0);}
  const target=path.resolve(root,input.relativePath);
- if(!within(root,target)){emit({kind:"workspace-path-denied"});process.exit(0);}
+ if(!within(root,target)){emit({kind:denied});process.exit(0);}
  const resolved=fs.realpathSync(target);
- if(!within(root,resolved)){emit({kind:"workspace-path-denied"});process.exit(0);}
+ if(!within(root,resolved)){emit({kind:denied});process.exit(0);}
  const info=fs.statSync(resolved);
  if(!info.isDirectory()){emit({kind:"workspace-entry",path:input.requestedPath,resolvedPath:resolved,entryKind:info.isFile()?"file":"other"});process.exit(0);}
  const directory=fs.opendirSync(resolved);const entries=[];let index=0;let bytes=0;let continuation;
@@ -79,8 +82,8 @@ try{
    entries.push(entry);bytes+=size;index++;
   }
  }finally{directory.closeSync();}
- if(fs.realpathSync(target)!==resolved){emit({kind:"workspace-path-denied"});process.exit(0);}
- emit({kind:"workspace-directory",path:input.requestedPath,resolvedPath:resolved,entries,...(continuation?{continuation}:{})});
+ if(fs.realpathSync(target)!==resolved){emit({kind:denied});process.exit(0);}
+ emit({kind:${JSON.stringify(WORKSPACE_DIRECTORY)},path:input.requestedPath,resolvedPath:resolved,entries,...(continuation?{continuation}:{})});
 }catch(error){if(error&&error.code==="ENOENT"){emit({kind:"workspace-missing",path:input.requestedPath});}else{process.stderr.write("Workspace entry inspection failed");process.exitCode=1;}}
 `;
 
@@ -102,10 +105,10 @@ export const inspectWorkspacePath = async (input: {
     throw new Error("The requested archive is outside the selected app baseline.");
   }
   const base = {
-    kind: "workspace-directory",
-    path: selected,
-    entries: [],
     continuation: { directoryOffset: Number.MAX_SAFE_INTEGER },
+    entries: [],
+    kind: WORKSPACE_DIRECTORY,
+    path: selected,
   };
   const entryBytes =
     EVE_NATIVE_RESULT_PAGE_BYTES - serializedNativeActionResultBytes(base, input.metadata) - 2;
@@ -113,15 +116,16 @@ export const inspectWorkspacePath = async (input: {
     throw new Error("Workspace inspection metadata exceeds the native result envelope.");
   }
   input.signal?.throwIfAborted();
+  const command = workspaceInspectionCommand({
+    directoryOffset: input.directoryOffset ?? 0,
+    entryBytes,
+    relativePath: path.posix.relative(WORKSPACE_REPOSITORY_ROOT, selected),
+    requestedPath: selected,
+    root: WORKSPACE_REPOSITORY_ROOT,
+  });
   const observed = await input.sandbox.run({
-    command: workspaceInspectionCommand({
-      root: WORKSPACE_REPOSITORY_ROOT,
-      relativePath: path.posix.relative(WORKSPACE_REPOSITORY_ROOT, selected),
-      requestedPath: selected,
-      directoryOffset: input.directoryOffset ?? 0,
-      entryBytes,
-    }),
     abortSignal: input.signal,
+    command,
     // Inspection runs only the maintained built-in reader, never inherited app preload hooks.
     env: { NODE_OPTIONS: "" },
   });
@@ -130,7 +134,7 @@ export const inspectWorkspacePath = async (input: {
     throw new Error("The selected workspace entry could not be inspected.");
   }
   const result = resultSchema.parse(JSON.parse(observed.stdout));
-  if (result.kind === "workspace-path-denied") {
+  if (result.kind === WORKSPACE_PATH_DENIED) {
     throw new Error("Workspace inspection must stay inside the selected repository.");
   }
   if (result.kind !== "workspace-missing") {
@@ -165,10 +169,10 @@ export const inspectWorkspacePath = async (input: {
   if (result.kind === "workspace-entry") {
     return fitOutputNativeFrame(
       {
-        kind: result.kind,
-        path: result.path,
         entryKind: result.entryKind,
         guidance: "Read file content with paths, using this exact file path.",
+        kind: result.kind,
+        path: result.path,
       },
       input.metadata,
       EVE_NATIVE_RESULT_PAGE_BYTES,

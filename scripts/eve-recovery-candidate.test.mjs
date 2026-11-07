@@ -15,7 +15,7 @@ const eve = path.resolve(
   process.env.EVE_RECOVERY_NATIVE_ROOT ?? path.dirname(require.resolve("eve/package.json")),
 );
 const nativePath = "dist/src/execution/session/recovery-candidate.js";
-const load = (file) => import(pathToFileURL(path.resolve(eve, file)).href);
+const load = async (file) => await import(pathToFileURL(path.resolve(eve, file)).href);
 const {
   collectTerminalRecoveryCandidate,
   createTerminalRecoveryCandidateCollector,
@@ -45,72 +45,72 @@ const requireEventSlot = (id) => {
 
 const ownerRunId = "wrun_00000000000000000000000001";
 const logicalSessionId = ownerRunId;
-const binding = { ownerRunId, logicalSessionId };
+const binding = { logicalSessionId, ownerRunId };
 const exactOutput = {
   changedFileCount: 3,
   status: "applied",
   syntheticPrivate: "must-not-be-public",
 };
 const protocolResult = {
-  type: "action.result",
   data: {
     result: {
-      kind: "tool-result",
       callId: "actual-call",
-      toolName: "apply_app_creation",
+      kind: "tool-result",
       output: exactOutput,
+      toolName: "apply_app_creation",
     },
   },
+  type: "action.result",
 };
 const makeState = (phase) =>
   // Use the real native state projection; no handcrafted binary serialization.
   createDurableSessionState({
     session: {
-      sessionId: logicalSessionId,
-      continuationToken: "original-continuation",
       agent: { system: "system", tools: [] },
-      history: [{ role: "user", content: "Original product brief" }],
-      compaction: { threshold: 10_000, recentWindowSize: 10 },
-      state: {
-        "autograph-app-builder.workflow.v17": {
-          version: 17,
-          phase,
-          appSpec: { appId: "spend-review", digest: "exact-original-spec" },
-          workspace: { workspaceId: "original-workspace" },
+      compaction: { recentWindowSize: 10, threshold: 10_000 },
+      continuationToken: "original-continuation",
+      history: [{ content: "Original product brief", role: "user" }],
+      sandboxState: {
+        session: {
+          providerName: "vercel",
+          state: { name: "original-sandbox", workspaceDrive: { id: "original-drive" } },
+          stateProtocolVersion: 1,
         },
+      },
+      sessionId: logicalSessionId,
+      state: {
         "autograph-app-builder.private-apply-authority.v1": {
           grant: {
             appId: "spend-review",
-            sessionId: logicalSessionId,
-            workspaceId: "original-workspace",
             appSpecDigest: "exact-original-spec",
             proposalDigest: "exact-original-proposal",
+            sessionId: logicalSessionId,
+            workspaceId: "original-workspace",
           },
           pending: [],
         },
         "autograph-app-builder.staged-implementation.v1": {
-          files: [{ path: "app.ts", content: "original private source" }],
+          files: [{ content: "original private source", path: "app.ts" }],
+        },
+        "autograph-app-builder.workflow.v17": {
+          appSpec: { appId: "spend-review", digest: "exact-original-spec" },
+          phase,
+          version: 17,
+          workspace: { workspaceId: "original-workspace" },
         },
         "eve.runtime.pendingCoordinationBatch": {
-          tasks: [{ callId: "actual-call" }],
+          event: { sequence: 1, stepIndex: 2, turnId: "turn-original" },
           responseMessages: [],
           runtimeActions: [],
-          event: { sequence: 1, turnId: "turn-original", stepIndex: 2 },
-        },
-      },
-      sandboxState: {
-        session: {
-          providerName: "vercel",
-          stateProtocolVersion: 1,
-          state: { name: "original-sandbox", workspaceDrive: { id: "original-drive" } },
+          tasks: [{ callId: "actual-call" }],
         },
       },
     },
   });
 const pair = (phase) => ({
   serializedContext: {
-    "eve.sessionId": logicalSessionId,
     "eve.bundle": { fixture: true },
+    "eve.sessionId": logicalSessionId,
     privateMetadata: "private",
   },
   sessionState: makeState(phase),
@@ -127,79 +127,77 @@ const fixture = async function fixture(options = {}) {
     delivery: {
       kind: "deliver",
       payloads: [
-        { inputResponses: [{ requestId: "original-approval", kind: "approval", approved: true }] },
+        { inputResponses: [{ approved: true, kind: "approval", requestId: "original-approval" }] },
       ],
     },
     runtimeResults: { results: [protocolResult.data.result] },
   };
-  const inputs = { prior, failed: { ...final, input: incoming }, final };
+  const inputs = { failed: { ...final, input: incoming }, final, prior };
   const encodeArgs = (input) =>
     serialization.dehydrateStepArguments({ args: [input], closureVars: [] }, ownerRunId, key);
   const steps = new Map([
     [
       "step-prior",
       {
-        runId: ownerRunId,
-        stepId: "step-prior",
-        stepName: "step//eve@0.68.0//turnStep",
-        status: "completed",
         input: await encodeArgs(prior),
         output: await serialization.dehydrateStepReturnValue(
           { action: "park", ...prior },
           ownerRunId,
           key,
         ),
+        runId: ownerRunId,
+        status: "completed",
+        stepId: "step-prior",
+        stepName: "step//eve@0.68.0//turnStep",
       },
     ],
     [
       "step-failed",
       {
+        error: { name: "MODEL_CALL_FAILED" },
+        input: await encodeArgs(inputs.failed),
         runId: ownerRunId,
+        status: "failed",
         stepId: "step-failed",
         stepName: "step//eve@0.68.0//turnStep",
-        status: "failed",
-        input: await encodeArgs(inputs.failed),
-        error: { name: "MODEL_CALL_FAILED" },
       },
     ],
     [
       "step-final",
       {
+        input: await encodeArgs(final),
         runId: ownerRunId,
+        status: "completed",
         stepId: "step-final",
         stepName: "step//eve@0.68.0//terminateChildSessionsStep",
-        status: "completed",
-        input: await encodeArgs(final),
       },
     ],
     [
       "step-later",
       {
-        runId: ownerRunId,
-        stepId: "step-later",
-        stepName: "step//eve//unrecognizedNativeFact",
-        status: "completed",
         input: await encodeArgs({ retained: true }),
         output: await serialization.dehydrateStepReturnValue(
           { actual: "retained-later-output" },
           ownerRunId,
           key,
         ),
+        runId: ownerRunId,
+        status: "completed",
+        stepId: "step-later",
+        stepName: "step//eve//unrecognizedNativeFact",
       },
     ],
   ]);
-  const event = (slot, eventType, stepId, eventData = {}) => ({
-    runId: ownerRunId,
-    eventId: slotToEventId(slot),
-    eventType,
-    ...(stepId === undefined ? {} : { correlationId: stepId }),
-    eventData: {
-      ...(steps.has(stepId) ? { stepName: steps.get(stepId).stepName } : {}),
-      ...(eventType === "step_completed" ? { result: steps.get(stepId)?.output } : {}),
-      ...eventData,
-    },
-    createdAt: new Date(10_000 - slot),
-  });
+  const event = (slot, eventType, stepId, eventData = {}) => {
+    const result = { eventId: slotToEventId(slot), eventType, runId: ownerRunId };
+    if (stepId !== undefined) result.correlationId = stepId;
+    const data = {};
+    if (steps.has(stepId)) data.stepName = steps.get(stepId).stepName;
+    if (eventType === "step_completed") data.result = steps.get(stepId)?.output;
+    result.eventData = { ...data, ...eventData };
+    result.createdAt = new Date(10_000 - slot);
+    return result;
+  };
   const events = [
     event(1, "run_created"),
     event(2, "step_started", "step-prior"),
@@ -214,25 +212,13 @@ const fixture = async function fixture(options = {}) {
   ];
   const originalEntry = {
     kind: "initial",
-    sessionTimeoutMs: false,
     retention: "default",
     serializedContext: { "eve.capabilities": { requestInput: true } },
+    sessionTimeoutMs: false,
   };
   const runInput = await serialization.dehydrateWorkflowArguments([originalEntry], ownerRunId, key);
   const calls = [];
   const world = {
-    runs: {
-      get: async (id, params) => {
-        calls.push(["run", id, params]);
-        return {
-          runId: ownerRunId,
-          status: options.status ?? "failed",
-          deploymentId: "original-deployment",
-          input: runInput,
-          ...(options.expired === true ? { expiredAt: new Date(0) } : {}),
-        };
-      },
-    },
     events: {
       list: async (params) => {
         calls.push(["events", params]);
@@ -243,7 +229,20 @@ const fixture = async function fixture(options = {}) {
             params.resolveData === "none" ? eventMetadata(nativeEvent) : nativeEvent,
           );
         const end = start + data.length;
-        return { data, hasMore: end < events.length, cursor: String(end) };
+        return { cursor: String(end), data, hasMore: end < events.length };
+      },
+    },
+    runs: {
+      get: async (id, params) => {
+        calls.push(["run", id, params]);
+        const result = {
+          deploymentId: "original-deployment",
+          input: runInput,
+          runId: ownerRunId,
+          status: options.status ?? "failed",
+        };
+        if (options.expired === true) result.expiredAt = new Date(0);
+        return result;
       },
     },
     steps: {
@@ -261,12 +260,6 @@ const fixture = async function fixture(options = {}) {
       calls.push(["world"]);
       return world;
     },
-    resolveRunEncryptionKey: async (currentWorld, run) => {
-      assert.equal(currentWorld, world);
-      assert.equal(run.runId, ownerRunId);
-      calls.push(["key"]);
-      return key;
-    },
     hydrateStepArguments: async (...args) => {
       calls.push(["hydrate-input"]);
       return serialization.hydrateStepArguments(...args);
@@ -275,9 +268,8 @@ const fixture = async function fixture(options = {}) {
       calls.push(["hydrate-output"]);
       return serialization.hydrateStepReturnValue(...args);
     },
-    readDurableSession,
-    requireEventSlot,
     now: () => 1000,
+    readDurableSession,
     async *readNativeEvents(id) {
       calls.push(["stream", id]);
       yield protocolResult;
@@ -285,29 +277,36 @@ const fixture = async function fixture(options = {}) {
         throw new Error("private provider details never exposed");
       }
     },
+    requireEventSlot,
+    resolveRunEncryptionKey: async (currentWorld, run) => {
+      assert.equal(currentWorld, world);
+      assert.equal(run.runId, ownerRunId);
+      calls.push(["key"]);
+      return key;
+    },
   };
   const collect = createTerminalRecoveryCandidateCollector(dependencies);
   const input = {
-    binding,
     authorizeOwner: async (authorized) => {
       calls.push(["authorize"]);
       assert.deepEqual(authorized, binding);
       assert.ok(Object.isFrozen(authorized));
     },
+    binding,
   };
   return {
-    collect,
-    input,
     calls,
-    events,
-    steps,
-    world,
+    collect,
     dependencies,
-    inputs,
-    prior,
+    events,
     final,
+    input,
+    inputs,
     key,
     originalEntry,
+    prior,
+    steps,
+    world,
   };
 };
 
@@ -366,11 +365,11 @@ test("native serialization preserves paired state, original approval, Drive and 
     ]),
   );
   assert.deepEqual(counts, {
-    run: 1,
-    key: 1,
-    step: 3,
     "hydrate-input": 2,
     "hydrate-output": 1,
+    key: 1,
+    run: 1,
+    step: 3,
     stream: 1,
   });
   assert.equal(new Set(f.calls.filter(([name]) => name === "step").map((call) => call[2])).size, 3);
@@ -393,18 +392,18 @@ test("actual native encryption and hydration preserve original typed state", asy
 });
 
 test("completed native terminal step preserves its original paired input and real approval/results despite corrupt output", async () => {
-  const f = await fixture({ status: "completed", encrypted: true });
+  const f = await fixture({ encrypted: true, status: "completed" });
   const corrupt = structuredClone(f.final);
   corrupt.sessionState.snapshot.session.history.push({
-    role: "assistant",
     content: [
       {
-        type: "tool-call",
+        input: {},
         toolCallId: "missing-output",
         toolName: "apply_app_creation",
-        input: {},
+        type: "tool-call",
       },
     ],
+    role: "assistant",
   });
   const terminal = f.steps.get("step-failed");
   terminal.status = "completed";
@@ -448,10 +447,10 @@ test("denied/missing canonical authorization makes no World or stream call", asy
   await assert.rejects(f.collect({ binding }), /Canonical server ownership/u);
   await assert.rejects(
     f.collect({
-      binding,
       authorizeOwner: async () => {
         throw new Error("ownership-denied");
       },
+      binding,
     }),
     /ownership-denied/u,
   );
@@ -461,10 +460,10 @@ test("denied/missing canonical authorization makes no World or stream call", asy
 test("native production wiring imports successfully but denied authorization never opens a World", async () => {
   await assert.rejects(
     collectTerminalRecoveryCandidate({
-      binding,
       authorizeOwner: async () => {
         throw new Error("synthetic-owner-denied");
       },
+      binding,
     }),
     /synthetic-owner-denied/u,
   );
@@ -488,11 +487,11 @@ test("authorization uses a frozen identity snapshot across awaits", async () => 
   const f = await fixture();
   const moving = { ...binding };
   await f.collect({
-    binding: moving,
     authorizeOwner: async (authorized) => {
       moving.ownerRunId = "foreign";
       assert.equal(authorized.ownerRunId, ownerRunId);
     },
+    binding: moving,
   });
   assert.equal(f.calls.find(([kind]) => kind === "run")[1], ownerRunId);
 });
@@ -502,8 +501,10 @@ test("foreign logical checkpoints fail before the native stream is read", async 
   await assert.rejects(
     f.collect({
       ...f.input,
+      authorizeOwner: async () => {
+        // Permit the owner so the logical identity check is exercised.
+      },
       binding: { ...binding, logicalSessionId: "foreign" },
-      authorizeOwner: () => Promise.resolve(),
     }),
     /logical identity differs/u,
   );
@@ -600,7 +601,7 @@ test("unknown/missing pairs are unavailable and never trigger a replay", async (
 
 test("stalled pagination and out-of-order native slots reject rather than select an arbitrary checkpoint", async () => {
   const f = await fixture();
-  f.world.events.list = async () => ({ data: [f.events[0]], hasMore: true, cursor: "stuck" });
+  f.world.events.list = async () => ({ cursor: "stuck", data: [f.events[0]], hasMore: true });
   await assert.rejects(f.collect(f.input), /pagination did not advance/u);
   f.world.events.list = async () => ({ data: [f.events[2], f.events[0]], hasMore: false });
   await assert.rejects(f.collect(f.input), /event order differs/u);
@@ -620,7 +621,7 @@ test("inspection never exposes malformed authored phase text", async () => {
 });
 
 test("provider-cancelled terminal owner retains actual paired state and approval without effect authority", async () => {
-  const f = await fixture({ status: "cancelled", encrypted: true });
+  const f = await fixture({ encrypted: true, status: "cancelled" });
   const result = await f.collect(f.input);
   assert.equal(result.kind, "candidate");
   const payload = readTerminalRecoveryCandidate(result.candidate);
@@ -654,13 +655,13 @@ const frameNativeHistory = async (values, key) => {
   )) {
     frames.push(frame);
   }
-  return frames.map((data, index) => ({ index, data }));
+  return frames.map((data, index) => ({ data, index }));
 };
 const snapshotFixture = async (fault, packing = "split") => {
-  const f = await fixture({ status: "cancelled", encrypted: true });
+  const f = await fixture({ encrypted: true, status: "cancelled" });
   const native = Array.from({ length: 5 }, (_, index) => ({
-    type: "text.delta",
     data: { text: `original private native text ${index}` },
+    type: "text.delta",
   }));
   const chunks = await frameNativeHistory(
     native.map((event) => new TextEncoder().encode(`${JSON.stringify(event)}\n`)),
@@ -703,21 +704,18 @@ const snapshotFixture = async (fault, packing = "split") => {
   let infos = 0;
   let cancelled = false;
   f.world.streams = {
-    async getInfo(id, name) {
-      f.calls.push(["snapshot-info", id, name]);
-      assert.equal(id, ownerRunId);
-      assert.equal(name, `${ownerRunId.replace("wrun_", "strm_")}_user`);
-      infos += 1;
-      return {
-        tailIndex: chunks.length - 1 + (fault === "changed-tail" && infos > 1 ? 1 : 0),
-        done: fault === "changed-done" && infos > 1,
-      };
-    },
     async get(id, name, startIndex) {
       f.calls.push(["snapshot-stream", id, name]);
       assert.equal(startIndex, 0);
       let index = 0;
       return new ReadableStream({
+        cancel() {
+          cancelled = true;
+          f.calls.push(["snapshot-cancel"]);
+          if (fault === "cancel") {
+            throw new Error("private cancellation failure");
+          }
+        },
         pull(controller) {
           if (index < wire.length) {
             controller.enqueue(wire[index]);
@@ -732,21 +730,24 @@ const snapshotFixture = async (fault, packing = "split") => {
           }
           // A successful source remains open forever: the finite reader must cancel it.
         },
-        cancel() {
-          cancelled = true;
-          f.calls.push(["snapshot-cancel"]);
-          if (fault === "cancel") {
-            throw new Error("private cancellation failure");
-          }
-        },
       });
     },
     getChunks() {
       throw new Error("Serial pagination must not be used.");
     },
+    async getInfo(id, name) {
+      f.calls.push(["snapshot-info", id, name]);
+      assert.equal(id, ownerRunId);
+      assert.equal(name, `${ownerRunId.replace("wrun_", "strm_")}_user`);
+      infos += 1;
+      return {
+        done: fault === "changed-done" && infos > 1,
+        tailIndex: chunks.length - 1 + (fault === "changed-tail" && infos > 1 ? 1 : 0),
+      };
+    },
   };
   f.dependencies.readNativeEvents = (id) => readTerminalNativeEventsSnapshot(f.world, id, f.key);
-  return { ...f, native, cancelled: () => cancelled };
+  return { ...f, cancelled: () => cancelled, native };
 };
 
 for (const packing of ["split", "coalesced"]) {
@@ -791,25 +792,26 @@ for (const fault of [
   });
 }
 
+const join = (parts) => {
+  const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    bytes.set(part, offset);
+    offset += part.length;
+  }
+  return bytes;
+};
+
 const reconnectingSnapshot = async (mode) => {
   const native = Array.from({ length: 5 }, (_, index) => ({
-    type: "text.delta",
     data: { text: index < 2 ? "same valid repeated value" : `private ${index}` },
+    type: "text.delta",
   }));
   const key = await serialization.deriveRunPayloadKeys(new Uint8Array(32).fill(7));
   const chunks = await frameNativeHistory(
     native.map((event) => new TextEncoder().encode(`${JSON.stringify(event)}\n`)),
     key,
   );
-  const join = (parts) => {
-    const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
-    let offset = 0;
-    for (const part of parts) {
-      bytes.set(part, offset);
-      offset += part.length;
-    }
-    return bytes;
-  };
   let partial = new Uint8Array();
   if (mode === "partial-header") {
     partial = chunks[2].data.subarray(0, 2);
@@ -826,18 +828,14 @@ const reconnectingSnapshot = async (mode) => {
   let cancelled = false;
   const world = {
     streams: {
-      async getInfo() {
-        infos += 1;
-        return {
-          tailIndex: chunks.length - 1 + (mode === "changed-tail" && infos > 1 ? 1 : 0),
-          done: mode === "changed-done" && infos > 1,
-        };
-      },
       async get(_run, _name, startIndex) {
         starts.push(startIndex);
         assert.equal(startIndex, starts.length === 1 ? 0 : 2);
         let sent = false;
         return new ReadableStream({
+          cancel() {
+            cancelled = true;
+          },
           async pull(controller) {
             if (starts.length === 2 && mode === "stalled-resume") {
               controller.close();
@@ -859,14 +857,18 @@ const reconnectingSnapshot = async (mode) => {
               }
             }
           },
-          cancel() {
-            cancelled = true;
-          },
         });
+      },
+      async getInfo() {
+        infos += 1;
+        return {
+          done: mode === "changed-done" && infos > 1,
+          tailIndex: chunks.length - 1 + (mode === "changed-tail" && infos > 1 ? 1 : 0),
+        };
       },
     },
   };
-  return { native, key, world, starts, cancelled: () => cancelled };
+  return { cancelled: () => cancelled, key, native, starts, world };
 };
 for (const mode of ["clean-eof", "partial-header", "partial-payload", "transport-error"]) {
   test(`finite reader resumes only the interrupted native frame after ${mode}`, async () => {
@@ -895,7 +897,7 @@ for (const mode of ["zero-progress", "stalled-resume", "changed-tail", "changed-
 }
 
 test("reconnect preserves a UTF-8 NDJSON value split across complete native frames", async () => {
-  const native = { type: "text.delta", data: { text: "private 😃 value" } };
+  const native = { data: { text: "private 😃 value" }, type: "text.delta" };
   const bytes = new TextEncoder().encode(`${JSON.stringify(native)}\n`);
   const cut = bytes.indexOf(240) + 2;
   assert.ok(cut > 2);
@@ -903,9 +905,6 @@ test("reconnect preserves a UTF-8 NDJSON value split across complete native fram
   const starts = [];
   const world = {
     streams: {
-      async getInfo() {
-        return { tailIndex: 1, done: false };
-      },
       async get(_run, _name, startIndex) {
         starts.push(startIndex);
         assert.equal(startIndex, starts.length - 1);
@@ -921,6 +920,9 @@ test("reconnect preserves a UTF-8 NDJSON value split across complete native fram
           },
         });
       },
+      async getInfo() {
+        return { done: false, tailIndex: 1 };
+      },
     },
   };
   const events = [];
@@ -934,7 +936,7 @@ test("reconnect preserves a UTF-8 NDJSON value split across complete native fram
 for (const interrupted of [false, true]) {
   test(`finite reader retains all 171094 native frames across transport EOFs (interrupted=${interrupted})`, async () => {
     const frameCount = 171_094;
-    const native = { type: "text.delta", data: { text: "private native content" } };
+    const native = { data: { text: "private native content" }, type: "text.delta" };
     const [frame] = await frameNativeHistory([
       new TextEncoder().encode(`${JSON.stringify(native)}\n`),
     ]);
@@ -944,16 +946,15 @@ for (const interrupted of [false, true]) {
     const starts = [];
     const world = {
       streams: {
-        async getInfo() {
-          infos += 1;
-          return { tailIndex: frameCount - 1, done: false };
-        },
         async get(_run, _name, startIndex) {
           starts.push(startIndex);
           assert.equal(startIndex, interrupted ? (starts.length - 1) * 75_274 : 0);
           let sent = startIndex;
           const end = interrupted ? Math.min(startIndex + 75_274, frameCount) : frameCount;
           return new ReadableStream({
+            cancel() {
+              cancelled = true;
+            },
             pull(controller) {
               if (sent === end) {
                 if (end !== frameCount) {
@@ -969,10 +970,11 @@ for (const interrupted of [false, true]) {
               sent += count;
               controller.enqueue(bytes);
             },
-            cancel() {
-              cancelled = true;
-            },
           });
+        },
+        async getInfo() {
+          infos += 1;
+          return { done: false, tailIndex: frameCount - 1 };
         },
       },
     };
@@ -992,12 +994,12 @@ test("an empty unclosed captured tail never opens a live stream", async () => {
   let infos = 0;
   const world = {
     streams: {
-      async getInfo() {
-        infos += 1;
-        return { tailIndex: -1, done: false };
-      },
       get() {
         throw new Error("empty tail must not follow stream");
+      },
+      async getInfo() {
+        infos += 1;
+        return { done: false, tailIndex: -1 };
       },
     },
   };
@@ -1012,7 +1014,7 @@ test("an empty unclosed captured tail never opens a live stream", async () => {
 for (const status of ["running", "pending"]) {
   test(`nonterminal ${status} owner never reads native snapshot`, async () => {
     const f = await snapshotFixture();
-    const get = f.world.runs.get;
+    const { get } = f.world.runs;
     f.world.runs.get = async (...args) => ({ ...(await get(...args)), status });
     const result = await f.collect(f.input);
     assert.partialDeepStrictEqual(result, { kind: "unavailable", reason: "source-not-terminal" });
@@ -1089,23 +1091,23 @@ const { createRecoveryHistoryInterner } = await load(
 const memoryCheckpoint = (history, state = {}) => ({
   serializedContext: { "eve.sessionId": logicalSessionId },
   sessionState: {
-    version: 1,
-    sessionId: logicalSessionId,
     emissionState: { sequence: 1, stepIndex: 1, turnId: "original" },
-    snapshot: { session: { sessionId: logicalSessionId, history, state } },
+    sessionId: logicalSessionId,
+    snapshot: { session: { history, sessionId: logicalSessionId, state } },
+    version: 1,
   },
 });
 test("646 independent checkpoint histories retain every value while sharing immutable equal message nodes", () => {
   const intern = createRecoveryHistoryInterner(logicalSessionId);
   const history = Array.from({ length: 16 }, (_, index) => ({
-    role: "tool",
     content: [
       {
-        type: "tool-result",
-        toolCallId: `original-${index}`,
         output: { type: "json", value: "x".repeat(1024) },
+        toolCallId: `original-${index}`,
+        type: "tool-result",
       },
     ],
+    role: "tool",
   }));
   const records = Array.from({ length: 646 }, (_, index) => {
     const original = memoryCheckpoint(structuredClone(history), {
@@ -1129,7 +1131,8 @@ test("646 independent checkpoint histories retain every value while sharing immu
     records.flatMap((value) => value.sessionState.snapshot.session.history),
   );
   assert.equal(uniqueMessages.size, history.length);
-  const shared = records[0].sessionState.snapshot.session.history[0];
+  const [firstRecord] = records;
+  const [shared] = firstRecord.sessionState.snapshot.session.history;
   assert.equal(Object.isFrozen(shared), true);
   assert.equal(Object.isFrozen(shared.content[0].output), true);
   assert.throws(() => {
@@ -1142,8 +1145,8 @@ test("646 independent checkpoint histories retain every value while sharing immu
 });
 test("mutable context, session and permission aliases remain untouched while historical evidence is immutable", () => {
   const message = {
+    content: [{ approvalId: "original", approved: true, type: "tool-approval-response" }],
     role: "tool",
-    content: [{ type: "tool-approval-response", approvalId: "original", approved: true }],
   };
   const history = [message];
   const permission = { historicalMessage: message, mutableGrant: true };
@@ -1159,7 +1162,7 @@ test("mutable context, session and permission aliases remain untouched while his
   assert.notEqual(shared.sessionState.snapshot.session.history[0], message);
   permission.mutableGrant = false;
   permission.historicalMessage.content[0].approved = false;
-  history.push({ role: "user", content: "later live state" });
+  history.push({ content: "later live state", role: "user" });
   assert.equal(Object.isFrozen(permission), false);
   assert.equal(Object.isFrozen(message), false);
   assert.equal(shared.sessionState.snapshot.session.state.mutableGrant, false);
@@ -1170,20 +1173,20 @@ test("different approvals and results never share a canonical history node", () 
   const intern = createRecoveryHistoryInterner(logicalSessionId);
   const values = [
     {
+      content: [{ approvalId: "original", approved: true, type: "tool-approval-response" }],
       role: "tool",
-      content: [{ type: "tool-approval-response", approvalId: "original", approved: true }],
     },
     {
+      content: [{ approvalId: "original", approved: false, type: "tool-approval-response" }],
       role: "tool",
-      content: [{ type: "tool-approval-response", approvalId: "original", approved: false }],
     },
     {
+      content: [{ output: { value: "one" }, toolCallId: "original", type: "tool-result" }],
       role: "tool",
-      content: [{ type: "tool-result", toolCallId: "original", output: { value: "one" } }],
     },
     {
+      content: [{ output: { value: "two" }, toolCallId: "original", type: "tool-result" }],
       role: "tool",
-      content: [{ type: "tool-result", toolCallId: "original", output: { value: "two" } }],
     },
   ];
   const shared = values.map(
@@ -1196,11 +1199,11 @@ test("different approvals and results never share a canonical history node", () 
 test("unsupported branded, cyclic and non-JSON-safe history values stay unchanged without invoking accessors", () => {
   let accessed = 0;
   const getter = {
-    role: "assistant",
     get content() {
       accessed += 1;
       return "must-not-read";
     },
+    role: "assistant",
   };
   const proxy = new Proxy(
     {},
@@ -1222,10 +1225,10 @@ test("unsupported branded, cyclic and non-JSON-safe history values stay unchange
     proxy,
     cyclic,
     new Branded(),
-    { role: "tool", content: new Map() },
-    { role: "tool", content: undefined },
-    { role: "tool", content: new Uint8Array([1]) },
-    { role: "tool", content: { kind: "native-recovery-transport-reference", value: "private" } },
+    { content: new Map(), role: "tool" },
+    { content: undefined, role: "tool" },
+    { content: new Uint8Array([1]), role: "tool" },
+    { content: { kind: "native-recovery-transport-reference", value: "private" }, role: "tool" },
   ];
   const shared = createRecoveryHistoryInterner(logicalSessionId).checkpoint(
     memoryCheckpoint(messages),
@@ -1252,18 +1255,18 @@ test("real encrypted checkpoint hydration shares history but preserves all paire
 test("context primitive canonicalization preserves mutable identities, descriptors and unsupported branches", () => {
   const sharedPermission = { issuer: "same-issuer", scope: "original" };
   let getterReads = 0;
-  const context = { permission: sharedPermission, array: ["same-issuer"], readonly: "same-issuer" };
+  const context = { array: ["same-issuer"], permission: sharedPermission, readonly: "same-issuer" };
   Object.defineProperty(context, "readonly", {
+    enumerable: true,
     value: "same-issuer",
     writable: false,
-    enumerable: true,
   });
   Object.defineProperty(context, "accessor", {
+    enumerable: true,
     get() {
       getterReads += 1;
       return "must-not-read";
     },
-    enumerable: true,
   });
   context.self = context;
   context.branded = new Map([["issuer", "same-issuer"]]);
@@ -1313,7 +1316,7 @@ test("independently decoded retained contexts use less heap after exact primitiv
     const result = spawnSync(
       process.execPath,
       ["--expose-gc", "--max-old-space-size=128", "--input-type=module", "-e", script, mode],
-      { env: { NODE_NO_WARNINGS: "1" }, encoding: "utf-8" },
+      { encoding: "utf-8", env: { NODE_NO_WARNINGS: "1" } },
     );
     assert.equal(result.status, 0, result.stderr);
     return JSON.parse(result.stdout);
@@ -1334,13 +1337,13 @@ test("actual collector identifies the exact authority-anchor status refusal with
       const f = await fixture({ status });
       const result = await f.collect({ ...f.input, allowParked: true });
       assert.deepEqual(result, {
-        kind: "unavailable",
-        reason: "source-not-terminal",
         boundary: {
+          allowParked: true,
           stage: "authority_anchor",
           status: status === "waiting" ? "waiting" : "other",
-          allowParked: true,
         },
+        kind: "unavailable",
+        reason: "source-not-terminal",
       });
       assert.equal(JSON.stringify(result).includes("private-canary"), false);
     }),

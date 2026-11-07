@@ -145,10 +145,10 @@ describe("replacement checkout dependencies", () => {
       throw new Error("Missing install attempt");
     }
     expect(install).toMatchObject({
-      executionCommand: "bun install --frozen-lockfile",
       dispatchedCommandDigest: createHash("sha256")
         .update(workspaceBinInstallCommand("/workspace/repository", true))
         .digest("hex"),
+      executionCommand: "bun install --frozen-lockfile",
     });
     expect(install.excerpt.length).toBeLessThanOrEqual(2400);
     expect(install.truncated).toBe(true);
@@ -437,8 +437,8 @@ const dependencyFailure = (
   artifactRevision: "revision",
   attemptDigest: "original-attempt",
   changedContentDigest: "changed",
-  commands: [],
   commandFailure: { exitCode: 1, name: "check-build", operation: "run-validation-command" },
+  commands: [],
   dependencyCacheContentDigest: "cache-content",
   dependencyCacheDigest: "cache",
   dependencyReceiptDigest: "dependencies",
@@ -472,7 +472,7 @@ describe("saved validation dependency recovery", () => {
       onAttempt: vi.fn((attempt: DependencyAttemptResult) => {
         attempts.push(attempt);
       }),
-      prepareInstall: vi.fn(async () => {}),
+      prepareInstall: vi.fn<() => Promise<void>>().mockResolvedValue(),
     };
   };
 
@@ -498,7 +498,7 @@ describe("saved validation dependency recovery", () => {
       exitCode: 0,
       recoveryOfValidationFailure: request.failure,
     });
-    const installed = request.attempts[1];
+    const [, installed] = request.attempts;
     if (installed === undefined || request.logStore === undefined) {
       throw new Error("Missing install logs");
     }
@@ -600,10 +600,10 @@ describe("authored workspace preview dependencies", () => {
     await expect(
       ensureCheckoutDependencies({
         ...input(spawn),
-        reconcileWorkspace: true,
         onAttempt: (attempt) => {
           attempts.push(attempt);
         },
+        reconcileWorkspace: true,
       }),
     ).rejects.toThrow(/bun install.*status 1/u);
     expect(spawn).toHaveBeenCalledExactlyOnceWith({
@@ -613,8 +613,8 @@ describe("authored workspace preview dependencies", () => {
     expect(attempts).toHaveLength(1);
     expect(attempts[0]).toMatchObject({
       command: "dependency-install",
-      exitCode: 1,
       completion: "complete",
+      exitCode: 1,
     });
   });
 
@@ -624,13 +624,13 @@ describe("authored workspace preview dependencies", () => {
     await expect(
       ensureCheckoutDependencies({
         ...input(spawn),
-        reconcileWorkspace: true,
         assertCurrent: () => {
           checks += 1;
           if (checks === 2) {
             throw new Error("app changed");
           }
         },
+        reconcileWorkspace: true,
       }),
     ).rejects.toThrow("app changed");
     expect(checks).toBe(2);

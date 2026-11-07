@@ -9,55 +9,52 @@ import { emptySourceReviewInvocation } from "./product-source-review-batches";
 import type { ProductSourceReviewInput, SourceReviewPolicy } from "./product-source-review";
 
 const input: ProductSourceReviewInput = {
-  originalRequest: "Save the record on the server.",
   appSpec: "Save the record on the server.",
   appSpecDigest: "spec",
-  sourceDigest: "source",
   clarifications: [],
-  omissions: [],
   files: [],
+  omissions: [],
+  originalRequest: "Save the record on the server.",
+  sourceDigest: "source",
 };
 const file = 'export const save = (x) => localStorage.setItem("x", x);';
 const evidence: ApplicationReviewEvidence = {
-  requirements: [{ id: "original", kind: "original", order: 0 }],
-  sourceFiles: [{ path: "app/save.ts", digest: "a", mode: "644" }],
   changedPaths: ["app/save.ts"],
-  readRedactionTexts: () => Promise.resolve([input.originalRequest ?? "", input.appSpec]),
-  readRequirements: () => Promise.resolve({ text: input.originalRequest ?? "" }),
-  readSource: () =>
-    Promise.resolve({
-      path: "app/save.ts",
-      digest: "a",
-      content: file,
-      startLine: 1,
-      endLine: 1,
-      startColumn: 1,
-      endColumn: file.length + 1,
-      totalLines: 1,
-    }),
-  verifyRequirementQuote: ({ quote }) =>
-    Promise.resolve((input.originalRequest ?? "").includes(quote)),
-  verifySourceCitation: ({ path, startLine, endLine, excerpt }) =>
-    Promise.resolve(path === "app/save.ts" && startLine === 1 && endLine === 1 && excerpt === file),
+  readRedactionTexts: async () => [input.originalRequest ?? "", input.appSpec],
+  readRequirements: async () => ({ text: input.originalRequest ?? "" }),
+  readSource: async () => ({
+    content: file,
+    digest: "a",
+    endColumn: file.length + 1,
+    endLine: 1,
+    path: "app/save.ts",
+    startColumn: 1,
+    startLine: 1,
+    totalLines: 1,
+  }),
+  requirements: [{ id: "original", kind: "original", order: 0 }],
+  sourceFiles: [{ digest: "a", mode: "644", path: "app/save.ts" }],
+  verifyRequirementQuote: async ({ quote }) => (input.originalRequest ?? "").includes(quote),
+  verifySourceCitation: async ({ path, startLine, endLine, excerpt }) =>
+    path === "app/save.ts" && startLine === 1 && endLine === 1 && excerpt === file,
 };
 const finding = {
-  requirementDocumentId: "original",
-  requirement: "Server persistence",
-  requirementQuote: "Save the record on the server.",
+  citations: [{ endLine: 1, excerpt: file, path: "app/save.ts", startLine: 1 }],
   explanation: "The save uses browser storage.",
   repair: "Save on the server.",
-  citations: [{ path: "app/save.ts", startLine: 1, endLine: 1, excerpt: file }],
+  requirement: "Server persistence",
+  requirementDocumentId: "original",
+  requirementQuote: "Save the record on the server.",
 };
 const policy: SourceReviewPolicy = {
+  fallback: { modelId: "sol", reasoningEffort: null },
   id: "test-terra-sol",
   primary: { modelId: "terra", reasoningEffort: "low" },
-  fallback: { modelId: "sol", reasoningEffort: null },
 };
 type Step = Error | { name: string; input: unknown }[];
 const model = (id: string, steps: Step[]) => {
   let index = 0;
   return new MockLanguageModelV4({
-    modelId: id,
     async doGenerate() {
       await Promise.resolve();
       const step = steps[index];
@@ -70,31 +67,32 @@ const model = (id: string, steps: Step[]) => {
       }
       return {
         content: step.map((x, i) => ({
-          type: "tool-call" as const,
+          input: JSON.stringify(x.input),
           toolCallId: `${id}-${index}-${i}`,
           toolName: x.name,
-          input: JSON.stringify(x.input),
+          type: "tool-call" as const,
         })),
-        finishReason: { unified: "tool-calls" as const, raw: "tool_calls" },
+        finishReason: { raw: "tool_calls", unified: "tool-calls" as const },
         usage: {
-          inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
-          outputTokens: { total: 5, text: 5, reasoning: 0 },
+          inputTokens: { cacheRead: 0, cacheWrite: 0, noCache: 10, total: 10 },
+          outputTokens: { reasoning: 0, text: 5, total: 5 },
         },
         warnings: [],
       };
     },
+    modelId: id,
   });
 };
 const record = [
   {
-    name: "recordReviewEvidence",
     input: { findings: [finding], remainingRuntimeChecks: ["Verify persistence."] },
+    name: "recordReviewEvidence",
   },
 ];
-const complete = [{ name: "completeReview", input: { remainingRuntimeChecks: [] } }];
+const complete = [{ input: { remainingRuntimeChecks: [] }, name: "completeReview" }];
 const reads = [
-  { name: "readRequirements", input: { id: "original" } },
-  { name: "readSource", input: { path: "app/save.ts" } },
+  { input: { id: "original" }, name: "readRequirements" },
+  { input: { path: "app/save.ts" }, name: "readSource" },
 ];
 
 describe("durable application reviewer fallback", () => {
@@ -103,14 +101,14 @@ describe("durable application reviewer fallback", () => {
     const fallback = model("sol", [reads, complete]);
     const result = await assessApplicationSource(input, evidence, {
       policy,
-      testModels: { terra: primary, sol: fallback },
+      testModels: { sol: fallback, terra: primary },
     });
     expect(result).toMatchObject({
-      reviewCompleted: false,
-      status: "failed",
       modelId: "terra",
       reasoningEffort: "low",
+      reviewCompleted: false,
       reviewPolicyId: "test-terra-sol",
+      status: "failed",
     });
     expect(primary.doGenerateCalls).toHaveLength(2);
     expect(fallback.doGenerateCalls).toHaveLength(2);
@@ -127,7 +125,7 @@ describe("durable application reviewer fallback", () => {
   it("does not credit primary references or findings to fallback completion", async () => {
     const primary = model("terra", [record, new Error("first")]);
     const fallback = model("sol", [complete, new Error("second")]);
-    const options = { policy, testModels: { terra: primary, sol: fallback } };
+    const options = { policy, testModels: { sol: fallback, terra: primary } };
     let round = await assessApplicationSourceRound(input, evidence, options);
     while (round.assessment === undefined) {
       // Each round depends on the preceding durable continuation.
@@ -135,9 +133,9 @@ describe("durable application reviewer fallback", () => {
       round = await assessApplicationSourceRound(input, evidence, options, round.continuation);
     }
     expect(round.assessment).toMatchObject({
+      modelId: "terra",
       reviewCompleted: false,
       status: "failed",
-      modelId: "terra",
     });
     expect(round.assessment?.findings).toHaveLength(1);
     expect(round.continuation.priorReviewerEvidence?.reviewer.modelId).toBe("terra");
@@ -148,23 +146,23 @@ describe("durable application reviewer fallback", () => {
     const primary = model("terra", [record, new Error("first")]);
     const otherFinding = {
       ...finding,
-      requirementQuote: "Save the record",
       explanation: "A second independent finding.",
+      requirementQuote: "Save the record",
     };
     const fallback = model("sol", [
       [
         {
-          name: "recordReviewEvidence",
           input: { findings: [otherFinding], remainingRuntimeChecks: [] },
+          name: "recordReviewEvidence",
         },
       ],
       complete,
     ]);
     const result = await assessApplicationSource(input, evidence, {
       policy,
-      testModels: { terra: primary, sol: fallback },
+      testModels: { sol: fallback, terra: primary },
     });
-    expect(result).toMatchObject({ reviewCompleted: false, status: "failed", modelId: "multiple" });
+    expect(result).toMatchObject({ modelId: "multiple", reviewCompleted: false, status: "failed" });
     expect(result.findings).toHaveLength(2);
     expect(result.evidenceNote).toContain("terra and sol");
   });
@@ -172,8 +170,8 @@ describe("durable application reviewer fallback", () => {
     const primary = model("terra", [
       [
         {
-          name: "recordReviewEvidence",
           input: { findings: [], remainingRuntimeChecks: ["Verify server persistence."] },
+          name: "recordReviewEvidence",
         },
       ],
       new Error("first"),
@@ -181,9 +179,9 @@ describe("durable application reviewer fallback", () => {
     const fallback = model("sol", [complete]);
     const result = await assessApplicationSource(input, evidence, {
       policy,
-      testModels: { terra: primary, sol: fallback },
+      testModels: { sol: fallback, terra: primary },
     });
-    expect(result).toMatchObject({ reviewCompleted: true, modelId: "sol" });
+    expect(result).toMatchObject({ modelId: "sol", reviewCompleted: true });
     expect(result.remainingRuntimeChecks).toContain("Verify server persistence.");
     expect(result.evidenceNote).toContain("from terra");
   });
@@ -191,8 +189,8 @@ describe("durable application reviewer fallback", () => {
     const primary = model("terra", [
       [
         {
-          name: "recordReviewEvidence",
           input: { findings: [], remainingRuntimeChecks: ["Verify server persistence."] },
+          name: "recordReviewEvidence",
         },
       ],
       new Error("first"),
@@ -200,23 +198,25 @@ describe("durable application reviewer fallback", () => {
     const fallback = model("sol", [new Error("second")]);
     const result = await assessApplicationSource(input, evidence, {
       policy,
-      testModels: { terra: primary, sol: fallback },
+      testModels: { sol: fallback, terra: primary },
     });
-    expect(result).toMatchObject({ reviewCompleted: false, status: "blocked", modelId: "terra" });
+    expect(result).toMatchObject({ modelId: "terra", reviewCompleted: false, status: "blocked" });
     expect(result.remainingRuntimeChecks).toContain("Verify server persistence.");
   });
   it("preserves prior findings when fallback evidence access fails", async () => {
     const primary = model("terra", [record, new Error("first")]);
-    const fallback = model("sol", [[{ name: "readSource", input: { path: "app/save.ts" } }]]);
+    const fallback = model("sol", [[{ input: { path: "app/save.ts" }, name: "readSource" }]]);
     const failedEvidence = {
       ...evidence,
-      readSource: () => Promise.reject(new Error("unavailable")),
+      readSource: async () => {
+        throw new Error("unavailable");
+      },
     };
     const result = await assessApplicationSource(input, failedEvidence, {
       policy,
-      testModels: { terra: primary, sol: fallback },
+      testModels: { sol: fallback, terra: primary },
     });
-    expect(result).toMatchObject({ reviewCompleted: false, status: "failed", modelId: "terra" });
+    expect(result).toMatchObject({ modelId: "terra", reviewCompleted: false, status: "failed" });
     expect(result.findings).toHaveLength(1);
   });
   it("does not fall back after completed primary review", async () => {
@@ -224,12 +224,12 @@ describe("durable application reviewer fallback", () => {
     const fallback = model("sol", [complete]);
     const result = await assessApplicationSource(input, evidence, {
       policy,
-      testModels: { terra: primary, sol: fallback },
+      testModels: { sol: fallback, terra: primary },
     });
     expect(result).toMatchObject({
-      reviewCompleted: true,
       modelId: "terra",
       reasoningEffort: "low",
+      reviewCompleted: true,
     });
     expect(fallback.doGenerateCalls).toHaveLength(0);
   });
@@ -238,9 +238,9 @@ describe("durable application reviewer fallback", () => {
     const fallback = model("sol", [new Error("second")]);
     const result = await assessApplicationSource(input, evidence, {
       policy,
-      testModels: { terra: primary, sol: fallback },
+      testModels: { sol: fallback, terra: primary },
     });
-    expect(result).toMatchObject({ reviewCompleted: false, status: "blocked", modelId: "sol" });
+    expect(result).toMatchObject({ modelId: "sol", reviewCompleted: false, status: "blocked" });
     expect(fallback.doGenerateCalls).toHaveLength(1);
   });
   it("keeps primary findings separate if fallback also fails", async () => {
@@ -248,12 +248,12 @@ describe("durable application reviewer fallback", () => {
     const fallback = model("sol", [new Error("second")]);
     const result = await assessApplicationSource(input, evidence, {
       policy,
-      testModels: { terra: primary, sol: fallback },
+      testModels: { sol: fallback, terra: primary },
     });
     expect(result).toMatchObject({
+      modelId: "terra",
       reviewCompleted: false,
       status: "failed",
-      modelId: "terra",
     });
     expect(result.reason).toContain("unavailable");
     expect(JSON.stringify(result)).not.toContain(file);
@@ -270,24 +270,26 @@ describe("durable application reviewer fallback", () => {
     });
     await expect(
       assessApplicationSource(input, evidence, {
-        policy,
         abortSignal: controller.signal,
         assertCurrentOwner: guard,
-        testModels: { terra: primary, sol: fallback },
+        policy,
+        testModels: { sol: fallback, terra: primary },
       }),
     ).rejects.toThrow();
     expect(fallback.doGenerateCalls).toHaveLength(0);
   });
   it("never falls back after evidence becomes unavailable", async () => {
-    const primary = model("terra", [[{ name: "readSource", input: { path: "app/save.ts" } }]]);
+    const primary = model("terra", [[{ input: { path: "app/save.ts" }, name: "readSource" }]]);
     const fallback = model("sol", [complete]);
     const inaccessible: ApplicationReviewEvidence = {
       ...evidence,
-      readSource: () => Promise.reject(new Error("unavailable")),
+      readSource: async () => {
+        throw new Error("unavailable");
+      },
     };
     const result = await assessApplicationSource(input, inaccessible, {
       policy,
-      testModels: { terra: primary, sol: fallback },
+      testModels: { sol: fallback, terra: primary },
     });
     expect(result).toMatchObject({ reviewCompleted: false, status: "blocked" });
     expect(fallback.doGenerateCalls).toHaveLength(0);
@@ -303,41 +305,41 @@ describe("durable application reviewer fallback", () => {
     });
     await expect(
       assessApplicationSource(input, evidence, {
-        policy,
         assertCurrentOwner: guard,
-        testModels: { terra: primary, sol: fallback },
+        policy,
+        testModels: { sol: fallback, terra: primary },
       }),
     ).rejects.toThrow("owner revoked");
     expect(fallback.doGenerateCalls).toHaveLength(0);
   });
   it("preserves Sol identity for pre-policy continuation", async () => {
     const old: ApplicationReviewContinuation = {
-      version: 1,
-      messages: [{ role: "user", content: "legacy" }],
-      findings: [],
-      runtimeChecks: [],
-      references: [],
-      reusableReads: [],
       completionRequested: false,
-      invalidEvidence: false,
       evidenceFailed: false,
-      outputRejected: false,
+      findings: [],
+      invalidEvidence: false,
       invocation: emptySourceReviewInvocation(),
+      messages: [{ content: "legacy", role: "user" }],
+      outputRejected: false,
+      references: [],
       requestOrdinal: 0,
+      reusableReads: [],
+      runtimeChecks: [],
       stepNumber: 0,
+      version: 1,
     };
     const primary = model("terra", [complete]);
     const fallback = model("openai/gpt-6.1-sol", [complete]);
     const result = await assessApplicationSourceRound(
       input,
       evidence,
-      { policy, testModels: { terra: primary, "openai/gpt-6.1-sol": fallback } },
+      { policy, testModels: { "openai/gpt-6.1-sol": fallback, terra: primary } },
       old,
     );
     expect(result.assessment).toMatchObject({
       modelId: "openai/gpt-6.1-sol",
-      reviewPolicyId: "legacy-sol",
       reviewCompleted: true,
+      reviewPolicyId: "legacy-sol",
     });
     expect(primary.doGenerateCalls).toHaveLength(0);
   });

@@ -7,9 +7,9 @@ import { z } from "zod";
 import type { BrowserContext } from "playwright/test";
 
 const fixtureSchema = z.object({
-  databaseUrl: z.string().url(),
+  databaseUrl: z.url(),
   flagsSecret: z.string().min(32),
-  origin: z.string().url(),
+  origin: z.url(),
   secret: z.string().min(32),
 });
 
@@ -19,15 +19,14 @@ export const readNavigationFixture = function readNavigationFixture() {
   );
   const origin = new URL(fixture.origin);
   const database = new URL(fixture.databaseUrl);
-  if (
-    origin.protocol !== "https:" ||
-    origin.hostname !== "localhost" ||
-    !origin.port ||
-    database.protocol !== "postgresql:" ||
-    database.hostname !== "127.0.0.1" ||
-    !database.port ||
-    !/^\/autograph_navigation_[a-z0-9_]+$/u.test(database.pathname)
-  ) {
+  const validOrigin =
+    origin.protocol === "https:" && origin.hostname === "localhost" && Boolean(origin.port);
+  const validDatabase =
+    database.protocol === "postgresql:" &&
+    database.hostname === "127.0.0.1" &&
+    Boolean(database.port) &&
+    /^\/autograph_navigation_[a-z0-9_]+$/u.test(database.pathname);
+  if (!validOrigin || !validDatabase) {
     throw new Error("Production navigation requires its isolated loopback fixture.");
   }
   return fixture;
@@ -59,8 +58,10 @@ export const seedIdentity = async function seedIdentity(context: BrowserContext,
       // valid session. This synthetic identity has no provider credentials.
       await transaction`insert into account (id, issuer, account_id, provider_id, user_id, created_at, updated_at)
         values (${randomUUID()}, 'https://github.com', ${id}, 'github', ${id}, now(), now())`;
+      const authIssuer = `${fixture.origin}/api/auth`;
+      const audience = `${fixture.origin}/mcp`;
       await transaction`insert into organization (id, name, slug, created_at, issuer, audience, workspace_id)
-        values (${organization}, ${appName}, ${organization}, now(), ${`${fixture.origin}/api/auth`}, ${`${fixture.origin}/mcp`}, ${workspace})`;
+        values (${organization}, ${appName}, ${organization}, now(), ${authIssuer}, ${audience}, ${workspace})`;
       await transaction`insert into member (id, organization_id, user_id, role, created_at)
         values (${randomUUID()}, ${organization}, ${id}, 'owner', now())`;
       await transaction`insert into personal_workspace (user_id, organization_id, created_at)
@@ -95,7 +96,7 @@ export const seedIdentity = async function seedIdentity(context: BrowserContext,
         version: 1,
       };
       await transaction`insert into builder_draft (issuer, audience, workspace_id, owner_user_id, draft_id, revision, record, created_at, updated_at)
-        values (${`${fixture.origin}/api/auth`}, ${`${fixture.origin}/mcp`}, ${workspace}, ${id}, ${randomUUID()}, 1, ${transaction.json(record)}, now(), now())`;
+        values (${authIssuer}, ${audience}, ${workspace}, ${id}, ${randomUUID()}, 1, ${transaction.json(record)}, now(), now())`;
     });
   } finally {
     await sql.end();
@@ -114,7 +115,7 @@ export const seedIdentity = async function seedIdentity(context: BrowserContext,
   const response = await context.request.get(`${fixture.origin}/api/auth/get-session`);
   if (!response.ok()) throw new Error("Seeded Better Auth session was rejected.");
   const session: unknown = await response.json();
-  if (z.object({ user: z.object({ id: z.literal(id) }) }).safeParse(session).success !== true) {
+  if (!z.object({ user: z.object({ id: z.literal(id) }) }).safeParse(session).success) {
     throw new Error("Seeded Better Auth session did not resolve the expected identity.");
   }
   return { appName, email, id };

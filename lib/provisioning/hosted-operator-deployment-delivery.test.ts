@@ -106,37 +106,37 @@ const plan = hostedOperatorPlanSchema.parse({
 });
 const gatewayPlan = hostedOperatorPlanSchema.parse({
   ...plan,
-  publicGateway: {
-    projectId: "prj_gateway",
-    branch: "gateway-main",
-    origin: "https://approved-gateway.example.test",
-  },
-  gatewayDelivery: {
-    projectId: "prj_gateway",
-    branch: "gateway-main",
-    repoId: "gateway-repo",
-    gitSha: sha,
-  },
   deploymentBoundary: {
+    app: { branch: selection.branch, environment: "preview", projectId: "prj_app" },
     authority,
+    gateway: { branch: "gateway-main", environment: "preview", projectId: "prj_gateway" },
+    operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
     teamId: "team",
-    app: { projectId: "prj_app", branch: selection.branch, environment: "preview" },
-    gateway: { projectId: "prj_gateway", branch: "gateway-main", environment: "preview" },
-    operator: { projectId: "prj_operator", deploymentId: "dpl_operator", environment: "preview" },
     verification: {
       gatewayOrigin: "https://approved-gateway.example.test",
-      publicOrigin: "https://approved-gateway.example.test",
       jwksUrl: "https://approved-gateway.example.test/_platform/jwks.json",
+      publicOrigin: "https://approved-gateway.example.test",
     },
   },
   effects: [
     ...plan.effects,
     {
+      description: "Deliver and pin the exact approved Gateway Preview",
       id: "gateway-delivery",
       kind: "gateway-delivery",
-      description: "Deliver and pin the exact approved Gateway Preview",
     },
   ],
+  gatewayDelivery: {
+    branch: "gateway-main",
+    gitSha: sha,
+    projectId: "prj_gateway",
+    repoId: "gateway-repo",
+  },
+  publicGateway: {
+    branch: "gateway-main",
+    origin: "https://approved-gateway.example.test",
+    projectId: "prj_gateway",
+  },
 });
 
 interface DeliveryProjectFixture {
@@ -430,42 +430,42 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
       }),
   });
   return {
-    calls,
-    wait,
     aliasState,
-    observeAlias,
-    project,
-    team,
+    calls,
+    checkpoint,
     deployment,
     differentDeployment,
-    checkpoint,
-    input,
     failCandidateReads: () => {
       failCandidateReads = true;
+    },
+    input,
+    observeAlias,
+    oldPlan,
+    priorProfilePlan,
+    project,
+    revoke: () => {
+      deny = true;
     },
     seedCandidate: () => {
       count = 1;
     },
-    revoke: () => {
-      deny = true;
+    setPriorNativePreviewClaims: (value: typeof priorNativePreviewClaims) => {
+      priorNativePreviewClaims = value;
+    },
+    setPriorNativePreviewSha: (value: string) => {
+      priorNativePreviewSha = value;
     },
     setReady: (value: string) => {
       ready = value;
     },
+    team,
     useOldBlockedProduction: () => {
       oldBlockedProduction = true;
     },
     useOldFailedNativePreview: () => {
       oldFailedNativePreview = true;
     },
-    setPriorNativePreviewSha: (value: string) => {
-      priorNativePreviewSha = value;
-    },
-    setPriorNativePreviewClaims: (value: typeof priorNativePreviewClaims) => {
-      priorNativePreviewClaims = value;
-    },
-    oldPlan,
-    priorProfilePlan,
+    wait,
     writer,
   };
 };
@@ -482,12 +482,12 @@ it("requests standard Preview delivery from approved Git source and observes rea
   expect(f.calls.filter((call) => call.method === "POST")).toHaveLength(1);
   expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
     gitSource: { ref: "feature", repoId: "repo", sha, type: "github" },
-    project: "prj_app",
     meta: {
       autograph_operator_effect: "deliver",
       autograph_operator_operation: f.input.operationRef,
       autograph_operator_plan: operatorPlanDigest(plan),
     },
+    project: "prj_app",
   });
   expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
     projectSettings: appProjectSettings,
@@ -501,8 +501,8 @@ it("requests standard Preview delivery from approved Git source and observes rea
   f.setReady("READY");
   const result = await f.writer.reconcile(f.input);
   expect(result).toMatchObject({
-    status: "applied",
     selected: { projectName: f.project.name, scopeSlug: f.team.slug },
+    status: "applied",
   });
   expect(f.input.deliveryCandidates?.[0]).toMatchObject({
     projectName: f.project.name,
@@ -692,13 +692,9 @@ it("delivers the approved published ref while retaining the resource branch", as
   const publishedPlan = hostedOperatorPlanSchema.parse({
     ...plan,
     delivery: { ...plan.delivery, branch },
-    publicGateway: {
-      branch: "main",
-      projectId: "prj_gateway",
-      origin: "https://public.example.test",
-    },
     deploymentBoundary: {
       app: { branch, deploymentId: "dpl_previous", environment: "preview", projectId: "prj_app" },
+      authority,
       gateway: {
         branch: "main",
         deploymentId: "dpl_gateway",
@@ -706,13 +702,17 @@ it("delivers the approved published ref while retaining the resource branch", as
         projectId: "prj_gateway",
       },
       operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
-      authority,
       teamId: "team",
       verification: {
         gatewayOrigin: "https://gateway.example.test",
-        publicOrigin: "https://public.example.test",
         jwksUrl: "https://gateway.example.test/_platform/jwks.json",
+        publicOrigin: "https://public.example.test",
       },
+    },
+    publicGateway: {
+      branch: "main",
+      origin: "https://public.example.test",
+      projectId: "prj_gateway",
     },
   });
   const f = fixture(publishedPlan);
@@ -741,18 +741,18 @@ it.each(["services", "nextjs", null, "future-provider-framework", undefined])(
     const building = await f.writer.deliver(f.input);
     expect(building.status).toBe("applied");
     expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
+      gitSource: { ref: plan.delivery?.branch, repoId: plan.delivery?.repoId, sha },
       project: plan.selection.projectId,
-      gitSource: { repoId: plan.delivery?.repoId, ref: plan.delivery?.branch, sha },
     });
     f.setReady("READY");
     const result = await f.writer.reconcile(f.input);
     expect(result.status).toBe("applied");
     if (result.status === "applied") {
       expect(result.selected).toMatchObject({
-        projectId: plan.selection.projectId,
-        repoId: plan.delivery?.repoId,
         branch: plan.delivery?.branch,
+        projectId: plan.selection.projectId,
         readyState: "READY",
+        repoId: plan.delivery?.repoId,
       });
     }
   },
@@ -866,10 +866,10 @@ it("reconciles historical staging delivery with Preview claims without changing 
   expect(observed.status).toBe("applied");
   if (observed.status === "applied") {
     expect(observed.selected).toMatchObject({
-      projectId: plan.selection.projectId,
-      repoId: plan.delivery?.repoId,
       branch: plan.delivery?.branch,
       operationRef: f.input.operationRef,
+      projectId: plan.selection.projectId,
+      repoId: plan.delivery?.repoId,
     });
   }
 });
@@ -889,7 +889,7 @@ const renewedDelivery = (gateway: boolean, addAppGrant = false) => {
       ? {}
       : {
           appTrustedSources: {
-            gatewayPreview: { projectId: "prj_gateway", from: "preview", to: "preview" },
+            gatewayPreview: { from: "preview", projectId: "prj_gateway", to: "preview" },
           },
         }),
     gatewayBindings: {
@@ -911,27 +911,19 @@ const renewedDelivery = (gateway: boolean, addAppGrant = false) => {
         effect.kind === "bindings"
           ? {
               ...effect,
-              id: "bindings",
               description: addAppGrant
                 ? "Bind only app-owned runtime URL and public verification context."
                 : "Bind app-owned runtime URL and public verification context, and allow the configured Gateway Preview to reach this app Preview.",
+              id: "bindings",
             }
           : effect,
       ),
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind Gateway" },
+      { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
       gatewayPlan.effects[5],
     ],
   });
   const current = hostedOperatorPlanSchema.parse({
     ...original,
-    retention: { ...original.retention, expiresAt: "2027-01-02T00:00:00Z" },
-    gatewayBindings: {
-      ...original.gatewayBindings,
-      trustedSources: {
-        ...original.gatewayBindings?.trustedSources,
-        appPreview: { projectId: selection.projectId, from: "preview", to: "preview" },
-      },
-    },
     effects: original.effects.map((effect) => {
       if (effect.kind === "gateway-bindings") {
         return {
@@ -949,10 +941,18 @@ const renewedDelivery = (gateway: boolean, addAppGrant = false) => {
       }
       return effect;
     }),
+    gatewayBindings: {
+      ...original.gatewayBindings,
+      trustedSources: {
+        ...original.gatewayBindings?.trustedSources,
+        appPreview: { from: "preview", projectId: selection.projectId, to: "preview" },
+      },
+    },
+    retention: { ...original.retention, expiresAt: "2027-01-02T00:00:00Z" },
     ...(addAppGrant
       ? {
           appTrustedSources: {
-            gatewayPreview: { projectId: "prj_gateway", from: "preview", to: "preview" },
+            gatewayPreview: { from: "preview", projectId: "prj_gateway", to: "preview" },
           },
         }
       : {}),
@@ -974,13 +974,13 @@ const renewedDelivery = (gateway: boolean, addAppGrant = false) => {
   };
   f.input.renewalDeliveryProvenance = [
     {
-      operationRef: f.input.operationRef,
-      plan: original,
-      planDigest: operatorPlanDigest(original),
       approvalId: "original-approval",
       approvedByCallId: "original-approved-call",
       deliveryCandidates: gateway ? [] : [retained],
       gatewayDeliveryCandidates: gateway ? [retained] : [],
+      operationRef: f.input.operationRef,
+      plan: original,
+      planDigest: operatorPlanDigest(original),
     },
   ];
   f.deployment.meta.autograph_operator_plan = operatorPlanDigest(original);
@@ -992,17 +992,17 @@ const renewedDelivery = (gateway: boolean, addAppGrant = false) => {
 };
 
 it.each([
-  { gateway: false, addAppGrant: false },
-  { gateway: true, addAppGrant: false },
-  { gateway: false, addAppGrant: true },
-  { gateway: true, addAppGrant: true },
+  { addAppGrant: false, gateway: false },
+  { addAppGrant: false, gateway: true },
+  { addAppGrant: true, gateway: false },
+  { addAppGrant: true, gateway: true },
 ])(
   "retains an approved renewal's existing delivery without POST (%j)",
   async ({ gateway, addAppGrant }) => {
     const f = renewedDelivery(gateway, addAppGrant);
     expect(await f.writer.deliver(f.input)).toMatchObject({
-      status: "applied",
       selected: { deploymentId: "dpl_new", operationRef: f.input.operationRef },
+      status: "applied",
     });
     expect(f.calls.every((call) => call.method === "GET")).toBe(true);
     expect(f.calls.some((call) => call.path === "/v13/deployments/dpl_new")).toBe(true);
@@ -1051,10 +1051,6 @@ it.each([false, true])(
     const record = hostedRuntimeJournalRecordSchema.parse({
       approvedByCallId: "new-approved-call",
       kind: "app-runtime",
-      request: target,
-      status: "pending",
-      step: "reserved",
-      version: 1,
       operator: {
         mode: "protected-operator-v1",
         operationRef: f.input.operationRef,
@@ -1066,17 +1062,21 @@ it.each([false, true])(
             approvedByCallId: original.approvedByCallId,
             operator: {
               approvalId: original.approvalId,
+              deliveryCandidates: [appCandidate],
+              gatewayDeliveryCandidates: archivedGateways,
               mode: "protected-operator-v1",
               operationRef: original.operationRef,
               plan: original.plan,
               planDigest: original.planDigest,
               receipts: [],
-              deliveryCandidates: [appCandidate],
-              gatewayDeliveryCandidates: archivedGateways,
             },
           },
         ],
       },
+      request: target,
+      status: "pending",
+      step: "reserved",
+      version: 1,
     });
     f.input.renewalDeliveryProvenance = retentionRenewalDeliveryProvenance(record);
     expect(f.input.renewalDeliveryProvenance[0]?.deliveryCandidates).toEqual([appCandidate]);
@@ -1084,8 +1084,8 @@ it.each([false, true])(
       gatewayCandidate,
     ]);
     expect(await f.writer.deliver(f.input)).toMatchObject({
-      status: "applied",
       selected: { deploymentId: "dpl_new", operationRef: f.input.operationRef },
+      status: "applied",
     });
     expect(f.calls.every((call) => call.method === "GET")).toBe(true);
     expect(f.calls.some((call) => call.path.includes("older-gateway-"))).toBe(false);
@@ -1221,8 +1221,6 @@ const narrowedGateway = async () => {
   const original = hostedOperatorPlanSchema.parse({
     ...gatewayPlan,
     access: [],
-    stage: "auth-bootstrap",
-    resourcesInstaller: { reference: "neon-resource-bootstrap-v1", sha256: "c".repeat(64) },
     authSchema: {
       artifactRef: "auth-plan",
       installer: plan.installer,
@@ -1232,20 +1230,20 @@ const narrowedGateway = async () => {
     bootstrap: { endpointId: "ep-fixture", maintenanceDatabase: "neondb", role: "neondb_owner" },
     effects: [
       {
+        description: "Prepare Auth",
         id: "auth-resources",
         kind: "resources",
         resourceId: plan.authDatabase.resourceId,
-        description: "Prepare Auth",
       },
       {
+        description: "Prepare app",
         id: "app-resources",
         kind: "resources",
         resourceId: plan.appDatabase.resourceId,
-        description: "Prepare app",
       },
-      { id: "install", kind: "install", description: "Install Auth" },
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind approved protection" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Deliver Gateway" },
+      { description: "Install Auth", id: "install", kind: "install" },
+      { description: "Bind approved protection", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Deliver Gateway", id: "gateway-delivery", kind: "gateway-delivery" },
     ],
     gatewayBindings: {
       authBrowserOrigin: "https://auth-preview.example.test",
@@ -1261,10 +1259,12 @@ const narrowedGateway = async () => {
         subject: "fixture-gateway",
       },
       trustedSources: {
-        builderProduction: { projectId: "builder", from: "production", to: "preview" },
-        operatorPreview: { projectId: "operator", from: "preview", to: "preview" },
+        builderProduction: { from: "production", projectId: "builder", to: "preview" },
+        operatorPreview: { from: "preview", projectId: "operator", to: "preview" },
       },
     },
+    resourcesInstaller: { reference: "neon-resource-bootstrap-v1", sha256: "c".repeat(64) },
+    stage: "auth-bootstrap",
   });
   const current = hostedOperatorPlanSchema.parse({
     ...original,
@@ -1273,11 +1273,11 @@ const narrowedGateway = async () => {
   const f = fixture(current, null, true);
   f.input.gatewayDeliveryProvenance = [
     {
+      approvalId: "original-approval",
+      approvedByCallId: "original-approved-call",
       operationRef: f.input.operationRef,
       plan: original,
       planDigest: operatorPlanDigest(original),
-      approvalId: "original-approval",
-      approvedByCallId: "original-approved-call",
     },
   ];
   f.deployment.meta.autograph_operator_plan = operatorPlanDigest(original);
@@ -1293,8 +1293,8 @@ it("reconciles an approved narrowing's retained metadata and reassigns only afte
   const f = await narrowedGateway();
   expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "retryable" });
   expect(await f.writer.deliver(f.input)).toMatchObject({
-    status: "applied",
     selected: { deploymentId: "dpl_new" },
+    status: "applied",
   });
   expect(f.calls.some((call) => call.path === "/v13/deployments/dpl_previous")).toBe(true);
   expect(
@@ -1402,8 +1402,8 @@ it("uses independently observed project and team ownership when the different al
   const f = await narrowedGateway();
   Object.assign(f.differentDeployment, { ownerId: undefined });
   expect(await f.writer.deliver(f.input)).toMatchObject({
-    status: "applied",
     selected: { deploymentId: "dpl_new" },
+    status: "applied",
   });
   expect(f.calls.some((call) => call.path === "/v9/projects/prj_gateway")).toBe(true);
   expect(f.calls.some((call) => call.path === "/v2/teams/team")).toBe(true);
@@ -1611,10 +1611,10 @@ it("durably records a definite alias rejection and permits a later corrected app
   );
   expect(f.input.deliveryCandidates?.[0]?.gatewayAliasAttempted).toBe(false);
   expect(f.observeAlias).toHaveBeenCalledWith({
-    stage: "assignment",
-    method: "POST",
-    httpStatus: 400,
     category: "rejected",
+    httpStatus: 400,
+    method: "POST",
+    stage: "assignment",
   });
   expect(JSON.stringify(f.observeAlias.mock.calls)).not.toContain("credential/body");
   f.aliasState.rejectStatus = 0;
@@ -1701,7 +1701,9 @@ it("recovers a read failure before assignment without persisting attempted inten
 it("does not await an unresolved advisory alias observer", async () => {
   const f = await readyGateway();
   const pendingDiagnostic = Promise.withResolvers<undefined>();
-  f.observeAlias.mockImplementation(() => pendingDiagnostic.promise);
+  f.observeAlias.mockImplementation(async () => {
+    await pendingDiagnostic.promise;
+  });
   const delivered = await f.writer.deliver(f.input);
   expect(delivered.status).toBe("applied");
 });
@@ -1867,9 +1869,9 @@ it("reobserves a completed app candidate under its original delivery identity be
   const gatewayInput = {
     ...f.input,
     effect: {
+      description: "Bind Gateway",
       id: "gateway-bindings",
       kind: "gateway-bindings" as const,
-      description: "Bind Gateway",
     },
   };
   const original = structuredClone(gatewayInput.deliveryCandidates ?? []);
@@ -1992,16 +1994,16 @@ it.each([
       const diagnostic = z
         .object({
           gatewayDelivery: z.object({
-            stage: z.string(),
-            phase: z.string().optional(),
             errorClass: z.string(),
+            phase: z.string().optional(),
             publicCode: z.string().optional(),
             result: z.literal("unknown"),
+            stage: z.string(),
           }),
         })
         .parse(rawDiagnostic);
       expect(diagnostic).toMatchObject({
-        gatewayDelivery: { stage, errorClass, result: "unknown" },
+        gatewayDelivery: { errorClass, result: "unknown", stage },
       });
       expect(diagnostic.gatewayDelivery.phase).toBe(phase);
       expect(diagnostic.gatewayDelivery.publicCode).toBe(publicCode);

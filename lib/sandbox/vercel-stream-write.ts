@@ -39,8 +39,8 @@ export const writeVercelStream = async (input: {
   signal?: AbortSignal;
 }): Promise<void> => {
   const lease = await holdActiveCommandLease({
-    current: input.current,
     authorize: input.authorize,
+    current: input.current,
     signal: input.signal,
   });
   const stage = path.posix.join(
@@ -52,8 +52,8 @@ export const writeVercelStream = async (input: {
     await input.authorize?.();
     lease.signal.throwIfAborted();
     const running = await input.current().runCommand({
-      cmd: "node",
       args: ["-e", program, ...args],
+      cmd: "node",
       detached: true,
       signal: lease.signal,
     });
@@ -102,9 +102,9 @@ export const writeVercelStream = async (input: {
       await input.current().writeFiles(
         [
           {
-            path: path.posix.join(stage, String(count)),
             content: Buffer.from(buffer.subarray(0, used)),
             mode: 0o600,
+            path: path.posix.join(stage, String(count)),
           },
         ],
         { signal: lease.signal },
@@ -132,7 +132,7 @@ export const writeVercelStream = async (input: {
   } finally {
     if (created) {
       try {
-        await input.current().fs.rm(stage, { recursive: true, force: true });
+        await input.current().fs.rm(stage, { force: true, recursive: true });
       } catch {
         /* Retain the initiating transfer/abort error. */
       }

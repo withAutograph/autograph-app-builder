@@ -29,13 +29,13 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 const unavailable = () => new HostedOperatorError("reconciliation_required");
 const mismatch = () => new HostedOperatorError("resource_mismatch");
 const providerRowSchema = z.object({
-  id: z.string().min(1),
-  key: z.string().min(1),
-  type: z.string(),
-  target: z.array(z.string()),
-  gitBranch: z.string().nullable().optional(),
   comment: z.string().optional(),
   configurationId: z.string().nullable().optional(),
+  gitBranch: z.string().nullable().optional(),
+  id: z.string().min(1),
+  key: z.string().min(1),
+  target: z.array(z.string()),
+  type: z.string(),
 });
 type Patch = Partial<
   Pick<
@@ -81,30 +81,30 @@ const expectedPublication = (
     throw mismatch();
   }
   const common = {
-    intentId: record.requestId,
-    approvalRef: approval.approvalId,
-    owner: { ...context.authority, sessionId: context.target.sessionId },
     appId: context.target.appId,
-    runtimeAttemptId: record.attemptId,
+    approvalRef: approval.approvalId,
     fence: record.fence,
+    intentId: record.requestId,
+    owner: { ...context.authority, sessionId: context.target.sessionId },
+    runtimeAttemptId: record.attemptId,
   };
   const observedCommon = {
-    intentId: projection.intentId,
-    approvalRef: projection.approvalRef,
-    owner: projection.owner,
     appId: projection.appId,
-    runtimeAttemptId: projection.runtimeAttemptId,
+    approvalRef: projection.approvalRef,
     fence: projection.fence,
+    intentId: projection.intentId,
+    owner: projection.owner,
+    runtimeAttemptId: projection.runtimeAttemptId,
   };
   const { expiresAt, ...observedTarget } = projection.observation;
   const valid = [
     isDeepStrictEqual(observedCommon, common),
     isDeepStrictEqual(current, {
       ...common,
-      sandboxId: plan.runtime.sandboxId,
-      providerSessionId: locator.providerSessionId,
-      state: current.state,
       leaseExpiresAt: current.leaseExpiresAt,
+      providerSessionId: locator.providerSessionId,
+      sandboxId: plan.runtime.sandboxId,
+      state: current.state,
     }),
     projection.preparedOperationRef === plan.originalSetup.operationRef,
     isDeepStrictEqual(projection.gateway, plan.gateway),
@@ -132,7 +132,7 @@ const expectedPublication = (
   }
   const [targetKey, transportKey] = namesFor(record.requestId);
   return new Map([
-    [targetKey, JSON.stringify({ projection, current })],
+    [targetKey, JSON.stringify({ current, projection })],
     [transportKey, capabilities.transport],
   ]);
 };
@@ -152,7 +152,7 @@ export const createHostedManagedRuntimeProjection = (deps: {
     parseContinuityPlanForOwner(record.plan, context);
     const { gateway, preparedPlan } = record.plan;
     const delivery = preparedPlan.gatewayDelivery;
-    const publicGateway = preparedPlan.publicGateway;
+    const { publicGateway } = preparedPlan;
     if (publicGateway === undefined || delivery === undefined) {
       throw mismatch();
     }
@@ -210,16 +210,16 @@ export const createHostedManagedRuntimeProjection = (deps: {
       let response: Response;
       try {
         response = await (deps.fetch ?? fetch)(url, {
-          method,
           body: body === undefined ? undefined : JSON.stringify(body),
           cache: "no-store",
-          redirect: "error",
-          signal: AbortSignal.timeout(20_000),
           headers: {
             Accept: "application/json",
             Authorization: `Bearer ${credential.token}`,
             "Content-Type": "application/json",
           },
+          method,
+          redirect: "error",
+          signal: AbortSignal.timeout(20_000),
         });
       } catch {
         throw unavailable();
@@ -249,8 +249,8 @@ export const createHostedManagedRuntimeProjection = (deps: {
     const inspect = async () => {
       const project = z
         .object({
-          id: z.string(),
           accountId: z.string(),
+          id: z.string(),
           link: z
             .object({ productionBranch: z.string().nullable().optional() })
             .nullable()
@@ -320,13 +320,13 @@ export const createHostedManagedRuntimeProjection = (deps: {
       const savedRows = new Map(record.environmentRows.map((row) => [row.id, row]));
       const pendingWrites = new Map(record.environmentWrites.map((write) => [write.key, write]));
       for (const row of selected) {
-        const value = z
+        const { value } = z
           .object({ value: z.string() })
           .parse(
             await request(
               `/v1/projects/${encodeURIComponent(gateway.projectId)}/env/${encodeURIComponent(row.id)}`,
             ),
-          ).value;
+          );
         const saved = savedRows.get(row.id);
         const pending = pendingWrites.get(row.key);
         if (
@@ -337,31 +337,31 @@ export const createHostedManagedRuntimeProjection = (deps: {
         values.set(row.id, value);
       }
       await guard();
-      return { rows: selected, values, gitBranch };
+      return { gitBranch, rows: selected, values };
     };
     const references = (
       observed: Awaited<ReturnType<typeof inspect>>,
     ): ManagedOperatorEnvironmentRow[] =>
       observed.rows.map((row) => ({
+        branch: delivery.branch,
+        comment: row.comment ?? comment,
+        gitBranch: observed.gitBranch,
         id: row.id,
         key: row.key,
-        projectId: gateway.projectId,
-        branch: delivery.branch,
-        gitBranch: observed.gitBranch,
         operationRef: record.requestId,
-        comment: row.comment ?? comment,
+        projectId: gateway.projectId,
         valueSha256: hash(observed.values.get(row.id) ?? ""),
       }));
     return {
-      keys,
       comment,
       guard,
-      request,
       inspect,
-      references,
+      keys,
       get record() {
         return record;
       },
+      references,
+      request,
       setRecord(patch: Patch) {
         record = { ...record, ...structuredClone(patch) };
       },
@@ -440,23 +440,22 @@ export const createHostedManagedRuntimeProjection = (deps: {
       }
       const deliveryContext: HostedOperatorDeploymentContext = {
         ...context,
-        plan: plan.preparedPlan,
-        effect,
-        operationRef: io.record.requestId,
-        fenceGeneration: io.record.fence,
-        workerCheckpoints: [],
         assertCurrent: io.guard,
-        checkpoint: () => Promise.reject(mismatch()),
-        deliveryCandidates: io.record.deliveryCandidates,
+        checkpoint: async () => {
+          throw mismatch();
+        },
         checkpointDelivery: async (candidates) => {
           await persist({ deliveryCandidates: [...candidates] });
           deliveryContext.deliveryCandidates = io.record.deliveryCandidates;
         },
+        deliveryCandidates: io.record.deliveryCandidates,
+        effect,
+        fenceGeneration: io.record.fence,
+        operationRef: io.record.requestId,
+        plan: plan.preparedPlan,
+        workerCheckpoints: [],
       };
       const delivery = createHostedOperatorDeploymentDelivery({
-        target: "gateway",
-        readCredential: deps.readCredential,
-        fetch: deps.fetch,
         assertAuthorized: io.guard,
         assertEnvironment: verifyPair,
         beforeCreate: async () => {
@@ -465,6 +464,9 @@ export const createHostedManagedRuntimeProjection = (deps: {
           }
           await persist({ deliveryAttempted: true });
         },
+        fetch: deps.fetch,
+        readCredential: deps.readCredential,
+        target: "gateway",
       });
       const result = await delivery.deliver(deliveryContext);
       if (result.status !== "applied") {
@@ -525,7 +527,11 @@ export const createHostedManagedRuntimeProjection = (deps: {
     }
   };
   return {
-    publish: (...args) => safe(() => implementation.publish(...args)),
-    revoke: (...args) => safe(() => implementation.revoke(...args)),
+    publish: async (...args) => {
+      await safe(async () => await implementation.publish(...args));
+    },
+    revoke: async (...args) => {
+      await safe(async () => await implementation.revoke(...args));
+    },
   };
 };

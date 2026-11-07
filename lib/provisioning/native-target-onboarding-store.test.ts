@@ -25,52 +25,29 @@ import type {
 
 const time = "2026-10-21T15:00:00.000Z";
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace_fixture",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner_fixture",
+  workspaceId: "workspace_fixture",
 };
 const owner: NativeTargetCurrentOwner = {
+  adapterGeneration: 1,
+  adapterSessionId: "native_original",
   authority,
   publicSessionId: "public_original",
-  adapterSessionId: "native_original",
-  adapterGeneration: 1,
 };
 const plan = () =>
   nativeTargetOnboardingPlanSchema.parse({
-    version: 1,
-    appId: "requests-app",
-    origin: {
-      publicSessionId: owner.publicSessionId,
-      adapterSessionId: owner.adapterSessionId,
-      adapterGeneration: 1,
-      appSpecDigest: "a".repeat(64),
-      release: {
-        id: "release-original",
-        artifactRef: "artifact-original",
-        manifestSha256: "b".repeat(64),
-        schemaSha256: "c".repeat(64),
-      },
-    },
-    project: {
-      name: "requests-app",
-      teamId: "team_fixture",
-      installationId: "install_fixture",
-      projectSettings: {
-        framework: "nextjs",
-        rootDirectory: "apps/requests",
-        sourceFilesOutsideRootDirectory: true,
-      },
-      protection: nativeTargetRequiredProjectProtection,
-    },
-    branch: "main",
     appDatabase: {
-      resourceId: "requests-resource",
       database: "requests_data",
       migratorRole: "requests_migrator",
+      resourceId: "requests-resource",
       runtimeRole: "requests_runtime",
     },
-    productRoles: [],
+    appId: "requests-app",
+    branch: "main",
+    conflictPolicy: "stop-on-conflict",
+    cost: { description: "Separate app target", ownership: "current-owner" },
     nativeNeon: {
       approvalReference: "native-scope-approval",
       nativeStore: {
@@ -79,31 +56,54 @@ const plan = () =>
         sourceProjectId: "source-project",
       },
       scope: {
-        projectId: "neon-project",
         branchId: "neon-branch",
         endpointId: "neon-endpoint",
         hostname: "ep-fixture.neon.tech",
         maintenanceDatabase: "maintenance",
         maintenanceRole: "installer",
+        projectId: "neon-project",
       },
     },
+    origin: {
+      adapterGeneration: 1,
+      adapterSessionId: owner.adapterSessionId,
+      appSpecDigest: "a".repeat(64),
+      publicSessionId: owner.publicSessionId,
+      release: {
+        artifactRef: "artifact-original",
+        id: "release-original",
+        manifestSha256: "b".repeat(64),
+        schemaSha256: "c".repeat(64),
+      },
+    },
+    productRoles: [],
+    project: {
+      installationId: "install_fixture",
+      name: "requests-app",
+      projectSettings: {
+        framework: "nextjs",
+        rootDirectory: "apps/requests",
+        sourceFilesOutsideRootDirectory: true,
+      },
+      protection: nativeTargetRequiredProjectProtection,
+      teamId: "team_fixture",
+    },
+    retention: { policy: "Until approved cleanup" },
+    version: 1,
     worker: {
-      id: "generic-installer",
       executablePath: "/trusted/generic-worker",
-      sha256: "d".repeat(64),
+      id: "generic-installer",
       operationScope: "generated-app-release-install-v1",
+      sha256: "d".repeat(64),
       subcommand: "protected-generated-app-install",
     },
-    cost: { ownership: "current-owner", description: "Separate app target" },
-    retention: { policy: "Until approved cleanup" },
-    conflictPolicy: "stop-on-conflict",
   });
 const attempt = (): NativeTargetOnboardingAttempt => ({
   attemptId: "b209b89b-0bad-4a60-820f-4e29d5e5a4cc",
   candidateName: "requests-app",
+  leaseExpiresAt: "2026-10-21T15:10:00.000Z",
   leaseId: "b209b89b-0bad-4a60-820f-4e29d5e5a4cd",
   startedAt: time,
-  leaseExpiresAt: "2026-10-21T15:10:00.000Z",
 });
 const makeFixture = (
   store: NativeTargetOnboardingStore = createInMemoryNativeTargetOnboardingStore(),
@@ -113,13 +113,13 @@ const makeFixture = (
   let granted = true;
   let clock = new Date(time);
   let receipt: NativeTargetOnboardingApproval | null = {
-    requestId: "approval-original",
     callId: "call-original",
-    planDigest: nativeTargetOnboardingPlanDigest(p),
-    responderPrincipalId: owner.authority.ownerUserId,
-    publicSessionId: owner.publicSessionId,
-    outcome: "approved",
     observedAt: time,
+    outcome: "approved",
+    planDigest: nativeTargetOnboardingPlanDigest(p),
+    publicSessionId: owner.publicSessionId,
+    requestId: "approval-original",
+    responderPrincipalId: owner.authority.ownerUserId,
   };
   const authorize = vi.fn(async (_invocation: string, appId: string) => {
     if (!granted || appId !== p.appId) {
@@ -127,9 +127,9 @@ const makeFixture = (
     }
     return structuredClone(currentOwner);
   });
-  const assertPlanOrigin = vi.fn(async () => {});
+  const assertPlanOrigin = vi.fn<() => Promise<void>>().mockResolvedValue();
   const readApproval = vi.fn(async () => structuredClone(receipt));
-  const ports = { store, authorize, assertPlanOrigin, readApproval, now: () => clock };
+  const ports = { assertPlanOrigin, authorize, now: () => clock, readApproval, store };
   const registry = createNativeTargetOnboardingRegistry(ports);
   const approved = async () => {
     await registry.reservePlan("server-invocation", p);
@@ -151,48 +151,48 @@ const makeFixture = (
   const accept = async () => {
     await dispatch();
     await registry.acceptProjectId("server-invocation", p.appId, attempt().leaseId, {
+      acceptedAt: time,
       attemptId: attempt().attemptId,
       projectId: "new-project-id",
-      acceptedAt: time,
     });
   };
   const proof = () => ({
     attemptId: attempt().attemptId,
     observed: {
-      projectId: "new-project-id",
-      name: p.project.name,
-      teamId: p.project.teamId,
       installationId: p.project.installationId,
+      name: p.project.name,
+      projectId: "new-project-id",
       projectSettings: p.project.projectSettings,
       protection: p.project.protection,
+      teamId: p.project.teamId,
     },
     observedAt: time,
   });
   return {
-    p,
-    store,
-    registry,
-    ports,
-    authorize,
-    assertPlanOrigin,
+    accept,
     approved,
+    assertPlanOrigin,
+    authorize,
     creating,
     dispatch,
-    accept,
+    getReceipt: () => receipt,
+    p,
+    ports,
     proof,
-    setOwner: (value: NativeTargetCurrentOwner) => {
-      currentOwner = value;
-    },
+    registry,
     revoke: () => {
       granted = false;
+    },
+    setOwner: (value: NativeTargetCurrentOwner) => {
+      currentOwner = value;
     },
     setReceipt: (value: NativeTargetOnboardingApproval | null) => {
       receipt = value;
     },
-    getReceipt: () => receipt,
     setTime: (value: string) => {
       clock = new Date(value);
     },
+    store,
   };
 };
 
@@ -236,13 +236,13 @@ describe("native target registry authorization and restart", () => {
     await expect(f.registry.recordApproval("server-invocation", f.p.appId)).rejects.toThrow();
     f.setReceipt({
       ...f.getReceipt()!,
-      requestId: "cancel",
       callId: "cancel-call",
-      planDigest: nativeTargetOnboardingPlanDigest(f.p),
-      responderPrincipalId: owner.authority.ownerUserId,
-      publicSessionId: owner.publicSessionId,
-      outcome: "cancelled",
       observedAt: time,
+      outcome: "cancelled",
+      planDigest: nativeTargetOnboardingPlanDigest(f.p),
+      publicSessionId: owner.publicSessionId,
+      requestId: "cancel",
+      responderPrincipalId: owner.authority.ownerUserId,
     });
     expect((await f.registry.recordApproval("server-invocation", f.p.appId)).record.stage).toBe(
       "cancelled",
@@ -274,7 +274,7 @@ describe("native target registry authorization and restart", () => {
     await f.approved();
     const before = await f.registry.read("server-invocation", f.p.appId);
     const initial = f.getReceipt()!;
-    f.setReceipt({ ...initial, requestId: "fresh-request", callId: "fresh-call" });
+    f.setReceipt({ ...initial, callId: "fresh-call", requestId: "fresh-request" });
     const checked = await f.registry.recordApproval("server-invocation", f.p.appId);
     expect(checked).toEqual(before);
     expect(checked.record).toMatchObject({ approval: initial });
@@ -288,7 +288,7 @@ describe("native target registry authorization and restart", () => {
         attempt().leaseId,
       ),
     ).rejects.toThrow();
-    f.setReceipt({ ...initial, requestId: "fresh-request", callId: "fresh-call" });
+    f.setReceipt({ ...initial, callId: "fresh-call", requestId: "fresh-request" });
     await f.registry.authorizeAttempt(
       "server-invocation",
       f.p.appId,
@@ -302,13 +302,14 @@ describe("native target registry authorization and restart", () => {
     const f = makeFixture();
     await f.creating();
     const results = await Promise.allSettled(
-      [1, 2].map(() =>
-        f.registry.authorizeAttempt(
-          "server-invocation",
-          f.p.appId,
-          attempt().attemptId,
-          attempt().leaseId,
-        ),
+      [1, 2].map(
+        async () =>
+          await f.registry.authorizeAttempt(
+            "server-invocation",
+            f.p.appId,
+            attempt().attemptId,
+            attempt().leaseId,
+          ),
       ),
     );
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
@@ -380,9 +381,9 @@ describe("native target registry authorization and restart", () => {
     f.setReceipt({ ...f.getReceipt()!, outcome: "cancelled" });
     await f.registry.recordApproval("server-invocation", f.p.appId);
     await f.registry.acceptProjectId("server-invocation", f.p.appId, attempt().leaseId, {
+      acceptedAt: time,
       attemptId: attempt().attemptId,
       projectId: "new-project-id",
-      acceptedAt: time,
     });
     expect((await f.registry.read("server-invocation", f.p.appId))?.record.stage).toBe("unknown");
     await expect(
@@ -403,16 +404,16 @@ describe("native target registry authorization and restart", () => {
     await f.registry.recordReady("server-invocation", f.p.appId, f.proof());
     f.setOwner({
       ...owner,
-      publicSessionId: "new-public-session",
-      adapterSessionId: "new-native-session",
       adapterGeneration: 2,
+      adapterSessionId: "new-native-session",
+      publicSessionId: "new-public-session",
     });
     const revised = {
       ...f.p,
       origin: {
         ...f.p.origin,
-        publicSessionId: "new-public-session",
         appSpecDigest: "e".repeat(64),
+        publicSessionId: "new-public-session",
         release: { ...f.p.origin.release, id: "new-release" },
       },
       project: {
@@ -497,8 +498,8 @@ describe("native target registry authorization and restart", () => {
     await f.accept();
     await f.registry.recordReady("server-invocation", f.p.appId, f.proof());
     const reader = createNativeTargetOnboardingReader({
-      store: { read: f.store.read },
       authorize: f.authorize,
+      store: { read: f.store.read },
     });
     expect(
       (await reader.readReady("server-invocation", f.p.appId))?.registration.observed.projectId,
@@ -517,7 +518,7 @@ describe("native target registry authorization and restart", () => {
     expect(replanned.record.priorCancellations?.[0]?.approval).toEqual(old);
     f.setReceipt({ ...old, outcome: "approved" });
     await expect(f.registry.recordApproval("server-invocation", f.p.appId)).rejects.toThrow();
-    f.setReceipt({ ...old, outcome: "approved", requestId: "approval-new", callId: "call-new" });
+    f.setReceipt({ ...old, callId: "call-new", outcome: "approved", requestId: "approval-new" });
     expect((await f.registry.recordApproval("server-invocation", f.p.appId)).record.stage).toBe(
       "approved",
     );
@@ -558,40 +559,42 @@ describe("native target registry authorization and restart", () => {
     const f = makeFixture();
     await f.accept();
     const ready = await f.registry.recordReady("server-invocation", f.p.appId, f.proof());
-    expect(() =>
-      f.store.compareAndSet({
-        ...ready,
-        expectedRevision: ready.revision,
-        record: {
-          kind: ready.record.kind,
-          version: ready.record.version,
-          appId: ready.appId,
-          plan: ready.record.plan,
-          planDigest: ready.record.planDigest,
-          stage: "planned",
-          previousAttempts: ready.record.previousAttempts,
-        },
-        now: new Date(time),
-      }),
+    expect(
+      async () =>
+        await f.store.compareAndSet({
+          ...ready,
+          expectedRevision: ready.revision,
+          now: new Date(time),
+          record: {
+            appId: ready.appId,
+            kind: ready.record.kind,
+            plan: ready.record.plan,
+            planDigest: ready.record.planDigest,
+            previousAttempts: ready.record.previousAttempts,
+            stage: "planned",
+            version: ready.record.version,
+          },
+        }),
     ).toThrow();
     const planned = makeFixture();
     const row = await planned.registry.reservePlan("server-invocation", planned.p);
     const changed = { ...row.record, plan: { ...row.record.plan, branch: "another" } };
     changed.planDigest = nativeTargetOnboardingPlanDigest(changed.plan);
-    expect(() =>
-      planned.store.compareAndSet({
-        ...row,
-        expectedRevision: row.revision,
-        record: changed,
-        now: new Date(time),
-      }),
+    expect(
+      async () =>
+        await planned.store.compareAndSet({
+          ...row,
+          expectedRevision: row.revision,
+          now: new Date(time),
+          record: changed,
+        }),
     ).toThrow();
     expect(
       await planned.store.compareAndSet({
         ...row,
         expectedRevision: 99,
-        record: row.record,
         now: new Date(time),
+        record: row.record,
       }),
     ).toBeUndefined();
   });
@@ -615,6 +618,7 @@ describe("Postgres native target journal adapter", () => {
       return { onConflictDoNothing: () => ({ returning: async () => [saved] }) };
     });
     const database = {
+      insert: () => ({ values }),
       select: () => ({
         from: () => ({
           where: (condition: SQL) => {
@@ -623,7 +627,6 @@ describe("Postgres native target journal adapter", () => {
           },
         }),
       }),
-      insert: () => ({ values }),
       update: () => ({
         set: (update: Partial<StoredValues>) => ({
           where: (condition: SQL) => {

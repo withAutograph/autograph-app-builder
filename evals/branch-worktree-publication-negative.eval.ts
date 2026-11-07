@@ -20,7 +20,7 @@ export default defineEval({
     t.succeeded();
     t.check(turn1.message, includes("canceled or rejected"));
     if (
-      execFileSync("git", ["branch", "--list", "app-builder/*"], {
+      execFileSync("/usr/bin/git", ["branch", "--list", "app-builder/*"], {
         cwd: repository,
         encoding: "utf-8",
       }) !== ""

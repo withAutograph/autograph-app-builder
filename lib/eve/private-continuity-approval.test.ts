@@ -17,10 +17,10 @@ import {
 } from "./private-continuity-approval";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 const context: HostedOperatorContext = {
   authority,
@@ -28,36 +28,35 @@ const context: HostedOperatorContext = {
     appId: "orchard",
     branch: "preview",
     environment: "preview",
-    projectId: "app-project",
-    sessionId: "saved-session",
     installationId: "installation",
+    projectId: "app-project",
     scopeId: "team",
     scopeType: "team",
+    sessionId: "saved-session",
   },
 };
 const preparedPlan = hostedOperatorPlanSchema.parse({
-  version: 1,
-  action: "prepare",
   access: [{ actorId: "actor-one", organizationId: "organization-one", roles: ["custom_role"] }],
+  action: "prepare",
   appDatabase: {
     database: "app_db",
     migratorRole: "app_migrator",
-    runtimeRole: "app_runtime",
     resourceId: "app-resource",
+    runtimeRole: "app_runtime",
   },
   authDatabase: {
     database: "auth_db",
     migratorRole: "auth_migrator",
-    runtimeRole: "auth_runtime",
     resourceId: "auth-resource",
+    runtimeRole: "auth_runtime",
   },
   contextId: "ordinary-planning-context",
   cost: { class: "shared-recovery-group", description: "Controlled fixture", owner: "Fixture" },
   effects: [
-    { id: "resources", kind: "resources", description: "Prepare resources" },
-    { id: "install", kind: "install", description: "Install app" },
-    { id: "access", kind: "access", description: "Authorize app" },
-    { id: "bindings", kind: "bindings", description: "Bind runtime" },
+    { description: "Prepare resources", id: "resources", kind: "resources" },
+    { description: "Install app", id: "install", kind: "install" },
+    { description: "Authorize app", id: "access", kind: "access" },
+    { description: "Bind runtime", id: "bindings", kind: "bindings" },
   ],
   installer: { reference: "shared-installer", sha256: "a".repeat(64) },
   neon: {
@@ -76,34 +75,35 @@ const preparedPlan = hostedOperatorPlanSchema.parse({
     projectId: context.target.projectId,
     sessionId: context.target.sessionId,
   },
+  version: 1,
 });
 const selection = {
-  version: 1 as const,
-  kind: "app-continuity-plan" as const,
+  actors: [{ actorId: "actor-one", organizationId: "organization-one" }],
   authority,
-  target: context.target,
+  gateway: {
+    environment: "preview" as const,
+    ownerId: "team",
+    projectId: "gateway-project",
+    publicOrigin: "https://gateway.example",
+  },
+  kind: "app-continuity-plan" as const,
   originalSetup: {
-    operationRef: "10000000-0000-4000-8000-000000000001",
-    planDigest: "c".repeat(64),
     approvalId: "setup-human",
     approvedByCallId: "setup-call",
+    operationRef: "10000000-0000-4000-8000-000000000001",
+    planDigest: "c".repeat(64),
   },
   preparedPlan,
   runtime: {
-    sandboxId: "owned-sandbox",
-    root: "/controlled/source",
-    projectId: "builder-project",
-    ownerId: "team",
     appPort: 3000,
     bridgePort: 3100,
-  },
-  gateway: {
-    projectId: "gateway-project",
     ownerId: "team",
-    environment: "preview" as const,
-    publicOrigin: "https://gateway.example",
+    projectId: "builder-project",
+    root: "/controlled/source",
+    sandboxId: "owned-sandbox",
   },
-  actors: [{ actorId: "actor-one", organizationId: "organization-one" }],
+  target: context.target,
+  version: 1 as const,
 };
 const makePlan = () =>
   hostedContinuityPlanSchema.parse({
@@ -115,57 +115,57 @@ const makePlan = () =>
 const plan = makePlan();
 const request = {
   action: "continuity" as const,
-  planRef: plan.planRef,
-  planDigest: continuityPlanDigest(plan),
   idempotencyKey: "request",
+  planDigest: continuityPlanDigest(plan),
+  planRef: plan.planRef,
 };
 const toolInput = { ...request, plan };
 const requested = (
   options: { toolName?: string; callId?: string; toolInput?: ContinuityApprovalToolInput } = {},
 ): MessageStreamEvent => ({
-  type: "input.requested",
-  meta: { at: "2026-10-20T00:00:00Z", id: "request-event" },
   data: {
+    requests: [
+      {
+        action: {
+          callId: options.callId ?? "continuity-call",
+          input: options.toolInput ?? toolInput,
+          kind: "tool-call",
+          toolName: options.toolName ?? "run-app-continuity-tests",
+        },
+        kind: "tool-approval",
+        prompt: "Approve this managed continuity run",
+        requestId: "human-request",
+      },
+    ],
     sequence: 1,
     stepIndex: 0,
     turnId: "turn",
-    requests: [
-      {
-        kind: "tool-approval",
-        requestId: "human-request",
-        prompt: "Approve this managed continuity run",
-        action: {
-          kind: "tool-call",
-          toolName: options.toolName ?? "run-app-continuity-tests",
-          callId: options.callId ?? "continuity-call",
-          input: options.toolInput ?? toolInput,
-        },
-      },
-    ],
   },
+  meta: { at: "2026-10-20T00:00:00Z", id: "request-event" },
+  type: "input.requested",
 });
 const settled = (
   owner = authority.ownerUserId,
   outcome: "approved" | "cancelled" = "approved",
   requestId = "human-request",
 ): MessageStreamEvent => ({
-  type: "approval.settled",
-  meta: { at: "2026-10-20T00:00:01Z", id: "settled-event" },
   data: {
+    outcome,
+    requestId,
+    responderPrincipalId: owner,
     sequence: 2,
     stepIndex: 0,
     turnId: "turn",
-    requestId,
-    responderPrincipalId: owner,
-    outcome,
   },
+  meta: { at: "2026-10-20T00:00:01Z", id: "settled-event" },
+  type: "approval.settled",
 });
 const capture = () =>
   createPrivateContinuityApprovalCapture({
-    plan,
-    request,
-    principal: { ...authority, scopes: ["autograph:send"] },
     callId: "continuity-call",
+    plan,
+    principal: { ...authority, scopes: ["autograph:send"] },
+    request,
   });
 describe("native private managed continuity approval", () => {
   it("requires an exact authored request followed by its authenticated owner settlement", () => {
@@ -210,9 +210,9 @@ describe("native private managed continuity approval", () => {
     }
     reader.observe(
       requested({
-        toolName: failure === "wrong tool" ? "prepare-app-hosted-runtime" : undefined,
         callId: failure === "wrong call" ? "different-call" : undefined,
         toolInput: changed,
+        toolName: failure === "wrong tool" ? "prepare-app-hosted-runtime" : undefined,
       }),
     );
     reader.observe(
@@ -283,8 +283,8 @@ describe("compact saved continuity request", () => {
   it("rejects missing reference fields, extra partial plans, and malformed intent paths", () => {
     const incomplete = {
       action: request.action,
-      planRef: request.planRef,
       idempotencyKey: request.idempotencyKey,
+      planRef: request.planRef,
     };
     expect(continuityApprovalToolInputSchema.safeParse(incomplete).success).toBe(false);
     expect(
@@ -303,8 +303,8 @@ describe("public continuity consent and exact private authority", () => {
     const projected = projectInstalledEveEvent(event, 3);
     expect(projected).toHaveLength(1);
     expect(projected[0]).toMatchObject({
-      type: "input.requested",
       request: { kind: "approval", requestId: "human-request" },
+      type: "input.requested",
     });
     expect(projected[0]).not.toHaveProperty("code", "confirmation_unavailable");
     const reader = capture();

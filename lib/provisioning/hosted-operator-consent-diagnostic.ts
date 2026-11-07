@@ -150,14 +150,14 @@ export const projectOperatorPlanningValidationInvariants = (
 };
 
 const operatorPlanningFailure = z.strictObject({
-  stage: operatorPlanStage,
-  errorClass: z.enum(["operator_error", "validation_error", "type_error", "unexpected"]),
   code: operatorPublicResultSchema.shape.code.unwrap().optional(),
-  sqlState: operatorPlanningSqlState.optional(),
-  validationInvariants: z.array(operatorPlanningValidationInvariant).optional(),
+  errorClass: z.enum(["operator_error", "validation_error", "type_error", "unexpected"]),
   nativeStoreFailure: z
     .enum(["connection_required", "provider_unavailable", "resource_mismatch"])
     .optional(),
+  sqlState: operatorPlanningSqlState.optional(),
+  stage: operatorPlanStage,
+  validationInvariants: z.array(operatorPlanningValidationInvariant).optional(),
 });
 type OperatorPlanningFailure = z.infer<typeof operatorPlanningFailure>;
 
@@ -184,7 +184,6 @@ const continuityPlanningStage = z.enum([
 ]);
 export type ContinuityPlanningStage = z.infer<typeof continuityPlanningStage>;
 const continuityPlanningFailure = z.strictObject({
-  stage: continuityPlanningStage,
   errorClass: z.enum([
     "operator_error",
     "validation_error",
@@ -195,6 +194,7 @@ const continuityPlanningFailure = z.strictObject({
   ]),
   httpStatus: z.number().int().min(100).max(599).optional(),
   signalAborted: z.boolean().optional(),
+  stage: continuityPlanningStage,
 });
 
 const exportPlanningStage = z.enum([
@@ -240,8 +240,8 @@ const exportPlanningStage = z.enum([
 export type ExportPlanningStage = z.infer<typeof exportPlanningStage>;
 export type ExportPlanningStageObserver = (stage: ExportPlanningStage) => void;
 const exportPlanningFailure = z.strictObject({
-  stage: exportPlanningStage,
   errorClass: z.enum(["operator_error", "validation_error", "type_error", "unexpected"]),
+  stage: exportPlanningStage,
 });
 
 /** Optional diagnostics cannot alter planning or authorization, including a throwing observer. */
@@ -257,6 +257,12 @@ export const advanceExportPlanningStage = (
 };
 
 const normalActorProofFailure = z.strictObject({
+  code: operatorPublicResultSchema.shape.code.unwrap().optional(),
+  contentTypeValid: z.boolean().optional(),
+  cookiePresent: z.boolean().optional(),
+  errorClass: operatorPlanningFailure.shape.errorClass.optional(),
+  httpStatus: z.number().int().min(100).max(599).optional(),
+  redirected: z.boolean().optional(),
   stage: z.enum([
     "authorization",
     "journal_read",
@@ -274,16 +280,21 @@ const normalActorProofFailure = z.strictObject({
     "proof_persistence",
     "result",
   ]),
-  cookiePresent: z.boolean().optional(),
-  httpStatus: z.number().int().min(100).max(599).optional(),
-  contentTypeValid: z.boolean().optional(),
-  redirected: z.boolean().optional(),
-  errorClass: operatorPlanningFailure.shape.errorClass.optional(),
-  code: operatorPublicResultSchema.shape.code.unwrap().optional(),
 });
 export type OperatorNormalActorProofFailure = z.infer<typeof normalActorProofFailure>;
 
 const runtimeIdentityFailure = z.strictObject({
+  reason: z.enum([
+    "read_failed",
+    "unavailable",
+    "scope_mismatch",
+    "actor_mismatch",
+    "session_mismatch",
+    "email_mismatch",
+    "expired",
+    "selected_organization_mismatch",
+    "membership_mismatch",
+  ]),
   stage: z.enum([
     "authority",
     "journal",
@@ -295,17 +306,6 @@ const runtimeIdentityFailure = z.strictObject({
     "identity",
     "membership",
     "final_authority",
-  ]),
-  reason: z.enum([
-    "read_failed",
-    "unavailable",
-    "scope_mismatch",
-    "actor_mismatch",
-    "session_mismatch",
-    "email_mismatch",
-    "expired",
-    "selected_organization_mismatch",
-    "membership_mismatch",
   ]),
 });
 export type OperatorRuntimeIdentityFailure = z.infer<typeof runtimeIdentityFailure>;
@@ -403,10 +403,11 @@ export const projectAuthStartupDiagnostic = (value: unknown): AuthStartupDiagnos
     }
     const code: unknown = Object.getOwnPropertyDescriptor(value, "domain_code")?.value;
     const parsedCode = authStartupDomainCode.safeParse(code);
-    return {
-      stage: parsedStage.data,
-      ...(parsedCode.success ? { domain_code: parsedCode.data } : {}),
-    };
+    const diagnostic: AuthStartupDiagnostic = { stage: parsedStage.data };
+    if (parsedCode.success) {
+      diagnostic.domain_code = parsedCode.data;
+    }
+    return diagnostic;
   } catch {
     return undefined;
   }
@@ -474,29 +475,32 @@ export const projectResourceReadbackDiagnostic = (
     const parsedReason = resourceReadbackReason.safeParse(reason);
     const sqlStateClass: unknown = Object.getOwnPropertyDescriptor(value, "sqlStateClass")?.value;
     const parsedClass = resourceReadbackSqlStateClass.safeParse(sqlStateClass);
-    return {
-      stage: parsedStage.data,
-      ...(parsedReason.success ? { reason: parsedReason.data } : {}),
-      ...(parsedClass.success ? { sqlStateClass: parsedClass.data } : {}),
-    };
+    const diagnostic: ResourceReadbackDiagnostic = { stage: parsedStage.data };
+    if (parsedReason.success) {
+      diagnostic.reason = parsedReason.data;
+    }
+    if (parsedClass.success) {
+      diagnostic.sqlStateClass = parsedClass.data;
+    }
+    return diagnostic;
   } catch {
     return undefined;
   }
 };
 
 const operatorExecutionFailure = operatorPlanningFailure
-  .omit({ stage: true, nativeStoreFailure: true })
+  .omit({ nativeStoreFailure: true, stage: true })
   .extend({
-    stage: operatorExecutionStage,
-    runtimeReadinessStage: operatorRuntimeReadinessStage.optional(),
     authStartup: z.unknown().optional(),
-    resourceReadback: z.unknown().optional(),
-    normalAuth: normalAuthClientFailureDiagnosticSchema.optional(),
+    commandExit: z.enum(["zero", "nonzero"]).optional(),
+    httpStatus: z.number().int().min(100).max(599).optional(),
     journalFailure: z.literal("normal_actor_journal_changed").optional(),
     mode: z.enum(["inspect", "execute"]).optional(),
-    httpStatus: z.number().int().min(100).max(599).optional(),
-    commandExit: z.enum(["zero", "nonzero"]).optional(),
+    normalAuth: normalAuthClientFailureDiagnosticSchema.optional(),
     protocol: z.enum(["incomplete", "unknown"]).optional(),
+    resourceReadback: z.unknown().optional(),
+    runtimeReadinessStage: operatorRuntimeReadinessStage.optional(),
+    stage: operatorExecutionStage,
     workerFailure: z
       .enum([
         "startup_rejected",
@@ -518,11 +522,17 @@ const operatorExecutionFailure = operatorPlanningFailure
       failure.workerFailure === "readback_unknown" && failure.mode === "inspect"
         ? projectResourceReadbackDiagnostic(resourceReadback)
         : undefined;
-    return {
-      ...failure,
-      ...(projected === undefined ? {} : { authStartup: projected }),
-      ...(readback === undefined ? {} : { resourceReadback: readback }),
-    };
+    const result: typeof failure & {
+      authStartup?: typeof projected;
+      resourceReadback?: typeof readback;
+    } = { ...failure };
+    if (projected !== undefined) {
+      result.authStartup = projected;
+    }
+    if (readback !== undefined) {
+      result.resourceReadback = readback;
+    }
+    return result;
   });
 export type OperatorExecutionFailure = z.infer<typeof operatorExecutionFailure>;
 
@@ -539,11 +549,9 @@ const hostedEnvironmentBindingStage = z.enum([
   "readback",
 ]);
 const hostedEnvironmentBindingFailure = z.strictObject({
-  stage: hostedEnvironmentBindingStage,
-  requestTarget: z.enum(["environment_row", "project_settings"]).optional(),
-  trustedSourcesVisibility: z.enum(["absent", "null", "present"]).optional(),
-  approvedSourcePresent: z.boolean().optional(),
   approvedPairCovered: z.boolean().optional(),
+  approvedSourcePresent: z.boolean().optional(),
+  httpStatus: z.number().int().min(100).max(599).optional(),
   providerCode: z
     .enum([
       "not_found",
@@ -567,7 +575,9 @@ const hostedEnvironmentBindingFailure = z.strictObject({
     "checkpoint_failed",
     "state_conflict",
   ]),
-  httpStatus: z.number().int().min(100).max(599).optional(),
+  requestTarget: z.enum(["environment_row", "project_settings"]).optional(),
+  stage: hostedEnvironmentBindingStage,
+  trustedSourcesVisibility: z.enum(["absent", "null", "present"]).optional(),
 });
 export type HostedEnvironmentBindingFailure = z.infer<typeof hostedEnvironmentBindingFailure>;
 
@@ -584,7 +594,7 @@ const runtimePreparationStage = z.enum([
 ]);
 export type RuntimePreparationStage = z.infer<typeof runtimePreparationStage>;
 const runtimePreparationFailure = z.strictObject({
-  stage: runtimePreparationStage,
+  code: operatorPublicResultSchema.shape.code.unwrap().optional(),
   errorClass: z.enum([
     "operator_error",
     "validation_error",
@@ -593,7 +603,6 @@ const runtimePreparationFailure = z.strictObject({
     "timeout_error",
     "unexpected",
   ]),
-  code: operatorPublicResultSchema.shape.code.unwrap().optional(),
   moduleCode: z
     .enum([
       "ERR_MODULE_NOT_FOUND",
@@ -602,6 +611,7 @@ const runtimePreparationFailure = z.strictObject({
       "ERR_UNKNOWN_FILE_EXTENSION",
     ])
     .optional(),
+  stage: runtimePreparationStage,
 });
 
 const boundary = z.enum(["builder", "operator"]);
@@ -773,6 +783,7 @@ export const maintenanceUriMismatchSchema = z.enum([
 export type OperatorMaintenanceUriMismatch = z.infer<typeof maintenanceUriMismatchSchema>;
 
 const neonMcpFailureSchema = z.strictObject({
+  httpStatus: z.number().int().min(100).max(599).optional(),
   phase: z.enum([
     "tool_request",
     "tool_error",
@@ -794,7 +805,6 @@ const neonMcpFailureSchema = z.strictObject({
       z.literal(-32_002),
     ])
     .optional(),
-  httpStatus: z.number().int().min(100).max(599).optional(),
   uriMismatch: z.array(maintenanceUriMismatchSchema).optional(),
 });
 export type OperatorNeonMcpFailure = z.infer<typeof neonMcpFailureSchema>;
@@ -943,7 +953,14 @@ export const projectOperatorGatewayProviderFailure = (payload: unknown) => {
 };
 
 const gatewayBindingsDiagnostic = z.strictObject({
+  httpStatus: z.number().int().min(100).max(599).optional(),
+  method: z.enum(["GET", "POST", "PATCH"]).optional(),
+  missingApprovedPairCount: z.number().int().nonnegative().optional(),
   mode: z.enum(["bind", "reconcile", "verify"]),
+  providerCode: gatewayProviderCode.optional(),
+  providerTerms: z.array(gatewayProviderTerm).optional(),
+  requestTarget: z.enum(["project_environment", "project_settings"]).optional(),
+  result: z.enum(["bound", "applied", "absent", "unknown", "failed"]),
   stage: z.enum([
     "context",
     "authority",
@@ -966,10 +983,6 @@ const gatewayBindingsDiagnostic = z.strictObject({
     "write_readback",
     "final_readback",
   ]),
-  method: z.enum(["GET", "POST", "PATCH"]).optional(),
-  requestTarget: z.enum(["project_environment", "project_settings"]).optional(),
-  trustedSourcesVisibility: z.enum(["absent", "null", "present"]).optional(),
-  missingApprovedPairCount: z.number().int().nonnegative().optional(),
   statusCategory: z
     .enum([
       "success",
@@ -982,15 +995,22 @@ const gatewayBindingsDiagnostic = z.strictObject({
       "no_response",
     ])
     .optional(),
-  httpStatus: z.number().int().min(100).max(599).optional(),
-  providerCode: gatewayProviderCode.optional(),
-  providerTerms: z.array(gatewayProviderTerm).optional(),
+  trustedSourcesVisibility: z.enum(["absent", "null", "present"]).optional(),
   validationFields: z.array(gatewayValidationField).optional(),
-  result: z.enum(["bound", "applied", "absent", "unknown", "failed"]),
 });
 export type OperatorGatewayBindingsDiagnostic = z.infer<typeof gatewayBindingsDiagnostic>;
 
 const gatewayDeliveryDiagnostic = z.strictObject({
+  errorClass: operatorPlanningFailure.shape.errorClass.optional(),
+  httpStatus: z.number().int().min(100).max(599).optional(),
+  method: z.enum(["GET", "POST"]).optional(),
+  phase: z
+    .enum(["authority", "credential", "fetch", "http_response", "json_decode", "response_schema"])
+    .optional(),
+  providerCode: gatewayProviderCode.optional(),
+  providerTerms: z.array(gatewayProviderTerm).optional(),
+  publicCode: operatorPublicResultSchema.shape.code.unwrap().optional(),
+  result: z.enum(["applied", "retryable", "unknown"]),
   stage: z.enum([
     "context",
     "reconciliation",
@@ -1006,22 +1026,13 @@ const gatewayDeliveryDiagnostic = z.strictObject({
     "deployment_readback",
     "checkpoint",
   ]),
-  phase: z
-    .enum(["authority", "credential", "fetch", "http_response", "json_decode", "response_schema"])
-    .optional(),
-  method: z.enum(["GET", "POST"]).optional(),
-  httpStatus: z.number().int().min(100).max(599).optional(),
-  result: z.enum(["applied", "retryable", "unknown"]),
-  errorClass: operatorPlanningFailure.shape.errorClass.optional(),
-  publicCode: operatorPublicResultSchema.shape.code.unwrap().optional(),
-  providerCode: gatewayProviderCode.optional(),
-  providerTerms: z.array(gatewayProviderTerm).optional(),
   validationFields: z.array(gatewayValidationField).optional(),
 });
 export type OperatorGatewayDeliveryDiagnostic = z.infer<typeof gatewayDeliveryDiagnostic>;
 
 const inventoryReadFailure = z.strictObject({
-  target: z.enum(["inventory", "app", "gateway", "operator"]),
+  errorClass: operatorPlanningFailure.shape.errorClass.optional(),
+  httpStatus: z.number().int().min(100).max(599).optional(),
   operation: z.enum([
     "owner",
     "credential",
@@ -1034,9 +1045,8 @@ const inventoryReadFailure = z.strictObject({
     "store_detail",
   ]),
   phase: z.enum(["owner", "credential", "fetch", "http_response", "json_decode", "schema"]),
-  httpStatus: z.number().int().min(100).max(599).optional(),
-  errorClass: operatorPlanningFailure.shape.errorClass.optional(),
   publicCode: operatorPublicResultSchema.shape.code.unwrap().optional(),
+  target: z.enum(["inventory", "app", "gateway", "operator"]),
 });
 export type OperatorInventoryReadFailure = z.infer<typeof inventoryReadFailure>;
 type InventoryReadDescriptor = Omit<OperatorInventoryReadFailure, "errorClass" | "publicCode">;
@@ -1064,9 +1074,30 @@ const metadata = z.strictObject({
       urlValid: z.boolean(),
     })
     .optional(),
+  continuityPlanningFailure: continuityPlanningFailure.optional(),
+  executionFailure: operatorExecutionFailure.optional(),
+  exportPlanningFailure: exportPlanningFailure.optional(),
+  gatewayBindings: gatewayBindingsDiagnostic.optional(),
+  gatewayDelivery: gatewayDeliveryDiagnostic.optional(),
+  hostedEnvironmentBindingFailure: hostedEnvironmentBindingFailure.optional(),
   httpStatus: z.number().int().min(100).max(599).optional(),
+  inventoryReadFailure: inventoryReadFailure.optional(),
   nativeNotFound: z.boolean().optional(),
   neonMcpFailure: neonMcpFailureSchema.optional(),
+  normalActorProofFailure: normalActorProofFailure.optional(),
+  operatorAction: z
+    .enum([
+      "plan",
+      "execute",
+      "status",
+      "bindings",
+      "auth-identity-input",
+      "resolve-preview-target",
+      "neon-authorization",
+    ])
+    .optional(),
+  operatorCode: operatorPublicResultSchema.shape.code.unwrap().optional(),
+  operatorResponse: z.enum(["decode_failed", "schema_invalid", "blocked"]).optional(),
   outcome,
   ownerConfiguration: z
     .strictObject({
@@ -1084,39 +1115,18 @@ const metadata = z.strictObject({
       module: z.enum(["database", "handoff", "session", "membership"]),
     })
     .optional(),
-  operatorAction: z
-    .enum([
-      "plan",
-      "execute",
-      "status",
-      "bindings",
-      "auth-identity-input",
-      "resolve-preview-target",
-      "neon-authorization",
-    ])
-    .optional(),
-  operatorResponse: z.enum(["decode_failed", "schema_invalid", "blocked"]).optional(),
-  operatorCode: operatorPublicResultSchema.shape.code.unwrap().optional(),
-  preparationStage: runtimePreparationStage.optional(),
-  preparationFailure: runtimePreparationFailure.optional(),
   phase,
   planningFailure: operatorPlanningFailure.optional(),
-  continuityPlanningFailure: continuityPlanningFailure.optional(),
-  exportPlanningFailure: exportPlanningFailure.optional(),
-  normalActorProofFailure: normalActorProofFailure.optional(),
-  runtimeIdentityFailure: runtimeIdentityFailure.optional(),
-  executionFailure: operatorExecutionFailure.optional(),
-  hostedEnvironmentBindingFailure: hostedEnvironmentBindingFailure.optional(),
-  gatewayBindings: gatewayBindingsDiagnostic.optional(),
-  gatewayDelivery: gatewayDeliveryDiagnostic.optional(),
-  inventoryReadFailure: inventoryReadFailure.optional(),
   planningMismatch: z
     .strictObject({
       boundary: operatorPlanningMismatchBoundary,
       fields: z.array(operatorPlanningMismatchField),
     })
     .optional(),
+  preparationFailure: runtimePreparationFailure.optional(),
+  preparationStage: runtimePreparationStage.optional(),
   probeVariant: z.enum(["both_headers", "trusted_oidc_only"]).optional(),
+  runtimeIdentityFailure: runtimeIdentityFailure.optional(),
   stage,
   vercelError: z.literal("TRUSTED_SOURCES_ENVIRONMENT_MISMATCH").optional(),
   workloadFailure: operatorWorkloadFailureSchema.optional(),
@@ -1245,10 +1255,10 @@ export const reportOperatorNormalActorProofFailure = (
       sink,
     )({
       boundary: "operator",
+      normalActorProofFailure: projected,
+      outcome: "setup_unavailable",
       phase: "inline",
       stage: "operator_request",
-      outcome: "setup_unavailable",
-      normalActorProofFailure: projected,
     });
   } catch {
     /* Reporting cannot change collection, authority or error behavior. */
@@ -1264,8 +1274,8 @@ export const reportOperatorRuntimeIdentityFailure = (
 ): void => {
   try {
     const projected = runtimeIdentityFailure.safeParse({
-      stage: ownDiagnosticValue(failure, "stage"),
       reason: ownDiagnosticValue(failure, "reason"),
+      stage: ownDiagnosticValue(failure, "stage"),
     });
     if (!projected.success) {
       return;
@@ -1275,10 +1285,10 @@ export const reportOperatorRuntimeIdentityFailure = (
       sink,
     )({
       boundary: "operator",
-      phase: "inline",
-      stage: "operator_request",
       outcome: "setup_unavailable",
+      phase: "inline",
       runtimeIdentityFailure: projected.data,
+      stage: "operator_request",
     });
   } catch {
     /* Reporting cannot change the original runtime handoff rejection. */
@@ -1301,10 +1311,10 @@ export const reportHostedEnvironmentBindingFailure = (
       sink,
     )({
       boundary: "operator",
+      hostedEnvironmentBindingFailure: parsed.data,
+      outcome: "setup_unavailable",
       phase: "complete",
       stage: "operator_request",
-      outcome: "setup_unavailable",
-      hostedEnvironmentBindingFailure: parsed.data,
     });
   } catch {
     /* Reporting cannot change binding behavior. */
@@ -1330,10 +1340,10 @@ export const reportOperatorPlanningMismatch = (
       sink,
     )({
       boundary: "operator",
-      phase: "inline",
-      stage: "operator_request",
       outcome: "setup_unavailable",
+      phase: "inline",
       planningMismatch: { boundary: mismatchBoundary, fields },
+      stage: "operator_request",
     });
   } catch {
     /* Diagnostics never change planning or authorization behavior. */
@@ -1399,10 +1409,10 @@ export const reportExportPlanningFailure = (
       sink,
     )({
       boundary: planStage.startsWith("tool_") ? "builder" : "operator",
+      exportPlanningFailure: { errorClass, stage: planStage },
+      outcome: "setup_unavailable",
       phase: "inline",
       stage: "operator_request",
-      outcome: "setup_unavailable",
-      exportPlanningFailure: { stage: planStage, errorClass },
     });
   } catch {
     /* Diagnostics cannot replace the original rejection. */
@@ -1419,8 +1429,8 @@ export const reportContinuityPlanningFailure = (
   requestSignal?: AbortSignal,
 ): void => {
   const failure: z.infer<typeof continuityPlanningFailure> = {
-    stage: planStage,
     errorClass: "unexpected",
+    stage: planStage,
   };
   try {
     if (error instanceof HostedOperatorError) {
@@ -1443,10 +1453,10 @@ export const reportContinuityPlanningFailure = (
     )({
       boundary:
         planStage.startsWith("tool_") || planStage.startsWith("client_") ? "builder" : "operator",
+      continuityPlanningFailure: failure,
+      outcome: "setup_unavailable",
       phase: "inline",
       stage: "operator_request",
-      outcome: "setup_unavailable",
-      continuityPlanningFailure: failure,
     });
   } catch {
     /* Diagnostics never change continuity planning. */
@@ -1480,8 +1490,8 @@ export const observeOperatorPlanStage = async <T>(
     return await run();
   } catch (error) {
     const planningFailure: OperatorPlanningFailure = {
-      stage: planStage,
       errorClass: "unexpected",
+      stage: planStage,
     };
     try {
       if (error instanceof HostedOperatorError) {
@@ -1515,10 +1525,10 @@ export const observeOperatorPlanStage = async <T>(
         sink,
       )({
         boundary: "operator",
-        phase: "inline",
-        stage: "operator_request",
         outcome: "setup_unavailable",
+        phase: "inline",
         planningFailure,
+        stage: "operator_request",
       });
     } catch {
       /* Reporting cannot change the original rejection. */
@@ -1591,10 +1601,10 @@ export const reportOperatorExecutionFailure = (
       sink,
     )({
       boundary: "operator",
+      executionFailure,
+      outcome: "setup_unavailable",
       phase: "inline",
       stage: "operator_request",
-      outcome: "setup_unavailable",
-      executionFailure,
     });
   } catch {
     /* Reporting cannot change the original rejection. */
@@ -1663,10 +1673,10 @@ export const reportOperatorInventoryReadFailure = (
       sink,
     )({
       boundary: "operator",
+      inventoryReadFailure: failure,
+      outcome: "setup_unavailable",
       phase: "inline",
       stage: "operator_request",
-      outcome: "setup_unavailable",
-      inventoryReadFailure: failure,
     });
   } catch {
     /* Hostile descriptors and diagnostics never change provider read behavior. */
@@ -1736,10 +1746,10 @@ export const reportOperatorNeonMcpFailure = (
       sink,
     )({
       boundary: "operator",
+      neonMcpFailure: failure,
+      outcome: "setup_unavailable",
       phase: "inline",
       stage: "operator_request",
-      outcome: "setup_unavailable",
-      neonMcpFailure: failure,
     });
   } catch {
     /* Diagnostics cannot change credential authorization or expose hostile exception properties. */
@@ -1755,8 +1765,8 @@ export const reportRuntimePreparationFailure = (
   sink?: HostedOperatorConsentDiagnosticSink,
 ): void => {
   const failure: z.infer<typeof runtimePreparationFailure> = {
-    stage: preparationStage,
     errorClass: "unexpected",
+    stage: preparationStage,
   };
   try {
     if (error instanceof HostedOperatorError) {
@@ -1795,8 +1805,8 @@ export const reportRuntimePreparationFailure = (
       boundary: "builder",
       outcome: "setup_unavailable",
       phase: "inline",
-      stage: "operator_request",
       preparationFailure: failure,
+      stage: "operator_request",
     });
   } catch {
     /* Failure reporting is advisory. */
@@ -1813,8 +1823,8 @@ export const reportRuntimePreparationStarted = (
       boundary: "builder",
       outcome: "started",
       phase: "inline",
-      stage: "operator_request",
       preparationStage,
+      stage: "operator_request",
     });
   } catch {
     /* Diagnostics never prevent entry into the original step. */

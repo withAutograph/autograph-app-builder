@@ -19,37 +19,37 @@ const tokenFor = (project: string) =>
     Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url"),
     Buffer.from(
       JSON.stringify({
+        exp: Math.floor(Date.now() / 1000) + 3600,
         owner_id: "team",
         project_id: project,
-        exp: Math.floor(Date.now() / 1000) + 3600,
       }),
     ).toString("base64url"),
     "synthetic-signature",
   ].join(".");
 const resumed = () =>
   Response.json({
+    resumed: true,
+    routes: [],
     sandbox: {
+      createdAt: 1,
+      currentSessionId: "owned-session",
       name: "owned-name",
       persistent: true,
       status: "running",
-      currentSessionId: "owned-session",
-      createdAt: 1,
       updatedAt: 1,
     },
     session: {
+      createdAt: 1,
+      cwd: "/workspace",
       id: "owned-session",
       memory: 1024,
-      vcpus: 1,
       region: "iad1",
-      timeout: 60_000,
-      status: "running",
       requestedAt: 1,
-      createdAt: 1,
+      status: "running",
+      timeout: 60_000,
       updatedAt: 1,
-      cwd: "/workspace",
+      vcpus: 1,
     },
-    routes: [],
-    resumed: true,
   });
 
 afterEach(() => {
@@ -58,32 +58,32 @@ afterEach(() => {
 
 describe("request-owned Sandbox management fetch", () => {
   it("pins the verified bearer and retains the original URL and unrelated headers/options", async () => {
-    const raw = vi.fn<typeof fetch>(() => Promise.resolve(response()));
+    const raw = vi.fn<typeof fetch>(async () => response());
     const token = vi.fn(() => "verified-builder");
     const adapted = createHostedOperatorSandboxFetch(token, raw);
     const controller = new AbortController();
     const body = new ReadableStream<Uint8Array>();
     const dispatcher = { owned: true };
     const init: RequestInit & { dispatcher: typeof dispatcher; duplex: "half" } = {
-      method: "POST",
-      headers: { AUTHORIZATION: "ambient-operator", "x-existing": "retained" },
       body,
-      signal: controller.signal,
       dispatcher,
       duplex: "half",
+      headers: { AUTHORIZATION: "ambient-operator", "x-existing": "retained" },
+      method: "POST",
       redirect: "follow",
+      signal: controller.signal,
     };
     await adapted(management, init);
     expect(raw).toHaveBeenCalledOnce();
     expect(raw.mock.calls[0]?.[0]).toBe(management);
     const forwarded = raw.mock.calls[0]?.[1];
     expect(forwarded).toMatchObject({
-      method: "POST",
       body,
-      signal: controller.signal,
       dispatcher,
       duplex: "half",
+      method: "POST",
       redirect: "manual",
+      signal: controller.signal,
     });
     expect(new Headers(forwarded?.headers).get("authorization")).toBe("Bearer verified-builder");
     expect(new Headers(forwarded?.headers).get("x-existing")).toBe("retained");
@@ -93,12 +93,12 @@ describe("request-owned Sandbox management fetch", () => {
   });
 
   it("preserves Request identity/body/signal and native init header replacement semantics", async () => {
-    const raw = vi.fn<typeof fetch>(() => Promise.resolve(response()));
+    const raw = vi.fn<typeof fetch>(async () => response());
     const adapted = createHostedOperatorSandboxFetch(() => "verified-builder", raw);
     const request = new Request(management, {
-      method: "POST",
       body: "unchanged",
-      headers: { "x-request": "original", authorization: "ambient" },
+      headers: { authorization: "ambient", "x-request": "original" },
+      method: "POST",
     });
     await adapted(request);
     expect(raw.mock.calls[0]?.[0]).toBe(request);
@@ -121,7 +121,7 @@ describe("request-owned Sandbox management fetch", () => {
     "https://vercel.com/api/v2/sandboxes/sessions/session/cmd",
     "https://vercel.com/api/v2/sandboxes/sessions/session/fs/read",
   ])("covers the supported management namespace %s", async (url) => {
-    const raw = vi.fn<typeof fetch>(() => Promise.resolve(response()));
+    const raw = vi.fn<typeof fetch>(async () => response());
     const input = new URL(url);
     await createHostedOperatorSandboxFetch(() => "verified-builder", raw)(input);
     expect(raw.mock.calls[0]?.[0]).toBe(input);
@@ -145,7 +145,7 @@ describe("request-owned Sandbox management fetch", () => {
     "wss://runtime.test/interactive",
     "/relative-input",
   ])("leaves foreign or unsupported destinations unchanged: %s", async (input) => {
-    const raw = vi.fn<typeof fetch>(() => Promise.resolve(response()));
+    const raw = vi.fn<typeof fetch>(async () => response());
     const token = vi.fn(() => "verified-builder");
     const init = {
       headers: { authorization: "original-destination-credential" },
@@ -158,7 +158,7 @@ describe("request-owned Sandbox management fetch", () => {
   });
 
   it("keeps concurrent request workloads isolated and resolves only their own live carrier", async () => {
-    const raw = vi.fn<typeof fetch>(() => Promise.resolve(response()));
+    const raw = vi.fn<typeof fetch>(async () => response());
     let first = "first-builder";
     const a = createHostedOperatorSandboxFetch(() => first, raw);
     const b = createHostedOperatorSandboxFetch(() => "second-builder", raw);
@@ -172,10 +172,10 @@ describe("request-owned Sandbox management fetch", () => {
 
   it("does not follow redirects and preserves fetch rejection and cancellation identity", async () => {
     const redirect = new Response(null, {
-      status: 302,
       headers: { location: "https://foreign.test/target" },
+      status: 302,
     });
-    const raw = vi.fn<typeof fetch>(() => Promise.resolve(redirect));
+    const raw = vi.fn<typeof fetch>().mockResolvedValue(redirect);
     const adapted = createHostedOperatorSandboxFetch(() => "verified-builder", raw);
     expect(await adapted(management)).toBe(redirect);
     expect(raw.mock.calls[0]?.[1]?.redirect).toBe("manual");
@@ -191,36 +191,34 @@ describe("request-owned Sandbox management fetch", () => {
     const builder = tokenFor("builder");
     const operator = tokenFor("operator");
     vi.stubEnv("VERCEL_OIDC_TOKEN", operator);
-    const raw = vi.fn<typeof fetch>((input) =>
-      Promise.resolve(
-        requestUrl(input).includes("/fs/read")
-          ? new Response("owned bytes", { headers: { "content-type": "application/octet-stream" } })
-          : resumed(),
-      ),
+    const raw = vi.fn<typeof fetch>(async (input) =>
+      requestUrl(input).includes("/fs/read")
+        ? new Response("owned bytes", { headers: { "content-type": "application/octet-stream" } })
+        : resumed(),
     );
     const controller = new AbortController();
     // The same SDK call without the adapter demonstrates its supported pre-fetch replacement.
     await Sandbox.get({
+      fetch: raw,
       name: "owned-name",
-      resume: true,
       projectId: "builder",
+      resume: true,
+      signal: controller.signal,
       teamId: "team",
       token: builder,
-      fetch: raw,
-      signal: controller.signal,
     });
     expect(new Headers(raw.mock.calls[0]?.[1]?.headers).get("authorization")).toBe(
       `Bearer ${operator}`,
     );
     raw.mockClear();
     const sandbox = await Sandbox.get({
+      fetch: createHostedOperatorSandboxFetch(() => builder, raw),
       name: "owned-name",
-      resume: true,
       projectId: "builder",
+      resume: true,
+      signal: controller.signal,
       teamId: "team",
       token: builder,
-      fetch: createHostedOperatorSandboxFetch(() => builder, raw),
-      signal: controller.signal,
     });
     expect(sandbox.name).toBe("owned-name");
     const url = new URL(requestUrl(raw.mock.calls[0]?.[0]));
@@ -243,18 +241,17 @@ describe("request-owned Sandbox management fetch", () => {
   });
 
   it("lets the installed SDK surface management redirects as its original APIError status", async () => {
-    const raw = vi.fn<typeof fetch>(() =>
-      Promise.resolve(
-        new Response(null, { status: 307, headers: { location: "https://foreign.test/target" } }),
-      ),
+    const raw = vi.fn<typeof fetch>(
+      async () =>
+        new Response(null, { headers: { location: "https://foreign.test/target" }, status: 307 }),
     );
     const result = Sandbox.get({
+      fetch: createHostedOperatorSandboxFetch(() => "synthetic-builder", raw),
       name: "owned-name",
-      resume: true,
       projectId: "builder",
+      resume: true,
       teamId: "team",
       token: "synthetic-builder",
-      fetch: createHostedOperatorSandboxFetch(() => "synthetic-builder", raw),
     });
     await expect(result).rejects.toBeInstanceOf(APIError);
     await expect(result).rejects.toMatchObject({ response: { status: 307 } });

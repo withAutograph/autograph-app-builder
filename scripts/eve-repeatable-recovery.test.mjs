@@ -11,7 +11,7 @@ import { authorizeRepeatablePrivateApplyCalls } from "../lib/eve/native-recovery
 
 const require = createRequire(import.meta.url);
 const eve = path.dirname(require.resolve("eve/package.json"));
-const load = (name) => import(pathToFileURL(path.join(eve, "dist/src", name)).href);
+const load = async (name) => await import(pathToFileURL(path.join(eve, "dist/src", name)).href);
 const { createTerminalRecoveryCandidateCollector, readTerminalRecoveryCandidate } = await load(
   "execution/session/recovery-candidate.js",
 );
@@ -29,189 +29,188 @@ const logical = "logical-session";
 const owner = "physical-owner";
 const callId = "native-call";
 const result = {
-  type: "tool-result",
+  output: { type: "text", value: "actual-deferred-result" },
   toolCallId: "deferred-call",
   toolName: "deferred",
-  output: { type: "text", value: "actual-deferred-result" },
+  type: "tool-result",
 };
 const approval = (approved = true) => ({
-  type: "tool-approval-response",
   approvalId: "native-approval",
   approved,
+  type: "tool-approval-response",
 });
 const history = (tail = "mixed", approved = true) => [
   {
-    role: "assistant",
     content: [
       {
-        type: "tool-call",
+        input: { value: "original-input" },
         toolCallId: callId,
         toolName: "native",
-        input: { value: "original-input" },
+        type: "tool-call",
       },
-      { type: "tool-approval-request", approvalId: "native-approval", toolCallId: callId },
-      { type: "tool-call", toolCallId: "deferred-call", toolName: "deferred", input: {} },
+      { approvalId: "native-approval", toolCallId: callId, type: "tool-approval-request" },
+      { input: {}, toolCallId: "deferred-call", toolName: "deferred", type: "tool-call" },
     ],
+    role: "assistant",
   },
   ...(tail === "mixed"
     ? [
-        { role: "tool", content: [approval(approved)] },
-        { role: "tool", content: [result] },
+        { content: [approval(approved)], role: "tool" },
+        { content: [result], role: "tool" },
       ]
-    : [{ role: "tool", content: [approval(approved), result] }]),
+    : [{ content: [approval(approved), result], role: "tool" }]),
 ];
 const fixture = async (options = {}) => {
   let session = {
-    sessionId: logical,
-    continuationToken: "original-continuation",
-    rootSessionId: logical,
     agent: {
+      modelReference: { id: "synthetic", provider: "test" },
       system: "Original brief",
       tools: [],
-      modelReference: { id: "synthetic", provider: "test" },
     },
-    compaction: { threshold: 1e6, recentWindowSize: 10 },
+    compaction: { recentWindowSize: 10, threshold: 1e6 },
+    continuationToken: "original-continuation",
+    history: options.history ?? history(),
+    rootSessionId: logical,
+    sessionId: logical,
     state: {
-      "fixture.grant": { original: true, cancelled: false },
-      "fixture.app": { exact: "latest-app" },
       "eve.harness.emission": {
-        sessionStarted: true,
         sequence: 5,
+        sessionStarted: true,
         stepIndex: 4,
         turnId: "original-turn",
       },
+      "fixture.app": { exact: "latest-app" },
+      "fixture.grant": { cancelled: false, original: true },
     },
-    history: options.history ?? history(),
   };
   if (options.pending === "coordination") {
     session = setPendingCoordinationBatch({
-      session,
+      event: { sequence: 5, stepIndex: 4, turnId: "original-turn" },
+      responseMessages: [],
       runtimeActions: [],
+      session,
       tasks: [
         {
-          kind: "workflow-task",
           callId,
-          toolName: "native",
           input: { value: "original-input" },
+          kind: "workflow-task",
+          toolName: "native",
           workflowId: "workflow:native",
         },
       ],
-      responseMessages: [],
-      event: { sequence: 5, stepIndex: 4, turnId: "original-turn" },
     });
   }
   if (options.pending === "human") {
     session = appendPendingInputBatch({
-      session,
-      responseMessages: [],
+      event: { sequence: 5, stepIndex: 4, turnId: "original-turn" },
       requests: [
         {
-          requestId: "request",
           action: {
-            kind: "tool-call",
             callId,
-            toolName: "native",
             input: { value: "original-input" },
+            kind: "tool-call",
+            toolName: "native",
           },
+          requestId: "request",
         },
       ],
-      event: { sequence: 5, stepIndex: 4, turnId: "original-turn" },
+      responseMessages: [],
+      session,
     });
   }
   const pair = {
-    sessionState: createDurableSessionState({ session }),
     serializedContext: {
       "eve.sessionId": logical,
       "fixture.authority": { exact: "original-owner" },
       ...options.context,
     },
+    sessionState: createDurableSessionState({ session }),
   };
   const step = {
+    input: await serialization.dehydrateStepArguments({ args: [pair], closureVars: [] }, owner),
     runId: owner,
+    status: "completed",
     stepId: "finalizer",
     stepName: "step//eve//terminateChildSessionsStep",
-    status: "completed",
-    input: await serialization.dehydrateStepArguments({ args: [pair], closureVars: [] }, owner),
   };
   const world = {
-    runs: { get: () => Promise.resolve({ runId: owner, status: "completed" }) },
     events: {
-      list: () =>
-        Promise.resolve({
-          data: [
-            {
-              runId: owner,
-              eventId: "evnt_00000000000000000000000002",
-              correlationId: step.stepId,
-              eventType: "step_completed",
-              eventData: { stepName: step.stepName },
-            },
-          ],
-          hasMore: false,
-        }),
+      list: async () => ({
+        data: [
+          {
+            correlationId: step.stepId,
+            eventData: { stepName: step.stepName },
+            eventId: "evnt_00000000000000000000000002",
+            eventType: "step_completed",
+            runId: owner,
+          },
+        ],
+        hasMore: false,
+      }),
     },
-    steps: { get: () => Promise.resolve(step) },
+    runs: { get: async () => ({ runId: owner, status: "completed" }) },
+    steps: { get: async () => step },
   };
   const collect = createTerminalRecoveryCandidateCollector({
-    getWorld: () => Promise.resolve(world),
-    resolveRunEncryptionKey: () => Promise.resolve(),
+    getWorld: async () => world,
     hydrateStepArguments: (value, runId, key) =>
       serialization.hydrateStepArguments(value, runId, key, []),
     hydrateStepReturnValue: (value, runId, key) =>
       serialization.hydrateStepReturnValue(value, runId, key),
+    now: () => 0,
     readDurableSession,
-    requireEventSlot: (id) => Number(id.slice(5)),
     async *readNativeEvents() {
       yield* options.nativeEvents ?? [];
     },
-    now: () => 0,
+    requireEventSlot: (id) => Number(id.slice(5)),
+    resolveRunEncryptionKey: async () => {},
   });
   const collected = await collect({
-    binding: { ownerRunId: owner, logicalSessionId: logical },
-    authorizeOwner: () => Promise.resolve(),
+    authorizeOwner: async () => {},
+    binding: { logicalSessionId: logical, ownerRunId: owner },
   });
   assert.equal(collected.kind, "candidate");
   const payload = readTerminalRecoveryCandidate(collected.candidate);
-  return { handle: collected.candidate, payload, pair };
+  return { handle: collected.candidate, pair, payload };
 };
 const runNextModel = async (ready) => {
   const session = readDurableSession(ready.checkpointCore.sessionState);
   let executions = 0;
   let requests = 0;
   const model = new MockLanguageModelV4({
-    doGenerate: ({ prompt }) => {
+    doGenerate: async ({ prompt }) => {
       requests += 1;
       const summary = summarizeModelProtocol(prompt);
       assert.equal(summary.missingResultCount, 0);
-      return Promise.resolve({
-        content: [{ type: "text", text: "continued" }],
-        finishReason: { unified: "stop", raw: "stop" },
+      return {
+        content: [{ text: "continued", type: "text" }],
+        finishReason: { raw: "stop", unified: "stop" },
         usage: { inputTokens: { total: 1 }, outputTokens: { total: 1 } },
         warnings: [],
-      });
+      };
     },
   });
   const nativeTool = tool({
-    inputSchema: z.object({ value: z.string() }),
     execute: (value) => {
       executions += 1;
       assert.equal(value.value, "original-input");
       return "actual-native-output";
     },
+    inputSchema: z.object({ value: z.string() }),
   });
   const agent = new ToolLoopAgent({
     model,
     tools: {
       apply_app_creation: nativeTool,
+      deferred: tool({ inputSchema: z.object({}) }),
       native: tool({
-        inputSchema: z.object({ value: z.string() }),
         execute: (value) => {
           executions += 1;
           assert.equal(value.value, "original-input");
           return "actual-native-output";
         },
+        inputSchema: z.object({ value: z.string() }),
       }),
-      deferred: tool({ inputSchema: z.object({}) }),
     },
   });
   await agent.generate({ messages: session.history });
@@ -223,9 +222,9 @@ test("mixed retained call/approval/deferred result is uncertain before any inval
   const before = JSON.stringify(f.payload);
   const reconciled = await reconcileTerminalRecoveryCandidate(f.handle);
   assert.deepEqual(reconciled, {
+    callId,
     kind: "uncertain",
     reason: "uncommitted-action-dispatch",
-    callId,
   });
   assert.equal(JSON.stringify(f.payload), before);
 });
@@ -233,11 +232,11 @@ test("mixed retained call/approval/deferred result is uncertain before any inval
 test("a genuine result already retained pairs the call and is not executed again", async () => {
   const messages = history();
   messages.at(-1).content.push({
-    type: "tool-result",
-    toolCallId: callId,
-    toolName: "native",
     output: { type: "text", value: "real-retained-native-output" },
     providerOptions: { openai: { itemId: "retained-provider-metadata" } },
+    toolCallId: callId,
+    toolName: "native",
+    type: "tool-result",
   });
   const f = await fixture({ history: messages });
   const ready = await reconcileTerminalRecoveryCandidate(f.handle);
@@ -284,25 +283,25 @@ test("emitted native result alone never becomes a committed result or permission
     history: history("final"),
     nativeEvents: [
       {
-        type: "action.result",
         data: {
+          result: {
+            callId,
+            kind: "tool-result",
+            output: "actual-but-uncommitted-output",
+            toolName: "native",
+          },
           sequence: 1,
           stepIndex: 1,
-          result: {
-            kind: "tool-result",
-            callId,
-            toolName: "native",
-            output: "actual-but-uncommitted-output",
-          },
         },
+        type: "action.result",
       },
     ],
   });
   const before = JSON.stringify(f.payload);
   assert.deepEqual(await reconcileTerminalRecoveryCandidate(f.handle), {
+    callId,
     kind: "uncertain",
     reason: "uncommitted-action-result",
-    callId,
   });
   assert.equal(JSON.stringify(f.payload), before);
 });
@@ -310,7 +309,7 @@ test("emitted native result alone never becomes a committed result or permission
 test("only the trusted exact repeatable call restores its genuine approval tail and actual SDK output", async () => {
   const messages = [
     ...history(),
-    { role: "assistant", content: [{ type: "text", text: "terminal framework context" }] },
+    { content: [{ text: "terminal framework context", type: "text" }], role: "assistant" },
   ];
   messages[1].providerOptions = { fixture: { original: "metadata" } };
   messages[1].content[0].providerOptions = { fixture: { signature: "retained" } };
@@ -349,8 +348,8 @@ for (const mode of [
         mode === "native-result"
           ? [
               {
+                data: { result: { callId, output: "genuine outcome" }, sequence: 1, stepIndex: 1 },
                 type: "action.result",
-                data: { sequence: 1, stepIndex: 1, result: { callId, output: "genuine outcome" } },
               },
             ]
           : [],
@@ -367,47 +366,47 @@ test("trusted Builder call contract flows through actual native prepare and reco
     appId: "app",
     appSpecDigest: "spec",
     proposalDigest: "proposal",
-    workspaceId: "workspace",
     sessionId: logical,
+    workspaceId: "workspace",
   };
-  const messages = [...history(), { role: "assistant", content: "terminal context" }];
+  const messages = [...history(), { content: "terminal context", role: "assistant" }];
   messages[0].content[0].toolName = "apply_app_creation";
   const f = await fixture({
-    history: messages,
     context: {
       "autograph-app-builder.private-apply-authority.v1": {
         grant: null,
         pending: [{ callId, scope }],
       },
       "autograph-app-builder.workflow.v17": {
-        phase: "planned",
         appSpec: { digest: "spec" },
+        phase: "planned",
         proposal: { digest: "proposal", target: { contract: { appId: "app" } } },
         workspace: { workspaceId: "workspace" },
       },
     },
+    history: messages,
   });
   const { recoverTerminalSession } = await load("execution/session/terminal-recovery.js");
   const descriptor = {
-    version: 1,
-    operationId: "new-operation",
-    sourcePublicSessionId: "failed-public-child",
-    sourceOwnerRunId: owner,
-    sourceAdapterGeneration: 1,
     logicalSessionId: logical,
+    operationId: "new-operation",
     originalAuthoritySessionId: "original-public",
     parentCancellationRevision: 0,
+    sourceAdapterGeneration: 1,
+    sourceOwnerRunId: owner,
+    sourcePublicSessionId: "failed-public-child",
+    version: 1,
   };
   const selected = f.payload.candidates[0];
   const binding = {
     ...descriptor,
     ownerRunId: "new-physical-child",
     provenance: {
+      checkpointVersion: 1,
       kind: selected.kind,
-      sourceStepId: selected.origin.stepId,
       sourceEventId: selected.origin.eventId,
       sourceSlot: selected.origin.slot,
-      checkpointVersion: 1,
+      sourceStepId: selected.origin.stepId,
     },
   };
   let receipt;
@@ -417,44 +416,46 @@ test("trusted Builder call contract flows through actual native prepare and reco
   let contractReads = 0;
   const accepted = await recoverTerminalSession(
     {
+      auth: { authenticator: "fixture", principalId: "owner", principalType: "user" },
       descriptor,
-      auth: { authenticator: "fixture", principalType: "user", principalId: "owner" },
       ports: {
-        authorize: () => Promise.resolve(),
-        readReceipt: () => Promise.resolve(receipt),
-        commitReceipt: ({ recoveryBinding }) => {
-          receipt = recoveryBinding;
-          return Promise.resolve(receipt);
-        },
-        authorizeRepeatableRecoveryCalls: (input) => {
+        authorize: async () => {},
+        authorizeRepeatableRecoveryCalls: async (input) => {
           contractReads += 1;
-          return Promise.resolve(authorizeRepeatablePrivateApplyCalls(input));
+          return authorizeRepeatablePrivateApplyCalls(input);
         },
+        commitReceipt: async ({ recoveryBinding }) => {
+          receipt = recoveryBinding;
+          return receipt;
+        },
+        readReceipt: async () => receipt,
       },
     },
     {
       collect: async ({ binding: source, authorizeOwner }) => {
         await authorizeOwner(source);
-        return { kind: "candidate", candidate: f.handle };
+        return { candidate: f.handle, kind: "candidate" };
       },
+      getHook: async () =>
+        hook === undefined
+          ? await Promise.reject(new Error("missing hook"))
+          : await Promise.resolve(hook),
+      isHookNotFound: (error) => error.message === "missing hook",
+      now: () => 0,
       readCandidate: readTerminalRecoveryCandidate,
+      readEntry: async () => ({ checkpoint: { sessionTimeoutMs: false }, kind: "handoff" }),
       reconcile: reconcileTerminalRecoveryCandidate,
-      readEntry: () =>
-        Promise.resolve({ kind: "handoff", checkpoint: { sessionTimeoutMs: false } }),
-      start: (input) => {
+      start: async (input) => {
         starts += 1;
         checkpoint = input.checkpoint;
         hook = {
-          runId: binding.ownerRunId,
           metadata: Promise.resolve({ recoveryBinding: binding }),
+          runId: binding.ownerRunId,
         };
-        return Promise.resolve();
       },
-      getHook: () =>
-        hook === undefined ? Promise.reject(new Error("missing hook")) : Promise.resolve(hook),
-      isHookNotFound: (error) => error.message === "missing hook",
-      now: () => 0,
-      wait: () => Promise.reject(new Error("unexpected wait")),
+      wait: async () => {
+        throw new Error("unexpected wait");
+      },
     },
   );
   assert.equal(accepted.kind, "accepted");

@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-import type { GitHubProvisionResult } from "./contracts";
+import type { GitHubProvisionResult } from "./contracts-schema";
 import { provisionVercelProject } from "./vercel-provider";
+
+const requestUrl = (input: RequestInfo | URL): string =>
+  input instanceof Request ? input.url : input.toString();
 
 const github = {
   defaultBranch: "main",
@@ -55,7 +58,7 @@ describe("Vercel project provisioning", () => {
       // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
       const request = vi.fn<typeof fetch>(async (_url, init) => {
         if (init?.method === "POST") {
-          writes.push(JSON.parse(String(init.body)));
+          writes.push(JSON.parse(z.string().parse(init.body)));
           created = true;
           return Response.json({ id: "prj_public" }, { status: 201 });
         }
@@ -64,9 +67,9 @@ describe("Vercel project provisioning", () => {
               framework: "services",
               id: "prj_public",
               name: "apps-vendor-portal",
+              oidcTokenConfig: { enabled, issuerMode },
               rootDirectory: ".",
               ssoProtection: deploymentType === null ? null : { deploymentType },
-              oidcTokenConfig: { enabled, issuerMode },
             })
           : Response.json({}, { status: 404 });
       });
@@ -87,9 +90,9 @@ describe("Vercel project provisioning", () => {
       expect(writes).toHaveLength(1);
       expect(writes[0]).toMatchObject({
         framework: "services",
+        oidcTokenConfig: { enabled: true, issuerMode: "team" },
         rootDirectory: ".",
         ssoProtection: { deploymentType: "prod_deployment_urls_and_all_previews" },
-        oidcTokenConfig: { enabled: true, issuerMode: "team" },
       });
       expect(request.mock.calls.every(([, init]) => init?.method !== "PATCH")).toBe(true);
     },
@@ -99,19 +102,19 @@ describe("Vercel project provisioning", () => {
     [
       JSON.stringify({ error: { code: "forbidden", message: "secret" } }),
       "iad1::failure_123",
-      { statusCode: 403, code: "forbidden", requestRef: "iad1::failure_123" },
+      { code: "forbidden", requestRef: "iad1::failure_123", statusCode: 403 },
     ],
     [
       JSON.stringify({ error: { code: "secret", message: "secret" }, token: "secret" }),
       "https://secret.example",
       { statusCode: 403 },
     ],
-    ["not-json", "iad1::failure_123", { statusCode: 403, requestRef: "iad1::failure_123" }],
+    ["not-json", "iad1::failure_123", { requestRef: "iad1::failure_123", statusCode: 403 }],
   ])("retains only allowlisted provider failure facts", async (body, requestRef, diagnostic) => {
     // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
     const request = vi.fn<typeof fetch>(async (_url, init) => {
       if (init?.method !== "POST") return Response.json({}, { status: 404 });
-      return new Response(body, { status: 403, headers: { "x-vercel-id": requestRef } });
+      return new Response(body, { headers: { "x-vercel-id": requestRef }, status: 403 });
     });
     const result = await provisionVercelProject({
       appId: "vendor-portal",
@@ -126,9 +129,9 @@ describe("Vercel project provisioning", () => {
       token: "secret",
     });
     expect(result).toMatchObject({
-      status: "failed",
       code: "provider_permission_denied",
       providerDiagnostic: diagnostic,
+      status: "failed",
     });
     expect(JSON.stringify(result)).not.toContain("secret");
     expect(request.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
@@ -148,7 +151,7 @@ describe("Vercel project provisioning", () => {
       // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
       const request = vi.fn<typeof fetch>(async (_url, init) => {
         if (init?.method === "POST") {
-          writes.push(JSON.parse(String(init.body)));
+          writes.push(JSON.parse(z.string().parse(init.body)));
           created = true;
           return Response.json({ id: "prj_public" }, { status: 201 });
         }
@@ -157,9 +160,9 @@ describe("Vercel project provisioning", () => {
               framework: "services",
               id: "prj_public",
               name: "apps-vendor-portal",
+              oidcTokenConfig: { enabled, issuerMode },
               rootDirectory: ".",
               ssoProtection: deploymentType === null ? null : { deploymentType },
-              oidcTokenConfig: { enabled, issuerMode },
             })
           : Response.json({}, { status: 404 });
       });
@@ -180,9 +183,9 @@ describe("Vercel project provisioning", () => {
       expect(writes).toHaveLength(1);
       expect(writes[0]).toMatchObject({
         framework: "services",
+        oidcTokenConfig: { enabled: true, issuerMode: "team" },
         rootDirectory: ".",
         ssoProtection: { deploymentType: "prod_deployment_urls_and_all_previews" },
-        oidcTokenConfig: { enabled: true, issuerMode: "team" },
       });
       expect(request.mock.calls.every(([, init]) => init?.method !== "PATCH")).toBe(true);
     },
@@ -192,22 +195,22 @@ describe("Vercel project provisioning", () => {
     [
       { error: { code: "forbidden", message: "secret" } },
       "iad1::failure_123",
-      { statusCode: 403, code: "forbidden", requestRef: "iad1::failure_123" },
+      { code: "forbidden", requestRef: "iad1::failure_123", statusCode: 403 },
     ],
     [
       { error: { code: "secret", message: "secret" }, token: "secret" },
       "https://secret.example",
       { statusCode: 403 },
     ],
-    ["not-json", "iad1::failure_123", { statusCode: 403, requestRef: "iad1::failure_123" }],
+    ["not-json", "iad1::failure_123", { requestRef: "iad1::failure_123", statusCode: 403 }],
   ])("retains only allowlisted provider failure facts", async (body, requestRef, diagnostic) => {
     // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
     const request = vi.fn<typeof fetch>(async (_url, init) => {
       if (init?.method !== "POST") return Response.json({}, { status: 404 });
       // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This negative table deliberately supplies raw text and structured provider error bodies to the actual sanitizer.
       return typeof body === "string"
-        ? new Response(body, { status: 403, headers: { "x-vercel-id": requestRef } })
-        : Response.json(body, { status: 403, headers: { "x-vercel-id": requestRef } });
+        ? new Response(body, { headers: { "x-vercel-id": requestRef }, status: 403 })
+        : Response.json(body, { headers: { "x-vercel-id": requestRef }, status: 403 });
     });
     const result = await provisionVercelProject({
       appId: "vendor-portal",
@@ -222,9 +225,9 @@ describe("Vercel project provisioning", () => {
       token: "secret",
     });
     expect(result).toMatchObject({
-      status: "failed",
       code: "provider_permission_denied",
       providerDiagnostic: diagnostic,
+      status: "failed",
     });
     expect(JSON.stringify(result)).not.toContain("secret");
     expect(request.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
@@ -338,9 +341,9 @@ describe("Vercel project provisioning", () => {
     const candidates: string[] = [];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (url, init) => {
-      const path = new URL(String(url)).pathname;
+      const path = new URL(requestUrl(url)).pathname;
       if (init?.method === "POST") {
-        const body = z.object({ name: z.string() }).parse(JSON.parse(String(init.body)));
+        const body = z.object({ name: z.string() }).parse(JSON.parse(z.string().parse(init.body)));
         created.add(body.name);
         return Response.json({ id: "prj_7" }, { status: 201 });
       }
@@ -385,12 +388,12 @@ describe("Vercel project provisioning", () => {
       let created = false;
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const request = vi.fn<typeof fetch>(async (url, init) => {
-        const value = new URL(String(url));
+        const value = new URL(requestUrl(url));
         expect(value.searchParams.has("teamId")).toBe(scopeType === "team");
         expect(value.pathname).not.toContain("deployments");
         if (init?.method === "POST") {
           created = true;
-          const body = JSON.parse(String(init.body));
+          const body: unknown = JSON.parse(z.string().parse(init.body));
           expect(body).not.toHaveProperty("ssoProtection");
           expect(body).not.toHaveProperty("oidcTokenConfig");
           expect(body).toMatchObject({
@@ -446,7 +449,9 @@ describe("Vercel project provisioning", () => {
       });
       expect(candidates[0]).toBe("apps-vendor-portal");
       expect(absent).toEqual(["apps-vendor-portal"]);
-      expect(request.mock.calls.every(([url]) => !String(url).includes("deployments"))).toBe(true);
+      expect(request.mock.calls.every(([url]) => !requestUrl(url).includes("deployments"))).toBe(
+        true,
+      );
     },
   );
 
@@ -481,7 +486,7 @@ describe("Vercel project provisioning", () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (_url, init) => {
       if (init?.method === "POST") {
-        bodies.push(JSON.parse(String(init.body)));
+        bodies.push(JSON.parse(z.string().parse(init.body)));
         return Response.json({ error: { code: "repo_not_found" } }, { status: 400 });
       }
       return Response.json({}, { status: 404 });
@@ -513,9 +518,11 @@ describe("Vercel project provisioning", () => {
     let created = false;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (url, init) => {
-      const path = new URL(String(url)).pathname;
+      const path = new URL(requestUrl(url)).pathname;
       if (init?.method === "POST") {
-        const body = JSON.parse(String(init.body));
+        const body = z
+          .looseObject({ name: z.string() })
+          .parse(JSON.parse(z.string().parse(init.body)));
         expect(body.name).toBe("apps-vendor-portal-a1b2c3");
         expect(body).not.toHaveProperty("gitRepository");
         created = true;

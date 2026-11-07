@@ -83,11 +83,11 @@ export const initialAppIntegrationCapabilityRecord = (
   plan: AppIntegrationCapabilityPlan,
 ): AppIntegrationCapabilityRecord =>
   appIntegrationCapabilityRecordSchema.parse({
+    approvalReceipts: [],
+    effects: Object.fromEntries(plan.effects.map((effect) => [effect, { state: "idle" }])),
     kind: "app-integrations-capability-v1",
     plan,
     planDigest: appIntegrationCapabilityPlanDigest(plan),
-    approvalReceipts: [],
-    effects: Object.fromEntries(plan.effects.map((effect) => [effect, { state: "idle" }])),
   });
 const matches = (authority: AppIntegrationCapabilityPlan["authority"], operationRef: string) =>
   and(
@@ -112,7 +112,7 @@ const parse = (
   ) {
     throw unavailable();
   }
-  return { operationRef: row.requestId, revision: row.revision, record };
+  return { operationRef: row.requestId, record, revision: row.revision };
 };
 /** The existing typed provision journal is the only effect ledger. Credentials live in separate encrypted custody kinds. */
 export const createPostgresAppIntegrationCapabilityStore = (
@@ -127,28 +127,24 @@ export const createPostgresAppIntegrationCapabilityStore = (
     return rows[0] === undefined ? undefined : parse(rows[0]);
   };
   return {
-    read,
-    reserve: async (plan) => {
-      const record = initialAppIntegrationCapabilityRecord(plan);
-      const operationRef = appIntegrationCapabilityOperationRef(plan);
-      await database
-        .insert(builderProvisioningJournals)
-        .values({
-          ...plan.authority,
-          requestId: operationRef,
-          requestDigest: record.planDigest,
-          record,
-          revision: 1,
-          state: "pending",
-          createdAt: new Date(),
+    claimLease: async (row) => {
+      const leaseId = randomUUID();
+      const rows = await database
+        .update(builderProvisioningJournals)
+        .set({
+          record: sql`jsonb_set(${builderProvisioningJournals.record},'{executionLease}',jsonb_build_object('leaseId',${leaseId},'fenceGeneration',nextval('public.builder_protected_access_fence_generation_seq'::regclass)),true)`,
+          revision: row.revision + 1,
           updatedAt: new Date(),
         })
-        .onConflictDoNothing();
-      const row = await read(plan.authority, operationRef);
-      if (row === undefined || !isDeepStrictEqual(row.record.plan, plan)) {
-        throw unavailable();
-      }
-      return row;
+        .where(
+          and(
+            matches(row.record.plan.authority, row.operationRef),
+            eq(builderProvisioningJournals.revision, row.revision),
+            eq(builderProvisioningJournals.requestDigest, row.record.planDigest),
+          ),
+        )
+        .returning();
+      return rows[0] === undefined ? undefined : parse(rows[0]);
     },
     compareAndSet: async (row, value) => {
       const record = appIntegrationCapabilityRecordSchema.parse(value);
@@ -194,24 +190,28 @@ export const createPostgresAppIntegrationCapabilityStore = (
         .returning();
       return rows[0] === undefined ? undefined : parse(rows[0]);
     },
-    claimLease: async (row) => {
-      const leaseId = randomUUID();
-      const rows = await database
-        .update(builderProvisioningJournals)
-        .set({
-          record: sql`jsonb_set(${builderProvisioningJournals.record},'{executionLease}',jsonb_build_object('leaseId',${leaseId},'fenceGeneration',nextval('public.builder_protected_access_fence_generation_seq'::regclass)),true)`,
-          revision: row.revision + 1,
+    read,
+    reserve: async (plan) => {
+      const record = initialAppIntegrationCapabilityRecord(plan);
+      const operationRef = appIntegrationCapabilityOperationRef(plan);
+      await database
+        .insert(builderProvisioningJournals)
+        .values({
+          ...plan.authority,
+          createdAt: new Date(),
+          record,
+          requestDigest: record.planDigest,
+          requestId: operationRef,
+          revision: 1,
+          state: "pending",
           updatedAt: new Date(),
         })
-        .where(
-          and(
-            matches(row.record.plan.authority, row.operationRef),
-            eq(builderProvisioningJournals.revision, row.revision),
-            eq(builderProvisioningJournals.requestDigest, row.record.planDigest),
-          ),
-        )
-        .returning();
-      return rows[0] === undefined ? undefined : parse(rows[0]);
+        .onConflictDoNothing();
+      const row = await read(plan.authority, operationRef);
+      if (row === undefined || !isDeepStrictEqual(row.record.plan, plan)) {
+        throw unavailable();
+      }
+      return row;
     },
   };
 };

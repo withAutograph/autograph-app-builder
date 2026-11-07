@@ -16,29 +16,29 @@ const origin = z.url().refine((value) => {
   );
 });
 export const centralNativeDeploymentReceiptSchema = z.strictObject({
+  bodySha256: hash,
   eventId: id,
   eventType: z.enum(["deployment.created", "deployment.ready"]),
-  bodySha256: hash,
-  projectId: id,
-  teamId: id,
-  providerDeploymentId: id,
   immutableOrigin: origin,
+  projectId: id,
+  providerDeploymentId: id,
+  teamId: id,
 });
 export type CentralNativeDeploymentReceipt = z.infer<typeof centralNativeDeploymentReceiptSchema>;
 const unavailable = () => new Error("central_deployment_receipt_rejected");
 const eventSchema = z.object({
   id,
-  type: z.enum(["deployment.created", "deployment.ready"]),
   payload: z.object({
-    project: z.object({ id }),
-    team: z.object({ id }),
-    target: z.union([z.null(), z.literal("staging")]),
     deployment: z.object({
       id,
-      url: id,
       meta: z.object({ githubCommitRef: id, githubCommitSha: z.string().regex(/^[a-f0-9]{40}$/u) }),
+      url: id,
     }),
+    project: z.object({ id }),
+    target: z.union([z.null(), z.literal("staging")]),
+    team: z.object({ id }),
   }),
+  type: z.enum(["deployment.created", "deployment.ready"]),
 });
 /** Signature admission precedes parsing. Git facts correlate an already-issued native ID; they never elect a deployment. */
 export const verifyCentralNativeDeploymentReceipt = (input: {
@@ -80,26 +80,26 @@ export const verifyCentralNativeDeploymentReceipt = (input: {
     return undefined;
   }
   return centralNativeDeploymentReceiptSchema.parse({
+    bodySha256: createHash("sha256").update(input.raw).digest("hex"),
     eventId: event.id,
     eventType: event.type,
-    bodySha256: createHash("sha256").update(input.raw).digest("hex"),
-    projectId: event.payload.project.id,
-    teamId: event.payload.team.id,
-    providerDeploymentId: event.payload.deployment.id,
     immutableOrigin: `https://${event.payload.deployment.url}`,
+    projectId: event.payload.project.id,
+    providerDeploymentId: event.payload.deployment.id,
+    teamId: event.payload.team.id,
   });
 };
 export const centralNativeDeploymentStateSchema = z.discriminatedUnion("status", [
   z.strictObject({ status: z.literal("empty") }),
   z.strictObject({
-    status: z.literal("accepted"),
-    providerDeploymentId: id,
-    immutableOrigin: origin,
     events: z.array(centralNativeDeploymentReceiptSchema).min(1).max(2),
+    immutableOrigin: origin,
+    providerDeploymentId: id,
+    status: z.literal("accepted"),
   }),
   z.strictObject({
-    status: z.literal("conflict"),
     providerDeploymentIds: z.array(id).min(1).max(2),
+    status: z.literal("conflict"),
   }),
 ]);
 export type CentralNativeDeploymentState = z.infer<typeof centralNativeDeploymentStateSchema>;
@@ -115,10 +115,10 @@ export const retainCentralNativeDeploymentReceipt = (
   }
   if (state.status === "empty") {
     return {
-      status: "accepted",
-      providerDeploymentId: receipt.providerDeploymentId,
-      immutableOrigin: receipt.immutableOrigin,
       events: [receipt],
+      immutableOrigin: receipt.immutableOrigin,
+      providerDeploymentId: receipt.providerDeploymentId,
+      status: "accepted",
     };
   }
   if (
@@ -129,10 +129,10 @@ export const retainCentralNativeDeploymentReceipt = (
     )
   ) {
     return {
-      status: "conflict",
       providerDeploymentIds: [
         ...new Set([state.providerDeploymentId, receipt.providerDeploymentId]),
       ],
+      status: "conflict",
     };
   }
   if (state.events.some((event) => event.eventType === receipt.eventType)) {

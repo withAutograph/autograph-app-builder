@@ -5,9 +5,9 @@ import { builderDestinationEpochSchema } from "./builder-session-destination-con
 import { builderProvisionRequestSchema } from "./contracts";
 
 export const builderSessionDestinationSelectionSchema = z.strictObject({
-  sessionId: z.string().min(1),
   expected: builderDestinationEpochSchema,
   request: builderProvisionRequestSchema,
+  sessionId: z.string().min(1),
 });
 export interface BuilderSessionDestinationActionState {
   // oxlint-disable-next-line sonarjs/max-union-size -- Four distinct product action outcomes.
@@ -32,25 +32,25 @@ export const createBuilderSessionDestinationAction =
       const parsed = builderSessionDestinationSelectionSchema.parse(input);
       if (incoming.get("origin") !== ports.origin || !(await ports.enabled())) {
         return {
-          status: "error",
           message: "Destination setup is unavailable. Your build is preserved.",
+          status: "error",
         };
       }
       const context = await ports.open(incoming);
       const result = await context.service.select({ ...parsed, principal: context.principal });
       ports.refresh();
       return result.provisioning.vercel.status === "succeeded"
-        ? { status: "ready", message: "Your app destination is ready. Continue the saved build." }
+        ? { message: "Your app destination is ready. Continue the saved build.", status: "ready" }
         : {
-            status: "pending",
             message:
               "Destination setup is unfinished. Continue this same saved destination; do not start another build.",
+            status: "pending",
           };
     } catch {
       return {
-        status: "error",
         message:
           "Destination setup could not finish. Your build and saved request are preserved. Refresh this page to continue safely.",
+        status: "error",
       };
     }
   };

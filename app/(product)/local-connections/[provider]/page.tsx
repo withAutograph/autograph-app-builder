@@ -15,21 +15,29 @@ interface Props {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
+const parseEmulatedProvider = (value: string): EmulatedProvider | undefined => {
+  if (value === "vercel" || value === "github") return value;
+  return undefined;
+};
+
+const parseQueryValue = (value: string | string[] | undefined): string | undefined =>
+  Array.isArray(value) ? value[0] : value;
+
 /** Development-only consent surface; real provider installation pages remain external. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
+const LocalConnectionBridgeContent = async ({ params, searchParams }: Props) => {
   const [{ provider }, query] = await Promise.all([params, searchParams]);
+  const emulatedProvider = parseEmulatedProvider(provider);
+  const state = parseQueryValue(query.state);
   let emulation;
   try {
     emulation = readProviderEmulation(process.env);
   } catch {
     notFound();
   }
-  if (!emulation || !["vercel", "github"].includes(provider) || typeof query.state !== "string") {
+  if (!emulation || emulatedProvider === undefined || state === undefined) {
     notFound();
   }
-  const typedProvider = provider as EmulatedProvider;
-  const resumeKey = parseProviderResumeKey(query.resume);
+  const resumeKey = parseProviderResumeKey(parseQueryValue(query.resume));
   const authorizing = provider === "github" && query.phase === "authorize";
   const providerName = provider === "vercel" ? "Vercel" : "GitHub";
   const title = authorizing ? "Authorize GitHub connection" : `Connect to ${providerName}`;
@@ -60,7 +68,7 @@ async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
     : [];
   return (
     <EmulationApproval
-      provider={typedProvider}
+      provider={emulatedProvider}
       environment={environment}
       title={title}
       description={`Approve the prepared test account for this App Builder workspace.`}
@@ -73,16 +81,21 @@ async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
           : "Access is limited to the Vercel team and integration configuration shown above."
       }
       actionLabel={actionLabel}
-      backHref={resumeKey ? `/?resume=${encodeURIComponent(resumeKey)}` : "/"}
+      backHref={
+        resumeKey !== undefined && resumeKey.length > 0
+          ? `/?resume=${encodeURIComponent(resumeKey)}`
+          : "/"
+      }
       action={
         <form method="post" action={`/local-connections/${provider}/complete`}>
-          <input type="hidden" name="state" value={query.state} />
+          <input type="hidden" name="state" value={state} />
           {authorizing ? <input type="hidden" name="phase" value="authorize" /> : null}
-          {forwarded.map((name) =>
-            typeof query[name] === "string" ? (
-              <input key={name} type="hidden" name={name} value={query[name]} />
-            ) : null,
-          )}
+          {forwarded.map((name) => {
+            const value = parseQueryValue(query[name]);
+            return value === undefined || value.length === 0 ? null : (
+              <input key={name} type="hidden" name={name} value={value} />
+            );
+          })}
           <button className={emulationApprovalStyles.button} type="submit">
             {actionLabel}
           </button>
@@ -90,12 +103,12 @@ async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
       }
     />
   );
-}
+};
 
-export default function LocalConnectionBridge(props: Props) {
-  return (
-    <Suspense fallback={<main className="min-h-svh" aria-busy="true" />}>
-      <LocalConnectionBridgeContent {...props} />
-    </Suspense>
-  );
-}
+const LocalConnectionBridge = (props: Props) => (
+  <Suspense fallback={<main className="min-h-svh" aria-busy="true" />}>
+    <LocalConnectionBridgeContent {...props} />
+  </Suspense>
+);
+
+export default LocalConnectionBridge;

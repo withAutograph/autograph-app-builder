@@ -8,11 +8,7 @@ import { defineTool } from "eve/tools";
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
-import {
-  configuredToolchainImage,
-  requiredToolVersions,
-  toolVersionMatches,
-} from "@/lib/sandbox/toolchain";
+import { configuredToolchainImage, requiredToolVersions } from "@/lib/sandbox/toolchain";
 import { sandboxBackendPlan } from "@/lib/sandbox/backend";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 import {
@@ -54,8 +50,8 @@ export default defineTool({
       if (!("workspace" in current)) {
         return {
           diagnosticOnly: true,
-          status: "no-private-workspace",
           readinessScope: "private-compute-observation",
+          status: "no-private-workspace",
         };
       }
       await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
@@ -63,7 +59,7 @@ export default defineTool({
       const computeState = await readPrivateComputeProviderState(native, async () => {
         await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
       });
-      return { diagnosticOnly: true, readinessScope: "private-compute-observation", computeState };
+      return { computeState, diagnosticOnly: true, readinessScope: "private-compute-observation" };
     }
     const sandbox = await ctx.getSandbox();
     const tools = await Promise.all(
@@ -88,19 +84,17 @@ export default defineTool({
               return globalThis.undefined;
             }
           })();
-    const required = (
-      Object.keys(requiredToolVersions) as (keyof typeof requiredToolVersions)[]
-    ).map((command) => {
+    const required = Object.entries(requiredToolVersions).map(([command, expected]) => {
       const observed = tools.find((tool) => tool.command === command);
       return {
         available: observed?.available === true,
         command,
-        expected: requiredToolVersions[command].source,
-        matches: observed?.available === true && toolVersionMatches(command, observed.version),
+        expected: expected.source,
+        matches: observed?.available === true && expected.test(observed.version),
         version: observed?.available === true ? observed.version : "",
       };
     });
-    return {
+    const result = {
       backend: backend.kind,
       backendBlockers: backend.blockers,
       dependencyCacheDigest:
@@ -114,10 +108,11 @@ export default defineTool({
       toolchainReady:
         execution !== undefined && cache !== undefined && required.every((tool) => tool.matches),
       tools,
-      ...(input.runtimeDiagnostics === true
-        ? { runtimeResources: await inspectSandboxRuntimeResources(sandbox) }
-        : {}),
     };
+    if (input.runtimeDiagnostics === true) {
+      return { ...result, runtimeResources: await inspectSandboxRuntimeResources(sandbox) };
+    }
+    return result;
   },
   inputSchema: z.object({
     computeState: z.boolean().optional(),

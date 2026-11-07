@@ -349,7 +349,7 @@ export const createGitHubAppHttpProvider = (input: {
       }
       return {
         body: response.data,
-        requestId: requestId(String(response.headers["x-github-request-id"] ?? "github")),
+        requestId: requestId(response.headers["x-github-request-id"] ?? "github"),
         status: response.status,
       };
     } catch (error) {
@@ -387,7 +387,7 @@ export const createGitHubAppHttpProvider = (input: {
     return {
       accountId: decimalProperty(account, "id"),
       accountLogin: stringProperty(account, "login"),
-      accountType: accountType as "Organization" | "User",
+      accountType,
       installationId: config.installationId,
       repositorySelection: selection,
     };
@@ -545,7 +545,7 @@ export const createGitHubAppHttpProvider = (input: {
       return;
     }
     const repositoryId = decimalProperty(response.body, "id");
-    return repositoryById(
+    return await repositoryById(
       repositoryId,
       stringProperty(response.body, "default_branch"),
       permissions,
@@ -902,7 +902,7 @@ export const createGitHubAppHttpProvider = (input: {
     snapshotHeadSha: string,
     accessToken: string,
   ): Promise<boolean> => {
-    const reconciliation = draftRequest.reconciliation;
+    const { reconciliation } = draftRequest;
     if (await ownedDraftHead(draftRequest.recovery, observed, accessToken)) {
       return true;
     }
@@ -1309,8 +1309,8 @@ export const createGitHubAppHttpProvider = (input: {
         name: proposal.name,
         number: proposal.pullRequestNumber,
         owner: proposal.owner,
-        repositoryId: proposal.repositoryId,
         reconciliation: proposal,
+        repositoryId: proposal.repositoryId,
         ...(recovery === undefined ? {} : { recovery }),
       });
       if (current.headSha !== observed.headSha || current.headTree !== observed.headTree) {
@@ -1381,10 +1381,10 @@ export const createGitHubAppHttpProvider = (input: {
       )
         return false;
       const current = await inspectExistingDraft({
-        repositoryId: proposal.repositoryId,
-        owner: proposal.owner,
         name: proposal.name,
         number: proposal.pullRequestNumber,
+        owner: proposal.owner,
+        repositoryId: proposal.repositoryId,
       });
       if (current.headSha !== observed.headSha || current.headTree !== observed.headTree)
         return false;
@@ -1839,7 +1839,7 @@ export const createGitHubAppHttpProvider = (input: {
         throw new Error("invalid-response");
       }
       const accessToken = await destinationSnapshot(repository);
-      return readDestinationPath(
+      return await readDestinationPath(
         repository,
         path,
         accessToken,

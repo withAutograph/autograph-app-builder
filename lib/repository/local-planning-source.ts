@@ -24,6 +24,9 @@ import { z } from "zod";
 export { captureLocalPlanningSource } from "./local-planning-source-capture";
 
 const objectId = z.string().regex(/^[a-f0-9]{40}$/u);
+const workspaceRepositoryPath = "/workspace/repository";
+const workspacePath = "/workspace";
+const workspaceManifestPath = `${workspacePath}/.app-builder/source-files.json`;
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 const reconciliationOutcome = z.strictObject({
@@ -63,7 +66,7 @@ const verifyCurrentLocalManifest = async (input: {
     input.assertCurrent();
     return {
       currentManifestDigest: current.workspaceDigest,
-      currentManifestPath: "/workspace/.app-builder/source-files.json",
+      currentManifestPath: workspaceManifestPath,
     };
   }
   return {};
@@ -103,8 +106,8 @@ export const reconcileLocalPlanningSource = async (
   await retainSourceGeneration(capture, dependencies);
   input.assertCurrent();
   const presence = await sandbox.run({
-    command: `node -e ${quote(localPlanningGitPresenceProgram)} ${quote(JSON.stringify({ root: "/workspace/repository" }))}`,
-    workingDirectory: "/workspace",
+    command: `node -e ${quote(localPlanningGitPresenceProgram)} ${quote(JSON.stringify({ root: workspaceRepositoryPath }))}`,
+    workingDirectory: workspacePath,
   });
   input.assertCurrent();
   if (presence.exitCode !== 0) {
@@ -128,19 +131,19 @@ export const reconcileLocalPlanningSource = async (
     const pack = `.app-builder/local-source/${hash(input.sessionId)}/original-${baseline.sourceSha}.pack`;
     await ensureSandboxDirectories(sandbox, [path.posix.dirname(pack)]);
     input.assertCurrent();
-    await sandbox.writeFile({ path: pack, content: baseline.streamPack() });
+    await sandbox.writeFile({ content: baseline.streamPack(), path: pack });
     input.assertCurrent();
     const initialization = {
-      root: "/workspace/repository",
-      stateRoot: `/workspace/.app-builder/local-source/${hash(input.sessionId)}`,
+      originalSourceSha: baseline.originalSourceSha,
       packPath: `/workspace/${pack}`,
+      root: workspaceRepositoryPath,
       sourceSha: baseline.sourceSha,
       sourceTree: baseline.sourceTree,
-      originalSourceSha: baseline.originalSourceSha,
+      stateRoot: `/workspace/.app-builder/local-source/${hash(input.sessionId)}`,
     };
     const initialized = await sandbox.run({
       command: `node -e ${quote(initializeLocalPlanningGitBaseProgram)} ${quote(JSON.stringify(initialization))}`,
-      workingDirectory: "/workspace",
+      workingDirectory: workspacePath,
     });
     input.assertCurrent();
     if (initialized.exitCode !== 0) {
@@ -154,17 +157,17 @@ export const reconcileLocalPlanningSource = async (
     const pack = `.app-builder/local-source/${hash(input.sessionId)}/current-${current.sourceSha}.pack`;
     await ensureSandboxDirectories(sandbox, [path.posix.dirname(pack)]);
     input.assertCurrent();
-    await sandbox.writeFile({ path: pack, content: current.streamPack() });
+    await sandbox.writeFile({ content: current.streamPack(), path: pack });
     input.assertCurrent();
     const currentIdentity = {
-      root: "/workspace/repository",
       packPath: `/workspace/${pack}`,
+      root: workspaceRepositoryPath,
       sourceSha: current.sourceSha,
       sourceTree: current.sourceTree,
     };
     const imported = await sandbox.run({
       command: `node -e ${quote(importLocalPlanningCurrentCommitProgram)} ${quote(JSON.stringify(currentIdentity))}`,
-      workingDirectory: "/workspace",
+      workingDirectory: workspacePath,
     });
     input.assertCurrent();
     if (imported.exitCode !== 0) {
@@ -177,7 +180,7 @@ export const reconcileLocalPlanningSource = async (
   if (capture.needsBundle) {
     await ensureSandboxDirectories(sandbox, [path.posix.dirname(bundle)]);
     input.assertCurrent();
-    await sandbox.writeFile({ path: bundle, content: capture.streamBundle() });
+    await sandbox.writeFile({ content: capture.streamBundle(), path: bundle });
   }
   input.assertCurrent();
   const oldCommit = quote(`${objectId.parse(input.originalSourceSha)}^{commit}`);
@@ -192,30 +195,37 @@ export const reconcileLocalPlanningSource = async (
   }
   const imported = await sandbox.run({
     command: commands.join(" && "),
-    workingDirectory: "/workspace/repository",
+    workingDirectory: workspaceRepositoryPath,
   });
   if (imported.exitCode !== 0) {
     throw new Error(
       `Builder could not read the original private source base or import current local planning objects. The candidate is retained. ${sanitizeValidationDiagnosticText(imported.stderr || imported.stdout)}`,
     );
   }
-  const request = {
+  const requestBase = {
     appId: input.appId,
     branchRef: "refs/app-builder/local-source",
     fetchRemote: false,
     localSource: true,
     ...currentManifest,
-    ...(input.sourceOverlay === undefined
-      ? {}
-      : {
-          managedOverlayWorkspaceDigest: z
-            .string()
-            .regex(/^[a-f0-9]{64}$/u)
-            .parse(input.sourceOverlay.workspaceDigest),
-          managedOverlayManifestPath: "/workspace/.app-builder/source-files.json",
-        }),
+  };
+  interface ManagedOverlayRequest {
+    managedOverlayManifestPath?: string;
+    managedOverlayWorkspaceDigest?: string;
+  }
+  const overlay: ManagedOverlayRequest = {};
+  if (input.sourceOverlay !== undefined) {
+    overlay.managedOverlayManifestPath = workspaceManifestPath;
+    overlay.managedOverlayWorkspaceDigest = z
+      .string()
+      .regex(/^[a-f0-9]{64}$/u)
+      .parse(input.sourceOverlay.workspaceDigest);
+  }
+  const request = {
+    ...requestBase,
+    ...overlay,
     originalSourceSha: objectId.parse(input.originalSourceSha),
-    root: "/workspace/repository",
+    root: workspaceRepositoryPath,
     sessionId: input.sessionId,
     stateRoot: "/workspace/.app-builder/source-reconciliation",
     targetSha: capture.snapshotSha,
@@ -223,7 +233,7 @@ export const reconcileLocalPlanningSource = async (
   input.assertCurrent();
   const reconciled = await sandbox.run({
     command: `node -e ${quote(planningSourceReconciliationProgram)} ${quote(JSON.stringify(request))}`,
-    workingDirectory: "/workspace/repository",
+    workingDirectory: workspaceRepositoryPath,
   });
   if (reconciled.exitCode !== 0) {
     throw new Error(
@@ -234,32 +244,32 @@ export const reconcileLocalPlanningSource = async (
   const { generation } = capture;
   input.assertCurrent();
   const workspace = await recordPreparedSandboxWorkspace({
-    sandbox,
     callId: input.callId,
+    eligibilityDigest: generation.eligibilityDigest,
+    sandbox,
     sourcePath: generation.sourcePath,
     sourceSha: input.receipt.sourceSha,
     sourceTree: generation.generation,
-    eligibilityDigest: generation.eligibilityDigest,
     workspaceDigest: generation.workspaceDigest,
   });
   input.assertCurrent();
   await sandbox.writeTextFile({
-    path: ".app-builder/source-files.json",
     content: `${JSON.stringify(generation.sourceFiles)}\n`,
+    path: ".app-builder/source-files.json",
   });
   input.assertCurrent();
   await sandbox.writeTextFile({
-    path: ".app-builder/source-checksums.sha256",
     content: `${generation.sourceFiles
       .map((file) => `${file.sha256}  repository/${file.path}`)
       .join("\n")}\n`,
+    path: ".app-builder/source-checksums.sha256",
   });
-  return {
+  const result = {
     workspace,
     ...outcome,
     selectedSourceSha: input.receipt.sourceSha,
     selectedSourceTree: input.receipt.sourceTree,
     sourceSnapshotTree: capture.snapshotTree,
-    ...(restoredOriginalBase === undefined ? {} : { restoredOriginalBase }),
   };
+  return restoredOriginalBase === undefined ? result : { ...result, restoredOriginalBase };
 };

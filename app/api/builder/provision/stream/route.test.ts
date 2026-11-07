@@ -1,15 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { BuilderProvisionProjection } from "@/lib/provisioning/contracts";
-import { GET } from "./route";
+import { createProvisioningStreamHandler } from "./route";
 
-const deployment = vi.hoisted(() => ({
-  handler: vi.fn(),
-}));
-
-vi.mock("@/lib/provisioning/deployment", () => ({
-  getBuilderProvisioningDeploymentHandler: vi.fn(() => deployment.handler),
-}));
+const deployment = { handler: vi.fn() };
+const getDeploymentHandler = vi.fn(() => deployment.handler);
+const get = createProvisioningStreamHandler(getDeploymentHandler);
 
 const requestId = "123e4567-e89b-42d3-a456-426614174000";
 
@@ -46,24 +42,25 @@ async function readAll(response: Response) {
 
 afterEach(() => {
   deployment.handler.mockReset();
+  getDeploymentHandler.mockClear();
   vi.useRealTimers();
 });
 
 describe("GET /api/builder/provision/stream", () => {
   it("rejects requests without a durable journal id", async () => {
-    const response = await GET(
+    const response = await get(
       new Request("https://builder.example.test/api/builder/provision/stream"),
     );
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({ error: "request_invalid" });
-    expect(deployment.handler).not.toHaveBeenCalled();
+    expect(getDeploymentHandler).not.toHaveBeenCalled();
   });
 
   it("frames the initial durable projection and its terminal event", async () => {
     mockProjection(projection(4));
 
-    const response = await GET(
+    const response = await get(
       new Request(
         `https://builder.example.test/api/builder/provision/stream?requestId=${requestId}`,
       ),
@@ -79,7 +76,7 @@ describe("GET /api/builder/provision/stream", () => {
 
   it("uses a valid Last-Event-ID as the reconnect cursor and safely ignores an invalid one", async () => {
     mockProjection(projection(4));
-    const resumed = await GET(
+    const resumed = await get(
       new Request(
         `https://builder.example.test/api/builder/provision/stream?requestId=${requestId}`,
         { headers: { "Last-Event-ID": "4" } },
@@ -90,7 +87,7 @@ describe("GET /api/builder/provision/stream", () => {
     );
 
     mockProjection(projection(4));
-    const invalid = await GET(
+    const invalid = await get(
       new Request(
         `https://builder.example.test/api/builder/provision/stream?requestId=${requestId}`,
         { headers: { "Last-Event-ID": "not-a-revision" } },
@@ -104,7 +101,7 @@ describe("GET /api/builder/provision/stream", () => {
     vi.setSystemTime(new Date("2026-09-11T00:00:00.000Z"));
     mockProjection(projection(1, "pending"));
 
-    const response = await GET(
+    const response = await get(
       new Request(
         `https://builder.example.test/api/builder/provision/stream?requestId=${requestId}`,
       ),
@@ -129,7 +126,7 @@ describe("GET /api/builder/provision/stream", () => {
       ["1", { "Last-Event-ID": "4" }],
     ] as const) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const response = await GET(
+      const response = await get(
         new Request(
           `https://builder.example.test/api/builder/provision/stream?requestId=${requestId}&afterRevision=${query}`,
           { headers },
@@ -146,7 +143,7 @@ describe("GET /api/builder/provision/stream", () => {
     "ignores malformed query cursor %s",
     async (cursor) => {
       mockProjection(projection(4));
-      const response = await GET(
+      const response = await get(
         new Request(
           `https://builder.example.test/api/builder/provision/stream?requestId=${requestId}&afterRevision=${cursor}`,
         ),

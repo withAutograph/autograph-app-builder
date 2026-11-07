@@ -9,43 +9,35 @@ import { plan } from "./public-release-test-fixture";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 
 const resource = (name: string) => ({
-  resourceId: `${name}-resource`,
   database: name,
   migratorRole: `${name}_installer`,
+  resourceId: `${name}-resource`,
   runtimeRole: `${name}_runtime`,
 });
 const fixture = () => {
   const authResource = resource("auth_app");
   const appResource = resource("invoice_app");
   const profile: NonNullable<HostedOperatorSourceConfiguration["standardRuntime"]> = {
-    profileId: "reviewed-isolated-profile",
+    appSpecDigest: "e".repeat(64),
     authOwnership: { kind: "dedicated-app-development", resource: { ...authResource } },
+    capturedReleaseId: "release-current",
+    productionDatabaseIdentity: "ep-customer-production.neon.tech/auth",
+    profileId: "reviewed-isolated-profile",
+    provisioningDigest: plan.project.provisioningDigest,
+    provisioningRequestId: plan.project.provisioningRequestId,
     publicRealmWorkload: {
+      audience: "https://vercel.com/team",
       environment: "production",
+      issuer: "https://oidc.vercel.com/team",
       ownerId: "team",
       projectId: "owned-project",
-      issuer: "https://oidc.vercel.com/team",
-      audience: "https://vercel.com/team",
       subject: "explicit-production-workload",
     },
-    productionDatabaseIdentity: "ep-customer-production.neon.tech/auth",
-    provisioningRequestId: plan.project.provisioningRequestId,
-    provisioningDigest: plan.project.provisioningDigest,
-    appSpecDigest: "e".repeat(64),
-    capturedReleaseId: "release-current",
   };
   return {
     appId: plan.selection.appId,
     appResource,
     authResource,
-    profile,
-    publicOrigin: plan.publicOrigin,
-    neon: {
-      endpoint: "ep-dedicated-development.neon.tech",
-      branchId: "dedicated-branch",
-      projectId: "dedicated-project",
-      source: "synthetic-only" as const,
-    },
     bindings: {
       appDatabase: {
         runtimeUrl:
@@ -56,6 +48,14 @@ const fixture = () => {
           "postgresql://auth_app_runtime:private-auth@ep-dedicated-development.neon.tech/auth_app?sslmode=verify-full",
       },
     },
+    neon: {
+      branchId: "dedicated-branch",
+      endpoint: "ep-dedicated-development.neon.tech",
+      projectId: "dedicated-project",
+      source: "synthetic-only" as const,
+    },
+    profile,
+    publicOrigin: plan.publicOrigin,
   };
 };
 
@@ -64,10 +64,10 @@ describe("owned application Auth project boundary", () => {
     const input = fixture();
     const scope = assertOwnedAppAuthRuntimeScope(input);
     expect(scope).toMatchObject({
-      boundary: "owned-app-project",
-      providerEnvironment: "development",
-      profileId: input.profile.profileId,
       authResource: input.authResource,
+      boundary: "owned-app-project",
+      profileId: input.profile.profileId,
+      providerEnvironment: "development",
     });
     expect(JSON.stringify(scope)).not.toContain("private-auth");
     expect(JSON.stringify(scope)).not.toContain("private-app");

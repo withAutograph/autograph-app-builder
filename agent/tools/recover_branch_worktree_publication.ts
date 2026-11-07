@@ -39,12 +39,14 @@ export default defineTool({
     const result = await recoverBranchWorktreePublication({
       expectedJournalDigest,
       proposal: expectedProposal,
-      readOverlayFile: (path) =>
-        ctx
-          .getSandbox()
-          .then((sandbox) => sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` })),
-      readOverlayFileStream: (path) =>
-        ctx.getSandbox().then((sandbox) => sandbox.readFile({ path: `${relativeRoot}/${path}` })),
+      readOverlayFile: async (path) => {
+        const sandbox = await ctx.getSandbox();
+        return await sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` });
+      },
+      readOverlayFileStream: async (path) => {
+        const sandbox = await ctx.getSandbox();
+        return await sandbox.readFile({ path: `${relativeRoot}/${path}` });
+      },
       recoveredByCallId: ctx.callId,
       review: workflow.reviewReceipt,
       sourceReceipt: workflow.sourceReceipt,

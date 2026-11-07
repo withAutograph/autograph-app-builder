@@ -49,8 +49,8 @@ if (values.size !== 0) {
 try {
   const result = await readLocalTurnExecutionEvidence({
     cycleRoot,
-    sessionId,
     selector: selectors[0],
+    sessionId,
   });
   console.log(JSON.stringify(result, null, 2));
 } catch {

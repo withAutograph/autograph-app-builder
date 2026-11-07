@@ -105,10 +105,10 @@ export const confirmNormalActorCapture = (
     }
     const scope = {
       authority: context.authority,
-      ownerSessionId: context.target.sessionId,
-      operationRef: preparation.accountOperationRef,
-      program: preparation.program,
       config: input.keyring,
+      operationRef: preparation.accountOperationRef,
+      ownerSessionId: context.target.sessionId,
+      program: preparation.program,
     };
     const state = decryptNormalActorState({ ...scope, sealed: preparation.sealedState });
     const checkpoint = state.actors.find((entry) => entry.actorKey === payload.actorKey);
@@ -162,6 +162,10 @@ export const confirmNormalActorCapture = (
     delete consumedLink.sealedNonce;
     return {
       ...record,
+      accountPreparation: {
+        ...preparation,
+        sealedState: encryptNormalActorState({ ...scope, state }),
+      },
       operator: {
         ...operator,
         identityLink: {
@@ -170,10 +174,6 @@ export const confirmNormalActorCapture = (
           proofRef: input.proofRef,
           proofSha256: input.proofSha256,
         },
-      },
-      accountPreparation: {
-        ...preparation,
-        sealedState: encryptNormalActorState({ ...scope, state }),
       },
     };
   } catch {

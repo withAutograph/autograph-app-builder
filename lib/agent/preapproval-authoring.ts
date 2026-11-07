@@ -4,43 +4,43 @@ import type { AppBuilderWorkflowState } from "./workflow-state";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const plannedAuthoringCorrectionSchema = z.strictObject({
-  proposalDigest: digest,
   denialEvidenceDigest: digest,
+  inspectionCallId: z.string().min(1),
+  proposalDigest: digest,
+  requestMessageDigest: digest,
+  requestMessageSequence: z.number().int().nonnegative(),
   requestTurnId: z.string().min(1),
   requestTurnSequence: z.number().int().nonnegative(),
-  requestMessageSequence: z.number().int().nonnegative(),
-  requestMessageDigest: digest,
-  inspectionCallId: z.string().min(1),
 });
 export type PlannedAuthoringCorrection = z.infer<typeof plannedAuthoringCorrectionSchema>;
 /** Accepted product intent only. This is never an apply or provider grant. */
 export const preapprovalAuthoringScopeSchema = z.strictObject({
-  authoritySessionId: z.string().min(1),
+  acceptedByCallId: z.string().min(1),
   appId: z.string().min(1),
   appSpecDigest: digest,
-  acceptedByCallId: z.string().min(1),
   artifactPath: z.string().min(1),
   artifactRevision: z.string().min(1),
-  sourceReceiptDigest: digest,
-  workspaceId: z.string().min(1),
-  workspaceDigest: digest,
-  planningStateDigest: digest,
+  authoritySessionId: z.string().min(1),
   correction: plannedAuthoringCorrectionSchema.optional(),
+  planningStateDigest: digest,
+  sourceReceiptDigest: digest,
+  workspaceDigest: digest,
+  workspaceId: z.string().min(1),
 });
 export type PreapprovalAuthoringScope = z.infer<typeof preapprovalAuthoringScopeSchema>;
 export const authoringScopeDigest = (scope: PreapprovalAuthoringScope) =>
   createHash("sha256").update(JSON.stringify(scope)).digest("hex");
 export const preapprovalAuthoringDecisionSchema = z
   .strictObject({
-    version: z.literal(1),
-    kind: z.literal("preapproval-authoring-decision-v1"),
     adapterSessionId: z.string().min(1),
-    turnId: z.string().min(1),
-    turnSequence: z.number().int().nonnegative(),
     decision: z.enum(["working", "runnable", "blocked", "waiting-input", "planned"]),
+    kind: z.literal("preapproval-authoring-decision-v1"),
+    reason: z.enum(["authoring_no_progress", "authoring_cancelled"]).optional(),
     scope: preapprovalAuthoringScopeSchema.optional(),
     scopeDigest: digest.optional(),
-    reason: z.enum(["authoring_no_progress", "authoring_cancelled"]).optional(),
+    turnId: z.string().min(1),
+    turnSequence: z.number().int().nonnegative(),
+    version: z.literal(1),
   })
   .superRefine((value, context) => {
     const unpaired = (value.scope === undefined) !== (value.scopeDigest === undefined);
@@ -54,9 +54,9 @@ export const preapprovalAuthoringDecisionSchema = z
 export type PreapprovalAuthoringDecision = z.infer<typeof preapprovalAuthoringDecisionSchema>;
 export const internalAuthoringContinuationSchema = z.strictObject({
   decision: preapprovalAuthoringDecisionSchema,
-  nonce: digest,
-  deliveredTurnId: z.string().min(1).optional(),
   deliveredMessageSequence: z.number().int().nonnegative().optional(),
+  deliveredTurnId: z.string().min(1).optional(),
+  nonce: digest,
 });
 const marker =
   /\n\[autograph-preapproval-authoring:(?<operationId>[a-z0-9_:-]+):(?<nonce>[a-f0-9]{64})\]$/u;
@@ -84,11 +84,11 @@ export const decidePreapprovalAuthoring = (input: {
   correction?: PlannedAuthoringCorrection;
 }): PreapprovalAuthoringDecision => {
   const base = {
-    version: 1 as const,
-    kind: "preapproval-authoring-decision-v1" as const,
     adapterSessionId: input.adapterSessionId,
+    kind: "preapproval-authoring-decision-v1" as const,
     turnId: input.turnId,
     turnSequence: input.turnSequence,
+    version: 1 as const,
   };
   if (input.pendingInput || input.pendingApproval) {
     return { ...base, decision: "waiting-input" };
@@ -120,9 +120,12 @@ export const decidePreapprovalAuthoring = (input: {
   ) {
     return { ...base, decision: "blocked" };
   }
+  const authority = { authoritySessionId: input.adapterSessionId };
+  const candidateAuthority = correcting
+    ? { ...authority, correction: input.correction }
+    : authority;
   const candidate = preapprovalAuthoringScopeSchema.safeParse({
-    authoritySessionId: input.adapterSessionId,
-    ...(correcting ? { correction: input.correction } : {}),
+    ...candidateAuthority,
     appId: current.appSpec.appId,
     appSpecDigest: current.appSpec.digest,
     acceptedByCallId: current.appSpec.acceptedByCallId,
@@ -134,9 +137,9 @@ export const decidePreapprovalAuthoring = (input: {
     planningStateDigest: createHash("sha256")
       .update(
         JSON.stringify({
-          phase: current.phase,
           dependencyReceipt: "dependencyReceipt" in current ? current.dependencyReceipt : undefined,
           identityReceipt: "identityReceipt" in current ? current.identityReceipt : undefined,
+          phase: current.phase,
         }),
       )
       .digest("hex"),

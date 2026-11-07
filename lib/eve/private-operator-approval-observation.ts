@@ -17,25 +17,25 @@ const requestSchema = z.strictObject({
     "central-integration-host",
     "normal-platform-integrations",
   ]),
-  planRef: z.string().min(1),
-  planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   idempotencyKey: z.string().min(1),
+  planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  planRef: z.string().min(1),
 });
 export const privateOperatorApprovalCaptureSchema = z
   .strictObject({
-    request: requestSchema,
-    ownerUserId: z.string().min(1),
     entries: z.array(
       z.strictObject({
-        requestId: z.string().min(1),
-        callId: z.string().min(1),
         approved: z.boolean(),
+        callId: z.string().min(1),
         cancelled: z.boolean(),
         completedApproved: z.boolean().default(false),
         completedCancelled: z.boolean().default(false),
+        requestId: z.string().min(1),
         settledAt: z.iso.datetime({ offset: true }).optional(),
       }),
     ),
+    ownerUserId: z.string().min(1),
+    request: requestSchema,
   })
   .superRefine((value, ctx) => {
     if (new Set(value.entries.map((entry) => entry.requestId)).size !== value.entries.length) {
@@ -44,10 +44,10 @@ export const privateOperatorApprovalCaptureSchema = z
   });
 export type PrivateOperatorApprovalCapture = z.infer<typeof privateOperatorApprovalCaptureSchema>;
 export const privateOperatorApprovalObservationSchema = z.strictObject({
-  adapterSessionId: z.string().min(1),
   adapterGeneration: z.number().int().positive(),
-  nextNativeIndex: z.number().int().nonnegative(),
+  adapterSessionId: z.string().min(1),
   capture: privateOperatorApprovalCaptureSchema,
+  nextNativeIndex: z.number().int().nonnegative(),
 });
 export type PrivateOperatorApprovalObservation = z.infer<
   typeof privateOperatorApprovalObservationSchema
@@ -82,31 +82,14 @@ export const createPrivateOperatorApprovalCapture = (input: {
       entries.set(
         requestId,
         previous ?? {
-          requestId,
-          callId,
           approved: false,
+          callId,
           cancelled: false,
           completedApproved: false,
           completedCancelled: false,
+          requestId,
         },
       );
-    },
-    settle(event: Extract<MessageStreamEvent, { type: "approval.settled" }>) {
-      const entry = entries.get(event.data.requestId);
-      if (entry === undefined) {
-        return;
-      }
-      if (
-        event.data.outcome !== "approved" ||
-        event.data.responderPrincipalId !== input.ownerUserId
-      ) {
-        entry.cancelled = true;
-      } else {
-        entry.approved = true;
-        if (input.captureSettlementTime === true && entry.settledAt === undefined) {
-          entry.settledAt = z.iso.datetime({ offset: true }).parse(event.meta.at);
-        }
-      }
     },
     proveComplete: () => {
       for (const entry of entries.values()) {
@@ -125,16 +108,33 @@ export const createPrivateOperatorApprovalCapture = (input: {
       if (approved.length > 1) {
         throw new Error("Private approval is ambiguous.");
       }
-      const entry = approved[0];
+      const [entry] = approved;
       return entry === undefined
         ? null
         : { approvalId: entry.requestId, approvedByCallId: entry.callId };
     },
+    settle(event: Extract<MessageStreamEvent, { type: "approval.settled" }>) {
+      const entry = entries.get(event.data.requestId);
+      if (entry === undefined) {
+        return;
+      }
+      if (
+        event.data.outcome !== "approved" ||
+        event.data.responderPrincipalId !== input.ownerUserId
+      ) {
+        entry.cancelled = true;
+      } else {
+        entry.approved = true;
+        if (input.captureSettlementTime === true && entry.settledAt === undefined) {
+          entry.settledAt = z.iso.datetime({ offset: true }).parse(event.meta.at);
+        }
+      }
+    },
     snapshot: (): PrivateOperatorApprovalCapture =>
       privateOperatorApprovalCaptureSchema.parse({
-        request: input.request,
-        ownerUserId: input.ownerUserId,
         entries: [...entries.values()],
+        ownerUserId: input.ownerUserId,
+        request: input.request,
       }),
   };
 };
@@ -196,10 +196,10 @@ export const readPrivateOperatorApproval = async <Approval>(input: {
     (observed.complete || observed.nextNativeIndex > startIndex)
   ) {
     const checkpoint = privateOperatorApprovalObservationSchema.parse({
-      adapterSessionId: input.owner.adapterSessionId,
       adapterGeneration: input.owner.adapterGeneration,
-      nextNativeIndex: observed.nextNativeIndex,
+      adapterSessionId: input.owner.adapterSessionId,
       capture: capture.snapshot(),
+      nextNativeIndex: observed.nextNativeIndex,
     });
     if (!isDeepStrictEqual(saved, checkpoint)) {
       await input.observation.save(checkpoint);
@@ -208,12 +208,12 @@ export const readPrivateOperatorApproval = async <Approval>(input: {
   }
   try {
     console.info("[builder:operator-approval-read]", {
-      sessionIdHash: `sha256:${createHash("sha256").update(input.owner.sessionId).digest("hex")}`,
-      nativeStartIndex: startIndex,
-      nativeNextIndex: observed.nextNativeIndex,
-      nativeTailIndex: observed.nativeTailIndex,
       complete: observed.complete,
+      nativeNextIndex: observed.nextNativeIndex,
+      nativeStartIndex: startIndex,
+      nativeTailIndex: observed.nativeTailIndex,
       progressPersisted: persisted,
+      sessionIdHash: `sha256:${createHash("sha256").update(input.owner.sessionId).digest("hex")}`,
     });
   } catch {
     /* Diagnostic delivery never changes approval authority. */

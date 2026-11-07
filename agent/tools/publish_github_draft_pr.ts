@@ -82,26 +82,26 @@ export default defineTool({
     });
     try {
       const recording = await recordPublishedAppSourceForSession({
+        adapterSessionId: ctx.session.id,
         appId: state.appSpec.appId,
         appSpecDigest: state.appSpec.digest,
         backendKind: state.appBackendKind,
-        root: state.applyReceipt.applyRoot,
-        adapterSessionId: ctx.session.id,
-        callbackExecution: hostedOperatorCallbackExecution(ctx.session),
-        sessionAuth: ctx.session.auth,
         callId: ctx.callId,
-        review: state.reviewReceipt,
+        callbackExecution: hostedOperatorCallbackExecution(ctx.session),
         publication,
+        review: state.reviewReceipt,
+        root: state.applyReceipt.applyRoot,
+        sessionAuth: ctx.session.auth,
       });
       return { ...publication, appSourceRecording: { status: recording.status } };
     } catch {
       return {
         ...publication,
         appSourceRecording: {
-          status: "unavailable" as const,
-          recoveryRequired: true,
           nextAction:
             "Resume this approved publication to record its source for Preview; the GitHub publication already succeeded. Preview source preparation remains unavailable until recording succeeds.",
+          recoveryRequired: true,
+          status: "unavailable" as const,
         },
       };
     }

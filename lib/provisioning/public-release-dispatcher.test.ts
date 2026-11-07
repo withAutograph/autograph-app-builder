@@ -9,56 +9,56 @@ import { publicReleaseOperationRef, publicReleasePlanDigest } from "./public-rel
 import { initialPublicReleaseRecord } from "./public-release-store";
 
 const ownerContext = operatorOwnerContextSchema.parse({
-  kind: "direct",
+  adapterGeneration: 1,
+  adapterSessionId: "native",
   authority,
+  kind: "direct",
   principal: { ...authority, scopes: ["autograph:send"] },
   sessionId: plan.selection.sessionId,
-  adapterSessionId: "native",
-  adapterGeneration: 1,
 });
 const common = {
-  ownerContext,
   adapterSessionId: "native",
   callId: "current-call",
   execution: { logicalSessionId: "native" },
+  ownerContext,
 };
 // oxlint-disable-next-line anti-slop/no-object-parameters -- Malformed external JSON is deliberately sent through the real request parser.
 const request = (body: object, path = "/v1/public-release") =>
   new Request(`https://operator.example${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
+    headers: { "content-type": "application/json" },
+    method: "POST",
   });
 const fixture = () => {
   const row = {
     operationRef: publicReleaseOperationRef(plan),
-    revision: 1,
     record: initialPublicReleaseRecord(plan),
+    revision: 1,
   };
   const ports: PublicReleasePorts = {
+    applyEffect: vi.fn(),
+    assertApproved: vi.fn().mockRejectedValue(new Error("pending")),
+    assertAuthorized: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    observe: vi.fn(),
+    reconcileEffect: vi.fn(),
+    resolve: vi.fn().mockResolvedValue(plan),
     store: {
+      compareAndSet: vi.fn(),
       read: vi.fn().mockResolvedValue(row),
       reserve: vi.fn().mockResolvedValue(row),
-      compareAndSet: vi.fn(),
     },
-    resolve: vi.fn().mockResolvedValue(plan),
-    assertAuthorized: vi.fn().mockResolvedValue(undefined),
-    assertApproved: vi.fn().mockRejectedValue(new Error("pending")),
     withTargetLease: vi.fn(),
-    reconcileEffect: vi.fn(),
-    applyEffect: vi.fn(),
-    observe: vi.fn(),
   };
   const owner = {
-    verifyWorkload: vi.fn().mockResolvedValue(undefined),
-    assertCanonicalAppOwner: vi.fn().mockResolvedValue(undefined),
+    assertCanonicalAppOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    verifyWorkload: vi.fn<() => Promise<void>>().mockResolvedValue(),
   };
   const createPorts = vi.fn().mockResolvedValue(ports);
   return {
-    ports,
-    owner,
     createPorts,
-    handler: createPublicReleaseDispatcher({ owner, createPorts }),
+    handler: createPublicReleaseDispatcher({ createPorts, owner }),
+    owner,
+    ports,
   };
 };
 describe("public release HTTP authority boundary", () => {
@@ -88,9 +88,9 @@ describe("public release HTTP authority boundary", () => {
     );
     expect(result.status).toBe(409);
     expect(await result.json()).toMatchObject({
-      status: "blocked",
-      code: "same_project_auth_required",
       authenticatedBehavior: "unassessed",
+      code: "same_project_auth_required",
+      status: "blocked",
     });
     expect(f.ports.applyEffect).not.toHaveBeenCalled();
   });
@@ -111,8 +111,8 @@ describe("public release HTTP authority boundary", () => {
         ...common,
         action: "public-release-run",
         input: {
-          plan,
           operationRef: publicReleaseOperationRef(plan),
+          plan,
           planDigest: publicReleasePlanDigest(plan),
         },
       }),
@@ -129,8 +129,8 @@ describe("public release HTTP authority boundary", () => {
         ...common,
         action: "public-release-observe",
         input: {
-          plan,
           operationRef: publicReleaseOperationRef(plan),
+          plan,
           planDigest: publicReleasePlanDigest(plan),
         },
       }),
@@ -147,8 +147,8 @@ describe("public release HTTP authority boundary", () => {
         await f.handler(
           request({
             ...common,
-            adapterSessionId: "foreign",
             action: "public-release-plan",
+            adapterSessionId: "foreign",
             appId: plan.selection.appId,
           }),
         )

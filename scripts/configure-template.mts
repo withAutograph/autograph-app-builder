@@ -3,7 +3,7 @@ import path from "node:path";
 
 const originIndex = process.argv.indexOf("--origin");
 const originValue = originIndex === -1 ? undefined : process.argv[originIndex + 1];
-if (!originValue) {
+if (originValue === undefined || originValue === "") {
   throw new Error("Usage: pnpm configure --origin https://agent.example.com");
 }
 const origin = new URL(originValue);

@@ -61,8 +61,8 @@ const consumed: RealmContinuationAuthority["reason"] = {
   proofSha256: "c".repeat(64),
 };
 const expired: RealmContinuationAuthority["reason"] = {
-  kind: "expired-technical-wait",
   expiresAt: "2026-10-01T00:00:00.000Z",
+  kind: "expired-technical-wait",
 };
 const authFor = (reason: RealmContinuationAuthority["reason"] = consumed) =>
   createRealmContinuationServiceAuth({
@@ -77,9 +77,9 @@ describe("sealed Realm continuation authority", () => {
     (reason) => {
       const auth = authFor(reason);
       expect(auth.current).toMatchObject({
-        principalType: "service",
         issuer: service.issuer,
         principalId: service.principalId,
+        principalType: "service",
       });
       expect(auth.initiator).toEqual(initiator);
       const claim = readVerifiedRealmContinuationAuthority(auth, options);
@@ -146,7 +146,7 @@ describe("sealed Realm continuation authority", () => {
       ...encryptVercelToken({
         associatedData: "other-purpose",
         key: config.tokenKey,
-        token: JSON.stringify({ ...observed, reason: consumed, service, purpose: "other-purpose" }),
+        token: JSON.stringify({ ...observed, purpose: "other-purpose", reason: consumed, service }),
       }),
       keyVersion: config.tokenKeyVersion,
     });
@@ -188,9 +188,9 @@ describe("sealed Realm continuation authority", () => {
           key: config.tokenKey,
           token: JSON.stringify({
             ...observed,
+            purpose: "autograph-realm-continuation-authority-v1",
             reason: consumed,
             service,
-            purpose: "autograph-realm-continuation-authority-v1",
             ...extra,
           }),
         }),
@@ -245,12 +245,12 @@ describe("sealed Realm continuation authority", () => {
     const auth = authFor();
     expect(
       readVerifiedRealmContinuationAuthority(auth, {
-        service,
         config: {
+          previousTokenKeys: [{ key: config.tokenKey, version: "v1" }],
           tokenKey: Buffer.alloc(32, 9),
           tokenKeyVersion: "v2",
-          previousTokenKeys: [{ key: config.tokenKey, version: "v1" }],
         },
+        service,
       })?.ownerSessionId,
     ).toBe(observed.ownerSessionId);
   });

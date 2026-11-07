@@ -69,7 +69,7 @@ const reportCaughtPreparationFailure = (
 };
 
 const preparationPlanningAction = (input: HostedRuntimeInput, reason: string) => ({
-  tool: "plan-app-hosted-runtime" as const,
+  approval: "normal-plan-approval" as const,
   input: {
     appId: input.appId,
     branch: input.branch,
@@ -95,8 +95,8 @@ const preparationPlanningAction = (input: HostedRuntimeInput, reason: string) =>
           },
         }),
   },
-  approval: "normal-plan-approval" as const,
   reason,
+  tool: "plan-app-hosted-runtime" as const,
 });
 
 const preparationResult = (
@@ -357,9 +357,9 @@ export async function prepareHostedRuntimeStep(
         isOperatorError: (error): error is HostedOperatorErrorType =>
           error instanceof contract.HostedOperatorError,
         isTransportUnknown: clientModule.isHostedOperatorTransportUnknown,
-        sameSelection: (left, right) => contract.sameOperatorSelection(left, right),
         onFailure: (failureStage, error) =>
           diagnostic?.reportRuntimePreparationFailure(ctx.session.id, failureStage, error),
+        sameSelection: (left, right) => contract.sameOperatorSelection(left, right),
       },
     );
   } catch (error) {

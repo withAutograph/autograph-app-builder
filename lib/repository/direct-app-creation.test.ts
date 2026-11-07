@@ -59,7 +59,7 @@ describe("direct app creation", () => {
           }
           return { exitCode: 0, stderr: "", stdout: JSON.stringify(receipt) };
         }),
-        setNetworkPolicy: vi.fn(async () => {}),
+        setNetworkPolicy: vi.fn<() => Promise<void>>().mockResolvedValue(),
         writeTextFile: vi.fn(async ({ path }: { path: string }) => {
           calls.push(path);
         }),
@@ -109,7 +109,7 @@ describe("direct app creation", () => {
         readBinaryFile: vi.fn(async ({ path }: { path: string }) =>
           path.includes("prototype/") ? Buffer.from(content) : null,
         ),
-        removePath: vi.fn(async () => {}),
+        removePath: vi.fn<() => Promise<void>>().mockResolvedValue(),
         run: vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: "" })),
         writeBinaryFile: vi.fn(async ({ path }: { path: string }) => {
           writes.push(path);
@@ -204,12 +204,12 @@ describe("direct app creation", () => {
       ]);
       const writes: string[] = [];
       const iterationChanges = [
-        { path: appPath, after: { content: appContent, digest: sha256(appContent), mode: "644" } },
+        { after: { content: appContent, digest: sha256(appContent), mode: "644" }, path: appPath },
       ];
       const iterationProposal: TargetProposal = {
         ...proposal,
-        operation: "iterate-existing-app",
         iteration: { changes: iterationChanges, digest: sha256(JSON.stringify(iterationChanges)) },
+        operation: "iterate-existing-app",
       };
       const sandbox = {
         readBinaryFile: vi.fn(async ({ path }: { path: string }) => {
@@ -223,7 +223,7 @@ describe("direct app creation", () => {
           files.delete(path);
         }),
         run: vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: JSON.stringify(receipt) })),
-        setNetworkPolicy: vi.fn(async () => {}),
+        setNetworkPolicy: vi.fn<() => Promise<void>>().mockResolvedValue(),
         writeBinaryFile: vi.fn(
           async ({ path, content: bytes }: { path: string; content: Uint8Array }) => {
             writes.push(path);
@@ -265,9 +265,9 @@ describe("direct app creation", () => {
           const snapshot = [...files]
             .filter(([path]) => path.startsWith("repository/"))
             .map(([path, text]) => ({
-              path: path.slice("repository/".length),
-              mode: "644",
               digest: sha256(text),
+              mode: "644",
+              path: path.slice("repository/".length),
             }));
           return { files: snapshot, treeDigest: sha256(JSON.stringify(snapshot)) };
         },

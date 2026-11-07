@@ -11,13 +11,13 @@ import getTool from "../../agent/tools/get-app-hosted-runtime";
 const hooks = vi.hoisted(() => ({
   authorize: vi.fn(),
   client: vi.fn(),
-  request: vi.fn(),
   export: vi.fn(),
-  readExport: vi.fn(),
   readContinuity: vi.fn(),
   readContinuityBindings: vi.fn(),
   readContinuityCheckpoints: vi.fn(),
   readContinuityVerifiedActors: vi.fn(),
+  readExport: vi.fn(),
+  request: vi.fn(),
   resolve: vi.fn(),
 }));
 vi.mock("eve/tools", () => ({ defineTool: <T>(tool: T) => tool }));
@@ -47,13 +47,13 @@ const request = {
   sessionId: selection.sessionId,
 };
 const ctx = {
-  callId: "owned-tool-call",
   abortSignal: new AbortController().signal,
+  callId: "owned-tool-call",
   session: {
     auth: { owner: true },
     id: "adapter-session",
-    ownerRunId: "executing-session-owner",
     ownerAnchorRunId: "adapter-session",
+    ownerRunId: "executing-session-owner",
   },
 };
 // SAFETY: The identity defineTool fixture calls the production execute method; all consumed context fields are supplied.
@@ -165,18 +165,18 @@ describe("private hosted runtime planning target", () => {
   it("routes missing normal destination setup to the canonical saved session", async () => {
     hooks.resolve.mockRejectedValueOnce(new HostedOperatorError("builder_destination_required"));
     await expect(planTool.execute(input, toolCtx)).resolves.toMatchObject({
-      status: "blocked",
       code: "builder_destination_required",
       destinationPath: `/builds/${selection.sessionId}/destination`,
+      status: "blocked",
     });
     expect(hooks.request).not.toHaveBeenCalled();
   });
   it("routes missing normal destination setup to the canonical saved session", async () => {
     hooks.resolve.mockRejectedValueOnce(new HostedOperatorError("builder_destination_required"));
     await expect(planTool.execute(input, toolCtx)).resolves.toMatchObject({
-      status: "blocked",
       code: "builder_destination_required",
       destinationPath: `/builds/${selection.sessionId}/destination`,
+      status: "blocked",
     });
     expect(hooks.request).not.toHaveBeenCalled();
   });
@@ -203,9 +203,9 @@ describe("closed export tool pre-dispatch diagnostics", () => {
     hooks.resolve.mockResolvedValue(selection);
     hooks.export.mockResolvedValue({ status: "planned" });
     hooks.client.mockResolvedValue({
+      planTenantExport: hooks.export,
       request: hooks.request,
       resolvePreviewTarget: hooks.resolve,
-      planTenantExport: hooks.export,
       sessionId: selection.sessionId,
     });
   });
@@ -217,19 +217,19 @@ describe("closed export tool pre-dispatch diagnostics", () => {
   ) => {
     expect(console.info).toHaveBeenCalledWith("[builder:hosted-neon-consent]", {
       boundary: "builder",
-      phase: "inline",
-      stage: "operator_request",
-      outcome: "setup_unavailable",
       event: "builder.hosted_neon_consent",
+      exportPlanningFailure: { errorClass, stage },
+      outcome: "setup_unavailable",
+      phase: "inline",
       sessionIdHash: `sha256:${createHash("sha256").update(sessionId).digest("hex")}`,
-      exportPlanningFailure: { stage, errorClass },
+      stage: "operator_request",
     });
     expect(JSON.stringify(vi.mocked(console.info).mock.calls)).not.toContain(customerId);
     expect(JSON.stringify(vi.mocked(console.info).mock.calls)).not.toContain(selection.sessionId);
     expect(JSON.stringify(vi.mocked(console.info).mock.calls)).not.toContain(selection.projectId);
   };
   it.each([
-    [{ projectId: "private-other-project", customerId }, "tool_project_mismatch"],
+    [{ customerId, projectId: "private-other-project" }, "tool_project_mismatch"],
     [{ branch: "private-other-branch", customerId }, "tool_branch_mismatch"],
     [{}, "tool_missing_customer"],
   ] as const)("identifies the existing local guard %# without dispatch", async (hints, stage) => {
@@ -277,7 +277,7 @@ describe("closed export tool pre-dispatch diagnostics", () => {
     },
   );
   it("passes the explicit owner organization choice without guessing a customer ID", async () => {
-    const result = { status: "planned", retained: true };
+    const result = { retained: true, status: "planned" };
     hooks.export.mockResolvedValueOnce(result);
     expect(
       await planTool.execute({ ...exportInput, customerScope: "owner-organization" }, toolCtx),
@@ -299,13 +299,13 @@ describe("closed export tool pre-dispatch diagnostics", () => {
       toolCtx,
     );
     expect(result).toMatchObject({
-      status: "blocked",
       code: "export_customer_selection_required",
       nextAction: "Name the organization to export. No export was planned or data extracted.",
+      status: "blocked",
     });
   });
   it("preserves successful dispatch and produces no failure diagnostic", async () => {
-    const result = { status: "planned", retained: true };
+    const result = { retained: true, status: "planned" };
     hooks.export.mockResolvedValueOnce(result);
     expect(await planTool.execute({ ...exportInput, customerId }, toolCtx)).toBe(result);
     expect(hooks.resolve).toHaveBeenCalledOnce();
@@ -326,8 +326,8 @@ describe("closed export tool pre-dispatch diagnostics", () => {
   it("preserves the existing blocked result when diagnostic context lookup throws", async () => {
     let reads = 0;
     hooks.client.mockResolvedValueOnce({
-      resolvePreviewTarget: hooks.resolve,
       planTenantExport: hooks.export,
+      resolvePreviewTarget: hooks.resolve,
       get sessionId() {
         reads += 1;
         if (reads > 1) {
@@ -350,9 +350,9 @@ describe("saved export lookup tool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hooks.client.mockResolvedValue({
-      request: hooks.request,
-      readTenantExport: hooks.readExport,
       planTenantExport: hooks.export,
+      readTenantExport: hooks.readExport,
+      request: hooks.request,
       resolvePreviewTarget: hooks.resolve,
       sessionId: selection.sessionId,
     });
@@ -364,15 +364,15 @@ describe("saved export lookup tool", () => {
       status: { state: "planned" },
     };
     hooks.readExport.mockResolvedValueOnce(saved);
-    await expect(getTool.execute({ operation: "export", exportId }, toolCtx)).resolves.toEqual(
+    await expect(getTool.execute({ exportId, operation: "export" }, toolCtx)).resolves.toEqual(
       saved,
     );
     const clientCall = hooks.client.mock.calls.at(-1);
     expect(clientCall?.slice(0, 2)).toEqual([ctx.session.auth, ctx.session.id]);
     expect(clientCall?.[3]).toEqual({
       logicalSessionId: ctx.session.id,
-      ownerRunId: ctx.session.ownerRunId,
       ownerAnchorRunId: ctx.session.ownerAnchorRunId,
+      ownerRunId: ctx.session.ownerRunId,
     });
     expect(hooks.readExport).toHaveBeenCalledWith(exportId, ctx.abortSignal);
     expect(hooks.request).not.toHaveBeenCalled();
@@ -403,10 +403,10 @@ describe("saved export lookup tool", () => {
   });
   it("preserves a saved export ownership refusal without returning an intent or replanning", async () => {
     hooks.readExport.mockRejectedValueOnce(new HostedOperatorError("authorization_required"));
-    await expect(getTool.execute({ operation: "export", exportId }, toolCtx)).resolves.toEqual({
-      exportId,
+    await expect(getTool.execute({ exportId, operation: "export" }, toolCtx)).resolves.toEqual({
       authenticatedBehavior: "unassessed",
       code: "authorization_required",
+      exportId,
       status: "blocked",
     });
     expect(hooks.request).not.toHaveBeenCalled();
@@ -419,26 +419,26 @@ describe("saved continuity lookup tool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hooks.client.mockResolvedValue({
-      request: hooks.request,
       readContinuity: hooks.readContinuity,
       readContinuityBindings: hooks.readContinuityBindings,
       readContinuityCheckpoints: hooks.readContinuityCheckpoints,
       readContinuityVerifiedActors: hooks.readContinuityVerifiedActors,
       readTenantExport: hooks.readExport,
+      request: hooks.request,
       resolvePreviewTarget: hooks.resolve,
       sessionId: selection.sessionId,
     });
   });
   it("routes saved checkpoint and verified actor reads without effects", async () => {
-    const checkpoint = { intentId, checkpoints: { suiteDispatch: "unrecorded" } };
-    const actors = { requestCorrelation: "not_established", actors: [] };
+    const checkpoint = { checkpoints: { suiteDispatch: "unrecorded" }, intentId };
+    const actors = { actors: [], requestCorrelation: "not_established" };
     hooks.readContinuityCheckpoints.mockResolvedValueOnce(checkpoint);
     hooks.readContinuityVerifiedActors.mockResolvedValueOnce(actors);
     await expect(
-      getTool.execute({ operation: "continuity-checkpoints", intentId }, toolCtx),
+      getTool.execute({ intentId, operation: "continuity-checkpoints" }, toolCtx),
     ).resolves.toEqual(checkpoint);
     await expect(
-      getTool.execute({ operation: "continuity-verified-actors", intentId }, toolCtx),
+      getTool.execute({ intentId, operation: "continuity-verified-actors" }, toolCtx),
     ).resolves.toEqual(actors);
     expect(hooks.request).not.toHaveBeenCalled();
     expect(hooks.resolve).not.toHaveBeenCalled();
@@ -447,8 +447,8 @@ describe("saved continuity lookup tool", () => {
     const result = {
       bindings: [
         {
-          appId: "spend-review",
           actorId: "actor",
+          appId: "spend-review",
           organizationId: "org",
           role: "reviewer",
           status: "actor_active",
@@ -457,7 +457,7 @@ describe("saved continuity lookup tool", () => {
     };
     hooks.readContinuityBindings.mockResolvedValueOnce(result);
     await expect(
-      getTool.execute({ operation: "continuity-bindings", intentId }, toolCtx),
+      getTool.execute({ intentId, operation: "continuity-bindings" }, toolCtx),
     ).resolves.toEqual(result);
     expect(hooks.readContinuityBindings).toHaveBeenCalledWith(intentId, ctx.abortSignal);
     expect(hooks.request).not.toHaveBeenCalled();
@@ -470,15 +470,15 @@ describe("saved continuity lookup tool", () => {
       status: { state: "planned" },
     };
     hooks.readContinuity.mockResolvedValueOnce(saved);
-    await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toBe(
+    await expect(getTool.execute({ intentId, operation: "continuity" }, toolCtx)).resolves.toBe(
       saved,
     );
     const clientCall = hooks.client.mock.calls.at(-1);
     expect(clientCall?.slice(0, 2)).toEqual([ctx.session.auth, ctx.session.id]);
     expect(clientCall?.[3]).toEqual({
       logicalSessionId: ctx.session.id,
-      ownerRunId: ctx.session.ownerRunId,
       ownerAnchorRunId: ctx.session.ownerAnchorRunId,
+      ownerRunId: ctx.session.ownerRunId,
     });
     expect(hooks.readContinuity).toHaveBeenCalledWith(intentId, ctx.abortSignal);
     expect(hooks.request).not.toHaveBeenCalled();
@@ -488,10 +488,10 @@ describe("saved continuity lookup tool", () => {
   });
   it("returns an ownership refusal without exposing a saved continuity intent", async () => {
     hooks.readContinuity.mockRejectedValueOnce(new HostedOperatorError("authorization_required"));
-    await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toEqual({
-      intentId,
+    await expect(getTool.execute({ intentId, operation: "continuity" }, toolCtx)).resolves.toEqual({
       authenticatedBehavior: "unassessed",
       code: "authorization_required",
+      intentId,
       status: "blocked",
     });
     expect(hooks.request).not.toHaveBeenCalled();
@@ -500,18 +500,18 @@ describe("saved continuity lookup tool", () => {
   it("preserves an operator-provided recovery stage and progress without replaying the intent", async () => {
     hooks.readContinuity.mockRejectedValueOnce(
       new HostedOperatorError("operator_unavailable", {
-        recoveryStage: "canonical_read",
-        recoveryProgressAdvanced: false,
         continuityReadStage: "client_response_validation",
+        recoveryProgressAdvanced: false,
+        recoveryStage: "canonical_read",
       }),
     );
-    await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toEqual({
-      intentId,
+    await expect(getTool.execute({ intentId, operation: "continuity" }, toolCtx)).resolves.toEqual({
       authenticatedBehavior: "unassessed",
       code: "operator_unavailable",
-      recoveryStage: "canonical_read",
-      recoveryProgressAdvanced: false,
       continuityReadStage: "client_response_validation",
+      intentId,
+      recoveryProgressAdvanced: false,
+      recoveryStage: "canonical_read",
       status: "blocked",
     });
     expect(hooks.readContinuity).toHaveBeenCalledOnce();
@@ -520,10 +520,10 @@ describe("saved continuity lookup tool", () => {
   });
   it("does not invent a stage or expose raw details for an unclassified failure", async () => {
     hooks.readContinuity.mockRejectedValueOnce(new Error("private provider detail"));
-    await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toEqual({
-      intentId,
+    await expect(getTool.execute({ intentId, operation: "continuity" }, toolCtx)).resolves.toEqual({
       authenticatedBehavior: "unassessed",
       code: "operator_unavailable",
+      intentId,
       status: "blocked",
     });
   });

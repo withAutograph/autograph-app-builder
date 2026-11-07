@@ -240,12 +240,6 @@ const installEffectSummary = (effect: HostedOperatorPlan["effects"][number]) => 
     : "Install or update the approved Preview data structures.";
 };
 const effectSummaryByKind = {
-  resources: (plan: HostedOperatorPlan, effect: HostedOperatorPlan["effects"][number]) =>
-    resourceEffectSummary(plan, effect),
-  install: (_plan: HostedOperatorPlan, effect: HostedOperatorPlan["effects"][number]) =>
-    installEffectSummary(effect),
-  "gateway-bindings": () => "Connect the app's Preview environment to the shared sign-in service.",
-  "gateway-delivery": () => "Update the shared sign-in service used by Preview.",
   access: (plan: HostedOperatorPlan) =>
     plan.action === "cleanup"
       ? "Revoke the app access created by this setup."
@@ -258,10 +252,6 @@ const effectSummaryByKind = {
     plan.action === "cleanup"
       ? "Remove the sign-up policy created by this setup."
       : "Apply the approved sign-up eligibility and app roles.",
-  "normal-accounts": (plan: HostedOperatorPlan) =>
-    plan.action === "cleanup"
-      ? "Remove the app-owner access created by this setup."
-      : "Create or update the approved app-owner access.",
   bindings: (plan: HostedOperatorPlan) =>
     plan.action === "cleanup"
       ? "Remove service connections created by this setup."
@@ -270,9 +260,19 @@ const effectSummaryByKind = {
     plan.action === "cleanup"
       ? "Remove the app's Preview delivery."
       : "Publish the app's Preview delivery.",
-  revoke: () => "Revoke access created by this setup.",
+  "gateway-bindings": () => "Connect the app's Preview environment to the shared sign-in service.",
+  "gateway-delivery": () => "Update the shared sign-in service used by Preview.",
+  install: (_plan: HostedOperatorPlan, effect: HostedOperatorPlan["effects"][number]) =>
+    installEffectSummary(effect),
+  "normal-accounts": (plan: HostedOperatorPlan) =>
+    plan.action === "cleanup"
+      ? "Remove the app-owner access created by this setup."
+      : "Create or update the approved app-owner access.",
   "remove-bindings": () => "Remove service connections created by this setup.",
+  resources: (plan: HostedOperatorPlan, effect: HostedOperatorPlan["effects"][number]) =>
+    resourceEffectSummary(plan, effect),
   retire: () => "Retire the app-owned Preview resource; shared Auth resources may be retained.",
+  revoke: () => "Revoke access created by this setup.",
 } satisfies Record<
   HostedOperatorPlan["effects"][number]["kind"],
   (plan: HostedOperatorPlan, effect: HostedOperatorPlan["effects"][number]) => string
@@ -556,8 +556,8 @@ const nativeTargetApprovalDescription = (input: unknown): string | undefined => 
     .strictObject({
       appId,
       operationRef: z.uuid(),
-      planDigest: digest,
       plan: nativeTargetOnboardingPlanSchema,
+      planDigest: digest,
     })
     .safeParse(input);
   if (
@@ -601,7 +601,7 @@ function otherPublicApprovalDescription(input: unknown, toolName?: string): stri
   if (toolName === "export-app-hosted-data") {
     const parsed = tenantExportApprovalInputSchema.safeParse(record);
     if (!parsed.success) return undefined;
-    const plan = parsed.data.plan;
+    const { plan } = parsed.data;
     return [
       `Export the selected customer's ${plan.scope.appId} data for private review. Builder will read the app's public tables in a read-only snapshot and keep the export and manifest private to you in this session. No external recipient or database changes are included. This may contain customer information; approve only if you need this export.`,
       `Customer reference (provider identity reference):\n- ${plan.scope.customerId}`,

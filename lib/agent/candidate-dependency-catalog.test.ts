@@ -5,10 +5,10 @@ import type { CandidateDependencyCatalogIntent } from "../repository/candidate-d
 import normalizeCatalog from "../../agent/tools/normalize_github_draft_pr_dependency_catalog";
 
 const mocks = vi.hoisted(() => ({
-  candidate: null as DraftReconciliationCandidate | null,
-  plan: vi.fn(),
   apply: vi.fn(),
+  candidate: null as DraftReconciliationCandidate | null,
   inspect: vi.fn(),
+  plan: vi.fn(),
 }));
 vi.mock("eve/tools", () => ({ defineTool: <T>(tool: T): T => tool }));
 vi.mock("./published-draft-repair", () => ({ currentDraftCandidateSource: () => ({}) }));
@@ -33,19 +33,19 @@ vi.mock("../repository/sandbox-draft-reconciliation", () => ({
 }));
 vi.mock(import("../repository/candidate-dependency-catalog"), async (original) => ({
   ...(await original()),
-  planCandidateDependencyCatalog: mocks.plan,
   normalizeCandidateDependencyCatalog: mocks.apply,
+  planCandidateDependencyCatalog: mocks.plan,
 }));
 const intent: CandidateDependencyCatalogIntent = {
-  root: "/workspace/candidate",
   appId: "example",
   dependency: "fixture-tool",
-  version: "1.2.3",
-  index: "original-index",
-  files: [],
-  lockGenerated: false,
-  lockExitCode: 7,
   diagnostic: "lock resolution failed",
+  files: [],
+  index: "original-index",
+  lockExitCode: 7,
+  lockGenerated: false,
+  root: "/workspace/candidate",
+  version: "1.2.3",
 };
 const context = { abortSignal: new AbortController().signal } as never;
 beforeEach(() => {
@@ -53,10 +53,10 @@ beforeEach(() => {
   // SAFETY: Only source identity and cleared receipt fields are observed by this controlled tool fixture.
   mocks.candidate = {
     originalReviewDigest: "review",
+    proposal: {},
+    review: {},
     validation: {},
     validationRun: {},
-    review: {},
-    proposal: {},
   } as DraftReconciliationCandidate;
   mocks.plan.mockResolvedValue(intent);
   mocks.apply.mockImplementation(async () => {
@@ -76,16 +76,16 @@ it("persists the exact intent before writes and resumes it after loss without ab
   );
   mocks.apply.mockResolvedValueOnce({
     dependency: "fixture-tool",
-    version: "1.2.3",
-    lockGenerated: false,
-    lockExitCode: 7,
     diagnostic: "lock resolution failed",
     files: [],
+    lockExitCode: 7,
+    lockGenerated: false,
     receipt: { files: [], nonAppIndexDigest: "new-index" },
+    version: "1.2.3",
   });
   await expect(
     normalizeCatalog.execute({ dependency: "fixture-tool" }, context),
-  ).resolves.toMatchObject({ status: "lock_generation_failed", lockExitCode: 7 });
+  ).resolves.toMatchObject({ lockExitCode: 7, status: "lock_generation_failed" });
   expect(mocks.plan).toHaveBeenCalledOnce();
   expect(mocks.inspect).toHaveBeenCalledOnce();
   expect(mocks.candidate?.dependencyCatalogPending).toBeUndefined();

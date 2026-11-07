@@ -45,28 +45,31 @@ const privateHeaders = {
   "x-content-type-options": "nosniff",
 };
 const unavailable = () =>
-  new Response("Export is unavailable.", { status: 404, headers: privateHeaders });
+  new Response("Export is unavailable.", { headers: privateHeaders, status: 404 });
 const workerFor = (record: TenantExportJournalRecord): TenantExportWorkerInput => {
-  const completion = record.completion;
+  const { completion } = record;
   if (!completion) {
     throw operatorArtifactUnavailable();
   }
   return {
-    version: 1,
-    kind: "tenant-export-worker",
-    exportId: record.requestId,
     attemptId: completion.attemptId,
-    snapshotId: completion.snapshotId,
-    planDigest: record.planDigest,
-    scope: record.plan.scope,
-    resource: record.plan.resource,
-    release: record.plan.release,
-    selection: record.plan.selection,
+    exportId: record.requestId,
     format: record.plan.format,
+    kind: "tenant-export-worker",
+    planDigest: record.planDigest,
+    release: record.plan.release,
+    resource: record.plan.resource,
+    scope: record.plan.scope,
+    selection: record.plan.selection,
+    snapshotId: completion.snapshotId,
+    version: 1,
   };
 };
 const responseBody = (iterator: AsyncIterator<Uint8Array>) =>
   new ReadableStream<Uint8Array>({
+    async cancel() {
+      await iterator.return?.();
+    },
     async pull(controller) {
       try {
         const next = await iterator.next();
@@ -79,9 +82,6 @@ const responseBody = (iterator: AsyncIterator<Uint8Array>) =>
         controller.error(operatorArtifactUnavailable());
         await iterator.return?.();
       }
-    },
-    async cancel() {
-      await iterator.return?.();
     },
   });
 
@@ -97,11 +97,11 @@ export const createTenantExportReader =
       const authority = await ports.authenticate(request);
       if (!authority) {
         return new Response("Sign in to download this export.", {
-          status: 401,
           headers: privateHeaders,
+          status: 401,
         });
       }
-      const rawRecord = await ports.readCompletion({ exportId, authority });
+      const rawRecord = await ports.readCompletion({ authority, exportId });
       if (!rawRecord) {
         return unavailable();
       }
@@ -119,7 +119,9 @@ export const createTenantExportReader =
         target: { appId: record.target.appId, sessionId: record.target.sessionId },
       };
       parseHostedTenantExportPlanForOwner(record.plan, { authority, target: context.target });
-      const assertCurrent = () => ports.assertCurrentOwner(context);
+      const assertCurrent = async () => {
+        await ports.assertCurrentOwner(context);
+      };
       await assertCurrent();
       const worker = workerFor(record);
       const inspection = await inspectTenantExportCompletion({
@@ -133,7 +135,7 @@ export const createTenantExportReader =
       ) {
         return unavailable();
       }
-      const manifest = inspection.manifest;
+      const { manifest } = inspection;
       const name = input.member?.at(0);
       if (name === undefined) {
         const path = `/api/hosted-operator/exports/${exportId}`;
@@ -142,10 +144,10 @@ export const createTenantExportReader =
           {
             exportId,
             files: [record.completion.manifest, ...manifest.files].map((file) => ({
-              name: file.name,
               byteLength: file.byteLength,
-              sha256: file.sha256,
               downloadPath: `${path}/${file.name}`,
+              name: file.name,
+              sha256: file.sha256,
             })),
           },
           { headers: privateHeaders },
@@ -170,9 +172,9 @@ export const createTenantExportReader =
         {
           headers: {
             ...privateHeaders,
-            "content-type": file.kind === "manifest" ? "application/json" : "application/x-ndjson",
             "content-disposition": `attachment; filename="${file.name}"`,
             "content-length": file.byteLength,
+            "content-type": file.kind === "manifest" ? "application/json" : "application/x-ndjson",
           },
         },
       );
@@ -191,8 +193,8 @@ export const createTenantExportDownloadDeploymentHandler = (
       const config = readPreviewOAuthRuntimeConfig(environment);
       const database = openHostedPostgresDatabase(config.databaseUrl);
       const membership = createPostgresPreviewOrganizationAuthority(database, {
-        issuer: config.issuer,
         audience: config.resource,
+        issuer: config.issuer,
       });
       const sessions = createPostgresHostedEveStore(database);
       const authenticate = async (currentRequest: Request): Promise<Authority | undefined> => {
@@ -207,15 +209,15 @@ export const createTenantExportDownloadDeploymentHandler = (
           return undefined;
         }
         const workspaceId = await membership.activeWorkspaceForUser({
-          issuer: config.issuer,
           audience: config.resource,
+          issuer: config.issuer,
           ownerUserId: session.user.id,
         });
         return workspaceId === undefined
           ? undefined
           : {
-              issuer: config.issuer,
               audience: config.resource,
+              issuer: config.issuer,
               ownerUserId: session.user.id,
               workspaceId,
             };
@@ -242,13 +244,13 @@ export const createTenantExportDownloadDeploymentHandler = (
           }
         };
         return {
+          assertCurrentOwner,
           authenticate,
           readCompletion: createTenantExportCompletionLookup({
-            database,
             assertOwner: assertAuthority,
+            database,
           }),
-          assertCurrentOwner,
-          store: createPostgresOperatorArtifactReader({ database, assertCurrentOwner }),
+          store: createPostgresOperatorArtifactReader({ assertCurrentOwner, database }),
         };
       };
     }

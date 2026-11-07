@@ -2,6 +2,8 @@ import { spawnSync } from "node:child_process";
 import { lstatSync, realpathSync } from "node:fs";
 import path from "node:path";
 
+import { z } from "zod";
+
 import {
   parseLinkedVercelProject,
   parseLocalVercelOidcToken,
@@ -10,6 +12,7 @@ import {
 } from "../eve/local-vercel-oidc";
 
 const MINIMUM_TOKEN_LIFETIME_SECONDS = 300;
+const LOCAL_ENV_FILE = ".env.local";
 
 export interface LocalOidcStartupInvocation {
   executable: string;
@@ -30,16 +33,16 @@ export class LocalOidcRefreshFailedError extends Error {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requiredEnvironmentValue(environment: NodeJS.ProcessEnv, name: "HOME" | "PATH"): string {
-  const value = environment[name];
-  if (typeof value !== "string" || value.length === 0) {
+  const value = z.string().min(1).safeParse(environment[name]);
+  if (!value.success) {
     throw new Error(`Required ${name} was unavailable.`);
   }
-  return value;
+  return value.data;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function commandEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  return {
+  const childEnvironment: NodeJS.ProcessEnv = {
     CI: environment.CI ?? "",
     HOME: requiredEnvironmentValue(environment, "HOME"),
     LANG: environment.LANG ?? "C",
@@ -48,11 +51,12 @@ function commandEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     PATH: requiredEnvironmentValue(environment, "PATH"),
     TMPDIR: environment.TMPDIR ?? "/tmp",
     TZ: environment.TZ ?? "",
-    // Vercel CLI resolves its existing login/configuration under its XDG data directory.
-    ...(environment.XDG_DATA_HOME === undefined
-      ? {}
-      : { XDG_DATA_HOME: environment.XDG_DATA_HOME }),
   };
+  // Vercel CLI resolves its existing login/configuration under its XDG data directory.
+  if (environment.XDG_DATA_HOME !== undefined) {
+    childEnvironment.XDG_DATA_HOME = environment.XDG_DATA_HOME;
+  }
+  return childEnvironment;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -98,20 +102,20 @@ function installedOidcNeedsRefresh(input: {
   }
   let environment: string;
   try {
-    environment = readOwnerBoundLocalFile(path.resolve(input.repositoryRoot, ".env.local"), {
+    environment = readOwnerBoundLocalFile(path.resolve(input.repositoryRoot, LOCAL_ENV_FILE), {
       confidential: true,
     });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    const fileError = z.object({ code: z.unknown().optional() }).safeParse(error);
+    if (fileError.success && fileError.data.code === "ENOENT") {
       return true;
     }
-    const credentialPath = path.resolve(input.repositoryRoot, ".env.local");
+    const credentialPath = path.resolve(input.repositoryRoot, LOCAL_ENV_FILE);
     const stat = lstatSync(credentialPath);
     const ownerId = process.getuid?.();
+    const isOwnerFile = stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1;
     if (
-      stat.isFile() &&
-      !stat.isSymbolicLink() &&
-      stat.nlink === 1 &&
+      isOwnerFile &&
       ownerId !== undefined &&
       stat.uid === ownerId &&
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -167,7 +171,7 @@ export function ensureLocalDevelopmentOidc(input: {
   environment?: NodeJS.ProcessEnv;
   nowEpochSeconds?: number;
   runCommand?: LocalOidcStartupCommandRunner;
-}): { refreshed: boolean } {
+}) {
   const environment = input.environment ?? process.env;
   assertNoStaticCredential(environment);
 
@@ -202,7 +206,7 @@ export function ensureLocalDevelopmentOidc(input: {
   }
   try {
     runCommand({
-      args: ["env", "pull", ".env.local", "--environment=development", "--yes"],
+      args: ["env", "pull", LOCAL_ENV_FILE, "--environment=development", "--yes"],
       cwd: repositoryRoot,
       environment: childEnvironment,
       executable: input.vercelExecutable,
@@ -225,5 +229,5 @@ export function ensureLocalDevelopmentOidc(input: {
     nowEpochSeconds: input.nowEpochSeconds ?? Math.floor(Date.now() / 1000),
     repositoryRoot,
   });
-  return { refreshed: true };
+  return { refreshed: true } satisfies { refreshed: boolean };
 }

@@ -18,6 +18,7 @@ import type {
 import { createOperatorArtifactPublication } from "./hosted-operator-artifacts";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const selectionChangedStatus = "selection-changed" as const;
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 export const publishedAppSourceSchema = z.object({
   branch: z.string().min(1),
@@ -33,10 +34,10 @@ export type PublishedAppSourceLookup = Pick<
   "repositoryId" | "branch" | "gitSha" | "gitTree"
 >;
 export const publishedAppSourceLookupSchema = publishedAppSourceSchema.pick({
-  repositoryId: true,
   branch: true,
   gitSha: true,
   gitTree: true,
+  repositoryId: true,
 });
 export const compiledOperatorReleaseSelectionSchema = z.object({
   appId,
@@ -54,13 +55,13 @@ export type CompiledOperatorReleaseSelection = z.infer<
 export const exactCompiledOperatorReleaseLookupSchema = z.union([
   z.strictObject({
     appSpecDigest: digest.optional(),
-    publishedSource: publishedAppSourceLookupSchema.omit({ gitTree: true }).optional(),
     artifactRef: operatorArtifactReferenceSchema,
+    publishedSource: publishedAppSourceLookupSchema.omit({ gitTree: true }).optional(),
   }),
   z.strictObject({
     appSpecDigest: digest.optional(),
-    publishedSource: publishedAppSourceLookupSchema.omit({ gitTree: true }).optional(),
     manifestSha256: digest.optional(),
+    publishedSource: publishedAppSourceLookupSchema.omit({ gitTree: true }).optional(),
     releaseId: z.string().min(1),
     schemaSha256: digest,
   }),
@@ -241,6 +242,76 @@ export const createPostgresOperatorArtifactSelections = (input: {
   const nextCreatedAt = (scope: ReturnType<typeof scoped>) =>
     sql`greatest(clock_timestamp(), (select max(${prototypeArtifactChunks.createdAt}) + interval '1 microsecond' from ${prototypeArtifactChunks} where ${predicate(scope)}))`;
   return {
+    async associatePublishedSource(context, association) {
+      const approved = compiledOperatorReleaseSelectionSchema.parse(association.approvedSelection);
+      const source = publishedAppSourceSchema.parse(association.publishedSource);
+      const operationId = z.string().min(1).parse(association.operationId);
+      if (approved.appId !== context.target.appId) {
+        throw operatorArtifactUnavailable();
+      }
+      const scope = scoped(context, approved.appSpecDigest);
+      return await writeSelection(
+        context,
+        scope,
+        async (database): Promise<PublishedSourceAssociationResult> => {
+          const [latest] = await database
+            .select({
+              chunkDigest: prototypeArtifactChunks.chunkDigest,
+              content: prototypeArtifactChunks.content,
+              transferDigest: prototypeArtifactChunks.transferDigest,
+            })
+            .from(prototypeArtifactChunks)
+            .where(predicate(scope))
+            .orderBy(
+              desc(prototypeArtifactChunks.createdAt),
+              desc(prototypeArtifactChunks.transferDigest),
+            )
+            .limit(1);
+          if (latest === undefined) {
+            return { status: selectionChangedStatus };
+          }
+          if (latest.chunkDigest !== hash(latest.content)) {
+            throw operatorArtifactUnavailable();
+          }
+          const current = compiledOperatorReleaseSelectionSchema.parse(JSON.parse(latest.content));
+          if (!isEquivalentCompiledOperatorRelease(current, approved)) {
+            return { status: selectionChangedStatus };
+          }
+          if (current.publishedSource !== undefined) {
+            return isDeepStrictEqual(current.publishedSource, source)
+              ? { selection: current, status: "recorded" }
+              : { status: selectionChangedStatus };
+          }
+          const selection = { ...current, publishedSource: source };
+          const content = JSON.stringify(selection);
+          const transferDigest = hash(`source-association:${operationId}:${latest.transferDigest}`);
+          await database
+            .insert(prototypeArtifactChunks)
+            .values({
+              ...scope,
+              chunkDigest: hash(content),
+              chunkIndex: 0,
+              content,
+              createdAt: nextCreatedAt(scope),
+              transferDigest,
+            })
+            .onConflictDoNothing();
+          const [recorded] = await database
+            .select({
+              chunkDigest: prototypeArtifactChunks.chunkDigest,
+              content: prototypeArtifactChunks.content,
+            })
+            .from(prototypeArtifactChunks)
+            .where(
+              and(predicate(scope), eq(prototypeArtifactChunks.transferDigest, transferDigest)),
+            );
+          if (recorded?.content !== content || recorded.chunkDigest !== hash(content)) {
+            throw operatorArtifactUnavailable();
+          }
+          return { selection, status: "recorded" };
+        },
+      );
+    },
     async read(
       context: OperatorArtifactContext,
       appSpecDigest: string,
@@ -417,76 +488,6 @@ export const createPostgresOperatorArtifactSelections = (input: {
         }
         return selection;
       });
-    },
-    async associatePublishedSource(context, association) {
-      const approved = compiledOperatorReleaseSelectionSchema.parse(association.approvedSelection);
-      const source = publishedAppSourceSchema.parse(association.publishedSource);
-      const operationId = z.string().min(1).parse(association.operationId);
-      if (approved.appId !== context.target.appId) {
-        throw operatorArtifactUnavailable();
-      }
-      const scope = scoped(context, approved.appSpecDigest);
-      return await writeSelection(
-        context,
-        scope,
-        async (database): Promise<PublishedSourceAssociationResult> => {
-          const [latest] = await database
-            .select({
-              content: prototypeArtifactChunks.content,
-              chunkDigest: prototypeArtifactChunks.chunkDigest,
-              transferDigest: prototypeArtifactChunks.transferDigest,
-            })
-            .from(prototypeArtifactChunks)
-            .where(predicate(scope))
-            .orderBy(
-              desc(prototypeArtifactChunks.createdAt),
-              desc(prototypeArtifactChunks.transferDigest),
-            )
-            .limit(1);
-          if (latest === undefined) {
-            return { status: "selection-changed" };
-          }
-          if (latest.chunkDigest !== hash(latest.content)) {
-            throw operatorArtifactUnavailable();
-          }
-          const current = compiledOperatorReleaseSelectionSchema.parse(JSON.parse(latest.content));
-          if (!isEquivalentCompiledOperatorRelease(current, approved)) {
-            return { status: "selection-changed" };
-          }
-          if (current.publishedSource !== undefined) {
-            return isDeepStrictEqual(current.publishedSource, source)
-              ? { status: "recorded", selection: current }
-              : { status: "selection-changed" };
-          }
-          const selection = { ...current, publishedSource: source };
-          const content = JSON.stringify(selection);
-          const transferDigest = hash(`source-association:${operationId}:${latest.transferDigest}`);
-          await database
-            .insert(prototypeArtifactChunks)
-            .values({
-              ...scope,
-              chunkIndex: 0,
-              content,
-              chunkDigest: hash(content),
-              createdAt: nextCreatedAt(scope),
-              transferDigest,
-            })
-            .onConflictDoNothing();
-          const [recorded] = await database
-            .select({
-              content: prototypeArtifactChunks.content,
-              chunkDigest: prototypeArtifactChunks.chunkDigest,
-            })
-            .from(prototypeArtifactChunks)
-            .where(
-              and(predicate(scope), eq(prototypeArtifactChunks.transferDigest, transferDigest)),
-            );
-          if (recorded?.content !== content || recorded.chunkDigest !== hash(content)) {
-            throw operatorArtifactUnavailable();
-          }
-          return { status: "recorded", selection };
-        },
-      );
     },
   };
 };

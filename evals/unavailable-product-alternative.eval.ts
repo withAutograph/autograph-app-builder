@@ -22,7 +22,7 @@ export default defineEval({
     t.check(
       turn.message,
       satisfies(
-        (reply) => isProductFacing(reply) && !String(reply).includes("?"),
+        (reply) => isProductFacing(String(reply)) && !String(reply).includes("?"),
         "the limitation and alternative remain product-facing without an unresolvable question",
       ),
     );

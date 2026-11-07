@@ -18,13 +18,13 @@ const projectName = nativeTargetProjectNameSchema;
 
 /** Initial effect provenance, not an admission condition on later app revisions. */
 export const nativeTargetOnboardingOriginSchema = z.strictObject({
-  publicSessionId: id,
-  adapterSessionId: id,
   adapterGeneration: z.number().int().positive(),
+  adapterSessionId: id,
   appSpecDigest: digest,
+  publicSessionId: id,
   release: z.strictObject({
-    id,
     artifactRef: id,
+    id,
     manifestSha256: digest,
     schemaSha256: digest,
   }),
@@ -32,66 +32,66 @@ export const nativeTargetOnboardingOriginSchema = z.strictObject({
 
 /** Nonsecret source references. Resource credentials stay in their existing custody. */
 export const nativeTargetProjectProtectionSchema = z.strictObject({
-  ssoProtection: z.strictObject({ deploymentType: z.literal("all") }),
   oidcTokenConfig: z.strictObject({ enabled: z.literal(true), issuerMode: z.literal("team") }),
+  ssoProtection: z.strictObject({ deploymentType: z.literal("all") }),
 });
 export type NativeTargetProjectProtection = z.infer<typeof nativeTargetProjectProtectionSchema>;
 export const nativeTargetRequiredProjectProtection = {
-  ssoProtection: { deploymentType: "all" },
   oidcTokenConfig: { enabled: true, issuerMode: "team" },
+  ssoProtection: { deploymentType: "all" },
 } as const satisfies NativeTargetProjectProtection;
 
 export const nativeTargetOnboardingPlanSchema = z
   .strictObject({
-    version: z.literal(1),
-    appId: builderAppIdSchema,
-    /** Deployment-owned owner/app resource selection; never a credential or caller scope. */
-    resourceProfileId: id.optional(),
-    resourceProfileAuthorityDigest: digest.optional(),
-    /** Prevent a retired approval from becoming current when a resource selection returns. */
-    resourceSelectionRevision: z.number().int().positive().optional(),
-    origin: nativeTargetOnboardingOriginSchema,
-    project: z.strictObject({
-      name: projectName,
-      teamId: id,
-      installationId: id,
-      projectSettings: hostedOperatorAppProjectSettingsSchema,
-      protection: nativeTargetProjectProtectionSchema,
-    }),
-    branch: id,
     appDatabase: z
       .strictObject({
-        resourceId: id,
         database: sqlName,
         migratorRole: sqlName,
+        resourceId: id,
         runtimeRole: sqlName,
       })
       .refine((value) => value.migratorRole !== value.runtimeRole),
-    productRoles: z.array(z.string().regex(/^[a-z][a-z0-9_]*$/u)).refine(unique),
+    appId: builderAppIdSchema,
+    branch: id,
+    conflictPolicy: z.enum(["stop-on-conflict", "suffix-on-confirmed-conflict"]),
+    cost: z.strictObject({ description: id, ownership: z.literal("current-owner") }),
     nativeNeon: z.strictObject({
       // Existing enrollment provenance when available; target creation does not authorize Neon effects.
       approvalReference: id.optional(),
       nativeStore: z.strictObject({ configurationId: id, resourceId: id, sourceProjectId: id }),
       scope: z.strictObject({
-        projectId: id,
         branchId: id,
         endpointId: id,
         hostname: id,
         maintenanceDatabase: sqlName,
         maintenanceRole: sqlName,
+        projectId: id,
       }),
     }),
+    origin: nativeTargetOnboardingOriginSchema,
+    productRoles: z.array(z.string().regex(/^[a-z][a-z0-9_]*$/u)).refine(unique),
+    project: z.strictObject({
+      installationId: id,
+      name: projectName,
+      projectSettings: hostedOperatorAppProjectSettingsSchema,
+      protection: nativeTargetProjectProtectionSchema,
+      teamId: id,
+    }),
+    resourceProfileAuthorityDigest: digest.optional(),
+    /** Deployment-owned owner/app resource selection; never a credential or caller scope. */
+    resourceProfileId: id.optional(),
+    /** Prevent a retired approval from becoming current when a resource selection returns. */
+    resourceSelectionRevision: z.number().int().positive().optional(),
+    retention: z.strictObject({ expiresAt: instant.optional(), policy: id }),
+    version: z.literal(1),
     worker: z.strictObject({
-      sourceCapture: operatorWorkerSourceCaptureSchema.optional(),
-      id,
       executablePath: id,
-      sha256: digest,
+      id,
       operationScope: z.literal("generated-app-release-install-v1"),
+      sha256: digest,
+      sourceCapture: operatorWorkerSourceCaptureSchema.optional(),
       subcommand: z.literal("protected-generated-app-install"),
     }),
-    cost: z.strictObject({ ownership: z.literal("current-owner"), description: id }),
-    retention: z.strictObject({ policy: id, expiresAt: instant.optional() }),
-    conflictPolicy: z.enum(["stop-on-conflict", "suffix-on-confirmed-conflict"]),
   })
   .superRefine((plan, context) => {
     if (

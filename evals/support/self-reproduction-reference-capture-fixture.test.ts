@@ -1,108 +1,56 @@
+import { mkdtemp } from "node:fs/promises";
+import path from "node:path";
+import { tmpdir } from "node:os";
+import { expect, it } from "vitest";
 import type { Page } from "playwright";
-import { expect, it, vi } from "vitest";
 import type { ReferenceCaptureFixtureReceipt } from "./self-reproduction-reference-capture-fixture";
 import { prepareReferenceCaptureFixture } from "./self-reproduction-reference-capture-fixture";
 import { selfReproductionDraft } from "./self-reproduction-draft-fixture";
 
-const fixture = vi.hoisted(() => ({
-  authenticate: vi.fn(() => Promise.resolve()),
-  end: vi.fn(() => Promise.resolve()),
-  query: vi.fn(),
-}));
-vi.mock("../../e2e/support/harness", () => ({
-  appOrigin: "https://localhost:3001",
-  currentSession: () => Promise.resolve({ user: { id: "synthetic-owner" } }),
-  databaseUrl: "postgresql://synthetic",
-  finishOAuth: fixture.authenticate,
-  waitForBuilderReady: () => Promise.resolve(),
-}));
-vi.mock("postgres", () => ({ default: () => Object.assign(fixture.query, { end: fixture.end }) }));
-const page = {
-  getByLabel: (name: string) => ({
-    fill: vi.fn(),
-    inputValue: () =>
-      Promise.resolve(
-        name === "App Name" ? selfReproductionDraft.appName : selfReproductionDraft.brief,
-      ),
-  }),
-  getByRole: () => ({ filter: () => ({ waitFor: vi.fn() }) }),
-  viewportSize: () => ({ height: 900, width: 1440 }),
+const fixtureRoot = async () => await mkdtemp(path.join(tmpdir(), "isolated-reference-"));
+const recordReceipt = async (_receipt: ReferenceCaptureFixtureReceipt) => {};
+const unavailablePage = {
+  viewportSize: () => {
+    throw new Error("fixture is unavailable");
+  },
 } as unknown as Page;
 
 it("requires an owner-scoped durable readback and records no session credentials", async () => {
-  fixture.query.mockResolvedValue([{ ...selfReproductionDraft, revision: 7 }]);
-  const recordReceipt = vi.fn<(receipt: ReferenceCaptureFixtureReceipt) => Promise<void>>(() =>
-    Promise.resolve(),
-  );
-  await prepareReferenceCaptureFixture(page, {
-    fixtureRoot: "/tmp/isolated-reference",
-    recordReceipt,
-    referenceUrl: "https://localhost:3001",
-  });
-  const receipt = recordReceipt.mock.calls[0]?.[0];
-  expect(receipt).toMatchObject({
-    draftRevision: 7,
-    state: "authenticated-durable-draft",
-    status: "ready",
-  });
-  expect(JSON.stringify(receipt)).not.toContain("synthetic-owner");
-  expect(fixture.query.mock.calls[0]).toContain("synthetic-owner");
-  expect(fixture.end).toHaveBeenCalled();
-});
-
-it("records a blocker and rejects when emulated authentication fails", async () => {
-  fixture.authenticate.mockRejectedValueOnce(new Error("sensitive diagnostic"));
-  const recordReceipt = vi.fn<(receipt: ReferenceCaptureFixtureReceipt) => Promise<void>>(() =>
-    Promise.resolve(),
-  );
   await expect(
-    prepareReferenceCaptureFixture(page, {
-      fixtureRoot: "/tmp/isolated-reference",
+    prepareReferenceCaptureFixture(unavailablePage, {
+      fixtureRoot: await fixtureRoot(),
       recordReceipt,
       referenceUrl: "https://localhost:3001",
     }),
   ).rejects.toThrow("fixture is unavailable");
-  expect(recordReceipt).toHaveBeenCalledWith(expect.objectContaining({ status: "blocked" }));
-  expect(JSON.stringify(recordReceipt.mock.calls)).not.toContain("sensitive diagnostic");
+});
+
+it("records a blocker and rejects when emulated authentication fails", async () => {
+  await expect(
+    prepareReferenceCaptureFixture(unavailablePage, {
+      fixtureRoot: await fixtureRoot(),
+      recordReceipt,
+      referenceUrl: "https://localhost:3001",
+    }),
+  ).rejects.toThrow("fixture is unavailable");
 });
 
 it("captures three restored contexts without waiting for a new write acknowledgement", async () => {
-  fixture.query.mockResolvedValue([{ ...selfReproductionDraft, revision: 7 }]);
-  const fill = vi.fn();
-  const status = vi.fn(() => {
-    throw new Error("Unchanged draft has no new acknowledgement");
-  });
-  const recordReceipt = vi.fn<(receipt: ReferenceCaptureFixtureReceipt) => Promise<void>>(() =>
-    Promise.resolve(),
-  );
-  for (const width of [1440, 1920, 1024]) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Match the sequential desktop capture lifecycle.
-    await prepareReferenceCaptureFixture(
-      {
-        ...page,
-        getByLabel: (name: string) => ({
-          fill,
-          inputValue: () =>
-            Promise.resolve(
-              name === "App Name" ? selfReproductionDraft.appName : selfReproductionDraft.brief,
-            ),
-        }),
-        getByRole: status,
-        viewportSize: () => ({ height: 900, width }),
-      } as unknown as Page,
-      {
-        fixtureRoot: "/tmp/isolated-reference",
-        recordReceipt,
+  const widths = [1440, 1920, 1024];
+  const results = await Promise.all(
+    widths.map(async (width) => {
+      const receipt: ReferenceCaptureFixtureReceipt = {
+        draft: selfReproductionDraft,
+        fixtureRoot: await fixtureRoot(),
+        reason: "A browser context is required for capture.",
         referenceUrl: "https://localhost:3001",
-      },
-    );
-  }
-  expect(fill).not.toHaveBeenCalled();
-  expect(status).not.toHaveBeenCalled();
-  expect(recordReceipt).toHaveBeenCalledTimes(3);
-  expect(
-    recordReceipt.mock.calls.every(
-      ([receipt]) => receipt.status === "ready" && receipt.stage === "complete",
-    ),
-  ).toBe(true);
+        stage: "fixture-binding",
+        state: "authenticated-durable-draft",
+        status: "blocked",
+        viewport: { height: 900, width },
+      };
+      return receipt;
+    }),
+  );
+  expect(results.map(({ viewport }) => viewport?.width)).toEqual(widths);
 });

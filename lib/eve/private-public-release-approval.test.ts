@@ -12,56 +12,56 @@ import {
 } from "./private-public-release-approval";
 
 const input = {
+  operationRef: publicReleaseOperationRef(plan),
   plan,
   planDigest: publicReleasePlanDigest(plan),
-  operationRef: publicReleaseOperationRef(plan),
 };
 const owner = operatorOwnerContextSchema.parse({
-  kind: "direct",
+  adapterGeneration: 1,
+  adapterSessionId: "native",
   authority,
+  kind: "direct",
   principal: { ...authority, scopes: ["autograph:send"] },
   sessionId: plan.selection.sessionId,
-  adapterSessionId: "native",
-  adapterGeneration: 1,
 });
 const request = (
   callId = "current-call",
   requestId = "request",
   toolInput = input,
 ): MessageStreamEvent => ({
-  type: "input.requested",
-  meta: { at: "2026-11-03T00:00:00Z", id: "request-event" },
   data: {
+    requests: [
+      {
+        action: {
+          callId,
+          input: toolInput,
+          kind: "tool-call",
+          toolName: "release-app-public-release",
+        },
+        kind: "tool-approval",
+        prompt: "Bind named runtime configuration and publish the reviewed source",
+        requestId,
+      },
+    ],
     sequence: 1,
     stepIndex: 0,
     turnId: "turn",
-    requests: [
-      {
-        kind: "tool-approval",
-        requestId,
-        prompt: "Bind named runtime configuration and publish the reviewed source",
-        action: {
-          kind: "tool-call",
-          toolName: "release-app-public-release",
-          callId,
-          input: toolInput,
-        },
-      },
-    ],
   },
+  meta: { at: "2026-11-03T00:00:00Z", id: "request-event" },
+  type: "input.requested",
 });
 const settlement = (
   outcome: "approved" | "cancelled" = "approved",
   requestId = "request",
   responderPrincipalId = authority.ownerUserId,
 ): MessageStreamEvent => ({
-  type: "approval.settled",
+  data: { outcome, requestId, responderPrincipalId, sequence: 2, stepIndex: 0, turnId: "turn" },
   meta: { at: "2026-11-03T00:00:01Z", id: "settled-event" },
-  data: { sequence: 2, stepIndex: 0, turnId: "turn", requestId, responderPrincipalId, outcome },
+  type: "approval.settled",
 });
 describe("private public-release consent", () => {
   it("requires the exact current call and does not reuse an earlier approval", () => {
-    const capture = createPrivatePublicReleaseApprovalCapture({ plan, callId: "current-call" });
+    const capture = createPrivatePublicReleaseApprovalCapture({ callId: "current-call", plan });
     capture.observe(request("old-call", "old-request"));
     capture.observe(settlement("approved", "old-request"));
     capture.observe(request());
@@ -70,13 +70,13 @@ describe("private public-release consent", () => {
     expect(capture.read()).toEqual({ approvalId: "request", approvedByCallId: "current-call" });
   });
   it("rejects changed runtime hashes, foreign consent and earlier cancellation", () => {
-    const capture = createPrivatePublicReleaseApprovalCapture({ plan, callId: "current-call" });
+    const capture = createPrivatePublicReleaseApprovalCapture({ callId: "current-call", plan });
     const changed = { ...plan, environment: [{ key: "APP_DATABASE_URL", sha256: "f".repeat(64) }] };
     capture.observe(
       request("current-call", "changed", {
+        operationRef: publicReleaseOperationRef(changed),
         plan: changed,
         planDigest: publicReleasePlanDigest(changed),
-        operationRef: publicReleaseOperationRef(changed),
       }),
     );
     capture.observe(settlement("approved", "changed"));
@@ -84,7 +84,7 @@ describe("private public-release consent", () => {
     capture.observe(request());
     capture.observe(settlement("approved", "request", "foreign"));
     expect(capture.read()).toBeNull();
-    const cancelled = createPrivatePublicReleaseApprovalCapture({ plan, callId: "current-call" });
+    const cancelled = createPrivatePublicReleaseApprovalCapture({ callId: "current-call", plan });
     cancelled.observe(request("old-call", "old-request"));
     cancelled.observe(settlement("cancelled", "old-request"));
     cancelled.observe(request());
@@ -92,43 +92,45 @@ describe("private public-release consent", () => {
     expect(cancelled.read()).toBeNull();
   });
   it("requires complete authenticated history and rechecks owner after reading", async () => {
-    const assertOwner = vi.fn(() => Promise.resolve());
-    const readHistory = vi.fn((_start, observe: (event: MessageStreamEvent) => void) => {
+    const assertOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
+    const readHistory = vi.fn(async (_start, observe: (event: MessageStreamEvent) => void) => {
       observe(request());
       observe(settlement());
-      return Promise.resolve({ complete: false, nextNativeIndex: 2, nativeTailIndex: 2 });
+      return { complete: false, nativeTailIndex: 2, nextNativeIndex: 2 };
     });
     await expect(
       readPrivatePublicReleaseApproval({
-        plan,
+        assertOwner,
         callId: "current-call",
         owner,
+        plan,
         readHistory,
-        assertOwner,
       }),
     ).rejects.toThrow();
     expect(assertOwner).toHaveBeenCalledTimes(1);
-    const complete = (_start: number, observe: (event: MessageStreamEvent) => void) => {
+    const complete = async (_start: number, observe: (event: MessageStreamEvent) => void) => {
       observe(request());
       observe(settlement());
-      return Promise.resolve({ complete: true, nextNativeIndex: 3, nativeTailIndex: 2 });
+      return { complete: true, nativeTailIndex: 2, nextNativeIndex: 3 };
     };
     expect(
       await readPrivatePublicReleaseApproval({
-        plan,
+        assertOwner,
         callId: "current-call",
         owner,
+        plan,
         readHistory: complete,
-        assertOwner,
       }),
     ).toEqual({ approvalId: "request", approvedByCallId: "current-call" });
     await expect(
       readPrivatePublicReleaseApproval({
-        plan,
+        assertOwner: async () => {
+          throw new Error("revoked");
+        },
         callId: "current-call",
         owner,
+        plan,
         readHistory: complete,
-        assertOwner: () => Promise.reject(new Error("revoked")),
       }),
     ).rejects.toThrow("revoked");
   });

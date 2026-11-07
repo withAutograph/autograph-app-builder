@@ -19,37 +19,41 @@ import {
 // SAFETY: This classifier fixture supplies exactly the source, validator and approval-scope fields the observation consumes; it grants no actual effect authority.
 // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- Deliberately bounded pure classifier fixture.
 const workflow = {
-  phase: "validation_failed",
   appSpec: { appId: "supplier-spend", digest: "a".repeat(64) },
-  sourceReceipt: { digest: "b".repeat(64), sourceSha: "c".repeat(40) },
-  workspace: { workspaceId: "owned-workspace", workspaceDigest: "d".repeat(64) },
-  proposal: { digest: "e".repeat(64), workspaceDigest: "d".repeat(64) },
   applyReceipt: {},
+  phase: "validation_failed",
+  proposal: { digest: "e".repeat(64), workspaceDigest: "d".repeat(64) },
+  sourceReceipt: { digest: "b".repeat(64), sourceSha: "c".repeat(40) },
   validationFailure: {
-    reason: "command-failed",
     attemptDigest: "f".repeat(64),
-    commandFailure: { name: "check-build", exitCode: 1 },
+    commandFailure: { exitCode: 1, name: "check-build" },
+    reason: "command-failed",
   },
+  workspace: { workspaceDigest: "d".repeat(64), workspaceId: "owned-workspace" },
 } as unknown as AppBuilderWorkflowState;
 const record = () =>
   recordLocalSourcePrerequisite({
-    state: workflow,
-    sessionId: "same-session",
     callId: "actual-failed-plan",
     originalSourceSha: "c".repeat(40),
     originalWorkspaceDigest: "d".repeat(64),
-  });
-const decide = (sourcePrerequisite?: ReturnType<typeof record>) =>
-  decideApprovedBuildContinuation({
+    sessionId: "same-session",
     state: workflow,
+  });
+const decide = (sourcePrerequisite?: ReturnType<typeof record>) => {
+  const input: Parameters<typeof decideApprovedBuildContinuation>[0] = {
     adapterSessionId: "same-session",
     approvalMatches: () => true,
-    pendingInput: false,
     blocked: false,
+    pendingInput: false,
+    state: workflow,
     turnId: "current-turn",
     turnSequence: 4,
-    ...(sourcePrerequisite === undefined ? {} : { sourcePrerequisite }),
-  });
+  };
+  if (sourcePrerequisite !== undefined) {
+    input.sourcePrerequisite = sourcePrerequisite;
+  }
+  return decideApprovedBuildContinuation(input);
+};
 
 describe("typed local source prerequisite observations", () => {
   it("blocks stale command-failed auto continuation without changing the old validator or approval", () => {
@@ -70,11 +74,11 @@ describe("typed local source prerequisite observations", () => {
       expect(currentLocalSourcePrerequisite(workflow, "different-session")).toBeUndefined();
       expect(
         recordLocalSourcePrerequisite({
-          state: workflow,
-          sessionId: "same-session",
           callId: "foreign-error",
           originalSourceSha: "9".repeat(40),
           originalWorkspaceDigest: "d".repeat(64),
+          sessionId: "same-session",
+          state: workflow,
         }),
       ).toBeUndefined();
       if (!("proposal" in workflow)) {
@@ -96,7 +100,7 @@ describe("typed local source prerequisite observations", () => {
       expect(currentLocalSourcePrerequisite(workflow, "same-session")).toBeUndefined();
       expect(localSourcePrerequisiteHistory.get()).toEqual([
         observation,
-        { ...observation, status: "resolved", observedByCallId: "verified-reconciliation" },
+        { ...observation, observedByCallId: "verified-reconciliation", status: "resolved" },
       ]);
       expect(decide().decision).toBe("runnable");
     });

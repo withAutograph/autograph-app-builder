@@ -31,7 +31,7 @@ vi.mock("./deployment-execution-lease", () => ({
 }));
 
 const context = {
-  getSandbox: () => Promise.resolve({ id: "sandbox", stop: mocks.stop }),
+  getSandbox: async () => ({ id: "sandbox", stop: mocks.stop }),
   session: { auth: {}, id: "session" },
 } as unknown as HookContext;
 const events = hook.events as Record<string, (event: unknown, ctx: HookContext) => Promise<void>>;
@@ -54,7 +54,7 @@ describe.each([false, true])("preview completion lifecycle hosted=%s", (hosted) 
     };
     mocks.provider.mockResolvedValue({
       currentSession: () => ({ sessionId: "provider-session" }),
-      getCommand: () => Promise.resolve({ exitCode: null }),
+      getCommand: async () => ({ exitCode: null }),
       status: "running",
     });
   });
@@ -92,7 +92,7 @@ describe.each([false, true])("preview completion lifecycle hosted=%s", (hosted) 
   it("releases a stopped preview command", async () => {
     mocks.provider.mockResolvedValue({
       currentSession: () => ({ sessionId: "provider-session" }),
-      getCommand: () => Promise.resolve({ exitCode: 0 }),
+      getCommand: async () => ({ exitCode: 0 }),
       status: "running",
     });
     await events["turn.completed"]({}, context);

@@ -17,54 +17,28 @@ import {
 import type { PrivateNativeTargetApprovalObservation } from "./private-native-target-approval";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace_fixture",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner_fixture",
+  workspaceId: "workspace_fixture",
 };
 const owner: NativeTargetCurrentOwner = {
+  adapterGeneration: 1,
+  adapterSessionId: "native-original",
   authority,
   publicSessionId: "public-original",
-  adapterSessionId: "native-original",
-  adapterGeneration: 1,
 };
 const plan = nativeTargetOnboardingPlanSchema.parse({
-  version: 1,
-  appId: "requests-app",
-  origin: {
-    publicSessionId: owner.publicSessionId,
-    adapterSessionId: owner.adapterSessionId,
-    adapterGeneration: 1,
-    appSpecDigest: "a".repeat(64),
-    release: {
-      id: "release-original",
-      artifactRef: "artifact-original",
-      manifestSha256: "b".repeat(64),
-      schemaSha256: "c".repeat(64),
-    },
-  },
-  project: {
-    protection: {
-      ssoProtection: { deploymentType: "all" },
-      oidcTokenConfig: { enabled: true, issuerMode: "team" },
-    },
-    name: "requests-app",
-    teamId: "team_fixture",
-    installationId: "install_fixture",
-    projectSettings: {
-      framework: "nextjs",
-      rootDirectory: "apps/requests",
-      sourceFilesOutsideRootDirectory: true,
-    },
-  },
-  branch: "main",
   appDatabase: {
-    resourceId: "requests-resource",
     database: "requests_data",
     migratorRole: "requests_migrator",
+    resourceId: "requests-resource",
     runtimeRole: "requests_runtime",
   },
-  productRoles: [],
+  appId: "requests-app",
+  branch: "main",
+  conflictPolicy: "stop-on-conflict",
+  cost: { description: "Separate app target", ownership: "current-owner" },
   nativeNeon: {
     approvalReference: "native-scope-approval",
     nativeStore: {
@@ -73,48 +47,74 @@ const plan = nativeTargetOnboardingPlanSchema.parse({
       sourceProjectId: "source-project",
     },
     scope: {
-      projectId: "neon-project",
       branchId: "neon-branch",
       endpointId: "neon-endpoint",
       hostname: "ep-fixture.neon.tech",
       maintenanceDatabase: "maintenance",
       maintenanceRole: "installer",
+      projectId: "neon-project",
     },
   },
+  origin: {
+    adapterGeneration: 1,
+    adapterSessionId: owner.adapterSessionId,
+    appSpecDigest: "a".repeat(64),
+    publicSessionId: owner.publicSessionId,
+    release: {
+      artifactRef: "artifact-original",
+      id: "release-original",
+      manifestSha256: "b".repeat(64),
+      schemaSha256: "c".repeat(64),
+    },
+  },
+  productRoles: [],
+  project: {
+    installationId: "install_fixture",
+    name: "requests-app",
+    projectSettings: {
+      framework: "nextjs",
+      rootDirectory: "apps/requests",
+      sourceFilesOutsideRootDirectory: true,
+    },
+    protection: {
+      oidcTokenConfig: { enabled: true, issuerMode: "team" },
+      ssoProtection: { deploymentType: "all" },
+    },
+    teamId: "team_fixture",
+  },
+  retention: { policy: "Until approved cleanup" },
+  version: 1,
   worker: {
-    id: "generic-installer",
     executablePath: "/trusted/generic-worker",
-    sha256: "d".repeat(64),
+    id: "generic-installer",
     operationScope: "generated-app-release-install-v1",
+    sha256: "d".repeat(64),
     subcommand: "protected-generated-app-install",
   },
-  cost: { ownership: "current-owner", description: "Separate app target" },
-  retention: { policy: "Until approved cleanup" },
-  conflictPolicy: "stop-on-conflict",
 });
 const planDigest = nativeTargetOnboardingPlanDigest(plan);
 const record = nativeTargetOnboardingRecordSchema.parse({
-  kind: "native-target-onboarding",
-  version: 1,
-  stage: "planned",
   appId: plan.appId,
+  kind: "native-target-onboarding",
   plan,
   planDigest,
   previousAttempts: [],
+  stage: "planned",
+  version: 1,
 });
 const toolInput = {
   appId: plan.appId,
   operationRef: nativeTargetOnboardingRegistryId(authority, plan.appId),
-  planDigest,
   plan,
+  planDigest,
 };
 const historyOwner = operatorOwnerContextSchema.parse({
-  kind: "direct",
+  adapterGeneration: owner.adapterGeneration,
+  adapterSessionId: owner.adapterSessionId,
   authority,
+  kind: "direct",
   principal: { ...authority, scopes: ["autograph:send"] },
   sessionId: owner.publicSessionId,
-  adapterSessionId: owner.adapterSessionId,
-  adapterGeneration: owner.adapterGeneration,
 });
 const requested = (
   input: {
@@ -124,42 +124,42 @@ const requested = (
     requestId?: string;
   } = {},
 ): MessageStreamEvent => ({
-  type: "input.requested",
-  meta: { at: "2026-10-21T15:00:00.000Z", id: "requested-event" },
   data: {
+    requests: [
+      {
+        action: {
+          callId: input.callId ?? "prepare-call",
+          input: input.toolInput ?? toolInput,
+          kind: "tool-call",
+          toolName: input.toolName ?? "prepare-app-native-target",
+        },
+        kind: "tool-approval",
+        prompt: "Approve native target",
+        requestId: input.requestId ?? "human-request",
+      },
+    ],
     sequence: 1,
     stepIndex: 0,
     turnId: "turn-native-target",
-    requests: [
-      {
-        kind: "tool-approval",
-        requestId: input.requestId ?? "human-request",
-        prompt: "Approve native target",
-        action: {
-          kind: "tool-call",
-          toolName: input.toolName ?? "prepare-app-native-target",
-          callId: input.callId ?? "prepare-call",
-          input: input.toolInput ?? toolInput,
-        },
-      },
-    ],
   },
+  meta: { at: "2026-10-21T15:00:00.000Z", id: "requested-event" },
+  type: "input.requested",
 });
 const settled = (
   outcome: "approved" | "cancelled" = "approved",
   responderPrincipalId = authority.ownerUserId,
   requestId = "human-request",
 ): MessageStreamEvent => ({
-  type: "approval.settled",
-  meta: { at: "2026-10-21T15:00:01.000Z", id: "settled-event" },
   data: {
+    outcome,
+    requestId,
+    responderPrincipalId,
     sequence: 2,
     stepIndex: 0,
     turnId: "turn-native-target",
-    requestId,
-    responderPrincipalId,
-    outcome,
   },
+  meta: { at: "2026-10-21T15:00:01.000Z", id: "settled-event" },
+  type: "approval.settled",
 });
 const capture = () => createPrivateNativeTargetApprovalCapture({ owner, record });
 
@@ -170,13 +170,13 @@ describe("private native target terminal approval", () => {
     expect(reader.read()).toBeNull();
     reader.observe(settled());
     expect(reader.read()).toEqual({
-      requestId: "human-request",
       callId: "prepare-call",
-      planDigest,
-      responderPrincipalId: authority.ownerUserId,
-      publicSessionId: plan.origin.publicSessionId,
-      outcome: "approved",
       observedAt: "2026-10-21T15:00:01.000Z",
+      outcome: "approved",
+      planDigest,
+      publicSessionId: plan.origin.publicSessionId,
+      requestId: "human-request",
+      responderPrincipalId: authority.ownerUserId,
     });
   });
 
@@ -194,8 +194,8 @@ describe("private native target terminal approval", () => {
         }
         reader.observe(
           requested({
-            toolName: scenario === "wrong tool" ? "plan-app-native-target" : undefined,
             toolInput: changed,
+            toolName: scenario === "wrong tool" ? "plan-app-native-target" : undefined,
           }),
         );
       }
@@ -205,14 +205,14 @@ describe("private native target terminal approval", () => {
   );
 
   it("does not reuse one invocation's approval for a different pending invocation", () => {
-    const first = createPrivateNativeTargetApprovalCapture({ owner, record, callId: "call-one" });
-    const second = createPrivateNativeTargetApprovalCapture({ owner, record, callId: "call-two" });
+    const first = createPrivateNativeTargetApprovalCapture({ callId: "call-one", owner, record });
+    const second = createPrivateNativeTargetApprovalCapture({ callId: "call-two", owner, record });
     for (const reader of [first, second]) {
-      reader.observe(requested({ requestId: "request-one", callId: "call-one" }));
-      reader.observe(requested({ requestId: "request-two", callId: "call-two" }));
+      reader.observe(requested({ callId: "call-one", requestId: "request-one" }));
+      reader.observe(requested({ callId: "call-two", requestId: "request-two" }));
       reader.observe(settled("approved", authority.ownerUserId, "request-one"));
     }
-    expect(first.read()).toMatchObject({ requestId: "request-one", outcome: "approved" });
+    expect(first.read()).toMatchObject({ outcome: "approved", requestId: "request-one" });
     expect(second.read()).toBeNull();
   });
 
@@ -222,39 +222,39 @@ describe("private native target terminal approval", () => {
       ["request-one", "call-one"],
       ["request-two", "call-two"],
     ]) {
-      all.observe(requested({ requestId, callId }));
+      all.observe(requested({ callId, requestId }));
       all.observe(settled("approved", authority.ownerUserId, requestId));
     }
     all.proveComplete();
     expect(() => all.read()).toThrow("ambiguous");
     const current = createPrivateNativeTargetApprovalCapture({
+      callId: "call-two",
       owner,
       record,
-      callId: "call-two",
       state: all.snapshot(),
       terminals: all.terminalSnapshot(),
     });
-    expect(current.read()).toMatchObject({ requestId: "request-two", callId: "call-two" });
+    expect(current.read()).toMatchObject({ callId: "call-two", requestId: "request-two" });
     expect(current.snapshot().entries).toHaveLength(2);
   });
 
   it("keeps a prior invocation's cancellation dominant over a fresh approved invocation", () => {
-    const current = createPrivateNativeTargetApprovalCapture({ owner, record, callId: "call-two" });
-    current.observe(requested({ requestId: "request-one", callId: "call-one" }));
+    const current = createPrivateNativeTargetApprovalCapture({ callId: "call-two", owner, record });
+    current.observe(requested({ callId: "call-one", requestId: "request-one" }));
     current.observe(settled("cancelled", authority.ownerUserId, "request-one"));
-    current.observe(requested({ requestId: "request-two", callId: "call-two" }));
+    current.observe(requested({ callId: "call-two", requestId: "request-two" }));
     current.observe(settled("approved", authority.ownerUserId, "request-two"));
     expect(current.read()).toMatchObject({
-      requestId: "request-one",
       callId: "call-one",
       outcome: "cancelled",
+      requestId: "request-one",
     });
   });
 
   it("still rejects two approved requests for the same invocation", () => {
-    const current = createPrivateNativeTargetApprovalCapture({ owner, record, callId: "call-one" });
+    const current = createPrivateNativeTargetApprovalCapture({ callId: "call-one", owner, record });
     for (const requestId of ["request-one", "request-two"]) {
-      current.observe(requested({ requestId, callId: "call-one" }));
+      current.observe(requested({ callId: "call-one", requestId }));
       current.observe(settled("approved", authority.ownerUserId, requestId));
     }
     expect(() => current.read()).toThrow("ambiguous");
@@ -262,43 +262,43 @@ describe("private native target terminal approval", () => {
 
   it("reads a saved partial batch as approved for the plan and pending for its unanswered call", async () => {
     const reader = capture();
-    reader.observe(requested({ requestId: "request-one", callId: "call-one" }));
-    reader.observe(requested({ requestId: "request-two", callId: "call-two" }));
+    reader.observe(requested({ callId: "call-one", requestId: "request-one" }));
+    reader.observe(requested({ callId: "call-two", requestId: "request-two" }));
     reader.observe(settled("approved", authority.ownerUserId, "request-one"));
     reader.proveComplete();
     const saved: PrivateNativeTargetApprovalObservation = {
-      version: 1,
       native: {
-        adapterSessionId: owner.adapterSessionId,
         adapterGeneration: owner.adapterGeneration,
-        nextNativeIndex: 3,
+        adapterSessionId: owner.adapterSessionId,
         capture: reader.snapshot(),
+        nextNativeIndex: 3,
       },
       terminals: reader.terminalSnapshot(),
+      version: 1,
     };
-    const readHistory = vi.fn((start: number) => {
+    const readHistory = vi.fn(async (start: number) => {
       expect(start).toBe(3);
-      return Promise.resolve({ nextNativeIndex: 3, nativeTailIndex: 2, complete: true });
+      return { complete: true, nativeTailIndex: 2, nextNativeIndex: 3 };
     });
     const common = {
-      owner,
-      record,
+      assertOwner: async () => {},
       historyOwner,
-      observation: { state: saved, save: vi.fn(() => Promise.resolve()) },
+      observation: { save: vi.fn(async () => {}), state: saved },
+      owner,
       readHistory,
-      assertOwner: () => Promise.resolve(),
+      record,
     };
     expect(await readPrivateNativeTargetApproval(common)).toEqual({
-      status: "approved",
       proof: {
-        requestId: "request-one",
         callId: "call-one",
-        planDigest,
-        responderPrincipalId: authority.ownerUserId,
-        publicSessionId: plan.origin.publicSessionId,
-        outcome: "approved",
         observedAt: "2026-10-21T15:00:01.000Z",
+        outcome: "approved",
+        planDigest,
+        publicSessionId: plan.origin.publicSessionId,
+        requestId: "request-one",
+        responderPrincipalId: authority.ownerUserId,
       },
+      status: "approved",
     });
     expect(await readPrivateNativeTargetApproval({ ...common, callId: "call-two" })).toEqual({
       status: "pending",
@@ -311,9 +311,9 @@ describe("private native target terminal approval", () => {
     reader.observe(settled("cancelled"));
     reader.observe(settled("approved"));
     expect(reader.read()).toMatchObject({
-      requestId: "human-request",
-      outcome: "cancelled",
       observedAt: "2026-10-21T15:00:01.000Z",
+      outcome: "cancelled",
+      requestId: "human-request",
     });
   });
 
@@ -327,9 +327,9 @@ describe("private native target terminal approval", () => {
   it("keeps the original public plan identity when the native stream belongs to a recovered child", () => {
     const childOwner = {
       ...owner,
-      publicSessionId: "public-recovered-child",
-      adapterSessionId: "native-recovered-child",
       adapterGeneration: 2,
+      adapterSessionId: "native-recovered-child",
+      publicSessionId: "public-recovered-child",
     };
     const reader = createPrivateNativeTargetApprovalCapture({ owner: childOwner, record });
     reader.observe(requested());
@@ -341,31 +341,30 @@ describe("private native target terminal approval", () => {
     "saves partial %s terminal proof and resumes with the original timestamp",
     async (outcome) => {
       let state: PrivateNativeTargetApprovalObservation | undefined;
-      const save = vi.fn((next: PrivateNativeTargetApprovalObservation) => {
+      const save = vi.fn(async (next: PrivateNativeTargetApprovalObservation) => {
         state = structuredClone(next);
-        return Promise.resolve();
       });
       const base = {
+        assertOwner: async () => {},
+        historyOwner,
         owner,
         record,
-        historyOwner,
-        assertOwner: () => Promise.resolve(),
       };
       await expect(
         readPrivateNativeTargetApproval({
           ...base,
           observation: { save },
-          readHistory: (_start, onEvent) => {
+          readHistory: async (_start, onEvent) => {
             onEvent(requested());
             onEvent(settled(outcome));
-            return Promise.resolve({ nextNativeIndex: 2, nativeTailIndex: 2, complete: false });
+            return { complete: false, nativeTailIndex: 2, nextNativeIndex: 2 };
           },
         }),
       ).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
       expect(state?.terminals).toMatchObject([
         {
-          requestId: "human-request",
           observedAt: "2026-10-21T15:00:01.000Z",
+          requestId: "human-request",
         },
       ]);
       expect(state?.native.capture.entries).toMatchObject([
@@ -375,55 +374,54 @@ describe("private native target terminal approval", () => {
       ]);
       const result = await readPrivateNativeTargetApproval({
         ...base,
-        observation: { state, save },
-        readHistory: (start) => {
+        observation: { save, state },
+        readHistory: async (start) => {
           expect(start).toBe(2);
-          return Promise.resolve({ nextNativeIndex: 2, nativeTailIndex: 1, complete: true });
+          return { complete: true, nativeTailIndex: 1, nextNativeIndex: 2 };
         },
       });
       expect(result).toMatchObject({
+        proof: { observedAt: "2026-10-21T15:00:01.000Z", outcome, requestId: "human-request" },
         status: outcome,
-        proof: { requestId: "human-request", outcome, observedAt: "2026-10-21T15:00:01.000Z" },
       });
     },
   );
 
   it("does not pair an old unproved request with a new adapter settlement", async () => {
     let state: PrivateNativeTargetApprovalObservation | undefined;
-    const save = (next: PrivateNativeTargetApprovalObservation) => {
+    const save = async (next: PrivateNativeTargetApprovalObservation) => {
       state = structuredClone(next);
-      return Promise.resolve();
     };
     await expect(
       readPrivateNativeTargetApproval({
-        owner,
-        record,
+        assertOwner: async () => {},
         historyOwner,
         observation: { save },
-        assertOwner: () => Promise.resolve(),
-        readHistory: (_start, onEvent) => {
+        owner,
+        readHistory: async (_start, onEvent) => {
           onEvent(requested());
-          return Promise.resolve({ nextNativeIndex: 1, nativeTailIndex: 2, complete: false });
+          return { complete: false, nativeTailIndex: 2, nextNativeIndex: 1 };
         },
+        record,
       }),
     ).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
     const replacement = operatorOwnerContextSchema.parse({
       ...historyOwner,
-      adapterSessionId: "native-replacement",
       adapterGeneration: 2,
+      adapterSessionId: "native-replacement",
     });
     expect(
       await readPrivateNativeTargetApproval({
-        owner: { ...owner, adapterSessionId: replacement.adapterSessionId, adapterGeneration: 2 },
-        record,
+        assertOwner: async () => {},
         historyOwner: replacement,
-        observation: { state, save },
-        assertOwner: () => Promise.resolve(),
-        readHistory: (start, onEvent) => {
+        observation: { save, state },
+        owner: { ...owner, adapterGeneration: 2, adapterSessionId: replacement.adapterSessionId },
+        readHistory: async (start, onEvent) => {
           expect(start).toBe(0);
           onEvent(settled());
-          return Promise.resolve({ nextNativeIndex: 1, nativeTailIndex: 0, complete: true });
+          return { complete: true, nativeTailIndex: 0, nextNativeIndex: 1 };
         },
+        record,
       }),
     ).toEqual({ status: "pending" });
   });

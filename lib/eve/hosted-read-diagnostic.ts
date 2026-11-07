@@ -68,9 +68,9 @@ const ownActionMetadata = (value: unknown, key: string): unknown => {
   }
 };
 const genericActionCounters = {
-  requested: "toolRequested",
   completed: "toolCompleted",
   failed: "toolFailed",
+  requested: "toolRequested",
 } as const;
 const failureCategory = {
   authority: "authority_failure",
@@ -83,15 +83,15 @@ const failureCategory = {
   workload_identity: "workload_identity_failure",
 } as const;
 const streamContractSchema = z.strictObject({
-  httpStatus: z.number().int().min(100).max(599),
   bodyPresent: z.boolean(),
   contentTypeMatches: z.boolean(),
-  sessionIdMatches: z.boolean(),
+  cursorWithinTail: z.boolean(),
   formatMatches: z.boolean(),
-  versionMatches: z.boolean(),
+  httpStatus: z.number().int().min(100).max(599),
+  sessionIdMatches: z.boolean(),
   tailPresent: z.boolean(),
   tailValid: z.boolean(),
-  cursorWithinTail: z.boolean(),
+  versionMatches: z.boolean(),
 });
 export interface HostedReadDiagnostic {
   event: "builder.hosted_read";
@@ -151,12 +151,12 @@ export const createHostedReadTrace = (input: {
     prepareWorkspaceRequested: 0,
     privateCallbacks: 0,
     publicSpoolEvents: 0,
-    toolRequested: 0,
-    toolCompleted: 0,
-    toolFailed: 0,
     resolveGithubSourceCompleted: 0,
     resolveGithubSourceFailed: 0,
     resolveGithubSourceRequested: 0,
+    toolCompleted: 0,
+    toolFailed: 0,
+    toolRequested: 0,
   };
   const sessionIdHash = `sha256:${createHash("sha256").update(input.sessionId).digest("hex")}`;
   const emit = (outcome: HostedReadDiagnostic["outcome"]) => {
@@ -180,8 +180,10 @@ export const createHostedReadTrace = (input: {
       phaseElapsedMs: Math.max(0, Math.round(at - phaseStarted)),
       sessionIdHash,
       ...counters,
-      ...(streamContract === undefined ? {} : { streamContract }),
     };
+    if (streamContract !== undefined) {
+      diagnostic.streamContract = streamContract;
+    }
     try {
       if (input.sink === undefined) {
         console.info("[builder:hosted-read]", diagnostic);

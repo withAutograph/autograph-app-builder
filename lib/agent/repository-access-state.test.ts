@@ -50,7 +50,6 @@ describe("session-bound repository access receipt", () => {
     expect(retried).toEqual(first);
     expect(first).toMatchObject({
       confirmedByCallId: "call_one",
-      digest: expect.stringMatching(/^[0-9a-f]{64}$/u),
       providerAccessDigest: accessDigest,
       repository: {
         defaultBranch: "main",
@@ -64,6 +63,7 @@ describe("session-bound repository access receipt", () => {
       sessionId: "ses_one",
       version: 1,
     });
+    expect(first.digest).toMatch(/^[0-9a-f]{64}$/u);
     expect(first.repository).not.toHaveProperty("repositoryVariableNames");
   });
 
@@ -191,17 +191,17 @@ describe("session-bound repository access receipt", () => {
       version: 2 as const,
     };
 
-    expect(() =>
-      assertResolvedSourceMatchesRepositoryAccess({ access: receipt, source }),
-    ).not.toThrow();
-    expect(() =>
+    expect(() => {
+      assertResolvedSourceMatchesRepositoryAccess({ access: receipt, source });
+    }).not.toThrow();
+    expect(() => {
       assertResolvedSourceMatchesRepositoryAccess({
         access: receipt,
         source: {
           ...source,
           repository: { ...source.repository, name: "another-repository" },
         },
-      }),
-    ).toThrow("The live GitHub source does not match the confirmed repository access receipt.");
+      });
+    }).toThrow("The live GitHub source does not match the confirmed repository access receipt.");
   });
 });

@@ -22,27 +22,32 @@ export default defineEval({
     ]);
     try {
       const destination = path.join(fixture.allowedRoot, "recovery");
-      await withFreshBootstrapTestCapability(fixture.capability, () =>
-        session.send(`Publish fresh repository bootstrap at ${destination}.`),
+      await withFreshBootstrapTestCapability(
+        fixture.capability,
+        async () => await session.send(`Publish fresh repository bootstrap at ${destination}.`),
       );
       session.requireInputRequest({ toolName: "publish_fresh_repository" });
-      await withFreshBootstrapTestCapability(fixture.capability, () =>
-        session.respondAll("approve"),
+      await withFreshBootstrapTestCapability(
+        fixture.capability,
+        async () => await session.respondAll("approve"),
       );
       t.succeeded();
 
-      await withFreshBootstrapTestCapability(fixture.capability, () =>
-        session.send("Recover fresh repository bootstrap after partial failure."),
+      await withFreshBootstrapTestCapability(
+        fixture.capability,
+        async () => await session.send("Recover fresh repository bootstrap after partial failure."),
       );
       session.requireInputRequest({ toolName: "recover_fresh_repository" });
-      const turn1 = await withFreshBootstrapTestCapability(fixture.capability, () =>
-        session.respondAll("approve"),
+      const turn1 = await withFreshBootstrapTestCapability(
+        fixture.capability,
+        async () => await session.respondAll("approve"),
       );
       t.succeeded();
       t.check(turn1.message, includes("separately approved exact"));
 
-      const retry = await withFreshBootstrapTestCapability(fixture.capability, () =>
-        session.send("Retry fresh repository recovery after a lost response."),
+      const retry = await withFreshBootstrapTestCapability(
+        fixture.capability,
+        async () => await session.send("Retry fresh repository recovery after a lost response."),
       );
 
       t.succeeded();

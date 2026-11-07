@@ -3,12 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 import { readStandardBuilderPublicOrigin } from "./standard-builder-public-origin";
 
 const setup = () => ({
-  destination: { projectId: "actual-project", teamId: "team", installationId: "installation" },
-  assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+  assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
+  destination: { installationId: "installation", projectId: "actual-project", teamId: "team" },
+  fetch: vi
+    .fn()
+    .mockResolvedValue(
+      Response.json({ domains: [{ name: "actual-public.example", verified: true }] }),
+    ),
   readCredential: vi
     .fn<Parameters<typeof readStandardBuilderPublicOrigin>[0]["readCredential"]>()
     .mockResolvedValue({
-      token: "private-test-token",
       binding: {
         active: true,
         displayName: "Team",
@@ -19,12 +23,8 @@ const setup = () => ({
         slug: "team",
         updatedAt: new Date("2026-11-01T00:00:00Z"),
       },
+      token: "private-test-token",
     }),
-  fetch: vi
-    .fn()
-    .mockResolvedValue(
-      Response.json({ domains: [{ name: "actual-public.example", verified: true }] }),
-    ),
 });
 describe("owned standard public origin", () => {
   it("reads an actual verified production domain under the exact team/project and rechecks ownership", async () => {
@@ -39,18 +39,18 @@ describe("owned standard public origin", () => {
   it.each([
     [[]],
     [[{ name: "unverified.example", verified: false }]],
-    [[{ name: "branch.example", verified: true, gitBranch: "main" }]],
+    [[{ gitBranch: "main", name: "branch.example", verified: true }]],
     [
       [
         {
+          customEnvironmentId: "env_nonproduction",
           name: "custom-environment.example",
           verified: true,
-          customEnvironmentId: "env_nonproduction",
         },
       ],
     ],
     [[{ name: "*.example", verified: true }]],
-    [[{ name: "redirect.example", verified: true, redirect: "elsewhere.example" }]],
+    [[{ name: "redirect.example", redirect: "elsewhere.example", verified: true }]],
     [
       [
         { name: "one.example", verified: true },
@@ -78,9 +78,7 @@ describe("owned standard public origin", () => {
   });
   it("does not acknowledge a domain after destination or membership changes", async () => {
     const f = setup();
-    f.assertCurrent
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(new Error("owner changed"));
+    f.assertCurrent.mockResolvedValueOnce().mockRejectedValueOnce(new Error("owner changed"));
     await expect(readStandardBuilderPublicOrigin(f)).rejects.toThrow("owner changed");
   });
   it("rejects partial domain listings, malformed provider payloads and non-domain names without retaining payloads", async () => {

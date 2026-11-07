@@ -23,37 +23,37 @@ const fixture = () => {
   const staging = path.join(root, "stage");
   mkdirSync(staging);
   const receipt = {
-    version: 1 as const,
-    kind: "application-source-import-v1" as const,
-    reference: {
-      kind: "application-source-candidate-v1" as const,
-      uploadId: "46024567-225f-4169-9b78-2b2e19ba8848",
-      appId: "invoice-app",
-      manifestDigest: "a".repeat(64),
-    },
-    sourceSessionId: "local-session",
-    importedSessionId: "hosted-session",
-    platformSourceReceiptDigest: "b".repeat(64),
-    workspaceId: "private-workspace",
     appRoot: "apps/invoice-app",
     importedByCallId: "import-call",
+    importedSessionId: "hosted-session",
+    kind: "application-source-import-v1" as const,
+    platformSourceReceiptDigest: "b".repeat(64),
+    reference: {
+      appId: "invoice-app",
+      kind: "application-source-candidate-v1" as const,
+      manifestDigest: "a".repeat(64),
+      uploadId: "46024567-225f-4169-9b78-2b2e19ba8848",
+    },
+    sourceSessionId: "local-session",
+    version: 1 as const,
+    workspaceId: "private-workspace",
   };
   const bytes = Buffer.from([0, 255, 10, 13]);
   const files = [
     {
-      path: "apps/invoice-app/public/data.bin",
-      mode: "100755",
       bytes: bytes.length,
+      mode: "100755",
+      path: "apps/invoice-app/public/data.bin",
       sha256: createHash("sha256").update(bytes).digest("hex"),
     },
   ];
   writeFileSync(path.join(staging, "0.base64"), bytes.toString("base64"));
-  const plan = { receipt, files, staging };
+  const plan = { files, receipt, staging };
   writeFileSync(path.join(staging, "plan.json"), JSON.stringify(plan));
   const script = path.join(staging, "import.cjs");
   writeFileSync(script, applicationSourceImportProgram({ ...plan, root }));
   const run = () => spawnSync(process.execPath, [script], { encoding: "utf-8" });
-  return { root, staging, receipt, files, bytes, run };
+  return { bytes, files, receipt, root, run, staging };
 };
 describe("source-only application materialization", () => {
   it("preserves binary bytes and mode without executing source, and resumes without overwriting edits", () => {
@@ -86,8 +86,8 @@ describe("source-only application materialization", () => {
     const f = fixture();
     expect(f.run().status).toBe(0);
     const plan = {
-      receipt: { ...f.receipt, importedSessionId: "foreign" },
       files: f.files,
+      receipt: { ...f.receipt, importedSessionId: "foreign" },
       staging: f.staging,
     };
     writeFileSync(path.join(f.staging, "plan.json"), JSON.stringify(plan));
@@ -99,33 +99,33 @@ it("does not stage source after cancellation or owner rejection", async () => {
   const run = vi.fn<SandboxSession["run"]>();
   const sandbox = { run, writeTextFile: vi.fn<SandboxSession["writeTextFile"]>() };
   const f = fixture();
-  const receipt = f.receipt;
+  const { receipt } = f;
   const validated = validateApplicationSourceArtifact({
+    files: [{ contentBase64: f.bytes.toString("base64"), path: f.files[0]?.path }],
     manifest: {
-      version: 1,
-      kind: "application-source-v1",
       appId: receipt.reference.appId,
       displayName: "Invoice App",
-      sourceSessionId: receipt.sourceSessionId,
       files: f.files,
+      kind: "application-source-v1",
       omissions: [],
+      sourceSessionId: receipt.sourceSessionId,
+      version: 1,
     },
-    files: [{ path: f.files[0]?.path, contentBase64: f.bytes.toString("base64") }],
   });
   const controller = new AbortController();
   controller.abort();
   await expect(
-    materializeApplicationSource({ sandbox, validated, receipt, abortSignal: controller.signal }),
+    materializeApplicationSource({ abortSignal: controller.signal, receipt, sandbox, validated }),
   ).rejects.toThrow();
   await expect(
     materializeApplicationSource({
-      sandbox,
-      validated,
-      receipt,
       assertCurrent: async () => {
         await Promise.resolve();
         throw new Error("Owner changed");
       },
+      receipt,
+      sandbox,
+      validated,
     }),
   ).rejects.toThrow("Owner changed");
   expect(run).not.toHaveBeenCalled();

@@ -22,8 +22,10 @@ import { ARRUSTED_COMPONENT_COMPOSITION_MANIFEST } from "../evals/support/suppor
 const reportRoot = path.resolve(
   process.env.APP_BUILDER_PRODUCT_EVAL_REPORT_DIR ?? ".artifacts/product-quality",
 );
-const vendorEvidenceRoot = path.resolve(reportRoot, "vendor-onboarding");
+const reportFilename = "product-quality-report.json";
+const reportRelativePath = `\`${reportFilename}\``;
 const vendor = productQualityScenario("vendor-onboarding");
+const vendorEvidenceRoot = path.resolve(reportRoot, vendor.id);
 const prototype = evaluatePrototypeQuality({
   appSpec: vendorOnboardingCompleteAppSpec,
   html: vendorOnboardingPrototype,
@@ -107,17 +109,14 @@ await writeFile(
     2,
   )}\n`,
 );
-await writeFile(
-  path.resolve(reportRoot, "product-quality-report.json"),
-  `${JSON.stringify(report, null, 2)}\n`,
-);
+await writeFile(path.resolve(reportRoot, reportFilename), `${JSON.stringify(report, null, 2)}\n`);
 const summary = [
   "## App Builder product-quality evals",
   "",
   `- Hard prototype gate: **${report.hardGates.prototype}**`,
   `- Hard AppSpec gate: **${report.hardGates.appSpec}**`,
   `- Hard Arrusted composition gate: **${report.hardGates.componentComposition}**`,
-  `- Quality report: \`product-quality-report.json\``,
+  `- Quality report: ${reportRelativePath}`,
 ].join("\n");
 if (process.env.GITHUB_STEP_SUMMARY === undefined) {
   process.stdout.write(`${summary}\n`);

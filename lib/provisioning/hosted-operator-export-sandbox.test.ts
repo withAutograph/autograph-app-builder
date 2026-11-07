@@ -14,9 +14,9 @@ const metadata = new Map<string, Buffer>();
 let commandTerminal = true;
 let dispatchUnknown = false;
 const command = {
-  stdout: async () => "",
   cmdId: "command-one",
   exitCode: 0,
+  stdout: async () => "",
   wait: vi.fn(async () => ({ exitCode: 0 })),
 };
 const runCommand = vi.fn(
@@ -35,21 +35,21 @@ const runCommand = vi.fn(
     }
     if (input.cmd === "node") {
       const args = input.args ?? [];
-      const script = args[1];
-      const target = args[2];
-      const content = args[3];
+      const [, script, target, content] = args;
       if (script === undefined || target === undefined || content === undefined) {
         throw new Error("Missing fixed metadata arguments");
       }
       const fs = {
-        mkdirSync: vi.fn(),
+        closeSync: vi.fn(),
+        fsyncSync: vi.fn(),
         lstatSync: (value: string) => ({
           isDirectory: () => value !== target,
           isFile: () => value === target,
           isSymbolicLink: () => false,
-          uid: 500,
           mode: value === target ? 0o600 : 0o700,
+          uid: 500,
         }),
+        mkdirSync: vi.fn(),
         openSync: (value: string, flags: string, mode: number) => {
           expect(flags).toBe("wx");
           expect(mode).toBe(0o600);
@@ -58,25 +58,23 @@ const runCommand = vi.fn(
           }
           return value;
         },
+        readFileSync: (value: string) => metadata.get(value)?.toString("utf-8"),
         writeFileSync: (handle: string, value: string) => {
           metadata.set(handle, Buffer.from(value));
         },
-        fsyncSync: vi.fn(),
-        closeSync: vi.fn(),
-        readFileSync: (value: string) => metadata.get(value)?.toString("utf-8"),
       };
       // oxlint-disable-next-line sonarjs/code-eval -- Execute only the source-owned fixed metadata writer against a virtual filesystem, never app code.
       runInNewContext(script, {
-        require: (module: string) => (module === "node:fs" ? fs : path),
         process: {
           argv: ["node", target, content],
-          getuid: () => 500,
           exit: (code: number) => {
             if (code !== 0) {
               throw new Error("invalid private metadata");
             }
           },
+          getuid: () => 500,
         },
+        require: (module: string) => (module === "node:fs" ? fs : path),
       });
       return { ...command, exitCode: 0 };
     }
@@ -87,25 +85,25 @@ const runCommand = vi.fn(
   },
 );
 const sandbox = {
+  delete: vi.fn<() => Promise<void>>().mockResolvedValue(),
+  extendTimeout: vi.fn<() => Promise<void>>().mockResolvedValue(),
+  getCommand: vi.fn(async () => ({ ...command, exitCode: commandTerminal ? 0 : null })),
   name: "private-vm",
-  runCommand,
-  delete: vi.fn(async () => {}),
-  extendTimeout: vi.fn(async () => {}),
+  readFile: vi.fn<() => Promise<null>>().mockResolvedValue(null),
   readFileToBuffer: vi.fn(async (input: { path: string }) =>
     input.path.endsWith("manifest.json")
       ? Buffer.from("private manifest")
       : (metadata.get(input.path) ?? null),
   ),
-  readFile: vi.fn(async () => null),
-  getCommand: vi.fn(async () => ({ ...command, exitCode: commandTerminal ? 0 : null })),
+  runCommand,
 };
 const launcher = () =>
   createTenantExportSandbox(
     {
+      exportWorker: fixture.descriptor,
       image: "trusted-image",
       projectId: "operator-project",
       teamId: "operator-team",
-      exportWorker: fixture.descriptor,
     },
     sdk,
   );
@@ -121,17 +119,17 @@ beforeEach(() => {
 describe("fixed tenant export Sandbox transport", () => {
   it("creates exclusive private metadata and confines the migrator credential to the fixed command environment", async () => {
     const executor = launcher();
-    const assertCurrent = vi.fn(async () => {});
+    const assertCurrent = vi.fn<() => Promise<void>>().mockResolvedValue();
     const locator = await executor.prepare(fixture.worker, assertCurrent);
-    const checkpoint = vi.fn(async () => {});
+    const checkpoint = vi.fn<() => Promise<void>>().mockResolvedValue();
     const credential = "postgres://app-migrator:synthetic-password@private.test/app";
     await executor.run(fixture.worker, locator, credential, assertCurrent, checkpoint);
     expect(sdk.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        ports: [],
-        persistent: false,
-        networkPolicy: "allow-all",
         env: {},
+        networkPolicy: "allow-all",
+        persistent: false,
+        ports: [],
       }),
     );
     const actual = runCommand.mock.calls.at(-1)?.[0];
@@ -160,7 +158,7 @@ describe("fixed tenant export Sandbox transport", () => {
   it("preserves uncertain command dispatch without inventing a command identity or retrying it", async () => {
     const executor = launcher();
     const locator = await executor.prepare(fixture.worker, async () => {});
-    const checkpoint = vi.fn(async () => {});
+    const checkpoint = vi.fn<() => Promise<void>>().mockResolvedValue();
     dispatchUnknown = true;
     await expect(
       executor.run(fixture.worker, locator, "private-credential", async () => {}, checkpoint),

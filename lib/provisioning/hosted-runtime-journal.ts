@@ -16,6 +16,8 @@ import type { RetainedOperatorAuth } from "./hosted-operator-contract";
 
 import { normalActorAccountPreparationSchema } from "./hosted-operator-normal-actor-journal";
 
+const resourceReadyStep = "resource-ready";
+
 export const hostedRuntimeTargetSchema = z.strictObject({
   appId: builderAppIdSchema,
   branch: z
@@ -56,24 +58,13 @@ const encryptedStateSchema = z.strictObject({
 });
 
 export const retainedParticipantGatewaySchema = z.strictObject({
-  completion: retainedOperatorAuthSchema,
   candidate: operatorDeploymentCandidateSchema,
+  completion: retainedOperatorAuthSchema,
 });
 
 const hostedRuntimeJournalRecordBaseSchema = z.strictObject({
-  approvedByCallId: z.string().min(1),
   accountPreparation: normalActorAccountPreparationSchema.optional(),
-  /** Immutable prior account scope and completed app evidence; never current-plan approval. */
-  participantPreparationHistory: z
-    .array(
-      z.strictObject({
-        preparation: normalActorAccountPreparationSchema,
-        approvedByCallId: z.string().min(1),
-        operator: hostedOperatorRecordSchema,
-        proof: hostedRuntimeProofSchema.optional(),
-      }),
-    )
-    .optional(),
+  approvedByCallId: z.string().min(1),
   cleanupApprovedByCallId: z.string().min(1).optional(),
   credentialReference: z
     .strictObject({
@@ -83,67 +74,78 @@ const hostedRuntimeJournalRecordBaseSchema = z.strictObject({
     .optional(),
   environmentBound: z.boolean().optional(),
   environmentGitBranch: z.string().nullable().optional(),
-  kind: z.literal("app-runtime"),
-  leaseExpiresAt: z.iso.datetime({ offset: true }).optional(),
-  leaseId: z.uuid().optional(),
   /** Closed execution acknowledgement, separate from resource credential custody. */
   executionObservation: z
     .discriminatedUnion("state", [
       z.strictObject({
-        state: z.literal("running"),
+        approvalId: z.string().min(1),
         attemptRef: z.uuid(),
+        callId: z.string().min(1),
         operationRef: z.uuid(),
         planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-        callId: z.string().min(1),
-        approvalId: z.string().min(1),
+        state: z.literal("running"),
       }),
       z.strictObject({
-        state: z.literal("settled"),
-        attemptRef: z.uuid(),
-        operationRef: z.uuid(),
-        planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-        callId: z.string().min(1),
         approvalId: z.string().min(1),
+        attemptRef: z.uuid(),
+        callId: z.string().min(1),
+        operationRef: z.uuid(),
         outcome: operatorExecutionOutcomeSchema,
+        planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+        state: z.literal("settled"),
       }),
     ])
     .optional(),
+  kind: z.literal("app-runtime"),
+  leaseExpiresAt: z.iso.datetime({ offset: true }).optional(),
+  leaseId: z.uuid().optional(),
   operator: hostedOperatorRecordSchema.optional(),
+  /** Immutable prior account scope and completed app evidence; never current-plan approval. */
+  participantPreparationHistory: z
+    .array(
+      z.strictObject({
+        approvedByCallId: z.string().min(1),
+        operator: hostedOperatorRecordSchema,
+        preparation: normalActorAccountPreparationSchema,
+        proof: hostedRuntimeProofSchema.optional(),
+      }),
+    )
+    .optional(),
   privateState: encryptedStateSchema.optional(),
+  proof: hostedRuntimeProofSchema.optional(),
+  /** Private native continuation claim; never projected into public operator metadata. */
+  realmContinuation: z
+    .strictObject({
+      acceptedAt: z.iso.datetime({ offset: true }).optional(),
+      adapterSessionId: z.string().min(1).max(200),
+      approvedPlanDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+      claimedAt: z.iso.datetime({ offset: true }),
+      dispatchId: z.string().regex(/^[a-f0-9]{64}$/u),
+      nonceSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+      operationRef: z.uuid(),
+      receiverClaimedAt: z.iso.datetime({ offset: true }).optional(),
+      receiverRequestId: z.string().min(1).max(200).optional(),
+      receiverStreamStartIndex: z.number().int().nonnegative().optional(),
+      status: z.enum(["claimed", "unknown", "accepted"]),
+    })
+    .optional(),
   /** Authored Workflow hook capability; kept encrypted and outside public operator results. */
   realmIdentityWait: z
     .strictObject({
       adapterSessionId: z.string().min(1).max(200),
       approvedPlanDigest: z.string().regex(/^[a-f0-9]{64}$/u),
       callId: z.string().min(1),
-      hook: encryptedStateSchema,
-      nonceSha256: z.string().regex(/^[a-f0-9]{64}$/u),
-      operationRef: z.uuid(),
-      registeredAt: z.iso.datetime({ offset: true }),
-      observedAt: z.iso.datetime({ offset: true }).optional(),
       eventId: z
         .string()
         .regex(/^[a-f0-9]{64}$/u)
         .optional(),
-    })
-    .optional(),
-  /** Private native continuation claim; never projected into public operator metadata. */
-  realmContinuation: z
-    .strictObject({
-      dispatchId: z.string().regex(/^[a-f0-9]{64}$/u),
-      operationRef: z.uuid(),
-      approvedPlanDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+      hook: encryptedStateSchema,
       nonceSha256: z.string().regex(/^[a-f0-9]{64}$/u),
-      status: z.enum(["claimed", "unknown", "accepted"]),
-      claimedAt: z.iso.datetime({ offset: true }),
-      acceptedAt: z.iso.datetime({ offset: true }).optional(),
-      receiverClaimedAt: z.iso.datetime({ offset: true }).optional(),
-      receiverStreamStartIndex: z.number().int().nonnegative().optional(),
-      receiverRequestId: z.string().min(1).max(200).optional(),
-      adapterSessionId: z.string().min(1).max(200),
+      observedAt: z.iso.datetime({ offset: true }).optional(),
+      operationRef: z.uuid(),
+      registeredAt: z.iso.datetime({ offset: true }),
     })
     .optional(),
-  proof: hostedRuntimeProofSchema.optional(),
   request: hostedRuntimeTargetSchema,
   retainedAuth: retainedOperatorAuthSchema.optional(),
   /** Completed APP Gateway authority retained separately from the original Auth bootstrap. */
@@ -155,8 +157,8 @@ const hostedRuntimeJournalRecordBaseSchema = z.strictObject({
     "prepared",
     "verified",
     "bound",
-    "resource-ready",
-    "resource-ready",
+    resourceReadyStep,
+    resourceReadyStep,
     "environment-removed",
     "cleaned",
   ]),
@@ -164,6 +166,19 @@ const hostedRuntimeJournalRecordBaseSchema = z.strictObject({
 });
 
 export const hostedRuntimeJournalRecordSchema = hostedRuntimeJournalRecordBaseSchema.extend({
+  /** Immutable prerequisites displaced only by exact pending-account restoration. */
+  pendingAccountRestorations: z
+    .array(
+      z.strictObject({
+        approvedByCallId: z.string().min(1),
+        executionObservation: hostedRuntimeJournalRecordBaseSchema.shape.executionObservation,
+        operator: hostedOperatorRecordSchema,
+        realmContinuation: hostedRuntimeJournalRecordBaseSchema.shape.realmContinuation,
+        realmIdentityWait: hostedRuntimeJournalRecordBaseSchema.shape.realmIdentityWait,
+        retainedAuth: retainedOperatorAuthSchema.optional(),
+      }),
+    )
+    .optional(),
   /** Immutable unapproved app proposal and its real approved prerequisites. This history
    * never grants approval to the app proposal or implies its effects were absent. */
   unapprovedAppProposalHistory: z
@@ -174,19 +189,6 @@ export const hostedRuntimeJournalRecordSchema = hostedRuntimeJournalRecordBaseSc
         preparation: normalActorAccountPreparationSchema,
         retainedAuth: retainedOperatorAuthSchema,
         retainedParticipantGateway: retainedParticipantGatewaySchema.optional(),
-      }),
-    )
-    .optional(),
-  /** Immutable prerequisites displaced only by exact pending-account restoration. */
-  pendingAccountRestorations: z
-    .array(
-      z.strictObject({
-        approvedByCallId: z.string().min(1),
-        operator: hostedOperatorRecordSchema,
-        retainedAuth: retainedOperatorAuthSchema.optional(),
-        executionObservation: hostedRuntimeJournalRecordBaseSchema.shape.executionObservation,
-        realmIdentityWait: hostedRuntimeJournalRecordBaseSchema.shape.realmIdentityWait,
-        realmContinuation: hostedRuntimeJournalRecordBaseSchema.shape.realmContinuation,
       }),
     )
     .optional(),

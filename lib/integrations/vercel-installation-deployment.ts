@@ -68,11 +68,12 @@ function deployment(environment: NodeJS.ProcessEnv | Record<string, string | und
       config,
       emulation,
       fetch: emulation
-        ? (resource, init) => providerEmulationFetch(resource as string | URL, init, emulation)
+        ? async (resource, init) =>
+            await providerEmulationFetch(resource as string | URL, init, emulation)
         : undefined,
       installations,
       membership: {
-        isActiveMember: (authority) => membership.isActiveMember(authority),
+        isActiveMember: async (authority) => await membership.isActiveMember(authority),
       },
       states: createPostgresVercelAuthorizationStateStore(database),
     }),

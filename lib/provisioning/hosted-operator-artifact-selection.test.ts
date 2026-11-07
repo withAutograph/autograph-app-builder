@@ -91,13 +91,13 @@ it("accepts additive source and selection metadata without changing exact releas
     ...selected,
     advisory: "Release label",
     publishedSource: {
+      advisory: { label: "Published source" },
       branch: "codex/reviewed-app",
       changeSetDigest: "b".repeat(64),
       gitSha: "c".repeat(40),
       gitTree: "d".repeat(40),
       repositoryId: "owned-repository",
       reviewDigest: "e".repeat(64),
-      advisory: { label: "Published source" },
     },
   };
   const parsed = compiledOperatorReleaseSelectionSchema.parse(input);
@@ -125,11 +125,11 @@ it("accepts additive source and selection metadata without changing exact releas
 
 describe("exact recorded published source across accepted specifications", () => {
   const publishedSource = {
-    repositoryId: "fixture-repository",
     branch: "app-builder/fixture",
+    changeSetDigest: "f".repeat(64),
     gitSha: "d".repeat(40),
     gitTree: "e".repeat(40),
-    changeSetDigest: "f".repeat(64),
+    repositoryId: "fixture-repository",
     reviewDigest: "a".repeat(64),
   };
   it("finds an older approved publication without selecting the current unpublished specification", () => {
@@ -173,11 +173,11 @@ describe("exact recorded published source across accepted specifications", () =>
 
 describe("complete immutable release equivalence for publication association", () => {
   const source = {
-    repositoryId: "fixture-repository",
     branch: "app-builder/fixture",
+    changeSetDigest: "f".repeat(64),
     gitSha: "d".repeat(40),
     gitTree: "e".repeat(40),
-    changeSetDigest: "f".repeat(64),
+    repositoryId: "fixture-repository",
     reviewDigest: "a".repeat(64),
   };
   it("ignores only the existing publication association", () => {

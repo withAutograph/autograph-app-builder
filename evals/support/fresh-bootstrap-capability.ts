@@ -17,18 +17,18 @@ import { withFreshBootstrapTestCapability } from "@/lib/agent/fresh-bootstrap-ca
 import type { FreshBootstrapFaultHooks } from "@/lib/repository/node-fresh-bootstrap";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function withFreshBootstrapEvalCapability<T>(
+export async function withFreshBootstrapEvalCapability<T>(
   capability: FreshBootstrapCapability,
   operation: () => Promise<T>,
   hooks?: FreshBootstrapFaultHooks,
 ): Promise<T> {
   if (capability.authority === "structural-test-injection") {
-    return withFreshBootstrapTestCapability(capability, operation, hooks);
+    return await withFreshBootstrapTestCapability(capability, operation, hooks);
   }
   if (hooks !== undefined) {
     throw new Error("Configured-production eval capability cannot inject faults.");
   }
-  return operation();
+  return await operation();
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -110,6 +110,8 @@ export async function createFreshBootstrapEvalCapability(): Promise<{
       systemPython,
       systemPythonIdentity: await executableIdentity(systemPython),
     },
-    cleanup: () => rm(owner, { force: true, recursive: true }),
+    cleanup: async () => {
+      await rm(owner, { force: true, recursive: true });
+    },
   };
 }

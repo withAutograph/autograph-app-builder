@@ -26,6 +26,11 @@ const allConnectionNames = featuredConnections.map(([name]) => name);
 export const comingSoonConnections = new Set(["Ramp", "NetSuite", "Xero", "Sage Intacct"]);
 
 const connectionKind = new Map<string, string>(featuredConnections);
+const icons = {
+  quickbooks: SiQuickbooks,
+  "sage-intacct": SiSage,
+  xero: SiXero,
+};
 
 const connectionDescriptions: Record<string, string> = {
   NetSuite: "Import vendor data from a NetSuite account",
@@ -42,11 +47,6 @@ function connectionDescription(name: string) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ConnectionIcon({ kind, name }: { kind?: string; name: string }) {
-  const icons = {
-    quickbooks: SiQuickbooks,
-    "sage-intacct": SiSage,
-    xero: SiXero,
-  };
   const Icon = kind ? icons[kind as keyof typeof icons] : undefined;
   const hasBrandAsset = kind === "ramp" || kind === "netsuite";
   return (
@@ -84,9 +84,11 @@ export function ConnectionsSection({
   showMore: boolean;
 }) {
   const normalizedSearch = search.trim().toLowerCase();
-  const available = (
-    showMore || normalizedSearch ? allConnectionNames : allConnectionNames.slice(0, 2)
-  ).filter((name) => !normalizedSearch || name.toLowerCase().includes(normalizedSearch));
+  const source = showMore || normalizedSearch ? allConnectionNames : allConnectionNames.slice(0, 2);
+  const selectedNames = new Set(selected);
+  const available = source.filter(
+    (name) => !normalizedSearch || name.toLowerCase().includes(normalizedSearch),
+  );
   const controls = (
     <>
       <label className={styles.searchBox}>
@@ -97,19 +99,30 @@ export function ConnectionsSection({
           name="connection-search"
           autoComplete="off"
           value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
-          onKeyDown={(event) => event.key === "Escape" && onSearchChange("")}
+          onChange={(event) => {
+            onSearchChange(event.target.value);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              onSearchChange("");
+            }
+          }}
           placeholder="Search connections…"
         />
         {search ? (
-          <button type="button" onClick={() => onSearchChange("")}>
+          <button
+            type="button"
+            onClick={() => {
+              onSearchChange("");
+            }}
+          >
             Esc
           </button>
         ) : null}
       </label>
       <div className={styles.connectionGrid}>
         {available
-          .filter((name) => !selected.includes(name))
+          .filter((name) => !selectedNames.has(name))
           .map((name) => {
             const comingSoon = comingSoonConnections.has(name);
             if (comingSoon && !comingSoonEnabled) {
@@ -121,7 +134,9 @@ export function ConnectionsSection({
                 key={name}
                 aria-label={comingSoon ? `${name} coming soon` : `Add ${name}`}
                 disabled={comingSoon}
-                onClick={() => onAdd(name)}
+                onClick={() => {
+                  onAdd(name);
+                }}
               >
                 <ConnectionIcon kind={connectionKind.get(name)} name={name} />
                 {name}
@@ -146,10 +161,21 @@ export function ConnectionsSection({
                 <strong>{name}</strong>
                 <p>{connectionDescription(name)}</p>
               </div>
-              <button type="button" onClick={() => onCustomize(name)}>
+              <button
+                type="button"
+                onClick={() => {
+                  onCustomize(name);
+                }}
+              >
                 {connected.includes(name) ? "Customize" : "Connect"}
               </button>
-              <button type="button" aria-label={`Remove ${name}`} onClick={() => onRemove(name)}>
+              <button
+                type="button"
+                aria-label={`Remove ${name}`}
+                onClick={() => {
+                  onRemove(name);
+                }}
+              >
                 <X size={17} />
               </button>
             </article>
@@ -185,10 +211,10 @@ export function ConnectionDrawer({
   onConnected: () => void;
 }) {
   const [showSuccess, setShowSuccess] = useState(false);
-  const [connectionName, setConnectionName] = useState(
+  const [connectionName, setConnectionName] = useState(() =>
     flow.name.toLowerCase().replaceAll(/[^a-z0-9]+/gu, "-"),
   );
-  const [description, setDescription] = useState(connectionDescription(flow.name));
+  const [description, setDescription] = useState(() => connectionDescription(flow.name));
   const accountLabel = flow.name === "Slack" ? "Slack Workspace" : "Account";
 
   useEffect(() => {
@@ -235,7 +261,9 @@ export function ConnectionDrawer({
         role="dialog"
         aria-modal="true"
         aria-labelledby="connection-drawer-title"
-        onMouseDown={(event) => event.stopPropagation()}
+        onMouseDown={(event) => {
+          event.stopPropagation();
+        }}
       >
         <header>
           <h2 id="connection-drawer-title">Add Connection</h2>
@@ -265,7 +293,12 @@ export function ConnectionDrawer({
               </div>
               <h4>Connect your {flow.name} account</h4>
               <p>Authorize Autograph to access {flow.name} on your behalf.</p>
-              <button type="button" onClick={() => setShowSuccess(true)}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSuccess(true);
+                }}
+              >
                 Connect {flow.name} <ExternalLink size={14} aria-hidden="true" />
               </button>
             </div>
@@ -285,7 +318,9 @@ export function ConnectionDrawer({
                 </span>
                 <input
                   value={connectionName}
-                  onChange={(event) => setConnectionName(event.target.value)}
+                  onChange={(event) => {
+                    setConnectionName(event.target.value);
+                  }}
                 />
               </label>
               <div className={styles.scopeRow}>
@@ -301,7 +336,9 @@ export function ConnectionDrawer({
                 <button
                   type="button"
                   disabled={!connectionName.trim()}
-                  onClick={() => onStageChange("customize")}
+                  onClick={() => {
+                    onStageChange("customize");
+                  }}
                 >
                   Continue
                 </button>
@@ -323,14 +360,18 @@ export function ConnectionDrawer({
                 Display Name
                 <input
                   value={connectionName}
-                  onChange={(event) => setConnectionName(event.target.value)}
+                  onChange={(event) => {
+                    setConnectionName(event.target.value);
+                  }}
                 />
               </label>
               <label>
                 Description
                 <textarea
                   value={description}
-                  onChange={(event) => setDescription(event.target.value)}
+                  onChange={(event) => {
+                    setDescription(event.target.value);
+                  }}
                 />
               </label>
               <label className={styles.defaultConnection}>

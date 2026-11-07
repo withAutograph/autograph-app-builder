@@ -9,24 +9,18 @@ import { projectNormalActorRuntime } from "./hosted-operator-normal-actor-runtim
 const operationRef = "11111111-1111-4111-8111-111111111111";
 const program = () =>
   normalActorProgramSchema.parse({
-    version: 1,
-    appId: "diverse-app",
-    origin: "https://actual-preview.example.test",
     actors: ["owner", "second-owner", "shared", "no-access", "unassigned"].map((actorKey) => ({
+      account: "capture-existing",
       actorKey,
       email: `${actorKey}@example.test`,
       name: actorKey,
-      account: "capture-existing",
     })),
-    organizations: [
-      { organizationId: "actual-first-org", ownerActorKey: "owner", name: "First", slug: "first" },
-      {
-        organizationId: "actual-second-org",
-        ownerActorKey: "second-owner",
-        name: "Second",
-        slug: "second",
-      },
+    appAccess: [
+      { actorKey: "owner", organizationId: "actual-first-org", roles: ["reviewer"] },
+      { actorKey: "shared", organizationId: "actual-first-org", roles: ["requester"] },
+      { actorKey: "shared", organizationId: "actual-second-org", roles: ["auditor"] },
     ],
+    appId: "diverse-app",
     memberships: [
       { actorKey: "owner", organizationId: "actual-first-org", role: "owner" },
       { actorKey: "second-owner", organizationId: "actual-second-org", role: "owner" },
@@ -34,43 +28,49 @@ const program = () =>
       { actorKey: "shared", organizationId: "actual-second-org", role: "member" },
       { actorKey: "no-access", organizationId: "actual-first-org", role: "member" },
     ],
-    appAccess: [
-      { actorKey: "owner", organizationId: "actual-first-org", roles: ["reviewer"] },
-      { actorKey: "shared", organizationId: "actual-first-org", roles: ["requester"] },
-      { actorKey: "shared", organizationId: "actual-second-org", roles: ["auditor"] },
+    organizations: [
+      { name: "First", organizationId: "actual-first-org", ownerActorKey: "owner", slug: "first" },
+      {
+        name: "Second",
+        organizationId: "actual-second-org",
+        ownerActorKey: "second-owner",
+        slug: "second",
+      },
     ],
+    origin: "https://actual-preview.example.test",
+    version: 1,
   });
 const completed = () => {
   const approved = program();
   const state = initialNormalActorState(approved, operationRef);
   state.actors = state.actors.map((actor, index) => ({
     ...actor,
-    signup: "complete",
     credentials: { password: "private-signup-password-that-must-stay-private" },
     session: {
-      reference: `22222222-2222-4222-8222-${String(index + 1).padStart(12, "0")}`,
       actorId: `verified-${actor.actorKey}-id`,
-      realmSessionId: `private-realm-${actor.actorKey}`,
-      origin: approved.origin,
       expiresAt: "2030-01-01T00:00:00.000Z",
+      origin: approved.origin,
+      realmSessionId: `private-realm-${actor.actorKey}`,
+      reference: `22222222-2222-4222-8222-${String(index + 1).padStart(12, "0")}`,
     },
+    signup: "complete",
     storageState: {
       cookies: [
         {
-          name: "normal-auth-session",
-          value: `actual-cookie-${actor.actorKey}`,
           domain: "actual-preview.example.test",
-          path: "/",
           expires: -1,
           httpOnly: true,
-          secure: true,
+          name: "normal-auth-session",
+          path: "/",
           sameSite: "Lax",
+          secure: true,
+          value: `actual-cookie-${actor.actorKey}`,
         },
       ],
       origins: [
         {
-          origin: approved.origin,
           localStorage: [{ name: "selection", value: `actual-local-${actor.actorKey}` }],
+          origin: approved.origin,
         },
       ],
     },
@@ -81,43 +81,43 @@ const completed = () => {
   }));
   state.memberships = state.memberships.map((membership) => ({
     ...membership,
-    status: "complete",
     invitationId: "private-invitation",
+    status: "complete",
   }));
   state.organizationSessions = approved.memberships.map((membership, index) => ({
     actorKey: membership.actorKey,
     organizationId: membership.organizationId,
     selection: "selected",
     session: {
-      reference: `44444444-4444-4444-8444-${String(index + 1).padStart(12, "0")}`,
-      actorId: `verified-${membership.actorKey}-id`,
       activeOrganizationId: membership.organizationId,
-      realmSessionId: `private-scoped-${index}`,
-      origin: approved.origin,
+      actorId: `verified-${membership.actorKey}-id`,
       expiresAt: "2030-01-01T00:00:00.000Z",
+      origin: approved.origin,
+      realmSessionId: `private-scoped-${index}`,
+      reference: `44444444-4444-4444-8444-${String(index + 1).padStart(12, "0")}`,
     },
     storageState: {
       cookies: [
         {
-          name: "normal-auth-session",
-          value: `actual-scoped-cookie-${index}`,
           domain: "actual-preview.example.test",
-          path: "/",
           expires: -1,
           httpOnly: true,
-          secure: true,
+          name: "normal-auth-session",
+          path: "/",
           sameSite: "Lax",
+          secure: true,
+          value: `actual-scoped-cookie-${index}`,
         },
       ],
       origins: [
         {
-          origin: approved.origin,
           localStorage: [{ name: "selection", value: `actual-scoped-local-${index}` }],
+          origin: approved.origin,
         },
       ],
     },
   }));
-  return { program: approved, state, operationRef };
+  return { operationRef, program: approved, state };
 };
 
 describe("actual normal actor runtime projection", () => {
@@ -128,8 +128,8 @@ describe("actual normal actor runtime projection", () => {
     expect(rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          actorKey: "owner",
           actorId: "verified-owner-id",
+          actorKey: "owner",
           organizationId: "actual-first-org",
           roles: ["reviewer"],
         }),
@@ -184,7 +184,7 @@ describe("actual normal actor runtime projection", () => {
     const fixture = completed();
     const state = initialNormalActorState(approved, operationRef);
     state.actors = fixture.state.actors.filter((actor) => actor.actorKey === "unassigned");
-    const projection = projectNormalActorRuntime({ program: approved, state, operationRef });
+    const projection = projectNormalActorRuntime({ operationRef, program: approved, state });
     expect(projection.identities.actors).toEqual([
       expect.objectContaining({ actorKey: "unassigned", organizationId: null, roles: [] }),
     ]);
@@ -216,15 +216,13 @@ describe("actual normal actor runtime projection", () => {
     "rejects a scoped session with a changed actual %s",
     (kind) => {
       const fixture = completed();
-      fixture.state.organizationSessions = fixture.state.organizationSessions?.map((entry) => ({
-        ...entry,
-        session: {
-          ...entry.session,
-          ...(kind === "actor" ? { actorId: "other-real-user" } : {}),
-          ...(kind === "origin" ? { origin: "https://other.example.test" } : {}),
-          ...(kind === "active-organization" ? { activeOrganizationId: "other-real-org" } : {}),
-        },
-      }));
+      fixture.state.organizationSessions = fixture.state.organizationSessions?.map((entry) => {
+        const session = { ...entry.session };
+        if (kind === "actor") session.actorId = "other-real-user";
+        if (kind === "origin") session.origin = "https://other.example.test";
+        if (kind === "active-organization") session.activeOrganizationId = "other-real-org";
+        return { ...entry, session };
+      });
       expect(() => projectNormalActorRuntime(fixture)).toThrow("normal_actor_program_mismatch");
     },
   );

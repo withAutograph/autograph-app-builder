@@ -15,6 +15,8 @@ import { createNativeRecoveryBinding } from "../lib/eve/native-recovery-binding.
 import { createSameOriginEveTransport } from "../lib/eve/same-origin-http.ts";
 import { hostedEveOperationScopes } from "../lib/eve/hosted-auth.ts";
 
+const logicalSessionId = "logical-original";
+
 const require = createRequire(import.meta.url);
 const sdk = path.dirname(require.resolve("eve/package.json"));
 const { handleTerminalRecoveryRequest } = await import(
@@ -26,28 +28,28 @@ const terminalReceiptLifecycle = async (reconciliationKind) => {
     audience: "https://builder.example.test/mcp",
     issuer: "https://builder.example.test/api/auth",
     ownerUserId: "owner",
-    workspaceId: "tenant",
     scopes: Object.values(hostedEveOperationScopes),
+    workspaceId: "tenant",
   };
   const auth = {
-    authenticator: "mcp-oauth-jwks",
-    issuer: principal.issuer,
-    principalId: principal.ownerUserId,
-    principalType: "user",
-    subject: principal.ownerUserId,
     attributes: {
       "mcp:audience": principal.audience,
       "mcp:scopes": principal.scopes,
       "mcp:workspace-id": principal.workspaceId,
     },
+    authenticator: "mcp-oauth-jwks",
+    issuer: principal.issuer,
+    principalId: principal.ownerUserId,
+    principalType: "user",
+    subject: principal.ownerUserId,
   };
   const store = new InMemoryHostedEveStore();
   const failed = { events: [], status: "failed" };
   const ports = createNativeRecoveryBinding({
-    store,
     assertOwner: async (source) => {
       assert.equal(source.principal.ownerUserId, principal.ownerUserId);
     },
+    store,
   });
   const frontier = Object.freeze({ kind: "fixture-candidate" });
   const collectedOwners = [];
@@ -58,8 +60,12 @@ const terminalReceiptLifecycle = async (reconciliationKind) => {
     collect: async ({ binding, authorizeOwner }) => {
       await authorizeOwner(binding);
       collectedOwners.push(binding);
-      return { kind: "candidate", candidate: frontier };
+      return { candidate: frontier, kind: "candidate" };
     },
+    getHook: async () => {
+      throw new Error("hook-missing");
+    },
+    isHookNotFound: (error) => error.message === "hook-missing",
     readCandidate: (candidate) => {
       assert.equal(candidate, frontier);
       const binding = collectedOwners.at(-1);
@@ -70,25 +76,20 @@ const terminalReceiptLifecycle = async (reconciliationKind) => {
       reconciled.push(candidate);
       return { kind: reconciliationKind, reason: "fixture-stops-at-reconciler" };
     },
-    start: async () => {
-      ownerStarts += 1;
-      throw new Error("No new native owner is authorized by this fixture.");
-    },
     resumeHook: async () => {
       activations += 1;
       throw new Error("The retained terminal owner's hook was consumed.");
     },
-    getHook: async () => {
-      throw new Error("hook-missing");
+    start: async () => {
+      ownerStarts += 1;
+      throw new Error("No new native owner is authorized by this fixture.");
     },
-    isHookNotFound: (error) => error.message === "hook-missing",
   };
   let lostFirstResponse = false;
   let oldReceipt;
   let receiptCommitFailure;
   const http = createSameOriginEveTransport({
     config: { baseUrl: "https://builder.example.test" },
-    workloadIdentity: { token: async () => "synthetic-workload-token" },
     fetchImplementation: async (url, options) => {
       assert.equal(url, "https://builder.example.test/eve/v1/session");
       const payload = JSON.parse(options.body);
@@ -100,11 +101,11 @@ const terminalReceiptLifecycle = async (reconciliationKind) => {
           ...descriptor,
           ownerRunId: "physical-terminal-child",
           provenance: {
+            checkpointVersion: 1,
             kind: "completed-terminal-turn-input",
-            sourceStepId: "retained-step",
             sourceEventId: "retained-event",
             sourceSlot: 1,
-            checkpointVersion: 1,
+            sourceStepId: "retained-step",
           },
         };
         try {
@@ -116,45 +117,44 @@ const terminalReceiptLifecycle = async (reconciliationKind) => {
         throw new Error("Lost old native receipt response.");
       }
       return await handleTerminalRecoveryRequest(
-        { payload, auth, forwarded: true, ports },
+        { auth, forwarded: true, payload, ports },
         async () => deps,
       );
     },
+    workloadIdentity: { token: async () => "synthetic-workload-token" },
   });
   const transport = {
     ...http,
-    start: async (request) =>
-      request.recovery === undefined
-        ? { adapterSessionId: "logical-original", snapshot: failed }
-        : await http.start(request),
     get: async ({ adapterSessionId }) => {
       assert.equal(adapterSessionId, "physical-terminal-child");
       return failed;
     },
+    start: async (request) =>
+      request.recovery === undefined
+        ? { adapterSessionId: logicalSessionId, snapshot: failed }
+        : await http.start(request),
   };
   const service = () =>
     createHostedEveSessionService({
-      principal,
-      store,
-      transport,
-      now: () => 100,
       assertNativeRecoveryOwner: async (source) => {
         assert.equal(source.principal.ownerUserId, principal.ownerUserId);
       },
+      now: () => 100,
+      principal,
+      store,
+      transport,
     });
   const original = await service().start({ clientRequestId: "original", prompt: "Build app" });
   const protection = {
     appId: "fixture-app",
     appSpecDigest: "a".repeat(64),
     proposalDigest: "b".repeat(64),
-    sessionId: "logical-original",
+    sessionId: logicalSessionId,
     workspaceId: "private-workspace",
   };
   await store.recordPrivateBuildDecision({
-    principal,
-    sessionId: original.sessionId,
     decision: {
-      adapterSessionId: "logical-original",
+      adapterSessionId: logicalSessionId,
       decision: "waiting-input",
       scope: protection,
       turnId: "original-turn",
@@ -162,6 +162,8 @@ const terminalReceiptLifecycle = async (reconciliationKind) => {
       version: 1,
       workflowPhase: "implementation",
     },
+    principal,
+    sessionId: original.sessionId,
   });
   const oldRequest = { clientRequestId: "saved-unknown", resumeSessionId: original.sessionId };
   await assert.rejects(service().start(oldRequest), HostedSubmissionUnknownError);
@@ -175,14 +177,14 @@ const terminalReceiptLifecycle = async (reconciliationKind) => {
   assert.equal(child.adapterSessionId, oldReceipt.ownerRunId);
   assert.equal(child.parentSessionId, original.sessionId);
   assert.equal(child.nativeRecoveryBinding.originalAuthoritySessionId, original.sessionId);
-  assert.equal(child.nativeRecoveryBinding.logicalSessionId, "logical-original");
+  assert.equal(child.nativeRecoveryBinding.logicalSessionId, logicalSessionId);
   assert.deepEqual(child.privateBuildDecision.scope, protection);
   assert.equal(child.privateBuildDecision.adapterSessionId, oldReceipt.ownerRunId);
   assert.equal(collectedOwners.length, 0);
   assert.equal(reconciled.length, 0);
   assert.equal(ownerStarts, 0);
   assert.equal(activations, 0);
-  const terminal = await service().get({ sessionId: adopted.sessionId, cursor: 0, limit: 100 });
+  const terminal = await service().get({ cursor: 0, limit: 100, sessionId: adopted.sessionId });
   assert.equal(terminal.status, "failed");
   const newRequest = {
     clientRequestId: "normal-child-resume",
@@ -198,12 +200,10 @@ const terminalReceiptLifecycle = async (reconciliationKind) => {
   assert.equal(next.state, reconciliationKind === "uncertain" ? "submission_unknown" : "rejected");
   assert.equal(next.nativeRecovery.sourcePublicSessionId, adopted.sessionId);
   assert.equal(next.nativeRecovery.sourceOwnerRunId, oldReceipt.ownerRunId);
-  assert.equal(next.nativeRecovery.logicalSessionId, "logical-original");
+  assert.equal(next.nativeRecovery.logicalSessionId, logicalSessionId);
   assert.equal(next.nativeRecovery.originalAuthoritySessionId, original.sessionId);
   assert.equal(next.nativeRecoveryReceipt, undefined);
-  assert.deepEqual(collectedOwners, [
-    { ownerRunId: oldReceipt.ownerRunId, logicalSessionId: "logical-original" },
-  ]);
+  assert.deepEqual(collectedOwners, [{ logicalSessionId, ownerRunId: oldReceipt.ownerRunId }]);
   assert.deepEqual(reconciled, [frontier]);
   // An exact retry checks this same operation; it never substitutes a fresh owner
   // or converts uncertain native reconciliation into a pre-dispatch rejection.

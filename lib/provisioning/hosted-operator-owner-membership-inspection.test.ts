@@ -200,9 +200,9 @@ const membershipInspectionFixture = () => {
     operator: {
       ...original,
       approvalId: "current-request",
+      fenceGeneration: 7,
       plan: currentPlan,
       planDigest: operatorPlanDigest(currentPlan),
-      fenceGeneration: 7,
       receipts: [],
       retainedInstallerOperations: [{ approvedByCallId: approval.callId, operator: original }],
     },
@@ -229,19 +229,17 @@ const membershipInspectionFixture = () => {
     version: 2,
   });
   const eve: Pick<HostedEveStore, "getSession" | "recordPrivateApprovalReceipts"> = {
-    getSession: vi.fn(() => Promise.resolve(session)),
-    recordPrivateApprovalReceipts: vi.fn(() => Promise.resolve()),
+    getSession: vi.fn(async () => session),
+    recordPrivateApprovalReceipts: vi.fn(async () => {}),
   };
-  const observe = vi.fn(() =>
-    Promise.resolve({
-      artifactProjectionRequiresLegacyReadback: false,
-      installedEventCount: 0,
-      pendingRequests: [],
-      publicEventCount: 0,
-      status: "waiting" as const,
-    }),
-  );
-  const journal = { read: vi.fn(() => Promise.resolve({ record, revision: 1 })) };
+  const observe = vi.fn(async () => ({
+    artifactProjectionRequiresLegacyReadback: false,
+    installedEventCount: 0,
+    pendingRequests: [],
+    publicEventCount: 0,
+    status: "waiting" as const,
+  }));
+  const journal = { read: vi.fn(async () => ({ record, revision: 1 })) };
   const readApproval = createHostedOperatorReadApproval({ eve, journal, observe });
   const context = {
     action: "prepare" as const,
@@ -332,26 +330,26 @@ describe("retained membership inspection owner approval", () => {
 
 const approvedInspectionFixture = () => {
   const f = membershipInspectionFixture();
-  const operator = f.record.operator;
+  const { operator } = f.record;
   const effect = operator?.plan.effects.find((candidate) => candidate.kind === "auth-membership");
   if (operator === undefined || effect === undefined) {
     throw new Error("Missing fixture effect");
   }
   const context: HostedOperatorEffectContext = {
+    assertCurrent: vi.fn(async () => {}),
     authority: f.context.authority,
-    ownerContext: f.context.ownerContext,
-    target: f.context.target,
-    assertCurrent: vi.fn(() => Promise.resolve()),
-    checkpoint: vi.fn(() => Promise.resolve()),
+    checkpoint: vi.fn(async () => {}),
     effect,
     fenceGeneration: operator.fenceGeneration ?? 7,
     leaseId: "3e38466d-46fd-4277-a9f7-432e13447354",
     operationRef: operator.operationRef,
+    ownerContext: f.context.ownerContext,
     plan: operator.plan,
+    target: f.context.target,
     workerCheckpoints: [],
   };
   const readApproval = vi.fn(f.readApproval);
-  const readCurrentRecord = vi.fn(() => Promise.resolve(f.record));
+  const readCurrentRecord = vi.fn(async () => f.record);
   return { ...f, context, readApproval, readCurrentRecord };
 };
 
@@ -369,48 +367,40 @@ const selectedInspectionFixture = () => {
   }
   const organizations = [
     spec,
-    { ...spec, organizationId: "second-org", name: "Second", slug: "second-org" },
+    { ...spec, name: "Second", organizationId: "second-org", slug: "second-org" },
   ];
   const program = normalActorProgramSchema.parse({
-    version: 1,
-    appId: current.plan.selection.appId,
-    origin: current.plan.publicGateway?.origin,
     actors: [
       {
+        account: "capture-existing",
         actorKey: "owner",
         email: "owner@example.test",
         name: "Owner",
-        account: "capture-existing",
       },
     ],
-    organizations: organizations.map((organization) => ({
-      organizationId: organization.organizationId,
-      name: organization.name,
-      slug: organization.slug,
-      ownerActorKey: "owner",
-    })),
-    memberships: organizations.map(({ organizationId }) => ({
-      organizationId,
-      actorKey: "owner",
-      role: "owner",
-    })),
     appAccess: organizations.map(({ organizationId }) => ({
-      organizationId,
       actorKey: "owner",
+      organizationId,
       roles: ["member"],
     })),
+    appId: current.plan.selection.appId,
+    memberships: organizations.map(({ organizationId }) => ({
+      actorKey: "owner",
+      organizationId,
+      role: "owner",
+    })),
+    organizations: organizations.map((organization) => ({
+      name: organization.name,
+      organizationId: organization.organizationId,
+      ownerActorKey: "owner",
+      slug: organization.slug,
+    })),
+    origin: current.plan.publicGateway?.origin,
+    version: 1,
   });
   current.plan = hostedOperatorPlanSchema.parse({
     ...current.plan,
     authMembership: { kind: "create-owned-organizations", organizations },
-    normalActorProgram: program,
-    normalActorPreparation: {
-      accountOperationRef: "33333333-3333-4333-8333-333333333333",
-      accountPlanDigest: "a".repeat(64),
-      accountApprovalId: "account-approval",
-      accountApprovedByCallId: "account-call",
-      programDigest: normalActorProgramDigest(program),
-    },
     effects: current.plan.effects.flatMap((effect) =>
       effect.kind === "auth-membership"
         ? organizations.map(({ organizationId }) => ({
@@ -419,6 +409,14 @@ const selectedInspectionFixture = () => {
           }))
         : [effect],
     ),
+    normalActorPreparation: {
+      accountApprovalId: "account-approval",
+      accountApprovedByCallId: "account-call",
+      accountOperationRef: "33333333-3333-4333-8333-333333333333",
+      accountPlanDigest: "a".repeat(64),
+      programDigest: normalActorProgramDigest(program),
+    },
+    normalActorProgram: program,
   });
   current.planDigest = operatorPlanDigest(current.plan);
   current.operationRef = "44444444-4444-4444-8444-444444444444";
@@ -567,7 +565,9 @@ describe("approved retained membership inspection", () => {
   it("propagates a current owner authorization failure without classifying it as an old approval denial", async () => {
     const f = selectedInspectionFixture();
     const failure = new HostedOperatorError("authorization_required");
-    f.context.assertCurrent = vi.fn(() => Promise.reject(failure));
+    f.context.assertCurrent = vi.fn(async () => {
+      throw failure;
+    });
     await expect(
       readApprovedRetainedMembershipInspections({
         effect: f.context,
@@ -586,7 +586,9 @@ describe("approved retained membership inspection", () => {
       readApprovedRetainedMembershipInspections({
         effect: f.context,
         organizationId: f.organizationId,
-        readApproval: () => Promise.reject(failure),
+        readApproval: async () => {
+          throw failure;
+        },
         readCurrentRecord: f.readCurrentRecord,
       }),
     ).rejects.toBe(failure);
@@ -602,8 +604,8 @@ describe("approved retained membership inspection", () => {
       readCurrentRecord: f.readCurrentRecord,
     });
     expect(result).toEqual({
-      plan: f.approval.toolInput.plan,
       effect: f.approval.toolInput.plan.effects.find((effect) => effect.kind === "auth-membership"),
+      plan: f.approval.toolInput.plan,
     });
     expect(result?.plan).not.toBe(historical?.plan);
     expect(result?.effect).not.toBe(
@@ -613,10 +615,10 @@ describe("approved retained membership inspection", () => {
     expect(f.context.assertCurrent).toHaveBeenCalledTimes(2);
     expect(f.readApproval).toHaveBeenCalledWith(
       expect.objectContaining({
-        plan: f.context.plan,
+        callId: f.approval.callId,
         fenceGeneration: 7,
         leaseId: f.context.leaseId,
-        callId: f.approval.callId,
+        plan: f.context.plan,
         planDigest: f.approval.toolInput.planDigest,
       }),
     );
@@ -650,8 +652,8 @@ describe("approved retained membership inspection", () => {
       await expect(
         readApprovedRetainedMembershipInspection({
           effect: f.context,
+          readApproval: async () => (mismatch === "null" ? null : approval),
           readCurrentRecord: f.readCurrentRecord,
-          readApproval: () => Promise.resolve(mismatch === "null" ? null : approval),
         }),
       ).rejects.toMatchObject({ code: "authorization_required" });
       expect(f.readCurrentRecord).toHaveBeenCalledTimes(1);
@@ -661,7 +663,9 @@ describe("approved retained membership inspection", () => {
   it("checks the live execution lease before looking up historical approval", async () => {
     const f = approvedInspectionFixture();
     const failure = new Error("Current execution lease was revoked");
-    f.context.assertCurrent = vi.fn(() => Promise.reject(failure));
+    f.context.assertCurrent = vi.fn(async () => {
+      throw failure;
+    });
     await expect(
       readApprovedRetainedMembershipInspection({
         effect: f.context,

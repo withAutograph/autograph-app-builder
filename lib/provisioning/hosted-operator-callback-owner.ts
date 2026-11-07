@@ -21,8 +21,8 @@ export const hostedOperatorCallbackExecution = (session: {
   readonly ownerAnchorRunId?: string;
 }): HostedOperatorCallbackExecution => ({
   logicalSessionId: session.id,
-  ownerRunId: session.ownerRunId,
   ownerAnchorRunId: session.ownerAnchorRunId,
+  ownerRunId: session.ownerRunId,
 });
 
 const samePrincipal = (left: HostedPrincipal, right: HostedPrincipal) =>
@@ -75,10 +75,10 @@ const shouldReconcileOwnerDelivery = (input: {
     currentSession.sessionId === authoritySession.sessionId ||
       recoveredCallbackIdentityMatches({
         authoritySession,
+        canReadCurrent: input.canReadCurrent,
         currentSession,
         execution: input.execution,
         logicalSessionId,
-        canReadCurrent: input.canReadCurrent,
       }),
   ].every(Boolean);
   return cancellationPending && canObserve;
@@ -118,19 +118,19 @@ export const readHostedOperatorCallbackSessions = async (input: {
     input.reconcileOwnerDelivery !== undefined &&
     shouldReconcileOwnerDelivery({
       authoritySession,
+      canReadCurrent: input.store.readCurrentBuildSession !== undefined,
       currentSession,
-      owner: input.owner,
       execution: input.execution,
       logicalSessionId,
-      canReadCurrent: input.store.readCurrentBuildSession !== undefined,
+      owner: input.owner,
     })
   ) {
     await input.reconcileOwnerDelivery(currentSession);
     // Re-read every guard, including a later Stop, after exact native proof observation.
     return await readHostedOperatorCallbackSessions({
-      store: input.store,
-      owner: input.owner,
       execution: input.execution,
+      owner: input.owner,
+      store: input.store,
     });
   }
   const currentMatches = [
@@ -152,10 +152,10 @@ export const readHostedOperatorCallbackSessions = async (input: {
   if (currentSession.sessionId !== authoritySession.sessionId) {
     const recoveryMatches = recoveredCallbackIdentityMatches({
       authoritySession,
+      canReadCurrent: input.store.readCurrentBuildSession !== undefined,
       currentSession,
       execution: input.execution,
       logicalSessionId,
-      canReadCurrent: input.store.readCurrentBuildSession !== undefined,
     });
     if (!recoveryMatches) {
       throw denied();

@@ -22,20 +22,25 @@ export function LastUsedBadge({ method, compact, floating }: LastUsedBadgeProps)
   const { method: lastLoginMethod, localization } = useLastLoginMethod();
   const methods = Array.isArray(method) ? method : [method];
 
-  if (!lastLoginMethod || !methods.includes(lastLoginMethod)) {
+  if (
+    lastLoginMethod === null ||
+    lastLoginMethod === undefined ||
+    lastLoginMethod === "" ||
+    !methods.includes(lastLoginMethod)
+  ) {
     return null;
   }
 
   return (
     <Badge
       className={
-        floating
+        floating === true
           ? "pointer-events-none absolute top-0 right-0 z-10 translate-x-1/4 -translate-y-1/2 shadow-sm"
           : undefined
       }
       variant="secondary"
     >
-      {compact || floating ? localization.lastUsedShort : localization.lastUsed}
+      {compact === true || floating === true ? localization.lastUsedShort : localization.lastUsed}
     </Badge>
   );
 }

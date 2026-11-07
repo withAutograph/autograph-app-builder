@@ -98,25 +98,22 @@ describe("Vitest browser failure diagnostics", () => {
     };
     let originalOpenCalls = 0;
     const provider: BrowserProvider = {
-      name: "playwright",
-      supportsParallelism: false,
-      openPage() {
-        originalOpenCalls += 1;
-        return Promise.resolve();
-      },
+      async close() {},
       getCommandsContext() {
         return { page };
       },
-      close() {
-        return Promise.resolve();
+      name: "playwright",
+      async openPage() {
+        originalOpenCalls += 1;
       },
+      supportsParallelism: false,
     };
     const reports: BrowserFailureDiagnostic[] = [];
     const probes: [string, number][] = [];
     const instrumented = attachVitestBrowserFailureDiagnostics(provider, 63_315, {
-      probe(host, port) {
+      async probe(host, port) {
         probes.push([host, port]);
-        return Promise.resolve("connection_refused");
+        return "connection_refused";
       },
       report(diagnostic) {
         reports.push(diagnostic);

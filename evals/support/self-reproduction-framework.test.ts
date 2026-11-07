@@ -5,27 +5,32 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { runTrustedFrameworkEvidence } from "./self-reproduction-framework";
+import type { TrustedFrameworkAdapter } from "./self-reproduction-framework";
 import { frameworkMatrix } from "./self-reproduction-parity";
+import type { Page } from "playwright";
+
+type FrameworkRequirement = (typeof frameworkMatrix)[number]["id"];
 
 const browser = () => {
-  const close = vi.fn(() => Promise.resolve());
+  const close = vi.fn(async () => {});
   const page = {};
-  return {
-    close,
-    page,
-    value: {
-      newContext: () => Promise.resolve({ close, newPage: () => Promise.resolve(page) }),
-    } as never,
+  const value = {
+    newContext: async () => {
+      await Promise.resolve();
+      return { close, newPage: async () => await Promise.resolve(page) };
+    },
   };
+  return { close, page, value };
 };
 
 const adapter = {
-  exerciseBrowser: (_page: unknown, id: string) => {
+  exerciseBrowser: async (page: Page, id: FrameworkRequirement) => {
+    await Promise.resolve(page);
     const requirement = frameworkMatrix.find((row) => row.id === id);
     if (!requirement) {
       throw new Error(`Unknown framework requirement: ${id}`);
     }
-    return Promise.resolve({
+    return {
       artifacts: [],
       assertions: requirement.assertions.map((assertion) => ({
         artifacts: [],
@@ -34,10 +39,10 @@ const adapter = {
         passed: true,
       })),
       reason: "Browser assertions completed.",
-    });
+    };
   },
-  instantNavigationRecipe: () =>
-    Promise.resolve({
+  instantNavigationRecipe: async () =>
+    await Promise.resolve({
       artifacts: [],
       ready: true as const,
       recipe: {
@@ -49,22 +54,24 @@ const adapter = {
         sourcePath: "/",
       },
     }),
-  reviewSource: () =>
-    Promise.resolve({
+  reviewSource: async () =>
+    await Promise.resolve({
       artifacts: [],
       assertions: [],
       ready: true as const,
       reason: "Reviewed against installed Next 16.3.4 docs.",
     }),
-};
+} satisfies TrustedFrameworkAdapter;
 
 describe("trusted framework evidence", () => {
   it("combines source and browser evidence and uses instant navigation", async () => {
     const outputRoot = await mkdtemp(path.join(tmpdir(), "self-reproduction-framework-"));
     const fixture = browser();
-    const runInstant = vi.fn(() => Promise.resolve());
+    const runInstant = vi.fn(async () => {
+      await Promise.resolve();
+    });
     const result = await runTrustedFrameworkEvidence({
-      adapters: { candidate: adapter as never },
+      adapters: { candidate: adapter },
       browser: fixture.value,
       outputRoot,
       runInstant,
@@ -92,17 +99,19 @@ describe("trusted framework evidence", () => {
       adapters: {
         candidate: {
           ...adapter,
-          instantNavigationRecipe: () =>
-            Promise.resolve({
+          instantNavigationRecipe: async () =>
+            await Promise.resolve({
               disposition: "infrastructure-unavailable" as const,
               ready: false as const,
               reason: "Production instant-navigation runtime was unavailable.",
             }),
-        } as never,
+        },
       },
       browser: fixture.value,
       outputRoot,
-      runInstant: vi.fn(() => Promise.resolve()),
+      runInstant: vi.fn(async () => {
+        await Promise.resolve();
+      }),
     });
     expect(
       result.observations.candidate.find((row) => row.requirementId === "instant-navigation"),
@@ -116,8 +125,11 @@ it("retains sanitized diagnostics and blocks an evaluator exception", async () =
     adapters: {
       candidate: {
         ...adapter,
-        reviewSource: () => Promise.reject(new Error("Fixture unavailable Bearer private-secret")),
-      } as never,
+        reviewSource: async () => {
+          await Promise.resolve();
+          throw new Error("Fixture unavailable Bearer private-secret");
+        },
+      },
     },
     browser: browser().value,
     outputRoot,
@@ -140,18 +152,20 @@ it("keeps a missing browser fixture unassessed after a source review", async () 
     adapters: {
       candidate: {
         ...adapter,
-        exerciseBrowser: () =>
-          Promise.resolve({
+        exerciseBrowser: async () =>
+          await Promise.resolve({
             artifacts: [],
             assertions: [],
             disposition: "not-run",
             reason: "Fixture not bound",
           }),
-      } as never,
+      },
     },
     browser: browser().value,
     outputRoot,
-    runInstant: vi.fn(() => Promise.resolve()),
+    runInstant: vi.fn(async () => {
+      await Promise.resolve();
+    }),
   });
   expect(
     result.observations.candidate.find((row) => row.requirementId === "server-first"),
@@ -163,10 +177,13 @@ it("retains an executed instant assertion failure as observed failure", async ()
     path.join(tmpdir(), "self-reproduction-framework-instant-failure-"),
   );
   const result = await runTrustedFrameworkEvidence({
-    adapters: { candidate: adapter as never },
+    adapters: { candidate: adapter },
     browser: browser().value,
     outputRoot,
-    runInstant: () => Promise.reject(new Error("Resolved content never appeared")),
+    runInstant: async () => {
+      await Promise.resolve();
+      throw new Error("Resolved content never appeared");
+    },
   });
   expect(
     result.observations.candidate.find((row) => row.requirementId === "instant-navigation"),

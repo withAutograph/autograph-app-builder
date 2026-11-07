@@ -5,6 +5,7 @@ import type { ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { lstatSync, realpathSync } from "node:fs";
 import nodePath from "node:path";
+import { z } from "zod";
 import { readLocalEveCycleBinding } from "./local-cycle-binding";
 
 import {
@@ -15,6 +16,7 @@ import {
   validateLocalVercelOidcToken,
 } from "./local-vercel-oidc";
 
+const closedAuthorityError = "Local Eve execution authority was not closed.";
 const sha256 = /^[0-9a-f]{64}$/u;
 const gitObject = /^[0-9a-f]{40}$/u;
 
@@ -30,8 +32,8 @@ export type LocalEveInvocation = Readonly<{
 type ForwardedSignal = "SIGINT" | "SIGTERM";
 
 type SignalTarget = Readonly<{
-  once: (signal: ForwardedSignal, listener: () => void) => unknown;
-  off: (signal: ForwardedSignal, listener: () => void) => unknown;
+  once: (signal: ForwardedSignal, listener: () => void) => void;
+  off: (signal: ForwardedSignal, listener: () => void) => void;
 }>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -53,9 +55,10 @@ function ownerDirectory(path: string, label: string, ownerOnly = false) {
     throw new Error(`${label} was not an absolute canonical directory.`);
   }
   const info = lstatSync(path);
+  if (info.isSymbolicLink() || !info.isDirectory()) {
+    throw new Error(`${label} was not owner-bound.`);
+  }
   if (
-    info.isSymbolicLink() ||
-    !info.isDirectory() ||
     info.uid !== process.getuid?.() ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & (ownerOnly ? 0o777 : 0o022)) !== (ownerOnly ? 0o700 : 0)
@@ -141,8 +144,8 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
   return {
     applicationRoot,
     destinationRoot,
-    runtimeHome,
     runsRoot,
+    runtimeHome,
     sourceRoot,
     supervisorRoot,
     workflowData,
@@ -154,24 +157,44 @@ function exactBinding(environment: Environment) {
   if (
     environment.APP_BUILDER_EXECUTION_MODE !== "development" ||
     environment.APP_BUILDER_EXECUTION_BUNDLE !== "local-development" ||
-    environment.APP_BUILDER_SANDBOX_PROVIDER !== "vercel" ||
+    environment.APP_BUILDER_SANDBOX_PROVIDER !== "vercel"
+  ) {
+    throw new Error(closedAuthorityError);
+  }
+  if (
     environment.APP_BUILDER_LOCAL_ADAPTER !== "1" ||
     environment.APP_BUILDER_LOCAL_PUBLICATION !== "0" ||
-    environment.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION !== "0" ||
+    environment.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION !== "0"
+  ) {
+    throw new Error(closedAuthorityError);
+  }
+  if (
     environment.APP_BUILDER_GITHUB_PUBLICATION_ENABLED !== "0" ||
     environment.APP_BUILDER_FRESH_BOOTSTRAP_ENABLED !== "0" ||
-    environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION !== "0" ||
+    environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION !== "0"
+  ) {
+    throw new Error(closedAuthorityError);
+  }
+  if (
     environment.APP_BUILDER_LOCAL_AUTH_EMULATION !== "0" ||
     environment.EVE_HOSTED_ADAPTER !== "0" ||
-    environment.WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS !== "0" ||
+    environment.WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS !== "0"
+  ) {
+    throw new Error(closedAuthorityError);
+  }
+  if (
     environment.APP_BUILDER_SANDBOX_IMAGE !== undefined ||
     environment.MSB_HOME !== undefined ||
-    environment.MSB_PATH !== undefined ||
+    environment.MSB_PATH !== undefined
+  ) {
+    throw new Error(closedAuthorityError);
+  }
+  if (
     environment.MSB_LIBKRUNFW_PATH !== undefined ||
     environment.VERCEL_TOKEN !== undefined ||
     environment.AI_GATEWAY_API_KEY !== undefined
   ) {
-    throw new Error("Local Eve execution authority was not closed.");
+    throw new Error(closedAuthorityError);
   }
   const port = required(environment, "APP_BUILDER_EVE_PORT");
   if (!/^\d{4,5}$/u.test(port) || Number(port) < 1024 || Number(port) > 65_535) {
@@ -225,7 +248,7 @@ export function createLocalEveInvocation(input: {
   const binding = exactBinding(input.environment);
   const cycleFile = required(input.environment, "APP_BUILDER_LOCAL_EVE_CYCLE_FILE");
   readLocalEveCycleBinding(cycleFile);
-  return {
+  const invocation: LocalEveInvocation = {
     args: [
       input.eveCli,
       "dev",
@@ -245,24 +268,22 @@ export function createLocalEveInvocation(input: {
       APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: binding.fingerprint,
       APP_BUILDER_DEVELOPMENT_SOURCE_SHA: binding.sourceSha,
       APP_BUILDER_DEVELOPMENT_SOURCE_TREE: binding.sourceTree,
-      APP_BUILDER_DEV_RUNTIME_HOME: roots.runtimeHome,
       APP_BUILDER_DEV_RUNS_ROOT: roots.runsRoot,
-
+      APP_BUILDER_DEV_RUNTIME_HOME: roots.runtimeHome,
       APP_BUILDER_EXECUTION_BUNDLE: "local-development",
       APP_BUILDER_EXECUTION_MODE: "development",
       APP_BUILDER_FRESH_BOOTSTRAP_ENABLED: "0",
       APP_BUILDER_GITHUB_PUBLICATION_ENABLED: "0",
       APP_BUILDER_HOSTED_ARTIFACT_PROOF: "0",
       APP_BUILDER_LOCAL_ADAPTER: "1",
-      APP_BUILDER_LOCAL_EVE_CYCLE_FILE: cycleFile,
       APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
+      APP_BUILDER_LOCAL_EVE_CYCLE_FILE: cycleFile,
       APP_BUILDER_LOCAL_PROVIDER_EMULATION: "0",
       APP_BUILDER_LOCAL_PUBLICATION: "0",
       APP_BUILDER_SANDBOX_PROVIDER: "vercel",
       EVE_AGENT_HOST: `http://127.0.0.1:${binding.port}`,
       EVE_HOSTED_ADAPTER: "0",
       HOME: roots.runtimeHome,
-      XDG_DATA_HOME: nodePath.join(roots.runtimeHome, "data"),
       LANG: "C",
       LC_ALL: "C",
       NODE_ENV: "production",
@@ -272,9 +293,6 @@ export function createLocalEveInvocation(input: {
       REPOSITORY_WORKSPACE_ROOT: roots.destinationRoot,
       TMPDIR: "/tmp",
       TZ: "UTC",
-      ...(limits === undefined
-        ? {}
-        : { APP_BUILDER_PRIVATE_COMPUTE_LIMITS: JSON.stringify(limits) }),
       VERCEL_OIDC_TOKEN: input.oidcToken,
       VERCEL_PROJECT_ID: input.vercelProject.projectId,
       VERCEL_TEAM_ID: input.vercelProject.orgId,
@@ -285,6 +303,10 @@ export function createLocalEveInvocation(input: {
       WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
     },
   };
+  if (limits !== undefined) {
+    invocation.environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS = JSON.stringify(limits);
+  }
+  return invocation;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -313,14 +335,20 @@ export async function waitForForwardedEveChild(
   child: ChildProcess,
   signalTarget: SignalTarget = process,
 ) {
-  const forwardInterrupt = () => child.kill("SIGINT");
-  const forwardTerminate = () => child.kill("SIGTERM");
+  const forwardInterrupt = () => {
+    child.kill("SIGINT");
+  };
+  const forwardTerminate = () => {
+    child.kill("SIGTERM");
+  };
   signalTarget.once("SIGINT", forwardInterrupt);
   signalTarget.once("SIGTERM", forwardTerminate);
 
   try {
-    const [code, signal] = await once(child, "exit");
-    return code ?? (signal ? 1 : 0);
+    const [code, signal] = z
+      .tuple([z.number().nullable(), z.string().nullable()])
+      .parse(await once(child, "exit"));
+    return code ?? (signal === null ? 0 : 1);
   } finally {
     signalTarget.off("SIGINT", forwardInterrupt);
     signalTarget.off("SIGTERM", forwardTerminate);
@@ -351,22 +379,21 @@ export async function runLocalEve(input: {
     project,
     token,
   });
-  const invocation = createLocalEveInvocation({
+  const invocationInput: Parameters<typeof createLocalEveInvocation>[0] = {
     environment,
-    resume: input.resume,
     eveCli: resolveInstalledEveCli(repositoryRoot),
     oidcToken,
     pinnedNode: process.execPath,
     repositoryRoot,
+    resume: input.resume,
     vercelProject: project,
-    ...(environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS === undefined
-      ? {}
-      : {
-          privateComputeLimits: privateComputeLimitsSchema.parse(
-            JSON.parse(environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS),
-          ),
-        }),
-  });
+  };
+  if (environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS !== undefined) {
+    invocationInput.privateComputeLimits = privateComputeLimitsSchema.parse(
+      JSON.parse(environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS),
+    );
+  }
+  const invocation = createLocalEveInvocation(invocationInput);
   const child: ChildProcess = spawn(invocation.command, [...invocation.args], {
     cwd: invocation.cwd,
     env: { ...invocation.environment },

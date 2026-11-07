@@ -1,8 +1,15 @@
 import { defineEval } from "eve/evals";
 import { includes, satisfies } from "eve/evals/expect";
+import { z } from "zod";
 
 import { isProductFacing } from "./support/public-conversation";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
+
+const stringInputSchema = z.string();
+const completedMessageEventSchema = z.object({
+  data: z.object({ message: z.string() }),
+  type: z.literal("message.completed"),
+});
 
 export default defineEval({
   description:
@@ -32,11 +39,15 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
     t.calledTool("record_prototype_artifact", {
       count: 1,
       input: {
-        content: (value) =>
-          typeof value === "string" &&
-          value.includes("Operations review queue") &&
-          value.includes("Finance: verify tax information") &&
-          value.includes('id="detail-title"'),
+        content: (value) => {
+          const parsedValue = stringInputSchema.safeParse(value);
+          return (
+            parsedValue.success &&
+            parsedValue.data.includes("Operations review queue") &&
+            parsedValue.data.includes("Finance: verify tax information") &&
+            parsedValue.data.includes('id="detail-title"')
+          );
+        },
         mediaType: "text/html",
         path: "prototype/vendor-onboarding/index.html",
       },
@@ -48,17 +59,24 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
     t.calledTool("record_prototype_artifact", {
       count: 1,
       input: {
-        content: (value) => typeof value === "string" && !value.includes("## Build handoff"),
+        content: (value) => {
+          const parsedValue = stringInputSchema.safeParse(value);
+          return parsedValue.success && !parsedValue.data.includes("## Build handoff");
+        },
         path: "prototype/vendor-onboarding/app-spec.md",
       },
     });
     t.calledTool("record_prototype_artifact", {
       count: 1,
       input: {
-        content: (value) =>
-          typeof value === "string" &&
-          value.includes("## Build handoff") &&
-          value.includes('"status": "build-ready"'),
+        content: (value) => {
+          const parsedValue = stringInputSchema.safeParse(value);
+          return (
+            parsedValue.success &&
+            parsedValue.data.includes("## Build handoff") &&
+            parsedValue.data.includes('"status": "build-ready"')
+          );
+        },
         path: "prototype/vendor-onboarding/app-spec.md",
       },
     });
@@ -87,7 +105,7 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
       turn1.message,
       satisfies(
         (reply) =>
-          isProductFacing(reply) &&
+          isProductFacing(String(reply)) &&
           !/(?:no mutation|nothing was (?:created|written)|[0-9a-f]{40})/iu.test(String(reply)) &&
           !/\b(?:queue|form|dashboard)\?/iu.test(String(reply)),
         "assistant reply stays product-facing and does not ask identity or interface-selection questions",
@@ -96,11 +114,10 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
     session.eventsSatisfy(
       "all public assistant messages omit routine source and authority mechanics",
       (events) => {
-        const messages = events.flatMap((event) =>
-          event.type === "message.completed" && typeof event.data.message === "string"
-            ? [event.data.message]
-            : [],
-        );
+        const messages = events.flatMap((event) => {
+          const candidate = completedMessageEventSchema.safeParse(event);
+          return candidate.success ? [candidate.data.data.message] : [];
+        });
         return (
           messages.length > 0 &&
           messages.every(

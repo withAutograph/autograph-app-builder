@@ -9,8 +9,8 @@ import { expect, it } from "vitest";
 import { z } from "zod";
 import configuration from "../../vercel.json";
 
-// oxlint-disable-next-line typescript/strict-void-return -- Adapt Node's overloaded callback API.
-const execute = promisify(execFile);
+const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+const execute = promisifyExecFile(execFile);
 const require = createRequire(import.meta.url);
 const outputSchema = z.object({
   services: z.record(z.string(), z.object({ buildCommand: z.string(), root: z.string() })),
@@ -75,8 +75,8 @@ it("prepares the hosted app and delegates Eve output to the generated service bu
     );
     const environment: NodeJS.ProcessEnv = {
       ...process.env,
-      VERCEL: "1",
       PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ""}`,
+      VERCEL: "1",
     };
     delete environment.NODE_OPTIONS;
     delete environment.EVE_INTERNAL_BUILD_OUTPUT_DIRECTORY;
@@ -85,7 +85,7 @@ it("prepares the hosted app and delegates Eve output to the generated service bu
     const outputPath = path.join(root, ".vercel/output/config.json");
     const hostOutput = await readFile(outputPath, "utf-8");
     const generated = outputSchema.parse(JSON.parse(hostOutput));
-    const service = Object.values(generated.services)[0];
+    const [service] = Object.values(generated.services);
     if (service === undefined) {
       throw new Error("Hosted Next integration did not generate an Eve service");
     }
@@ -100,6 +100,6 @@ it("prepares the hosted app and delegates Eve output to the generated service bu
     // The child build leaves the host's generated routing/service output intact.
     expect(await readFile(outputPath, "utf-8")).toBe(hostOutput);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { force: true, recursive: true });
   }
 });

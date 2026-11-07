@@ -3,18 +3,18 @@ import type { PublicEveEvent } from "../mcp/contracts";
 import { verifyHistoricalApprovalReplay } from "./historical-approval-replay";
 
 const binding = {
-  issuer: "issuer",
+  adapterGeneration: 1,
+  adapterSessionId: "adapter",
   audience: "audience",
-  workspaceId: "workspace",
+  issuer: "issuer",
   ownerUserId: "owner",
   sessionId: "session",
-  adapterSessionId: "adapter",
-  adapterGeneration: 1,
+  workspaceId: "workspace",
 };
 const events: [PublicEveEvent, PublicEveEvent, PublicEveEvent] = [
-  { type: "status", status: "working", index: 0 },
-  { type: "assistant_message", text: "Saved", turnId: "turn", index: 1 },
-  { type: "status", status: "waiting", index: 2 },
+  { index: 0, status: "working", type: "status" },
+  { index: 1, text: "Saved", turnId: "turn", type: "assistant_message" },
+  { index: 2, status: "waiting", type: "status" },
 ];
 const stream = async function* stream(items: PublicEveEvent[]) {
   for (const item of items) {
@@ -22,12 +22,12 @@ const stream = async function* stream(items: PublicEveEvent[]) {
   }
 };
 const input = () => ({
-  trustedBinding: binding,
+  nativeTail: { complete: true, nativeTailIndex: 9, nextNativeIndex: 10 },
   replayBinding: { ...binding },
+  replayEvents: stream(events),
+  trustedBinding: binding,
   trustedEventCount: 2,
   trustedEvents: stream(events.slice(0, 2)),
-  replayEvents: stream(events),
-  nativeTail: { complete: true, nextNativeIndex: 10, nativeTailIndex: 9 },
 });
 
 describe("historical approval replay", () => {
@@ -59,7 +59,7 @@ describe("historical approval replay", () => {
     const changed = input();
     changed.replayEvents = stream([
       events[0],
-      { type: "assistant_message", text: "Changed", turnId: "turn", index: 1 },
+      { index: 1, text: "Changed", turnId: "turn", type: "assistant_message" },
       events[2],
     ]);
     await expect(verifyHistoricalApprovalReplay(changed)).rejects.toThrow("prefix mismatch");

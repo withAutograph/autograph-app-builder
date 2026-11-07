@@ -93,7 +93,9 @@ function expectGitHubControlAndNoOAuthLeak(page: Page, rawValues: readonly strin
 }
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-test.beforeEach(async () => resetApplicationState());
+test.beforeEach(async () => {
+  await resetApplicationState();
+});
 
 test("GitHub return preserves edits made while its checkpoint is in flight", async ({ page }) => {
   await finishOAuth(page, "GitHub");
@@ -106,10 +108,12 @@ test("GitHub return preserves edits made while its checkpoint is in flight", asy
     if (
       held ||
       request.method() !== "POST" ||
-      !request.headers()["next-action"] ||
-      !request.postData()?.includes("clientMutationId")
-    )
-      return route.continue();
+      !Object.hasOwn(request.headers(), "next-action") ||
+      !(request.postData() ?? "").includes("clientMutationId")
+    ) {
+      await route.continue();
+      return;
+    }
     held = true;
     checkpointIntercepted = true;
     const response = await route.fetch();
@@ -206,10 +210,12 @@ for (const provider of emulatedProviders) {
         if (
           checkpointHeld ||
           request.method() !== "POST" ||
-          !request.headers()["next-action"] ||
-          !request.postData()?.includes("clientMutationId")
-        )
-          return route.continue();
+          !Object.hasOwn(request.headers(), "next-action") ||
+          !(request.postData() ?? "").includes("clientMutationId")
+        ) {
+          await route.continue();
+          return;
+        }
         checkpointHeld = true;
         // Exercise the real durable save while delaying its acknowledgement
         // beyond the default five-second assertion budget. Callback query
@@ -341,10 +347,16 @@ for (const key of ["code", "state", "installation_id", "setup_action"] as const)
     await openBuilderPage(page);
     const assertNoLeak = expectGitHubControlAndNoOAuthLeak(page, ["duplicate-app-owned-value"]);
 
-    await setGitHubCallbackFixture(
-      page,
-      `duplicate-${key.replaceAll("_", "-")}` as GitHubCallbackFixture,
-    );
+    const fixture = `duplicate-${key.replaceAll("_", "-")}`;
+    if (
+      fixture !== "duplicate-code" &&
+      fixture !== "duplicate-state" &&
+      fixture !== "duplicate-installation-id" &&
+      fixture !== "duplicate-setup-action"
+    ) {
+      throw new Error(`Unsupported GitHub callback fixture: ${fixture}`);
+    }
+    await setGitHubCallbackFixture(page, fixture);
     await startGitHubConnection(page);
     await expect(page).toHaveURL(/github=failed&githubReason=callback-invalid/u);
     const counts = await applicationCounts();
@@ -361,7 +373,9 @@ test("provider substitution and malformed callback fail without a binding", asyn
   await page.getByRole("button", { name: "Continue with GitHub" }).click();
   const state = new URL(page.url()).searchParams.get("state");
   expect(state).toBeTruthy();
-  if (!state) throw new Error("Expected GitHub callback state");
+  if (state === null || state.length === 0) {
+    throw new Error("Expected GitHub callback state");
+  }
 
   await page.goto(
     `/vercel/installations/callback?code=substituted&state=${encodeURIComponent(state)}`,

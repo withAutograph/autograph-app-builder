@@ -632,7 +632,7 @@ describe("public self-reproduction driver", () => {
       save: () => {
         savedCursors.push(current.session?.cursor ?? 0);
       },
-      sleep: () => Promise.resolve(),
+      sleep: async () => {},
       state: current,
       timeoutMs: 1000,
       transport: {

@@ -366,18 +366,17 @@ describe("source and workspace status guidance", () => {
     ]);
     const sandbox = {
       id: observed.workspaceId,
-      readTextFile: ({ path }: { path: string }) => Promise.resolve(files.get(path) ?? null),
-      run: () =>
-        Promise.resolve({
-          exitCode: 0,
-          stderr: "",
-          stdout: JSON.stringify({
-            repositoryInput: "/workspace/repository",
-            realRepository: "/workspace/repository",
-            realWorkspace: "/workspace",
-            workspaceRoot: "/workspace",
-          }),
+      readTextFile: async ({ path }: { path: string }) => files.get(path) ?? null,
+      run: async () => ({
+        exitCode: 0,
+        stderr: "",
+        stdout: JSON.stringify({
+          realRepository: "/workspace/repository",
+          realWorkspace: "/workspace",
+          repositoryInput: "/workspace/repository",
+          workspaceRoot: "/workspace",
         }),
+      }),
     };
     getWorkflowState.mockReturnValue(selected);
     const capability = vi.spyOn(testCapabilities, "hasTestCapability").mockReturnValue(false);

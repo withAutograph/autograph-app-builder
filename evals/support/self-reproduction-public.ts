@@ -1,4 +1,3 @@
-/* eslint-disable eslint/no-await-in-loop -- Public session continuations and SSE chunks are ordered. */
 import { setTimeout as delay } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
 import { appendFileSync, chmodSync, existsSync } from "node:fs";
@@ -67,7 +66,7 @@ const redactObservationUrls = (entry: unknown): unknown => {
   if (Array.isArray(entry)) {
     return entry.map(redactObservationUrls);
   }
-  if (entry && typeof entry === "object") {
+  if (entry !== null && typeof entry === "object") {
     return Object.fromEntries(
       Object.entries(entry).map(([key, item]) => [key, redactObservationUrls(item)]),
     );
@@ -129,11 +128,12 @@ export const publicObservationReport = (state: PublicState, nowMs = Date.now()) 
         functionality: "visual-prototype",
         present: state.session?.prototype !== undefined,
       },
-      workingApp: {
-        availability,
-        reason,
-        ...(receipt ? { expiresAt: receipt.expiresAt, verifiedAt: receipt.verifiedAt } : {}),
-      },
+      workingApp: (() => {
+        const observation = { availability, reason };
+        return receipt
+          ? { ...observation, expiresAt: receipt.expiresAt, verifiedAt: receipt.verifiedAt }
+          : observation;
+      })(),
     },
     redaction:
       "Shareable URLs retain origins only. Original public responses and usable preview URLs remain in owner-only transcript.private.jsonl and state.json; do not share these private files.",
@@ -225,7 +225,11 @@ export const makePublicTransport = async (
     sequence += 1;
     const id = sequence;
     const response = await fetch(url, {
-      body: JSON.stringify({ jsonrpc: "2.0", ...(notification ? {} : { id }), method, params }),
+      body: (() => {
+        const version = { jsonrpc: "2.0" };
+        const request = notification ? version : { ...version, id };
+        return JSON.stringify({ ...request, method, params });
+      })(),
       credentials: "omit",
       headers: publicRequestHeaders(session, bearerToken),
       method: "POST",
@@ -242,7 +246,7 @@ export const makePublicTransport = async (
       return undefined;
     }
     let envelope: { id?: number; result?: unknown; error?: unknown };
-    if (response.headers.get("content-type")?.includes("text/event-stream")) {
+    if (response.headers.get("content-type")?.includes("text/event-stream") === true) {
       const reader = response.body?.getReader();
       if (!reader) {
         throw new Error("Missing public MCP response body");
@@ -296,7 +300,6 @@ export const makePublicTransport = async (
     try {
       return await performRpc(method, params, notification);
     } catch (error) {
-      // oxlint-disable-next-line eslint/preserve-caught-error -- A raw provider cause can echo credentials; only sanitized text leaves the transport boundary.
       throw new Error(
         String(
           redactTransportToken(error instanceof Error ? error.message : String(error), bearerToken),
@@ -421,7 +424,7 @@ const sendPendingMessage = async (options: SessionOptions, accept: AcceptSession
     if (!options.message.trim() || options.message.length > 32_000) {
       throw new Error("Message must contain 1 to 32000 characters");
     }
-    if (state.session?.status !== "waiting" || state.session.inputRequests?.length) {
+    if (state.session?.status !== "waiting" || (state.session.inputRequests?.length ?? 0) > 0) {
       throw new Error(
         "Ordinary messages require a waiting public conversation without structured input requests",
       );
@@ -469,12 +472,14 @@ const validateResponses = (session: EveSessionResult, responses: Responses) => {
       throw new Error("Question requires an ordinary answer");
     }
     const { response } = item;
-    if (
-      response.kind === "answer" &&
-      ((!request.allowFreeform && !response.optionId) ||
-        (response.optionId && !request.options?.some((option) => option.id === response.optionId)))
-    ) {
-      throw new Error("Answer must use a supported option");
+    if (response.kind === "answer") {
+      const hasOption = Boolean(response.optionId);
+      if (
+        (!request.allowFreeform && !hasOption) ||
+        (hasOption && request.options?.some((option) => option.id === response.optionId) !== true)
+      ) {
+        throw new Error("Answer must use a supported option");
+      }
     }
   }
 };
@@ -522,7 +527,7 @@ const submitResponse = async (options: SessionOptions, accept: AcceptSession) =>
   if (!pending || !state.session) {
     throw new Error("Missing pending response session");
   }
-  const sessionId = state.session.sessionId;
+  const { sessionId } = state.session;
   const result = eveSessionResultSchema.parse(
     await transport.call("autograph_respond", { ...pending, sessionId }),
   );

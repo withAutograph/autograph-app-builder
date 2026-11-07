@@ -21,14 +21,14 @@ export const BuilderPublicOriginForm = (props: {
     async (_state, data) => {
       const parsed = builderPublicOriginSchema.safeParse(data.get("publicOrigin"));
       if (!parsed.success) {
-        return { status: "error", message: "Choose a verified production domain." };
+        return { message: "Choose a verified production domain.", status: "error" };
       }
       return await props.submit({
-        sessionId: props.sessionId,
-        scope: props.scope,
         expected: props.expected,
-        publicOrigin: parsed.data,
         expectedPublicOrigin: props.selectedPublicOrigin,
+        publicOrigin: parsed.data,
+        scope: props.scope,
+        sessionId: props.sessionId,
       });
     },
     { status: "idle" },

@@ -8,44 +8,44 @@ import type { ProtectedInstallContextWire } from "./hosted-operator-sandbox-laun
 const runId = "11111111-1111-4111-a111-111111111111";
 const sha = "a".repeat(64);
 const worker = {
-  id: "app-integration-bootstrap-v1",
-  sha256: sha,
-  operationScope: "app-integration-bootstrap-v1",
   executablePath: "/worker/integration",
+  id: "app-integration-bootstrap-v1",
+  operationScope: "app-integration-bootstrap-v1",
+  sha256: sha,
   subcommand: "integration-control-schema-readback",
 } as const;
 const context: ProtectedInstallContextWire = {
-  version: 1,
-  operation: { operation_id: runId, approval_digest: "b".repeat(64), fence_generation: 7 },
   app_id: "invoice-app",
+  installer: { id: worker.id, sha256: sha },
+  operation: { approval_digest: "b".repeat(64), fence_generation: 7, operation_id: runId },
+  release: { id: "checked-release", sha256: "c".repeat(64) },
   resource: {
-    resource_id: "isolated-control",
+    database: "integrations",
     environment: "preview",
     hostname: "ep-control.neon.tech",
-    port: 5432,
-    database: "integrations",
-    schema: "public",
     migrator_role: "control_owner",
-    runtime_role: "app_lease",
-    provider_project_id: "isolated-project",
+    port: 5432,
     provider_branch_id: "isolated-branch",
+    provider_project_id: "isolated-project",
+    resource_id: "isolated-control",
+    runtime_role: "app_lease",
+    schema: "public",
   },
-  release: { id: "checked-release", sha256: "c".repeat(64) },
-  installer: { id: worker.id, sha256: sha },
   tenant_targets: ["one-tenant"],
+  version: 1,
 };
 const digest = createHash("sha256").update(JSON.stringify(context)).digest("hex");
 const removalReceipt = (status: "unknown" | "not-applied" | "applied") =>
   status === "applied"
     ? {
+        readback_sha256: sha,
         receipt: {
-          operationRef: runId,
           active: false as const,
+          operationRef: runId,
           principalGeneration: 8,
           priorGeneration: 7,
           stoppedBindingsSha256: sha,
         },
-        readback_sha256: sha,
       }
     : {};
 const fixture = (
@@ -58,43 +58,38 @@ const fixture = (
   const frame = (path: string, data: z.infer<ReturnType<typeof z.json>>) =>
     files.set(path, Buffer.from(JSON.stringify(data)));
   const sandbox = {
+    delete: stop,
+    extendTimeout: vi.fn(async () => {}),
     fs: {
-      mkdir: vi.fn(async () => {}),
-      rm: vi.fn(async () => {}),
       lstat: vi.fn(async (path: string) => ({
         isFile: () => true,
         size: files.get(path)?.length ?? 0,
       })),
+      mkdir: vi.fn(async () => {}),
+      rm: vi.fn(async () => {}),
     },
-    writeFiles: vi.fn(async (rows: { path: string; content: Buffer }[]) => {
-      for (const row of rows) {
-        files.set(row.path, row.content);
-      }
-    }),
     readFileToBuffer: vi.fn(async ({ path }: { path: string }) => files.get(path) ?? null),
-    delete: stop,
-    extendTimeout: vi.fn(async () => {}),
     runCommand: vi.fn(async (options: { detached?: boolean; args: string[] }) => {
       if (options.detached !== true) {
         return { exitCode: 0, stdout: async () => `${sha}  /worker/integration\n` };
       }
       const spool = options.args[2];
       frame(`${spool}/requests/1.json`, {
-        kind: mutation ? "authorize_effect" : "check_fence",
-        version: 1,
-        operation_id: runId,
+        app_id: context.app_id,
         approval_digest: context.operation.approval_digest,
         context_digest: digest,
         fence_generation: 7,
-        app_id: context.app_id,
-        resource_id: context.resource.resource_id,
-        release_id: context.release.id,
         installer_id: worker.id,
         installer_sha256: sha,
+        kind: mutation ? "authorize_effect" : "check_fence",
+        operation_id: runId,
+        release_id: context.release.id,
+        resource_id: context.resource.resource_id,
         tenant_id: null,
+        version: 1,
         ...(mutation ? { effect_id: "install-control-schema", sequence: 1 } : {}),
       });
-      frame(`${spool}/requests/1.ready`, { version: 1, run_id: runId, frame_id: 1 });
+      frame(`${spool}/requests/1.ready`, { frame_id: 1, run_id: runId, version: 1 });
       if (removal) {
         const base = z.record(z.string(), z.unknown()).parse(
           JSON.parse(
@@ -114,29 +109,29 @@ const fixture = (
             kind,
             ...(kind === "check_fence"
               ? {}
-              : { sequence: 1, effect_id: "fence-app-integration-authority" }),
+              : { effect_id: "fence-app-integration-authority", sequence: 1 }),
             ...(kind === "checkpoint_effect"
-              ? { receipt: { state: "applied", readback_sha256: "d".repeat(64) } }
+              ? { receipt: { readback_sha256: "d".repeat(64), state: "applied" } }
               : {}),
           });
           if (kind === "checkpoint_effect") {
             frame(`${spool}/requests/${frameId}.json`, {
-              kind,
-              version: 1,
-              operation_id: runId,
               context_digest: digest,
-              fence_generation: 7,
-              sequence: 1,
               effect_id: "fence-app-integration-authority",
+              fence_generation: 7,
+              kind,
+              operation_id: runId,
+              receipt: { readback_sha256: "d".repeat(64), state: "applied" },
               resource_id: context.resource.resource_id,
+              sequence: 1,
               tenant_id: null,
-              receipt: { state: "applied", readback_sha256: "d".repeat(64) },
+              version: 1,
             });
           }
           frame(`${spool}/requests/${frameId}.ready`, {
-            version: 1,
-            run_id: runId,
             frame_id: frameId,
+            run_id: runId,
+            version: 1,
           });
         }
       }
@@ -145,34 +140,33 @@ const fixture = (
         [1, "worker_started"],
         [2, "worker_succeeded"],
       ] as const) {
-        frame(`${spool}/lifecycle/${index}.json`, { version: 1, run_id: runId, kind });
-        frame(`${spool}/lifecycle/${index}.ready`, { version: 1, run_id: runId, frame_id: index });
+        frame(`${spool}/lifecycle/${index}.json`, { kind, run_id: runId, version: 1 });
+        frame(`${spool}/lifecycle/${index}.ready`, { frame_id: index, run_id: runId, version: 1 });
       }
       frame(`${spool}/readback.json`, {
-        version: 1,
-        operation_id: runId,
         context_digest: digest,
         fence_generation: 7,
-        status: "applied",
+        operation_id: runId,
         readback_sha256: "d".repeat(64),
         receipt: { resourceId: context.resource.resource_id, schemaSha256: "e".repeat(64) },
+        status: "applied",
+        version: 1,
       });
       if (removalStatus !== undefined) {
         frame(
           `${spool}/readback.json`,
           z.json().parse({
-            version: 1,
-            operation_id: runId,
             context_digest: digest,
             fence_generation: 7,
+            operation_id: runId,
             status: removalStatus,
+            version: 1,
             ...removalReceipt(removalStatus),
           }),
         );
       }
       return {
         kill: vi.fn(async () => {}),
-        wait: async () => ({ exitCode: 0 }),
         logs: async function* logs() {
           for (const [kind, frameId] of [
             ["protected_installer_lifecycle_ready", 1],
@@ -187,27 +181,33 @@ const fixture = (
             ["protected_installer_lifecycle_ready", 2],
           ] as const) {
             yield {
+              data: `${JSON.stringify({ frame_id: frameId, kind, run_id: runId, version: 1 })}\n`,
               stream: "stdout",
-              data: `${JSON.stringify({ kind, version: 1, run_id: runId, frame_id: frameId })}\n`,
             };
           }
         },
+        wait: async () => ({ exitCode: 0 }),
       };
+    }),
+    writeFiles: vi.fn(async (rows: { path: string; content: Buffer }[]) => {
+      for (const row of rows) {
+        files.set(row.path, row.content);
+      }
     }),
   };
   const createSandbox = vi.fn(async () => sandbox);
   const input = {
-    worker,
+    assertCurrent: vi.fn(async () => {}),
     context,
-    runId,
     directDatabaseUrl:
       "postgresql://owner:private@ep-control.neon.tech/integrations?sslmode=verify-full",
-    startupFiles: { "app-integration-approved-plan.json": Buffer.from("{}") },
     readOnly: true,
+    runId,
     signal: new AbortController().signal,
-    assertCurrent: vi.fn(async () => {}),
+    startupFiles: { "app-integration-approved-plan.json": Buffer.from("{}") },
+    worker,
   };
-  return { input, createSandbox, stop, files };
+  return { createSandbox, files, input, stop };
 };
 const config = {
   image: "pinned-control",
@@ -224,8 +224,8 @@ it("reuses the fenced framed transport for fixed integration readback and privat
     >["createSandbox"],
   });
   expect(result).toMatchObject({
-    status: "applied",
     receipt: { resourceId: context.resource.resource_id },
+    status: "applied",
   });
   expect(f.input.assertCurrent).toHaveBeenCalled();
   expect(f.stop).toHaveBeenCalledOnce();
@@ -263,10 +263,10 @@ it("authorizes the stopped snapshot only at the app fence frame, not narrow owne
     config,
     {
       ...f.input,
-      readOnly: false,
-      worker: { ...worker, subcommand: "integration-fence-app-authority" },
       authorizeAppIntegrationRemoval: authorize,
+      readOnly: false,
       recordCheckpoint: checkpoint,
+      worker: { ...worker, subcommand: "integration-fence-app-authority" },
     },
     {
       // SAFETY: Same bounded official-SDK transport fake as existing protocol tests.
@@ -281,7 +281,7 @@ it("authorizes the stopped snapshot only at the app fence frame, not narrow owne
   expect(checkpoint).toHaveBeenCalledWith(
     expect.objectContaining({
       effectId: "fence-app-integration-authority",
-      receipt: { state: "applied", readbackSha256: "d".repeat(64) },
+      receipt: { readbackSha256: "d".repeat(64), state: "applied" },
     }),
   );
 });

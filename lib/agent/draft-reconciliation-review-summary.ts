@@ -13,16 +13,19 @@ export interface ReconciliationChangeSummary {
   changes: OverlayChange[];
 }
 
-const changeMetadata = (change: OverlayChange): OverlayChange => ({
-  kind: change.kind,
-  path: change.path,
-  ...(change.before === undefined
-    ? {}
-    : { before: { digest: change.before.digest, mode: change.before.mode } }),
-  ...(change.after === undefined
-    ? {}
-    : { after: { digest: change.after.digest, mode: change.after.mode } }),
-});
+const changeMetadata = (change: OverlayChange): OverlayChange => {
+  const metadata: OverlayChange = {
+    kind: change.kind,
+    path: change.path,
+  };
+  if (change.before !== undefined) {
+    metadata.before = { digest: change.before.digest, mode: change.before.mode };
+  }
+  if (change.after !== undefined) {
+    metadata.after = { digest: change.after.digest, mode: change.after.mode };
+  }
+  return metadata;
+};
 
 /** Optional change-index pages retain every path and never decide review or publication eligibility. */
 export const summarizeReconciliationChanges = (
@@ -33,7 +36,7 @@ export const summarizeReconciliationChanges = (
   if (!Number.isSafeInteger(cursor) || cursor < 0 || cursor > changes.length) {
     throw new RangeError("The reconciliation change cursor is outside this inventory.");
   }
-  const counts = { added: 0, modified: 0, deleted: 0 };
+  const counts = { added: 0, deleted: 0, modified: 0 };
   let appOwnedFiles = 0;
   for (const change of changes) {
     counts[change.kind] += 1;
@@ -42,13 +45,13 @@ export const summarizeReconciliationChanges = (
     }
   }
   const page: ReconciliationChangeSummary = {
+    appOwnedFiles,
+    changes: [],
+    counts,
     cursor,
     nextCursor: null,
-    totalFiles: changes.length,
-    appOwnedFiles,
     nonAppFiles: changes.length - appOwnedFiles,
-    counts,
-    changes: [],
+    totalFiles: changes.length,
   };
   for (let index = cursor; index < changes.length; index += 1) {
     const change = changes[index];

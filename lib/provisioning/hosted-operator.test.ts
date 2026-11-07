@@ -459,9 +459,6 @@ const completedOwnerBootstrap = async (normalActors = false) => {
     access: [],
     authSchema: gatewayPlan.authSchema,
     bootstrap: gatewayPlan.bootstrap,
-    gatewayBindings: gatewayPlan.gatewayBindings,
-    resourcesInstaller: gatewayPlan.resourcesInstaller,
-    stage: "auth-bootstrap",
     effects: [
       {
         description: "Prepare Auth resource",
@@ -478,23 +475,26 @@ const completedOwnerBootstrap = async (normalActors = false) => {
       { description: "Prepare Auth", id: "install:auth", kind: "install" },
       { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
     ],
+    gatewayBindings: gatewayPlan.gatewayBindings,
+    resourcesInstaller: gatewayPlan.resourcesInstaller,
+    stage: "auth-bootstrap",
     ...(normalActors
       ? {
           normalActorProgram: {
-            version: 1,
-            appId: selection.appId,
-            origin: plan.publicGateway?.origin,
             actors: [
               {
-                actorKey: "owner",
                 account: "capture-existing",
+                actorKey: "owner",
                 email: "owner@example.test",
                 name: "Owner",
               },
             ],
-            organizations: [],
-            memberships: [],
             appAccess: [],
+            appId: selection.appId,
+            memberships: [],
+            organizations: [],
+            origin: plan.publicGateway?.origin,
+            version: 1,
           },
         }
       : {}),
@@ -504,9 +504,9 @@ const completedOwnerBootstrap = async (normalActors = false) => {
     assetSha256: "1".repeat(64),
     catalogFingerprint: "2".repeat(64),
     database: plan.authDatabase.database,
+    observedAt: new Date().toISOString(),
     runtimeRole: plan.authDatabase.runtimeRole,
     targetDigest: z.string().parse(bootstrapPlan.authSchema?.targetDigest),
-    observedAt: new Date().toISOString(),
   });
   const request = await prepared(f);
   f.approve();
@@ -520,13 +520,13 @@ const completedOwnerBootstrap = async (normalActors = false) => {
     authResourceId: bootstrapPlan.authDatabase.resourceId,
     bootstrapPlanDigest: request.planDigest,
     browserOrigin: z.string().parse(bootstrapPlan.gatewayBindings?.authBrowserOrigin),
-    endpointOrigin: z.string().parse(bootstrapPlan.deploymentBoundary?.verification.gatewayOrigin),
-    issuer: z.string().parse(bootstrapPlan.deploymentBoundary?.verification.publicOrigin),
-    ownerSessionId: selection.sessionId,
-    organizationId: null,
-    nonceSha256: "d".repeat(64),
-    expiresAt: "2026-10-01T00:00:00Z",
     consumedAt: "2026-09-30T23:59:00Z",
+    endpointOrigin: z.string().parse(bootstrapPlan.deploymentBoundary?.verification.gatewayOrigin),
+    expiresAt: "2026-10-01T00:00:00Z",
+    issuer: z.string().parse(bootstrapPlan.deploymentBoundary?.verification.publicOrigin),
+    nonceSha256: "d".repeat(64),
+    organizationId: null,
+    ownerSessionId: selection.sessionId,
     proofRef: "canonical-owner-proof",
     proofSha256: "e".repeat(64),
   };
@@ -537,7 +537,7 @@ const completedOwnerBootstrap = async (normalActors = false) => {
       operator: { ...current.record.operator, identityLink },
     }),
   };
-  return { f, request, identityLink };
+  return { f, identityLink, request };
 };
 
 describe("legacy owner bootstrap public readiness", () => {
@@ -545,9 +545,9 @@ describe("legacy owner bootstrap public readiness", () => {
     const { f, request } = await completedOwnerBootstrap();
     const result = await f.client.request(request);
     expect(result).toMatchObject({
-      status: "prepared",
       authenticatedBehavior: "unassessed",
       operationRef: request.operationRef,
+      status: "prepared",
     });
     expect(result).not.toHaveProperty("appUrl");
     expect(result).not.toHaveProperty("nativePreview");
@@ -622,14 +622,14 @@ describe("protected hosted operator boundary", () => {
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       const result = await f.client.request({ action: "plan", operation: "prepare", selection });
-      expect(result).toMatchObject({ status: "blocked", code: "operation_in_progress" });
+      expect(result).toMatchObject({ code: "operation_in_progress", status: "blocked" });
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           planningFailure: {
-            stage: "approved_plan_recovery",
-            errorClass: "operator_error",
             code: "operation_in_progress",
+            errorClass: "operator_error",
+            stage: "approved_plan_recovery",
           },
         }),
       ]);
@@ -1198,8 +1198,8 @@ describe("protected hosted operator boundary", () => {
     const result = await f.client.request({
       action: "plan",
       operation: "prepare",
-      selection,
       releaseIntent: "prepared-preview",
+      selection,
     });
     expect(result.status).toBe("planned");
     expect(f.deps.plan).toHaveBeenCalledWith(
@@ -1213,17 +1213,17 @@ describe("protected hosted operator boundary", () => {
     const request = {
       action: "plan" as const,
       operation: "prepare" as const,
-      selection,
       releaseIntent: "prepared-preview" as const,
+      selection,
     };
     const first = await f.client.request(request);
     const before = structuredClone(f.row);
     const second = await f.client.request(request);
     expect(second).toMatchObject({
-      status: "planned",
       operationRef: first.operationRef,
-      planDigest: first.planDigest,
       plan: first.plan,
+      planDigest: first.planDigest,
+      status: "planned",
     });
     expect(f.deps.plan).toHaveBeenCalledTimes(1);
     expect(f.row).toEqual(before);
@@ -1235,7 +1235,7 @@ describe("protected hosted operator boundary", () => {
       planDigest: z.string().parse(second.planDigest),
       selection,
     });
-    expect(execution).toMatchObject({ status: "blocked", code: "authorization_required" });
+    expect(execution).toMatchObject({ code: "authorization_required", status: "blocked" });
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
   });
   it("denies changed product input or revoked owner on pending prepared Preview retry", async () => {
@@ -1244,28 +1244,28 @@ describe("protected hosted operator boundary", () => {
     const request = {
       action: "plan" as const,
       operation: "prepare" as const,
-      selection,
       releaseIntent: "prepared-preview" as const,
+      selection,
     };
     await f.client.request(request);
     const before = structuredClone(f.row);
     const changed = await f.client.request({
       ...request,
       authSignupPolicy: {
-        version: 1,
         appPath: "/",
-        organizationId: "other-org",
+        appRoles: ["reviewer"],
         eligibility: "public",
         membershipRole: "member",
-        appRoles: ["reviewer"],
+        organizationId: "other-org",
+        version: 1,
       },
     });
-    expect(changed).toMatchObject({ status: "blocked", code: "operation_in_progress" });
+    expect(changed).toMatchObject({ code: "operation_in_progress", status: "blocked" });
     expect(f.row).toEqual(before);
     f.revoke();
     expect(await f.client.request(request)).toMatchObject({
-      status: "blocked",
       code: "authorization_required",
+      status: "blocked",
     });
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
   });
@@ -1275,8 +1275,8 @@ describe("protected hosted operator boundary", () => {
     const request = {
       action: "plan" as const,
       operation: "prepare" as const,
-      selection,
       releaseIntent: "prepared-preview" as const,
+      selection,
     };
     const first = await f.client.request(request);
     const authorize = f.deps.assertAuthorized;
@@ -1292,9 +1292,9 @@ describe("protected hosted operator boundary", () => {
       }
     };
     expect(await f.client.request(request)).toMatchObject({
-      status: "planned",
       operationRef: first.operationRef,
       planDigest: first.planDigest,
+      status: "planned",
     });
     f.deps.assertAuthorized = async (input) => {
       await authorize(input);
@@ -1303,54 +1303,54 @@ describe("protected hosted operator boundary", () => {
       }
     };
     expect(await f.client.request(request)).toMatchObject({
-      status: "blocked",
       code: "operation_in_progress",
+      status: "blocked",
     });
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
   });
   it("matches supplied signup input to the bound pending prepared Preview policy", async () => {
     const f = fixture();
     const policy = {
-      version: 1 as const,
       appPath: "/",
-      organizationId: "synthetic-org",
+      appRoles: ["reviewer"],
       eligibility: "public" as const,
       membershipRole: "member" as const,
-      appRoles: ["reviewer"],
+      organizationId: "synthetic-org",
+      version: 1 as const,
     };
     const pending = hostedOperatorPlanSchema.parse({
       ...plan,
-      stage: "app",
-      releaseIntent: "prepared-preview",
       authSignupPolicy: {
         ...policy,
-        policyId: "owned-policy",
-        authResourceId: plan.authDatabase.resourceId,
         appId: selection.appId,
+        authResourceId: plan.authDatabase.resourceId,
         origin: plan.deploymentBoundary?.verification.publicOrigin,
+        policyId: "owned-policy",
       },
       effects: plan.effects.flatMap((effect) =>
         effect.kind === "access"
           ? [
-              { id: "signup", kind: "auth-signup-policy", description: "Persist approved signup" },
+              { description: "Persist approved signup", id: "signup", kind: "auth-signup-policy" },
               effect,
             ]
           : [effect],
       ),
+      releaseIntent: "prepared-preview",
+      stage: "app",
     });
     f.deps.plan = vi.fn(async () => pending);
     const request = {
       action: "plan" as const,
-      operation: "prepare" as const,
-      selection,
-      releaseIntent: "prepared-preview" as const,
       authSignupPolicy: policy,
+      operation: "prepare" as const,
+      releaseIntent: "prepared-preview" as const,
+      selection,
     };
     const first = await f.client.request(request);
     expect(await f.client.request(request)).toMatchObject({
-      status: "planned",
-      planDigest: first.planDigest,
       operationRef: first.operationRef,
+      planDigest: first.planDigest,
+      status: "planned",
     });
     expect(f.deps.plan).toHaveBeenCalledTimes(1);
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
@@ -1642,11 +1642,11 @@ describe("protected hosted operator boundary", () => {
           operator: {
             ...operator,
             fenceGeneration: 1,
-            pendingEffectId: "install",
             pendingEffectAttempt:
               existingAttemptId === undefined
                 ? undefined
                 : { contextDigest: "b".repeat(64), id: existingAttemptId },
+            pendingEffectId: "install",
             receipts: [
               {
                 effectId: "resources",
@@ -1732,7 +1732,7 @@ describe("protected hosted operator boundary", () => {
     f.approve();
     await f.client.request(request);
     const credentials = structuredClone(f.row?.record.privateState);
-    const readApproval = f.deps.readApproval;
+    const { readApproval } = f.deps;
     f.deps.readApproval = async (input) =>
       input.planDigest === request.planDigest ? await readApproval(input) : null;
     f.deps.plan = async () => ({
@@ -1761,7 +1761,7 @@ describe("protected hosted operator boundary", () => {
       planDigest: z.string().parse(next.planDigest),
       selection,
     });
-    expect(unapproved).toMatchObject({ status: "blocked", code: "authorization_required" });
+    expect(unapproved).toMatchObject({ code: "authorization_required", status: "blocked" });
     expect(f.deps.executeEffect).toHaveBeenCalledTimes(4);
     expect(f.row?.record.privateState).toEqual(credentials);
     expect(f.row?.record.operator?.approvalId).toBeUndefined();
@@ -2531,13 +2531,13 @@ describe("closed operator access response diagnostics", () => {
         const responseDiagnostics = log.mock.calls.flatMap(([, value]) => {
           const parsed = z
             .object({
-              boundary: z.literal("builder"),
-              stage: z.literal("operator_request"),
-              operatorAction: z.literal("plan"),
               accessClass: z.literal("upstream_auth_denied"),
-              outcome: z.literal("operator_access_denied"),
+              boundary: z.literal("builder"),
               httpStatus: z.literal(status),
+              operatorAction: z.literal("plan"),
+              outcome: z.literal("operator_access_denied"),
               sessionIdHash: z.string(),
+              stage: z.literal("operator_request"),
               vercelError: z.literal("TRUSTED_SOURCES_ENVIRONMENT_MISMATCH").optional(),
             })
             .safeParse(value);
@@ -2585,12 +2585,12 @@ describe("closed operator access response diagnostics", () => {
         expect(log.mock.calls).toContainEqual([
           "[builder:hosted-neon-consent]",
           expect.objectContaining({
+            accessClass: status === 200 ? "ok" : "other_failed",
             boundary: "builder",
-            stage: "operator_request",
+            httpStatus: status,
             operatorAction: "plan",
             outcome: status === 200 ? "verified" : "setup_unavailable",
-            accessClass: status === 200 ? "ok" : "other_failed",
-            httpStatus: status,
+            stage: "operator_request",
           }),
         ]);
       } finally {
@@ -2687,59 +2687,59 @@ describe("idle installer source successor planning", () => {
     const now = Date.parse("2026-10-20T12:00:00Z");
     const f = fixture(() => now);
     const requireRow = () => {
-      const row = f.row;
+      const { row } = f;
       if (row === undefined) {
         throw new Error("Missing source successor fixture journal");
       }
       return row;
     };
     const program = {
-      version: 1 as const,
-      appId: selection.appId,
-      origin: "https://apps-preview.example.test",
       actors: [
         {
-          actorKey: "owner",
           account: "capture-existing" as const,
+          actorKey: "owner",
           email: "owner@example.test",
           name: "Owner",
         },
       ],
-      organizations: [],
-      memberships: [],
       appAccess: [],
+      appId: selection.appId,
+      memberships: [],
+      organizations: [],
+      origin: "https://apps-preview.example.test",
+      version: 1 as const,
     };
     const preparation = {
-      accountOperationRef: "facfd14d-e963-4228-8219-dba37c95b0b8",
-      accountPlanDigest: operatorPlanDigest(plan),
       accountApprovalId: "original-account-approval",
       accountApprovedByCallId: "original-account-call",
+      accountOperationRef: "facfd14d-e963-4228-8219-dba37c95b0b8",
+      accountPlanDigest: operatorPlanDigest(plan),
       programDigest: normalActorProgramDigest(program),
     };
     const oldPlan = hostedOperatorPlanSchema.parse({
       ...plan,
-      stage: "app",
       access: [],
-      normalActorProgram: program,
-      normalActorPreparation: preparation,
       effects: [
         {
+          description: "Observe Auth",
           id: "auth-resources",
           kind: "resources",
-          description: "Observe Auth",
         },
         {
+          description: "Observe app",
           id: "app-resources",
           kind: "resources",
-          description: "Observe app",
         },
         {
+          description: "Observe Auth schema",
           id: "auth-schema",
           kind: "install",
-          description: "Observe Auth schema",
         },
         ...plan.effects.slice(1),
       ],
+      normalActorPreparation: preparation,
+      normalActorProgram: program,
+      stage: "app",
     });
     f.deps.plan = async () => oldPlan;
     const originalRequest = await prepared(f);
@@ -2752,28 +2752,28 @@ describe("idle installer source successor planning", () => {
     };
     const accountPreparation = {
       ...preparation,
-      program,
       accountPlan: plan,
+      captures: [],
+      program,
       sealedState: {
         encryptedToken: "sealed-account-state",
         keyVersion: "v1",
         tokenIv: "iv",
         tokenTag: "tag",
       },
-      captures: [],
     };
     f.row = {
       ...current,
       record: hostedRuntimeJournalRecordSchema.parse({
         ...current.record,
-        privateState,
         accountPreparation,
+        privateState,
       }),
     };
     f.approve();
     let originalApproved = true;
     let newApproved = false;
-    const readApproval = f.deps.readApproval;
+    const { readApproval } = f.deps;
     f.deps.readApproval = vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(
       async (input) => {
         if (
@@ -2796,26 +2796,26 @@ describe("idle installer source successor planning", () => {
         throw new HostedOperatorError("resource_mismatch");
       }
       return {
-        status: "applied" as const,
         receipt: observedReceipt(input.effect.id, input.fenceGeneration),
+        status: "applied" as const,
       };
     });
     expect(await f.client.request(originalRequest)).toMatchObject({
-      status: "blocked",
       code: "resource_mismatch",
+      status: "blocked",
     });
     const failed = structuredClone(requireRow());
     expect(failed.record).toMatchObject({
-      privateState,
       accountPreparation,
       executionObservation: {
-        state: "settled",
-        operationRef: originalRequest.operationRef,
-        planDigest: originalRequest.planDigest,
-        callId: originalRequest.callId,
         approvalId: "durable-human-decision",
-        outcome: { status: "blocked", code: "resource_mismatch" },
+        callId: originalRequest.callId,
+        operationRef: originalRequest.operationRef,
+        outcome: { code: "resource_mismatch", status: "blocked" },
+        planDigest: originalRequest.planDigest,
+        state: "settled",
       },
+      privateState,
     });
     expect(failed.record.leaseId).toBeUndefined();
     expect(failed.record.leaseExpiresAt).toBeUndefined();
@@ -2841,13 +2841,13 @@ describe("idle installer source successor planning", () => {
     originalApproved = false;
     expect(
       await f.client.request({ action: "plan", operation: "prepare", selection }),
-    ).toMatchObject({ status: "blocked", code: "authorization_required" });
+    ).toMatchObject({ code: "authorization_required", status: "blocked" });
     expect(f.row).toEqual(failed);
     originalApproved = true;
     const proposed = await f.client.request({ action: "plan", operation: "prepare", selection });
     expect(proposed).toMatchObject({
-      status: "planned",
       operationRef: originalRequest.operationRef,
+      status: "planned",
     });
     const proposedPlan = hostedOperatorPlanSchema.parse(proposed.plan);
     expect(proposedPlan).toEqual({
@@ -2855,9 +2855,9 @@ describe("idle installer source successor planning", () => {
       installer: { ...oldPlan.installer, sha256: "e".repeat(64) },
     });
     expect(requireRow().record).toMatchObject({
-      privateState,
       accountPreparation,
       approvedByCallId: "operator:unapproved-plan",
+      privateState,
     });
     expect(requireRow().record.operator?.approvalId).toBeUndefined();
     expect(requireRow().record.operator?.fenceGeneration).toBe(
@@ -2878,14 +2878,14 @@ describe("idle installer source successor planning", () => {
     }));
     f.deps.reconcile = reconcile;
     expect(await f.client.request(request)).toMatchObject({
-      status: "blocked",
       code: "authorization_required",
+      status: "blocked",
     });
     expect(reconcile).not.toHaveBeenCalled();
     newApproved = true;
     expect(await f.client.request(request)).toMatchObject({
-      status: "blocked",
       code: "reconciliation_required",
+      status: "blocked",
     });
     expect(reconcile).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -2902,8 +2902,8 @@ describe("idle installer source successor planning", () => {
         : { status: "unknown" as const },
     );
     expect(await f.client.request(request)).toMatchObject({
-      status: "blocked",
       code: "reconciliation_required",
+      status: "blocked",
     });
     expect(f.deps.executeEffect).toHaveBeenCalledTimes(1);
     expect(f.deps.executeEffect).toHaveBeenCalledWith(
@@ -2991,14 +2991,14 @@ describe("approved retention renewal planning", () => {
             approvalId: "durable-human-decision",
             mode: "protected-operator-v1",
             operationRef,
+            pendingEffectAttempt: {
+              contextDigest: "e".repeat(64),
+              id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
+            },
+            pendingEffectId,
             plan: oldPlan,
             planDigest: operatorPlanDigest(oldPlan),
             receipts: oldReceipts,
-            pendingEffectId,
-            pendingEffectAttempt: {
-              id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
-              contextDigest: "e".repeat(64),
-            },
           },
           privateState: {
             encryptedToken: "ciphertext",
@@ -3019,7 +3019,7 @@ describe("approved retention renewal planning", () => {
       });
 
       const first = await f.client.request({ action: "plan", operation: "prepare", selection });
-      expect(first).toMatchObject({ status: "planned", operationRef });
+      expect(first).toMatchObject({ operationRef, status: "planned" });
       const firstPlan = first.plan;
       if (firstPlan === undefined) {
         throw new Error("The retention renewal response must include its frozen plan");
@@ -3054,11 +3054,11 @@ describe("approved retention renewal planning", () => {
         approvedByCallId: "original-approved-call",
         operator: {
           approvalId: "durable-human-decision",
-          pendingEffectId,
           pendingEffectAttempt: {
-            id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
             contextDigest: "e".repeat(64),
+            id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
           },
+          pendingEffectId,
           planDigest: operatorPlanDigest(oldPlan),
           receipts: oldReceipts,
         },
@@ -3070,7 +3070,7 @@ describe("approved retention renewal planning", () => {
       expect(f.deps.plan).not.toHaveBeenCalled();
 
       const privateError = new TypeError("private authorization detail owner-token");
-      const assertAuthorized = f.deps.assertAuthorized;
+      const { assertAuthorized } = f.deps;
       const log = vi.spyOn(console, "info").mockImplementation(() => {});
       try {
         f.deps.assertAuthorized = vi.fn(async () => {
@@ -3078,11 +3078,11 @@ describe("approved retention renewal planning", () => {
         });
         expect(
           await f.client.request({ action: "plan", operation: "prepare", selection }),
-        ).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+        ).toMatchObject({ code: "operator_unavailable", status: "blocked" });
         expect(log.mock.calls).toContainEqual([
           "[builder:hosted-neon-consent]",
           expect.objectContaining({
-            planningFailure: { stage: "saved_plan_reexposure", errorClass: "type_error" },
+            planningFailure: { errorClass: "type_error", stage: "saved_plan_reexposure" },
           }),
         ]);
         expect(JSON.stringify(log.mock.calls)).not.toContain(privateError.message);
@@ -3091,7 +3091,7 @@ describe("approved retention renewal planning", () => {
         f.deps.assertAuthorized = assertAuthorized;
       }
       if (pendingKind !== "gateway-delivery") {
-        const readApproval = f.deps.readApproval;
+        const { readApproval } = f.deps;
         const approvalRead = vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(
           async (input) => (input.callId === "renewed-call" ? null : await readApproval(input)),
         );
@@ -3104,8 +3104,8 @@ describe("approved retention renewal planning", () => {
           selection,
         };
         expect(await f.client.request(execute)).toMatchObject({
-          status: "blocked",
           code: "authorization_required",
+          status: "blocked",
         });
         expect(f.deps.executeEffect).not.toHaveBeenCalled();
         const blockedReconcile = vi.fn<ProtectedHostedOperatorDependencies["reconcile"]>(
@@ -3116,8 +3116,8 @@ describe("approved retention renewal planning", () => {
           input.callId === "original-approved-call" ? null : await readApproval(input),
         );
         expect(await f.client.request(execute)).toMatchObject({
-          status: "blocked",
           code: "authorization_required",
+          status: "blocked",
         });
         expect(blockedReconcile).not.toHaveBeenCalled();
         expect(f.deps.executeEffect).not.toHaveBeenCalled();
@@ -3125,33 +3125,33 @@ describe("approved retention renewal planning", () => {
         const reconcile = vi.fn<ProtectedHostedOperatorDependencies["reconcile"]>(async (input) => {
           if (input.effect.id === pendingEffectId) {
             expect(input.renewalBindingProvenance).toMatchObject({
-              approvedByCallId: "original-approved-call",
               approvalId: "durable-human-decision",
+              approvedByCallId: "original-approved-call",
               effectId: pendingEffectId,
               kind: pendingKind,
               operationRef,
               pendingEffectAttempt: {
-                id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
                 contextDigest: "e".repeat(64),
+                id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
               },
               planDigest: operatorPlanDigest(oldPlan),
             });
             return { status: "unknown" };
           }
           return {
-            status: "applied",
             receipt: {
               effectId: input.effect.id,
               fenceGeneration: input.fenceGeneration,
               observedAt: new Date(now).toISOString(),
               resourceVersion: "observed-prerequisite",
             },
+            status: "applied",
           };
         });
         f.deps.reconcile = reconcile;
         expect(await f.client.request(execute)).toMatchObject({
-          status: "blocked",
           code: "reconciliation_required",
+          status: "blocked",
         });
         expect(reconcile.mock.calls.some(([input]) => input.effect.id === pendingEffectId)).toBe(
           true,
@@ -3171,14 +3171,14 @@ describe("approved retention renewal planning", () => {
 describe("read-only configured Preview target resolution", () => {
   const resolveRequest = () =>
     new Request("https://operator.example/v1/runtime", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
       body: JSON.stringify({
         action: "resolve-preview-target",
         appId: selection.appId,
-        sessionId: selection.sessionId,
         ownerContext,
+        sessionId: selection.sessionId,
       }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
     });
   it("returns only the authorized nonsecret selection without journal or effect calls", async () => {
     const f = fixture();
@@ -3198,8 +3198,8 @@ describe("read-only configured Preview target resolution", () => {
     const result = await createProtectedHostedOperatorHandler(f.deps)(resolveRequest());
     expect(await result.json()).toMatchObject({
       appId: selection.appId,
-      status: "blocked",
       code: "protected_operator_required",
+      status: "blocked",
     });
   });
   it.each(["appId", "sessionId"] as const)(
@@ -3212,8 +3212,8 @@ describe("read-only configured Preview target resolution", () => {
       });
       const result = await createProtectedHostedOperatorHandler(f.deps)(resolveRequest());
       expect(await result.json()).toMatchObject({
-        status: "blocked",
         code: "authorization_required",
+        status: "blocked",
       });
     },
   );
@@ -3232,8 +3232,8 @@ describe("read-only configured Preview target resolution", () => {
     };
     const result = await createProtectedHostedOperatorHandler(f.deps)(resolveRequest());
     expect(await result.json()).toMatchObject({
-      status: "blocked",
       code: "authorization_required",
+      status: "blocked",
     });
     expect(f.row).toBeUndefined();
   });
@@ -3281,7 +3281,7 @@ const observationFixture = () => {
     if (!hasLiveLease || !hasCurrentFence || !hasCurrentPlan) {
       throw new HostedOperatorError("operation_in_progress");
     }
-    return { leaseId: record.leaseId, fenceGeneration: operator.fenceGeneration };
+    return { fenceGeneration: operator.fenceGeneration, leaseId: record.leaseId };
   };
   f.deps.withResourceLease = async (input, run) => {
     const initialFence = await readLeaseFence(input);
@@ -3311,20 +3311,20 @@ const observationFixture = () => {
   });
   return {
     ...f,
-    client,
-    base: f,
-    counters: () => ({
-      providerAuthorizationReads,
-      canonicalOwnerReads,
-      durableApprovalReads,
-      physicalFenceReads,
-    }),
-    changeApproval: () => {
-      approvalId = "different-durable-human-decision";
-    },
     advance: (duration: number) => {
       currentTime += duration;
     },
+    base: f,
+    changeApproval: () => {
+      approvalId = "different-durable-human-decision";
+    },
+    client,
+    counters: () => ({
+      canonicalOwnerReads,
+      durableApprovalReads,
+      physicalFenceReads,
+      providerAuthorizationReads,
+    }),
   };
 };
 
@@ -3471,15 +3471,15 @@ describe("closed prepare pre-effect diagnostics", () => {
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       expect(await f.client.request(request)).toMatchObject({
-        status: "blocked",
         code: "operator_unavailable",
+        status: "blocked",
       });
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           boundary: "operator",
+          executionFailure: { errorClass: "type_error", stage },
           stage: "operator_request",
-          executionFailure: { stage, errorClass: "type_error" },
         }),
       ]);
       expect(JSON.stringify(log.mock.calls)).not.toContain("planningFailure");
@@ -3524,9 +3524,9 @@ describe("closed prepare pre-effect diagnostics", () => {
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           executionFailure: {
-            stage: "approval_read",
-            errorClass: "operator_error",
             code: "authorization_required",
+            errorClass: "operator_error",
+            stage: "approval_read",
           },
         }),
       ]);
@@ -3556,7 +3556,7 @@ describe("closed prepare pre-effect diagnostics", () => {
     ).rejects.toBe(privateError);
     expect(sink).toHaveBeenCalledWith(
       expect.objectContaining({
-        executionFailure: { stage: "approval_read", errorClass: "unexpected", sqlState: "42501" },
+        executionFailure: { errorClass: "unexpected", sqlState: "42501", stage: "approval_read" },
       }),
     );
     expect(JSON.stringify(sink.mock.calls)).not.toContain(privateError.message);
@@ -3583,26 +3583,26 @@ describe("canonical runtime proof through the production verifier and handler", 
       );
       const selectedPlan = hostedOperatorPlanSchema.parse({
         ...plan,
+        delivery: { branch: selection.branch, projectId: selection.projectId, repoId: "repo-app" },
         deploymentBoundary: {
           ...plan.deploymentBoundary,
           operator: { ...plan.deploymentBoundary?.operator, environment: "preview" },
         },
-        neon: { ...plan.neon, branchId: "br-fixture" },
-        delivery: { branch: selection.branch, projectId: selection.projectId, repoId: "repo-app" },
+        effects: [
+          ...plan.effects,
+          { description: "Observe app delivery", id: "delivery", kind: "delivery" },
+          {
+            description: "Observe Gateway delivery",
+            id: "gateway-delivery",
+            kind: "gateway-delivery",
+          },
+        ],
         gatewayDelivery: {
           branch: selection.branch,
           projectId: "prj_gateway",
           repoId: "repo-gateway",
         },
-        effects: [
-          ...plan.effects,
-          { id: "delivery", kind: "delivery", description: "Observe app delivery" },
-          {
-            id: "gateway-delivery",
-            kind: "gateway-delivery",
-            description: "Observe Gateway delivery",
-          },
-        ],
+        neon: { ...plan.neon, branchId: "br-fixture" },
         release: { ...plan.release, sha256: createHash("sha256").update(manifest).digest("hex") },
       });
       f.deps.plan = vi.fn(async () => selectedPlan);
@@ -3732,7 +3732,6 @@ describe("canonical runtime proof through the production verifier and handler", 
           rolsuper: false,
         }),
         readOrganization: async (scope) => ({
-          ok: true,
           data: {
             active_base_revision: plan.release.id,
             active_effective_artifact_hash: artifactHash,
@@ -3754,6 +3753,7 @@ describe("canonical runtime proof through the production verifier and handler", 
               },
             ],
           },
+          ok: true,
         }),
       };
       const realReadiness = appReadiness.createHostedOperatorAppReadiness;
@@ -3774,16 +3774,16 @@ describe("canonical runtime proof through the production verifier and handler", 
       const payloads = new Map<string, object>();
       for (const kind of ["app", "gateway", "operator"] as const) {
         const projectId = kind === "app" ? selection.projectId : `prj_${kind}`;
-        payloads.set(`/v9/projects/${projectId}`, { id: projectId, accountId: target.scopeId });
+        payloads.set(`/v9/projects/${projectId}`, { accountId: target.scopeId, id: projectId });
         payloads.set(`/v13/deployments/dpl_${kind}`, {
+          env: [],
+          gitSource: { ref: selection.branch },
           id: `dpl_${kind}`,
-          projectId,
           ownerId: target.scopeId,
+          projectId,
           readyState: "READY",
           target: null,
-          gitSource: { ref: selection.branch },
           url: `${kind}-preview.example.test`,
-          env: [],
         });
         payloads.set(`/v10/projects/${projectId}/env`, { envs: [] });
       }
@@ -3812,23 +3812,8 @@ describe("canonical runtime proof through the production verifier and handler", 
           if (scenario === "authority_denied") {
             throw new HostedOperatorError("authorization_required");
           }
-          await f.deps.assertAuthorized({ authority, target, plan: selectedPlan });
+          await f.deps.assertAuthorized({ authority, plan: selectedPlan, target });
         }),
-        store: f.deps.store,
-        readResourceBindings: vi.fn(async () => ({
-          appDatabase: { runtimeUrl: environment.SPEND_REVIEW_DATABASE_URL },
-        })),
-        readGeneratedSelection: vi.fn(async () => ({
-          artifactRef: selectedPlan.release.artifactRef,
-          manifestSha256: selectedPlan.release.sha256,
-          releaseId: scenario === "release_mismatch" ? "other-release" : selectedPlan.release.id,
-        })),
-        readGeneratedRelease: vi.fn(async () => ({
-          files: {
-            "release-manifest.json":
-              scenario === "manifest_mismatch" ? Buffer.from("wrong-manifest") : manifest,
-          },
-        })),
         readCredential: vi.fn(async () => ({
           binding: {
             active: true,
@@ -3838,6 +3823,21 @@ describe("canonical runtime proof through the production verifier and handler", 
           },
           token: "fixture-private-owner-token",
         })),
+        readGeneratedRelease: vi.fn(async () => ({
+          files: {
+            "release-manifest.json":
+              scenario === "manifest_mismatch" ? Buffer.from("wrong-manifest") : manifest,
+          },
+        })),
+        readGeneratedSelection: vi.fn(async () => ({
+          artifactRef: selectedPlan.release.artifactRef,
+          manifestSha256: selectedPlan.release.sha256,
+          releaseId: scenario === "release_mismatch" ? "other-release" : selectedPlan.release.id,
+        })),
+        readResourceBindings: vi.fn(async () => ({
+          appDatabase: { runtimeUrl: environment.SPEND_REVIEW_DATABASE_URL },
+        })),
+        store: f.deps.store,
       };
       const composed = composeHostedOperatorDependencies(
         configuration,
@@ -3852,11 +3852,11 @@ describe("canonical runtime proof through the production verifier and handler", 
         if (initialScenario !== "ready") {
           const denied = await f.client.request(execute);
           expect(denied).toMatchObject({
-            status: "blocked",
             code:
               initialScenario === "authority_denied"
                 ? "authorization_required"
                 : "operator_unavailable",
+            status: "blocked",
           });
           expect(f.row?.record.proof).toBeUndefined();
           expect(readRuntimeSnapshot).not.toHaveBeenCalled();
@@ -3876,19 +3876,19 @@ describe("canonical runtime proof through the production verifier and handler", 
         expect(richResult).toMatchObject({
           actors: 0,
           authenticatedBehavior: "unassessed",
-          source: "reviewed-plan-app-runtime",
-          resourceId: selectedPlan.appDatabase.resourceId,
           observations: [{ organizationId: "synthetic-org" }],
+          resourceId: selectedPlan.appDatabase.resourceId,
+          source: "reviewed-plan-app-runtime",
         });
         expect(richResult?.observedAt).toEqual(expect.any(String));
         expect(hostedRuntimeProofSchema.safeParse(richResult).success).toBe(false);
         expect(log.mock.calls).not.toContainEqual([
           "[builder:hosted-neon-consent]",
           expect.objectContaining({
-            executionFailure: { stage: "final_proof_parse", errorClass: "validation_error" },
+            executionFailure: { errorClass: "validation_error", stage: "final_proof_parse" },
           }),
         ]);
-        expect(result).toMatchObject({ status: "prepared", authenticatedBehavior: "unassessed" });
+        expect(result).toMatchObject({ authenticatedBehavior: "unassessed", status: "prepared" });
         const persisted = hostedRuntimeProofSchema.parse(f.row?.record.proof);
         expect(persisted).toMatchObject({
           actors: 0,
@@ -3933,9 +3933,9 @@ describe("closed prepare final verification diagnostics", () => {
         ...plan,
         effects: [
           ...Array.from({ length: 6 }, (_, index) => ({
+            description: "Observe an approved resource",
             id: `resource-${index}`,
             kind: "resources",
-            description: "Observe an approved resource",
           })),
           ...plan.effects,
         ],
@@ -3948,19 +3948,19 @@ describe("closed prepare final verification diagnostics", () => {
         await (
           await f.handler(
             new Request("https://operator.example/v1/runtime", {
-              method: "POST",
+              body: JSON.stringify({ ...request, ownerContext }),
               headers: {
                 "content-type": "application/json",
                 authorization: "Bearer fixture-service-identity",
                 "x-vercel-trusted-oidc-idp-token": "fixture-service-identity",
                 [OPERATOR_EXECUTION_OBSERVATION_HEADER]: OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
               },
-              body: JSON.stringify({ ...request, ownerContext }),
+              method: "POST",
             }),
           )
         ).json(),
       );
-    return { f, execute };
+    return { execute, f };
   };
 
   it("reports the original physical authority error after ten receipts before verifier entry", async () => {
@@ -3984,20 +3984,20 @@ describe("closed prepare final verification diagnostics", () => {
     const verify = vi.spyOn(f.deps, "verify");
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
-      expect(await execute()).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+      expect(await execute()).toMatchObject({ code: "operator_unavailable", status: "blocked" });
       expect(captured).toBe(privateError);
       expect(verify).not.toHaveBeenCalled();
       expect(f.deps.executeEffect).toHaveBeenCalledTimes(10);
       expect(f.row?.record.proof).toBeUndefined();
       expect(f.row?.record.leaseId).toBeUndefined();
       expect(f.row?.record.executionObservation).toMatchObject({
+        outcome: { code: "operator_unavailable", status: "blocked" },
         state: "settled",
-        outcome: { status: "blocked", code: "operator_unavailable" },
       });
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
-          executionFailure: { stage: "final_authority", errorClass: "type_error" },
+          executionFailure: { errorClass: "type_error", stage: "final_authority" },
         }),
       ]);
       expect(JSON.stringify(log.mock.calls)).not.toContain("resource_lease");
@@ -4013,18 +4013,18 @@ describe("closed prepare final verification diagnostics", () => {
     const verify = vi.spyOn(f.deps, "verify").mockRejectedValue(privateError);
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
-      expect(await execute()).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+      expect(await execute()).toMatchObject({ code: "operator_unavailable", status: "blocked" });
       expect(verify).toHaveBeenCalledOnce();
       expect(f.deps.executeEffect).toHaveBeenCalledTimes(10);
       expect(f.row?.record.proof).toBeUndefined();
       expect(f.row?.record.executionObservation).toMatchObject({
+        outcome: { code: "operator_unavailable", status: "blocked" },
         state: "settled",
-        outcome: { status: "blocked", code: "operator_unavailable" },
       });
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
-          executionFailure: { stage: "final_verifier_entry", errorClass: "type_error" },
+          executionFailure: { errorClass: "type_error", stage: "final_verifier_entry" },
         }),
       ]);
       const output = JSON.stringify(log.mock.calls);
@@ -4049,7 +4049,7 @@ describe("closed prepare final verification diagnostics", () => {
             throw privateError;
           }
         });
-      const compareAndSet = f.deps.store.compareAndSet;
+      const { compareAndSet } = f.deps.store;
       f.deps.store.compareAndSet = async (input) => {
         const settlementFailure =
           stage === "execution_settlement" &&
@@ -4067,21 +4067,21 @@ describe("closed prepare final verification diagnostics", () => {
       const log = vi.spyOn(console, "info").mockImplementation(() => {});
       try {
         expect(await execute()).toMatchObject({
-          status: "blocked",
           code: stage === "execution_settlement" ? "operator_unavailable" : "resource_mismatch",
+          status: "blocked",
         });
         expect(verify).not.toHaveBeenCalled();
         expect(f.deps.executeEffect).toHaveBeenCalledTimes(10);
         expect(log.mock.calls).toContainEqual([
           "[builder:hosted-neon-consent]",
           expect.objectContaining({
-            executionFailure: { stage: "final_authority", errorClass: "type_error" },
+            executionFailure: { errorClass: "type_error", stage: "final_authority" },
           }),
         ]);
         expect(log.mock.calls).toContainEqual([
           "[builder:hosted-neon-consent]",
           expect.objectContaining({
-            executionFailure: { stage, errorClass: "operator_error", code: "resource_mismatch" },
+            executionFailure: { code: "resource_mismatch", errorClass: "operator_error", stage },
           }),
         ]);
         expect(JSON.stringify(log.mock.calls)).not.toContain("resource_lease");
@@ -4097,15 +4097,15 @@ describe("closed prepare final verification diagnostics", () => {
     vi.spyOn(f.deps, "verify").mockResolvedValue({ ...proof, releaseId: "different-release" });
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
-      expect(await execute()).toMatchObject({ status: "blocked", code: "resource_mismatch" });
+      expect(await execute()).toMatchObject({ code: "resource_mismatch", status: "blocked" });
       expect(f.row?.record.proof).toBeUndefined();
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           executionFailure: {
-            stage: "final_proof_parse",
-            errorClass: "operator_error",
             code: "resource_mismatch",
+            errorClass: "operator_error",
+            stage: "final_proof_parse",
           },
         }),
       ]);
@@ -4116,7 +4116,7 @@ describe("closed prepare final verification diagnostics", () => {
 
   it("classifies final proof publication failure and retries without duplicate effects", async () => {
     const { f, execute } = await finalFixture();
-    const compareAndSet = f.deps.store.compareAndSet;
+    const { compareAndSet } = f.deps.store;
     const privateError = Object.assign(new Error("private-publication-query private-token"), {
       code: "42501",
     });
@@ -4129,16 +4129,16 @@ describe("closed prepare final verification diagnostics", () => {
     const verify = vi.spyOn(f.deps, "verify");
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
-      expect(await execute()).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+      expect(await execute()).toMatchObject({ code: "operator_unavailable", status: "blocked" });
       expect(f.row?.record.proof).toBeUndefined();
       expect(f.row?.record.leaseId).toBeUndefined();
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           executionFailure: {
-            stage: "final_proof_publication",
             errorClass: "unexpected",
             sqlState: "42501",
+            stage: "final_proof_publication",
           },
         }),
       ]);
@@ -4156,12 +4156,12 @@ describe("closed prepare final verification diagnostics", () => {
     "classifies resource lease cleanup with journal release failure %s",
     async (releaseFails) => {
       const { f, execute } = await finalFixture();
-      const withResourceLease = f.deps.withResourceLease;
+      const { withResourceLease } = f.deps;
       f.deps.withResourceLease = async (input, run) => {
         await withResourceLease(input, run);
         throw new TypeError("private-resource-lease-cleanup");
       };
-      const compareAndSet = f.deps.store.compareAndSet;
+      const { compareAndSet } = f.deps.store;
       f.deps.store.compareAndSet = async (input) => {
         if (
           releaseFails &&
@@ -4175,8 +4175,8 @@ describe("closed prepare final verification diagnostics", () => {
       const log = vi.spyOn(console, "info").mockImplementation(() => {});
       try {
         expect(await execute()).toMatchObject({
-          status: "blocked",
           code: releaseFails ? "resource_mismatch" : "operator_unavailable",
+          status: "blocked",
         });
         expect(f.row?.record.proof).toEqual(proof);
         expect(f.row?.record.leaseId !== undefined).toBe(releaseFails);
@@ -4184,7 +4184,7 @@ describe("closed prepare final verification diagnostics", () => {
         expect(log.mock.calls).toContainEqual([
           "[builder:hosted-neon-consent]",
           expect.objectContaining({
-            executionFailure: { stage: "resource_lease", errorClass: "type_error" },
+            executionFailure: { errorClass: "type_error", stage: "resource_lease" },
           }),
         ]);
         if (releaseFails) {
@@ -4192,9 +4192,9 @@ describe("closed prepare final verification diagnostics", () => {
             "[builder:hosted-neon-consent]",
             expect.objectContaining({
               executionFailure: {
-                stage: "final_lease_release",
-                errorClass: "operator_error",
                 code: "resource_mismatch",
+                errorClass: "operator_error",
+                stage: "final_lease_release",
               },
             }),
           ]);
@@ -4207,7 +4207,7 @@ describe("closed prepare final verification diagnostics", () => {
 
   it("classifies journal lease clearing failure without repeating completed effects", async () => {
     const { f, execute } = await finalFixture();
-    const compareAndSet = f.deps.store.compareAndSet;
+    const { compareAndSet } = f.deps.store;
     f.deps.store.compareAndSet = async (input) => {
       if (f.row?.record.leaseId !== undefined && input.record.leaseId === undefined) {
         throw new TypeError("private-journal-lease-clear");
@@ -4216,14 +4216,14 @@ describe("closed prepare final verification diagnostics", () => {
     };
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
-      expect(await execute()).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+      expect(await execute()).toMatchObject({ code: "operator_unavailable", status: "blocked" });
       expect(f.row?.record.proof).toEqual(proof);
       expect(f.row?.record.leaseId).toBeDefined();
       expect(f.deps.executeEffect).toHaveBeenCalledTimes(10);
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
-          executionFailure: { stage: "final_lease_release", errorClass: "type_error" },
+          executionFailure: { errorClass: "type_error", stage: "final_lease_release" },
         }),
       ]);
       expect(JSON.stringify(log.mock.calls)).not.toContain("resource_lease");
@@ -4238,11 +4238,11 @@ describe("completed owned Gateway binding convergence", () => {
     const f = fixture();
     const gatewayPlan = hostedOperatorPlanSchema.parse({
       ...plan,
-      gatewayBindings: adoptedGatewayPlan().gatewayBindings,
       effects: [
         ...plan.effects,
         { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
       ],
+      gatewayBindings: adoptedGatewayPlan().gatewayBindings,
     });
     f.deps.plan = async () => gatewayPlan;
     const request = await prepared(f);
@@ -4255,7 +4255,7 @@ describe("completed owned Gateway binding convergence", () => {
     let stale = true;
     f.deps.reconcile = async (input) => {
       if (input.effect.kind === "gateway-bindings" && stale) {
-        return { status: "retryable", resourceVersion: "observed-old-owned-config" };
+        return { resourceVersion: "observed-old-owned-config", status: "retryable" };
       }
       return await reconcile(input);
     };
@@ -4301,51 +4301,51 @@ describe("completed owned Gateway binding convergence", () => {
       f.deps.plan = async () =>
         hostedOperatorPlanSchema.parse({
           ...plan,
-          stage: "app",
-          gatewayBindings: adoptedGatewayPlan().gatewayBindings,
-          gatewayDelivery: {
-            projectId: "prj_gateway",
-            branch: selection.branch,
-            repoId: "gateway-repo",
-            gitSha: "c".repeat(40),
-          },
           effects: [
             ...plan.effects,
             { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
             { description: "Deliver Gateway", id: "gateway-delivery", kind: "gateway-delivery" },
           ],
+          gatewayBindings: adoptedGatewayPlan().gatewayBindings,
+          gatewayDelivery: {
+            branch: selection.branch,
+            gitSha: "c".repeat(40),
+            projectId: "prj_gateway",
+            repoId: "gateway-repo",
+          },
+          stage: "app",
         });
       const request = await prepared(f);
       f.approve();
       expect((await f.client.request(request)).status).toBe("prepared");
-      const row = f.row;
+      const { row } = f;
       if (row?.record.operator === undefined) {
         throw new Error("Missing approved fixture operation");
       }
-      const pending = { id: "11111111-1111-4111-8111-111111111111", contextDigest: "a".repeat(64) };
+      const pending = { contextDigest: "a".repeat(64), id: "11111111-1111-4111-8111-111111111111" };
       const pendingId = outcome === "orphan" ? undefined : "gateway-delivery";
       f.row = {
         ...row,
         record: hostedRuntimeJournalRecordSchema.parse({
           ...row.record,
-          status: "pending",
-          step: "reserved",
           operator: {
             ...row.record.operator,
+            pendingEffectAttempt: pending,
+            pendingEffectId: pendingId,
             receipts: row.record.operator.receipts.filter(
               (receipt) => receipt.effectId !== "gateway-delivery",
             ),
-            pendingEffectId: pendingId,
-            pendingEffectAttempt: pending,
           },
+          status: "pending",
+          step: "reserved",
         }),
       };
       const executeCalls = vi.mocked(f.deps.executeEffect).mock.calls.length;
-      const reconcile = f.deps.reconcile;
+      const { reconcile } = f.deps;
       const deliveryReceipt = {
         effectId: outcome === "nonmatching" ? "unrelated-effect" : "gateway-delivery",
-        resourceVersion: "verified-existing-delivery",
         observedAt: "2026-10-29T00:00:00Z",
+        resourceVersion: "verified-existing-delivery",
       };
       let observedDelivery = false;
       let pendingAtDelivery: { id?: string; attempt?: unknown } | undefined;
@@ -4353,29 +4353,29 @@ describe("completed owned Gateway binding convergence", () => {
         if (input.effect.kind === "gateway-bindings") {
           await input.assertCurrent();
           if (outcome === "retryable" || outcome === "orphan") {
-            return { status: "retryable", resourceVersion: "verified-bindings-need-retry" };
+            return { resourceVersion: "verified-bindings-need-retry", status: "retryable" };
           }
           if (outcome === "absent") {
             return { status: "absent" };
           }
           return {
-            status: "applied",
             receipt: {
               effectId: input.effect.id,
-              resourceVersion: "verified-existing-bindings",
               observedAt: "2026-10-29T00:00:00Z",
+              resourceVersion: "verified-existing-bindings",
             },
+            status: "applied",
           };
         }
         if (input.effect.kind === "gateway-delivery") {
           observedDelivery = true;
           pendingAtDelivery = structuredClone({
-            id: f.row?.record.operator?.pendingEffectId,
             attempt: f.row?.record.operator?.pendingEffectAttempt,
+            id: f.row?.record.operator?.pendingEffectId,
           });
           return outcome === "unknown"
             ? { status: "unknown" }
-            : { status: "applied", receipt: deliveryReceipt };
+            : { receipt: deliveryReceipt, status: "applied" };
         }
         return await reconcile(input);
       };
@@ -4385,7 +4385,7 @@ describe("completed owned Gateway binding convergence", () => {
         outcome === "retryable" || outcome === "absent" || outcome === "orphan";
       expect(observedDelivery).toBe(!bindingNeedsExecution);
       if (!bindingNeedsExecution) {
-        expect(pendingAtDelivery).toEqual({ id: pendingId, attempt: pending });
+        expect(pendingAtDelivery).toEqual({ attempt: pending, id: pendingId });
       }
       expect(f.deps.executeEffect).toHaveBeenCalledTimes(executeCalls);
       if (outcome === "matching") {
@@ -4411,11 +4411,11 @@ describe("completed owned Gateway binding convergence", () => {
     f.deps.plan = async () =>
       hostedOperatorPlanSchema.parse({
         ...plan,
-        gatewayBindings: adoptedGatewayPlan().gatewayBindings,
         effects: [
           ...plan.effects,
           { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
         ],
+        gatewayBindings: adoptedGatewayPlan().gatewayBindings,
       });
     const request = await prepared(f);
     f.approve();
@@ -4436,14 +4436,14 @@ it("completes resource preparation without claiming a bound or deployed app", as
   }
   const resources = hostedOperatorPlanSchema.parse({
     ...plan,
-    runtimePreparation: "single-project-resources-v1",
     deploymentBoundary: {
       ...plan.deploymentBoundary,
       composition: "single-project-services",
       gateway: { ...plan.deploymentBoundary.gateway, projectId: selection.projectId },
     },
-    publicGateway: { ...plan.publicGateway, projectId: selection.projectId },
     effects: plan.effects.filter((effect) => effect.kind !== "bindings"),
+    publicGateway: { ...plan.publicGateway, projectId: selection.projectId },
+    runtimePreparation: "single-project-resources-v1",
   });
   f.deps.plan = async () => resources;
   f.deps.bindings = vi.fn(f.deps.bindings);
@@ -4451,10 +4451,10 @@ it("completes resource preparation without claiming a bound or deployed app", as
   f.approve();
   expect((await f.client.request(input)).status).toBe("prepared");
   expect(f.row?.record).toMatchObject({
-    status: "prepared",
-    step: "resource-ready",
     environmentBound: false,
     proof,
+    status: "prepared",
+    step: "resource-ready",
   });
   expect(f.deps.bindings).not.toHaveBeenCalled();
   expect(f.row?.record.operator?.receipts.map((receipt) => receipt.effectId)).toEqual(
@@ -4468,14 +4468,14 @@ it("completes resource preparation without claiming a bound or deployed app", as
   }
   const resources = hostedOperatorPlanSchema.parse({
     ...plan,
-    runtimePreparation: "single-project-resources-v1",
     deploymentBoundary: {
       ...plan.deploymentBoundary,
       composition: "single-project-services",
       gateway: { ...plan.deploymentBoundary.gateway, projectId: selection.projectId },
     },
-    publicGateway: { ...plan.publicGateway, projectId: selection.projectId },
     effects: plan.effects.filter((effect) => effect.kind !== "bindings"),
+    publicGateway: { ...plan.publicGateway, projectId: selection.projectId },
+    runtimePreparation: "single-project-resources-v1",
   });
   f.deps.plan = async () => resources;
   f.deps.bindings = vi.fn(f.deps.bindings);
@@ -4483,10 +4483,10 @@ it("completes resource preparation without claiming a bound or deployed app", as
   f.approve();
   expect((await f.client.request(input)).status).toBe("prepared");
   expect(f.row?.record).toMatchObject({
-    status: "prepared",
-    step: "resource-ready",
     environmentBound: false,
     proof,
+    status: "prepared",
+    step: "resource-ready",
   });
   expect(f.deps.bindings).not.toHaveBeenCalled();
   expect(f.row?.record.operator?.receipts.map((receipt) => receipt.effectId)).toEqual(

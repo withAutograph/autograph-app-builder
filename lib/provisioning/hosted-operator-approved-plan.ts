@@ -51,12 +51,14 @@ export const recoverOriginalApprovedPlan = async (
     // Each CAS retry rechecks current canonical ownership and actual approval.
     const current = await deps.store.read(context);
     const saved = current?.record.operator;
-    const original = await deps.readApprovedPlan({
+    const readContext = {
       ...context,
-      plan,
       now: now(),
-      ...(saved === undefined ? {} : { currentOperation: saved }),
-    });
+      plan,
+    };
+    const original = await deps.readApprovedPlan(
+      saved === undefined ? readContext : { ...readContext, currentOperation: saved },
+    );
     if (original === null) {
       return null;
     }
@@ -97,9 +99,9 @@ export const recoverOriginalApprovedPlan = async (
     const record = { ...current.record, operator: { ...saved, ...original } };
     const restored = await deps.store.compareAndSet({
       ...context,
-      record,
       expectedRevision: current.revision,
       now: new Date(now()),
+      record,
     });
     if (restored === undefined) {
       continue;

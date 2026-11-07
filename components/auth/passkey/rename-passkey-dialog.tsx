@@ -4,8 +4,9 @@ import type { PasskeyAuthClient } from "@better-auth-ui/core/plugins/passkey";
 import { useAuth, useAuthPlugin } from "@better-auth-ui/react";
 import { useUpdatePasskey } from "@better-auth-ui/react/plugins/passkey";
 import { useState } from "react";
-import type { FormEvent } from "react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import type { SubmitEvent } from "react";
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import {
   Dialog,
   DialogClose,
@@ -35,9 +36,11 @@ export function RenamePasskeyDialog({
   const [name, setName] = useState(passkey.name ?? "");
 
   const updatePasskey = useUpdatePasskey(authClient, {
-    onSuccess: () => onOpenChange(false),
+    onSuccess: () => {
+      onOpenChange(false);
+    },
   });
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextName = name.trim();
     if (nextName) {
@@ -58,7 +61,9 @@ export function RenamePasskeyDialog({
               id={`passkey-name-${passkey.id}`}
               autoFocus
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => {
+                setName(event.target.value);
+              }}
               required
             />
           </Field>

@@ -714,13 +714,13 @@ describe("private approval delta checkpoints", () => {
       coldReadProgress: true,
       event: "builder.hosted_approval_observation",
       inlineReceiptCount: 1,
-      nativeStatePresent: true,
       nativeNextIndex: 42,
       nativePendingCount: 1,
       nativePublicEventCount: 4,
+      nativeStatePresent: true,
       privateCapturePendingCount: 1,
-      privateCaptureReceiptCount: 1,
       privateCapturePresent: true,
+      privateCaptureReceiptCount: 1,
       publicPendingRequestCount: 1,
       publicPendingRequests: [
         {
@@ -786,6 +786,13 @@ const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold:
   // oxlint-disable-next-line eslint/require-await -- The recovery test transport has no model or provider.
   const emptyRecovery = async () => ({ events: [], status: "waiting" as const });
   const recoveryTransport: HostedEveTransport = {
+    activateRecovery: async ({ operationId }) => {
+      const operation = await original.store.getPrivateOperation(principal, operationId);
+      if (operation?.state !== "succeeded" || operation.nativeRecoveryReceipt === undefined) {
+        throw new Error("Expected committed canonical recovery child and receipt.");
+      }
+      return operation.nativeRecoveryReceipt;
+    },
     cancel: emptyRecovery,
     get: emptyRecovery,
     respond: emptyRecovery,
@@ -798,11 +805,11 @@ const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold:
         ...request.recovery,
         ownerRunId: "child_physical",
         provenance: {
+          checkpointVersion: 1 as const,
           kind: "completed-terminal-turn-input" as const,
-          sourceStepId: "source_step",
           sourceEventId: "source_event",
           sourceSlot: 1,
-          checkpointVersion: 1 as const,
+          sourceStepId: "source_step",
         },
       };
       await original.store.commitNativeRecoveryReceipt({
@@ -817,16 +824,9 @@ const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold:
         snapshot: await emptyRecovery(),
       };
     },
-    activateRecovery: async ({ operationId }) => {
-      const operation = await original.store.getPrivateOperation(principal, operationId);
-      if (operation?.state !== "succeeded" || operation.nativeRecoveryReceipt === undefined) {
-        throw new Error("Expected committed canonical recovery child and receipt.");
-      }
-      return operation.nativeRecoveryReceipt;
-    },
   };
   const recovered = await createHostedEveSessionService({
-    assertNativeRecoveryOwner: () => Promise.resolve(),
+    assertNativeRecoveryOwner: async () => {},
     now: () => 10,
     principal,
     store: original.store,
@@ -849,9 +849,9 @@ const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold:
   const storedChild = hostedSessionRecordSchema.parse({
     ...childRecord,
     adapterSessionId: "child_physical",
-    originAdapterSessionId: "child_physical",
     checkpointDigest: digest,
     checkpointRef: { digest, eventCount: 0, id: randomUUID() },
+    originAdapterSessionId: "child_physical",
   });
   const requestedPlan = hostedOperatorPlanSchema.parse({
     ...plan,
@@ -906,9 +906,6 @@ const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold:
     activateRecovery: recoveryTransport.activateRecovery,
     cancel: empty,
     get: empty,
-    respond: empty,
-    send: empty,
-    start: async () => ({ adapterSessionId: "unused", snapshot: await empty() }),
     observe: async (input) => {
       observed.push({ adapterSessionId: input.adapterSessionId, sessionId: input.sessionId });
       observation += 1;
@@ -951,20 +948,23 @@ const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold:
         status: "waiting",
       };
     },
+    respond: empty,
+    send: empty,
+    start: async () => ({ adapterSessionId: "unused", snapshot: await empty() }),
   };
   const service = () =>
     createHostedEveSessionService({ now: () => 20, principal, store, transport });
   return {
     child,
     childId,
-    originalId,
-    original,
     metadata: () => metadata,
-    requestedPlan,
-    requestedInput,
     observed,
-    writes,
+    original,
+    originalId,
+    requestedInput,
+    requestedPlan,
     service,
+    writes,
   };
 };
 
@@ -978,30 +978,30 @@ describe("recovered child private hosted approval authority", () => {
     "persists %s under original authority across cold=%s child reads",
     async (outcome, cold) => {
       const f = await recoveredApprovalFixture(outcome, cold);
-      await f.service().get({ sessionId: f.childId, cursor: 0, limit: 10 });
+      await f.service().get({ cursor: 0, limit: 10, sessionId: f.childId });
       const pending = cold
         ? f.metadata().coldReadProgress?.privateApprovalCaptureState
         : f.metadata().privateApprovalCaptureState;
       expect(pending).toMatchObject({
-        sessionId: f.originalId,
         pendingRequests: [{ requestId: "recovered_setup" }],
+        sessionId: f.originalId,
       });
       expect(f.writes).toEqual([]);
-      const result = await f.service().get({ sessionId: f.childId, cursor: 0, limit: 10 });
+      const result = await f.service().get({ cursor: 0, limit: 10, sessionId: f.childId });
       expect(f.observed).toEqual([
         { adapterSessionId: "child_physical", sessionId: f.childId },
         { adapterSessionId: "child_physical", sessionId: f.childId },
       ]);
       expect(f.writes).toEqual([f.originalId]);
       const saved = await readPrivateHostedApproval({
-        store: f.original.store,
-        principal,
-        sessionId: f.originalId,
         action: "prepare",
         callId: "call_fixture",
         planDigest: operatorPlanDigest(f.requestedPlan),
-        selection: f.requestedPlan.selection,
+        principal,
         requestId: "recovered_setup",
+        selection: f.requestedPlan.selection,
+        sessionId: f.originalId,
+        store: f.original.store,
       });
       expect(saved).toMatchObject({
         outcome,
@@ -1019,7 +1019,7 @@ describe("recovered child private hosted approval authority", () => {
     "rejects foreign private capture metadata before observing cold=%s",
     async (cold) => {
       const f = await recoveredApprovalFixture("approved", cold);
-      await f.service().get({ sessionId: f.childId, cursor: 0, limit: 10 });
+      await f.service().get({ cursor: 0, limit: 10, sessionId: f.childId });
       const metadata = f.metadata();
       const capture = cold
         ? metadata.coldReadProgress?.privateApprovalCaptureState
@@ -1030,7 +1030,7 @@ describe("recovered child private hosted approval authority", () => {
       capture.sessionId = f.childId;
       capture.pendingRequests = [];
       await expect(
-        f.service().get({ sessionId: f.childId, cursor: 0, limit: 10 }),
+        f.service().get({ cursor: 0, limit: 10, sessionId: f.childId }),
       ).rejects.toThrow();
       expect(f.observed).toHaveLength(1);
       expect(f.writes).toEqual([]);

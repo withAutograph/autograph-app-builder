@@ -72,7 +72,7 @@ const defaultDependencies: RuntimeDependencies = {
   enabled: hostedLeaseEnabled,
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async isMember({ principal, workspaceId, environment }) {
-    return createPostgresWorkspaceMembership(hostedLeaseDatabase(environment)).isMember({
+    return await createPostgresWorkspaceMembership(hostedLeaseDatabase(environment)).isMember({
       principal,
       workspaceId,
     });
@@ -88,9 +88,7 @@ function errorWithCleanupEvidence(error: unknown, evidence: SandboxCleanupEviden
   const preserved =
     error instanceof Error
       ? error
-      : new Error("Hosted sandbox execution acquisition failed.", {
-          cause: error,
-        });
+      : new Error("Hosted sandbox execution acquisition failed.", { cause: error });
   Object.defineProperty(preserved, cleanupEvidenceKey, {
     configurable: true,
     enumerable: false,
@@ -145,7 +143,7 @@ export async function acquireHostedSandboxExecutionLease(input: {
   sandbox: RuntimeSandboxSession;
   environment?: Readonly<Record<string, string | undefined>>;
   nowEpochMs?: number;
-}) {
+}): Promise<SandboxExecutionLease | undefined> {
   const environment = input.environment ?? process.env;
   let enabled: boolean;
   try {
@@ -155,7 +153,7 @@ export async function acquireHostedSandboxExecutionLease(input: {
     throw errorWithCleanupEvidence(error, evidence);
   }
   if (!enabled) {
-    return;
+    return undefined;
   }
   try {
     const { authority, principal } = exactForwardedSessionAuthority(input.sessionAuth);
@@ -196,10 +194,10 @@ export async function assertHostedSandboxCommandAuthority(input: {
   sessionId: string;
   environment?: Readonly<Record<string, string | undefined>>;
   nowEpochMs?: number;
-}) {
+}): Promise<SandboxExecutionLease | undefined> {
   const environment = input.environment ?? process.env;
   if (!dependencies.enabled(environment)) {
-    return;
+    return undefined;
   }
   const active = commandAuthorities.get(input.sessionId);
   if (active === undefined) {

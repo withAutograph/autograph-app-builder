@@ -41,6 +41,9 @@ interface Destroyable {
   destroy: () => void;
 }
 const unavailable = () => new Error("Managed Gateway request unavailable.");
+const denyUpgrade = (socket: Duplex) => {
+  socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+};
 const incomingHeaders = (request: IncomingMessage) => {
   const headers = new Headers();
   for (const [name, value] of Object.entries(request.headers)) {
@@ -150,10 +153,10 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
   }
   const publicOrigin = new URL(profile.publicOrigin);
   let verification = input.verification.createVerification({
-    profile,
     appId: identity.appId,
-    publicOrigin: profile.publicOrigin,
     jwksUrl: profile.jwksUrl,
+    profile,
+    publicOrigin: profile.publicOrigin,
   });
   const limit = z
     .number()
@@ -184,7 +187,7 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
     }
   };
   const authorize = async (request: IncomingMessage, body?: Uint8Array) => {
-    const authorization = request.headers.authorization;
+    const { authorization } = request.headers;
     const bearer =
       authorization !== undefined && authorization.startsWith("Bearer ")
         ? authorization.slice(7)
@@ -193,21 +196,23 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
       throw unavailable();
     }
     await assertCurrent();
-    await input.verification.verifyRequest({
-      verification,
+    const requestDetails: Omit<VerifiedRequest, "actors"> & { verification: Configuration } = {
       headers: incomingHeaders(request),
       method: request.method ?? "GET",
       target: request.url ?? "/",
-      ...(body === undefined ? {} : { body }),
-      actors,
-    });
+      verification,
+    };
+    if (body !== undefined) {
+      requestDetails.body = body;
+    }
+    await input.verification.verifyRequest({ ...requestDetails, actors });
     await assertCurrent();
   };
   const server = createServer((request, response) => {
     void (async () => {
       try {
         // Reject unauthenticated ingress before buffering any entity bytes.
-        const authorization = request.headers.authorization;
+        const { authorization } = request.headers;
         if (
           !verifyManagedCapability(
             authorization !== undefined && authorization.startsWith("Bearer ")
@@ -224,11 +229,11 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
         headers["content-length"] = body.length;
         const upstream = upstreamRequest(
           {
-            hostname: "127.0.0.1",
-            port: appPort,
-            path: request.url ?? "/",
-            method: request.method ?? "GET",
             headers,
+            hostname: "127.0.0.1",
+            method: request.method ?? "GET",
+            path: request.url ?? "/",
+            port: appPort,
           },
           (incoming) => {
             response.writeHead(incoming.statusCode ?? 502, incoming.headers);
@@ -260,9 +265,6 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
       }
     })();
   });
-  const denyUpgrade = (socket: Duplex) => {
-    socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
-  };
   server.on("upgrade", (request, socket, head) => {
     connections.add(socket);
     socket.once("close", () => {
@@ -275,11 +277,11 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
       try {
         await authorize(request);
         const upstream = upstreamRequest({
-          hostname: "127.0.0.1",
-          port: appPort,
-          path: request.url ?? "/",
-          method: request.method ?? "GET",
           headers: appHeaders(request, publicOrigin, true),
+          hostname: "127.0.0.1",
+          method: request.method ?? "GET",
+          path: request.url ?? "/",
+          port: appPort,
         });
         connections.add(upstream);
         upstream.once("close", () => {
@@ -341,7 +343,7 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
     }
   });
   let closing: Promise<void> | undefined;
-  const shutdown = () => {
+  const shutdown = async () => {
     closing ??= new Promise<void>((resolve, reject) => {
       // oxlint-disable-next-line promise/prefer-await-to-callbacks -- Node server close acknowledgement is retained once and awaited by every owner close call.
       server.close((error) => {
@@ -358,7 +360,7 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
         connection.destroy();
       }
     });
-    return closing;
+    await closing;
   };
   signal.addEventListener(
     "abort",
@@ -374,7 +376,11 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
     { once: true },
   );
   return {
-    server,
+    async close() {
+      clearTimeout(timer);
+      controller.abort();
+      await shutdown();
+    },
     async replacePublicProfile(value: ManagedRuntimePublicProfile): Promise<void> {
       const replacement = managedRuntimePublicProfileSchema.parse(structuredClone(value));
       if (
@@ -386,18 +392,14 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
       }
       await assertCurrent();
       const next = input.verification.createVerification({
-        profile: replacement,
         appId: identity.appId,
-        publicOrigin: profile.publicOrigin,
         jwksUrl: profile.jwksUrl,
+        profile: replacement,
+        publicOrigin: profile.publicOrigin,
       });
       await assertCurrent();
       verification = next;
     },
-    async close() {
-      clearTimeout(timer);
-      controller.abort();
-      await shutdown();
-    },
+    server,
   };
 };

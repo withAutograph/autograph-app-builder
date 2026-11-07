@@ -25,14 +25,12 @@ describe("approval-bound implementation files", () => {
         path: "apps/stock-exceptions/db/migrations/001.sql",
       },
     ]);
-    const writeTextFile = vi.fn(() => Promise.resolve());
-    const executor = vi.fn(() =>
-      Promise.resolve({
-        exitCode: 0,
-        stderr: "",
-        stdout: "receipt",
-      }),
-    );
+    const writeTextFile = vi.fn(async () => {});
+    const executor = vi.fn(async () => ({
+      exitCode: 0,
+      stderr: "",
+      stdout: "receipt",
+    }));
     const wrapped = withImplementationFiles(executor, files);
 
     await expect(
@@ -63,8 +61,8 @@ describe("approval-bound implementation files", () => {
   });
 
   it("rejects out-of-app implementation files before applying an existing-app change", async () => {
-    const writeTextFile = vi.fn(() => Promise.resolve());
-    const executor = vi.fn(() => Promise.resolve({ exitCode: 0, stderr: "", stdout: "" }));
+    const writeTextFile = vi.fn(async () => {});
+    const executor = vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: "" }));
     const wrapped = withImplementationFiles(executor, [
       { content: "out of scope", path: "packages/platform/src/change.ts" },
     ]);
@@ -89,23 +87,23 @@ describe("approval-bound implementation files", () => {
       operation: "iterate-existing-app",
       plan: { source: { workspacePath: "apps/inventory-queue" } },
     } as never;
-    expect(() =>
+    expect(() => {
       assertExistingAppImplementationFiles(
         [{ content: "out of scope", path: "packages/platform/src/change.ts" }],
         proposal,
-      ),
-    ).toThrow("Existing-app implementation files must stay inside the app workspace.");
-    expect(() =>
+      );
+    }).toThrow("Existing-app implementation files must stay inside the app workspace.");
+    expect(() => {
       assertExistingAppImplementationFiles(
         [{ content: "in scope", path: "apps/inventory-queue/app/page.tsx" }],
         proposal,
-      ),
-    ).not.toThrow();
+      );
+    }).not.toThrow();
   });
   it("applies explicit removal non-recursively and retries an absent file safely", async () => {
     const sandbox = {
-      removePath: vi.fn(() => Promise.resolve()),
-      writeTextFile: vi.fn(() => Promise.resolve()),
+      removePath: vi.fn(async () => {}),
+      writeTextFile: vi.fn(async () => {}),
     };
     const files = implementationFilesSchema.parse([
       { operation: "delete", path: "apps/example/server/demo.ts" },

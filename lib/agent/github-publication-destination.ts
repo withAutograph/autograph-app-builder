@@ -165,7 +165,7 @@ export const createPublicationTargetResolver =
     }
     const access = await ports.resolveAccess(destination, input.ctx);
     if (access.kind === "selection") {
-      return { kind: "selection", access: access.access };
+      return { access: access.access, kind: "selection" };
     }
     const selected = publicationDestinationFromAccess(access.receipt, input.ctx.session.id);
     if (ownedDestination !== undefined) {
@@ -181,7 +181,6 @@ export const createPublicationTargetResolver =
     return { kind: "ready", target: { destination: selected } };
   };
 
-// oxlint-disable-next-line eslint/complexity -- Canonical app destination checks preserve the existing fresh, revision, retained-review and access-selection branches.
 export const resolvePublicationTargetForTool = createPublicationTargetResolver<ToolContext>({
   readOwnedDestination: readBuilderPublicationDestinationForTool,
   resolveAccess: async (destination, ctx) =>

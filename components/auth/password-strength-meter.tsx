@@ -35,7 +35,7 @@ export interface PasswordStrengthMeterProps {
 export function PasswordStrengthMeter({ password, className }: PasswordStrengthMeterProps) {
   const { emailAndPassword, localization } = useAuth();
 
-  if (!emailAndPassword?.strengthMeter) {
+  if (emailAndPassword?.strengthMeter !== true) {
     return null;
   }
 

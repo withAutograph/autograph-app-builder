@@ -303,11 +303,11 @@ const fixture = () => {
   };
   const handler = createProtectedHostedOperatorHandler(deps);
   const client = createHostedOperatorClient({
-    sessionId: selection.sessionId,
     endpoint: "https://operator.example",
     fetch: async (url, init) =>
       await handler(new Request(url instanceof Request ? url.url : url, init)),
     ownerContext,
+    sessionId: selection.sessionId,
     token: async () => "fixture-service-identity",
   });
   return {
@@ -351,69 +351,72 @@ const prepared = async (f: ReturnType<typeof fixture>) => {
 };
 
 const normalProgram = {
-  version: 1 as const,
-  appId: selection.appId,
-  origin: "https://apps-preview.example.test",
   actors: [
     {
+      account: "capture-existing" as const,
       actorKey: "owner",
       email: "owner@example.test",
       name: "Owner",
-      account: "capture-existing" as const,
     },
   ],
-  organizations: [],
-  memberships: [],
   appAccess: [],
+  appId: selection.appId,
+  memberships: [],
+  organizations: [],
+  origin: "https://apps-preview.example.test",
+  version: 1 as const,
 };
 const actorProjection = {
-  origin: normalProgram.origin,
+  files: {
+    "owner-22222222-2222-4222-8222-222222222222.storage.json":
+      '{"cookies":[{"name":"actual-session","value":"actual%2Fencoded%3Dcookie","domain":"apps-preview.example.test","path":"/","expires":-1,"httpOnly":true,"secure":true,"sameSite":"Lax"}],"origins":[]}',
+  },
   identities: {
-    version: 1 as const,
     actors: [
       {
-        actorKey: "owner",
         actorId: "actual-actor",
+        actorKey: "owner",
         organizationId: null,
         roles: [],
         storageState: "owner-22222222-2222-4222-8222-222222222222.storage.json",
       },
     ],
+    version: 1 as const,
   },
-  files: {
-    "owner-22222222-2222-4222-8222-222222222222.storage.json":
-      '{"cookies":[{"name":"actual-session","value":"actual%2Fencoded%3Dcookie","domain":"apps-preview.example.test","path":"/","expires":-1,"httpOnly":true,"secure":true,"sameSite":"Lax"}],"origins":[]}',
-  },
+  origin: normalProgram.origin,
 };
 const boundFixture = async (normal = true) => {
   const f = fixture();
   const request = await prepared(f);
   f.approve();
   await f.client.request(request);
-  const selectedPlan = hostedOperatorPlanSchema.parse({
+  const selectedPlanInput = {
     ...plan,
     access: [],
-    stage: "app",
-    ...(normal
-      ? {
-          normalActorProgram: normalProgram,
-          normalActorPreparation: {
-            accountOperationRef: "11111111-1111-4111-8111-111111111111",
-            programDigest: normalActorProgramDigest(normalProgram),
-            accountPlanDigest: "d".repeat(64),
-            accountApprovalId: "account-approval",
-            accountApprovedByCallId: "account-call",
-          },
-        }
-      : {}),
     delivery: { branch: selection.branch, projectId: selection.projectId, repoId: "repo-app" },
-    gatewayDelivery: { branch: selection.branch, projectId: "prj_gateway", repoId: "repo-gateway" },
     effects: [
       ...plan.effects,
       { description: "App delivery", id: "delivery", kind: "delivery" },
       { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
     ],
-  });
+    gatewayDelivery: { branch: selection.branch, projectId: "prj_gateway", repoId: "repo-gateway" },
+    stage: "app",
+  };
+  const selectedPlan = hostedOperatorPlanSchema.parse(
+    normal
+      ? {
+          ...selectedPlanInput,
+          normalActorPreparation: {
+            accountApprovalId: "account-approval",
+            accountApprovedByCallId: "account-call",
+            accountOperationRef: "11111111-1111-4111-8111-111111111111",
+            accountPlanDigest: "d".repeat(64),
+            programDigest: normalActorProgramDigest(normalProgram),
+          },
+          normalActorProgram: normalProgram,
+        }
+      : selectedPlanInput,
+  );
   if (f.row?.record.operator === undefined) {
     throw new Error("Missing prepared journal");
   }
@@ -538,7 +541,7 @@ describe("private normal actor bindings producer", () => {
 
 const publicBoundFixture = async () => {
   const f = await boundFixture();
-  const row = f.base.row;
+  const { row } = f.base;
   if (!row?.record.operator) {
     throw new Error("Missing prepared fixture");
   }
@@ -551,16 +554,16 @@ const publicBoundFixture = async () => {
   void _gatewayDelivery;
   const selectedPlan = hostedOperatorPlanSchema.parse({
     ...prior,
-    runtimePreparation: "single-project-resources-v1",
-    effects: prior.effects.filter(
-      (effect) => !["bindings", "delivery", "gateway-delivery"].includes(effect.kind),
-    ),
     deploymentBoundary: {
       ...prior.deploymentBoundary,
       composition: "single-project-services",
       gateway: { ...prior.deploymentBoundary?.gateway, projectId: selection.projectId },
     },
+    effects: prior.effects.filter(
+      (effect) => !["bindings", "delivery", "gateway-delivery"].includes(effect.kind),
+    ),
     publicGateway: { ...prior.publicGateway, projectId: selection.projectId },
+    runtimePreparation: "single-project-resources-v1",
   });
   row.record.operator.plan = selectedPlan;
   row.record.operator.planDigest = operatorPlanDigest(selectedPlan);
@@ -572,60 +575,60 @@ const publicBoundFixture = async () => {
   row.record.environmentBound = false;
   const publicPlan = publicReleasePlanSchema.parse({
     ...publicPlanFixture,
-    purpose: "application",
     authority,
-    selection: { appId: selectedPlan.selection.appId, sessionId: selectedPlan.selection.sessionId },
     project: { ...publicPlanFixture.project, projectId: selection.projectId },
+    publicOrigin: normalProgram.origin,
+    purpose: "application",
     runtime: {
       ...publicPlanFixture.runtime,
       operationRef: f.request.operationRef,
       planDigest: operatorPlanDigest(selectedPlan),
       releaseId: selectedPlan.release.id,
     },
-    publicOrigin: normalProgram.origin,
+    selection: { appId: selectedPlan.selection.appId, sessionId: selectedPlan.selection.sessionId },
   });
   const observation = {
-    status: "ready" as const,
     deploymentId: "dpl_public",
-    projectId: selection.projectId,
     environment: "production" as const,
+    projectId: selection.projectId,
     publicOrigin: normalProgram.origin,
     releaseId: selectedPlan.release.id,
+    status: "ready" as const,
   };
   const record = publicReleaseRecordSchema.parse({
-    kind: "public-app-release-v1",
-    plan: publicPlan,
-    planDigest: publicReleasePlanDigest(publicPlan),
-    effects: { "bind-production-runtime": "applied", "publish-release-source": "applied" },
-    bindings: Object.fromEntries(
-      publicPlan.environment.map((entry) => [
-        entry.key,
-        { state: "applied", acceptedEnvId: "provider-owned-env" },
-      ]),
-    ),
     approvalReceipts: [
       { approvalId: "real-public-consent", approvedByCallId: "original-public-call" },
     ],
+    bindings: Object.fromEntries(
+      publicPlan.environment.map((entry) => [
+        entry.key,
+        { acceptedEnvId: "provider-owned-env", state: "applied" },
+      ]),
+    ),
+    effects: { "bind-production-runtime": "applied", "publish-release-source": "applied" },
+    kind: "public-app-release-v1",
     observation,
+    plan: publicPlan,
+    planDigest: publicReleasePlanDigest(publicPlan),
   });
   const readCandidates = vi.fn(async () => [
-    { requestId: publicReleaseOperationRef(publicPlan), requestDigest: record.planDigest, record },
+    { record, requestDigest: record.planDigest, requestId: publicReleaseOperationRef(publicPlan) },
   ]);
-  const assertApproved = vi.fn(async () => {});
+  const assertApproved = vi.fn<() => Promise<void>>().mockResolvedValue();
   const observe = vi.fn(async () => ({ ...observation }));
   f.deps.publicRuntimeBinding = async (input) =>
     await readVerifiedPublicRuntimeBinding({
       appEntryPath: "/actual-catalog-route",
-      plan: input.plan,
-      operationRef: input.operationRef,
-      readCandidates,
       assertApproved,
-      observe,
       assertCurrent: async () => {
         await f.deps.assertAuthorized(input);
       },
+      observe,
+      operationRef: input.operationRef,
+      plan: input.plan,
+      readCandidates,
     });
-  return { ...f, record, observation, readCandidates, assertApproved, observe, selectedPlan };
+  return { ...f, assertApproved, observation, observe, readCandidates, record, selectedPlan };
 };
 describe("normal public application runtime handoff", () => {
   it("uses an approved freshly observed public release without creating a Preview delivery", async () => {
@@ -633,9 +636,9 @@ describe("normal public application runtime handoff", () => {
     const result = await f.client.bindings(f.request);
     expect(result.nativePreview).toBeUndefined();
     expect(result.publicDelivery).toMatchObject({
-      kind: "public-application-runtime-v1",
-      environment: "production",
       deploymentId: "dpl_public",
+      environment: "production",
+      kind: "public-application-runtime-v1",
       publicOrigin: actorProjection.origin,
     });
     expect(result.normalActors).toEqual(actorProjection);
@@ -646,25 +649,25 @@ describe("normal public application runtime handoff", () => {
   it("runs the normal browser tool through service, private client and prepared execution at the verified public destination", async () => {
     const f = await publicBoundFixture();
     const description = {
-      version: 1,
       app: { id: selection.appId, routes: [], workspacePath: `apps/${selection.appId}` },
       backend: {
         authorization: "declared-policy",
         kind: "generated-postgres",
-        roles: ["reviewer"],
-        schemaReceipt: null,
         release: {
-          id: f.selectedPlan.release.id,
-          directory: "schema/releases/current",
           artifactHash: `sha256:${proof.artifactHash}`,
+          directory: "schema/releases/current",
+          id: f.selectedPlan.release.id,
         },
+        roles: ["reviewer"],
         runtime: { databaseEnvironment: "SPEND_REVIEW_DATABASE_URL" },
+        schemaReceipt: null,
       },
       validation: {
         browser: { task: "test-e2e" },
         check: { task: "check" },
         test: { shards: 1, task: "test" },
       },
+      version: 1,
     };
     const close = vi.fn();
     const logs = Object.assign(
@@ -682,11 +685,11 @@ describe("normal public application runtime handoff", () => {
     };
     const provider: RuntimeTransport = {
       fs: { mkdir: vi.fn(), rm: vi.fn() },
-      writeFiles: vi.fn(),
       runCommand: vi
         .fn<RuntimeTransport["runCommand"]>()
         .mockResolvedValueOnce({ ...command, stdout: async () => JSON.stringify(description) })
         .mockResolvedValue(command),
+      writeFiles: vi.fn(),
     };
     const fallback = vi.fn(() => {
       throw new Error("No legacy/local runtime fallback");
@@ -706,10 +709,10 @@ describe("normal public application runtime handoff", () => {
         planDigest: operatorPlanDigest(f.selectedPlan),
       },
       {
-        operatorClient: async () => f.client,
         assertAuthority: async () => {},
         getProvider: async () => provider,
         observeInstallation: fallback,
+        operatorClient: async () => f.client,
         readBinding: fallback,
       },
     );
@@ -719,8 +722,8 @@ describe("normal public application runtime handoff", () => {
     const result = await runAppBrowserTests({
       appId: selection.appId,
       root: "/workspace/repository",
-      sandbox: { run: sandboxRun },
       runtime,
+      sandbox: { run: sandboxRun },
     });
     expect(result.status).toBe("passed");
     expect(provider.runCommand).toHaveBeenLastCalledWith(

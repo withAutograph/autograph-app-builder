@@ -37,25 +37,25 @@ const readOperatorResponse = async (response: Response) =>
   operatorPublicResultSchema.parse(await response.json());
 
 const externalPolicy: ExternallyManagedTrustedSources = {
-  mode: "externally-managed-trusted-sources",
-  teamId: "team-notes",
   appPreview: {
+    from: "preview",
     sourceProjectId: "project-gateway",
     targetProjectId: "project-notes",
-    from: "preview",
     to: "preview",
   },
   gatewayPreview: {
+    from: "preview",
     sourceProjectId: "project-notes",
     targetProjectId: "project-gateway",
-    from: "preview",
     to: "preview",
   },
+  mode: "externally-managed-trusted-sources",
   observedAt: "2026-10-19T10:00:00Z",
   provenance: {
     kind: "administrator-provider-readback",
     reference: "administrator-readback:synthetic-notes",
   },
+  teamId: "team-notes",
 };
 
 const now = Date.parse("2026-10-19T12:00:00.000Z");
@@ -64,98 +64,54 @@ const attemptId = "b596a9fe-8316-4eb1-97af-a046c85de610";
 
 const fixture = () => {
   const plan = hostedOperatorPlanSchema.parse({
-    version: 1,
+    access: [
+      { actorId: "writer-notes", organizationId: "organization-notes", roles: ["contributor"] },
+    ],
     action: "prepare",
-    stage: "app",
-    selection: {
-      sessionId: "session-notes",
-      appId: "field-notes",
-      projectId: "project-notes",
-      branch: "feature/notes",
-      environment: "preview",
-    },
     appDatabase: {
       database: "notes",
       migratorRole: "notes_owner",
-      runtimeRole: "notes_reader",
       resourceId: "resource-notes",
+      runtimeRole: "notes_reader",
     },
     authDatabase: {
       database: "identity",
       migratorRole: "identity_owner",
-      runtimeRole: "identity_reader",
       resourceId: "resource-identity",
+      runtimeRole: "identity_reader",
     },
     contextId: "notes-context",
-    neon: {
-      projectId: "neon-notes",
-      branchId: "branch-notes",
-      connectionRef: "connection-notes",
-      endpoint: "ep-notes.us-east-1.aws.neon.tech",
-      source: "synthetic-only",
+    cost: {
+      class: "independent-service",
+      description: "Approved Preview resources",
+      owner: "owner-notes",
+    },
+    delivery: {
+      branch: "feature/notes",
+      gitSha: "1".repeat(40),
+      projectId: "project-notes",
+      repoId: "repo-notes",
     },
     deploymentBoundary: {
-      app: { projectId: "project-notes", branch: "feature/notes", environment: "preview" },
-      gateway: { projectId: "project-gateway", branch: "gateway/notes", environment: "preview" },
-      operator: {
-        projectId: "project-builder",
-        deploymentId: "operator-1",
-        environment: "production",
-      },
+      app: { branch: "feature/notes", environment: "preview", projectId: "project-notes" },
       authority: {
         audience: "https://builder.example/mcp",
         issuer: "https://builder.example/api/auth",
         ownerUserId: "owner-notes",
         workspaceId: "workspace-notes",
       },
+      gateway: { branch: "gateway/notes", environment: "preview", projectId: "project-gateway" },
+      operator: {
+        deploymentId: "operator-1",
+        environment: "production",
+        projectId: "project-builder",
+      },
       teamId: "team-notes",
       verification: {
-        publicOrigin: "https://notes.example.test",
         gatewayOrigin: "https://gateway.example.test",
         jwksUrl: "https://gateway.example.test/_platform/jwks.json",
+        publicOrigin: "https://notes.example.test",
       },
-    },
-    delivery: {
-      projectId: "project-notes",
-      branch: "feature/notes",
-      repoId: "repo-notes",
-      gitSha: "1".repeat(40),
-    },
-    gatewayDelivery: {
-      projectId: "project-gateway",
-      branch: "gateway/notes",
-      repoId: "repo-gateway",
-      gitSha: "2".repeat(40),
-    },
-    publicGateway: {
-      projectId: "project-gateway",
-      branch: "gateway/notes",
-      origin: "https://notes.example.test",
-    },
-    gatewayBindings: {
-      authBrowserOrigin: "https://identity.example.test",
-      builderCallbackOrigin: "https://builder.example",
-      operatorOrigin: "https://operator.example.test",
-      catalogAppIds: ["field-notes"],
-      sourceWorkload: {
-        audience: "https://vercel.com/team-notes",
-        issuer: "https://oidc.vercel.com/team-notes",
-        subject: "gateway-notes-workload",
-        ownerId: "team-notes",
-        projectId: "project-gateway",
-        environment: "preview",
-      },
-    },
-    access: [
-      { actorId: "writer-notes", organizationId: "organization-notes", roles: ["contributor"] },
-    ],
-    installer: { reference: "notes-installer", sha256: "3".repeat(64) },
-    release: { artifactRef: "notes-release", id: "notes-release-1", sha256: "4".repeat(64) },
-    retention: { expiresAt: "2026-10-20T12:00:00.000Z", policy: "Retain approved Preview" },
-    cost: {
-      class: "independent-service",
-      owner: "owner-notes",
-      description: "Approved Preview resources",
     },
     effects: [
       "resources",
@@ -165,14 +121,80 @@ const fixture = () => {
       "delivery",
       "gateway-bindings",
       "gateway-delivery",
-    ].map((kind, index) => ({ kind, id: `notes-effect-${index}`, description: `Notes ${kind}` })),
+    ].map((kind, index) => ({ description: `Notes ${kind}`, id: `notes-effect-${index}`, kind })),
+    gatewayBindings: {
+      authBrowserOrigin: "https://identity.example.test",
+      builderCallbackOrigin: "https://builder.example",
+      catalogAppIds: ["field-notes"],
+      operatorOrigin: "https://operator.example.test",
+      sourceWorkload: {
+        audience: "https://vercel.com/team-notes",
+        environment: "preview",
+        issuer: "https://oidc.vercel.com/team-notes",
+        ownerId: "team-notes",
+        projectId: "project-gateway",
+        subject: "gateway-notes-workload",
+      },
+    },
+    gatewayDelivery: {
+      branch: "gateway/notes",
+      gitSha: "2".repeat(40),
+      projectId: "project-gateway",
+      repoId: "repo-gateway",
+    },
+    installer: { reference: "notes-installer", sha256: "3".repeat(64) },
+    neon: {
+      branchId: "branch-notes",
+      connectionRef: "connection-notes",
+      endpoint: "ep-notes.us-east-1.aws.neon.tech",
+      projectId: "neon-notes",
+      source: "synthetic-only",
+    },
+    publicGateway: {
+      branch: "gateway/notes",
+      origin: "https://notes.example.test",
+      projectId: "project-gateway",
+    },
+    release: { artifactRef: "notes-release", id: "notes-release-1", sha256: "4".repeat(64) },
+    retention: { expiresAt: "2026-10-20T12:00:00.000Z", policy: "Retain approved Preview" },
+    selection: {
+      appId: "field-notes",
+      branch: "feature/notes",
+      environment: "preview",
+      projectId: "project-notes",
+      sessionId: "session-notes",
+    },
+    stage: "app",
+    version: 1,
   });
   const record: HostedRuntimeJournalRecord = {
-    version: 1,
-    kind: "app-runtime",
     approvedByCallId: "approval-call-notes",
-    status: "pending",
-    step: "reserved",
+    kind: "app-runtime",
+    operator: {
+      approvalId: "approval-notes",
+      deliveryCandidates: [
+        {
+          branch: "feature/notes",
+          deploymentId: "ready-notes",
+          operationRef,
+          origin: "https://notes-immutable.example.test",
+          projectId: "project-notes",
+          readyState: "READY",
+          repoId: "repo-notes",
+        },
+      ],
+      mode: "protected-operator-v1",
+      operationRef,
+      pendingEffectAttempt: { id: attemptId },
+      pendingEffectId: "notes-effect-5",
+      plan,
+      planDigest: operatorPlanDigest(plan),
+      receipts: plan.effects.slice(0, 5).map((effect) => ({
+        effectId: effect.id,
+        observedAt: "2026-10-19T10:00:00.000Z",
+        resourceVersion: `version-${effect.id}`,
+      })),
+    },
     privateState: {
       encryptedToken: "protected-notes",
       keyVersion: "key-1",
@@ -182,47 +204,25 @@ const fixture = () => {
     request: {
       ...plan.selection,
       installationId: "installation-notes",
-      scopeType: "team",
       scopeId: "team-notes",
+      scopeType: "team",
     },
-    operator: {
-      mode: "protected-operator-v1",
-      operationRef,
-      approvalId: "approval-notes",
-      plan,
-      planDigest: operatorPlanDigest(plan),
-      pendingEffectId: "notes-effect-5",
-      pendingEffectAttempt: { id: attemptId },
-      receipts: plan.effects.slice(0, 5).map((effect) => ({
-        effectId: effect.id,
-        observedAt: "2026-10-19T10:00:00.000Z",
-        resourceVersion: `version-${effect.id}`,
-      })),
-      deliveryCandidates: [
-        {
-          deploymentId: "ready-notes",
-          operationRef,
-          projectId: "project-notes",
-          branch: "feature/notes",
-          repoId: "repo-notes",
-          readyState: "READY",
-          origin: "https://notes-immutable.example.test",
-        },
-      ],
-    },
+    status: "pending",
+    step: "reserved",
+    version: 1,
   };
   const intent: ReadyDeliveryReplacementIntent = {
-    version: 1,
     predecessor: {
+      appDeploymentId: "ready-notes",
       operationRef,
       planDigest: record.operator!.planDigest,
-      appDeploymentId: "ready-notes",
     },
+    version: 1,
   };
   return {
-    record,
-    intent,
     candidate: { ...structuredClone(plan), appDeliveryReplacement: intent },
+    intent,
+    record,
   };
 };
 
@@ -239,22 +239,24 @@ const recoveryFixture = () => {
   }));
   original.gatewayDeliveryCandidates = [
     {
-      deploymentId: "ready-gateway",
-      operationRef,
-      projectId: "project-gateway",
       branch: "gateway/notes",
-      repoId: "repo-gateway",
-      readyState: "READY",
-      origin: "https://gateway-immutable.example.test",
+      deploymentId: "ready-gateway",
       gatewayAliasAttempted: true,
+      operationRef,
+      origin: "https://gateway-immutable.example.test",
+      projectId: "project-gateway",
+      readyState: "READY",
+      repoId: "repo-gateway",
     },
   ];
   const firstPlan = createRetentionRenewalPlan(base.record, now - 24 * 60 * 60 * 1000)!;
   expect(firstPlan).toBeDefined();
   const first = {
+    approvalId: "approval-first-renewal",
     mode: original.mode,
     operationRef,
-    approvalId: "approval-first-renewal",
+    pendingEffectAttempt: { id: "52222222-2222-4222-8222-222222222222" },
+    pendingEffectId: firstPlan.effects[3].id,
     plan: firstPlan,
     planDigest: operatorPlanDigest(firstPlan),
     receipts: firstPlan.effects.slice(0, 3).map((effect) => ({
@@ -262,8 +264,6 @@ const recoveryFixture = () => {
       observedAt: "2026-10-18T12:01:00Z",
       resourceVersion: "retained-resource",
     })),
-    pendingEffectId: firstPlan.effects[3].id,
-    pendingEffectAttempt: { id: "52222222-2222-4222-8222-222222222222" },
   };
   const firstRecord = {
     ...base.record,
@@ -281,9 +281,9 @@ const recoveryFixture = () => {
     ...base.record,
     approvedByCallId: "approval-call-current",
     operator: {
+      approvalId: "approval-current",
       mode: original.mode,
       operationRef,
-      approvalId: "approval-current",
       plan: secondPlan,
       planDigest: operatorPlanDigest(secondPlan),
       receipts: first.receipts,
@@ -323,10 +323,10 @@ describe("native externally managed policy recovery integration", () => {
     async (planningCase) => {
       const f = fixture();
       f.record.operator!.plan.appTrustedSources = {
-        gatewayPreview: { projectId: "project-gateway", from: "preview", to: "preview" },
+        gatewayPreview: { from: "preview", projectId: "project-gateway", to: "preview" },
       };
       f.record.operator!.plan.gatewayBindings!.trustedSources = {
-        appPreview: { projectId: "project-notes", from: "preview", to: "preview" },
+        appPreview: { from: "preview", projectId: "project-notes", to: "preview" },
       };
       f.record.operator!.planDigest = operatorPlanDigest(f.record.operator!.plan);
       f.record.operator!.deliveredDeploymentId = "ready-notes";
@@ -356,11 +356,9 @@ describe("native externally managed policy recovery integration", () => {
         target: f.record.request,
       };
       const store: HostedRuntimeJournalStore = {
-        read: async () => structuredClone(row),
-        reserve: async () => structuredClone(row),
         compareAndSet: async (input) => {
           if (input.expectedRevision !== row.revision) {
-            return undefined;
+            return;
           }
           row = {
             record: hostedRuntimeJournalRecordSchema.parse(input.record),
@@ -368,6 +366,8 @@ describe("native externally managed policy recovery integration", () => {
           };
           return structuredClone(row);
         },
+        read: async () => structuredClone(row),
+        reserve: async () => structuredClone(row),
         reserveFenceGeneration: async () => {
           row.record.operator!.fenceGeneration = 1;
           row.revision++;
@@ -397,13 +397,13 @@ describe("native externally managed policy recovery integration", () => {
           : {
               readReadyDeliveryReplacementPlan: async () =>
                 await readNativePreviewRecoveryPlan({
-                  record: row.record,
-                  policy: externalPolicy,
                   now,
+                  policy: externalPolicy,
                   readGatewayAlias,
+                  record: row.record,
                 }),
             }),
-        readApproval: async (input) => ({ ...input, approved: true, approvalId: "approval-notes" }),
+        readApproval: async (input) => ({ ...input, approvalId: "approval-notes", approved: true }),
         withResourceLease: async (_input, run) => await run(async () => {}),
         reconcile: async (input) => {
           await input.assertCurrent();
@@ -412,13 +412,13 @@ describe("native externally managed policy recovery integration", () => {
             isDeepStrictEqual(existingGrants, input.plan.access)
           ) {
             return {
-              status: "applied",
               receipt: {
                 effectId: input.effect.id,
+                fenceGeneration: input.fenceGeneration,
                 observedAt: new Date(now).toISOString(),
                 resourceVersion: "existing-approved-grants",
-                fenceGeneration: input.fenceGeneration,
               },
+              status: "applied",
             };
           }
           return { status: "absent" };
@@ -434,13 +434,13 @@ describe("native externally managed policy recovery integration", () => {
             await input.checkpointGatewayDelivery!(
               [
                 {
+                  branch: "gateway/notes",
                   deploymentId: "default-gateway",
                   operationRef,
-                  projectId: "project-gateway",
-                  branch: "gateway/notes",
-                  repoId: "repo-gateway",
-                  readyState: "READY",
                   origin: "https://default-gateway.example.test",
+                  projectId: "project-gateway",
+                  readyState: "READY",
+                  repoId: "repo-gateway",
                 },
               ],
               "default-gateway",
@@ -455,20 +455,20 @@ describe("native externally managed policy recovery integration", () => {
         },
         verify: async () => ({
           actors: 1,
-          tenants: 1,
-          releaseId: f.record.operator!.plan.release.id,
           artifactHash: f.record.operator!.plan.release.sha256,
-          manifestSha256: f.record.operator!.plan.release.sha256,
           authenticatedBehavior: "unassessed",
+          manifestSha256: f.record.operator!.plan.release.sha256,
+          releaseId: f.record.operator!.plan.release.id,
+          tenants: 1,
         }),
         bindings: async () => ({}),
       };
       const handler = createProtectedHostedOperatorHandler(deps);
       const request = (body: Record<string, unknown>) =>
         new Request("https://operator.example.test/v1/runtime", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
           body: JSON.stringify({ ...body, selection: f.record.operator!.plan.selection }),
+          headers: { "content-type": "application/json" },
+          method: "POST",
         });
       vi.spyOn(Date, "now").mockReturnValue(now);
       try {
@@ -541,10 +541,10 @@ describe("native externally managed policy recovery integration", () => {
       }
       const readGatewayAlias = vi.fn(async () => "ready-gateway");
       const result = await readNativePreviewRecoveryPlan({
-        record,
-        policy: externalPolicy,
         now: Date.parse(f.proposed.retention.expiresAt) + 1,
+        policy: externalPolicy,
         readGatewayAlias,
+        record,
       });
       expect(result).toBeUndefined();
       expect(readGatewayAlias).not.toHaveBeenCalled();
@@ -566,9 +566,7 @@ describe("native externally managed policy recovery integration", () => {
       const record = structuredClone(f.current);
       const operator = record.operator!;
       operator.plan =
-        state === "legacy"
-          ? withExternallyManagedHostProtection(f.proposed, undefined)
-          : f.proposed;
+        state === "legacy" ? withExternallyManagedHostProtection(f.proposed) : f.proposed;
       if (state === "legacy") {
         const { hostProtection, appDeliveryReplacement, ...legacy } = operator.plan;
         void hostProtection;
@@ -633,7 +631,7 @@ describe("native externally managed policy recovery integration", () => {
       }
       if (change === "policy-write") {
         plan.appTrustedSources = {
-          gatewayPreview: { projectId: "project-gateway", from: "preview", to: "preview" },
+          gatewayPreview: { from: "preview", projectId: "project-gateway", to: "preview" },
         };
       }
       expect(hostedOperatorPlanSchema.safeParse(plan).success).toBe(false);
@@ -667,12 +665,10 @@ describe("native externally managed policy recovery integration", () => {
         target: f.current.request,
       };
       const store: HostedRuntimeJournalStore = {
-        read: vi.fn(async () => structuredClone(row)),
-        reserve: vi.fn(async () => structuredClone(row)),
         compareAndSet: vi.fn(
           async (input: Parameters<HostedRuntimeJournalStore["compareAndSet"]>[0]) => {
             if (input.expectedRevision !== row.revision) {
-              return undefined;
+              return;
             }
             row = {
               record: hostedRuntimeJournalRecordSchema.parse(input.record),
@@ -681,12 +677,14 @@ describe("native externally managed policy recovery integration", () => {
             return structuredClone(row);
           },
         ),
+        read: vi.fn(async () => structuredClone(row)),
+        reserve: vi.fn(async () => structuredClone(row)),
         reserveFenceGeneration: vi.fn(
           async (
             input: Parameters<NonNullable<HostedRuntimeJournalStore["reserveFenceGeneration"]>>[0],
           ) => {
             if (input.expectedRevision !== row.revision) {
-              return undefined;
+              return;
             }
             row.record.operator!.fenceGeneration = 2;
             row.revision++;
@@ -701,35 +699,35 @@ describe("native externally managed policy recovery integration", () => {
         autograph_operator_plan: op.planDigest,
       });
       raw["ready-notes"] = {
-        id: "ready-notes",
-        projectId: "project-notes",
-        ownerId: "team-notes",
-        readyState: "READY",
-        target: "staging",
-        oidcTokenClaims: { environment: "preview" },
-        url: "notes-immutable.example.test",
         gitSource: {
           ...f.original.plan.delivery,
-          type: "github",
           ref: "feature/notes",
           sha: "1".repeat(40),
+          type: "github",
         },
+        id: "ready-notes",
         meta: metadata("delivery"),
+        oidcTokenClaims: { environment: "preview" },
+        ownerId: "team-notes",
+        projectId: "project-notes",
+        readyState: "READY",
+        target: "staging",
+        url: "notes-immutable.example.test",
       };
       raw["ready-gateway"] = {
+        gitSource: {
+          ...f.original.plan.gatewayDelivery,
+          ref: "gateway/notes",
+          sha: "2".repeat(40),
+          type: "github",
+        },
         id: "ready-gateway",
-        projectId: "project-gateway",
+        meta: metadata("gateway-delivery"),
         ownerId: "team-notes",
+        projectId: "project-gateway",
         readyState: "READY",
         target: null,
         url: "gateway-immutable.example.test",
-        gitSource: {
-          ...f.original.plan.gatewayDelivery,
-          type: "github",
-          ref: "gateway/notes",
-          sha: "2".repeat(40),
-        },
-        meta: metadata("gateway-delivery"),
       };
       let aliasTarget = "ready-gateway";
       let appBound = false;
@@ -746,28 +744,28 @@ describe("native externally managed policy recovery integration", () => {
           init?.body === undefined
             ? undefined
             : z.record(z.string(), z.unknown()).parse(JSON.parse(z.string().parse(init.body)));
-        calls.push({ method, path: url.pathname, body });
+        calls.push({ body, method, path: url.pathname });
         if (url.pathname.startsWith("/v4/aliases/")) {
           if (guardReadUnavailable) {
             throw new Error("synthetic transient alias guard GET failure");
           }
           return Response.json({
             alias: "notes.example.test",
-            projectId: "project-gateway",
             deploymentId: aliasTarget,
+            projectId: "project-gateway",
             redirect: null,
           });
         }
         if (url.pathname.startsWith("/v9/projects/")) {
           const projectId = url.pathname.split("/")[3];
           return Response.json({
-            id: projectId,
             accountId: "team-notes",
-            name: projectId,
+            id: projectId,
             link: {
-              type: "github",
               repoId: projectId === "project-notes" ? "repo-notes" : "repo-gateway",
+              type: "github",
             },
+            name: projectId,
           });
         }
         if (url.pathname.startsWith("/v2/teams/")) {
@@ -777,7 +775,7 @@ describe("native externally managed policy recovery integration", () => {
           return Response.json({
             deployments: Object.values(raw)
               .filter((value) => value.projectId === url.searchParams.get("projectId"))
-              .map((value) => ({ uid: value.id, meta: value.meta })),
+              .map((value) => ({ meta: value.meta, uid: value.id })),
             pagination: { next: null },
           });
         }
@@ -799,14 +797,14 @@ describe("native externally managed policy recovery integration", () => {
             })
             .parse(body?.gitSource);
           raw[id] = {
+            gitSource,
             id,
-            projectId: project,
+            meta: body!.meta,
             ownerId: "team-notes",
+            projectId: project,
             readyState: "READY",
             target: null,
             url: `${id}.example.test`,
-            meta: body!.meta,
-            gitSource,
           };
           if (app && loseCreate) {
             if (outcome === "expired-create-missing") {
@@ -840,27 +838,25 @@ describe("native externally managed policy recovery integration", () => {
         return new Response(null, { status: 404 });
       });
       const readCredential = vi.fn(async () => ({
-        token: "synthetic-private-credential",
         binding: {
           active: true,
+          displayName: "Notes",
           installationId: context.target.installationId,
+          plan: "hobby",
           scopeId: "team-notes",
           scopeType: "team" as const,
           slug: "notes",
-          displayName: "Notes",
-          plan: "hobby",
           updatedAt: new Date(now),
         },
+        token: "synthetic-private-credential",
       }));
       const native = createReadyReplacementNativeReader({
-        context,
         assertCurrent: async () => {},
-        readCredential,
+        context,
         fetch: fetcher,
+        readCredential,
       });
       const app = createHostedOperatorDeploymentDelivery({
-        readCredential,
-        fetch: fetcher,
         assertAuthorized: async () => {},
         assertEnvironment: async () => {
           expect(appBound).toBe(true);
@@ -869,17 +865,13 @@ describe("native externally managed policy recovery integration", () => {
           expect(input.readyReplacement).toBeDefined();
           await native.verify(input.plan, input.readyReplacement!);
         },
+        fetch: fetcher,
+        readCredential,
       });
       const gateway = createHostedOperatorDeploymentDelivery({
-        readCredential,
-        fetch: fetcher,
-        target: "gateway",
         assertAuthorized: async () => {},
         assertEnvironment: async () => {
           expect(gatewayBoundOrigin).toBe("https://fresh-notes.example.test");
-        },
-        beforeCreate: async (input) => {
-          await native.verify(input.plan, input.readyReplacement!);
         },
         beforeAliasWrite: async (input, selected) => {
           guardReadUnavailable = failNextGuardRead;
@@ -890,6 +882,12 @@ describe("native externally managed policy recovery integration", () => {
             guardReadUnavailable = false;
           }
         },
+        beforeCreate: async (input) => {
+          await native.verify(input.plan, input.readyReplacement!);
+        },
+        fetch: fetcher,
+        readCredential,
+        target: "gateway",
       });
       const executed: string[] = [];
       let ordinaryPlan: typeof f.proposed | undefined;
@@ -900,25 +898,48 @@ describe("native externally managed policy recovery integration", () => {
         return ordinaryPlan;
       });
       const deps: ProtectedHostedOperatorDependencies = {
-        store,
-        authorize: async () => context,
         assertAuthorized: async () => {},
         assertCanonicalOwner: async () => {},
-        plan: ordinaryPlanning,
-        now: () => testNow,
-        readReadyDeliveryReplacementPlan: async () =>
-          await readNativePreviewRecoveryPlan({
-            record: row.record,
-            policy: externalPolicy,
-            now: testNow,
-            readGatewayAlias: async (plan) => await native.readGatewayAlias(plan),
-          }),
-        verifyReadyDeliveryReplacement: async (_context, plan, predecessor) => {
-          await native.verify(plan, predecessor);
+        authorize: async () => context,
+        bindings: async () => ({}),
+        executeEffect: async (input) => {
+          executed.push(input.effect.kind);
+          if (input.effect.kind === "bindings") {
+            appBound = true;
+          }
+          if (input.effect.kind === "gateway-bindings") {
+            gatewayBoundOrigin = input.deliveryCandidates?.find(
+              (candidate) =>
+                candidate.operationRef === input.operationRef && candidate.readyState === "READY",
+            )?.origin;
+          }
+          if (input.effect.kind === "delivery" || input.effect.kind === "gateway-delivery") {
+            const delivery = input.effect.kind === "delivery" ? app : gateway;
+            const result = await delivery.deliver({
+              ...input,
+              checkpointDelivery: (input.effect.kind === "delivery"
+                ? input.checkpointDelivery
+                : input.checkpointGatewayDelivery)!,
+              deliveryCandidates:
+                input.effect.kind === "delivery"
+                  ? input.deliveryCandidates
+                  : input.gatewayDeliveryCandidates,
+            });
+            if (result.status !== "applied") {
+              throw new Error("reconciliation required");
+            }
+          }
+          return {
+            effectId: input.effect.id,
+            observedAt: new Date(now).toISOString(),
+            resourceVersion: "fresh-owned-observation",
+            ...(input.effect.kind === "access" ? { fenceGeneration: input.fenceGeneration } : {}),
+          };
         },
+        now: () => testNow,
+        plan: ordinaryPlanning,
         readApproval: async (input) => ({
           ...input,
-          approved: input.callId !== "new-human-call" || approved,
           approvalId:
             input.callId === "approval-call-notes"
               ? "approval-notes"
@@ -927,8 +948,15 @@ describe("native externally managed policy recovery integration", () => {
                 : input.callId === "approval-call-current"
                   ? "approval-current"
                   : "new-human-approval",
+          approved: input.callId !== "new-human-call" || approved,
         }),
-        withResourceLease: async (_input, run) => await run(async () => {}),
+        readReadyDeliveryReplacementPlan: async () =>
+          await readNativePreviewRecoveryPlan({
+            now: testNow,
+            policy: externalPolicy,
+            readGatewayAlias: async (plan) => await native.readGatewayAlias(plan),
+            record: row.record,
+          }),
         reconcile: async (input) => {
           await input.assertCurrent();
           const currentAppOrigin = input.deliveryCandidates
@@ -948,66 +976,36 @@ describe("native externally managed policy recovery integration", () => {
             gatewayBoundOrigin === currentAppOrigin
           ) {
             return {
-              status: "applied",
               receipt: {
                 effectId: input.effect.id,
                 observedAt: new Date(now).toISOString(),
                 resourceVersion: "existing-current-app-gateway-binding",
               },
+              status: "applied",
             };
           }
           return { status: "absent" };
         },
-        executeEffect: async (input) => {
-          executed.push(input.effect.kind);
-          if (input.effect.kind === "bindings") {
-            appBound = true;
-          }
-          if (input.effect.kind === "gateway-bindings") {
-            gatewayBoundOrigin = input.deliveryCandidates?.find(
-              (candidate) =>
-                candidate.operationRef === input.operationRef && candidate.readyState === "READY",
-            )?.origin;
-          }
-          if (input.effect.kind === "delivery" || input.effect.kind === "gateway-delivery") {
-            const delivery = input.effect.kind === "delivery" ? app : gateway;
-            const result = await delivery.deliver({
-              ...input,
-              deliveryCandidates:
-                input.effect.kind === "delivery"
-                  ? input.deliveryCandidates
-                  : input.gatewayDeliveryCandidates,
-              checkpointDelivery: (input.effect.kind === "delivery"
-                ? input.checkpointDelivery
-                : input.checkpointGatewayDelivery)!,
-            });
-            if (result.status !== "applied") {
-              throw new Error("reconciliation required");
-            }
-          }
-          return {
-            effectId: input.effect.id,
-            observedAt: new Date(now).toISOString(),
-            resourceVersion: "fresh-owned-observation",
-            ...(input.effect.kind === "access" ? { fenceGeneration: input.fenceGeneration } : {}),
-          };
-        },
+        store,
         verify: async () => ({
           actors: 1,
-          tenants: 1,
-          releaseId: f.proposed.release.id,
           artifactHash: f.proposed.release.sha256,
-          manifestSha256: f.proposed.release.sha256,
           authenticatedBehavior: "unassessed",
+          manifestSha256: f.proposed.release.sha256,
+          releaseId: f.proposed.release.id,
+          tenants: 1,
         }),
-        bindings: async () => ({}),
+        verifyReadyDeliveryReplacement: async (_context, plan, predecessor) => {
+          await native.verify(plan, predecessor);
+        },
+        withResourceLease: async (_input, run) => await run(async () => {}),
       };
       const handler = createProtectedHostedOperatorHandler(deps);
       const request = (body: Record<string, unknown>) =>
         new Request("https://operator.example.test/v1/runtime", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
           body: JSON.stringify({ ...body, selection: f.proposed.selection }),
+          headers: { "content-type": "application/json" },
+          method: "POST",
         });
       vi.spyOn(Date, "now").mockImplementation(() => testNow);
       try {
@@ -1083,8 +1081,8 @@ describe("native externally managed policy recovery integration", () => {
           const provenance = retentionRenewalDeliveryProvenance(row.record);
           expect(provenance).toContainEqual(
             expect.objectContaining({
-              planDigest: uncertain.planDigest,
               pendingEffectAttempt: uncertain.pendingEffectAttempt,
+              planDigest: uncertain.planDigest,
             }),
           );
           const resumed = await readOperatorResponse(
@@ -1255,8 +1253,8 @@ describe("explicit READY delivery replacement", () => {
     candidate.access[0].roles = ["editor", "reviewer"];
     candidate.effects = candidate.effects.map((effect) => ({
       ...effect,
-      id: `renamed-${effect.id}`,
       description: "Changed product intent",
+      id: `renamed-${effect.id}`,
     }));
     expect(isReadyDeliveryReplacementSuccessor(record, candidate, now)).toBe(true);
   });
@@ -1282,9 +1280,9 @@ describe("explicit READY delivery replacement", () => {
     const renewal = createRetentionRenewalPlan(record, now)!;
     expect(renewal).toBeDefined();
     record.operator = {
+      approvalId: "approval-renewed",
       mode: original.mode,
       operationRef,
-      approvalId: "approval-renewed",
       plan: renewal,
       planDigest: operatorPlanDigest(renewal),
       receipts: [],
@@ -1435,13 +1433,13 @@ describe("explicit READY delivery replacement", () => {
     expect(resolveReadyDeliveryReplacementPredecessor(record, intent)).toBeUndefined();
     record.operator!.gatewayDeliveryCandidates = [
       {
+        branch: "gateway/notes",
         deploymentId: "ready-gateway",
         operationRef,
-        projectId: "project-gateway",
-        branch: "gateway/notes",
-        repoId: "repo-gateway",
-        readyState: "READY",
         origin: "https://gateway-immutable.example.test",
+        projectId: "project-gateway",
+        readyState: "READY",
+        repoId: "repo-gateway",
       },
     ];
     expect(
@@ -1484,14 +1482,14 @@ describe("explicit READY delivery replacement", () => {
     const { record, candidate } = fixture();
     record.operator!.gatewayDeliveryCandidates = [
       {
-        deploymentId: "ready-gateway",
-        operationRef,
-        projectId: "project-gateway",
         branch: "gateway/notes",
-        repoId: "repo-gateway",
-        readyState: "READY",
-        origin: "https://gateway-immutable.example.test",
+        deploymentId: "ready-gateway",
         gatewayAliasAttempted: true,
+        operationRef,
+        origin: "https://gateway-immutable.example.test",
+        projectId: "project-gateway",
+        readyState: "READY",
+        repoId: "repo-gateway",
       },
     ];
     expect(isReadyDeliveryReplacementSuccessor(record, candidate, now)).toBe(false);
@@ -1508,14 +1506,14 @@ describe("explicit READY delivery replacement", () => {
     const { record, candidate } = fixture();
     record.operator!.gatewayDeliveryCandidates = [
       {
-        deploymentId: "historical-gateway",
-        operationRef: "c1d096d4-d743-46d7-a4db-c20e67ca65a4",
-        projectId: "project-gateway",
         branch: "gateway/notes",
-        repoId: "repo-gateway",
-        readyState: "READY",
-        origin: "https://historical-gateway.example.test",
+        deploymentId: "historical-gateway",
         gatewayAliasAttempted: true,
+        operationRef: "c1d096d4-d743-46d7-a4db-c20e67ca65a4",
+        origin: "https://historical-gateway.example.test",
+        projectId: "project-gateway",
+        readyState: "READY",
+        repoId: "repo-gateway",
       },
     ];
     expect(isReadyDeliveryReplacementSuccessor(record, candidate, now)).toBe(true);

@@ -24,9 +24,9 @@ export const selectBuilderSessionDestination = async (
 ): Promise<BuilderSessionDestinationActionState> => {
   const config = readPreviewOAuthRuntimeConfig(process.env);
   return await createBuilderSessionDestinationAction({
-    origin: new URL(config.issuer).origin,
     enabled: builderResourceProvisioningFlag,
     open: openBuilderSessionDestination,
+    origin: new URL(config.issuer).origin,
     refresh,
   })(input, new Headers(await headers()));
 };
@@ -36,9 +36,9 @@ export const selectBuilderSessionPublicOrigin = async (
 ): Promise<BuilderPublicOriginActionState> => {
   const config = readPreviewOAuthRuntimeConfig(process.env);
   return await createBuilderPublicOriginAction({
-    origin: new URL(config.issuer).origin,
     enabled: builderResourceProvisioningFlag,
     open: openBuilderSessionDestination,
+    origin: new URL(config.issuer).origin,
     refresh,
   })(input, new Headers(await headers()));
 };

@@ -9,12 +9,12 @@ const secret = "r".repeat(32);
 const seconds = 1_800_000_000;
 const challengeSchema = z.object({
   appId: z.string(),
-  nonce: z.uuid(),
-  issuedAt: z.number(),
-  expiresAt: z.number(),
   capabilitySha256: z.string(),
   configurationReference: z.uuid(),
   configurationSha256: z.string(),
+  expiresAt: z.number(),
+  issuedAt: z.number(),
+  nonce: z.uuid(),
 });
 const signature = (purpose: string, bytes: string) =>
   createHmac("sha256", secret)
@@ -36,19 +36,19 @@ const fixture = (change?: (typeof mutations)[number]) => {
     );
     const request = challengeSchema.parse(JSON.parse(bytes));
     const body = {
-      version: 1,
-      status: "ready",
       appId: attachment.capability.appId,
-      releaseId: attachment.capability.release.id,
-      provider: "quickbooksSandbox",
-      serviceMemberships: attachment.capability.serviceMemberships.length,
-      principalGeneration: attachment.capability.control.principalGeneration,
       capabilitySha256: request.capabilitySha256,
       configurationReference: request.configurationReference,
       configurationSha256: request.configurationSha256,
-      scopeSha256: attachment.scopeSha256,
       nonce: request.nonce,
       observedAt: seconds,
+      principalGeneration: attachment.capability.control.principalGeneration,
+      provider: "quickbooksSandbox",
+      releaseId: attachment.capability.release.id,
+      scopeSha256: attachment.scopeSha256,
+      serviceMemberships: attachment.capability.serviceMemberships.length,
+      status: "ready",
+      version: 1,
     };
     if (change === "nonce") {
       body.nonce = "99999999-9999-4999-a999-999999999999";
@@ -60,23 +60,23 @@ const fixture = (change?: (typeof mutations)[number]) => {
       body.principalGeneration += 1;
     }
     return Response.json(body, {
-      status: change === "vercel-login" ? 403 : 200,
       headers: {
         "x-autograph-integration-readiness-signature":
           change === "signature" ? "0".repeat(64) : signature("response", JSON.stringify(body)),
       },
+      status: change === "vercel-login" ? 403 : 200,
     });
   });
   return {
     http,
     input: {
-      publicOrigin: "https://invoice-app.example",
+      assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
       attachment,
-      setupProofSecret: secret,
-      assertCurrent: vi.fn(async () => {}),
-      signal: new AbortController().signal,
       fetch: http,
       now: () => seconds * 1000,
+      publicOrigin: "https://invoice-app.example",
+      setupProofSecret: secret,
+      signal: new AbortController().signal,
     },
   };
 };

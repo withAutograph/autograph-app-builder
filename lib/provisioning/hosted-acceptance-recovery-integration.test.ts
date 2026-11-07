@@ -20,7 +20,9 @@ import {
 const temporaryRoots: string[] = [];
 afterEach(async () => {
   await Promise.all(
-    temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+    temporaryRoots.splice(0).map(async (root) => {
+      await rm(root, { force: true, recursive: true });
+    }),
   );
 });
 
@@ -46,8 +48,8 @@ it("recovers a missing published runtime and requires successor approval before 
   await writeFile(path.join(source, "release.txt"), preparedPlan.release.id);
   await writeFile(path.join(stale, "release.txt"), "older-release");
   await writeFile(path.join(stale, "private.txt"), "retain private edits");
-  // oxlint-disable-next-line typescript/strict-void-return -- Node supplies execFile promisification with stdout/stderr.
-  const exec = promisify(execFile);
+  const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+  const exec = promisifyExecFile(execFile);
   const git = async (...args: string[]) => await exec("git", ["-C", source, ...args]);
   await git("init");
   await git("add", "release.txt");
@@ -64,26 +66,24 @@ it("recovers a missing published runtime and requires successor approval before 
   );
   const head = await git("rev-parse", "HEAD");
   const revision = head.stdout.trim();
-  const privateWork = { root: stale, note: "retain private edits" };
+  const privateWork = { note: "retain private edits", root: stale };
   const recover = vi.fn(
     async () =>
       await recoverAcceptanceCheckout({
-        sandbox: {
-          run: async ({ command, workingDirectory }) => {
-            const output = await exec("/bin/sh", ["-c", command], { cwd: workingDirectory });
-            return { exitCode: 0, stdout: output.stdout, stderr: output.stderr };
-          },
-        },
         repositoryUrl: source,
         revision,
         root: recovered,
-        workingDirectory: fixture,
+        sandbox: {
+          run: async ({ command, workingDirectory }) => {
+            const output = await exec("/bin/sh", ["-c", command], { cwd: workingDirectory });
+            return { exitCode: 0, stderr: output.stderr, stdout: output.stdout };
+          },
+        },
         signal: new AbortController().signal,
+        workingDirectory: fixture,
       }),
   );
   const root = await resolveCompatibleAcceptanceRoot({
-    roots: [privateWork.root, "/controlled/missing-publication"],
-    releaseId: preparedPlan.release.id,
     describe: async (candidate) => {
       try {
         return await readFile(path.join(candidate, "release.txt"), "utf-8");
@@ -93,15 +93,17 @@ it("recovers a missing published runtime and requires successor approval before 
       }
     },
     recover,
+    releaseId: preparedPlan.release.id,
+    roots: [privateWork.root, "/controlled/missing-publication"],
   });
   expect(root).toBe(recovered);
   expect(recover).toHaveBeenCalledOnce();
-  expect(privateWork).toEqual({ root: stale, note: "retain private edits" });
+  expect(privateWork).toEqual({ note: "retain private edits", root: stale });
   expect(await readFile(path.join(stale, "private.txt"), "utf-8")).toBe("retain private edits");
-  const browserSelection = { testName: "@acceptance", workers: 1, retries: 0, maxFailures: 1 };
+  const browserSelection = { maxFailures: 1, retries: 0, testName: "@acceptance", workers: 1 };
   const successor = await f.operations.plan(
     context,
-    { ...selection.runtime, root, browserSelection },
+    { ...selection.runtime, browserSelection, root },
     "recovered-focused-continuity",
     { predecessorIntentId: old.plan.intentId },
   );
@@ -109,8 +111,8 @@ it("recovers a missing published runtime and requires successor approval before 
   expect(successor.plan.predecessorIntentId).toBe(old.plan.intentId);
   expect(f.rows.get(old.plan.intentId)).toMatchObject({
     ...oldBefore,
-    supersededBy: successor.plan.intentId,
     revision: oldBefore.revision + 1,
+    supersededBy: successor.plan.intentId,
   });
   expect(f.rows.get(old.plan.intentId)?.plan).toEqual(oldBefore.plan);
   expect(f.events).toEqual([]);

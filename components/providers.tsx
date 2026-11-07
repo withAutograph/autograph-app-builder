@@ -24,7 +24,7 @@ import { themePlugin } from "@/lib/auth/theme-plugin";
 import { getQueryClient } from "@/lib/query-client";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function authPlugins(passkeysEnabled: boolean, themeHook: typeof useTheme) {
+function authPlugins(passkeysEnabled: boolean, themeHook: typeof useTheme) {
   return [
     {
       ...oauthProviderPlugin(),
@@ -85,7 +85,13 @@ export function AuthRouteProvider({
     <AuthProvider
       authClient={authClient}
       Link={Link}
-      navigate={({ to, replace }) => (replace ? router.replace(to) : router.push(to))}
+      navigate={({ to, replace }) => {
+        if (replace === true) {
+          router.replace(to);
+        } else {
+          router.push(to);
+        }
+      }}
       plugins={authPlugins(passkeysEnabled, useTheme)}
       emailAndPassword={{ enabled: false }}
       redirectTo={DEFAULT_AUTH_REDIRECT_TO}

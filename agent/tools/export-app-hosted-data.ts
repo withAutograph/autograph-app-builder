@@ -21,18 +21,17 @@ async function exportApproval(
     return retained.approved ? "not-applicable" : "user-approval";
   } catch {
     return {
-      type: "denied",
       reason:
         "The current owner and exact saved export intent could not be verified. Retry the same export when access is restored.",
+      type: "denied",
     };
   }
 }
 
 export default defineWorkflowTool({
+  approval: exportApproval,
   description:
     "Export one explicitly requested customer's app data after approval of the exact server-resolved plan from plan-app-hosted-runtime operation export. All public tenant tables are exported read-only as private NDJSON and a manifest, retained for the current owner on Builder. This does not grant access, prepare resources, change app data, or deploy. Resume the same intent after uncertainty; status reads never restart an export.",
-  inputSchema: tenantExportApprovalInputSchema,
-  approval: exportApproval,
   async execute(input, ctx) {
     "use workflow";
     let delayMs = 1000;
@@ -46,4 +45,5 @@ export default defineWorkflowTool({
     }
     return await exportHostedTenantDataStep(input, ctx);
   },
+  inputSchema: tenantExportApprovalInputSchema,
 });

@@ -137,17 +137,17 @@ describe("actual private local approved build continuation", () => {
           attemptDigest: "c".repeat(64),
           command: "check-build",
           exitCode: 134,
-          reason: "tooling-prerequisite",
           failureClass,
+          reason: "tooling-prerequisite",
         },
       });
-      const dispatch = vi.fn(() => Promise.resolve());
+      const dispatch = vi.fn<() => Promise<void>>().mockResolvedValue();
       expect(
         await continueApprovedLocalBuild({
           active: false,
+          dispatch,
           pendingInput: false,
           sessionId: f.decision.adapterSessionId,
-          dispatch,
         }),
       ).toBe(false);
       expect(dispatch).not.toHaveBeenCalled();

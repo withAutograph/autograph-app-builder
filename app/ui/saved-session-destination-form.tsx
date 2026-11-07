@@ -18,9 +18,9 @@ const fixedProvider = (): void => {
 };
 const initialDestination = (props: PageData) => ({
   github: props.request?.providers.githubInstallationId ?? "",
-  vercel: props.request?.providers.vercelInstallationId ?? "",
-  repository: props.request?.repository.name ?? props.appId,
   privateRepository: props.request?.repository.private ?? true,
+  repository: props.request?.repository.name ?? props.appId,
+  vercel: props.request?.providers.vercelInstallationId ?? "",
 });
 export const SavedSessionDestinationForm = (
   props: PageData & { requestId: string; submit: typeof selectBuilderSessionDestination },
@@ -33,20 +33,20 @@ export const SavedSessionDestinationForm = (
   const [state, action, pending] = useActionState<BuilderSessionDestinationActionState, FormData>(
     async () =>
       await props.submit({
-        sessionId: props.sessionId,
         expected: props.expected,
         request:
           props.request === undefined
             ? {
-                version: 1,
-                operation: "vercel",
-                requestId: props.requestId,
                 appName: props.appId,
                 deploymentAccess: "public-app",
-                repository: { name: repository, private: privateRepository },
+                operation: "vercel",
                 providers: { githubInstallationId: github, vercelInstallationId: vercel },
+                repository: { name: repository, private: privateRepository },
+                requestId: props.requestId,
+                version: 1,
               }
             : { ...props.request, operation: "vercel" },
+        sessionId: props.sessionId,
       }),
     { status: "idle" },
   );
@@ -78,8 +78,8 @@ export const SavedSessionDestinationForm = (
           connected={props.github.length > 0}
           gitScope={github}
           gitScopeOptions={props.github.map((scope) => ({
-            value: scope.installationId,
             label: scope.accountLogin,
+            value: scope.installationId,
           }))}
           onConnect={connect}
           onGitScopeChange={setGithub}
@@ -99,8 +99,8 @@ export const SavedSessionDestinationForm = (
           selected="vercel"
           team={vercel}
           teamOptions={props.vercel.map((scope) => ({
-            value: scope.installationId,
             label: scope.displayName,
+            value: scope.installationId,
           }))}
         />
       </fieldset>

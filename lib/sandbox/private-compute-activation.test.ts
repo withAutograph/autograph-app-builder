@@ -5,26 +5,26 @@ import { privateComputeProfileSchema } from "./private-compute-profile";
 
 const profile = () =>
   privateComputeProfileSchema.parse({
-    version: 1,
-    id: "private-checks-16gib-v1",
-    vcpus: 8,
-    memoryMiB: 16_384,
-    lintWorkers: 1,
-    target: { sandboxId: "owned-sandbox", workspaceDrive: "owned-drive" },
     checkPolicy: {
-      path: "apps/example/.config/mise/tasks/check",
-      beforeSha256: "a".repeat(64),
       afterSha256: "b".repeat(64),
+      beforeSha256: "a".repeat(64),
+      path: "apps/example/.config/mise/tasks/check",
     },
+    id: "private-checks-16gib-v1",
     limits: {
-      version: 1,
+      limited: false,
+      maxVcpus: 8,
+      observedAt: "2026-11-03T12:00:00.000Z",
+      plan: "pro",
       projectId: "prj_private",
       teamId: "team_private",
-      plan: "pro",
-      maxVcpus: 8,
-      limited: false,
-      observedAt: "2026-11-03T12:00:00.000Z",
+      version: 1,
     },
+    lintWorkers: 1,
+    memoryMiB: 16_384,
+    target: { sandboxId: "owned-sandbox", workspaceDrive: "owned-drive" },
+    vcpus: 8,
+    version: 1,
   });
 const fixture = () => {
   let status: PrivateComputeNative["status"] = "running";
@@ -34,71 +34,69 @@ const fixture = () => {
   const effects: string[] = [];
   let uncertainUpdate = false;
   const native: PrivateComputeNative = {
+    currentSession: () => ({ memory: sessionVcpus * 2048, vcpus: sessionVcpus }),
+    get memory() {
+      return vcpus * 2048;
+    },
+    mounts: { "/workspace": { drive: "owned-drive", mode: "read-write" } },
     name: "owned-sandbox",
     persistent: true,
-    mounts: { "/workspace": { drive: "owned-drive", mode: "read-write" } },
     get status() {
       return status;
+    },
+    stop: async () => {
+      effects.push("stop");
+      status = "stopped";
+      return globalThis.undefined;
+    },
+    update: async (input) => {
+      effects.push("update");
+      if (uncertainUpdate) {
+        throw new Error("Lost provider reply");
+      }
+      vcpus = input.resources?.vcpus ?? vcpus;
     },
     get vcpus() {
       return vcpus;
     },
-    get memory() {
-      return vcpus * 2048;
-    },
-    currentSession: () => ({ vcpus: sessionVcpus, memory: sessionVcpus * 2048 }),
-    stop: () => {
-      effects.push("stop");
-      status = "stopped";
-      return Promise.resolve(globalThis.undefined);
-    },
-    update: (input) => {
-      effects.push("update");
-      if (uncertainUpdate) {
-        return Promise.reject(new Error("Lost provider reply"));
-      }
-      vcpus = input.resources?.vcpus ?? vcpus;
-      return Promise.resolve();
-    },
   };
   const ports = {
-    read: () => Promise.resolve(native),
-    resume: () => {
+    assertCurrent: () => {},
+    read: async () => native,
+    readActivation: async () => record,
+    resume: async () => {
       effects.push("resume");
       status = "running";
       sessionVcpus = vcpus;
-      return Promise.resolve(native);
+      return native;
     },
-    readActivation: () => Promise.resolve(record),
-    writeActivation: (value: PrivateComputeActivation) => {
+    writeActivation: async (value: PrivateComputeActivation) => {
       record = value;
-      return Promise.resolve();
     },
-    assertCurrent: () => {},
   };
   const input = {
+    appId: "example",
+    callId: "approved-apply",
     profile: profile(),
     proposalDigest: "1".repeat(64),
-    callId: "approved-apply",
-    appId: "example",
     sessionId: "actual-session",
   };
   return {
-    input,
-    ports,
-    native,
     effects,
-    get record() {
-      return record;
+    input,
+    native,
+    observeConfigured: () => {
+      vcpus = 8;
     },
     observeStatus: (value: PrivateComputeNative["status"]) => {
       status = value;
     },
+    ports,
+    get record() {
+      return record;
+    },
     uncertain: () => {
       uncertainUpdate = true;
-    },
-    observeConfigured: () => {
-      vcpus = 8;
     },
   };
 };
@@ -107,7 +105,7 @@ describe("approved private compute transition", () => {
     const f = fixture();
     await expect(activatePrivateComputeProfile(f.input, f.ports)).resolves.toBe(f.native);
     expect(f.effects).toEqual(["stop", "update", "resume"]);
-    expect(f.native.currentSession()).toEqual({ vcpus: 8, memory: 16_384 });
+    expect(f.native.currentSession()).toEqual({ memory: 16_384, vcpus: 8 });
     expect(f.record).toMatchObject({ phase: "ready", proposalDigest: f.input.proposalDigest });
     await activatePrivateComputeProfile({ ...f.input, proposalDigest: "2".repeat(64) }, f.ports);
     expect(f.effects).toEqual(["stop", "update", "resume"]);

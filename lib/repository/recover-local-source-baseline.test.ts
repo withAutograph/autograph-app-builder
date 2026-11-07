@@ -23,7 +23,7 @@ const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(
     roots.splice(0).map(async (root) => {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }),
   );
 });
@@ -31,15 +31,15 @@ const sha = (data: string | Uint8Array) => createHash("sha256").update(data).dig
 const git = (root: string, args: string[]) =>
   execFileSync("/usr/bin/git", ["-C", root, ...args], {
     env: {
-      NODE_ENV: "test",
-      PATH: "/usr/bin:/bin",
-      HOME: root,
+      GIT_AUTHOR_EMAIL: "fixture@invalid.example",
+      GIT_AUTHOR_NAME: "Source Fixture",
+      GIT_COMMITTER_EMAIL: "fixture@invalid.example",
+      GIT_COMMITTER_NAME: "Source Fixture",
       GIT_CONFIG_GLOBAL: "/dev/null",
       GIT_CONFIG_NOSYSTEM: "1",
-      GIT_AUTHOR_NAME: "Source Fixture",
-      GIT_AUTHOR_EMAIL: "fixture@invalid.example",
-      GIT_COMMITTER_NAME: "Source Fixture",
-      GIT_COMMITTER_EMAIL: "fixture@invalid.example",
+      HOME: root,
+      NODE_ENV: "test",
+      PATH: "/usr/bin:/bin",
     },
   })
     .toString()
@@ -68,10 +68,10 @@ const fixture = async () => {
     mode: 0o755,
   });
   const archive = path.join(root, "source.tar.gz");
-  await createTar({ file: archive, gzip: true, cwd: overlay }, ["apps/example/run.sh"]);
+  await createTar({ cwd: overlay, file: archive, gzip: true }, ["apps/example/run.sh"]);
   const files = [
-    { path: "README.md", mode: "100644", content: "Original source\n" },
-    { path: "apps/example/run.sh", mode: "100755", content: "#!/bin/sh\nexit 0\n" },
+    { content: "Original source\n", mode: "100644", path: "README.md" },
+    { content: "#!/bin/sh\nexit 0\n", mode: "100755", path: "apps/example/run.sh" },
   ].map((file) => ({
     mode: file.mode,
     objectId: sha(file.content).slice(0, 40),
@@ -79,29 +79,29 @@ const fixture = async () => {
     sha256: sha(file.content),
   }));
   return {
-    root,
-    state,
-    source,
-    runsRoot,
     archive,
     request: {
-      originalSourceRoot: source,
-      originalSourceSha,
-      workspaceDigest: sha(JSON.stringify(files)),
       archives: [
         {
-          path: archive,
-          sha256: sha(await readFile(archive)),
           files: [
             {
-              path: "apps/example/run.sh",
               mode: "100755" as const,
+              path: "apps/example/run.sh",
               sha256: sha("#!/bin/sh\nexit 0\n"),
             },
           ],
+          path: archive,
+          sha256: sha(await readFile(archive)),
         },
       ],
+      originalSourceRoot: source,
+      originalSourceSha,
+      workspaceDigest: sha(JSON.stringify(files)),
     },
+    root,
+    runsRoot,
+    source,
+    state,
   };
 };
 
@@ -168,11 +168,11 @@ it("rejects bad archive bytes and wrong frozen digest without publishing a basel
 
 it("rejects duplicate declarations, traversal and changed executable modes", async () => {
   const f = await fixture();
-  const archive = f.request.archives[0];
+  const [archive] = f.request.archives;
   if (archive === undefined) {
     throw new Error("Missing fixture archive");
   }
-  const file = archive.files[0];
+  const [file] = archive.files;
   if (file === undefined) {
     throw new Error("Missing fixture file");
   }
@@ -205,14 +205,14 @@ it("rejects archive symlinks without interpreting their target", async () => {
   await mkdir(linked);
   await symlink("/outside/private", path.join(linked, "link"));
   const archive = path.join(f.root, "linked.tar.gz");
-  await createTar({ file: archive, gzip: true, cwd: linked }, ["link"]);
+  await createTar({ cwd: linked, file: archive, gzip: true }, ["link"]);
   await expect(
     recoverLocalSourceBaseline({
       ...f,
       request: {
         ...f.request,
         archives: [
-          { path: archive, sha256: sha(await readFile(archive)), files: [], ignoredMetadata: [] },
+          { files: [], ignoredMetadata: [], path: archive, sha256: sha(await readFile(archive)) },
         ],
       },
     }),

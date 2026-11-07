@@ -53,13 +53,14 @@ describe("sanitized hosted submission diagnostics", () => {
   it("projects exact ACK matches and strips identifiers and unknown fields from nested read diagnostics", () => {
     const sink = vi.fn<HostedSubmissionDiagnosticSink>();
     const nativeRead = {
-      nativeStartIndex: 7,
+      currentTurnPresent: true,
       nativeNextIndex: 8,
+      nativeStartIndex: 7,
       nativeTailIndex: 7,
       observationComplete: true,
-      currentTurnPresent: true,
     };
     const observation = sendDeliveryObservationDiagnostic({
+      binding: { adapterGeneration: 1, adapterSessionId: canary },
       delivery: {
         adapterGeneration: 1,
         adapterSessionId: canary,
@@ -67,31 +68,30 @@ describe("sanitized hosted submission diagnostics", () => {
         requestDigest: `sha256:${"a".repeat(64)}`,
         sessionId: canary,
       },
-      binding: { adapterGeneration: 1, adapterSessionId: canary },
+      nativeRead,
       proof: {
-        version: 1,
         currentTurnId: canary,
         turns: [
           {
-            turnId: canary,
+            boundaryDeliveryIds: [],
             deliveryIds: [canary],
             startedDeliveryIds: [],
-            boundaryDeliveryIds: [],
+            turnId: canary,
           },
         ],
+        version: 1,
       },
-      nativeRead,
     });
     const untrustedObservation = {
       ...observation,
-      privateText: canary,
       nativeRead: { ...nativeRead, privateText: canary },
+      privateText: canary,
     };
     reportHostedSubmissionDiagnostic({
       clientRequestId: canary,
+      failureCategory: "delivery_boundary_unobserved",
       operationKind: "send",
       phase: "send_delivery_boundary",
-      failureCategory: "delivery_boundary_unobserved",
       sendDeliveryObservation: untrustedObservation,
       sink,
     });
@@ -100,17 +100,17 @@ describe("sanitized hosted submission diagnostics", () => {
         clientRequestIdHash: hash(canary),
         sendDeliveryObservation: {
           ackObserved: true,
-          sameAdapterSession: true,
-          sameAdapterGeneration: true,
-          nativeDeliveryStatePresent: true,
-          nativeTurnCount: 1,
-          deliveryTurnMatchCount: 1,
-          startedStampMatchCount: 0,
           boundaryStampMatchCount: 0,
-          startedOrBoundaryMatch: false,
           currentTurnPresent: true,
-          nativeReadObserved: true,
+          deliveryTurnMatchCount: 1,
+          nativeDeliveryStatePresent: true,
           nativeRead,
+          nativeReadObserved: true,
+          nativeTurnCount: 1,
+          sameAdapterGeneration: true,
+          sameAdapterSession: true,
+          startedOrBoundaryMatch: false,
+          startedStampMatchCount: 0,
         },
       }),
     );
@@ -122,6 +122,7 @@ describe("sanitized hosted submission diagnostics", () => {
     "counts an exact %s stamp without confusing it with membership",
     (stamp) => {
       const observation = sendDeliveryObservationDiagnostic({
+        binding: { adapterGeneration: 2, adapterSessionId: "replacement" },
         delivery: {
           adapterGeneration: 1,
           adapterSessionId: "native",
@@ -129,41 +130,41 @@ describe("sanitized hosted submission diagnostics", () => {
           requestDigest: `sha256:${"a".repeat(64)}`,
           sessionId: "public",
         },
-        binding: { adapterGeneration: 2, adapterSessionId: "replacement" },
+        nativeRead: {
+          currentTurnPresent: false,
+          nativeNextIndex: 1,
+          nativeStartIndex: 0,
+          nativeTailIndex: 1,
+          observationComplete: false,
+        },
         proof: {
-          version: 1,
           turns: [
             {
-              turnId: "turn",
               deliveryIds: ["ack"],
+              turnId: "turn",
               ...(stamp === "started"
                 ? { startedDeliveryIds: ["ack"] }
                 : { boundary: "turn.completed", boundaryDeliveryIds: ["ack"] }),
             },
           ],
-        },
-        nativeRead: {
-          nativeStartIndex: 0,
-          nativeNextIndex: 1,
-          nativeTailIndex: 1,
-          observationComplete: false,
-          currentTurnPresent: false,
+          version: 1,
         },
       });
       expect(observation).toMatchObject({
-        sameAdapterSession: false,
-        sameAdapterGeneration: false,
-        deliveryTurnMatchCount: 1,
-        startedStampMatchCount: stamp === "started" ? 1 : 0,
         boundaryStampMatchCount: stamp === "boundary" ? 1 : 0,
-        startedOrBoundaryMatch: true,
+        deliveryTurnMatchCount: 1,
         nativeRead: { observationComplete: false },
+        sameAdapterGeneration: false,
+        sameAdapterSession: false,
+        startedOrBoundaryMatch: true,
+        startedStampMatchCount: stamp === "started" ? 1 : 0,
       });
     },
   );
   it("does not let invalid optional read diagnostics suppress the original unknown event", () => {
     const sink = vi.fn<HostedSubmissionDiagnosticSink>();
     const observation = sendDeliveryObservationDiagnostic({
+      binding: { adapterGeneration: 1, adapterSessionId: "native" },
       delivery: {
         adapterGeneration: 1,
         adapterSessionId: "native",
@@ -171,12 +172,11 @@ describe("sanitized hosted submission diagnostics", () => {
         requestDigest: `sha256:${"a".repeat(64)}`,
         sessionId: "public",
       },
-      binding: { adapterGeneration: 1, adapterSessionId: "native" },
     });
     reportHostedSubmissionDiagnostic({
+      failureCategory: "delivery_boundary_unobserved",
       operationKind: "send",
       phase: "send_delivery_boundary",
-      failureCategory: "delivery_boundary_unobserved",
       sendDeliveryObservation: { ...observation, nativeTurnCount: -1 },
       sink,
     });
@@ -533,11 +533,11 @@ describe("native recovery verification diagnostics", () => {
     ...descriptor,
     ownerRunId: "private-recovered-owner",
     provenance: {
+      checkpointVersion: 1,
       kind: "committed-turn-output",
-      sourceStepId: "private-step",
       sourceEventId: "private-event",
       sourceSlot: 1,
-      checkpointVersion: 1,
+      sourceStepId: "private-step",
     },
   });
   const recoveredFixture = async () => {
@@ -553,24 +553,24 @@ describe("native recovery verification diagnostics", () => {
       }
       const recoveryBinding = bindingFor(input.recovery);
       await store.commitNativeRecoveryReceipt({
-        principal,
         descriptor: input.recovery,
-        recoveryBinding,
         nowEpochMs: 100,
+        principal,
+        recoveryBinding,
       });
       return { adapterSessionId: recoveryBinding.ownerRunId, recoveryBinding, snapshot };
     });
-    const activate = vi.fn<NonNullable<HostedEveTransport["activateRecovery"]>>(({ recovery }) =>
-      Promise.resolve(bindingFor(recovery)),
+    const activate = vi.fn<NonNullable<HostedEveTransport["activateRecovery"]>>(
+      async ({ recovery }) => bindingFor(recovery),
     );
     transport.activateRecovery = activate;
     const service = createHostedEveSessionService({
+      assertNativeRecoveryOwner: async () => {},
+      now: () => 100,
+      onSubmissionDiagnostic: sink,
       principal,
       store,
       transport,
-      now: () => 100,
-      onSubmissionDiagnostic: sink,
-      assertNativeRecoveryOwner: () => Promise.resolve(),
     });
     const original = await service.start({
       clientRequestId: "diagnostic-original",
@@ -580,7 +580,7 @@ describe("native recovery verification diagnostics", () => {
       clientRequestId: "diagnostic-recovery",
       resumeSessionId: original.sessionId,
     };
-    return { service, store, transport, sink, activate, recoveryRequest };
+    return { activate, recoveryRequest, service, sink, store, transport };
   };
   it("allowlists internal verification tags without reading accessors or changing the public message", () => {
     const sink = vi.fn<HostedSubmissionDiagnosticSink>();
@@ -593,12 +593,12 @@ describe("native recovery verification diagnostics", () => {
     for (const error of [
       tagged,
       unsafe,
-      { verificationStep: "child_creation_digest", message: canary },
+      { message: canary, verificationStep: "child_creation_digest" },
     ]) {
       reportHostedSubmissionDiagnostic({
+        error,
         operationKind: "start",
         phase: "recovery_activation",
-        error,
         sink,
       });
     }
@@ -641,11 +641,11 @@ describe("native recovery verification diagnostics", () => {
     if (operation?.state !== "succeeded") {
       throw new Error("Expected committed child");
     }
-    const sessionId = operation.sessionId;
+    const { sessionId } = operation;
     await expect(f.service.start(f.recoveryRequest)).rejects.toBeInstanceOf(
       HostedSubmissionUnknownError,
     );
-    await expect(f.service.get({ sessionId, cursor: 0, limit: 10 })).rejects.toBeInstanceOf(
+    await expect(f.service.get({ cursor: 0, limit: 10, sessionId })).rejects.toBeInstanceOf(
       HostedSubmissionUnknownError,
     );
     expect(f.sink).toHaveBeenLastCalledWith(
@@ -656,7 +656,7 @@ describe("native recovery verification diagnostics", () => {
     );
     expect(
       await f.store.getStartOperation(principal, f.recoveryRequest.clientRequestId),
-    ).toMatchObject({ state: "succeeded", sessionId });
+    ).toMatchObject({ sessionId, state: "succeeded" });
     expect(f.transport.start).toHaveBeenCalledTimes(2);
     expect(JSON.stringify(f.sink.mock.calls)).not.toContain(canary);
     expect(JSON.stringify(f.sink.mock.calls)).not.toContain("private-recovered-owner");
@@ -664,11 +664,12 @@ describe("native recovery verification diagnostics", () => {
   it("distinguishes an activation receipt mismatch and a missing canonical GET operation", async () => {
     const f = await recoveredFixture();
     const child = await f.service.start(f.recoveryRequest);
-    f.activate.mockImplementation(({ recovery }) =>
-      Promise.resolve({ ...bindingFor(recovery), ownerRunId: "different-private-owner" }),
-    );
+    f.activate.mockImplementation(async ({ recovery }) => ({
+      ...bindingFor(recovery),
+      ownerRunId: "different-private-owner",
+    }));
     await expect(
-      f.service.get({ sessionId: child.sessionId, cursor: 0, limit: 10 }),
+      f.service.get({ cursor: 0, limit: 10, sessionId: child.sessionId }),
     ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     expect(f.sink).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -679,7 +680,7 @@ describe("native recovery verification diagnostics", () => {
     const lookup = vi.spyOn(f.store, "getPrivateOperation").mockResolvedValue(null);
     f.activate.mockClear();
     await expect(
-      f.service.get({ sessionId: child.sessionId, cursor: 0, limit: 10 }),
+      f.service.get({ cursor: 0, limit: 10, sessionId: child.sessionId }),
     ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     expect(f.sink).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -691,7 +692,7 @@ describe("native recovery verification diagnostics", () => {
     expect(f.transport.start).toHaveBeenCalledTimes(2);
     lookup.mockRejectedValue(new Error(canary));
     await expect(
-      f.service.get({ sessionId: child.sessionId, cursor: 0, limit: 10 }),
+      f.service.get({ cursor: 0, limit: 10, sessionId: child.sessionId }),
     ).rejects.toThrow(canary);
     expect(f.sink).toHaveBeenLastCalledWith(
       expect.objectContaining({

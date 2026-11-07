@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { ViewTransition } from "react";
+import { z } from "zod";
 
 import { RouteProviders } from "@/components/route-providers";
 
@@ -31,7 +32,6 @@ import { AuthenticatedBuilder } from "../ui/authenticated-builder";
 import { BuilderLoadingShell } from "../ui/builder-loading-shell";
 import { Header } from "../ui/builder-shell";
 import styles from "../ui/app-builder.module.css";
-import type { BuilderDraft } from "../ui/builder-types";
 import { WorkspaceOnboarding } from "../ui/workspace-onboarding";
 
 interface PageProps {
@@ -48,11 +48,12 @@ interface PageProps {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function currentUser() {
-  const state = await resolveWorkspaceOnboardingState(async () =>
-    ensurePreviewOAuthDeploymentSessionOrganization({
-      environment: process.env,
-      headers: await headers(),
-    }),
+  const state = await resolveWorkspaceOnboardingState(
+    async () =>
+      await ensurePreviewOAuthDeploymentSessionOrganization({
+        environment: process.env,
+        headers: await headers(),
+      }),
   );
   if (state.status === "anonymous") {
     console.warn(
@@ -90,24 +91,25 @@ async function currentUser() {
 async function HomeContent({ searchParams }: PageProps) {
   await connection();
   const [query, user] = await Promise.all([searchParams, currentUser()]);
-  const mode = typeof query.mode === "string" ? query.mode : undefined;
+  const parsedMode = z.string().optional().safeParse(query.mode);
+  const mode = parsedMode.success ? parsedMode.data : undefined;
   const notices: ProviderConnectionNotice[] = [];
   for (const provider of ["vercel", "github"] as const) {
     const status = query[provider];
     if (status !== "connected" && status !== "failed") {
       continue;
     }
-    notices.push({
-      provider,
-      status,
-      ...(status === "failed"
-        ? {
-            reason: parseProviderConnectionFailureReason(
-              query[provider === "vercel" ? "vercelReason" : "githubReason"] ?? query.reason,
-            ),
-          }
-        : {}),
-    });
+    if (status === "failed") {
+      notices.push({
+        provider,
+        reason: parseProviderConnectionFailureReason(
+          query[provider === "vercel" ? "vercelReason" : "githubReason"] ?? query.reason,
+        ),
+        status,
+      });
+    } else {
+      notices.push({ provider, status });
+    }
   }
   if (
     user.status === "workspace-setup-retry" ||
@@ -129,7 +131,7 @@ async function HomeContent({ searchParams }: PageProps) {
     builderResourceProvisioningFlag(),
   ]);
 
-  if (!resumeKey) {
+  if (resumeKey === undefined) {
     const pendingHandoff = await findAuthenticatedPendingBuilderHandoff({
       environment: process.env,
       headers: await headers(),
@@ -138,16 +140,17 @@ async function HomeContent({ searchParams }: PageProps) {
       redirect(`/handoff/${encodeURIComponent(pendingHandoff.handoffId)}`);
     }
   }
-  const durableDraft = resumeKey
-    ? await readAuthenticatedBuilderDraft({
-        draftId: resumeKey,
-        environment: process.env,
-        headers: await headers(),
-      })
-    : await readAuthenticatedActiveBuilderDraft({
-        environment: process.env,
-        headers: await headers(),
-      });
+  const durableDraft =
+    resumeKey === undefined
+      ? await readAuthenticatedActiveBuilderDraft({
+          environment: process.env,
+          headers: await headers(),
+        })
+      : await readAuthenticatedBuilderDraft({
+          draftId: resumeKey,
+          environment: process.env,
+          headers: await headers(),
+        });
   const integrations = await loadBuilderIntegrationState(
     {
       authenticated: true as const,
@@ -170,7 +173,7 @@ async function HomeContent({ searchParams }: PageProps) {
         integrations={integrations}
         providerNotices={notices}
         providerResumeKey={resumeKey}
-        initialDurableDraft={durableDraft?.record.draft as BuilderDraft | undefined}
+        initialDurableDraft={durableDraft?.record.draft}
         durableDraftId={durableDraft?.draftId}
         durableDraftRevision={durableDraft?.revision}
         durableDraftUpdatedAt={durableDraft?.updatedAt}

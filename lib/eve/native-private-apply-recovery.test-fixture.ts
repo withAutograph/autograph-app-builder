@@ -27,8 +27,8 @@ export const retainedPrivateApplyRecoveryFixture = async (
   selectedBinding?: { ownerRunId: string; logicalSessionId: string },
 ) => {
   const binding = selectedBinding ?? {
-    ownerRunId: "physical-failed-owner",
     logicalSessionId: "same-saved-session",
+    ownerRunId: "physical-failed-owner",
   };
   const scope = {
     appId: "app",
@@ -38,7 +38,6 @@ export const retainedPrivateApplyRecoveryFixture = async (
     workspaceId: "private-workspace",
   };
   const context = {
-    "eve.sessionId": binding.logicalSessionId,
     "autograph-app-builder.private-apply-authority.v1": {
       grant: { ...scope, proposalDigest: "older-approved-proposal" },
       pending: [
@@ -49,87 +48,88 @@ export const retainedPrivateApplyRecoveryFixture = async (
       ],
     },
     "autograph-app-builder.workflow.v17": {
-      phase: "planned",
       appSpec: { digest: "spec" },
+      phase: "planned",
       proposal: { digest: scope.proposalDigest, target: { contract: { appId: "app" } } },
-      workspace: { workspaceId: scope.workspaceId, workspaceDigest: "workspace-digest" },
+      workspace: { workspaceDigest: "workspace-digest", workspaceId: scope.workspaceId },
     },
+    "eve.sessionId": binding.logicalSessionId,
   };
   // Actual defect shape: a compaction checkpoint followed by call/approval/response
   // and the old real user that the prior guard wrongly appended after approval.
   const badHistory = [
-    { role: "user", kind: "context.compaction", content: "[compaction checkpoint]" },
-    { role: "assistant", content: "The same saved app remains planned; no apply has run." },
+    { content: "[compaction checkpoint]", kind: "context.compaction", role: "user" },
+    { content: "The same saved app remains planned; no apply has run.", role: "assistant" },
     ...history().slice(-2),
     originalUser,
   ];
   const session = {
-    sessionId: binding.logicalSessionId,
-    rootSessionId: binding.logicalSessionId,
-    continuationToken: "original-continuation",
     agent: {
+      modelReference: { id: "synthetic", provider: "test" },
       system: "Original product brief",
       tools: [],
-      modelReference: { id: "synthetic", provider: "test" },
     },
-    compaction: { threshold: 1e6, recentWindowSize: 10 },
-    state: { "eve.harness.emission": { sessionStarted: true, sequence: 433, stepIndex: 0 } },
+    compaction: { recentWindowSize: 10, threshold: 1e6 },
+    continuationToken: "original-continuation",
     history: badHistory,
+    rootSessionId: binding.logicalSessionId,
+    sessionId: binding.logicalSessionId,
+    state: { "eve.harness.emission": { sequence: 433, sessionStarted: true, stepIndex: 0 } },
   };
   const step = {
-    runId: binding.ownerRunId,
-    stepId: "step-original-terminal",
-    stepName: "step//eve//terminateChildSessionsStep",
-    status: "completed",
     input: await serialization.dehydrateStepArguments(
       {
         args: [
-          { sessionState: createDurableSessionState({ session }), serializedContext: context },
+          { serializedContext: context, sessionState: createDurableSessionState({ session }) },
         ],
         closureVars: [],
       },
       binding.ownerRunId,
     ),
+    runId: binding.ownerRunId,
+    status: "completed",
+    stepId: "step-original-terminal",
+    stepName: "step//eve//terminateChildSessionsStep",
   };
   const world = {
-    runs: { get: async () => ({ runId: binding.ownerRunId, status: "failed" }) },
     events: {
       list: async () => ({
         data: [
           {
-            runId: binding.ownerRunId,
-            eventId: "evnt_00000000000000000000000001",
             correlationId: step.stepId,
-            eventType: "step_completed",
             eventData: { stepName: step.stepName },
+            eventId: "evnt_00000000000000000000000001",
+            eventType: "step_completed",
+            runId: binding.ownerRunId,
           },
         ],
         hasMore: false,
       }),
     },
+    runs: { get: async () => ({ runId: binding.ownerRunId, status: "failed" }) },
     steps: { get: async () => step },
   };
   const collect = createTerminalRecoveryCandidateCollector({
     getWorld: async () => world,
-    resolveRunEncryptionKey: async () => {
-      /* This controlled World has no encryption key. */
-    },
     hydrateStepArguments: (value: unknown, run: string, key: unknown) =>
       serialization.hydrateStepArguments(value, run, key, []),
     hydrateStepReturnValue: (value: unknown, run: string, key: unknown) =>
       serialization.hydrateStepReturnValue(value, run, key),
+    now: () => 0,
     readDurableSession,
-    requireEventSlot: (id: string) => Number(id.slice(5)),
     async *readNativeEvents() {
       /* No native effect result exists for this pending call. */
     },
-    now: () => 0,
+    requireEventSlot: (id: string) => Number(id.slice(5)),
+    resolveRunEncryptionKey: async () => {
+      /* This controlled World has no encryption key. */
+    },
   });
   const collected = await collect({
-    binding,
     authorizeOwner: async () => {
       /* Controlled local World ownership; the real adapter ports are tested separately. */
     },
+    binding,
   });
   expect(collected.kind).toBe("candidate");
   const payload = readTerminalRecoveryCandidate(collected.candidate);
@@ -142,14 +142,14 @@ export const retainedPrivateApplyRecoveryFixture = async (
     repeatableCallIds,
   });
   return {
-    context,
-    collected,
-    repeatableCallIds,
-    reconciled,
     binding,
+    collected,
+    context,
     payload,
+    readDurableSession,
     reconcile: (ids: readonly string[]) =>
       reconcileTerminalRecoveryCandidate(collected.candidate, { repeatableCallIds: ids }),
-    readDurableSession,
+    reconciled,
+    repeatableCallIds,
   };
 };

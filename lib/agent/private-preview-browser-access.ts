@@ -108,20 +108,23 @@ export const withPrivatePreviewBrowserAccess = async <T>(input: {
     "authority.json",
   );
   const content = JSON.stringify({
-    version: 1,
-    kind: "private-preview-browser-access",
     appId: input.appId,
-    origin: launch.data.origin,
-    launchUrl: launch.data.href,
     expiresAt: input.preview.receipt.expiresAt,
+    kind: "private-preview-browser-access",
+    launchUrl: launch.data.href,
+    origin: launch.data.origin,
+    version: 1,
   });
   const digest = createHash("sha256").update(content).digest("hex");
   const run = async (operation: "prepare" | "seal" | "remove") => {
-    const result = await input.sandbox.run({
+    const command: Parameters<SandboxSession["run"]>[0] = {
       command: fileOperation(file, operation, digest),
       workingDirectory: input.root,
-      ...(operation === "remove" ? {} : { abortSignal: input.signal }),
-    });
+    };
+    if (operation !== "remove") {
+      command.abortSignal = input.signal;
+    }
+    const result = await input.sandbox.run(command);
     if (result.exitCode !== 0) {
       throw new PrivatePreviewBrowserPrerequisiteError();
     }
@@ -133,8 +136,8 @@ export const withPrivatePreviewBrowserAccess = async <T>(input: {
     input.assertCurrent();
     input.signal?.throwIfAborted();
     await input.sandbox.writeTextFile({
-      path: file,
       content,
+      path: file,
     });
     input.signal?.throwIfAborted();
     input.assertCurrent();
@@ -142,8 +145,8 @@ export const withPrivatePreviewBrowserAccess = async <T>(input: {
     input.signal?.throwIfAborted();
     input.assertCurrent();
     const result = await input.operation({
-      APP_TEST_PREVIEW_AUTHORITY_FILE: file,
       APP_TEST_BASE_URL: launch.data.origin,
+      APP_TEST_PREVIEW_AUTHORITY_FILE: file,
     });
     input.signal?.throwIfAborted();
     input.assertCurrent();

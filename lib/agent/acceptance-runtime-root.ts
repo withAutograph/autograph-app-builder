@@ -49,9 +49,9 @@ export const recoverAcceptanceCheckout = async (input: {
     input.signal.throwIfAborted();
     // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Recover source in order, retaining every existing checkout.
     const result = await input.sandbox.run({
+      abortSignal: input.signal,
       command,
       workingDirectory: input.workingDirectory,
-      abortSignal: input.signal,
     });
     if (
       result.exitCode === 128 &&
@@ -86,27 +86,26 @@ export const attachAvailableAcceptanceDependencies = async (input: {
     }
     // oxlint-disable-next-line eslint/no-await-in-loop -- Inspect retained sources in preference order.
     const existing = await input.sandbox.run({
+      abortSignal: input.signal,
       command: `test -d ${quote(root)}`,
       workingDirectory: input.workspaceRoot,
-      abortSignal: input.signal,
     });
-    if (existing.exitCode === 1) {
-      continue;
-    }
-    if (existing.exitCode !== 0) {
+    if (existing.exitCode !== 0 && existing.exitCode !== 1) {
       throw new Error(
         "Builder could not inspect the retained dependency source. The recovered checkout is preserved; inspect sandbox file access before retrying.",
       );
     }
-    // The maintained attachment implementation enforces owned paths and rebases workspace links.
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Attach the first existing source only.
-    await attachCheckoutDependencyView({
-      sandbox: input.sandbox,
-      checkoutRoot: root,
-      candidateRoot: input.recoveredRoot,
-      workspaceRoot: input.workspaceRoot,
-    });
-    return;
+    if (existing.exitCode === 0) {
+      // The maintained attachment implementation enforces owned paths and rebases workspace links.
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Attach the first existing source only.
+      await attachCheckoutDependencyView({
+        candidateRoot: input.recoveredRoot,
+        checkoutRoot: root,
+        sandbox: input.sandbox,
+        workspaceRoot: input.workspaceRoot,
+      });
+      return;
+    }
   }
   // Let the repository-owned describe command reveal any actual missing dependency.
 };
@@ -151,10 +150,10 @@ export const resolveAcceptanceRuntimeRoot = async (input: {
   const { state, sandbox, ctx, appId } = input;
   const projection = await resolveProtectedRuntimeBindings({
     appId,
+    callbackExecution: hostedOperatorCallbackExecution(ctx.session),
     sessionAuth: ctx.session.auth,
     sessionId: ctx.session.id,
     signal: ctx.abortSignal,
-    callbackExecution: hostedOperatorCallbackExecution(ctx.session),
   });
   if (projection === null) {
     return input.fallbackRoot;
@@ -177,16 +176,13 @@ export const resolveAcceptanceRuntimeRoot = async (input: {
     input.fallbackRoot,
   ].filter((entry): entry is string => entry !== undefined);
   const selectedRoot = await resolveCompatibleAcceptanceRoot({
-    roots: retainedRoots,
-    releaseId: projection.plan.release.id,
-    signal: ctx.abortSignal,
     describe: async (root) => {
       ctx.abortSignal.throwIfAborted();
       try {
         const result = await sandbox.run({
+          abortSignal: ctx.abortSignal,
           command: `mise run app:describe ${quote(appId)}`,
           workingDirectory: root,
-          abortSignal: ctx.abortSignal,
         });
         if (result.exitCode !== 0) {
           const diagnostic = sanitizeValidationDiagnosticText(
@@ -213,7 +209,7 @@ export const resolveAcceptanceRuntimeRoot = async (input: {
     },
     recover: async () => {
       const access = repositoryAccessReceiptSchema.parse(repositoryAccessReceiptState.get());
-      const delivery = projection.plan.delivery;
+      const { delivery } = projection.plan;
       if (
         access.sessionId !== ctx.session.id ||
         delivery?.gitSha === undefined ||
@@ -232,38 +228,41 @@ export const resolveAcceptanceRuntimeRoot = async (input: {
             repository: access.repository,
             sessionId: ctx.session.id,
           }),
-        sandbox: {
-          setNetworkPolicy: async (policy) => {
-            await setBuilderSandboxNetworkPolicy(sandbox, policy);
-          },
-        },
         prepare: async () => {
           // A rejected fetch may leave a partial clone. Keep it intact and retry into a new checkout.
           const destination = `/workspace/.app-builder/acceptance/${randomUUID()}`;
           await ensureSandboxDirectories(sandbox, ["/workspace/.app-builder/acceptance"]);
           await recoverAcceptanceCheckout({
-            sandbox,
             repositoryUrl: `https://github.com/${access.repository.owner}/${access.repository.name}.git`,
             revision,
             root: destination,
-            workingDirectory: "/workspace",
+            sandbox,
             signal: ctx.abortSignal,
+            workingDirectory: "/workspace",
           });
           // Retain the fetched source even if dependency attachment or description subsequently fails.
           recoveredRoots.update((value) => ({ ...value, [appId]: destination }));
           await attachAvailableAcceptanceDependencies({
-            sandbox,
-            roots: retainedRoots,
             recoveredRoot: destination,
-            workspaceRoot: "/workspace",
+            roots: retainedRoots,
+            sandbox,
             signal: ctx.abortSignal,
+            workspaceRoot: "/workspace",
           });
           return destination;
+        },
+        sandbox: {
+          setNetworkPolicy: async (policy) => {
+            await setBuilderSandboxNetworkPolicy(sandbox, policy);
+          },
         },
       });
       recoveredRoots.update((value) => ({ ...value, [appId]: prepared }));
       return prepared;
     },
+    releaseId: projection.plan.release.id,
+    roots: retainedRoots,
+    signal: ctx.abortSignal,
   });
   return selectedRoot;
 };

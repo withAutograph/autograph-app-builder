@@ -238,13 +238,6 @@ export const readAppRuntimeSnapshot: ReadAppRuntimeSnapshot = async (runtimeUrl,
             }
             return classifyActorBinding(rows[0]?.binding, scope);
           },
-          readIdentity: async () => {
-            const rows = await tx.unsafe(IDENTITY_SQL);
-            if (rows.length !== 1) {
-              throw reject();
-            }
-            return identitySchema.parse(rows[0]);
-          },
           readActiveOrganization: async (scope) => {
             const rows = await tx.unsafe(
               "select public.kernel_read_actor_binding($1::jsonb) as binding",
@@ -263,11 +256,11 @@ export const readAppRuntimeSnapshot: ReadAppRuntimeSnapshot = async (runtimeUrl,
             const result: unknown = rows[0]?.binding;
             const inactiveScope = z
               .object({
-                ok: z.literal(false),
                 error: z.object({
                   code: z.literal("authorization_denied"),
                   details: z.array(z.object({ code: z.literal("scope_mismatch") })).min(1),
                 }),
+                ok: z.literal(false),
               })
               .safeParse(result);
             if (inactiveScope.success) {
@@ -275,13 +268,13 @@ export const readAppRuntimeSnapshot: ReadAppRuntimeSnapshot = async (runtimeUrl,
             }
             const envelope = z
               .object({
-                ok: z.literal(true),
                 data: actorBindingSchema
                   .extend({
                     active: z.boolean(),
                     fenceGeneration: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
                   })
                   .nullable(),
+                ok: z.literal(true),
               })
               .parse(result);
             const binding = envelope.data;
@@ -301,6 +294,13 @@ export const readAppRuntimeSnapshot: ReadAppRuntimeSnapshot = async (runtimeUrl,
             }
             // Reuse the existing fence-checked observability read, including its locking admission.
             return await reader.readOrganization(scope);
+          },
+          readIdentity: async () => {
+            const rows = await tx.unsafe(IDENTITY_SQL);
+            if (rows.length !== 1) {
+              throw reject();
+            }
+            return identitySchema.parse(rows[0]);
           },
           readOrganization: async (scope, observeStage) => {
             observeStage?.("actor_binding");
@@ -411,10 +411,10 @@ export const readActiveAppInstallationCustomerIds = async (input: {
           throw reject();
         }
         observations.push({
-          organizationId: scope.organizationId,
-          schemaRevisionId: value.active_schema_revision_id,
           baseArtifactHash: active[0].artifact_hashes.base,
           effectiveArtifactHash: value.active_effective_artifact_hash,
+          organizationId: scope.organizationId,
+          schemaRevisionId: value.active_schema_revision_id,
         });
       }
       return observations;
@@ -719,8 +719,8 @@ export const createHostedOperatorAppReadiness =
         error,
         undefined,
         {
-          stage: "final_runtime_readiness",
           runtimeReadinessStage,
+          stage: "final_runtime_readiness",
         },
       );
       throw reject();

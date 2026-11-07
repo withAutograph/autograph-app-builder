@@ -105,15 +105,15 @@ const reconnect = (): PreparedVercelAccess => ({
 
 type VercelProjectAccessStage = "credential-read" | "provider-fetch" | "provider-json";
 const vercelProjectAccessReasons = {
+  authorizationRequired: "authorization-required",
   credentialUnavailable: "credential-unavailable",
   installationMismatch: "installation-mismatch",
-  scopeMismatch: "scope-mismatch",
-  rateLimited: "rate-limited",
-  projectUnavailable: "project-unavailable",
-  authorizationRequired: "authorization-required",
-  providerUnavailable: "provider-unavailable",
   projectResponseMismatch: "project-response-mismatch",
+  projectUnavailable: "project-unavailable",
+  providerUnavailable: "provider-unavailable",
+  rateLimited: "rate-limited",
   readFailed: "read-failed",
+  scopeMismatch: "scope-mismatch",
 } as const;
 interface VercelProjectAccessFailure {
   stage: VercelProjectAccessStage;
@@ -164,21 +164,21 @@ const readVercelProjectAccess = async (input: {
     });
     if (!credential || !credential.binding.active) {
       recordVercelProjectAccessFailure(() => ({
-        stage: diagnosticStage,
-        reason: vercelProjectAccessReasons.credentialUnavailable,
-        credentialsPresent: Boolean(credential),
         bindingActive: credential?.binding.active === true,
+        credentialsPresent: Boolean(credential),
+        reason: vercelProjectAccessReasons.credentialUnavailable,
+        stage: diagnosticStage,
       }));
       return reconnect();
     }
     const { binding, token } = credential;
     if (binding.installationId !== input.installationId) {
       recordVercelProjectAccessFailure(() => ({
-        stage: diagnosticStage,
-        reason: vercelProjectAccessReasons.installationMismatch,
-        credentialsPresent: true,
         bindingActive: true,
+        credentialsPresent: true,
         installationMatches: false,
+        reason: vercelProjectAccessReasons.installationMismatch,
+        stage: diagnosticStage,
       }));
       return unavailable();
     }
@@ -187,11 +187,11 @@ const readVercelProjectAccess = async (input: {
       (binding.scopeId !== input.expectedScope.id || binding.scopeType !== input.expectedScope.type)
     ) {
       recordVercelProjectAccessFailure(() => ({
-        stage: diagnosticStage,
-        reason: vercelProjectAccessReasons.scopeMismatch,
-        installationMatches: true,
         expectedScopeIdMatches: binding.scopeId === input.expectedScope?.id,
         expectedScopeTypeMatches: binding.scopeType === input.expectedScope?.type,
+        installationMatches: true,
+        reason: vercelProjectAccessReasons.scopeMismatch,
+        stage: diagnosticStage,
       }));
       return { action: "review-selection", status: "resource-unavailable" };
     }
@@ -215,40 +215,40 @@ const readVercelProjectAccess = async (input: {
     });
     if (response.status === 403 && response.headers.has("retry-after")) {
       recordVercelProjectAccessFailure(() => ({
-        stage: diagnosticStage,
-        reason: vercelProjectAccessReasons.rateLimited,
         httpStatus: response.status,
+        reason: vercelProjectAccessReasons.rateLimited,
         retryAfterPresent: true,
+        stage: diagnosticStage,
       }));
       await response.body?.cancel();
       return unavailable();
     }
     if (response.status === 404) {
       recordVercelProjectAccessFailure(() => ({
-        stage: diagnosticStage,
-        reason: vercelProjectAccessReasons.projectUnavailable,
         httpStatus: response.status,
+        reason: vercelProjectAccessReasons.projectUnavailable,
         retryAfterPresent: response.headers.has("retry-after"),
+        stage: diagnosticStage,
       }));
       await response.body?.cancel();
       return { action: "review-selection", status: "resource-unavailable" };
     }
     if ([401, 403].includes(response.status)) {
       recordVercelProjectAccessFailure(() => ({
-        stage: diagnosticStage,
-        reason: vercelProjectAccessReasons.authorizationRequired,
         httpStatus: response.status,
+        reason: vercelProjectAccessReasons.authorizationRequired,
         retryAfterPresent: response.headers.has("retry-after"),
+        stage: diagnosticStage,
       }));
       await response.body?.cancel();
       return reconnect();
     }
     if (response.status !== 200) {
       recordVercelProjectAccessFailure(() => ({
-        stage: diagnosticStage,
-        reason: vercelProjectAccessReasons.providerUnavailable,
         httpStatus: response.status,
+        reason: vercelProjectAccessReasons.providerUnavailable,
         retryAfterPresent: response.headers.has("retry-after"),
+        stage: diagnosticStage,
       }));
       await response.body?.cancel();
       return unavailable();
@@ -289,12 +289,12 @@ const readVercelProjectAccess = async (input: {
     const [idMatches, hasName, accountMatches] = observed.matches;
     if (observed.matches.some((matches) => !matches)) {
       recordVercelProjectAccessFailure(() => ({
-        stage: diagnosticStage,
-        reason: vercelProjectAccessReasons.projectResponseMismatch,
+        accountMatches,
         httpStatus: response.status,
         idMatches,
         namePresent: hasName,
-        accountMatches,
+        reason: vercelProjectAccessReasons.projectResponseMismatch,
+        stage: diagnosticStage,
       }));
       return unavailable();
     }
@@ -323,9 +323,9 @@ const readVercelProjectAccess = async (input: {
         errorClass = "error";
       }
       return {
-        stage: diagnosticStage,
-        reason: vercelProjectAccessReasons.readFailed,
         errorClass,
+        reason: vercelProjectAccessReasons.readFailed,
+        stage: diagnosticStage,
       };
     });
     return unavailable();
@@ -587,7 +587,7 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
       const { repositoryAccessRuntimeForSession } =
         await import("./deployment-repository-access-runtime");
       const runtime = await repositoryAccessRuntimeForSession(auth);
-      return runtime.classify(value);
+      return await runtime.classify(value);
     },
     readHandoff: readPreparedHandoffContext,
     async vercel(auth, intent) {
@@ -607,7 +607,7 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
         import("../integrations/local-provider-emulation"),
         import("../integrations/provider-emulation-fetch"),
       ]);
-      return readPreparedVercelAccess({
+      return await readPreparedVercelAccess({
         authority,
         intent,
         async readCredential(value) {
@@ -628,7 +628,7 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
           ) {
             throw new Error("Provider authority is unavailable.");
           }
-          return readActiveVercelInstallationToken({
+          return await readActiveVercelInstallationToken({
             ...value,
             config,
             database,
@@ -639,8 +639,8 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
           return emulation
             ? {
                 apiOrigin: emulation.vercelOrigin,
-                fetch: ((resource, init) =>
-                  providerEmulationFetch(resource as URL, init, emulation)) as typeof fetch,
+                fetch: async (resource, init) =>
+                  await providerEmulationFetch(resource as URL, init, emulation),
               }
             : {};
         })(),

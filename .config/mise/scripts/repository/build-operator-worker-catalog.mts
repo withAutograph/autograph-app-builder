@@ -27,9 +27,9 @@ for (const source of [builder, arrusted]) {
   }
 }
 const environment = {
-  PATH: process.env.PATH,
   HOME: process.env.HOME,
   NODE_ENV: "production" as const,
+  PATH: process.env.PATH,
 };
 const command = async (cwd: string, executable: string, args: string[]) => {
   try {
@@ -38,7 +38,7 @@ const command = async (cwd: string, executable: string, args: string[]) => {
       execFile(
         executable,
         args,
-        { cwd, env: environment, maxBuffer: 4 * 1024 * 1024, encoding: "utf-8" },
+        { cwd, encoding: "utf-8", env: environment, maxBuffer: 4 * 1024 * 1024 },
         (error: Error | null, stdout: string) => {
           if (error === null) {
             resolve(stdout.trim());
@@ -63,7 +63,7 @@ const identify = async (cwd: string) => {
     tree: await command(cwd, "git", ["rev-parse", "HEAD^{tree}"]),
   };
 };
-const sources = { builder: await identify(builder), arrusted: await identify(arrusted) };
+const sources = { arrusted: await identify(arrusted), builder: await identify(builder) };
 if ((await command(builder, bun, ["--version"])) !== "1.3.14") {
   throw new Error("Expected maintained Bun 1.3.14 compiler");
 }
@@ -107,25 +107,25 @@ await command(builder, bun, [
 ]);
 type CatalogWorkers = z.infer<typeof operatorWorkerCatalogReceiptSchema>["workers"];
 const entries = {
+  auth: [{ path: "packages/auth/protected-installer-worker.ts", repository: "arrusted" }],
+  authProposal: [
+    { path: ".config/mise/scripts/repository/auth-schema-proposal.ts", repository: "arrusted" },
+  ],
   genericInstaller: [
     {
-      repository: "arrusted",
       path: "packages/generated-app-runtime/protected-installer-worker.ts",
+      repository: "arrusted",
     },
-  ],
-  authProposal: [
-    { repository: "arrusted", path: ".config/mise/scripts/repository/auth-schema-proposal.ts" },
-  ],
-  auth: [{ repository: "arrusted", path: "packages/auth/protected-installer-worker.ts" }],
-  resources: [
-    { repository: "arrusted", path: "packages/provisioning/neon-resource-bootstrap-worker.ts" },
   ],
   managedRuntime: [
-    { repository: "builder", path: "lib/agent/managed-runtime-entry.ts" },
+    { path: "lib/agent/managed-runtime-entry.ts", repository: "builder" },
     {
-      repository: "arrusted",
       path: "packages/platform-microfrontends/src/policy/managed-gateway-verification.ts",
+      repository: "arrusted",
     },
+  ],
+  resources: [
+    { path: "packages/provisioning/neon-resource-bootstrap-worker.ts", repository: "arrusted" },
   ],
 } satisfies { [Family in keyof CatalogWorkers]: CatalogWorkers[Family]["entries"] };
 const workers: Partial<CatalogWorkers> = {};
@@ -147,22 +147,22 @@ for (const family of operatorWorkerFamilySchema.options) {
     throw new Error("Compiled worker is not Linux x64 ELF");
   }
   workers[family] = {
+    bytes: bytes.length,
+    entries: entries[family],
+    mode: "100755",
     path: `bin/${family}-linux-x64`,
     sha256: createHash("sha256").update(bytes).digest("hex"),
-    bytes: bytes.length,
-    mode: "100755",
-    entries: entries[family],
   };
 }
-const after = { builder: await identify(builder), arrusted: await identify(arrusted) };
+const after = { arrusted: await identify(arrusted), builder: await identify(builder) };
 if (JSON.stringify(after) !== JSON.stringify(sources)) {
   throw new Error("Source changed during release worker build; receipt not published");
 }
 const receipt = operatorWorkerCatalogReceiptSchema.parse({
-  version: 1,
+  compiler: { name: "bun", target: "bun-linux-x64", version: "1.3.14" },
   kind: "operator-worker-catalog-v1",
   sources,
-  compiler: { name: "bun", version: "1.3.14", target: "bun-linux-x64" },
+  version: 1,
   workers,
 });
 const bytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);

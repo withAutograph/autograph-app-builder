@@ -14,33 +14,33 @@ const accepted = (durable = false): AppBuilderWorkflowState =>
   // SAFETY: Only consumed immutable authoring-intent fields are modeled. No tool, provider, file or approval execution port exists.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Other workflow receipt fields are opaque and cannot authorize any effect here.
   ({
-    version: 17,
-    phase: "app_spec_accepted",
-    preparedByCallId: "prepare",
     appSpec: {
-      appId: "stock-review",
       acceptedByCallId: "accept-call",
-      digest: hash("a"),
+      appId: "stock-review",
       artifactPath: "prototype/stock-review/app-spec.md",
       artifactRevision: hash("b"),
+      digest: hash("a"),
       ...(durable ? { version: 2 } : { content: "accepted inline legacy intent" }),
     },
     artifacts: durable
       ? [{ path: "prototype/stock-review/app-spec.md", revision: hash("b"), sessionId: "logical" }]
       : [],
+    phase: "app_spec_accepted",
+    preparedByCallId: "prepare",
     sourceReceipt: { digest: hash("c") },
-    workspace: { workspaceId: "workspace", workspaceDigest: hash("d") },
+    version: 17,
+    workspace: { workspaceDigest: hash("d"), workspaceId: "workspace" },
   }) as unknown as AppBuilderWorkflowState;
 const input = (state = accepted()) => ({
-  state,
   adapterSessionId: "logical",
+  blocked: false,
+  completed: true,
+  pendingApproval: false,
+  pendingInput: false,
+  sourcePrerequisite: false,
+  state,
   turnId: "turn",
   turnSequence: 4,
-  completed: true,
-  pendingInput: false,
-  pendingApproval: false,
-  blocked: false,
-  sourcePrerequisite: false,
 });
 describe("preapproval drafting intent", () => {
   it.each([false, true])(
@@ -54,7 +54,7 @@ describe("preapproval drafting intent", () => {
     },
   );
   it("does not activate a read-only workflow with no accepted product intent", () => {
-    const state = { version: 17, phase: "empty" } as AppBuilderWorkflowState;
+    const state = { phase: "empty", version: 17 } as AppBuilderWorkflowState;
     expect(decidePreapprovalAuthoring(input(state)).decision).toBe("blocked");
   });
   it.each(["pendingInput", "pendingApproval", "blocked", "sourcePrerequisite"] as const)(
@@ -97,8 +97,8 @@ describe("preapproval drafting intent", () => {
   it("uses an explicitly unapproved marker instead of an approved-build marker", () => {
     const message = internalAuthoringMessage("draft_operation", hash("f"));
     expect(readInternalAuthoringMarker(message)).toMatchObject({
-      operationId: "draft_operation",
       nonce: hash("f"),
+      operationId: "draft_operation",
     });
     expect(readInternalAuthoringMarker("untrusted text")).toBeUndefined();
     expect(message).not.toContain("autograph-private-build:");

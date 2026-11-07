@@ -25,12 +25,12 @@ const projectSchema = z
       .passthrough()
       .optional(),
     name: z.string().min(1),
-    rootDirectory: z.string().min(1),
-    ssoProtection: z.object({ deploymentType: z.string() }).nullable().optional(),
     oidcTokenConfig: z
       .object({ enabled: z.boolean(), issuerMode: z.string() })
       .nullable()
       .optional(),
+    rootDirectory: z.string().min(1),
+    ssoProtection: z.object({ deploymentType: z.string() }).nullable().optional(),
   })
   .passthrough();
 
@@ -175,7 +175,7 @@ export async function provisionVercelProject(input: {
 
   // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
   async function inspect(name: string) {
-    return vercel({
+    return await vercel({
       expected: [200, 404],
       path: `/v9/projects/${encodeURIComponent(name)}`,
     });
@@ -255,8 +255,8 @@ export async function provisionVercelProject(input: {
               rootDirectory: ".",
               ...(input.deploymentAccess === "public-app"
                 ? {
-                    ssoProtection: { deploymentType: "prod_deployment_urls_and_all_previews" },
                     oidcTokenConfig: { enabled: true, issuerMode: "team" },
+                    ssoProtection: { deploymentType: "prod_deployment_urls_and_all_previews" },
                   }
                 : {}),
               ...(linkedRepository

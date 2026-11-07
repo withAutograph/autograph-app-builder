@@ -1,5 +1,6 @@
 import { defineEval } from "eve/evals";
 import { satisfies } from "eve/evals/expect";
+import { z } from "zod";
 
 import { validateBuildReadyAppSpec } from "../lib/agent/app-spec-validation";
 import {
@@ -9,6 +10,12 @@ import {
 } from "./support/product-quality";
 import { isProductFacing } from "./support/public-conversation";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
+
+const stringInputSchema = z.string();
+const completedMessageEventSchema = z.object({
+  data: z.object({ message: z.string() }),
+  type: z.literal("message.completed"),
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assertQuality(report: { hardFailures: readonly string[] }, label: string) {
@@ -34,7 +41,8 @@ export default defineEval({
       count: 1,
       input: {
         content: (value) => {
-          if (typeof value !== "string") {
+          const parsedValue = stringInputSchema.safeParse(value);
+          if (!parsedValue.success) {
             return false;
           }
           const report = evaluatePrototypeQuality({
@@ -97,7 +105,7 @@ Confirmed.
   "status": "build-ready"
 }
 \`\`\``,
-            html: value,
+            html: parsedValue.data,
             scenario: vendor,
           });
           return report.hardFailures.length === 0;
@@ -109,9 +117,14 @@ Confirmed.
       count: 1,
       input: {
         content: (value) =>
-          typeof value === "string" &&
-          value.includes("Operations starts from a review queue") &&
-          value.includes("Finance tax verification appears only"),
+          stringInputSchema.safeParse(value).success &&
+          (() => {
+            const parsedValue = stringInputSchema.parse(value);
+            return (
+              parsedValue.includes("Operations starts from a review queue") &&
+              parsedValue.includes("Finance tax verification appears only")
+            );
+          })(),
         path: "prototype/vendor-onboarding/decisions.md",
       },
     });
@@ -119,9 +132,14 @@ Confirmed.
       count: 1,
       input: {
         content: (value) =>
-          typeof value === "string" &&
-          validateBuildReadyAppSpec(value).valid &&
-          value.includes("prototype/vendor-onboarding/index.html"),
+          (() => {
+            const parsedValue = stringInputSchema.safeParse(value);
+            return (
+              parsedValue.success &&
+              validateBuildReadyAppSpec(parsedValue.data).valid &&
+              parsedValue.data.includes("prototype/vendor-onboarding/index.html")
+            );
+          })(),
         path: "prototype/vendor-onboarding/app-spec.md",
       },
     });
@@ -180,14 +198,8 @@ Confirmed.
       "all assistant messages stay product-facing across the quality suite",
       (events) => {
         const messages = events.flatMap((event) => {
-          const candidate = event as {
-            type?: unknown;
-            data?: { message?: unknown };
-          };
-          return candidate.type === "message.completed" &&
-            typeof candidate.data?.message === "string"
-            ? [candidate.data.message]
-            : [];
+          const candidate = completedMessageEventSchema.safeParse(event);
+          return candidate.success ? [candidate.data.data.message] : [];
         });
         return messages.length <= 4 && messages.every(isProductFacing);
       },

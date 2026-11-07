@@ -27,16 +27,16 @@ const values = {
 const manifest = ownedAppReleaseEnvironmentManifest(base.selection.appId, values, integration);
 const published = publicReleasePlanSchema.parse({
   ...base,
+  environment: manifest,
+  integrationCapability: integration,
   purpose: "application",
   runtime: { ...base.runtime, releaseId: integration.capability.release.id },
-  integrationCapability: integration,
-  environment: manifest,
 });
 const retained = (
   ["APP_INTEGRATIONS_CAPABILITY", "APP_INTEGRATIONS_RUNTIME_CONFIGURATION"] as const
 ).map((key) => ({
-  key,
   acceptedEnvId: `owned-${key}`,
+  key,
   sha256: createHash("sha256").update(values[key]).digest("hex"),
   sourceOperationRef: publicReleaseOperationRef(published),
   sourcePlanDigest: publicReleasePlanDigest(published),
@@ -71,8 +71,8 @@ test("only a separately approved attachment admits exactly its two private confi
 test("fresh Auth bootstrap retains proven optional rows read-only while its write set remains fifteen", () => {
   const bootstrap = publicReleasePlanSchema.parse({
     ...base,
-    purpose: "auth-bootstrap",
     environment: ownedAppReleaseEnvironmentManifest(base.selection.appId, authValues),
+    purpose: "auth-bootstrap",
     retainedOptionalBindings: retained,
   });
   expect(bootstrap.environment).toHaveLength(15);

@@ -614,8 +614,8 @@ export function createPreviewOAuthServer(input: {
           clientId: localGithubClientId,
           clientSecret: localGithubClientSecret,
           disableSignUp: false,
-          getToken: (data) =>
-            exchangeLocalEmulatedOAuthCode({
+          getToken: async (data) =>
+            await exchangeLocalEmulatedOAuthCode({
               clientId: localGithubClientId,
               clientSecret: localGithubClientSecret,
               code: data.code,
@@ -669,8 +669,8 @@ export function createPreviewOAuthServer(input: {
           clientId: localVercelClientId,
           clientSecret: localVercelClientSecret,
           disableSignUp: false,
-          getToken: (data) =>
-            exchangeLocalEmulatedOAuthCode({
+          getToken: async (data) =>
+            await exchangeLocalEmulatedOAuthCode({
               clientId: localVercelClientId,
               clientSecret: localVercelClientSecret,
               code: data.code,

@@ -12,23 +12,23 @@ import { execFileSync } from "node:child_process";
 const fixture = () => {
   const binary = Buffer.from([0, 255, 128, 1]);
   const rows = [
-    { path: "apps/app/public/image.bin", kind: "file", mode: "100644", bytes: binary.length },
-    { path: "apps/app/schema/release/old/sql.sql", kind: "file", mode: "100644", bytes: 2 },
-    { path: "apps/app/.env.local", kind: "file", mode: "100644", bytes: 999 },
-    { path: "apps/app/link", kind: "symlink" },
+    { bytes: binary.length, kind: "file", mode: "100644", path: "apps/app/public/image.bin" },
+    { bytes: 2, kind: "file", mode: "100644", path: "apps/app/schema/release/old/sql.sql" },
+    { bytes: 999, kind: "file", mode: "100644", path: "apps/app/.env.local" },
+    { kind: "symlink", path: "apps/app/link" },
   ];
   const readBinaryFile = vi.fn(async ({ path }: { path: string }) =>
     path.endsWith("image.bin") ? binary : Buffer.from("ok"),
   );
-  const run = vi.fn(async () => ({ exitCode: 0, stdout: JSON.stringify(rows), stderr: "" }));
+  const run = vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: JSON.stringify(rows) }));
   return {
-    sandbox: { run, readBinaryFile },
-    signal: new AbortController().signal,
     appId: "app",
+    assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
     displayName: "App",
-    sourceSessionId: "actual-owner",
-    assertCurrent: vi.fn(async () => {}),
     rows,
+    sandbox: { readBinaryFile, run },
+    signal: new AbortController().signal,
+    sourceSessionId: "actual-owner",
   };
 };
 describe("capture current applied app source", () => {
@@ -70,15 +70,15 @@ describe("capture current applied app source", () => {
 it("prunes actual Playwright reports and browser auth while retaining nested code and ZIP assets", async () => {
   const root = await mkdtemp(nodePath.join(tmpdir(), "app-source-retention-"));
   const files = {
-    "test-results/run/trace.zip": Buffer.from([0, 255, 1]),
-    "test-results/run/screenshot.png": Buffer.from([0, 255, 2]),
-    "playwright-report/index.html": "request fixture_cookie=not-a-secret",
-    "blob-report/report.zip": Buffer.from([0, 255, 3]),
     ".auth/member.json": '{"cookies":[{"value":"fixture-only"}]}',
-    "playwright/.auth/member.json": '{"origins":[{"localStorage":[]}]}',
     "app/test-results/page.tsx": "export default function Page() { return null; }",
+    "blob-report/report.zip": Buffer.from([0, 255, 3]),
+    "playwright-report/index.html": "request fixture_cookie=not-a-secret",
+    "playwright/.auth/member.json": '{"origins":[{"localStorage":[]}]}',
     "public/archive.zip": Buffer.from([0, 255, 4]),
     "schema/release/old/sql.sql": "select 1;",
+    "test-results/run/screenshot.png": Buffer.from([0, 255, 2]),
+    "test-results/run/trace.zip": Buffer.from([0, 255, 1]),
   };
   const reads: string[] = [];
   try {
@@ -91,11 +91,14 @@ it("prunes actual Playwright reports and browser auth while retaining nested cod
     }
     const result = await captureApplicationSource({
       appId: "app",
+      assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
       displayName: "App",
-      sourceSessionId: "fixture-session",
-      signal: new AbortController().signal,
-      assertCurrent: async () => {},
       sandbox: {
+        readBinaryFile: async ({ path }) => {
+          const relative = path.slice("/workspace/repository/apps/app/".length);
+          reads.push(relative);
+          return await readFile(nodePath.join(root, "apps/app", relative));
+        },
         run: async () => {
           const stdout = execFileSync(
             "/usr/bin/python3",
@@ -109,14 +112,11 @@ it("prunes actual Playwright reports and browser auth while retaining nested cod
             ],
             { encoding: "utf-8" },
           );
-          return { exitCode: 0, stdout, stderr: "" };
-        },
-        readBinaryFile: async ({ path }) => {
-          const relative = path.slice("/workspace/repository/apps/app/".length);
-          reads.push(relative);
-          return await readFile(nodePath.join(root, "apps/app", relative));
+          return { exitCode: 0, stderr: "", stdout };
         },
       },
+      signal: new AbortController().signal,
+      sourceSessionId: "fixture-session",
     });
     expect(result.artifact.manifest.files.map((file) => file.path)).toEqual([
       "apps/app/app/test-results/page.tsx",
@@ -141,6 +141,6 @@ it("prunes actual Playwright reports and browser auth while retaining nested cod
       Buffer.from([0, 255, 4]),
     );
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { force: true, recursive: true });
   }
 });

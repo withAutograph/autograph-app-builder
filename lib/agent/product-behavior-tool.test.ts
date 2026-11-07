@@ -61,7 +61,7 @@ const scenario = {
 };
 const context = {
   abortSignal: new AbortController().signal,
-  getSandbox: vi.fn(() => Promise.resolve({ id: "sandbox-one" })),
+  getSandbox: vi.fn(async () => ({ id: "sandbox-one" })),
   session: { id: "session-one" },
 } as unknown as Parameters<typeof verifyAppBehavior.execute>[1];
 
@@ -140,9 +140,9 @@ describe("verify_app_behavior", () => {
     "retains an in-flight %s observation after source or runtime replacement without current credit",
     async (status) => {
       const evidence = { coverage: "action-readback-only", reason: "Observed result.", status };
-      mocks.readback.mockImplementationOnce(() => {
+      mocks.readback.mockImplementationOnce(async () => {
         mocks.current.mockReturnValue(false);
-        return Promise.resolve(evidence);
+        return evidence;
       });
       const result = await verifyAppBehavior.execute(
         { acceptedOutcomeText: "Create a durable draft and read it back.", scenario },

@@ -10,7 +10,7 @@ import {
   writePreviewObservationReport,
 } from "./self-reproduction-preview-observation";
 
-const temp = () => mkdtemp(path.join(tmpdir(), "preview-observation-"));
+const temp = async () => await mkdtemp(path.join(tmpdir(), "preview-observation-"));
 it("keeps a missing receipt unassessed", async () => {
   const root = await temp();
   const state = path.join(root, "state.json");

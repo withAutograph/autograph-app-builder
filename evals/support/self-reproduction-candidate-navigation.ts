@@ -1,6 +1,42 @@
 import type { Page } from "playwright";
 import type { Observation } from "./self-reproduction-parity";
 
+const CANDIDATE_ENTRY_UNAVAILABLE = "Candidate entry unavailable";
+const NAVIGATION_CONTINUITY_REQUIREMENT = "navigation-continuity";
+const DRAFT_SENTINEL = "Navigation continuity sentinel";
+const DRAFT_BRIEF = "Keep this draft through browser Back and Forward.";
+const NAVIGATION_RECEIPT = "candidate-navigation.json";
+const MISSING_FUNCTIONALITY = "missing-functionality" as const;
+const INFRASTRUCTURE_UNAVAILABLE = "infrastructure-unavailable" as const;
+const CANDIDATE_RUNTIME_UNAVAILABLE = "Candidate runtime could not be opened.";
+
+const handleMissingBackControl = async (
+  page: Page,
+  initialURL: string,
+  initialContent: string | null,
+  observation: Observation,
+  capture: (state: string) => Promise<void>,
+): Promise<Observation> => {
+  const inert =
+    page.url() === initialURL && (await page.locator("body").textContent()) === initialContent;
+  observation.disposition = inert ? MISSING_FUNCTIONALITY : "not-run";
+  observation.reason = inert
+    ? "The known Docs control accepted keyboard activation but left URL and visible content unchanged. Browser history continuity cannot proceed."
+    : "Docs changed the application, but its destination does not match the supported history fixture.";
+  if (inert) {
+    observation.assertions = [
+      {
+        artifacts: [],
+        detail: "Docs activation produced no product transition to traverse with browser history.",
+        id: "back-forward-preserves-draft",
+        passed: false,
+      },
+    ];
+  }
+  await capture("documentation");
+  return observation;
+};
+
 /** Browser history behavior only: this does not award instant-navigation credit. */
 export const exerciseCandidateNavigation = async (
   page: Page,
@@ -13,18 +49,18 @@ export const exerciseCandidateNavigation = async (
     disposition: "not-run",
     method: "browser",
     reason: "No supported navigation fixture was established.",
-    requirementId: "navigation-continuity",
+    requirementId: NAVIGATION_CONTINUITY_REQUIREMENT,
   };
   try {
     const response = await page.goto(baseURL, { waitUntil: "domcontentloaded" });
-    if (!response?.ok()) {
-      throw new Error("Candidate entry unavailable");
+    if (response?.ok() !== true) {
+      throw new Error(CANDIDATE_ENTRY_UNAVAILABLE);
     }
   } catch {
     return {
       ...observation,
-      disposition: "infrastructure-unavailable",
-      reason: "Candidate runtime could not be opened.",
+      disposition: INFRASTRUCTURE_UNAVAILABLE,
+      reason: CANDIDATE_RUNTIME_UNAVAILABLE,
     };
   }
   const name = page.getByRole("textbox", { exact: true, name: "App name" });
@@ -37,15 +73,17 @@ export const exerciseCandidateNavigation = async (
         brief,
         docs,
         page.getByRole("button", { exact: true, name: "Continue to review" }),
-      ].map((control) => control.waitFor({ state: "visible", timeout: 10_000 })),
+      ].map(async (control) => {
+        await control.waitFor({ state: "visible", timeout: 10_000 });
+      }),
     );
   } catch {
     return observation;
   }
   try {
     const initialURL = page.url();
-    await name.fill("Navigation continuity sentinel");
-    await brief.fill("Keep this draft through browser Back and Forward.");
+    await name.fill(DRAFT_SENTINEL);
+    await brief.fill(DRAFT_BRIEF);
     const initialContent = await page.locator("body").textContent();
     await docs.focus();
     await docs.press("Enter");
@@ -53,45 +91,43 @@ export const exerciseCandidateNavigation = async (
     try {
       await back.waitFor({ state: "visible", timeout: 10_000 });
     } catch {
-      const inert =
-        page.url() === initialURL && (await page.locator("body").textContent()) === initialContent;
-      observation.disposition = inert ? "missing-functionality" : "not-run";
-      observation.reason = inert
-        ? "The known Docs control accepted keyboard activation but left URL and visible content unchanged. Browser history continuity cannot proceed."
-        : "Docs changed the application, but its destination does not match the supported history fixture.";
-      if (inert) {
-        observation.assertions = [
-          {
-            artifacts: [],
-            detail:
-              "Docs activation produced no product transition to traverse with browser history.",
-            id: "back-forward-preserves-draft",
-            passed: false,
-          },
-        ];
-      }
-      await capture("documentation");
-      return observation;
+      return await handleMissingBackControl(page, initialURL, initialContent, observation, capture);
     }
     const docsURL = page.url();
     await capture("documentation");
     await page.goBack({ waitUntil: "domcontentloaded" });
-    await name.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {
+    try {
+      await name.waitFor({ state: "visible", timeout: 10_000 });
+    } catch {
       // A missing editor after browser Back is an observed continuity failure.
-    });
-    const restored = page.url() === initialURL && (await name.isVisible().catch(() => false));
+    }
+    let editorVisible = false;
+    try {
+      editorVisible = await name.isVisible();
+    } catch {
+      // A missing editor after browser Back is an observed continuity failure.
+    }
+    const restored = page.url() === initialURL && editorVisible;
     const valuesRestored =
       restored &&
-      (await name.inputValue()) === "Navigation continuity sentinel" &&
-      (await brief.inputValue()) === "Keep this draft through browser Back and Forward.";
+      (await name.inputValue()) === DRAFT_SENTINEL &&
+      (await brief.inputValue()) === DRAFT_BRIEF;
     const focusRestored =
       restored && (await docs.evaluate((node) => node === document.activeElement));
     await capture("back");
     await page.goForward({ waitUntil: "domcontentloaded" });
-    await back.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {
+    try {
+      await back.waitFor({ state: "visible", timeout: 10_000 });
+    } catch {
       // Missing documentation after Forward is an observed continuity failure.
-    });
-    const forwarded = page.url() === docsURL && (await back.isVisible().catch(() => false));
+    }
+    let backControlVisible = false;
+    try {
+      backControlVisible = await back.isVisible();
+    } catch {
+      // Missing documentation after Forward is an observed continuity failure.
+    }
+    const forwarded = page.url() === docsURL && backControlVisible;
     await capture("forward");
     observation.assertions = [
       {
@@ -108,7 +144,7 @@ export const exerciseCandidateNavigation = async (
       },
     ];
     observation.disposition = observation.assertions.some((assertion) => !assertion.passed)
-      ? "missing-functionality"
+      ? MISSING_FUNCTIONALITY
       : "observed";
     observation.reason =
       "Executed real browser Back/Forward with edited draft inputs and focus readback; shared-layout state has no bound contract and remains unassessed. No instant-navigation or authentication credit is implied.";
@@ -117,11 +153,11 @@ export const exerciseCandidateNavigation = async (
     return {
       ...observation,
       disposition:
-        observation.disposition === "missing-functionality"
-          ? "missing-functionality"
-          : "infrastructure-unavailable",
+        observation.disposition === MISSING_FUNCTIONALITY
+          ? MISSING_FUNCTIONALITY
+          : INFRASTRUCTURE_UNAVAILABLE,
       reason:
-        observation.disposition === "missing-functionality"
+        observation.disposition === MISSING_FUNCTIONALITY
           ? observation.reason
           : "The browser history probe could not complete after fixture binding; retained diagnostics do not establish a product outcome.",
     };
@@ -160,26 +196,26 @@ export const candidateNavigationReceipt = (output: { observation?: Observation }
       ? {
           ...observation,
           artifacts: [
-            "candidate-navigation.json",
+            NAVIGATION_RECEIPT,
             ...observation.artifacts.map((path) => `candidate-navigation/${path}`),
           ],
           assertions: observation.assertions.map((assertion) => ({
             ...assertion,
             artifacts: [
-              "candidate-navigation.json",
+              NAVIGATION_RECEIPT,
               ...observation.artifacts.map((path) => `candidate-navigation/${path}`),
               ...assertion.artifacts.map((path) => `candidate-navigation/${path}`),
             ],
           })),
         }
       : {
-          artifacts: ["candidate-navigation.json"],
+          artifacts: [NAVIGATION_RECEIPT],
           assertions: [],
-          disposition: "infrastructure-unavailable" as const,
+          disposition: INFRASTRUCTURE_UNAVAILABLE,
           method: "none" as const,
           reason:
             "Candidate runtime was available, but the separate navigation probe failed to retain an evaluator observation.",
-          requirementId: "navigation-continuity",
+          requirementId: NAVIGATION_CONTINUITY_REQUIREMENT,
         },
     producer: "evaluator" as const,
     schemaVersion: "self-reproduction-runtime-receipt/v1" as const,

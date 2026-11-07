@@ -73,8 +73,8 @@ export const captureResourceApprovalResponse = (
     return undefined;
   }
   return resourceApprovalResponseMarkerSchema.parse({
-    adapterSessionId: binding.adapterSessionId,
     adapterGeneration: binding.adapterGeneration,
+    adapterSessionId: binding.adapterSessionId,
     approvals,
     batches: state.pending,
   });

@@ -20,10 +20,10 @@ export async function loadApplicationReviewContextStep(
   "use step";
   const { sourceReviewContextStoreForSession } = await import("./source-review-journal-runtime");
   const store = await sourceReviewContextStoreForSession({
+    abortSignal: ctx.abortSignal,
     appId: reference.appId,
     sessionAuth: ctx.session.auth,
     sessionId: ctx.session.id,
-    abortSignal: ctx.abortSignal,
   });
   return await store.readContext(reference.contextRef);
 }
@@ -51,10 +51,10 @@ export async function applicationReviewRoundStep(
   const { assessApplicationSourceRound, applicationSourceReviewCacheSessionId } = engine;
   const { unavailableSourceAssessment } = assessmentModule;
   const owner = {
+    abortSignal: ctx.abortSignal,
     appId: reference.appId,
     sessionAuth: ctx.session.auth,
     sessionId: ctx.session.id,
-    abortSignal: ctx.abortSignal,
   };
   if (preparedContext === undefined) {
     throw new Error("Prepared source review context is unavailable.");
@@ -73,23 +73,23 @@ export async function applicationReviewRoundStep(
   try {
     await assertCurrentOwner();
     const sandbox = await createApplicationReviewSandboxReader({
-      sandboxName: prepared.sandboxName,
       abortSignal: ctx.abortSignal,
       assertCurrentOwner,
+      sandboxName: prepared.sandboxName,
     });
     const evidence = createApplicationReviewEvidence({
       abortSignal: ctx.abortSignal,
       applyRoot: prepared.applyRoot,
       changedPaths: prepared.normalizedChanges.map((change) => change.path),
       observed: prepared.observed,
+      restoredSourceReads: continuation?.references.map(([, value]) => value),
       reviewInput,
       sandbox,
       visiblePaths: prepared.visiblePaths,
-      restoredSourceReads: continuation?.references.map(([, value]) => value),
     });
     const report = (event: string, detail: RequestDiagnostic) => {
       console.info(
-        JSON.stringify({ event, callId: ctx.callId, sessionId: ctx.session.id, ...detail }),
+        JSON.stringify({ callId: ctx.callId, event, sessionId: ctx.session.id, ...detail }),
       );
     };
     const result = await assessApplicationSourceRound(
@@ -98,14 +98,14 @@ export async function applicationReviewRoundStep(
       {
         abortSignal: ctx.abortSignal,
         assertCurrentOwner,
-        sessionId: ctx.session.id,
         cacheSessionId: applicationSourceReviewCacheSessionId(ctx.session.id, prepared.reviewKey),
-        onRequestStart(value) {
-          report("app_builder.source_review_request_started", value);
-        },
         onRequest(value) {
           report("app_builder.source_review_request_finished", value);
         },
+        onRequestStart(value) {
+          report("app_builder.source_review_request_started", value);
+        },
+        sessionId: ctx.session.id,
       },
       continuation,
     );
@@ -119,7 +119,7 @@ export async function applicationReviewRoundStep(
       "Independent source review was unavailable; its outcome remains unassessed.",
       "blocked",
     );
-    return { continuation, assessment };
+    return { assessment, continuation };
   }
 }
 
@@ -132,18 +132,18 @@ export async function saveApplicationReviewOutcomeStep(
   "use step";
   const { sourceReviewContextStoreForSession } = await import("./source-review-journal-runtime");
   const store = await sourceReviewContextStoreForSession({
+    abortSignal: ctx.abortSignal,
     appId: reference.appId,
     sessionAuth: ctx.session.auth,
     sessionId: ctx.session.id,
-    abortSignal: ctx.abortSignal,
   });
   const outcomeRef = await store.publishOutcome(reference.contextRef, assessment);
   ctx.abortSignal?.throwIfAborted();
   if (assessment.invocation !== undefined) {
     console.info(
       JSON.stringify({
-        event: "app_builder.source_review_invocation",
         callId: ctx.callId,
+        event: "app_builder.source_review_invocation",
         sessionId: ctx.session.id,
         ...assessment.invocation,
       }),
@@ -181,6 +181,6 @@ export const continueApplicationReviewWorkflow = async (
       // oxlint-disable-next-line eslint/no-await-in-loop -- Save only the terminal result after the preceding round completes.
       return await steps.save(reference, result.assessment, ctx);
     }
-    continuation = result.continuation;
+    ({ continuation } = result);
   }
 };

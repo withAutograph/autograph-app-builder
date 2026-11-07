@@ -538,7 +538,7 @@ export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapPropos
     !proposal.exactTree.every((file) => hasExactKeys(file, ["path", "mode", "blob"])) ||
     proposal.version !== FRESH_BOOTSTRAP_VERSION ||
     proposal.githubOutcome !== "unavailable" ||
-    proposal.releaseEnabled !== false ||
+    proposal.releaseEnabled ||
     !/^[0-9a-f]{64}$/u.test(proposal.atomicAdapterDigest) ||
     !/^[0-9a-f]{64}$/u.test(proposal.materializeAdapterDigest) ||
     proposal.destinationLockDigest !==
@@ -729,9 +729,9 @@ export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJour
     ((journal.status === "pending" || journal.status === "failed") &&
       (journal.stageCreated !== (journal.layout.phase !== "intent") ||
         journal.destinationPublished !== (journal.layout.phase === "published"))) ||
-    (journal.status === "failed" && journal.recoveryRequired !== true) ||
+    (journal.status === "failed" && !journal.recoveryRequired) ||
     (journal.status === "succeeded" &&
-      (journal.recoveryRequired !== false ||
+      (journal.recoveryRequired ||
         journal.commitCount !== 1 ||
         (journal.destinationPrestate.kind === "empty-directory") !==
           (journal.swappedOldIdentity !== undefined))) ||

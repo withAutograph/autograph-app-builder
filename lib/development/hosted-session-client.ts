@@ -19,17 +19,17 @@ export const hostedSessionTools = [
 ] as const;
 const serverName = "a511-original";
 const toolSchema = z.looseObject({
-  name: z.string(),
   inputSchema: z.looseObject({ type: z.literal("object") }),
+  name: z.string(),
 });
 const statusSchema = z.object({
   data: z.array(
     z.object({
+      httpOrigin: z.string().nullable(),
       name: z.string(),
       runtimeStatus: z.string().nullable(),
-      httpOrigin: z.string().nullable(),
-      toolsError: z.string().nullable(),
       tools: z.record(z.string(), toolSchema),
+      toolsError: z.string().nullable(),
     }),
   ),
   nextCursor: z.string().nullable(),
@@ -136,20 +136,20 @@ export const connectHostedSession = async (input: {
     try {
       const message = z
         .looseObject({
+          error: z.json().optional(),
           id: z.union([z.number(), z.string()]).optional(),
           method: z.string().optional(),
           result: z.json().optional(),
-          error: z.json().optional(),
         })
         .parse(JSON.parse(line));
       if (message.method !== undefined && message.id !== undefined) {
         // Never synthesize consent, attestation, credentials or user answers.
         send({
-          id: message.id,
           error: {
             code: -32_601,
             message: "Interactive native requests require the ordinary Codex client.",
           },
+          id: message.id,
         });
       } else if (z.number().safeParse(message.id).success) {
         const request = pending.get(Number(message.id));
@@ -164,8 +164,8 @@ export const connectHostedSession = async (input: {
       failPending();
     }
   });
-  const rpc = (method: string, params: JSONValue) =>
-    new Promise<JSONValue | undefined>((resolve, reject) => {
+  const rpc = async (method: string, params: JSONValue) =>
+    await new Promise<JSONValue | undefined>((resolve, reject) => {
       if (closed || terminated || child.exitCode !== null || child.killed) {
         reject(failure());
         return;
@@ -180,13 +180,13 @@ export const connectHostedSession = async (input: {
         method === "mcpServer/tool/call" ? 1_800_000 : 120_000,
       );
       pending.set(id, {
-        resolve: (value) => {
-          clearTimeout(timer);
-          resolve(value);
-        },
         reject: (error) => {
           clearTimeout(timer);
           reject(error);
+        },
+        resolve: (value) => {
+          clearTimeout(timer);
+          resolve(value);
         },
       });
       send({ id, method, params });
@@ -219,12 +219,12 @@ export const connectHostedSession = async (input: {
     clearTimeout(timer);
     clearTimeout(force);
     lines.close();
-    await rm(directory, { recursive: true, force: true });
+    await rm(directory, { force: true, recursive: true });
   };
   let closing: Promise<void> | undefined;
-  const close = () => {
+  const close = async () => {
     closing ??= closeChild();
-    return closing;
+    await closing;
   };
   const abort = () => {
     void close();
@@ -247,9 +247,9 @@ export const connectHostedSession = async (input: {
       }
       const status = statusSchema.parse(
         await rpc("mcpServerStatus/list", {
-          threadId: thread.thread.id,
-          serverName,
           detail: "toolsAndAuthOnly",
+          serverName,
+          threadId: thread.thread.id,
         }),
       );
       const upstream = status.data.find((entry) => entry.name === serverName);
@@ -283,24 +283,27 @@ export const connectHostedSession = async (input: {
       await delay(100);
     }
     return {
-      tools,
       async call(name: string, args: JSONObject, meta?: JSONObject): Promise<CallToolResult> {
         if (!hostedSessionTools.some((tool) => tool === name)) {
           throw new Error("Only the five public Builder tools are supported.");
         }
-        const result = await rpc("mcpServer/tool/call", {
-          threadId: thread.thread.id,
-          server: serverName,
-          tool: name,
+        const params: JSONObject = {
           arguments: args,
-          ...(meta === undefined ? {} : { _meta: meta }),
-        });
+          server: serverName,
+          threadId: thread.thread.id,
+          tool: name,
+        };
+        if (meta !== undefined) {
+          params._meta = meta;
+        }
+        const result = await rpc("mcpServer/tool/call", params);
         if (!isCallToolResult(result)) {
           throw failure();
         }
         return result;
       },
       close,
+      tools,
     };
   } catch (error) {
     await close();

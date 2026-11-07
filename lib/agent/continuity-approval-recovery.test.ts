@@ -15,7 +15,7 @@ it("continues a partial native approval read without granting authority", async 
     .fn()
     .mockRejectedValueOnce(new HostedOperatorError("operator_unavailable"))
     .mockResolvedValueOnce({ approved: true });
-  const signal = new AbortController().signal;
+  const { signal } = new AbortController();
   await expect(readContinuityApprovalWithRecovery(read, signal)).rejects.toThrow(
     "operator_unavailable",
   );
@@ -36,9 +36,9 @@ it("does not retry an owner denial or unclassified failure", async () => {
 it("respects cancellation during a failed read", async () => {
   const controller = new AbortController();
   await expect(
-    readContinuityApprovalWithRecovery(() => {
+    readContinuityApprovalWithRecovery(async () => {
       controller.abort();
-      return Promise.reject(new HostedOperatorError("operator_unavailable"));
+      throw new HostedOperatorError("operator_unavailable");
     }, controller.signal),
   ).rejects.toThrow();
 });
@@ -46,7 +46,7 @@ it("respects cancellation during a failed read", async () => {
 it("does not return authority from a successful read completed after cancellation", async () => {
   const controller = new AbortController();
   const result = Promise.withResolvers<{ approved: boolean }>();
-  const read = vi.fn(() => result.promise);
+  const read = vi.fn(async () => await result.promise);
   const pending = readContinuityApprovalWithRecovery(read, controller.signal);
   const rejected = expect(pending).rejects.toThrow();
   controller.abort();
@@ -83,16 +83,16 @@ it("retains only closed operator failure facts in deferred errors", async () => 
     readContinuityApprovalWithRecovery(
       vi.fn().mockRejectedValue(
         new HostedOperatorError("operation_in_progress", {
-          recoveryStage: "journal",
           cause: new Error("private-provider-detail"),
+          recoveryStage: "journal",
         }),
       ),
       new AbortController().signal,
     ),
   ).rejects.toMatchObject({
-    name: "RetryableError",
     message:
       "Continuity approval reconciliation must retry at journal: operation_in_progress. Preserve the same intent and native approval.",
+    name: "RetryableError",
   });
 });
 
@@ -101,8 +101,8 @@ it("continues every durably advancing native page without consuming the SDK retr
   for (let index = 0; index < 5; index += 1) {
     read.mockRejectedValueOnce(
       new HostedOperatorError("operator_unavailable", {
-        recoveryStage: "native_history",
         recoveryProgressAdvanced: true,
+        recoveryStage: "native_history",
       }),
     );
   }

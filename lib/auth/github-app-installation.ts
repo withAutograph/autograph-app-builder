@@ -725,7 +725,7 @@ export const createGitHubAppInstallationAuthorization = (input: {
     return emulatorBase;
   };
   const providerFetch: Fetch = input.emulation
-    ? (resource, init) => {
+    ? async (resource, init) => {
         let resourceUrl: string;
         if (typeof resource === "string") {
           resourceUrl = resource;
@@ -735,7 +735,7 @@ export const createGitHubAppInstallationAuthorization = (input: {
           resourceUrl = resource.url;
         }
         const githubUrl = new URL(resourceUrl);
-        return request(emulatedGitHubUrl(githubUrl), init);
+        return await request(emulatedGitHubUrl(githubUrl), init);
       }
     : request;
   const now = input.now ?? Date.now;

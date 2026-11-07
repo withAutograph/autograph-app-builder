@@ -1152,8 +1152,12 @@ const verifyGhcrLoginWithOwnedProcessGroup = async function verifyGhcrLoginWithO
       target.push(copy);
     }
   };
-  child.stdout.on("data", (chunk: Buffer) => collect(stdout, chunk));
-  child.stderr.on("data", (chunk: Buffer) => collect(stderr, chunk));
+  child.stdout.on("data", (chunk: Buffer) => {
+    collect(stdout, chunk);
+  });
+  child.stderr.on("data", (chunk: Buffer) => {
+    collect(stderr, chunk);
+  });
   child.stdin.on("error", () => {
     failed = true;
     terminate();
@@ -1725,28 +1729,30 @@ const proveSandboxImageUnlocked = function proveSandboxImageUnlocked(
   );
 };
 
-const locked = <T>(approval: LifecycleApproval, operation: () => T) =>
-  withLifecycleLock(approval.stateRoot, () => {
+const locked = async <T>(approval: LifecycleApproval, operation: () => T) =>
+  await withLifecycleLock(approval.stateRoot, () => {
     assertLifecycleStateScope(approval);
     reconcileLifecycleTemps(approval.stateRoot);
     return operation();
   });
 
-export const verifyImageSources = (approval: LifecycleApproval) =>
-  locked(approval, () => verifyImageSourcesUnlocked(approval));
-export const buildImage = (approval: LifecycleApproval) =>
-  locked(approval, () => buildImageUnlocked(approval));
-export const inspectLocalImage = (approval: LifecycleApproval) =>
-  locked(approval, () => inspectLocalImageUnlocked(approval));
-export const loginGhcr = (approval: LifecycleApproval, username: string) =>
-  locked(approval, () => loginGhcrUnlocked(approval, username));
-export const pushImage = (approval: LifecycleApproval) =>
-  locked(approval, () => pushImageUnlocked(approval));
-export const inspectRemoteImage = (approval: LifecycleApproval) =>
-  locked(approval, () => inspectRemoteImageUnlocked(approval));
-export const preloadImage = (approval: LifecycleApproval, digestReferenceInput: string) =>
-  locked(approval, () => preloadImageUnlocked(approval, digestReferenceInput));
-export const prepareProofRuntime = (approval: LifecycleApproval) =>
-  locked(approval, () => prepareProofRuntimeUnlocked(approval));
-export const proveSandboxImage = (approval: LifecycleApproval, digestReferenceInput: string) =>
-  locked(approval, () => proveSandboxImageUnlocked(approval, digestReferenceInput));
+export const verifyImageSources = async (approval: LifecycleApproval) =>
+  await locked(approval, () => verifyImageSourcesUnlocked(approval));
+export const buildImage = async (approval: LifecycleApproval) =>
+  await locked(approval, () => buildImageUnlocked(approval));
+export const inspectLocalImage = async (approval: LifecycleApproval) =>
+  await locked(approval, () => inspectLocalImageUnlocked(approval));
+export const loginGhcr = async (approval: LifecycleApproval, username: string) =>
+  await locked(approval, async () => await loginGhcrUnlocked(approval, username));
+export const pushImage = async (approval: LifecycleApproval) =>
+  await locked(approval, () => pushImageUnlocked(approval));
+export const inspectRemoteImage = async (approval: LifecycleApproval) =>
+  await locked(approval, () => inspectRemoteImageUnlocked(approval));
+export const preloadImage = async (approval: LifecycleApproval, digestReferenceInput: string) =>
+  await locked(approval, () => preloadImageUnlocked(approval, digestReferenceInput));
+export const prepareProofRuntime = async (approval: LifecycleApproval) =>
+  await locked(approval, () => prepareProofRuntimeUnlocked(approval));
+export const proveSandboxImage = async (
+  approval: LifecycleApproval,
+  digestReferenceInput: string,
+) => await locked(approval, () => proveSandboxImageUnlocked(approval, digestReferenceInput));

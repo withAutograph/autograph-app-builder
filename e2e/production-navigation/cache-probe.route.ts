@@ -21,7 +21,7 @@ const installCatalogFixture = () => {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise<Response> fetch contract
   globalThis.fetch = async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
-    if (url !== catalogUrl) return realFetch(input, init);
+    if (url !== catalogUrl) return await realFetch(input, init);
     upstreamCalls += 1;
     if (unavailable) return new Response(null, { status: 503 });
     return Response.json({
@@ -40,14 +40,14 @@ const installCatalogFixture = () => {
   installed = true;
 };
 
-export const GET = async () => {
+const get = async () => {
   await connection();
   installCatalogFixture();
   const models = await loadNextGatewayModels();
   return Response.json({ models, upstreamCalls }, { headers: { "Cache-Control": "no-store" } });
 };
 
-export const POST = async (request: Request) => {
+const post = async (request: Request) => {
   installCatalogFixture();
   const text = await request.text();
   if (text.length > 32) return new Response(null, { status: 400 });
@@ -81,3 +81,5 @@ export const POST = async (request: Request) => {
   revalidateTag("public-ai-gateway-models", { expire: 0 });
   return new Response(null, { status: 204 });
 };
+
+export { get as GET, post as POST };

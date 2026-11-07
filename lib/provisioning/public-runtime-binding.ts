@@ -16,19 +16,19 @@ import type {
 
 /** A fresh public observation is distinct from every historical protected Preview receipt. */
 export const publicRuntimeBindingSchema = z.strictObject({
+  appEntryPath: browserEntryPathSchema.nullable().optional(),
+  deploymentId: z.string().min(1),
+  environment: z.literal("production"),
   kind: z.literal("public-application-runtime-v1"),
   operationRef: z.uuid(),
   planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-  runtimeOperationRef: z.uuid(),
-  runtimePlanDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   projectId: z.string().min(1),
-  environment: z.literal("production"),
   publicOrigin: z
     .url()
     .refine((value) => new URL(value).protocol === "https:" && new URL(value).origin === value),
-  appEntryPath: browserEntryPathSchema.nullable().optional(),
-  deploymentId: z.string().min(1),
   releaseId: z.string().min(1),
+  runtimeOperationRef: z.uuid(),
+  runtimePlanDigest: z.string().regex(/^[a-f0-9]{64}$/u),
 });
 export type PublicRuntimeBinding = z.infer<typeof publicRuntimeBindingSchema>;
 const fail = () => new HostedOperatorError("auth_identity_required");
@@ -70,9 +70,9 @@ export const readVerifiedPublicRuntimeBinding = async (input: {
   if (rows.length !== 1) {
     throw fail();
   }
-  const row = rows[0];
+  const [row] = rows;
   const record: PublicReleaseRecord = publicReleaseRecordSchema.parse(row.record);
-  const plan = record.plan;
+  const { plan } = record;
   if (
     row.requestId !== publicReleaseOperationRef(plan) ||
     row.requestDigest !== publicReleasePlanDigest(plan) ||
@@ -111,19 +111,22 @@ export const readVerifiedPublicRuntimeBinding = async (input: {
   ) {
     throw fail();
   }
-  const binding = publicRuntimeBindingSchema.parse({
+  const bindingInput: z.input<typeof publicRuntimeBindingSchema> = {
+    deploymentId: observed.deploymentId,
+    environment: observed.environment,
     kind: "public-application-runtime-v1",
     operationRef: row.requestId,
     planDigest: row.requestDigest,
+    projectId: observed.projectId,
+    publicOrigin: observed.publicOrigin,
+    releaseId: observed.releaseId,
     runtimeOperationRef: input.operationRef,
     runtimePlanDigest: operatorPlanDigest(input.plan),
-    projectId: observed.projectId,
-    environment: observed.environment,
-    publicOrigin: observed.publicOrigin,
-    ...(input.appEntryPath === undefined ? {} : { appEntryPath: input.appEntryPath }),
-    deploymentId: observed.deploymentId,
-    releaseId: observed.releaseId,
-  });
+  };
+  if (input.appEntryPath !== undefined) {
+    bindingInput.appEntryPath = input.appEntryPath;
+  }
+  const binding = publicRuntimeBindingSchema.parse(bindingInput);
   assertPublicRuntimeBinding(binding, input.plan, input.operationRef);
   return binding;
 };

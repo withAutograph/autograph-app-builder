@@ -120,7 +120,7 @@ async function ownerBoundFile(filePath: string, label: string) {
   ) {
     throw new Error(`${label} must be a current-user-owned regular file.`);
   }
-  return readFile(filePath);
+  return await readFile(filePath);
 }
 
 const args = parseArguments(process.argv.slice(2));
@@ -178,18 +178,19 @@ try {
   const installRoot = path.join(output, ".portable-install");
   await mkdir(installRoot, { mode: 0o700 });
   await Promise.all(
-    ["codex", "vscode", "cursor"].map((client) =>
-      run(node, [
-        "--import",
-        "tsx",
-        "scripts/install-portable-plugin.mts",
-        "--client",
-        client,
-        "--source",
-        packageRoot,
-        "--destination",
-        installRoot,
-      ]),
+    ["codex", "vscode", "cursor"].map(
+      async (client) =>
+        await run(node, [
+          "--import",
+          "tsx",
+          "scripts/install-portable-plugin.mts",
+          "--client",
+          client,
+          "--source",
+          packageRoot,
+          "--destination",
+          installRoot,
+        ]),
     ),
   );
   const portable = await verifyPortableProofArtifact({

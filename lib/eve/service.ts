@@ -308,8 +308,6 @@ function localRuntimeState(generation: string): LocalEveRuntimeState {
   }
   return (localRuntimeGlobal[localEveRuntimeStateKey] = {
     activeResponses: new Map(),
-    responsePumps: new Map(),
-    responseObservers: new Map(),
     continuationPumps: new Map(),
     generation,
     guardOperations: new Map(),
@@ -318,6 +316,8 @@ function localRuntimeState(generation: string): LocalEveRuntimeState {
     recoveries: new Map(),
     recoveryRequired: new Set(),
     requests: new Map(),
+    responseObservers: new Map(),
+    responsePumps: new Map(),
     restartInterrupted: new Set(),
     sessionEvents: new Map(),
     sessionHandles: new Map(),
@@ -665,7 +665,8 @@ export function createLocalEveSessionService(
     }
     const existing = state.recoveries.get(sessionId);
     if (existing !== undefined) {
-      return existing;
+      await existing;
+      return;
     }
     const recovery = (async () => {
       const snapshot = await readLocalSnapshot(sessionId);
@@ -688,7 +689,7 @@ export function createLocalEveSessionService(
       // oxlint-disable-next-line promise/prefer-await-to-then
     })().finally(() => state.recoveries.delete(sessionId));
     state.recoveries.set(sessionId, recovery);
-    return recovery;
+    await recovery;
   }
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -776,10 +777,12 @@ export function createLocalEveSessionService(
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function consumeSessionResponse(sessionId: string, response: CancellableResponse) {
     consumeResponse(state, sessionId, response, modelTurnTimeoutMs, {
+      appendEvent: (events, event) => appendLocalEvent(sessionId, events, event),
       cancelTurn: async (turnId) =>
         await sessionFor(sessionId).cancel(turnId === undefined ? undefined : { turnId }),
-      consumeDurableTail: (observeEvent) => consumeDurableTail(sessionId, observeEvent),
-      appendEvent: (events, event) => appendLocalEvent(sessionId, events, event),
+      consumeDurableTail: (observeEvent) => {
+        consumeDurableTail(sessionId, observeEvent);
+      },
     });
   }
 
@@ -993,7 +996,9 @@ export function createLocalEveSessionService(
       }
       const approved = await continueApprovedLocalBuild({
         active: status === "working",
-        dispatch: async (message) => await dispatchLocalBuildMessage(sessionId, message),
+        dispatch: async (message) => {
+          await dispatchLocalBuildMessage(sessionId, message);
+        },
         pendingInput: outstandingInstalledEveRequests(snapshot.events).length > 0,
         sessionId,
       });
@@ -1002,10 +1007,7 @@ export function createLocalEveSessionService(
       const drafting = await readLocalAuthoringDecision(sessionId);
       if (drafting !== undefined && stoppedTurns.includes(drafting.turnId)) return false;
       const outcome = await continueLocalPreapprovalAuthoring({
-        sessionId,
         active: status !== "waiting",
-        pendingInput: outstandingInstalledEveRequests(snapshot.events).length > 0,
-        dispatch: async (message) => await dispatchLocalBuildMessage(sessionId, message),
         assertCurrent: async (decision) => {
           const fresh = await readLocalSnapshot(sessionId);
           const unavailable =
@@ -1018,6 +1020,11 @@ export function createLocalEveSessionService(
             throw new Error("The accepted authoring boundary changed.");
           await requireSettledModelTurn(sessionId);
         },
+        dispatch: async (message) => {
+          await dispatchLocalBuildMessage(sessionId, message);
+        },
+        pendingInput: outstandingInstalledEveRequests(snapshot.events).length > 0,
+        sessionId,
       });
       return outcome === "queued" || outcome === "unknown";
     };
@@ -1236,12 +1243,12 @@ export function createLocalEveSessionService(
       )
         return {
           ...result,
-          status: "working",
           error: {
             code: "preapproval_authoring_continuation_unknown",
             message:
               "The drafting continuation may have been accepted. Preserve this session and observe its outcome without resending.",
           },
+          status: "working",
         };
       return { ...result, status: "working" };
     }
@@ -1535,10 +1542,10 @@ export function createEveSessionService(
             const response = await fetch(
               new URL(`/eve/v1/session/${encodeURIComponent(sessionId)}`, url.origin),
               {
+                body: JSON.stringify(body),
+                headers: { "content-type": "application/json" },
                 method: "POST",
                 redirect: "error",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify(body),
               },
             );
             const value: unknown = await response.json();
@@ -1560,21 +1567,22 @@ export function createEveSessionService(
         ...(recovery === undefined
           ? {}
           : {
-              isRecoveredSession: (sessionId: string) => recovery.lineage(sessionId).length > 1,
               cancelRecovery: async (sessionId: string) => {
                 await recovery.cancel(sessionId);
               },
-              recoverTerminal: async (sessionId: string, requestId: string) =>
+              isRecoveredSession: (sessionId: string) => recovery.lineage(sessionId).length > 1,
+              recoverTerminal: async (sessionId: string, requestId: string) => {
                 await recovery.recover(client, sessionId, requestId, async (body) => {
                   const response = await fetch(new URL("/eve/v1/session", url.origin), {
+                    body: JSON.stringify(body),
+                    headers: { "content-type": "application/json" },
                     method: "POST",
                     redirect: "error",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify(body),
                   });
                   if (!response.ok) throw new LocalSessionRecoveryUnavailableError();
                   return localRecoveryResponseSchema.parse(await response.json());
-                }),
+                });
+              },
             }),
       },
     );

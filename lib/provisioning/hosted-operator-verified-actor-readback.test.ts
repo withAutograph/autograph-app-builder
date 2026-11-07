@@ -7,30 +7,30 @@ vi.mock("./hosted-operator-normal-actor-runtime-bindings", () => ({
   createNormalActorRuntimeBindings: () => hooks.verify,
 }));
 const program = {
-  version: 1,
-  appId: "spend-review",
-  origin: "https://apps.example.test",
   actors: [
-    { actorKey: "owner", email: "owner@example.test", name: "Owner", account: "capture-existing" },
+    { account: "capture-existing", actorKey: "owner", email: "owner@example.test", name: "Owner" },
   ],
-  organizations: [
-    { organizationId: "org", ownerActorKey: "owner", name: "Organization", slug: "org" },
-  ],
-  memberships: [{ actorKey: "owner", organizationId: "org", role: "owner" }],
   appAccess: [{ actorKey: "owner", organizationId: "org", roles: ["requester"] }],
+  appId: "spend-review",
+  memberships: [{ actorKey: "owner", organizationId: "org", role: "owner" }],
+  organizations: [
+    { name: "Organization", organizationId: "org", ownerActorKey: "owner", slug: "org" },
+  ],
+  origin: "https://apps.example.test",
+  version: 1,
 };
 const input = { plan: { normalActorProgram: program } };
 const identity = {
-  actorKey: "owner",
   actorId: "actor",
+  actorKey: "owner",
   organizationId: "org",
   roles: ["requester"],
   storageState: "private-file",
 };
 const projection = {
-  origin: program.origin,
-  identities: { version: 1, actors: [identity] },
   files: { "private-file": "secret cookie" },
+  identities: { actors: [identity], version: 1 },
+  origin: program.origin,
 };
 // SAFETY: The fixture calls the wrapper with a synthetic verified reader and only the plan field used by projection.
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Only the mocked verifier consumes its synthetic dependencies.
@@ -45,18 +45,18 @@ describe("verified actor diagnostic projection", () => {
     hooks.verify.mockResolvedValueOnce(projection);
     const result = await read(request);
     expect(result).toEqual({
-      requestCorrelation: "not_established",
       actors: [
         {
-          actorKey: "owner",
           account: "capture-existing",
-          email: "owner@example.test",
           actorId: "actor",
-          organizationId: "org",
-          membershipRole: "owner",
+          actorKey: "owner",
           appRoles: ["requester"],
+          email: "owner@example.test",
+          membershipRole: "owner",
+          organizationId: "org",
         },
       ],
+      requestCorrelation: "not_established",
     });
     expect(JSON.stringify(result)).not.toContain("secret cookie");
     expect(hooks.verify).toHaveBeenCalledWith(request);
@@ -64,7 +64,7 @@ describe("verified actor diagnostic projection", () => {
   it("refuses an identity whose roles differ from the approved program", async () => {
     hooks.verify.mockResolvedValueOnce({
       ...projection,
-      identities: { version: 1, actors: [{ ...identity, roles: ["reviewer"] }] },
+      identities: { actors: [{ ...identity, roles: ["reviewer"] }], version: 1 },
     });
     await expect(read(request)).rejects.toMatchObject({ code: "resource_mismatch" });
   });
@@ -75,7 +75,7 @@ describe("verified actor diagnostic projection", () => {
   });
   it("refuses omitted or duplicate approved memberships", async () => {
     for (const actors of [[], [identity, identity]]) {
-      hooks.verify.mockResolvedValueOnce({ ...projection, identities: { version: 1, actors } });
+      hooks.verify.mockResolvedValueOnce({ ...projection, identities: { actors, version: 1 } });
       // oxlint-disable-next-line eslint/no-await-in-loop -- Each independent fixture observes a separate failure.
       await expect(read(request)).rejects.toMatchObject({ code: "resource_mismatch" });
     }

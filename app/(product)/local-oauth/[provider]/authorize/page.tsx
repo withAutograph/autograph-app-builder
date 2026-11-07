@@ -19,10 +19,9 @@ interface Props {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function scalarValues(values: Record<string, string | string[] | undefined>) {
   return Object.fromEntries(
-    Object.entries(values).map(([key, value]) => [
-      key,
-      typeof value === "string" ? value : undefined,
-    ]),
+    Object.entries(values).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
   );
 }
 
@@ -31,24 +30,27 @@ function scalarValues(values: Record<string, string | string[] | undefined>) {
 async function LocalOAuthApprovalContent({ params, searchParams }: Props) {
   await connection();
   let parsed;
-  let emulation: ProviderEmulation;
+  let emulation: ProviderEmulation | undefined;
   try {
     const [{ provider }, query] = await Promise.all([params, searchParams]);
     const configured = readProviderEmulation(process.env);
-    if (!configured) {
-      notFound();
+    if (configured) {
+      emulation = configured;
+      const appOrigin = emulation.canonicalOrigin;
+      parsed = parseLocalOAuthAuthorization({
+        appOrigin,
+        emulation,
+        githubClientId: emulation.githubClientId,
+        provider,
+        values: scalarValues(query),
+        vercelClientId: emulation.vercelClientId,
+      });
     }
-    emulation = configured;
-    const appOrigin = emulation.canonicalOrigin;
-    parsed = parseLocalOAuthAuthorization({
-      appOrigin,
-      emulation,
-      githubClientId: emulation.githubClientId,
-      provider,
-      values: scalarValues(query),
-      vercelClientId: emulation.vercelClientId,
-    });
   } catch {
+    parsed = null;
+  }
+
+  if (!emulation || !parsed) {
     notFound();
   }
 

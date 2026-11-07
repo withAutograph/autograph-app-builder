@@ -54,24 +54,158 @@ export interface PairedCaptureRun {
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function unavailableCaptureObservations(reason: string): PairedCaptureRun["observations"] {
-  return Object.fromEntries(
-    sides.map((side) => [
-      side,
-      desktopViewports.flatMap((viewport) =>
-        captureStates.map((state): Observation => ({
+const captureManifestSide = (
+  observations: Observation[],
+  requirementId: string,
+  viewport: (typeof desktopViewports)[number],
+  state: CaptureState,
+  side: (typeof sides)[number],
+): PairedCaptureManifestRow["candidate"] => {
+  const observation = observations.find((item) => item.requirementId === requirementId);
+  const prefix = `parity/captures/${viewport.name}/${state}/${side}`;
+  const result: PairedCaptureManifestRow["candidate"] = {
+    disposition: observation?.disposition ?? "not-run",
+  };
+  if (observation?.artifacts.includes(`${prefix}.png`) === true) {
+    result.png = `${prefix}.png`;
+  }
+  if (observation?.artifacts.includes(`${prefix}.json`) === true) {
+    result.receipt = `${prefix}.json`;
+  }
+  return result;
+};
+
+const failedCaptureObservation = (
+  interactionStarted: boolean,
+  requirementId: string,
+  receipt: string,
+): Observation => {
+  const result: Observation = {
+    artifacts: [receipt],
+    assertions: [],
+    disposition: interactionStarted ? "observed" : "infrastructure-unavailable",
+    method: interactionStarted ? "browser" : "none",
+    reason: interactionStarted
+      ? "Fixture interaction threw; inspect sanitized evaluator diagnostics."
+      : "The browser could not create an isolated fixture page.",
+    requirementId,
+  };
+  if (interactionStarted) {
+    result.assertions.push({
+      artifacts: [receipt],
+      detail: "The fixture did not complete.",
+      id: "fixture-execution",
+      passed: false,
+    });
+  }
+  return result;
+};
+
+const captureReceipt = async (
+  input: { outputRoot: string },
+  receipt: string,
+  side: (typeof sides)[number],
+  state: CaptureState,
+  viewport: (typeof desktopViewports)[number],
+  result: Observation,
+): Promise<void> => {
+  await mkdir(path.dirname(path.join(input.outputRoot, receipt)), { recursive: true });
+  await writeFile(
+    path.join(input.outputRoot, receipt),
+    `${JSON.stringify({ side, state, viewport, ...result }, null, 2)}\n`,
+    { mode: 0o600 },
+  );
+};
+
+const capturePreparedPage = async (
+  input: { outputRoot: string },
+  adapter: CaptureAdapter,
+  page: Page,
+  state: CaptureState,
+  png: string,
+  receipt: string,
+  requirementId: string,
+): Promise<Observation> => {
+  let captured = false;
+  const assertions = await adapter.exercise(page, state, async () => {
+    await mkdir(path.dirname(path.join(input.outputRoot, png)), { recursive: true });
+    await page.screenshot({ fullPage: true, path: path.join(input.outputRoot, png) });
+    captured = true;
+  });
+  return {
+    artifacts: captured ? [png, receipt] : [receipt],
+    assertions: assertions.map((assertion) => ({ ...assertion, artifacts: [receipt] })),
+    disposition: "observed",
+    method: "browser",
+    reason: captured
+      ? "Paired fixture executed in an isolated browser context."
+      : "Adapter omitted the state capture.",
+    requirementId,
+  };
+};
+
+const captureCase = async (
+  input: { browser: Browser; outputRoot: string },
+  adapter: CaptureAdapter,
+  viewport: (typeof desktopViewports)[number],
+  state: CaptureState,
+  side: (typeof sides)[number],
+  requirementId: string,
+): Promise<Observation> => {
+  const prefix = `parity/captures/${viewport.name}/${state}/${side}`;
+  const png = `${prefix}.png`;
+  const receipt = `${prefix}.json`;
+  let context: BrowserContext | undefined;
+  let interactionStarted = false;
+  let result: Observation;
+  try {
+    context = await input.browser.newContext({ viewport });
+    const page = await context.newPage();
+    interactionStarted = true;
+    const prepared = await adapter.prepare(page, state);
+    result = prepared.ready
+      ? await capturePreparedPage(input, adapter, page, state, png, receipt, requirementId)
+      : {
           artifacts: [],
           assertions: [],
-          disposition: "infrastructure-unavailable",
+          disposition: prepared.disposition,
           method: "none",
-          reason,
-          requirementId: `capture/${viewport.name}/${state}`,
-        })),
-      ),
-    ]),
-  ) as PairedCaptureRun["observations"];
-}
+          reason: prepared.reason,
+          requirementId,
+        };
+  } catch {
+    result = failedCaptureObservation(interactionStarted, requirementId, receipt);
+  } finally {
+    if (context) {
+      try {
+        await context.close();
+      } catch {
+        // Cleanup errors are intentionally ignored.
+      }
+    }
+  }
+  await captureReceipt(input, receipt, side, state, viewport, result);
+  return result;
+};
+
+export const unavailableCaptureObservations = (
+  reason: string,
+): PairedCaptureRun["observations"] => {
+  const observations: PairedCaptureRun["observations"] = { candidate: [], reference: [] };
+  for (const side of sides) {
+    observations[side] = desktopViewports.flatMap((viewport) =>
+      captureStates.map((state): Observation => ({
+        artifacts: [],
+        assertions: [],
+        disposition: "infrastructure-unavailable",
+        method: "none",
+        reason,
+        requirementId: `capture/${viewport.name}/${state}`,
+      })),
+    );
+  }
+  return observations;
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function writePairedCaptureManifest(
@@ -81,25 +215,21 @@ export async function writePairedCaptureManifest(
   const rows = desktopViewports.flatMap((viewport) =>
     captureStates.map((state): PairedCaptureManifestRow => {
       const requirementId = `capture/${viewport.name}/${state}`;
-      const pair = Object.fromEntries(
-        sides.map((side) => {
-          const observation = observations[side].find(
-            (item) => item.requirementId === requirementId,
-          );
-          const prefix = `parity/captures/${viewport.name}/${state}/${side}`;
-          return [
-            side,
-            {
-              disposition: observation?.disposition ?? "not-run",
-              ...(observation?.artifacts.includes(`${prefix}.png`) ? { png: `${prefix}.png` } : {}),
-              ...(observation?.artifacts.includes(`${prefix}.json`)
-                ? { receipt: `${prefix}.json` }
-                : {}),
-            },
-          ];
-        }),
-      ) as Pick<PairedCaptureManifestRow, "reference" | "candidate">;
-      return { requirementId, state, viewport, ...pair };
+      const candidate = captureManifestSide(
+        observations.candidate,
+        requirementId,
+        viewport,
+        state,
+        "candidate",
+      );
+      const reference = captureManifestSide(
+        observations.reference,
+        requirementId,
+        viewport,
+        state,
+        "reference",
+      );
+      return { candidate, reference, requirementId, state, viewport };
     }),
   );
   const manifest: PairedCaptureRun["manifest"] = {
@@ -139,79 +269,7 @@ export async function captureParity(input: {
         }
         // New cookies/storage for every case and side. Durable fixtures live in
         // each app's own store; adapters authenticate via that app's test harness.
-        let context: BrowserContext | undefined;
-        let interactionStarted = false;
-        const prefix = `parity/captures/${viewport.name}/${state}/${side}`;
-        const png = `${prefix}.png`;
-        const receipt = `${prefix}.json`;
-        let captured = false;
-        let result: Observation;
-        try {
-          context = await input.browser.newContext({ viewport });
-          const page = await context.newPage();
-          interactionStarted = true;
-          const prepared = await adapter.prepare(page, state);
-          if (prepared.ready) {
-            const assertions = await adapter.exercise(page, state, async () => {
-              await mkdir(path.dirname(path.join(input.outputRoot, png)), { recursive: true });
-              await page.screenshot({ fullPage: true, path: path.join(input.outputRoot, png) });
-              captured = true;
-            });
-            result = {
-              artifacts: captured ? [png, receipt] : [receipt],
-              assertions: assertions.map((assertion) => ({ ...assertion, artifacts: [receipt] })),
-              disposition: "observed",
-              method: "browser",
-              reason: captured
-                ? "Paired fixture executed in an isolated browser context."
-                : "Adapter omitted the state capture.",
-              requirementId,
-            };
-          } else {
-            result = {
-              artifacts: [],
-              assertions: [],
-              disposition: prepared.disposition,
-              method: "none",
-              reason: prepared.reason,
-              requirementId,
-            };
-          }
-        } catch {
-          // Unexpected UI/selector failures are failures, not infrastructure claims.
-          // Avoid serializing arbitrary errors containing callback tokens or cookies.
-          result = {
-            artifacts: [receipt],
-            assertions: interactionStarted
-              ? [
-                  {
-                    artifacts: [receipt],
-                    detail: "The fixture did not complete.",
-                    id: "fixture-execution",
-                    passed: false,
-                  },
-                ]
-              : [],
-            disposition: interactionStarted ? "observed" : "infrastructure-unavailable",
-            method: interactionStarted ? "browser" : "none",
-            reason: interactionStarted
-              ? "Fixture interaction threw; inspect sanitized evaluator diagnostics."
-              : "The browser could not create an isolated fixture page.",
-            requirementId,
-          };
-        } finally {
-          // Preserve the case receipt if the browser disconnected during cleanup.
-          await context?.close().catch(() => {
-            // Cleanup errors are intentionally ignored.
-          });
-        }
-        await mkdir(path.dirname(path.join(input.outputRoot, receipt)), { recursive: true });
-        await writeFile(
-          path.join(input.outputRoot, receipt),
-          `${JSON.stringify({ side, state, viewport, ...result }, null, 2)}\n`,
-          { mode: 0o600 },
-        );
-        output[side].push(result);
+        output[side].push(await captureCase(input, adapter, viewport, state, side, requirementId));
       }
     }
   }
@@ -230,7 +288,7 @@ export async function runPairedCaptureEvidence(input: {
   adapters: Partial<Record<(typeof sides)[number], CaptureAdapter>>;
   launch?: () => Promise<Browser>;
 }): Promise<PairedCaptureRun> {
-  const browser = await (input.launch ?? (() => chromium.launch({ headless: true })))();
+  const browser = await (input.launch ?? (async () => await chromium.launch({ headless: true })))();
   let observations: Record<(typeof sides)[number], Observation[]>;
   try {
     observations = await captureParity({

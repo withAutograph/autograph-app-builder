@@ -235,9 +235,9 @@ const fixture = (
   let protectionReadbackTransform:
     | ((value: z.infer<typeof z.json>) => z.infer<typeof z.json>)
     | undefined;
-  const assertCurrent = vi.fn(async () => {});
-  const assertCurrentObservation = vi.fn(async () => {});
-  const assertCanonicalOwner = vi.fn(async () => {});
+  const assertCurrent = vi.fn<() => Promise<void>>().mockResolvedValue();
+  const assertCurrentObservation = vi.fn<() => Promise<void>>().mockResolvedValue();
+  const assertCanonicalOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
   const checkpointGatewayEnvironment = vi.fn(
     async (next: readonly ManagedOperatorEnvironmentRow[]) => {
       journal = structuredClone([...next]);
@@ -246,9 +246,8 @@ const fixture = (
   );
   input = {
     assertCurrent,
-    ...(observationGuards ? { assertCurrentObservation } : {}),
     authority,
-    checkpoint: vi.fn(async () => {}),
+    checkpoint: vi.fn<() => Promise<void>>().mockResolvedValue(),
     checkpointGatewayEnvironment,
     effect: plan.effects.find((effect) => effect.kind === "gateway-bindings")!,
     deliveryCandidates: [
@@ -280,6 +279,9 @@ const fixture = (
     target: structuredClone(target),
     workerCheckpoints: [],
   };
+  if (observationGuards) {
+    input.assertCurrentObservation = assertCurrentObservation;
+  }
   const project: FixtureProject = {
     id: gateway.projectId,
     accountId: target.scopeId,
@@ -362,7 +364,7 @@ const fixture = (
     },
     token: "fixture-owner-oauth",
   }));
-  const assertAuthorized = vi.fn(async () => {});
+  const assertAuthorized = vi.fn<() => Promise<void>>().mockResolvedValue();
   const readAuthRuntimeUrl = vi.fn(async () => privateAuthUrl);
   let canonicalRows: CanonicalGatewayEnvironmentRow[] = [];
   const readCanonicalGatewayRows = vi.fn(async () => ({
@@ -370,15 +372,18 @@ const fixture = (
     rows: structuredClone(canonicalRows),
   }));
   const diagnostics = vi.fn<HostedOperatorConsentDiagnosticSink>();
-  const writer = createHostedOperatorGatewayBindings({
+  const writerOptions: Parameters<typeof createHostedOperatorGatewayBindings>[0] = {
     diagnosticSink: diagnostics,
     assertAuthorized,
-    ...(observationGuards ? { assertCanonicalOwner } : {}),
     readCanonicalGatewayRows,
     fetch: fetcher,
     readAuthRuntimeUrl,
     readCredential,
-  });
+  };
+  if (observationGuards) {
+    writerOptions.assertCanonicalOwner = assertCanonicalOwner;
+  }
+  const writer = createHostedOperatorGatewayBindings(writerOptions);
   return {
     project,
     setLoseProtectionPatchResponse: (value: boolean) => (loseProtectionPatchResponse = value),
@@ -611,14 +616,17 @@ it("keeps legacy plans free of Trusted Sources writes", async () => {
 });
 
 const approveAppSource = (f: ReturnType<typeof fixture>, includeLegacy = false) => {
+  const appSource = {
+    appPreview: { projectId: selection.projectId, from: "preview", to: "preview" },
+  };
+  const trustedSources = includeLegacy ? { ...approvedSources, ...appSource } : appSource;
   f.input.plan = hostedOperatorPlanSchema.parse({
     ...f.input.plan,
     stage: "app",
     gatewayBindings: {
       ...f.input.plan.gatewayBindings,
       trustedSources: {
-        ...(includeLegacy ? approvedSources : {}),
-        appPreview: { projectId: selection.projectId, from: "preview", to: "preview" },
+        ...trustedSources,
       },
     },
   });
@@ -2432,15 +2440,12 @@ it("distinguishes authority and private runtime binding failures without added r
 
 it.each(["sync", "async"] as const)(
   "preserves exact binding requests and results when the %s diagnostic sink fails",
-  async (kind) => {
+  async () => {
     const control = fixture();
     const expected = await control.writer.bind(control.input);
     const f = fixture();
-    f.diagnostics.mockImplementation(() => {
-      if (kind === "sync") {
-        throw new Error(privateAuthUrl);
-      }
-      return Promise.reject(new Error(privateAuthUrl));
+    f.diagnostics.mockImplementation(async () => {
+      throw new Error(privateAuthUrl);
     });
     expect(await f.writer.bind(f.input)).toEqual(expected);
     expect(f.requests).toEqual(control.requests);
@@ -2517,7 +2522,7 @@ it("reports a post-response authorization failure as authority, retaining succes
 
 it("keeps the original post-response guard when an advisory status getter throws", async () => {
   const f = fixture();
-  const postResponseGuard = vi.fn(async () => {});
+  const postResponseGuard = vi.fn<() => Promise<void>>().mockResolvedValue();
   const response = Response.json({ envs: [] });
   Object.defineProperty(response, "status", {
     get() {
@@ -2799,7 +2804,7 @@ it.each(["malformed", "oversized", "stream_error", "body_getter"] as const)(
         },
       });
     }
-    const postResponseGuard = vi.fn(async () => {});
+    const postResponseGuard = vi.fn<() => Promise<void>>().mockResolvedValue();
     f.fetcher.mockImplementationOnce(async () => {
       f.assertCurrent.mockImplementation(postResponseGuard);
       return response;

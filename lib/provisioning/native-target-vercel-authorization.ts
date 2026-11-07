@@ -1,13 +1,13 @@
 import { z } from "zod";
 
 const configuration = z.object({
-  id: z.string().min(1),
-  teamId: z.string().min(1),
-  ownerId: z.string().min(1),
-  scopes: z.array(z.string()),
-  projectSelection: z.enum(["all", "selected"]),
   disabledAt: z.number().nonnegative().nullish(),
   disabledReason: z.string().min(1).nullish(),
+  id: z.string().min(1),
+  ownerId: z.string().min(1),
+  projectSelection: z.enum(["all", "selected"]),
+  scopes: z.array(z.string()),
+  teamId: z.string().min(1),
 });
 const providerCode = z.enum([
   "invalid_token",
@@ -17,7 +17,8 @@ const providerCode = z.enum([
   "not_found",
 ]);
 export const nativeTargetProviderAuthorizationSchema = z.object({
-  status: z.enum(["observed", "unavailable"]),
+  allProjectsConfigured: z.boolean().optional(),
+  disabled: z.boolean().optional(),
   failure: z
     .enum([
       "provider_rejected",
@@ -27,14 +28,13 @@ export const nativeTargetProviderAuthorizationSchema = z.object({
       "credential_unavailable",
     ])
     .optional(),
-  statusCode: z.number().int().min(100).max(599).optional(),
-  providerCode: providerCode.or(z.literal("unknown")).optional(),
   installationMatches: z.boolean().optional(),
-  teamMatches: z.boolean().optional(),
   ownerMatches: z.boolean().optional(),
   projectWriteConfigured: z.boolean().optional(),
-  allProjectsConfigured: z.boolean().optional(),
-  disabled: z.boolean().optional(),
+  providerCode: providerCode.or(z.literal("unknown")).optional(),
+  status: z.enum(["observed", "unavailable"]),
+  statusCode: z.number().int().min(100).max(599).optional(),
+  teamMatches: z.boolean().optional(),
 });
 export type NativeTargetVercelAuthorizationObservation = z.infer<
   typeof nativeTargetProviderAuthorizationSchema
@@ -104,15 +104,15 @@ export const inspectNativeTargetVercelAuthorization = async (input: {
     const token = await input.readInstallationToken();
     input.signal.throwIfAborted();
     if (token === undefined || token.length === 0) {
-      return { status: "unavailable", failure: "credential_unavailable" };
+      return { failure: "credential_unavailable", status: "unavailable" };
     }
     const url = new URL(
       `https://api.vercel.com/v1/integrations/configuration/${encodeURIComponent(input.expectedInstallationId)}`,
     );
     url.searchParams.set("teamId", input.expectedTeamId);
     const response = await input.fetch(url, {
-      method: "GET",
       headers: { authorization: `Bearer ${token}` },
+      method: "GET",
       redirect: "error",
       signal: input.signal,
     });
@@ -123,8 +123,8 @@ export const inspectNativeTargetVercelAuthorization = async (input: {
       body = JSON.parse(await readConfigurationJson(response, input.signal));
     } catch {
       return {
-        status: "unavailable",
         failure: input.signal.aborted ? "cancelled" : "invalid_response",
+        status: "unavailable",
         statusCode,
       };
     }
@@ -132,34 +132,37 @@ export const inspectNativeTargetVercelAuthorization = async (input: {
     if (!response.ok) {
       const error = z.object({ error: z.object({ code: providerCode }) }).safeParse(body);
       return {
-        status: "unavailable",
         failure: "provider_rejected",
-        statusCode,
         providerCode: error.success ? error.data.error.code : "unknown",
+        status: "unavailable",
+        statusCode,
       };
     }
     const parsed = configuration.safeParse(body);
     if (!parsed.success) {
-      return { status: "unavailable", failure: "invalid_response", statusCode };
+      return { failure: "invalid_response", status: "unavailable", statusCode };
     }
     const value = parsed.data;
     return {
-      status: "observed",
-      statusCode,
-      installationMatches: value.id === input.expectedInstallationId,
-      teamMatches: value.teamId === input.expectedTeamId,
-      ownerMatches: value.ownerId === input.expectedTeamId,
-      projectWriteConfigured: value.scopes.includes("read-write:project"),
       allProjectsConfigured: value.projectSelection === "all",
       disabled:
         (value.disabledAt !== null && value.disabledAt !== undefined) ||
         (value.disabledReason !== null && value.disabledReason !== undefined),
+      installationMatches: value.id === input.expectedInstallationId,
+      ownerMatches: value.ownerId === input.expectedTeamId,
+      projectWriteConfigured: value.scopes.includes("read-write:project"),
+      status: "observed",
+      statusCode,
+      teamMatches: value.teamId === input.expectedTeamId,
     };
   } catch {
-    return {
-      status: "unavailable",
+    const result = {
       failure: input.signal.aborted ? "cancelled" : "request_failed",
-      ...(statusCode === undefined ? {} : { statusCode }),
-    };
+      status: "unavailable",
+    } as const;
+    if (statusCode !== undefined) {
+      return { ...result, statusCode };
+    }
+    return result;
   }
 };

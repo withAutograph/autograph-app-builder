@@ -156,7 +156,7 @@ const fixture = () => {
     async (_url, read) => await read(reader),
   );
   const deps = {
-    assertAuthorized: vi.fn(async () => {}),
+    assertAuthorized: vi.fn<() => Promise<void>>().mockResolvedValue(),
     readReleaseManifest: vi.fn(async () => manifest),
     readRuntimeSnapshot,
     readRuntimeUrl: vi.fn(
@@ -167,7 +167,12 @@ const fixture = () => {
   return {
     deps,
     identity,
-    input: { assertCurrent: vi.fn(async () => {}), authority, plan, target },
+    input: {
+      assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      authority,
+      plan,
+      target,
+    },
     observation,
     reader,
     scopes,
@@ -187,10 +192,10 @@ it("reports a closed runtime failure before preserving the sanitized readiness r
       "[builder:hosted-neon-consent]",
       expect.objectContaining({
         executionFailure: {
-          stage: "final_runtime_readiness",
           errorClass: "unexpected",
-          sqlState: "42501",
           runtimeReadinessStage: "runtime_connection",
+          sqlState: "42501",
+          stage: "final_runtime_readiness",
         },
       }),
     ]);
@@ -217,11 +222,13 @@ it.each([
   } else if (stage === "runtime_credential") {
     f.deps.readRuntimeUrl.mockRejectedValueOnce(error);
   } else if (stage === "runtime_identity") {
-    f.reader.readIdentity = () => Promise.reject(error);
+    f.reader.readIdentity = async () => {
+      throw error;
+    };
   } else {
-    f.reader.readOrganization = (_scope, observeStage) => {
+    f.reader.readOrganization = async (_scope, observeStage) => {
       observeStage?.(stage);
-      return Promise.reject(error);
+      throw error;
     };
   }
   const log = vi.spyOn(console, "info").mockImplementation(() => {});
@@ -231,9 +238,9 @@ it.each([
       "[builder:hosted-neon-consent]",
       expect.objectContaining({
         executionFailure: {
-          stage: "final_runtime_readiness",
-          runtimeReadinessStage: stage,
           errorClass: "type_error",
+          runtimeReadinessStage: stage,
+          stage: "final_runtime_readiness",
         },
       }),
     ]);
@@ -382,14 +389,14 @@ const activeInstallationFixture = () => {
   const readActiveOrganization = vi.fn(async (_scope: OperatorAppMetadataScope) => f.observation);
   f.reader.readActiveOrganization = readActiveOrganization;
   const input = {
+    assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
     plan,
+    readRuntimeSnapshot: f.deps.readRuntimeSnapshot,
     runtimeUrl:
       "postgresql://spend_runtime:private-secret@ep-fixture.us-east-1.aws.neon.tech/spend?sslmode=verify-full",
     scopes: [scope],
-    assertCurrent: vi.fn(async () => {}),
-    readRuntimeSnapshot: f.deps.readRuntimeSnapshot,
   };
-  return { ...f, input, scope, readActiveOrganization };
+  return { ...f, input, readActiveOrganization, scope };
 };
 
 it("retains an active actor-bound organization on a previous release without requiring the desired release", async () => {
@@ -406,7 +413,7 @@ it("retains an active actor-bound organization on a previous release without req
 
 it("excludes only observed inactive or missing actor-bound organizations", async () => {
   const f = activeInstallationFixture();
-  f.reader.readActiveOrganization = vi.fn(async () => null);
+  f.reader.readActiveOrganization = vi.fn<() => Promise<null>>().mockResolvedValue(null);
   await expect(readActiveAppInstallationCustomerIds(f.input)).resolves.toEqual([]);
 });
 
@@ -473,8 +480,8 @@ const installationOnlyFixture = () => {
   const f = fixture();
   const retained: OperatorAppMetadataScope[] = [
     {
-      appId: selection.appId,
       actorId: "original-actor",
+      appId: selection.appId,
       organizationId: "synthetic-org",
       role: "reviewer",
     },
@@ -493,13 +500,13 @@ const installationOnlyFixture = () => {
     }),
   };
   const verify = createHostedOperatorAppReadiness({ ...f.deps, readInstallationScopes });
-  return { ...f, retained, readInstallationScopes, readActiveOrganization, input, verify };
+  return { ...f, input, readActiveOrganization, readInstallationScopes, retained, verify };
 };
 it("verifies an installation-only release through its retained active actor scope without granting access", async () => {
   const f = installationOnlyFixture();
   const before = structuredClone(f.input.plan);
   const result = await f.verify(f.input);
-  expect(result).toMatchObject({ tenants: 1, releaseId: plan.release.id, actors: 0 });
+  expect(result).toMatchObject({ actors: 0, releaseId: plan.release.id, tenants: 1 });
   expect(f.readActiveOrganization).toHaveBeenCalledWith(f.retained[0]);
   expect(f.readInstallationScopes).toHaveBeenCalledTimes(2);
   expect(f.scopes).toEqual([]);

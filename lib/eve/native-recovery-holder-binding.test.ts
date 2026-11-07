@@ -30,14 +30,14 @@ const auth = {
   subject: principal.ownerUserId,
 };
 const descriptor: NativeRecoveryDescriptor = {
-  version: 1,
-  operationId: "op_current",
-  sourcePublicSessionId: "ses_parent",
-  sourceOwnerRunId: "run_parent",
-  sourceAdapterGeneration: 1,
   logicalSessionId: "run_parent",
+  operationId: "op_current",
   originalAuthoritySessionId: "ses_parent",
   parentCancellationRevision: 0,
+  sourceAdapterGeneration: 1,
+  sourceOwnerRunId: "run_parent",
+  sourcePublicSessionId: "ses_parent",
+  version: 1,
 };
 const holderDescriptor: NativeRecoveryDescriptor = {
   ...descriptor,
@@ -47,11 +47,11 @@ const holderReceipt: NativeRecoveryBinding = {
   ...holderDescriptor,
   ownerRunId: "run_holder",
   provenance: {
+    checkpointVersion: 1,
     kind: "completed-terminal-turn-input",
-    sourceStepId: "step_1",
     sourceEventId: "event_1",
     sourceSlot: 0,
-    checkpointVersion: 1,
+    sourceStepId: "step_1",
   },
 };
 
@@ -94,11 +94,10 @@ const fixture = () => {
   ]);
   const sessions = new Map<string, HostedSessionRecord>([[source.sessionId, source]]);
   const binding = createNativeRecoveryBinding({
-    assertOwner: () => {
+    assertOwner: async () => {
       if (!allowed) {
         throw new Error("current-owner-revoked");
       }
-      return Promise.resolve();
     },
     store: {
       // oxlint-disable-next-line eslint/require-await -- The in-memory read follows the store's asynchronous port.
@@ -111,10 +110,10 @@ const fixture = () => {
   return {
     binding,
     operations,
-    sessions,
     revoke: () => {
       allowed = false;
     },
+    sessions,
     setSource: (next: HostedSessionRecord) => {
       currentSource = next;
     },
@@ -131,18 +130,18 @@ describe("native recovery holder facts", () => {
   it("classifies another reserved logical-inbox owner's exact source without claiming it", async () => {
     const f = fixture();
     await expect(f.binding.observeRecoveryHolderBinding(call)).resolves.toEqual({
-      operationFound: true,
+      committedChildMatches: null,
       descriptorMatches: true,
-      sourceBound: true,
-      operationSucceeded: false,
+      operationFound: true,
+      operationRejected: false,
       operationReserved: true,
       operationSubmissionUnknown: false,
-      operationRejected: false,
-      sourceCancelled: false,
-      sourceCancellationMatches: true,
-      receiptPresent: false,
+      operationSucceeded: false,
       receiptOwnerMatches: null,
-      committedChildMatches: null,
+      receiptPresent: false,
+      sourceBound: true,
+      sourceCancellationMatches: true,
+      sourceCancelled: false,
     });
   });
 
@@ -172,13 +171,13 @@ describe("native recovery holder facts", () => {
     const child = durableHostedSessionRecordSchema.parse({
       ...source,
       adapterSessionId: holderReceipt.ownerRunId,
-      originAdapterSessionId: holderReceipt.ownerRunId,
       nativeRecoveryBinding: holderReceipt,
+      originAdapterSessionId: holderReceipt.ownerRunId,
       parentSessionId: source.sessionId,
-      sessionId: "ses_holder_child",
-      status: "working",
       resumability: "live",
+      sessionId: "ses_holder_child",
       stage: "planning",
+      status: "working",
     });
     f.sessions.set(child.sessionId, child);
     f.operations.set(
@@ -186,7 +185,7 @@ describe("native recovery holder facts", () => {
       hostedOperationRecordSchema.parse({
         ...reserved(holderDescriptor),
         nativeRecoveryReceipt: holderReceipt,
-        result: { sessionId: child.sessionId, cursor: 0, events: [], status: "working" },
+        result: { cursor: 0, events: [], sessionId: child.sessionId, status: "working" },
         sessionId: child.sessionId,
         sessionRecordDigest: hostedSessionCreationDigest(child),
         state: "succeeded",
@@ -194,12 +193,12 @@ describe("native recovery holder facts", () => {
     );
     const facts = await f.binding.observeRecoveryHolderBinding(call);
     expect(facts).toMatchObject({
-      operationSucceeded: true,
-      operationReserved: false,
-      sourceBound: true,
-      receiptPresent: true,
-      receiptOwnerMatches: true,
       committedChildMatches: true,
+      operationReserved: false,
+      operationSucceeded: true,
+      receiptOwnerMatches: true,
+      receiptPresent: true,
+      sourceBound: true,
     });
     const wrongOwner = await f.binding.observeRecoveryHolderBinding({
       ...call,
@@ -230,10 +229,10 @@ describe("native recovery holder facts", () => {
     const f = fixture();
     f.operations.delete(holderDescriptor.operationId);
     expect(await f.binding.observeRecoveryHolderBinding(call)).toMatchObject({
-      operationFound: false,
       descriptorMatches: null,
-      sourceBound: null,
+      operationFound: false,
       receiptPresent: null,
+      sourceBound: null,
     });
     f.operations.set(
       holderDescriptor.operationId,
@@ -243,10 +242,10 @@ describe("native recovery holder facts", () => {
       }),
     );
     expect(await f.binding.observeRecoveryHolderBinding(call)).toMatchObject({
-      operationFound: true,
       descriptorMatches: false,
-      sourceBound: null,
+      operationFound: true,
       receiptPresent: null,
+      sourceBound: null,
     });
   });
 
@@ -264,11 +263,11 @@ describe("native recovery holder facts", () => {
           retainedDescriptor.sourcePublicSessionId,
           durableHostedSessionRecordSchema.parse({
             ...source,
-            sessionId: retainedDescriptor.sourcePublicSessionId,
+            cancellationRevision: kind === "cancelled" ? 1 : 0,
             principal:
               kind === "foreign" ? { ...principal, ownerUserId: "foreign-owner" } : principal,
+            sessionId: retainedDescriptor.sourcePublicSessionId,
             status: kind === "cancelled" ? "cancelled" : "failed",
-            cancellationRevision: kind === "cancelled" ? 1 : 0,
           }),
         );
       }
@@ -278,13 +277,13 @@ describe("native recovery holder facts", () => {
           holderDescriptor: retainedDescriptor,
         }),
       ).toMatchObject({
-        operationFound: true,
-        descriptorMatches: true,
-        sourceBound: false,
-        sourceCancelled: kind === "cancelled" ? true : null,
-        sourceCancellationMatches: kind === "cancelled" ? false : null,
-        receiptPresent: false,
         committedChildMatches: null,
+        descriptorMatches: true,
+        operationFound: true,
+        receiptPresent: false,
+        sourceBound: false,
+        sourceCancellationMatches: kind === "cancelled" ? false : null,
+        sourceCancelled: kind === "cancelled" ? true : null,
       });
     },
   );
@@ -309,18 +308,18 @@ describe("native recovery holder facts", () => {
       }),
     );
     await expect(f.binding.observeRecoveryHolderBinding(call)).resolves.toEqual({
-      operationFound: false,
+      committedChildMatches: null,
       descriptorMatches: null,
-      sourceBound: null,
-      operationSucceeded: null,
+      operationFound: false,
+      operationRejected: null,
       operationReserved: null,
       operationSubmissionUnknown: null,
-      operationRejected: null,
-      sourceCancelled: null,
-      sourceCancellationMatches: null,
-      receiptPresent: null,
+      operationSucceeded: null,
       receiptOwnerMatches: null,
-      committedChildMatches: null,
+      receiptPresent: null,
+      sourceBound: null,
+      sourceCancellationMatches: null,
+      sourceCancelled: null,
     });
   });
 });

@@ -118,17 +118,6 @@ const renewalPlanFrom = (prior: HostedOperatorPlan, expiresAt: string) => {
           },
         }
       : {}),
-    gatewayBindings: {
-      ...gatewayBindings,
-      ...(prior.hostProtection === undefined
-        ? {
-            trustedSources: {
-              ...gatewayBindings.trustedSources,
-              appPreview: { projectId: prior.selection.projectId, from: "preview", to: "preview" },
-            },
-          }
-        : {}),
-    },
     effects: prior.effects.map((effect) => {
       if (prior.hostProtection !== undefined) {
         return effect;
@@ -141,6 +130,17 @@ const renewalPlanFrom = (prior: HostedOperatorPlan, expiresAt: string) => {
       }
       return effect;
     }),
+    gatewayBindings: {
+      ...gatewayBindings,
+      ...(prior.hostProtection === undefined
+        ? {
+            trustedSources: {
+              ...gatewayBindings.trustedSources,
+              appPreview: { from: "preview", projectId: prior.selection.projectId, to: "preview" },
+            },
+          }
+        : {}),
+    },
     retention: { ...prior.retention, expiresAt },
   });
 };
@@ -226,8 +226,8 @@ export const retentionRenewalBindingProvenance = (
       continue;
     }
     return {
-      approvedByCallId: retained.approvedByCallId,
       approvalId: prior.approvalId,
+      approvedByCallId: retained.approvedByCallId,
       effectId,
       kind: effect.kind,
       operationRef: prior.operationRef,
@@ -252,8 +252,8 @@ export const isRetentionRenewalSuccessor = (
   if (record === undefined || operator === undefined || !isExactRenewalPlan(operator.plan, plan)) {
     return false;
   }
-  let pendingEffectId = operator.pendingEffectId;
-  let pendingEffectAttempt = operator.pendingEffectAttempt;
+  let { pendingEffectId } = operator;
+  let { pendingEffectAttempt } = operator;
   if (pendingEffectId === undefined) {
     const firstUnreceipted = operator.plan.effects.find(
       (effect) => !operator.receipts.some((receipt) => receipt.effectId === effect.id),

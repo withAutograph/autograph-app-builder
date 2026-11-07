@@ -10,11 +10,11 @@ import type { PublicReleaseInvocation } from "./public-release-handler";
 const decimal = z.string().regex(/^[1-9][0-9]*$/u);
 const oid = z.string().regex(/^[a-f0-9]{40}$/u);
 const authenticationSchema = z.object({
-  type: z.literal("token"),
-  token: z.string().min(1),
   installationId: z.union([z.string(), z.number()]).transform(String),
-  repositoryIds: z.array(z.union([z.string(), z.number()]).transform(String)),
   permissions: z.strictObject({ contents: z.literal("write"), metadata: z.literal("read") }),
+  repositoryIds: z.array(z.union([z.string(), z.number()]).transform(String)),
+  token: z.string().min(1),
+  type: z.literal("token"),
 });
 const unavailable = () => new Error("public_release_github_authorization_required");
 export interface PublicReleaseGitHubSourceScope {
@@ -70,11 +70,11 @@ export const createOwnerScopedGitHubRepositoryCredentialReader = (
       await binding();
       await check();
       const result: unknown = await app.octokit.auth({
-        type: "installation",
         installationId: scope.installationId,
-        repositoryIds: [repositoryNumber],
         permissions: { contents: "write", metadata: "read" },
         refresh: true,
+        repositoryIds: [repositoryNumber],
+        type: "installation",
       });
       await check();
       const authentication = authenticationSchema.parse(result);
@@ -88,9 +88,9 @@ export const createOwnerScopedGitHubRepositoryCredentialReader = (
       await binding();
       await check();
       return {
-        token: authentication.token,
-        repositoryId: scope.repositoryId,
         installationId: scope.installationId,
+        repositoryId: scope.repositoryId,
+        token: authentication.token,
       };
     } catch {
       invocation.signal.throwIfAborted();
@@ -105,8 +105,10 @@ export const createPublicReleaseGitHubCredentialReader = (
   },
 ): PublicReleaseGitHubDependencies["readCredential"] => {
   const read = createOwnerScopedGitHubRepositoryCredentialReader(input);
-  return (invocation, plan) =>
-    read(invocation, plan.source, () => input.assertCurrent(invocation, plan));
+  return async (invocation, plan) =>
+    await read(invocation, plan.source, async () => {
+      await input.assertCurrent(invocation, plan);
+    });
 };
 
 /** Read actual refs while constructing a new release plan; no model-provided repository authority. */
@@ -133,7 +135,7 @@ export const createPublicReleaseGitHubDestinationReader = (
       await check();
       const credential = await read(invocation, scope, check);
       await check();
-      const github = createGitHubTokenOctokit({ token: credential.token, fetch: input.fetch });
+      const github = createGitHubTokenOctokit({ fetch: input.fetch, token: credential.token });
       const repository = await github.request("GET /repositories/{repository_id}", {
         repository_id: scope.repositoryId,
         request: { signal: invocation.signal },
@@ -141,8 +143,8 @@ export const createPublicReleaseGitHubDestinationReader = (
       await check();
       const repo = z
         .object({
-          id: z.union([z.string(), z.number()]).transform(String),
           description: z.string(),
+          id: z.union([z.string(), z.number()]).transform(String),
           name: z.string().min(1),
           owner: z.object({ login: z.string().min(1) }),
         })
@@ -158,8 +160,8 @@ export const createPublicReleaseGitHubDestinationReader = (
         await check();
         const response = await github.request("GET /repos/{owner}/{repo}/git/ref/{ref}", {
           owner: repo.owner.login,
-          repo: repo.name,
           ref: `heads/${branch}`,
+          repo: repo.name,
           request: { signal: invocation.signal },
         });
         await check();
@@ -172,12 +174,12 @@ export const createPublicReleaseGitHubDestinationReader = (
       await check();
       return {
         deliveryScope: scope.deliveryScope,
+        expectedProductionSha,
         installationId: scope.installationId,
-        repositoryId: scope.repositoryId,
         productionBranch: scope.productionBranch,
+        repositoryId: scope.repositoryId,
         sourceBranch: scope.sourceBranch,
         sourceSha,
-        expectedProductionSha,
       };
     } catch {
       invocation.signal.throwIfAborted();

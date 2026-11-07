@@ -81,7 +81,6 @@ export const builderHandoffCreateRequestSchema = z
     connections: z.array(z.string().trim().min(1).max(100)).max(50),
     creationRequestId: z.string().uuid(),
     destination: builderHandoffDestinationSchema.optional(),
-    sourceCandidate: sourceCandidateReferenceSchema.optional(),
     modelId: activeBuilderModelIdSchema,
     provisioningRequestId: z.string().uuid().optional(),
     repository: z
@@ -95,6 +94,7 @@ export const builderHandoffCreateRequestSchema = z
         private: z.boolean(),
       })
       .strict(),
+    sourceCandidate: sourceCandidateReferenceSchema.optional(),
     version: z.literal(1),
   })
   .strict();
@@ -387,8 +387,8 @@ export async function findAuthenticatedPendingBuilderHandoff(input: {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function getBuilderHandoffStatusDeploymentHandler(environment: Environment) {
   return createBuilderHandoffStatusRouteHandler({
-    pageData: (request, handoffId) =>
-      getBuilderHandoffPageData({
+    pageData: async (request, handoffId) =>
+      await getBuilderHandoffPageData({
         environment,
         handoffId,
         headers: request.headers,
@@ -403,7 +403,8 @@ export function getBuilderHandoffRenewDeploymentHandler(environment: Environment
     try {
       const context = deploymentContext(environment);
       return await createBuilderHandoffRenewRouteHandler({
-        authorityForRequest: (innerRequest) => context.authorityForHeaders(innerRequest.headers),
+        authorityForRequest: async (innerRequest) =>
+          await context.authorityForHeaders(innerRequest.headers),
         handoffs: context.handoffs,
         origin: new URL(context.preview.issuer).origin,
       })(request, handoffId);
@@ -417,7 +418,7 @@ export function getBuilderHandoffRenewDeploymentHandler(environment: Environment
 export function getBuilderHandoffDeploymentHandler(environment: Environment) {
   const context = deploymentContext(environment);
   return createBuilderHandoffRouteHandler({
-    authorityForRequest: (request) => context.authorityForHeaders(request.headers),
+    authorityForRequest: async (request) => await context.authorityForHeaders(request.headers),
     handoffs: context.handoffs,
     journal: createPostgresBuilderProvisionJournalStore(context.database),
     origin: new URL(context.preview.issuer).origin,

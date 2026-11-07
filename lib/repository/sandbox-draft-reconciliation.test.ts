@@ -75,10 +75,10 @@ const fixture = (platformConflict = false, dependencyWorkspace = false) => {
     writeFileSync(
       path.join(checkout, "packages/probe/package.json"),
       JSON.stringify({
+        bin: { "workspace-probe": "./bin.cjs" },
+        exports: "./index.js",
         name: "@fixture/probe",
         type: "module",
-        exports: "./index.js",
-        bin: { "workspace-probe": "./bin.cjs" },
       }),
     );
     writeFileSync(
@@ -222,24 +222,24 @@ describe("isolated draft reconciliation", () => {
       path.join(prepared.root, "apps/demo/tests/journey.spec.ts"),
       "resolved app edit\n",
     );
-    await inspectDraftReconciliation({ sandbox: f.sandbox, prepared });
+    await inspectDraftReconciliation({ prepared, sandbox: f.sandbox });
     const files = [
       {
-        path: "package.json",
         content: '{"private":true,"workspaces":["packages/*"],"catalog":{"probe":"1.0.0"}}\n',
+        path: "package.json",
       },
       {
-        path: "packages/probe/package.json",
         content: '{"name":"@fixture/probe","dependencies":{"probe":"catalog:"}}\n',
+        path: "packages/probe/package.json",
       },
-      { path: "bun.lock", content: "normalized catalog lock\n" },
+      { content: "normalized catalog lock\n", path: "bun.lock" },
     ];
     for (const file of files) {
       writeFileSync(path.join(prepared.root, file.path), file.content);
     }
     git(prepared.root, "add", "--", ...files.map((file) => file.path));
     const dependencyCatalog = {
-      files: files.map((file) => ({ path: file.path, digest: digest(file.content) })),
+      files: files.map((file) => ({ digest: digest(file.content), path: file.path })),
       nonAppIndexDigest: await nonAppIndexDigest(f.sandbox, prepared.root, "demo"),
     };
     return { f, prepared: { ...prepared, dependencyCatalog } };
@@ -247,7 +247,7 @@ describe("isolated draft reconciliation", () => {
 
   it("reviews and reuses exact normalized catalog files while preserving app edits", async () => {
     const { f, prepared } = await catalogCandidate();
-    const inspected = await inspectDraftReconciliation({ sandbox: f.sandbox, prepared });
+    const inspected = await inspectDraftReconciliation({ prepared, sandbox: f.sandbox });
     expect(inspected.baseChanges.map((change) => change.path)).toEqual(
       expect.arrayContaining([
         "package.json",
@@ -267,8 +267,8 @@ describe("isolated draft reconciliation", () => {
       "resolved app edit\n",
     );
     const retainedInspection = await inspectDraftReconciliation({
-      sandbox: f.sandbox,
       prepared: retained,
+      sandbox: f.sandbox,
     });
     expect(retainedInspection.resolvedTree).toBe(inspected.resolvedTree);
   });
@@ -285,14 +285,14 @@ describe("isolated draft reconciliation", () => {
         ...prepared.dependencyCatalog,
         files: [
           ...prepared.dependencyCatalog.files,
-          { path: appManifest, digest: digest(normalized) },
+          { digest: digest(normalized), path: appManifest },
         ],
       },
     };
     const changed =
       '{"name":"demo","devDependencies":{"probe":"catalog:"},"scripts":{"test":"existing task --run"}}\n';
     writeFileSync(path.join(prepared.root, appManifest), changed);
-    const observed = await inspectDraftReconciliation({ sandbox: f.sandbox, prepared: candidate });
+    const observed = await inspectDraftReconciliation({ prepared: candidate, sandbox: f.sandbox });
     expect(
       observed.baseChanges.some(
         (change) => change.path === appManifest && change.after?.digest === digest(changed),
@@ -338,13 +338,13 @@ describe("isolated draft reconciliation", () => {
         git(prepared.root, "add", "docs/platform.md");
       }
     }
-    await expect(inspectDraftReconciliation({ sandbox: f.sandbox, prepared })).rejects.toThrow();
+    await expect(inspectDraftReconciliation({ prepared, sandbox: f.sandbox })).rejects.toThrow();
   });
 
   it("rejects receipts authorizing non-manifest paths", async () => {
     const { f, prepared } = await catalogCandidate();
-    prepared.dependencyCatalog.files.push({ path: "docs/platform.md", digest: digest("main\n") });
-    await expect(inspectDraftReconciliation({ sandbox: f.sandbox, prepared })).rejects.toThrow(
+    prepared.dependencyCatalog.files.push({ digest: digest("main\n"), path: "docs/platform.md" });
+    await expect(inspectDraftReconciliation({ prepared, sandbox: f.sandbox })).rejects.toThrow(
       "receipt is invalid",
     );
   });
@@ -397,9 +397,9 @@ describe("isolated draft reconciliation", () => {
     writeFileSync(
       path.join(externalPackage, "package.json"),
       JSON.stringify({
+        exports: { "./config": "./config.js" },
         name: "@vercel/microfrontends",
         type: "module",
-        exports: { "./config": "./config.js" },
       }),
     );
     const installedSource = path.join(externalPackage, "config.js");
@@ -501,10 +501,8 @@ describe("isolated draft reconciliation", () => {
     let largestOutput = 0;
     const sandbox = {
       ...f.sandbox,
-      readTextFile() {
-        return Promise.reject(
-          new Error("This source reader has no whole-file text transfer capability."),
-        );
+      async readTextFile() {
+        throw new Error("This source reader has no whole-file text transfer capability.");
       },
       async run(input: Parameters<SandboxSession["run"]>[0]) {
         const result = await f.sandbox.run(input);
@@ -959,27 +957,26 @@ describe("isolated draft reconciliation", () => {
         headSha: liveHead,
         repository: { name: "arrusted-development", owner: "withAutograph" },
         sandbox,
-        workspaceRoot: root,
         unpublished: {
-          priorPublishedHeadSha: publishedHead,
-          reviewDigest: "c".repeat(64),
           changes: [
             {
-              path: "apps/demo/tests/journey.spec.ts",
-              kind: "modified",
-              before: { digest: digest("main\n"), mode: "100644" },
               after: { digest: digest("repaired\n"), mode },
+              before: { digest: digest("main\n"), mode: "100644" },
+              kind: "modified",
+              path: "apps/demo/tests/journey.spec.ts",
             },
           ],
           contentSource: {
-            readFile: () =>
-              Promise.resolve({
-                bytes: Buffer.from("repaired\n"),
-                digest: digest("repaired\n"),
-                mode,
-              }),
+            readFile: async () => ({
+              bytes: Buffer.from("repaired\n"),
+              digest: digest("repaired\n"),
+              mode,
+            }),
           },
+          priorPublishedHeadSha: publishedHead,
+          reviewDigest: "c".repeat(64),
         },
+        workspaceRoot: root,
       });
       expect(git(prepared.root, "show", "HEAD:apps/demo/tests/journey.spec.ts")).toBe("repaired");
       expect(git(prepared.root, "show", "HEAD:apps/demo/retained.ts")).toBe(
@@ -1036,12 +1033,11 @@ describe("isolated draft reconciliation", () => {
       }
       const headSha = git(checkout, "rev-parse", "HEAD");
       git(checkout, "push", "origin", "draft");
-      const readFile = () =>
-        Promise.resolve({
-          bytes: Buffer.from(revised),
-          digest: digest(revised),
-          mode: "100644",
-        });
+      const readFile = async () => ({
+        bytes: Buffer.from(revised),
+        digest: digest(revised),
+        mode: "100644",
+      });
       const preparation = prepareDraftReconciliation({
         appId: "demo",
         baseBranch: "main",
@@ -1050,20 +1046,20 @@ describe("isolated draft reconciliation", () => {
         headSha,
         repository: { name: "arrusted-development", owner: "withAutograph" },
         sandbox,
-        workspaceRoot: root,
         unpublished: {
-          priorPublishedHeadSha: publishedHead,
-          reviewDigest: "e".repeat(64),
           changes: [
             {
-              path: relative,
-              kind: "modified",
-              before: { digest: digest('{"release":"selected-source"}\n'), mode: "100644" },
               after: { digest: digest(revised), mode: "100644" },
+              before: { digest: digest('{"release":"selected-source"}\n'), mode: "100644" },
+              kind: "modified",
+              path: relative,
             },
           ],
           contentSource: { readFile },
+          priorPublishedHeadSha: publishedHead,
+          reviewDigest: "e".repeat(64),
         },
+        workspaceRoot: root,
       });
       if (thirdPartyChange) {
         await expect(preparation).rejects.toThrow("matches neither");
@@ -1106,22 +1102,24 @@ describe("isolated draft reconciliation", () => {
         headSha,
         repository: { name: "arrusted-development", owner: "withAutograph" },
         sandbox,
-        workspaceRoot: root,
         unpublished: {
-          priorPublishedHeadSha: publishedHead,
-          reviewDigest: "d".repeat(64),
           changes: [
             {
-              path: "apps/demo/tests/journey.spec.ts",
-              kind: "modified",
-              before: { digest: digest("main\n"), mode: "100644" },
               after: { digest: digest("repaired\n"), mode: "100644" },
+              before: { digest: digest("main\n"), mode: "100644" },
+              kind: "modified",
+              path: "apps/demo/tests/journey.spec.ts",
             },
           ],
           contentSource: {
-            readFile: () => Promise.reject(new Error("must reject before loading the repair")),
+            readFile: async () => {
+              throw new Error("must reject before loading the repair");
+            },
           },
+          priorPublishedHeadSha: publishedHead,
+          reviewDigest: "d".repeat(64),
         },
+        workspaceRoot: root,
       }),
     ).rejects.toThrow(
       "matches neither its reviewed starting content nor the complete reviewed result",
@@ -1334,7 +1332,7 @@ describe("isolated draft reconciliation", () => {
     rmSync(path.join(old.root, "apps/demo/obsolete.txt"));
     writeFileSync(path.join(old.root, "apps/demo/repair.ts"), "app-owned repair\n");
     chmodSync(path.join(old.root, "apps/demo/repair.ts"), 0o755);
-    await inspectDraftReconciliation({ sandbox: f.sandbox, prepared: old });
+    await inspectDraftReconciliation({ prepared: old, sandbox: f.sandbox });
     writeFileSync(path.join(old.root, "bun.lock"), "observed root metadata\n");
     writeFileSync(path.join(old.root, "docs/platform.md"), "private outside-scope edit\n");
     git(old.root, "add", "docs/platform.md");
@@ -1380,7 +1378,7 @@ describe("isolated draft reconciliation", () => {
     expect(readFileSync(index)).toEqual(beforeIndex);
     expect(next.conflicts).toEqual([]);
     await expect(
-      inspectDraftReconciliation({ sandbox: f.sandbox, prepared: next }),
+      inspectDraftReconciliation({ prepared: next, sandbox: f.sandbox }),
     ).resolves.toMatchObject({ unresolvedConflicts: [] });
   });
 
@@ -1432,7 +1430,7 @@ describe("isolated draft reconciliation", () => {
       prepared: old,
       sandbox: f.sandbox,
     });
-    await inspectDraftReconciliation({ sandbox: f.sandbox, prepared: old });
+    await inspectDraftReconciliation({ prepared: old, sandbox: f.sandbox });
     const oldIndexPath = git(old.root, "rev-parse", "--git-path", "index");
     const beforeIndex = readFileSync(oldIndexPath);
     const oldHead = git(old.root, "rev-parse", "HEAD");
@@ -1488,10 +1486,10 @@ describe("isolated draft reconciliation", () => {
     const input = candidateFixtureInput(f, oldBase);
     const old = await prepareDraftReconciliation(input);
     await writeDraftReconciliationResolution({
+      content: "resolved draft\n",
+      path: "apps/demo/tests/journey.spec.ts",
       prepared: old,
       sandbox: f.sandbox,
-      path: "apps/demo/tests/journey.spec.ts",
-      content: "resolved draft\n",
     });
     await inspectDraftReconciliation({ prepared: old, sandbox: f.sandbox });
     writeFileSync(path.join(old.root, file), before.replace("first", "private-first"));
@@ -1519,18 +1517,18 @@ describe("isolated draft reconciliation", () => {
   it("three-way retains renamed executable and binary files through file-directory replacements", async () => {
     const f = fixture();
     const oldBase = advanceFixtureBase(f, {
-      "apps/demo/rename.ts": "original\n",
-      "apps/demo/file-to-directory": "old file\n",
       "apps/demo/directory-to-file/nested/leaf.ts": "old leaf\n",
+      "apps/demo/file-to-directory": "old file\n",
       "apps/demo/obsolete.ts": "obsolete\n",
+      "apps/demo/rename.ts": "original\n",
     });
     const input = candidateFixtureInput(f, oldBase);
     const old = await prepareDraftReconciliation(input);
     await writeDraftReconciliationResolution({
+      content: "resolved draft\n",
+      path: "apps/demo/tests/journey.spec.ts",
       prepared: old,
       sandbox: f.sandbox,
-      path: "apps/demo/tests/journey.spec.ts",
-      content: "resolved draft\n",
     });
     await inspectDraftReconciliation({ prepared: old, sandbox: f.sandbox });
     git(old.root, "mv", "apps/demo/rename.ts", "apps/demo/renamed.ts");
@@ -1576,10 +1574,10 @@ describe("isolated draft reconciliation", () => {
       const input = candidateFixtureInput(f, oldBase);
       const old = await prepareDraftReconciliation(input);
       await writeDraftReconciliationResolution({
+        content: "resolved draft\n",
+        path: "apps/demo/tests/journey.spec.ts",
         prepared: old,
         sandbox: f.sandbox,
-        path: "apps/demo/tests/journey.spec.ts",
-        content: "resolved draft\n",
       });
       await inspectDraftReconciliation({ prepared: old, sandbox: f.sandbox });
       if (kind === "delete") {
@@ -1728,10 +1726,10 @@ describe("isolated draft reconciliation", () => {
     };
     const next = await prepareDraftReconciliation({
       ...input,
-      sandbox,
       baseSha,
       previousCandidate: old,
       replayPreviousCandidate: true,
+      sandbox,
     });
     expect(attached.has(next.root)).toBe(true);
     for (const root of [old.root, next.root]) {
@@ -1862,13 +1860,13 @@ describe("unused draft worktree retirement", () => {
     const root = path.join(workspaceRoot, ".app-builder/draft-reconcile/previous");
     mkdirSync(path.dirname(root), { recursive: true });
     git(checkout, "worktree", "add", "--detach", root, f.headSha);
-    return { ...f, workspaceRoot, checkout, retiredRoot: root };
+    return { ...f, checkout, retiredRoot: root, workspaceRoot };
   };
   const retire = async (f: ReturnType<typeof registeredFixture>, retainedRoots: string[] = []) =>
     await retireUnusedDraftWorktrees({
+      retainedRoots,
       sandbox: f.sandbox,
       workspaceRoot: f.workspaceRoot,
-      retainedRoots,
     });
   const attachDependencies = async (f: ReturnType<typeof registeredFixture>, ignored = false) => {
     git(f.checkout, "config", "core.excludesFile", "/dev/null");
@@ -1882,9 +1880,9 @@ describe("unused draft worktree retirement", () => {
       writeFileSync(path.join(source, "private-cache"), "external dependency bytes\n");
     }
     await attachCheckoutDependencyView({
-      sandbox: f.sandbox,
-      checkoutRoot: f.checkout,
       candidateRoot: f.retiredRoot,
+      checkoutRoot: f.checkout,
+      sandbox: f.sandbox,
       workspaceRoot: f.workspaceRoot,
     });
     return roots.map((relative) => {
@@ -1912,10 +1910,9 @@ cp.spawn = (command, args, options) => {
 };`,
     );
     return await retireUnusedDraftWorktrees({
-      workspaceRoot: f.workspaceRoot,
       retainedRoots: [],
       sandbox: {
-        run(input) {
+        async run(input) {
           const result = spawnSync("/bin/sh", ["-c", input.command], {
             cwd: f.workspaceRoot,
             encoding: "utf-8",
@@ -1928,13 +1925,14 @@ cp.spawn = (command, args, options) => {
               PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ""}`,
             },
           });
-          return Promise.resolve({
+          return {
             exitCode: result.status ?? 1,
-            stdout: result.stdout,
             stderr: result.stderr,
-          });
+            stdout: result.stdout,
+          };
         },
       },
+      workspaceRoot: f.workspaceRoot,
     });
   };
 
@@ -1947,10 +1945,10 @@ cp.spawn = (command, args, options) => {
     writeFileSync(path.join(privateRoot, "owner-record"), "private retained bytes\n");
     const result = await retire(f, [referenced]);
     expect(result).toMatchObject({
-      status: "complete",
-      retired: 1,
+      reasons: { private_state: 1, referenced: 1 },
       retained: 2,
-      reasons: { referenced: 1, private_state: 1 },
+      retired: 1,
+      status: "complete",
     });
     expect(existsSync(f.retiredRoot)).toBe(false);
     expect(existsSync(referenced)).toBe(true);
@@ -1969,10 +1967,10 @@ cp.spawn = (command, args, options) => {
       "",
       `fs.statfsSync = () => ({ bsize: 4096n, blocks: 1024n, bavail: 0n, files: 512n, ffree: 0n });`,
     );
-    expect(result).toMatchObject({ status: "complete", retired: 1, retained: 0 });
+    expect(result).toMatchObject({ retained: 0, retired: 1, status: "complete" });
     expect(result.capacity?.before).toEqual({
-      bytes: { total: "4194304", available: "0" },
-      inodes: { total: "512", free: "0" },
+      bytes: { available: "0", total: "4194304" },
+      inodes: { free: "0", total: "512" },
     });
     expect(result.capacity?.after).toEqual(result.capacity?.before);
   });
@@ -1988,10 +1986,10 @@ cp.spawn = (command, args, options) => {
           ? `fs.statfsSync = () => ({ bsize: 4096n, blocks: 1024n, bavail: 7n, files: 0n, ffree: 0n });`
           : `fs.statfsSync = () => { throw Error("private statfs details"); };`,
       );
-      expect(result).toMatchObject({ status: "complete", retired: 1, retained: 0 });
+      expect(result).toMatchObject({ retained: 0, retired: 1, status: "complete" });
       expect(result.capacity?.before?.inodes).toBeUndefined();
       if (kind === "unsupported inodes") {
-        expect(result.capacity?.before?.bytes).toEqual({ total: "4194304", available: "28672" });
+        expect(result.capacity?.before?.bytes).toEqual({ available: "28672", total: "4194304" });
       } else {
         expect(result.capacity?.before?.bytes).toBeUndefined();
       }
@@ -2007,39 +2005,39 @@ cp.spawn = (command, args, options) => {
       `if (args.includes("status")) return original(process.execPath, ["-e", "process.exit(1)"], options);`,
     );
     expect(result).toMatchObject({
-      status: "partial",
-      retired: 0,
-      retained: 1,
       reasons: { inspection_unavailable: 1 },
+      retained: 1,
+      retired: 0,
+      status: "partial",
     });
     expect(existsSync(f.retiredRoot)).toBe(true);
     expect(git(f.retiredRoot, "rev-parse", "HEAD")).toBe(f.headSha);
   });
 
   it.each([
-    { exitCode: 1, stdout: "private command output", stderr: "private failure" },
-    { exitCode: 0, stdout: "not JSON private payload", stderr: "" },
+    { exitCode: 1, stderr: "private failure", stdout: "private command output" },
+    { exitCode: 0, stderr: "", stdout: "not JSON private payload" },
     {
       exitCode: 0,
-      stdout: JSON.stringify({ status: "complete", retired: -1, retained: 0, reasons: {} }),
       stderr: "",
+      stdout: JSON.stringify({ reasons: {}, retained: 0, retired: -1, status: "complete" }),
     },
     {
       exitCode: 0,
-      stdout: JSON.stringify({
-        status: "complete",
-        retired: 0,
-        retained: 0,
-        reasons: { "private path": 1 },
-      }),
       stderr: "",
+      stdout: JSON.stringify({
+        reasons: { "private path": 1 },
+        retained: 0,
+        retired: 0,
+        status: "complete",
+      }),
     },
   ])(
     "returns unavailable for an untrusted cleanup response %# without exposing command details",
     async (response) => {
       const run = vi.fn<SandboxSession["run"]>().mockResolvedValue(response);
-      const result = await retireUnusedDraftWorktrees({ sandbox: { run }, retainedRoots: [] });
-      expect(result).toEqual({ status: "unavailable", retired: 0, retained: 0, reasons: {} });
+      const result = await retireUnusedDraftWorktrees({ retainedRoots: [], sandbox: { run } });
+      expect(result).toEqual({ reasons: {}, retained: 0, retired: 0, status: "unavailable" });
       expect(run).toHaveBeenCalledOnce();
       expect(JSON.stringify(result)).not.toContain("private");
     },
@@ -2051,8 +2049,12 @@ cp.spawn = (command, args, options) => {
     controller.abort(cancellation);
     await expect(
       retireUnusedDraftWorktrees({
-        sandbox: { run: () => Promise.reject(cancellation) },
         retainedRoots: [],
+        sandbox: {
+          run: async () => {
+            throw cancellation;
+          },
+        },
         signal: controller.signal,
       }),
     ).rejects.toBe(cancellation);
@@ -2300,8 +2302,8 @@ fs.lstatSync = (...args) => {
     git(f.retiredRoot, "update-index", "--force-remove", trackedPath);
     // oxlint-disable-next-line sonarjs/no-os-command-from-path -- Git creates unresolved stages only in this temporary fixture.
     const result = spawnSync("git", ["-C", f.retiredRoot, "update-index", "--index-info"], {
-      input: [1, 2, 3].map((stage) => `100644 ${hash} ${stage}\t${trackedPath}\n`).join(""),
       encoding: "utf-8",
+      input: [1, 2, 3].map((stage) => `100644 ${hash} ${stage}\t${trackedPath}\n`).join(""),
     });
     expect(result.status).toBe(0);
     const unresolved = git(f.retiredRoot, "ls-files", "--unmerged");
@@ -2404,10 +2406,9 @@ cp.spawn = (command, args, options) => {
 `,
       );
       await retireUnusedDraftWorktrees({
-        workspaceRoot: f.workspaceRoot,
         retainedRoots: [],
         sandbox: {
-          run(input) {
+          async run(input) {
             const result = spawnSync("/bin/sh", ["-c", input.command], {
               cwd: f.workspaceRoot,
               encoding: "utf-8",
@@ -2417,13 +2418,14 @@ cp.spawn = (command, args, options) => {
                 PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ""}`,
               },
             });
-            return Promise.resolve({
+            return {
               exitCode: result.status ?? 1,
-              stdout: result.stdout,
               stderr: result.stderr,
-            });
+              stdout: result.stdout,
+            };
           },
         },
+        workspaceRoot: f.workspaceRoot,
       });
       expect(existsSync(f.retiredRoot)).toBe(true);
       if (failure === "race") {
@@ -2435,9 +2437,13 @@ cp.spawn = (command, args, options) => {
   it("leaves an unknown provider outcome alone", async () => {
     const f = registeredFixture();
     await retireUnusedDraftWorktrees({
-      workspaceRoot: f.workspaceRoot,
       retainedRoots: [],
-      sandbox: { run: () => Promise.reject(new Error("unknown provider outcome")) },
+      sandbox: {
+        run: async () => {
+          throw new Error("unknown provider outcome");
+        },
+      },
+      workspaceRoot: f.workspaceRoot,
     });
     expect(existsSync(f.retiredRoot)).toBe(true);
   });

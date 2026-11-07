@@ -5,18 +5,18 @@ import type { AppBuilderWorkflowState } from "./workflow-state";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const localSourcePrerequisiteObservationSchema = z.strictObject({
-  version: z.literal(1),
-  code: z.literal("local_source_baseline_required"),
-  status: z.enum(["blocked", "resolved"]),
   appId: z.string().min(1),
   appSpecDigest: digest,
-  sourceReceiptDigest: digest,
+  code: z.literal("local_source_baseline_required"),
+  observedByCallId: z.string().min(1),
   originalSourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
   originalWorkspaceDigest: digest,
   proposalDigest: digest.optional(),
-  workspaceId: z.string().min(1),
   sessionId: z.string().min(1),
-  observedByCallId: z.string().min(1),
+  sourceReceiptDigest: digest,
+  status: z.enum(["blocked", "resolved"]),
+  version: z.literal(1),
+  workspaceId: z.string().min(1),
 });
 export type LocalSourcePrerequisiteObservation = z.infer<
   typeof localSourcePrerequisiteObservationSchema
@@ -29,17 +29,35 @@ const binding = (state: AppBuilderWorkflowState, sessionId: string) => {
   if (!("appSpec" in state)) {
     return undefined;
   }
-  return {
-    appId: state.appSpec.appId,
-    appSpecDigest: state.appSpec.digest,
-    sourceReceiptDigest: state.sourceReceipt.digest,
-    originalSourceSha: state.sourceReceipt.sourceSha,
-    originalWorkspaceDigest:
-      "proposal" in state ? state.proposal.workspaceDigest : state.workspace.workspaceDigest,
-    ...("proposal" in state ? { proposalDigest: state.proposal.digest } : {}),
-    workspaceId: state.workspace.workspaceId,
+  const { appId, digest: appSpecDigest } = state.appSpec;
+  const sourceReceiptDigest = state.sourceReceipt.digest;
+  const originalSourceSha = state.sourceReceipt.sourceSha;
+  const originalWorkspaceDigest =
+    "proposal" in state ? state.proposal.workspaceDigest : state.workspace.workspaceDigest;
+  const hasProposal = "proposal" in state;
+  const proposalDigest = hasProposal ? state.proposal.digest : undefined;
+  const { workspaceId } = state.workspace;
+  const result: Pick<
+    LocalSourcePrerequisiteObservation,
+    | "appId"
+    | "appSpecDigest"
+    | "originalSourceSha"
+    | "originalWorkspaceDigest"
+    | "proposalDigest"
+    | "sessionId"
+    | "sourceReceiptDigest"
+    | "workspaceId"
+  > = {
+    appId,
+    appSpecDigest,
+    originalSourceSha,
+    originalWorkspaceDigest,
     sessionId,
+    sourceReceiptDigest,
+    workspaceId,
   };
+  if (hasProposal) result.proposalDigest = proposalDigest;
+  return result;
 };
 export const matchingLocalSourcePrerequisite = (input: {
   state: AppBuilderWorkflowState;
@@ -69,9 +87,9 @@ export const matchingLocalSourcePrerequisite = (input: {
 };
 export const currentLocalSourcePrerequisite = (state: AppBuilderWorkflowState, sessionId: string) =>
   matchingLocalSourcePrerequisite({
-    state,
-    sessionId,
     observations: localSourcePrerequisiteHistory.get(),
+    sessionId,
+    state,
   });
 
 /** Called only for the actual typed source error, never a message or diagnostic-text match. */
@@ -92,10 +110,10 @@ export const recordLocalSourcePrerequisite = (input: {
   }
   const observation = localSourcePrerequisiteObservationSchema.parse({
     ...selected,
-    version: 1,
     code: "local_source_baseline_required",
-    status: "blocked",
     observedByCallId: input.callId,
+    status: "blocked",
+    version: 1,
   });
   localSourcePrerequisiteHistory.update((history) => [...history, observation]);
   return observation;
@@ -112,7 +130,7 @@ export const resolveLocalSourcePrerequisite = (
   }
   localSourcePrerequisiteHistory.update((history) => [
     ...history,
-    { ...observed, status: "resolved", observedByCallId: callId },
+    { ...observed, observedByCallId: callId, status: "resolved" },
   ]);
   return undefined;
 };

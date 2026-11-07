@@ -22,9 +22,9 @@ export class ReviewedCheckRecipeRequiredError extends Error {
     );
     this.name = "ReviewedCheckRecipeRequiredError";
     this.implementationFile = {
-      path: taskPath,
-      operation: "upsert",
       content: PRIVATE_COMPUTE_CHECK_TASK,
+      operation: "upsert",
+      path: taskPath,
     };
   }
 }
@@ -58,7 +58,7 @@ export const prepareValidationPrivateComputeRepair = (
   if (supplied === undefined || supplied.operation === "delete") {
     return undefined;
   }
-  const appId = state.appSpec.appId;
+  const { appId } = state.appSpec;
   if (
     profile.checkPolicy.path !== `apps/${appId}/.config/mise/tasks/check` ||
     state.proposal.target.contract.appId !== appId ||
@@ -96,18 +96,18 @@ export const prepareValidationPrivateComputeRepair = (
     throw new ReviewedCheckRecipeRequiredError(profile.checkPolicy.path);
   }
   return {
-    assertAuthorized,
     applyPolicy: async (sandbox) => {
       input.signal?.throwIfAborted();
       assertAuthorized();
       await installPolicy({
-        sandbox,
+        abortSignal: input.signal,
         applyRoot: state.applyReceipt.applyRoot,
         profile,
-        abortSignal: input.signal,
+        sandbox,
       });
       input.signal?.throwIfAborted();
       assertAuthorized();
     },
+    assertAuthorized,
   };
 };

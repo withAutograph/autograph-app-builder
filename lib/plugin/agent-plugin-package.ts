@@ -118,7 +118,7 @@ const schemaVersion = (schema: unknown) => {
   if (typeof schema !== "string") {
     return;
   }
-  return schema.match(/\/schemas\/(?<version>[^/]+)\/(?:plugin|mcp)\.schema\.json$/u)?.[1];
+  return /\/schemas\/(?<version>[^/]+)\/(?:plugin|mcp)\.schema\.json$/u.exec(schema)?.[1];
 };
 
 export const assertAutographMcpEndpoint = (value: unknown, { release }: { release: boolean }) => {
@@ -194,7 +194,7 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
   const skillPath = path.resolve(skillDirectory, "SKILL.md");
   await assertRegularFile(pluginRoot, skillPath);
   const contents = await readFile(skillPath, "utf-8");
-  const match = contents.match(/^---[\t ]*\r?\n(?<frontmatter>[\s\S]*?)\r?\n---[\t ]*(?:\r?\n|$)/u);
+  const match = /^---[\t ]*\r?\n(?<frontmatter>[\s\S]*?)\r?\n---[\t ]*(?:\r?\n|$)/u.exec(contents);
   if (!match) {
     throw new Error(`${path.relative(pluginRoot, skillPath)} has invalid frontmatter.`);
   }

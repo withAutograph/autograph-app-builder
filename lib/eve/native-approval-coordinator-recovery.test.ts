@@ -59,8 +59,10 @@ beforeAll(async () => {
     path.join(fixtureDirectory, "dist/src/harness/approval-delivery-coordinator.js"),
     added.map((line) => line.slice(1)).join("\n"),
   );
-  const internal = <Module>(name: string) =>
-    vi.importActual<Module>(pathToFileURL(path.join(fixtureDirectory, `dist/src/${name}.js`)).href);
+  const internal = async <Module>(name: string) =>
+    await vi.importActual<Module>(
+      pathToFileURL(path.join(fixtureDirectory, `dist/src/${name}.js`)).href,
+    );
   [coordinator, batches, approvals, contexts, keys] = await Promise.all([
     internal<CoordinatorModule>("harness/approval-delivery-coordinator"),
     internal<typeof batches>("harness/pending-input-batches"),
@@ -71,7 +73,7 @@ beforeAll(async () => {
 });
 afterAll(() => {
   if (fixtureDirectory) {
-    rmSync(fixtureDirectory, { recursive: true, force: true });
+    rmSync(fixtureDirectory, { force: true, recursive: true });
   }
 });
 
@@ -80,39 +82,39 @@ const setup = async (
   abortSignal?: AbortSignal,
 ) => {
   const actor = {
+    attributes: {},
     authenticator: "fixture",
     principalId: "owner",
     principalType: "user",
-    attributes: {},
   };
   const request = {
-    kind: "tool-approval",
-    requestId: "pending-request",
-    prompt: "Approve target",
     action: {
-      kind: "tool-call",
-      toolName: "prepare-app-native-target",
       callId: "pending-call",
       input: { plan: "same-plan" },
+      kind: "tool-call",
+      toolName: "prepare-app-native-target",
     },
+    kind: "tool-approval",
+    prompt: "Approve target",
+    requestId: "pending-request",
   } satisfies Parameters<typeof batches.appendPendingInputBatch>[0]["requests"][number];
   const initial = batches.appendPendingInputBatch({
-    session: {
-      sessionId: "session",
-      state: {},
-      history: [],
-      agent: { dynamicModel: true, system: "", tools: [] },
-      compaction: { recentWindowSize: 1, threshold: 1000 },
-      continuationToken: "fixture",
-    },
     requests: [request],
     responseAuthRequiredRequestIds: [request.requestId],
     responseMessages: [],
+    session: {
+      agent: { dynamicModel: true, system: "", tools: [] },
+      compaction: { recentWindowSize: 1, threshold: 1000 },
+      continuationToken: "fixture",
+      history: [],
+      sessionId: "session",
+      state: {},
+    },
   });
   const context = new contexts.ContextContainer();
   context.set(keys.SessionKey, {
-    sessionId: "session",
     auth: { current: actor, initiator: actor },
+    sessionId: "session",
     turn: { id: "turn", sequence: 1 },
   });
   const authorizer = vi.fn(async (input: ApprovalResponseContext) => {
@@ -124,40 +126,43 @@ const setup = async (
     [
       "prepare-app-native-target",
       {
-        name: "prepare-app-native-target",
+        approval: { request: () => "user-approval", response: authorizer },
         description: "fixture",
         inputSchema: z.object({}),
-        approval: { request: () => "user-approval", response: authorizer },
+        name: "prepare-app-native-target",
       },
     ],
   ]);
-  const run = (input: CoordinatorInput) =>
-    contexts.contextStorage.run(context, () => coordinator.coordinateApprovalDelivery(input));
+  const run = async (input: CoordinatorInput) =>
+    await contexts.contextStorage.run(
+      context,
+      async () => await coordinator.coordinateApprovalDelivery(input),
+    );
   const ingested = await run({
+    abortSignal,
     now: 1,
     session: initial,
-    tools,
-    abortSignal,
     stepInput: {
       attributedInputResponses: [
-        { auth: actor, response: { requestId: request.requestId, optionId: "approve" } },
+        { auth: actor, response: { optionId: "approve", requestId: request.requestId } },
       ],
     },
+    tools,
   });
   expect(ingested.kind).toBe("continue-coordination");
   return {
     authorizer,
-    tools,
+    run: async (prepareTools?: CoordinatorInput["prepareTools"]) =>
+      await run({ abortSignal, now: 2, prepareTools, session: ingested.session, tools }),
     session: ingested.session,
-    run: (prepareTools?: CoordinatorInput["prepareTools"]) =>
-      run({ now: 2, session: ingested.session, tools, abortSignal, prepareTools }),
+    tools,
   };
 };
 
 describe("native approval coordinator recovery", () => {
   it("waits for the owner authorizer beyond ten seconds and settles its actual success", async () => {
     const authorization = Promise.withResolvers<ApprovalResponseDecision>();
-    const f = await setup(() => authorization.promise);
+    const f = await setup(async () => await authorization.promise);
     vi.useFakeTimers();
     try {
       const pending = f.run();
@@ -166,30 +171,30 @@ describe("native approval coordinator recovery", () => {
       authorization.resolve({ status: "allowed" });
       const result = await pending;
       expect(approvals.getApprovalAuditState(result.session.state).settlements).toEqual([
-        expect.objectContaining({ requestId: "pending-request", outcome: "allowed" }),
+        expect.objectContaining({ outcome: "allowed", requestId: "pending-request" }),
       ]);
     } finally {
       vi.useRealTimers();
     }
   });
   it.each(["denied", "failure"])("keeps %s authorization fail-closed", async (mode) => {
-    const f = await setup(() => {
+    const f = await setup(async () => {
       if (mode === "failure") {
-        return Promise.reject(new Error("owner verification unavailable"));
+        throw new Error("owner verification unavailable");
       }
-      return Promise.resolve({ status: "rejected", reason: "owner denied" });
+      return { reason: "owner denied", status: "rejected" };
     });
     const result = await f.run();
     expect(approvals.getApprovalAuditState(result.session.state).settlements).toHaveLength(0);
   });
   it("does not invoke the authorizer when tool preparation cancels the turn", async () => {
     const controller = new AbortController();
-    const f = await setup(() => Promise.resolve({ status: "allowed" }), controller.signal);
+    const f = await setup(async () => ({ status: "allowed" }), controller.signal);
     const cancelled = new Error("cancelled during preparation");
     await expect(
-      f.run(() => {
+      f.run(async () => {
         controller.abort(cancelled);
-        return Promise.resolve(f.tools);
+        return f.tools;
       }),
     ).rejects.toBe(cancelled);
     expect(f.authorizer).not.toHaveBeenCalled();
@@ -198,7 +203,7 @@ describe("native approval coordinator recovery", () => {
   it("interrupts on actual cancellation and cannot settle a late authorizer success", async () => {
     const controller = new AbortController();
     const authorization = Promise.withResolvers<ApprovalResponseDecision>();
-    const f = await setup(() => authorization.promise, controller.signal);
+    const f = await setup(async () => await authorization.promise, controller.signal);
     const pending = f.run();
     await Promise.resolve();
     const cancelled = new Error("turn cancelled");

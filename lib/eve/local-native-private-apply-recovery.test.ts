@@ -13,7 +13,11 @@ import { call, execute } from "./native-approval-compaction.test-fixture";
 const roots: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(
+    roots.splice(0).map(async (root) => {
+      await rm(root, { force: true, recursive: true });
+    }),
+  );
 });
 const fixture = async () => {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "builder-local-private-apply-")));
@@ -22,44 +26,44 @@ const fixture = async () => {
   const cycle = path.join(root, "cycle");
   await writeFile(cycle, "a".repeat(64), { mode: 0o600 });
   const recovery = createLocalNativeRecovery({
-    APP_BUILDER_EXECUTION_MODE: "development",
     APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+    APP_BUILDER_EXECUTION_MODE: "development",
     APP_BUILDER_LOCAL_ADAPTER: "1",
-    EVE_HOSTED_ADAPTER: "0",
     APP_BUILDER_LOCAL_EVE_CYCLE_FILE: cycle,
+    EVE_HOSTED_ADAPTER: "0",
   });
   if (recovery === undefined) {
     throw new Error("Missing local authority fixture");
   }
   const publicId = "same-saved-session";
   const native = await retainedPrivateApplyRecoveryFixture(false, {
-    ownerRunId: publicId,
     logicalSessionId: publicId,
+    ownerRunId: publicId,
   });
   vi.spyOn(ClientSession.prototype, "snapshot").mockImplementation(
-    function snapshot(this: ClientSession) {
-      return Promise.resolve({
-        session: { sessionId: this.state.sessionId, streamIndex: 1 },
+    async function snapshot(this: ClientSession) {
+      return {
         events: [
           {
-            type: "session.failed" as const,
             data: {
               code: "MODEL_CALL_FAILED",
               message: "Controlled unresolved approved private apply",
               sessionId: this.state.sessionId,
             },
-            meta: { id: "failed", at: "2026-11-04T07:14:18.000Z" },
+            meta: { at: "2026-11-04T07:14:18.000Z", id: "failed" },
+            type: "session.failed" as const,
           },
         ],
-      });
+        session: { sessionId: this.state.sessionId, streamIndex: 1 },
+      };
     },
   );
   const client = new Client({ host: "http://127.0.0.1:49999" });
   const auth = {
+    attributes: { "eve:forwarded-by": "local-dev" },
     authenticator: "local-dev",
     principalId: "local-dev",
     principalType: "local-dev",
-    attributes: { "eve:forwarded-by": "local-dev" },
   };
   type Request = Parameters<Parameters<typeof recovery.recover>[3]>[0];
   let reserved: Request | undefined;
@@ -84,11 +88,11 @@ const fixture = async () => {
   const policy = async (payload = native.payload, binding = native.binding, selectedAuth = auth) =>
     (await authorizeCalls({
       auth: selectedAuth,
+      binding,
       descriptor: request.recovery,
       payload,
-      binding,
     })) ?? [];
-  return { recovery, native, client, publicId, auth, request, policy };
+  return { auth, client, native, policy, publicId, recovery, request };
 };
 it("uses the real local authority ports to recover the original exact private call after a known rejected preparation", async () => {
   const f = await fixture();
@@ -103,7 +107,7 @@ it("uses the real local authority ports to recover the original exact private ca
     if (body.recoveryPhase === "activate") {
       await f.recovery.ports.authorizeActivation(input);
       const receipt = nativeRecoveryBindingSchema.parse(await f.recovery.ports.readReceipt(input));
-      return { sessionId: receipt.ownerRunId, recoveryBinding: receipt };
+      return { recoveryBinding: receipt, sessionId: receipt.ownerRunId };
     }
     const allowed = await f.policy();
     const result = await f.native.reconcile(allowed);
@@ -114,16 +118,16 @@ it("uses the real local authority ports to recover the original exact private ca
       ...body.recovery,
       ownerRunId: "recovered-owned-executor",
       provenance: {
-        kind: source.kind,
-        sourceStepId: source.stepId,
-        sourceEventId: source.eventId,
-        sourceSlot: source.slot,
         checkpointOwnerRunId: result.provenance.checkpointOwnerRunId,
         checkpointVersion: 1,
+        kind: source.kind,
+        sourceEventId: source.eventId,
+        sourceSlot: source.slot,
+        sourceStepId: source.stepId,
       },
     });
     await f.recovery.ports.commitReceipt({ ...input, recoveryBinding: receipt });
-    return { sessionId: receipt.ownerRunId, recoveryBinding: receipt };
+    return { recoveryBinding: receipt, sessionId: receipt.ownerRunId };
   });
   await f.recovery.recover(f.client, f.publicId, "new-qualified-recovery-cid", post);
   expect(post).toHaveBeenCalledTimes(2);

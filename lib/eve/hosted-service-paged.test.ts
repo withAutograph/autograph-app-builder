@@ -38,8 +38,10 @@ import {
 } from "../provisioning/hosted-operator-contract";
 
 const createHostedEveSessionService = (input: Parameters<typeof createHostedService>[0]) =>
-  // oxlint-disable-next-line eslint/require-await -- This owner fixture has the asynchronous authority contract.
-  createHostedService({ assertSendDeliveryOwner: async () => {}, ...input });
+  createHostedService({
+    assertSendDeliveryOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    ...input,
+  });
 const sendProof = {
   turns: [
     {
@@ -92,16 +94,16 @@ const principal: HostedPrincipal = {
 
 const emptySnapshot = { events: [], status: "waiting" as const };
 
+const createRetainedEventStream = async function* createRetainedEventStream(event: PublicEveEvent) {
+  yield event;
+};
+
 const transport = (observe: NonNullable<HostedEveTransport["observe"]>): HostedEveTransport => ({
-  // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous transport contract.
-  cancel: vi.fn(async () => emptySnapshot),
-  // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous transport contract.
-  get: vi.fn(async () => emptySnapshot),
+  cancel: vi.fn().mockResolvedValue(emptySnapshot),
+  get: vi.fn().mockResolvedValue(emptySnapshot),
   observe,
-  // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous transport contract.
-  respond: vi.fn(async () => emptySnapshot),
-  // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous transport contract.
-  send: vi.fn(async () => emptySnapshot),
+  respond: vi.fn().mockResolvedValue(emptySnapshot),
+  send: vi.fn().mockResolvedValue(emptySnapshot),
   // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous transport contract.
   start: vi.fn(async () => ({ adapterSessionId: "adapter_1", snapshot: emptySnapshot })),
 });
@@ -349,11 +351,11 @@ describe("unchanged paged observation reuse", () => {
       const f = await unchangedPollFixture();
       // Reconcile the public summary only; retained native/private bytes stay untouched.
       Object.assign(f.saved, {
-        status: "failed",
-        resumability,
-        stage: "needs_attention",
         cancellationRevision: 9,
+        resumability,
         resumedCancellationRevision: 6,
+        stage: "needs_attention",
+        status: "failed",
       });
       const before = structuredClone(f.saved);
       const metadata = structuredClone(f.metadata);
@@ -381,16 +383,16 @@ describe("unchanged paged observation reuse", () => {
   it("restores a failed presentation summary when the same native cursor exposes its retained approval", async () => {
     const f = await unchangedPollFixture();
     Object.assign(f.saved, {
-      status: "failed",
       resumability: "terminal",
       stage: "needs_attention",
+      status: "failed",
     });
     const request = {
       allowFreeform: false,
+      description: "Use the same approved resources.",
       kind: "approval" as const,
       requestId: "retained-approval",
       title: "Run saved exercise",
-      description: "Use the same approved resources.",
     };
     const state = f.observation.nativeObservationState;
     if (state === undefined) {
@@ -404,18 +406,18 @@ describe("unchanged paged observation reuse", () => {
     state.pendingRequests = [request];
     state.publicEventCount = 4;
     f.observe.mockImplementationOnce(async (input) => {
-      await input.onEvent({ index: 3, type: "input.requested", request });
+      await input.onEvent({ index: 3, request, type: "input.requested" });
       return structuredClone(f.observation);
     });
     vi.mocked(f.adapter.start).mockClear();
     const result = await f.service.get({ cursor: 3, limit: 10, sessionId: f.sessionId });
-    expect(result).toMatchObject({ status: "input_required", cursor: 4, inputRequests: [request] });
+    expect(result).toMatchObject({ cursor: 4, inputRequests: [request], status: "input_required" });
     expect(result.events.map((event) => event.index)).toEqual([3]);
     const stored = await f.getSession(principal, f.sessionId);
     expect(stored).toMatchObject({
-      status: "input_required",
-      resumability: "live",
       adapterSessionId: "adapter_1",
+      resumability: "live",
+      status: "input_required",
     });
     expect(f.adapter.start).not.toHaveBeenCalled();
     expect(f.adapter.send).not.toHaveBeenCalled();
@@ -425,9 +427,9 @@ describe("unchanged paged observation reuse", () => {
   it("does not preserve a failed summary without a complete unchanged native observation", async () => {
     const f = await unchangedPollFixture();
     Object.assign(f.saved, {
-      status: "failed",
       resumability: "terminal",
       stage: "needs_attention",
+      status: "failed",
     });
     const state = f.observation.nativeObservationState;
     if (state === undefined) {
@@ -443,9 +445,9 @@ describe("unchanged paged observation reuse", () => {
   it("rejects a changed tenant owner during the unchanged failed-source read", async () => {
     const f = await unchangedPollFixture();
     Object.assign(f.saved, {
-      status: "failed",
       resumability: "terminal",
       stage: "needs_attention",
+      status: "failed",
     });
     f.observe.mockImplementationOnce(async () => {
       f.getSession.mockResolvedValue({
@@ -463,16 +465,16 @@ describe("unchanged paged observation reuse", () => {
   it("still refuses a revoked owner before reading an unchanged failed source", async () => {
     const f = await unchangedPollFixture();
     Object.assign(f.saved, {
-      status: "failed",
       resumability: "terminal",
       stage: "needs_attention",
+      status: "failed",
     });
     const revoked = new Error("owner revoked");
     const service = createHostedEveSessionService({
+      beforeRead: vi.fn().mockRejectedValue(revoked),
       principal,
       store: f.store,
       transport: f.adapter,
-      beforeRead: () => Promise.reject(revoked),
     });
     await expect(service.get({ cursor: 0, limit: 1, sessionId: f.sessionId })).rejects.toBe(
       revoked,
@@ -522,10 +524,10 @@ describe("unchanged paged observation reuse", () => {
       }
       case "private-input": {
         state.privateInputState = {
+          frameworkSessionLimitIds: ["observed-framework-input"],
           pending: [],
           resolved: [],
           version: 1,
-          frameworkSessionLimitIds: ["observed-framework-input"],
         };
         break;
       }
@@ -629,7 +631,7 @@ describe("unchanged paged observation reuse", () => {
           winner = durableHostedSessionRecordSchema.parse({
             ...f.saved,
             ...(change === "cancellation"
-              ? { cancellationRevision: 1, status: "cancelled", stage: "needs_attention" }
+              ? { cancellationRevision: 1, stage: "needs_attention", status: "cancelled" }
               : { adapterGeneration: 2, adapterSessionId: "adapter_replacement" }),
           });
           f.getSession.mockImplementation(
@@ -871,10 +873,10 @@ describe("paged hosted session observation", () => {
   );
 
   it.each([
-    { unchanged: false, failure: "none" },
-    { unchanged: true, failure: "none" },
-    { unchanged: true, failure: "post" },
-    { unchanged: true, failure: "accepted-readback" },
+    { failure: "none", unchanged: false },
+    { failure: "none", unchanged: true },
+    { failure: "post", unchanged: true },
+    { failure: "accepted-readback", unchanged: true },
   ])("passes the owner-checked native response preflight (%j)", async ({ unchanged, failure }) => {
     const question = {
       allowFreeform: true,
@@ -1490,15 +1492,18 @@ describe("paged hosted session observation", () => {
           );
         }
         const pendingRequests = kind === "respond" && !accepted ? [question] : [];
-        const state = {
+        const baseState = {
           ...nativeState({
             adapterSessionId: input.adapterSessionId,
             nextNativeIndex: total + (accepted ? 1 : 0),
             publicEventCount: total,
           }),
           pendingRequests,
-          ...(accepted && kind === "send" ? { nativeDeliveryState: sendProof } : {}),
         };
+        const state =
+          accepted && kind === "send"
+            ? { ...baseState, nativeDeliveryState: sendProof }
+            : baseState;
         return {
           artifactProjectionRequiresLegacyReadback: false,
           installedEventCount: state.nextNativeIndex,
@@ -1510,7 +1515,7 @@ describe("paged hosted session observation", () => {
         };
       };
       const f = await fixture(observe);
-      await f.service.get({ sessionId: f.sessionId, cursor: 0, limit: 1 });
+      await f.service.get({ cursor: 0, limit: 1, sessionId: f.sessionId });
       const sendAccepted = vi.fn<NonNullable<HostedEveTransport["sendAccepted"]>>(async (input) => {
         accepted = true;
         await input.onAccepted?.("fixture-delivery");
@@ -1524,19 +1529,19 @@ describe("paged hosted session observation", () => {
       f.adapter.sendAccepted = sendAccepted;
       f.adapter.respondAccepted = respondAccepted;
       const requestId = randomUUID();
-      const submit = () =>
+      const submit = async () =>
         kind === "send"
-          ? f.service.send({
+          ? await f.service.send({
               clientRequestId: requestId,
-              sessionId: f.sessionId,
               message: "Continue",
-            })
-          : f.service.respond({
-              clientRequestId: requestId,
               sessionId: f.sessionId,
+            })
+          : await f.service.respond({
+              clientRequestId: requestId,
               responses: [
                 { requestId: question.requestId, response: { kind: "answer", value: "Preview" } },
               ],
+              sessionId: f.sessionId,
             });
       const result = await submit();
       expect(result.events.map((event) => event.index)).toEqual(
@@ -1546,14 +1551,14 @@ describe("paged hosted session observation", () => {
       expect(await submit()).toEqual(result);
       expect(kind === "send" ? sendAccepted : respondAccepted).toHaveBeenCalledOnce();
       const remainder = await f.service.get({
-        sessionId: f.sessionId,
         cursor: result.cursor,
         limit: 100,
+        sessionId: f.sessionId,
       });
       expect(remainder.events.map((event) => event.index)).toEqual(
         Array.from({ length: Math.max(0, delta - 100) }, (_, index) => baseline + 100 + index),
       );
-      const history = await f.service.get({ sessionId: f.sessionId, cursor: 0, limit: 1 });
+      const history = await f.service.get({ cursor: 0, limit: 1, sessionId: f.sessionId });
       expect(history.events[0]).toMatchObject({ index: 0, text: "history 0" });
     },
   );
@@ -1602,13 +1607,13 @@ describe("paged hosted session observation", () => {
     let acknowledged = false;
     const proof = nativeDeliveryForEvents([
       {
-        type: "turn.started",
         data: { sequence: 1, turnId: "turn_1" },
         meta: {
           at: "2026-10-14T00:00:00Z",
-          id: "native-turn-start",
           deliveryIds: ["fixture-delivery"],
+          id: "native-turn-start",
         },
+        type: "turn.started",
       },
     ]);
     const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(
@@ -1627,9 +1632,9 @@ describe("paged hosted session observation", () => {
             // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- The private native start is observed only after the real acknowledgement callback.
             ...(acknowledged
               ? {
-                  nativeDeliveryState: proof,
-                  currentTurnId: "turn_1",
                   boundary: "working" as const,
+                  currentTurnId: "turn_1",
+                  nativeDeliveryState: proof,
                 }
               : {}),
           },
@@ -1966,14 +1971,12 @@ describe("send preflight dispatch classification", () => {
         throw new Error("Expected the owned durable session.");
       }
       const saved = await f.observeSessionPaged({
-        events: (async function* retainedEvents() {
-          yield {
-            index: 0,
-            text: "retained",
-            turnId: "turn_1",
-            type: "assistant_message" as const,
-          };
-        })(),
+        events: createRetainedEventStream({
+          index: 0,
+          text: "retained",
+          turnId: "turn_1",
+          type: "assistant_message" as const,
+        }),
         expectedCheckpointDigest: initial.checkpointDigest,
         metadata: {
           capturedAtEpochMs: 1000,
@@ -2028,12 +2031,12 @@ describe("send preflight dispatch classification", () => {
         const result = await service.send(request);
         expect(result).toMatchObject({ cursor: 1, events: [], status: "waiting" });
         expect(await f.base.getPrivateOperation(principal, operationId)).toMatchObject({
-          state: "succeeded",
           sendDelivery: {
-            deliveryId: "fixture-delivery",
-            adapterSessionId: "adapter_1",
             adapterGeneration: initial.adapterGeneration,
+            adapterSessionId: "adapter_1",
+            deliveryId: "fixture-delivery",
           },
+          state: "succeeded",
         });
         expect(await service.send(request)).toEqual(result);
       } else {

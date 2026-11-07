@@ -5,17 +5,27 @@ import { assertExactToolDiscovery, parseReviewedProof } from "./proof-evidence";
 
 describe("release proof evidence", () => {
   it("requires exact ordered five-tool discovery", () => {
-    expect(() => assertExactToolDiscovery(TOOL_NAMES)).not.toThrow();
-    expect(() => assertExactToolDiscovery(TOOL_NAMES.slice(0, 4))).toThrow("five public tools");
-    expect(() => assertExactToolDiscovery([...TOOL_NAMES].toReversed())).toThrow(
-      "five public tools",
-    );
+    expect(() => {
+      assertExactToolDiscovery(TOOL_NAMES);
+    }).not.toThrow();
+    expect(() => {
+      assertExactToolDiscovery(TOOL_NAMES.slice(0, 4));
+    }).toThrow("five public tools");
+    expect(() => {
+      assertExactToolDiscovery([...TOOL_NAMES].toReversed());
+    }).toThrow("five public tools");
   });
 
   it("accepts only Browser-backed reviewed proof without publication", () => {
     // Keep receipt construction scoped to the proof fixture.
     // oxlint-disable-next-line unicorn/consistent-function-scoping
-    const receipt = (overrides: Record<string, unknown> = {}) =>
+    const receipt = (
+      overrides: Partial<{
+        browserPreview: boolean;
+        publicationAttempted: boolean;
+        terminalPhase: string;
+      }> = {},
+    ) =>
       JSON.stringify({
         browserPreview: true,
         publicationAttempted: false,

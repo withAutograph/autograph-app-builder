@@ -123,138 +123,138 @@ const operationRef = "00000000-0000-4000-8000-000000000001";
 const observedAt = "2026-10-14T12:00:00Z";
 const sourceWorkload = {
   audience: "https://vercel.com/team",
+  environment: "preview" as const,
   issuer: "https://oidc.vercel.com/team",
   ownerId: "team",
   projectId: "builder",
-  environment: "preview" as const,
   subject: "builder-workload",
 };
 const desiredPlan = () =>
   hostedOperatorPlanSchema.parse({
     ...bootstrapPlan(),
-    normalActorProgram: normalActorProgramSchema.parse({
-      version: 1,
-      appId: context.target.appId,
-      origin: "https://apps.example",
-      actors: [
-        {
-          actorKey: "owner",
-          email: "owner@example.test",
-          name: "Owner",
-          account: "create-email-password",
-        },
-      ],
-      organizations: [],
-      memberships: [],
-      appAccess: [],
-    }),
-    publicGateway: {
-      projectId: "gateway",
-      branch: context.target.branch,
-      origin: "https://apps.example",
-    },
     deploymentBoundary: {
-      authority,
-      teamId: "team",
       app: {
-        projectId: context.target.projectId,
+        branch: context.target.branch,
         deploymentId: "app-deployment",
-        branch: context.target.branch,
         environment: "preview",
+        projectId: context.target.projectId,
       },
+      authority,
       gateway: {
-        projectId: "gateway",
-        deploymentId: "gateway-deployment",
         branch: context.target.branch,
+        deploymentId: "gateway-deployment",
         environment: "preview",
+        projectId: "gateway",
       },
       operator: {
-        projectId: "operator",
         deploymentId: "operator-deployment",
         environment: "preview",
+        projectId: "operator",
       },
+      teamId: "team",
       verification: {
         gatewayOrigin: "https://gateway.example",
         jwksUrl: "https://gateway.example/_platform/jwks.json",
         publicOrigin: "https://apps.example",
       },
     },
+    effects: [
+      ...bootstrapPlan().effects,
+      { description: "Gateway configuration", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
+    ],
     gatewayBindings: {
       authBrowserOrigin: "https://apps.example",
       builderCallbackOrigin: "https://builder.example",
-      operatorOrigin: "https://operator.example",
       catalogAppIds: [context.target.appId],
+      operatorOrigin: "https://operator.example",
       sourceWorkload,
     },
     gatewayDelivery: {
-      projectId: "gateway",
       branch: context.target.branch,
-      repoId: "gateway-repo",
       gitSha: "c".repeat(40),
+      projectId: "gateway",
+      repoId: "gateway-repo",
     },
-    effects: [
-      ...bootstrapPlan().effects,
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway configuration" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
-    ],
+    normalActorProgram: normalActorProgramSchema.parse({
+      actors: [
+        {
+          account: "create-email-password",
+          actorKey: "owner",
+          email: "owner@example.test",
+          name: "Owner",
+        },
+      ],
+      appAccess: [],
+      appId: context.target.appId,
+      memberships: [],
+      organizations: [],
+      origin: "https://apps.example",
+      version: 1,
+    }),
+    publicGateway: {
+      branch: context.target.branch,
+      origin: "https://apps.example",
+      projectId: "gateway",
+    },
   });
 const completedRecord = (plan: HostedOperatorPlan = desiredPlan()) =>
   hostedRuntimeJournalRecordSchema.parse({
-    version: 1,
-    kind: "app-runtime",
     approvedByCallId: "ordinary-public-approval",
-    request: context.target,
-    status: "pending",
-    step: "reserved",
+    kind: "app-runtime",
+    operator: {
+      approvalId: "actual-approval",
+      authPreparation: {
+        assetSha256: "d".repeat(64),
+        catalogFingerprint: "e".repeat(64),
+        database: plan.authDatabase.database,
+        observedAt,
+        runtimeRole: plan.authDatabase.runtimeRole,
+        targetDigest: plan.authSchema?.targetDigest,
+      },
+      deliveredGatewayDeploymentId: "gateway-delivery",
+      gatewayDeliveryCandidates: [
+        {
+          branch: context.target.branch,
+          deploymentId: "gateway-delivery",
+          operationRef,
+          origin: "https://gateway.example",
+          projectId: "gateway",
+          readyState: "READY",
+          repoId: "gateway-repo",
+        },
+      ],
+      gatewayEnvironment: [
+        {
+          branch: context.target.branch,
+          comment: `App Builder protected operator ${operationRef}`,
+          id: "owned-environment-row",
+          key: "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
+          operationRef,
+          projectId: "gateway",
+          valueSha256: hostedOperatorRealmLinkConfigSha256(plan),
+        },
+      ],
+      mode: "protected-operator-v1",
+      operationRef,
+      plan,
+      planDigest: operatorPlanDigest(plan),
+      receipts: plan.effects.map((effect) => ({
+        effectId: effect.id,
+        observedAt,
+        resourceVersion: "actual-readback",
+      })),
+    },
     privateState: {
       encryptedToken: "private-ciphertext",
       keyVersion: "key-version",
       tokenIv: "iv",
       tokenTag: "tag",
     },
-    operator: {
-      mode: "protected-operator-v1",
-      approvalId: "actual-approval",
-      operationRef,
-      plan,
-      planDigest: operatorPlanDigest(plan),
-      authPreparation: {
-        assetSha256: "d".repeat(64),
-        catalogFingerprint: "e".repeat(64),
-        database: plan.authDatabase.database,
-        runtimeRole: plan.authDatabase.runtimeRole,
-        targetDigest: plan.authSchema?.targetDigest,
-        observedAt,
-      },
-      receipts: plan.effects.map((effect) => ({
-        effectId: effect.id,
-        observedAt,
-        resourceVersion: "actual-readback",
-      })),
-      gatewayEnvironment: [
-        {
-          key: "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
-          id: "owned-environment-row",
-          projectId: "gateway",
-          branch: context.target.branch,
-          operationRef,
-          comment: `App Builder protected operator ${operationRef}`,
-          valueSha256: hostedOperatorRealmLinkConfigSha256(plan),
-        },
-      ],
-      gatewayDeliveryCandidates: [
-        {
-          projectId: "gateway",
-          branch: context.target.branch,
-          repoId: "gateway-repo",
-          operationRef,
-          origin: "https://gateway.example",
-          deploymentId: "gateway-delivery",
-          readyState: "READY",
-        },
-      ],
-      deliveredGatewayDeploymentId: "gateway-delivery",
-    },
+    request: context.target,
+    status: "pending",
+    step: "reserved",
+    version: 1,
   });
 
 describe("participant bootstrap planning evidence", () => {
@@ -275,8 +275,8 @@ describe("participant bootstrap planning evidence", () => {
     record.retainedAuth = retainedOperatorAuthFromJournal(record);
     const accounts = hostedOperatorPlanSchema.parse({
       ...desired,
+      effects: [{ description: "Normal accounts", id: "normal-accounts", kind: "normal-accounts" }],
       stage: "auth-participants",
-      effects: [{ id: "normal-accounts", kind: "normal-accounts", description: "Normal accounts" }],
     });
     if (record.operator === undefined) {
       throw new Error("fixture operator missing");
@@ -335,10 +335,10 @@ describe("participant bootstrap planning evidence", () => {
       record.retainedAuth = retainedOperatorAuthFromJournal(record);
       operator.plan = hostedOperatorPlanSchema.parse({
         ...desired,
-        stage: "auth-participants",
         effects: [
-          { id: "normal-accounts", kind: "normal-accounts", description: "Normal accounts" },
+          { description: "Normal accounts", id: "normal-accounts", kind: "normal-accounts" },
         ],
+        stage: "auth-participants",
       });
       operator.planDigest = operatorPlanDigest(operator.plan);
       operator.operationRef = "00000000-0000-4000-8000-000000000002";
@@ -376,10 +376,10 @@ describe("participant bootstrap planning evidence", () => {
         ...desired.normalActorProgram,
         actors: [
           {
+            account: "create-email-password",
             actorKey: "second",
             email: "second@example.test",
             name: "Second",
-            account: "create-email-password",
           },
         ],
       },
@@ -523,25 +523,25 @@ const completedEnrollmentBootstrap = () => {
   const record = completedRecord();
   const accountPlan = hostedOperatorPlanSchema.parse({
     ...desiredPlan(),
+    effects: [{ description: "Accounts only", id: "normal-accounts", kind: "normal-accounts" }],
     stage: "auth-participants",
-    effects: [{ id: "normal-accounts", kind: "normal-accounts", description: "Accounts only" }],
   });
   record.accountPreparation = {
-    program: requiredFixture(accountPlan.normalActorProgram),
-    programDigest: normalActorProgramDigest(requiredFixture(accountPlan.normalActorProgram)),
+    accountApprovalId: "original-account-approval",
+    accountApprovedByCallId: "original-account-call",
     accountOperationRef: "00000000-0000-4000-8000-000000000009",
     accountPlan,
     accountPlanDigest: operatorPlanDigest(accountPlan),
-    accountApprovalId: "original-account-approval",
-    accountApprovedByCallId: "original-account-call",
+    accountsCompletedAt: observedAt,
+    captures: [],
+    program: requiredFixture(accountPlan.normalActorProgram),
+    programDigest: normalActorProgramDigest(requiredFixture(accountPlan.normalActorProgram)),
     sealedState: {
       encryptedToken: "original-enrollment",
       keyVersion: "original-key",
       tokenIv: "iv",
       tokenTag: "tag",
     },
-    captures: [],
-    accountsCompletedAt: observedAt,
   };
   return record;
 };
@@ -553,37 +553,37 @@ const incompleteAppRecord = () => {
   const retainedAuth = requiredFixture(retainedOperatorAuthFromJournal(record));
   const appPlan = hostedOperatorPlanSchema.parse({
     ...operator.plan,
-    stage: "app",
+    effects: [
+      ...bootstrapPlan().effects,
+      { description: "App schema", id: "app-install", kind: "install" },
+      { description: "Approved app access", id: "access", kind: "access" },
+      { description: "App bindings", id: "bindings", kind: "bindings" },
+      { description: "Gateway configuration", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
+    ],
     normalActorPreparation: {
+      accountApprovalId: preparation.accountApprovalId,
+      accountApprovedByCallId: preparation.accountApprovedByCallId,
       accountOperationRef: preparation.accountOperationRef,
       accountPlanDigest: preparation.accountPlanDigest,
       programDigest: preparation.programDigest,
-      accountApprovalId: preparation.accountApprovalId,
-      accountApprovedByCallId: preparation.accountApprovedByCallId,
     },
-    effects: [
-      ...bootstrapPlan().effects,
-      { id: "app-install", kind: "install", description: "App schema" },
-      { id: "access", kind: "access", description: "Approved app access" },
-      { id: "bindings", kind: "bindings", description: "App bindings" },
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway configuration" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
-    ],
+    stage: "app",
   });
   return hostedRuntimeJournalRecordSchema.parse({
     ...record,
     approvedByCallId: "app-call",
-    retainedAuth,
     operator: {
       ...operator,
-      operationRef: "00000000-0000-4000-8000-000000000010",
       approvalId: "app-approval",
+      operationRef: "00000000-0000-4000-8000-000000000010",
       plan: appPlan,
       planDigest: operatorPlanDigest(appPlan),
       receipts: operator.receipts.filter((receipt) =>
         ["auth-resources", "app-resources", "auth-schema"].includes(receipt.effectId),
       ),
     },
+    retainedAuth,
   });
 };
 
@@ -702,7 +702,7 @@ describe("completed enrollment and Gateway bootstrap handoff", () => {
     "programDigest",
   ] as const)("rejects an app plan with changed original %s", (field) => {
     const record = incompleteAppRecord();
-    const plan = requiredFixture(record.operator).plan;
+    const { plan } = requiredFixture(record.operator);
     requiredFixture(plan.normalActorPreparation)[field] = "unrelated-authority";
     expect(inspectCompletedParticipantBootstrap(plan, record)).toBeUndefined();
   });
@@ -739,26 +739,14 @@ describe("completed enrollment and Gateway bootstrap handoff", () => {
     const desired = structuredClone(operator.plan);
     const candidate = requiredFixture(operator.gatewayDeliveryCandidates)[0];
     const mutations = {
-      "missing-retained-auth": () => {
-        delete record.retainedAuth;
-      },
-      "incomplete-retained-auth": () => {
-        retained.receipts.pop();
-      },
-      "missing-private-state": () => {
-        delete record.privateState;
-      },
-      "unfinished-accounts": () => {
-        delete preparation.accountsCompletedAt;
-      },
       "changed-account-plan": () => {
         preparation.accountPlan.contextId = "unapproved-account-plan";
       },
       "changed-account-program": () => {
         preparation.program.actors[0].name = "Different account";
       },
-      "changed-auth-target": () => {
-        requiredFixture(operator.plan.authSchema).targetDigest = "0".repeat(64);
+      "changed-app-resource": () => {
+        operator.plan.appDatabase.resourceId = "other-app";
       },
       "changed-auth-preparation": () => {
         requiredFixture(operator.authPreparation).catalogFingerprint = "0".repeat(64);
@@ -766,8 +754,20 @@ describe("completed enrollment and Gateway bootstrap handoff", () => {
       "changed-auth-resource": () => {
         operator.plan.authDatabase.resourceId = "other-auth";
       },
-      "changed-app-resource": () => {
-        operator.plan.appDatabase.resourceId = "other-app";
+      "changed-auth-target": () => {
+        requiredFixture(operator.plan.authSchema).targetDigest = "0".repeat(64);
+      },
+      "changed-candidate-branch": () => {
+        candidate.branch = "other-branch";
+      },
+      "changed-candidate-operation": () => {
+        candidate.operationRef = "00000000-0000-4000-8000-000000000011";
+      },
+      "changed-candidate-project": () => {
+        candidate.projectId = "other-gateway";
+      },
+      "changed-candidate-repository": () => {
+        candidate.repoId = "other-repository";
       },
       "changed-endpoint": () => {
         operator.plan.neon.endpoint = "other.neon.tech";
@@ -778,20 +778,23 @@ describe("completed enrollment and Gateway bootstrap handoff", () => {
       cleanup: () => {
         operator.plan.action = "cleanup";
       },
-      "changed-candidate-operation": () => {
-        candidate.operationRef = "00000000-0000-4000-8000-000000000011";
+      "incomplete-retained-auth": () => {
+        retained.receipts.pop();
       },
-      "changed-candidate-project": () => {
-        candidate.projectId = "other-gateway";
+      lease: () => {
+        record.leaseId = "00000000-0000-4000-8000-000000000013";
       },
-      "changed-candidate-branch": () => {
-        candidate.branch = "other-branch";
+      "lease-expiry": () => {
+        record.leaseExpiresAt = "2027-01-01T00:00:00Z";
       },
-      "changed-candidate-repository": () => {
-        candidate.repoId = "other-repository";
+      "missing-private-state": () => {
+        delete record.privateState;
       },
-      "unready-candidate": () => {
-        candidate.readyState = "BUILDING";
+      "missing-retained-auth": () => {
+        delete record.retainedAuth;
+      },
+      "pending-attempt": () => {
+        operator.pendingEffectAttempt = { id: "00000000-0000-4000-8000-000000000012" };
       },
       "pending-binding": () => {
         requiredFixture(operator.gatewayEnvironment)[0].pendingOperationRef = operationRef;
@@ -799,14 +802,11 @@ describe("completed enrollment and Gateway bootstrap handoff", () => {
       "pending-effect": () => {
         operator.pendingEffectId = "app-install";
       },
-      "pending-attempt": () => {
-        operator.pendingEffectAttempt = { id: "00000000-0000-4000-8000-000000000012" };
+      "unfinished-accounts": () => {
+        delete preparation.accountsCompletedAt;
       },
-      lease: () => {
-        record.leaseId = "00000000-0000-4000-8000-000000000013";
-      },
-      "lease-expiry": () => {
-        record.leaseExpiresAt = "2027-01-01T00:00:00Z";
+      "unready-candidate": () => {
+        candidate.readyState = "BUILDING";
       },
     } satisfies Record<string, () => void>;
     mutations[change]();
@@ -820,15 +820,13 @@ describe("completed enrollment and Gateway bootstrap handoff", () => {
       inspectCompletedParticipantBootstrap(desiredPlan(), completedEnrollmentBootstrap()),
     );
     await expect(
-      assertCompletedParticipantBootstrapApproval(context, selected, () =>
-        Promise.resolve({
-          approved: false,
-          approvalId: selected.auth.approvalId,
-          callId: selected.auth.approvedByCallId,
-          planDigest: selected.auth.planDigest,
-          action: "prepare",
-        }),
-      ),
+      assertCompletedParticipantBootstrapApproval(context, selected, async () => ({
+        action: "prepare",
+        approvalId: selected.auth.approvalId,
+        approved: false,
+        callId: selected.auth.approvedByCallId,
+        planDigest: selected.auth.planDigest,
+      })),
     ).rejects.toMatchObject({ code: "authorization_required" });
   });
 });
@@ -856,11 +854,11 @@ const settledAppBootstrap = () => {
   record.environmentBound = true;
   record.proof = {
     actors: 1,
-    tenants: 1,
-    authenticatedBehavior: "unassessed",
     artifactHash: "a".repeat(64),
+    authenticatedBehavior: "unassessed",
     manifestSha256: currentPlan.release.sha256,
     releaseId: currentPlan.release.id,
+    tenants: 1,
   };
   return record;
 };
@@ -971,13 +969,13 @@ describe("settled app bootstrap planning handoff", () => {
           const completionAuthority =
             input.planDigest === selected.auth.planDigest ? selected.auth : gateway;
           return {
+            action: "prepare",
+            approvalId: completionAuthority.approvalId,
             approved: !(rejected === "original-auth"
               ? completionAuthority === selected.auth
               : completionAuthority === gateway),
-            approvalId: completionAuthority.approvalId,
             callId: input.callId,
             planDigest: input.planDigest,
-            action: "prepare",
           };
         },
       );
@@ -999,11 +997,11 @@ describe("settled app bootstrap planning handoff", () => {
         const completionAuthority =
           input.planDigest === selected.auth.planDigest ? selected.auth : gateway;
         return {
-          approved: true,
+          action: "prepare",
           approvalId: completionAuthority.approvalId,
+          approved: true,
           callId: input.callId,
           planDigest: input.planDigest,
-          action: "prepare",
         };
       },
     );
@@ -1011,9 +1009,9 @@ describe("settled app bootstrap planning handoff", () => {
     for (const completionAuthority of [selected.auth, gateway]) {
       expect(readApproval).toHaveBeenCalledWith(
         expect.objectContaining({
+          authority: context.authority,
           callId: completionAuthority.approvedByCallId,
           planDigest: completionAuthority.planDigest,
-          authority: context.authority,
         }),
       );
     }
@@ -1042,24 +1040,12 @@ describe("settled app bootstrap planning handoff", () => {
     const desired = structuredClone(operator.plan);
     const candidate = requiredFixture(requiredFixture(operator.gatewayDeliveryCandidates)[0]);
     const mutations = {
-      "desired-source": () => {
-        requiredFixture(desired.gatewayDelivery).gitSha = "0".repeat(40);
+      "account-authority": () => {
+        requiredFixture(operator.plan.normalActorPreparation).accountApprovalId =
+          "foreign-approval";
       },
-      "desired-realm": () => {
-        requiredFixture(desired.gatewayBindings).operatorOrigin =
-          "https://another-operator.example";
-      },
-      unbound: () => {
-        record.environmentBound = false;
-      },
-      "proof-release": () => {
-        requiredFixture(record.proof).releaseId = "another-release";
-      },
-      "proof-manifest": () => {
-        requiredFixture(record.proof).manifestSha256 = "0".repeat(64);
-      },
-      "missing-receipt": () => {
-        operator.receipts.pop();
+      "candidate-branch": () => {
+        candidate.branch = "other-branch";
       },
       "candidate-operation": () => {
         candidate.operationRef = operationRef;
@@ -1070,11 +1056,21 @@ describe("settled app bootstrap planning handoff", () => {
       "candidate-repository": () => {
         candidate.repoId = "other-repository";
       },
-      "candidate-branch": () => {
-        candidate.branch = "other-branch";
-      },
       "candidate-unready": () => {
         candidate.readyState = "BUILDING";
+      },
+      "desired-realm": () => {
+        requiredFixture(desired.gatewayBindings).operatorOrigin =
+          "https://another-operator.example";
+      },
+      "desired-source": () => {
+        requiredFixture(desired.gatewayDelivery).gitSha = "0".repeat(40);
+      },
+      lease: () => {
+        record.leaseId = "00000000-0000-4000-8000-000000000013";
+      },
+      "missing-receipt": () => {
+        operator.receipts.pop();
       },
       "pending-binding": () => {
         requiredFixture(operator.gatewayEnvironment)[0].pendingOperationRef = operationRef;
@@ -1082,15 +1078,17 @@ describe("settled app bootstrap planning handoff", () => {
       "pending-effect": () => {
         operator.pendingEffectId = "gateway-delivery";
       },
-      lease: () => {
-        record.leaseId = "00000000-0000-4000-8000-000000000013";
-      },
       "private-state": () => {
         delete record.privateState;
       },
-      "account-authority": () => {
-        requiredFixture(operator.plan.normalActorPreparation).accountApprovalId =
-          "foreign-approval";
+      "proof-manifest": () => {
+        requiredFixture(record.proof).manifestSha256 = "0".repeat(64);
+      },
+      "proof-release": () => {
+        requiredFixture(record.proof).releaseId = "another-release";
+      },
+      unbound: () => {
+        record.environmentBound = false;
       },
     };
     mutations[changed]();

@@ -915,7 +915,7 @@ describe("public GitHub App installation authorization", () => {
           unexpected: "provider-drift-sentinel",
         });
       }
-      return fallback(resource, init);
+      return await fallback(resource, init);
     });
     const { authorization, bind } = harness({ fetch: request });
     const { authorizeState } = await prepareAuthorization(authorization);

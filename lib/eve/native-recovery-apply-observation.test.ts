@@ -30,11 +30,11 @@ interface FixtureContext {
 }
 const fixture = () => {
   const workflow = {
-    phase: "planned",
     appSpec: { digest: scope.appSpecDigest },
+    phase: "planned",
+    privateContent: secret,
     proposal: { digest: scope.proposalDigest, target: { contract: { appId: scope.appId } } },
     workspace: { workspaceId: scope.workspaceId },
-    privateContent: secret,
   };
   const context: FixtureContext = {
     "eve.sessionId": "logical",
@@ -42,20 +42,20 @@ const fixture = () => {
     [workflowKey]: workflow,
   };
   const session = {
-    sessionId: "logical",
     history: [
       {
-        role: "assistant",
         content: [
           {
-            type: "tool-call",
-            toolName: "apply_app_creation",
-            toolCallId: "call",
             input: { secret },
+            toolCallId: "call",
+            toolName: "apply_app_creation",
+            type: "tool-call",
           },
         ],
+        role: "assistant",
       },
     ],
+    sessionId: "logical",
   };
   const candidate = (slot: number, kind: string) => ({
     kind,
@@ -67,18 +67,18 @@ const fixture = () => {
     },
   });
   return {
+    binding: { logicalSessionId: "logical", ownerRunId: "physical" },
     descriptor: { logicalSessionId: "logical" },
-    binding: { ownerRunId: "physical", logicalSessionId: "logical" },
     payload: {
       candidates: [
         candidate(30, "terminal-finalizer-input"),
         candidate(25, "committed-turn-output"),
         { ...candidate(20, "completed-terminal-turn-input"), incoming: { delivery: {} } },
       ],
-      // SAFETY: The empty mutable fixture list accepts only this native event shape.
-      nativeEvents: [] as { type: string; data: { sequence: number } }[],
       // SAFETY: The empty mutable fixture list accepts only typed issue reasons.
       issues: [] as { reason: string }[],
+      // SAFETY: The empty mutable fixture list accepts only this native event shape.
+      nativeEvents: [] as { type: string; data: { sequence: number } }[],
     },
   };
 };
@@ -89,18 +89,18 @@ describe("private apply native observation", () => {
     const before = structuredClone(input);
     const facts = observePrivateApplyRecoveryCandidate(input);
     expect(facts.flags).toMatchObject({
-      grantExplicitNull: true,
-      phasePlanned: true,
-      logicalIdentityMatches: true,
-      latestPendingScopeMatchesCurrent: true,
-      latestContextMatchesCommittedOutput: true,
-      latestSnapshotMatchesCommittedOutput: true,
+      appWorkflowUnchangedSinceInput: true,
       committedOutputAfterSourceInput: true,
+      grantExplicitNull: true,
+      latestContextMatchesCommittedOutput: true,
+      latestPendingScopeMatchesCurrent: true,
+      latestSnapshotMatchesCommittedOutput: true,
+      logicalIdentityMatches: true,
+      noRecordedContextResetAfterInput: true,
+      phasePlanned: true,
       preapprovalGrantExplicitNull: true,
       preapprovalScopeMatchesCurrent: true,
       privateAuthorityUnchangedSinceInput: true,
-      appWorkflowUnchangedSinceInput: true,
-      noRecordedContextResetAfterInput: true,
     });
     expect(facts.counts.matchingPendingCallCount).toBe(1);
     expect(input).toEqual(before);
@@ -122,21 +122,21 @@ describe("private apply native observation", () => {
     input.payload.candidates[0].serializedContext[authorityKey] = { grant: scope, pending: [] };
     input.payload.candidates[0].serializedContext[workflowKey] = {
       ...input.payload.candidates[0].serializedContext[workflowKey],
-      phase: "applied",
       applyReceipt: {},
+      phase: "applied",
     };
     expect(observePrivateApplyRecoveryCandidate(input).flags).toMatchObject({
+      applyReceiptPresent: true,
       grantExplicitNull: false,
+      latestContextMatchesCommittedOutput: false,
+      latestPendingScopeMatchesCurrent: false,
       matchingGrantPresent: true,
       phaseApplied: true,
-      latestPendingScopeMatchesCurrent: false,
-      latestContextMatchesCommittedOutput: false,
-      applyReceiptPresent: true,
     });
     input.payload.candidates[0].serializedContext[workflowKey] = {
       ...input.payload.candidates[0].serializedContext[workflowKey],
-      phase: "apply_failed",
       applyFailure: {},
+      phase: "apply_failed",
     };
     expect(observePrivateApplyRecoveryCandidate(input).flags.phaseApplyFailed).toBe(true);
   });
@@ -147,7 +147,7 @@ describe("private apply native observation", () => {
       pending: [{ callId: "call", scope: { ...scope, workspaceId: "foreign" } }],
     };
     input.binding.logicalSessionId = "foreign";
-    input.payload.nativeEvents.push({ type: "context.cleared", data: { sequence: 3 } });
+    input.payload.nativeEvents.push({ data: { sequence: 3 }, type: "context.cleared" });
     input.payload.issues.push({ reason: "failed-turn-effects-unreconciled" });
     expect(observePrivateApplyRecoveryCandidate(input).flags).toMatchObject({
       latestPendingScopeMatchesCurrent: false,

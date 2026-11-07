@@ -5,46 +5,42 @@ import type { AppBaselineSelection } from "./app-baseline";
 import { inspectWorkspacePath } from "./workspace-path-inspection";
 
 vi.mock("./app-baseline", () => ({
-  readableAppBaselinePaths: (
+  readableAppBaselinePaths: async (
     _sandbox: Pick<SandboxSession, "readTextFile">,
     _selection: AppBaselineSelection | undefined,
     paths: string[],
   ) =>
-    Promise.resolve(
-      paths.filter(
-        (candidate) => !candidate.startsWith("/workspace/repository/app/schema/release/hidden"),
-      ),
+    paths.filter(
+      (candidate) => !candidate.startsWith("/workspace/repository/app/schema/release/hidden"),
     ),
 }));
 it("retains canonical baseline archive omissions when a directory is addressed through an inside-root alias", async () => {
   const path = "/workspace/repository/schema-alias";
   const sandbox = {
-    readTextFile: vi.fn(() => Promise.resolve(null)),
-    run: vi.fn(() =>
-      Promise.resolve({
-        exitCode: 0,
-        stderr: "",
-        stdout: JSON.stringify({
-          kind: "workspace-directory",
-          path,
-          resolvedPath: "/workspace/repository/app/schema/release",
-          entries: [
-            { path: `${path}/visible`, kind: "directory" },
-            { path: `${path}/hidden`, kind: "directory" },
-          ],
-        }),
+    readTextFile: vi.fn().mockResolvedValue(null),
+    run: vi.fn(async () => ({
+      exitCode: 0,
+      stderr: "",
+      stdout: JSON.stringify({
+        entries: [
+          { kind: "directory", path: `${path}/visible` },
+          { kind: "directory", path: `${path}/hidden` },
+        ],
+        kind: "workspace-directory",
+        path,
+        resolvedPath: "/workspace/repository/app/schema/release",
       }),
-    ),
+    })),
   };
   const result = await inspectWorkspacePath({
-    path,
     baseline: undefined,
-    sandbox,
     metadata: { callId: "read", toolName: "inspect_repository", turnId: "turn" },
+    path,
+    sandbox,
   });
   expect(result).toMatchObject({
+    entries: [{ kind: "directory", path: `${path}/visible` }],
     kind: "workspace-directory",
-    entries: [{ path: `${path}/visible`, kind: "directory" }],
   });
   expect(result).not.toHaveProperty("resolvedPath");
 });

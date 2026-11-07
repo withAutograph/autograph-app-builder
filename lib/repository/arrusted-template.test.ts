@@ -27,11 +27,11 @@ describe("canonical Arrusted source preparation", () => {
           exitCode: 0,
           stderr: "",
           stdout: JSON.stringify({
-            sourceSha: "a".repeat(40),
-            sourceTree: "b".repeat(40),
             mainSha: "a".repeat(40),
             mainTree: "b".repeat(40),
             originMatches: true,
+            sourceSha: "a".repeat(40),
+            sourceTree: "b".repeat(40),
           }),
         };
       return {
@@ -75,11 +75,11 @@ describe("canonical Arrusted source preparation", () => {
           exitCode: 0,
           stderr: "",
           stdout: JSON.stringify({
-            sourceSha,
-            sourceTree,
             mainSha: sourceSha,
             mainTree: sourceTree,
             originMatches: true,
+            sourceSha,
+            sourceTree,
           }),
         };
       if (command.startsWith("test -e ") || command.startsWith("test -L ")) {
@@ -111,9 +111,9 @@ describe("canonical Arrusted source preparation", () => {
     });
     expect(materializeGitSource).toHaveBeenCalledOnce();
     expect(materializeGitSource).toHaveBeenCalledWith({
+      revision: "main",
       token: "test-token",
       url: "https://github.com/withAutograph/arrusted-development.git",
-      revision: "main",
     });
   });
 
@@ -265,9 +265,9 @@ const legacySourceFixture = () => {
     sourcePath: receipt.sourcePath,
     sourceSha: receipt.sourceSha,
     sourceTree: receipt.sourceTree,
+    workspaceDigest: digest(JSON.stringify(manifest)),
     workspaceId: "sandbox",
     workspacePath: "/workspace/repository",
-    workspaceDigest: digest(JSON.stringify(manifest)),
   };
   const files = new Map([
     [".app-builder/prepared-workspace.json", JSON.stringify(observed)],
@@ -278,19 +278,19 @@ const legacySourceFixture = () => {
   ]);
   const sandbox = {
     id: "sandbox",
+    readBinaryFile: vi.fn(),
     readTextFile: vi.fn(
       async ({ path }: { path: string }) => await Promise.resolve(files.get(path) ?? null),
     ),
-    readBinaryFile: vi.fn(),
     run: vi.fn(
       async () =>
         await Promise.resolve({
           exitCode: 0,
           stderr: "",
           stdout: JSON.stringify({
-            repositoryInput: "/workspace/repository",
             realRepository: "/workspace/repository",
             realWorkspace: "/workspace",
+            repositoryInput: "/workspace/repository",
             workspaceRoot: "/workspace",
           }),
         }),
@@ -305,7 +305,7 @@ describe("legacy source-bound writable workspace", () => {
     const expectedWorkspace = { ...observed, eligibilityDigest: "e".repeat(64) };
     expect(samePreparedWorkspaceSourceContext(observed, expectedWorkspace)).toBe(true);
     await expect(
-      inspectSourceBoundSandboxWorkspace({ receipt, expectedWorkspace, sandbox: sandbox as never }),
+      inspectSourceBoundSandboxWorkspace({ expectedWorkspace, receipt, sandbox: sandbox as never }),
     ).resolves.toEqual(observed);
     expect(sandbox.readBinaryFile).not.toHaveBeenCalled();
   });
@@ -321,8 +321,8 @@ describe("legacy source-bound writable workspace", () => {
       };
       await expect(
         inspectSourceBoundSandboxWorkspace({
-          receipt,
           expectedWorkspace,
+          receipt,
           sandbox: sandbox as never,
         }),
       ).rejects.toThrow("no longer matches its durable source receipt");
@@ -333,8 +333,8 @@ describe("legacy source-bound writable workspace", () => {
     const { observed, receipt, sandbox } = legacySourceFixture();
     await expect(
       inspectSourceBoundSandboxWorkspace({
-        receipt,
         expectedWorkspace: observed,
+        receipt,
         sandbox: { ...sandbox, id: "other" } as never,
       }),
     ).rejects.toThrow("does not belong to this session");

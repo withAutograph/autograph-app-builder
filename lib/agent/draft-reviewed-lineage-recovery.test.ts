@@ -109,12 +109,12 @@ const fixture = () => {
   mkdirSync(stateRoot, { mode: 0o700 });
   mkdirSync(runs, { mode: 0o700 });
   for (const [key, value] of Object.entries({
-    APP_BUILDER_EXECUTION_MODE: "development",
-    APP_BUILDER_EXECUTION_BUNDLE: "local-development",
-    APP_BUILDER_LOCAL_ADAPTER: "1",
-    EVE_HOSTED_ADAPTER: "0",
-    APP_BUILDER_SANDBOX_PROVIDER: "vercel",
     APP_BUILDER_DEV_RUNS_ROOT: runs,
+    APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+    APP_BUILDER_EXECUTION_MODE: "development",
+    APP_BUILDER_LOCAL_ADAPTER: "1",
+    APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+    EVE_HOSTED_ADAPTER: "0",
   })) {
     vi.stubEnv(key, value);
   }
@@ -131,9 +131,6 @@ const fixture = () => {
         "utf-8",
       );
     },
-    async writeTextFile(input: { path: string; content: string }) {
-      writeFileSync(path.join(root, input.path), input.content);
-    },
     async run(input: {
       command: string;
       workingDirectory?: string;
@@ -147,26 +144,26 @@ const fixture = () => {
           exitCode: 0,
           stderr: "",
           stdout: JSON.stringify({
-            version: 1,
-            app: { id: "orchard", workspacePath: "apps/orchard", routes: [] },
+            app: { id: "orchard", routes: [], workspacePath: "apps/orchard" },
             backend: { kind: "static" },
             validation: {
               browser: null,
               check: { task: "check" },
-              test: { task: "test", shards: 1 },
+              test: { shards: 1, task: "test" },
             },
+            version: 1,
           }),
         };
       }
       const technical =
         input.command.includes(check) || input.command.includes(" app:test orchard ");
       if (technical) {
-        commands.push({ root: cwd, command: input.command });
+        commands.push({ command: input.command, root: cwd });
         if (failure === "interrupted") {
           throw new Error("controlled external transport interruption");
         }
         if (failure === "startup") {
-          return { exitCode: 134, stdout: "controlled linter failed before analysis", stderr: "" };
+          return { exitCode: 134, stderr: "", stdout: "controlled linter failed before analysis" };
         }
         const result = spawnSync(
           process.execPath,
@@ -177,7 +174,7 @@ const fixture = () => {
           ],
           { cwd, encoding: "utf-8" },
         );
-        return { exitCode: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
+        return { exitCode: result.status ?? 1, stderr: result.stderr, stdout: result.stdout };
       }
       const result = spawnSync("/bin/sh", ["-c", input.command], {
         cwd,
@@ -185,12 +182,15 @@ const fixture = () => {
         env: {
           ...process.env,
           ...input.env,
-          PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ""}`,
           GIT_CONFIG_GLOBAL: "/dev/null",
           GIT_CONFIG_NOSYSTEM: "1",
+          PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ""}`,
         },
       });
-      return { exitCode: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
+      return { exitCode: result.status ?? 1, stderr: result.stderr, stdout: result.stdout };
+    },
+    async writeTextFile(input: { path: string; content: string }) {
+      writeFileSync(path.join(root, input.path), input.content);
     },
   } as unknown as SandboxSession;
   // SAFETY: Consumed apply fields are complete; unused preparation contracts are controlled fixture identities.
@@ -221,8 +221,6 @@ const fixture = () => {
     sourceSha: sha,
     sourceTree: tree,
     status: "applied",
-    version: 2,
-    workspaceDigest: hash("workspace"),
     targetReceipt: {
       appId: "orchard",
       mutations: ["apps/orchard"],
@@ -236,6 +234,8 @@ const fixture = () => {
       version: 1,
       workspacePath: "apps/orchard",
     },
+    version: 2,
+    workspaceDigest: hash("workspace"),
   } as unknown as TargetApplyReceipt;
   const validation = {
     ...validationBinding(apply),
@@ -260,22 +260,29 @@ const fixture = () => {
   };
   // SAFETY: Reviewed app/source/apply bindings are explicit; unrelated preparation receipts are opaque fixture identities.
   const reviewed = {
-    version: APP_BUILDER_WORKFLOW_VERSION,
-    phase: "reviewed",
     appSpec: {
+      acceptedByCallId: "original-spec",
       appId: "orchard",
-      digest: apply.appSpecDigest,
-      content: "Read and write records",
       artifactPath: apply.appSpecPath,
       artifactRevision: apply.artifactRevision,
-      acceptedByCallId: "original-spec",
+      content: "Read and write records",
+      digest: apply.appSpecDigest,
     },
     applyReceipt: apply,
-    validationReceipt: validation,
-    reviewReceipt: review,
     artifacts: [],
     dependencyReceipt: { dependencyLayout: {} },
+    githubSource: {
+      digest: hash("github-source"),
+      installationIdentityDigest: hash("installation"),
+      repository: observation,
+      resolvedByCallId: "resolve",
+      resolvedRef: "refs/heads/main",
+      resolvedSha: sha,
+      resolvedTree: tree,
+      version: 1,
+    },
     identityReceipt: { digest: apply.identityDigest },
+    phase: "reviewed",
     preparedByCallId: "prepare",
     proposal: {
       digest: apply.proposalDigest,
@@ -284,20 +291,13 @@ const fixture = () => {
         plan: { source: { workspacePath: "apps/orchard" } },
       },
     },
+    reviewReceipt: review,
     sourceReceipt: { digest: apply.sourceReceiptDigest, sourceKind: "existing-repository" },
-    githubSource: {
-      version: 1,
-      repository: observation,
-      resolvedRef: "refs/heads/main",
-      resolvedSha: sha,
-      resolvedTree: tree,
-      installationIdentityDigest: hash("installation"),
-      resolvedByCallId: "resolve",
-      digest: hash("github-source"),
-    },
+    validationReceipt: validation,
+    version: APP_BUILDER_WORKFLOW_VERSION,
     workspace: {
-      workspaceId: "owned-workspace",
       workspaceDigest: apply.workspaceDigest,
+      workspaceId: "owned-workspace",
       workspacePath: repository,
     },
   } as unknown as DraftReviewedWorkflow;
@@ -321,20 +321,20 @@ const fixture = () => {
   expect(requestPrivateApplyApproval(scope, "original-approved-call")).toBe("user-approval");
   recordApprovedPrivateApply(scope, "original-approved-call");
   const candidate: DraftReconciliationCandidate = {
-    version: 1,
     appId: "orchard",
-    githubSourceDigest: reviewed.githubSource!.digest,
-    originalReviewDigest: review.digest,
-    repositoryId: "17",
-    pullRequestNumber: 11,
-    root: candidateRoot,
-    workspaceRoot: root,
-    headSha: sha,
-    headTree: tree,
     baseSha: sha,
     baseTree: tree,
     conflicts: [],
+    githubSourceDigest: reviewed.githubSource!.digest,
+    headSha: sha,
+    headTree: tree,
+    originalReviewDigest: review.digest,
+    pullRequestNumber: 11,
+    repositoryId: "17",
     reviewedLineage: structuredClone(reviewed),
+    root: candidateRoot,
+    version: 1,
+    workspaceRoot: root,
   };
   draftReconciliationState.update(() => candidate);
   const context = (signal = new AbortController().signal, sessionId = "owner-session") =>
@@ -342,7 +342,7 @@ const fixture = () => {
       abortSignal: signal,
       callId: "candidate-check",
       getSandbox: async () => sandbox,
-      session: { id: sessionId, auth: {} },
+      session: { auth: {}, id: sessionId },
     }) as Parameters<typeof validateCreation.execute>[1];
   vi.spyOn(artifacts, "publishCompiledOperatorArtifactsForSession").mockResolvedValue({
     compilation: {
@@ -354,13 +354,13 @@ const fixture = () => {
     },
   } as Awaited<ReturnType<typeof artifacts.publishCompiledOperatorArtifactsForSession>>);
   return {
-    root,
-    repository,
-    sandbox,
-    reviewed,
     candidate,
     commands,
     context,
+    repository,
+    reviewed,
+    root,
+    sandbox,
     setFailure: (value: typeof failure) => {
       failure = value;
     },
@@ -370,11 +370,11 @@ const fixture = () => {
 const prepareEdited = async (f: ReturnType<typeof fixture>) => {
   await editCandidate.execute(
     {
-      kind: "replace",
-      path: appPath,
       expectedDigest: hash(original),
-      oldText: "original-native",
+      kind: "replace",
       newText: "managed-public-keys",
+      oldText: "original-native",
+      path: appPath,
     },
     f.context(),
   );
@@ -391,10 +391,10 @@ const prepareEdited = async (f: ReturnType<typeof fixture>) => {
       resolvedTree: observed.resolvedTree,
       schemaTaskCompleted: true,
       steps: [
-        { kind: "install", command: install },
-        { kind: "check", command: check },
-        { kind: "check", command: test },
-        { kind: "capture", command: "Capture selected checked app release" },
+        { command: install, kind: "install" },
+        { command: check, kind: "check" },
+        { command: test, kind: "check" },
+        { command: "Capture selected checked app release", kind: "capture" },
       ],
     },
   }));
@@ -436,7 +436,7 @@ describe("same-session draft review lineage with real shared state and draft byt
         f.setFailure(failure);
         const pending = validateCreation.execute({ implementationFiles: [] }, f.context());
         await (failure === "startup"
-          ? expect(pending).resolves.toMatchObject({ status: "needs_repair", exitCode: 134 })
+          ? expect(pending).resolves.toMatchObject({ exitCode: 134, status: "needs_repair" })
           : expect(pending).rejects.toThrow("controlled external transport interruption"));
         expect(appBuilderWorkflowState.get()).toEqual(f.reviewed);
         expect(candidateValidationAttemptHistory.get().some((entry) => entry.exitCode !== 0)).toBe(
@@ -514,10 +514,6 @@ describe("same-session draft review lineage with real shared state and draft byt
         const state = { ...f.reviewed, phase: "validated" as const };
         const variants = {
           app: () => ({ ...state, appSpec: { ...state.appSpec, appId: "foreign" } }),
-          source: () => ({
-            ...state,
-            githubSource: { ...state.githubSource!, digest: hash("foreign-source") },
-          }),
           apply: () => ({
             ...state,
             applyReceipt: { ...state.applyReceipt, digest: hash("different-apply") },
@@ -528,6 +524,10 @@ describe("same-session draft review lineage with real shared state and draft byt
               ...f.reviewed.reviewReceipt,
               digest: hash("different-current-review"),
             },
+          }),
+          source: () => ({
+            ...state,
+            githubSource: { ...state.githubSource!, digest: hash("foreign-source") },
           }),
         };
         const changedState = variants[changed]();

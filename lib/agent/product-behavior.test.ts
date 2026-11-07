@@ -14,7 +14,7 @@ const run = async (
       body += chunk;
     }
     requests.push({ body, cookie: request.headers.cookie, path: request.url ?? "" });
-    if (request.url?.startsWith("/__autograph_preview_launch")) {
+    if (request.url?.startsWith("/__autograph_preview_launch") === true) {
       response.writeHead(303, { location: "/", "set-cookie": "preview=private; HttpOnly; Path=/" });
     } else if (request.method === "POST") {
       if (mode === "auth") {
@@ -47,15 +47,18 @@ const run = async (
     server.listen(0, "127.0.0.1", resolve);
   });
   const address = server.address();
-  if (!address || typeof address === "string") {
+  if (address === null || typeof address === "string") {
     throw new Error("Missing server address");
   }
-  const transport: typeof fetch = (url, options) => {
+  const transport: typeof fetch = async (url, options) => {
     const target = new URL(String(url));
     expect(target.origin).toBe("https://preview.test");
     expect(options?.redirect).toBe("manual");
     expect(options?.credentials).toBe("omit");
-    return fetch(`http://127.0.0.1:${address.port}${target.pathname}${target.search}`, options);
+    return await fetch(
+      `http://127.0.0.1:${address.port}${target.pathname}${target.search}`,
+      options,
+    );
   };
   try {
     const result = await executeProductReadback({
@@ -124,9 +127,9 @@ it("blocks cross-origin paths before transport receives a capability", async () 
       expiresAt: Date.now() + 60_000,
       launchUrl: "https://preview.test/__autograph_preview_launch?token=private",
     },
-    fetch: () => {
+    fetch: async () => {
       called = true;
-      return Promise.reject(new Error("Must not run"));
+      throw new Error("Must not run");
     },
     scenario: {
       body: {},
@@ -148,9 +151,9 @@ it("honors cancellation before access exchange", async () => {
       expiresAt: Date.now() + 60_000,
       launchUrl: "https://preview.test/__autograph_preview_launch?token=private",
     },
-    fetch: () => {
+    fetch: async () => {
       called = true;
-      return Promise.reject(new Error("Must not run"));
+      throw new Error("Must not run");
     },
     scenario: {
       body: {},
@@ -173,17 +176,15 @@ it("bounds untrusted read response and omits its contents", async () => {
       expiresAt: Date.now() + 60_000,
       launchUrl: "https://preview.test/__autograph_preview_launch?token=private",
     },
-    fetch: () => {
+    fetch: async () => {
       count += 1;
       if (count === 1) {
-        return Promise.resolve(
-          new Response(null, {
-            headers: { location: "/", "set-cookie": "preview=secret" },
-            status: 303,
-          }),
-        );
+        return new Response(null, {
+          headers: { location: "/", "set-cookie": "preview=secret" },
+          status: 303,
+        });
       }
-      return Promise.resolve(new Response(count === 2 ? "ok" : "sensitive".repeat(10_000)));
+      return new Response(count === 2 ? "ok" : "sensitive".repeat(10_000));
     },
     scenario: {
       body: {},
@@ -206,15 +207,13 @@ it("validates the complete streamed read even when an early marker matches", asy
       expiresAt: Date.now() + 60_000,
       launchUrl: "https://preview.test/__autograph_preview_launch?token=private",
     },
-    fetch: (_url, options) => {
+    fetch: async (_url, options) => {
       calls += 1;
       if (calls === 1) {
-        return Promise.resolve(
-          new Response(null, {
-            headers: { location: "/", "set-cookie": "preview=secret" },
-            status: 303,
-          }),
-        );
+        return new Response(null, {
+          headers: { location: "/", "set-cookie": "preview=secret" },
+          status: 303,
+        });
       }
       if (options?.method === "POST") {
         const submitted: unknown = JSON.parse(String(options.body));
@@ -222,11 +221,9 @@ it("validates the complete streamed read even when an early marker matches", asy
           throw new Error("Invalid test request");
         }
         marker = String(submitted.value);
-        return Promise.resolve(new Response("ok"));
+        return new Response("ok");
       }
-      return Promise.resolve(
-        new Response(`{"value":"${marker}","other":${"1".repeat(1_000_000)}x}`),
-      );
+      return new Response(`{"value":"${marker}","other":${"1".repeat(1_000_000)}x}`);
     },
     scenario: {
       body: {},

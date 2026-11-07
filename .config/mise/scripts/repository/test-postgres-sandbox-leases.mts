@@ -53,8 +53,8 @@ function principal(ownerUserId: string, workspaceId = "workspace_1") {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function acquire(owner: string, session: string, workspace = "workspace_1") {
-  return store.acquire({
+async function acquire(owner: string, session: string, workspace = "workspace_1") {
+  return await store.acquire({
     adapterSessionId: session,
     // The PostgreSQL implementation must ignore application wall-clock input.
     nowEpochMs: 0,
@@ -133,7 +133,10 @@ try {
 
   await clear();
   const workspace = await Promise.all(
-    Array.from({ length: 5 }, (_, index) => acquire(`user_${index}`, `session_${index}`)),
+    Array.from(
+      { length: 5 },
+      async (_, index) => await acquire(`user_${index}`, `session_${index}`),
+    ),
   );
   assert.equal(workspace.filter(({ disposition }) => disposition === "acquired").length, 5);
 
@@ -281,7 +284,7 @@ try {
   assert.equal(stoppedReacquired.disposition, "acquired");
   const retry = await reconcileExpiredSandboxLeases({
     nowEpochMs: 0,
-    stopSandbox: () => Promise.resolve(),
+    stopSandbox: async () => {},
     store,
   });
   assert.equal(retry.claimed, 1);

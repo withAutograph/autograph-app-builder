@@ -37,21 +37,21 @@ const tools = [
   }
 });
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
 const scope = {
   appId: "spend",
-  projectId: "project",
-  teamId: "team",
   installationId: "installation",
-  provisioningRequestId: "8b22a6b1-33b9-4bdd-a152-f00e5fa373d9",
+  projectId: "project",
   provisioningDigest: "a".repeat(64),
+  provisioningRequestId: "8b22a6b1-33b9-4bdd-a152-f00e5fa373d9",
+  teamId: "team",
 };
 const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
-const current = () => Promise.resolve();
+const current = async () => {};
 let root: string | undefined;
 let started = false;
 let client: ReturnType<typeof postgres> | undefined;
@@ -91,12 +91,12 @@ describe.skipIf(tools === undefined)(
       );
       started = true;
       client = postgres({
-        host: root,
-        port: 54_329,
         database: "postgres",
-        username: userInfo().username,
+        host: root,
         max: 4,
+        port: 54_329,
         ssl: false,
+        username: userInfo().username,
       });
       const config = getTableConfig(builderProvisioningJournals);
       const dialect = new PgDialect();
@@ -127,17 +127,17 @@ describe.skipIf(tools === undefined)(
         );
       }
       if (root !== undefined) {
-        await rm(root, { recursive: true, force: true });
+        await rm(root, { force: true, recursive: true });
       }
     });
     it("stores and reads a first metadata choice under the actual UUID/state constraints", async () => {
       expect(await store.read({ authority, scope })).toBeUndefined();
       await store.select({
-        authority,
-        scope,
-        publicOrigin: "https://first.example",
-        expectedPublicOrigin: null,
         assertCurrent: current,
+        authority,
+        expectedPublicOrigin: null,
+        publicOrigin: "https://first.example",
+        scope,
       });
       expect(await store.read({ authority, scope })).toBe("https://first.example");
       if (client === undefined) {
@@ -173,26 +173,26 @@ describe.skipIf(tools === undefined)(
       const target = { ...scope, appId: "concurrent-app" };
       const choices = ["https://one.example", "https://two.example"];
       const results = await Promise.allSettled(
-        choices.map((publicOrigin) =>
-          store.select({
-            authority,
-            scope: target,
-            publicOrigin,
-            expectedPublicOrigin: null,
+        choices.map(async (publicOrigin) => {
+          await store.select({
             assertCurrent: current,
-          }),
-        ),
+            authority,
+            expectedPublicOrigin: null,
+            publicOrigin,
+            scope: target,
+          });
+        }),
       );
       expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
       const winner = await store.read({ authority, scope: target });
       expect(choices).toContain(winner);
       await expect(
         store.select({
-          authority,
-          scope: target,
-          publicOrigin: "https://stale.example",
-          expectedPublicOrigin: null,
           assertCurrent: current,
+          authority,
+          expectedPublicOrigin: null,
+          publicOrigin: "https://stale.example",
+          scope: target,
         }),
       ).rejects.toThrow("builder_public_origin_conflict");
       expect(await store.read({ authority, scope: target })).toBe(winner);
@@ -200,11 +200,11 @@ describe.skipIf(tools === undefined)(
         throw new Error("Expected committed winner.");
       }
       await store.select({
-        authority,
-        scope: target,
-        publicOrigin: "https://next.example",
-        expectedPublicOrigin: winner,
         assertCurrent: current,
+        authority,
+        expectedPublicOrigin: winner,
+        publicOrigin: "https://next.example",
+        scope: target,
       });
       expect(await store.read({ authority, scope: target })).toBe("https://next.example");
     });
@@ -214,11 +214,11 @@ describe.skipIf(tools === undefined)(
       }
       const target = { ...scope, appId: "retained-choice" };
       await store.select({
-        authority,
-        scope: target,
-        publicOrigin: "https://retained.example",
-        expectedPublicOrigin: null,
         assertCurrent: current,
+        authority,
+        expectedPublicOrigin: null,
+        publicOrigin: "https://retained.example",
+        scope: target,
       });
       await client`update builder_provisioning_journal set updated_at='2000-01-01' where record->'scope'->>'appId'=${target.appId}`;
       await client`insert into builder_provisioning_journal (issuer,audience,owner_user_id,workspace_id,created_at,record,request_digest,request_id,revision,state,updated_at) select issuer,audience,owner_user_id,workspace_id,created_at,'{}'::jsonb,request_digest,'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',revision,state,updated_at from builder_provisioning_journal where record->'scope'->>'appId'=${target.appId}`;
@@ -240,29 +240,29 @@ describe.skipIf(tools === undefined)(
       }
       const target = hostedRuntimeTargetSchema.parse({
         appId: "retained-app",
-        sessionId: "original-session",
         branch: "main",
         environment: "preview",
+        installationId: "installation",
         projectId: "retained-project",
         scopeId: "team",
         scopeType: "team",
-        installationId: "installation",
+        sessionId: "original-session",
       });
       const reference = ownedAppResourceSourceSchema.parse({
         kind: "owned-app-resources-v1",
         scopeDigest: "a".repeat(64),
         source: {
-          target,
+          checkpointSha256: "c".repeat(64),
           operationRef: "11111111-1111-4111-8111-111111111111",
           planDigest: "b".repeat(64),
-          checkpointSha256: "c".repeat(64),
+          target,
         },
       });
       const records = [
         {
           id: "dddddddd-dddd-4ddd-8ddd-dddddddddd01",
           owner: authority.ownerUserId,
-          record: { kind: "owned-app-resource-source-v1", scope: {}, reference },
+          record: { kind: "owned-app-resource-source-v1", reference, scope: {} },
         },
         {
           id: "dddddddd-dddd-4ddd-8ddd-dddddddddd02",
@@ -282,7 +282,6 @@ describe.skipIf(tools === undefined)(
           owner: "other-owner",
           record: {
             kind: "owned-app-resource-source-v1",
-            scope: {},
             reference: {
               ...reference,
               source: {
@@ -290,6 +289,7 @@ describe.skipIf(tools === undefined)(
                 target: { ...target, sessionId: "foreign-reference" },
               },
             },
+            scope: {},
           },
         },
         {
@@ -329,14 +329,17 @@ describe.skipIf(tools === undefined)(
       let checks = 0;
       await expect(
         store.select({
-          authority,
-          scope: target,
-          publicOrigin: "https://revoked.example",
-          expectedPublicOrigin: null,
-          assertCurrent: () => {
+          assertCurrent: async () => {
             checks += 1;
-            return checks === 2 ? Promise.reject(new Error("revoked")) : Promise.resolve();
+            if (checks === 2) {
+              await Promise.reject(new Error("revoked"));
+            }
+            await Promise.resolve();
           },
+          authority,
+          expectedPublicOrigin: null,
+          publicOrigin: "https://revoked.example",
+          scope: target,
         }),
       ).rejects.toThrow("revoked");
       expect(await store.read({ authority, scope: target })).toBeUndefined();

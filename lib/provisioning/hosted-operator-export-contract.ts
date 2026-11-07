@@ -6,6 +6,7 @@ import { z } from "zod";
 // authority. Parsing worker metadata never authorizes an export or a download.
 const id = z.string().min(1);
 const uuid = z.uuid();
+const releaseAppMismatchMessage = "Export release belongs to another app";
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const count = z.string().regex(/^(?:0|[1-9][0-9]*)$/u);
 const decimalTotal = (values: string[]) =>
@@ -14,6 +15,7 @@ const decimalTotal = (values: string[]) =>
     : undefined;
 const index = z.number().int().nonnegative().refine(Number.isSafeInteger);
 const uuidPart = "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}";
+const publicCustomerTablesSelection = "public-app-customer-tables-v1";
 const artifactPattern = new RegExp(
   `^_protected-operator/artifacts/tenant-export/(${uuidPart})/(${uuidPart})/(data|manifest)/([a-f0-9]{64})$`,
   "u",
@@ -24,77 +26,77 @@ const emptyDigest = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b785
 export const tenantExportScopeSchema = z.strictObject({ appId: id, customerId: id });
 export const tenantExportResourceSchema = z
   .strictObject({
-    projectId: id,
     branchId: id,
-    resourceId: id,
+    database: id,
     environment: z.enum(["local", "preview", "production"]),
     hostname: id.refine((value) => !/[\s/\\]/u.test(value) && !value.includes("://")),
-    port: z.number().int().min(1).max(65_535),
-    database: id,
-    schema: z.literal("public"),
     migratorRole: id,
+    port: z.number().int().min(1).max(65_535),
+    projectId: id,
+    resourceId: id,
     runtimeRole: id,
+    schema: z.literal("public"),
   })
 
   .refine((value) => value.migratorRole !== value.runtimeRole);
 export const tenantExportReleaseSchema = z.strictObject({
-  id,
   artifactHash: digest,
+  id,
   manifestRef: z
     .string()
     .regex(/^_protected-operator\/artifacts\/generated-release\/[a-z][a-z0-9-]*\/[a-f0-9]{64}$/u),
   manifestSha256: digest,
 });
 export const tenantExportWorkerDescriptorSchema = z.strictObject({
-  id,
-  operationScope: z.literal("generated-app-data-export-v1"),
   executablePath: id.refine(
     (value) =>
       value.startsWith("/") &&
       !/[\\\p{Cc}]/u.test(value) &&
       !value.split("/").some((part) => part === ".." || part === "."),
   ),
+  id,
+  operationScope: z.literal("generated-app-data-export-v1"),
   sha256: digest,
   subcommand: z.literal("protected-generated-app-export"),
 });
 
 export const tenantExportWorkerInputSchema = z
   .strictObject({
-    version: z.literal(1),
-    kind: z.literal("tenant-export-worker"),
-    exportId: uuid,
     attemptId: uuid,
-    snapshotId: uuid,
-    planDigest: digest,
-    scope: tenantExportScopeSchema,
-    resource: tenantExportResourceSchema,
-    release: tenantExportReleaseSchema,
-    selection: z.literal("public-app-customer-tables-v1"),
+    exportId: uuid,
     format: z.literal("ndjson"),
+    kind: z.literal("tenant-export-worker"),
+    planDigest: digest,
+    release: tenantExportReleaseSchema,
+    resource: tenantExportResourceSchema,
+    scope: tenantExportScopeSchema,
+    selection: z.literal(publicCustomerTablesSelection),
+    snapshotId: uuid,
+    version: z.literal(1),
   })
 
   .refine((value) => value.release.manifestRef.split("/")[3] === value.scope.appId, {
-    message: "Export release belongs to another app",
+    message: releaseAppMismatchMessage,
   });
 // Only the trusted executor later supplies the app-migrator connection in its
 // command-scoped environment. It is absent from JSON, argv and this contract.
 export type TenantExportWorkerInput = z.infer<typeof tenantExportWorkerInputSchema>;
 
 const chunkSchema = z.strictObject({
-  index,
-  byteLength: count,
-  sha256: digest,
   artifactRef: tenantExportArtifactReferenceSchema,
+  byteLength: count,
+  index,
+  sha256: digest,
 });
 export const tenantExportDataMemberSchema = z
   .strictObject({
+    byteLength: count,
+    chunks: z.array(chunkSchema),
     kind: z.literal("data"),
     name: z.string().regex(/^table-[0-9]+\.ndjson$/u),
-    table: z.strictObject({ schema: z.literal("public"), name: id }),
     rowCount: count,
-    byteLength: count,
     sha256: digest,
-    chunks: z.array(chunkSchema),
+    table: z.strictObject({ name: id, schema: z.literal("public") }),
   })
 
   .superRefine((value, ctx) => {
@@ -122,11 +124,11 @@ export const tenantExportDataMemberSchema = z
   });
 export const tenantExportManifestMemberSchema = z
   .strictObject({
+    artifactRef: tenantExportArtifactReferenceSchema,
+    byteLength: count,
     kind: z.literal("manifest"),
     name: z.literal("manifest.json"),
-    byteLength: count,
     sha256: digest,
-    artifactRef: tenantExportArtifactReferenceSchema,
   })
 
   .refine((value) => {
@@ -136,24 +138,24 @@ export const tenantExportManifestMemberSchema = z
 
 export const tenantExportArtifactManifestSchema = z
   .strictObject({
-    version: z.literal(1),
-    kind: z.literal("tenant-export"),
-    exportId: uuid,
     attemptId: uuid,
-    snapshotId: uuid,
-    planDigest: digest,
-    scope: tenantExportScopeSchema,
-    resource: tenantExportResourceSchema,
-    release: tenantExportReleaseSchema,
-    format: z.literal("ndjson"),
-    files: z.array(tenantExportDataMemberSchema),
-    rowCount: count,
     byteLength: count,
+    exportId: uuid,
+    files: z.array(tenantExportDataMemberSchema),
+    format: z.literal("ndjson"),
+    kind: z.literal("tenant-export"),
+    planDigest: digest,
+    release: tenantExportReleaseSchema,
+    resource: tenantExportResourceSchema,
+    rowCount: count,
+    scope: tenantExportScopeSchema,
+    snapshotId: uuid,
+    version: z.literal(1),
   })
 
   .superRefine((value, ctx) => {
     if (value.release.manifestRef.split("/")[3] !== value.scope.appId) {
-      ctx.addIssue({ code: "custom", message: "Export release belongs to another app" });
+      ctx.addIssue({ code: "custom", message: releaseAppMismatchMessage });
     }
     if (new Set(value.files.map((file) => file.name)).size !== value.files.length) {
       ctx.addIssue({ code: "custom", message: "Export member identity repeats" });
@@ -202,9 +204,9 @@ export const parseTenantExportManifestForWorker = (
 export const tenantExportWireFixtureSchema = z
   .strictObject({
     descriptor: tenantExportWorkerDescriptorSchema,
-    worker: tenantExportWorkerInputSchema,
     manifest: tenantExportArtifactManifestSchema,
     manifestMember: tenantExportManifestMemberSchema,
+    worker: tenantExportWorkerInputSchema,
   })
 
   .superRefine((value, ctx) => {
@@ -230,38 +232,38 @@ export type TenantExportWireFixture = z.infer<typeof tenantExportWireFixtureSche
 // Builder-only authority layer. These schemas do not extend preparation state,
 // its encryption AAD, its receipts, or the five public MCP tool definitions.
 const authoritySchema = z.strictObject({
-  issuer: id,
   audience: id,
-  workspaceId: id,
+  issuer: id,
   ownerUserId: id,
+  workspaceId: id,
 });
-const targetSchema = z.strictObject({ sessionId: id, appId: id, projectId: id, branch: id });
+const targetSchema = z.strictObject({ appId: id, branch: id, projectId: id, sessionId: id });
 const planRefPattern = new RegExp(`^_protected-operator/export-plans/(${uuidPart})$`, "u");
 const planRef = z.string().regex(planRefPattern);
 const setupSchema = z.strictObject({
-  operationRef: uuid,
-  planDigest: digest,
   approvalId: id,
   approvedByCallId: id,
+  operationRef: uuid,
+  planDigest: digest,
 });
 export const hostedTenantExportPlanSchema = z
   .strictObject({
-    version: z.literal(1),
-    kind: z.literal("tenant-export-plan"),
-    exportId: uuid,
-    planRef,
     authority: authoritySchema,
-    target: targetSchema,
-    originalSetup: setupSchema,
-    scope: tenantExportScopeSchema,
-    resource: tenantExportResourceSchema,
-    release: tenantExportReleaseSchema,
-    selection: z.literal("public-app-customer-tables-v1"),
-    format: z.literal("ndjson"),
     destination: z.strictObject({
-      kind: z.literal("owner-private-builder-artifact"),
       artifactPrefix: id,
+      kind: z.literal("owner-private-builder-artifact"),
     }),
+    exportId: uuid,
+    format: z.literal("ndjson"),
+    kind: z.literal("tenant-export-plan"),
+    originalSetup: setupSchema,
+    planRef,
+    release: tenantExportReleaseSchema,
+    resource: tenantExportResourceSchema,
+    scope: tenantExportScopeSchema,
+    selection: z.literal(publicCustomerTablesSelection),
+    target: targetSchema,
+    version: z.literal(1),
   })
 
   .superRefine((value, ctx) => {
@@ -275,7 +277,7 @@ export const hostedTenantExportPlanSchema = z
       ctx.addIssue({ code: "custom", message: "Export target scope differs" });
     }
     if (value.release.manifestRef.split("/")[3] !== value.scope.appId) {
-      ctx.addIssue({ code: "custom", message: "Export release belongs to another app" });
+      ctx.addIssue({ code: "custom", message: releaseAppMismatchMessage });
     }
     if (
       value.destination.artifactPrefix !==
@@ -295,9 +297,9 @@ export const tenantExportPlanDigest = (input: HostedTenantExportPlan): string =>
 /** Untrusted invocation: all resource, owner and destination choices are server-resolved. */
 export const hostedTenantExportRequestSchema = z.strictObject({
   action: z.literal("export"),
-  planRef,
-  planDigest: digest,
   idempotencyKey: id,
+  planDigest: digest,
+  planRef,
 });
 export type HostedTenantExportRequest = z.infer<typeof hostedTenantExportRequestSchema>;
 export const parseHostedTenantExportRequestForPlan = (
@@ -313,11 +315,11 @@ export const parseHostedTenantExportRequestForPlan = (
 };
 const approvalSchema = z.strictObject({
   action: z.literal("export"),
-  planRef,
-  planDigest: digest,
-  idempotencyKey: id,
   approvalId: id,
   approvedByCallId: id,
+  idempotencyKey: id,
+  planDigest: digest,
+  planRef,
 });
 const stateSchema = z.enum([
   "planned",
@@ -330,11 +332,11 @@ const stateSchema = z.enum([
 ]);
 const completionSchema = z.strictObject({
   attemptId: uuid,
-  snapshotId: uuid,
-  manifest: tenantExportManifestMemberSchema,
-  fileCount: count,
-  rowCount: count,
   byteLength: count,
+  fileCount: count,
+  manifest: tenantExportManifestMemberSchema,
+  rowCount: count,
+  snapshotId: uuid,
 });
 
 const journalIssue = (ctx: z.RefinementCtx) => {
@@ -343,26 +345,7 @@ const journalIssue = (ctx: z.RefinementCtx) => {
 
 export const tenantExportJournalRecordSchema = z
   .strictObject({
-    kind: z.literal("app-export"),
-    version: z.literal(1),
-    requestId: uuid,
-    authority: authoritySchema,
-    target: targetSchema,
-    plan: hostedTenantExportPlanSchema,
-    planDigest: digest,
-    idempotencyKey: id,
-    revision: index,
-    fenceGeneration: index,
-    state: stateSchema,
     approval: approvalSchema.optional(),
-    claim: z
-      .strictObject({
-        claimId: uuid,
-        fenceGeneration: z.number().int().positive().refine(Number.isSafeInteger),
-        attemptId: uuid,
-      })
-
-      .optional(),
     attempts: z.array(
       z.strictObject({
         attemptId: uuid,
@@ -377,7 +360,26 @@ export const tenantExportJournalRecordSchema = z
         ]),
       }),
     ),
+    authority: authoritySchema,
+    claim: z
+      .strictObject({
+        attemptId: uuid,
+        claimId: uuid,
+        fenceGeneration: z.number().int().positive().refine(Number.isSafeInteger),
+      })
+
+      .optional(),
     completion: completionSchema.optional(),
+    fenceGeneration: index,
+    idempotencyKey: id,
+    kind: z.literal("app-export"),
+    plan: hostedTenantExportPlanSchema,
+    planDigest: digest,
+    requestId: uuid,
+    revision: index,
+    state: stateSchema,
+    target: targetSchema,
+    version: z.literal(1),
   })
 
   .superRefine((value, ctx) => {
@@ -460,11 +462,11 @@ export type TenantExportJournalRecord = z.infer<typeof tenantExportJournalRecord
 
 export const tenantExportStatusSchema = z
   .strictObject({
+    counts: z.strictObject({ byteLength: count, fileCount: count, rowCount: count }).optional(),
+    download: z.strictObject({ indexPath: id }).optional(),
     exportId: uuid,
     planRef,
     state: stateSchema,
-    counts: z.strictObject({ fileCount: count, rowCount: count, byteLength: count }).optional(),
-    download: z.strictObject({ indexPath: id }).optional(),
   })
 
   .superRefine((value, ctx) => {

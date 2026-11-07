@@ -80,11 +80,11 @@ export const readLocalOwnedSessionHistory = async (
     throw unavailable();
   }
   const recovery = createLocalNativeRecovery({
-    APP_BUILDER_EXECUTION_MODE: "development",
     APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+    APP_BUILDER_EXECUTION_MODE: "development",
     APP_BUILDER_LOCAL_ADAPTER: "1",
-    EVE_HOSTED_ADAPTER: "0",
     APP_BUILDER_LOCAL_EVE_CYCLE_FILE: cycleFile,
+    EVE_HOSTED_ADAPTER: "0",
   });
   if (recovery === undefined) {
     throw unavailable();
@@ -106,10 +106,10 @@ export const readLocalOwnedSessionHistory = async (
     throw unavailable();
   }
   return {
-    sessionId: input.sessionId,
-    ownerLineage: lineage,
     events: snapshot.events,
     nativeCursor: snapshot.session.streamIndex,
+    ownerLineage: lineage,
+    sessionId: input.sessionId,
   };
 };
 

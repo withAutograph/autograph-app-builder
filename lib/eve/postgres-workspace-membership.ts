@@ -1,12 +1,11 @@
 import { and, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { HostedDatabase } from "../db/hosted-postgres";
 
-import type * as databaseSchema from "../db/schema";
 import { member, organization, user } from "../db/schema";
 import type { HostedWorkspaceMembership } from "../mcp/request-handler";
 import { hostedPrincipalSchema } from "./hosted-auth";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 
 /**
  * Request-time membership authority. A signed workspace claim selects the
@@ -84,7 +83,7 @@ export function createPostgresOAuthMembershipAuthority(database: Database) {
       workspaceId: string;
       ownerUserId: string;
     }): Promise<boolean> {
-      return createPostgresWorkspaceMembership(database).isMember({
+      return await createPostgresWorkspaceMembership(database).isMember({
         principal: {
           audience: input.audience,
           issuer: input.issuer,

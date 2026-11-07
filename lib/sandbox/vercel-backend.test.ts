@@ -48,16 +48,16 @@ const nativeFixture = () => ({
   },
   name: "owned-name",
   persistent: true,
-  region: "iad1",
   readFileToBuffer: vi.fn().mockResolvedValue(null),
+  region: "iad1",
   runCommand: vi.fn().mockResolvedValue({
     exitCode: 0,
     kill: vi.fn(async () => {
       await Promise.resolve();
     }),
-    stderr: () => Promise.resolve(""),
-    stdout: () => Promise.resolve("/home/vercel\n"),
-    wait: () => Promise.resolve({ exitCode: 0 }),
+    stderr: async () => "",
+    stdout: async () => "/home/vercel\n",
+    wait: async () => ({ exitCode: 0 }),
   }),
   status: "running",
   stop: vi.fn().mockResolvedValue(null),
@@ -90,17 +90,17 @@ const seedStorage = (
   initial: readonly (readonly [string, Buffer])[],
 ) => {
   const files = new Map(initial);
-  native.fs.lstat.mockImplementation((destination: string) =>
+  native.fs.lstat.mockImplementation(async (destination: string) =>
     files.has(destination)
-      ? Promise.resolve({})
-      : Promise.reject(Object.assign(new Error("not found"), { code: "ENOENT" })),
+      ? await Promise.resolve({})
+      : await Promise.reject(Object.assign(new Error("not found"), { code: "ENOENT" })),
   );
   native.writeFiles.mockImplementation(
-    (values: readonly { path: string; content: Uint8Array }[]) => {
+    async (values: readonly { path: string; content: Uint8Array }[]) => {
       for (const file of values) {
         files.set(file.path, Buffer.from(file.content));
       }
-      return Promise.resolve(null);
+      return null;
     },
   );
   return files;
@@ -120,37 +120,37 @@ describe("Builder Vercel provider", () => {
     await chmod(root, 0o700);
     await mkdir(path.join(root, "runs"), { mode: 0o700 });
     for (const [name, value] of Object.entries({
-      APP_BUILDER_EXECUTION_MODE: "development",
-      APP_BUILDER_EXECUTION_BUNDLE: "local-development",
-      APP_BUILDER_LOCAL_ADAPTER: "1",
-      EVE_HOSTED_ADAPTER: "0",
-      APP_BUILDER_SANDBOX_PROVIDER: "vercel",
       APP_BUILDER_DEV_RUNS_ROOT: path.join(root, "runs"),
+      APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+      APP_BUILDER_EXECUTION_MODE: "development",
+      APP_BUILDER_LOCAL_ADAPTER: "1",
+      APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+      EVE_HOSTED_ADAPTER: "0",
     })) {
       vi.stubEnv(name, value);
     }
     try {
       const record = {
-        sandboxId: "owned-name",
-        workspaceDrive: "drive-owned",
         appId: "example",
-        sessionId: context.session.id,
-        proposalDigest: "a".repeat(64),
-        profileId: "private-checks-16gib-v1" as const,
         phase: "configuring" as const,
+        profileId: "private-checks-16gib-v1" as const,
+        proposalDigest: "a".repeat(64),
+        sandboxId: "owned-name",
+        sessionId: context.session.id,
+        workspaceDrive: "drive-owned",
       };
       const journal = await createLocalPrivateComputeJournal({
-        authority: { kind: "local", stateRoot: root, ownerUid: process.getuid?.() ?? -1 },
+        assertCurrent: () => {},
+        authority: { kind: "local", ownerUid: process.getuid?.() ?? -1, stateRoot: root },
         sandboxId: record.sandboxId,
         workspaceDrive: record.workspaceDrive,
-        assertCurrent: () => {},
       });
       await journal.append(record, await journal.read());
       const stopped = {
         ...nativeFixture(),
+        memory: 4096,
         status: "stopped" as "stopped" | "running",
         vcpus: 2,
-        memory: 4096,
       };
       sdk.get.mockResolvedValue(stopped);
       const saved = { name: stopped.name, version: 1 as const, workspaceDrive: driveState };
@@ -160,56 +160,56 @@ describe("Builder Vercel provider", () => {
       expect(sdk.get.mock.calls.map(([options]) => options.resume)).toEqual([false]);
       const configured = {
         ...stopped,
-        vcpus: 8,
+        currentSession: () => ({ memory: 16_384, vcpus: 8 }),
         memory: 16_384,
         update: () => {
           throw new Error("An uncertain update must never be resent");
         },
-        currentSession: () => ({ vcpus: 8, memory: 16_384 }),
+        vcpus: 8,
       };
       const active = { ...configured, status: "running" as const };
       const profile = privateComputeProfileSchema.parse({
-        version: 1,
-        id: record.profileId,
-        vcpus: 8,
-        memoryMiB: 16_384,
-        lintWorkers: 1,
-        target: { sandboxId: record.sandboxId, workspaceDrive: record.workspaceDrive },
         checkPolicy: {
-          path: "apps/example/.config/mise/tasks/check",
-          beforeSha256: "b".repeat(64),
           afterSha256: "c".repeat(64),
+          beforeSha256: "b".repeat(64),
+          path: "apps/example/.config/mise/tasks/check",
         },
+        id: record.profileId,
         limits: {
-          version: 1,
+          limited: false,
+          maxVcpus: 8,
+          observedAt: "2026-11-03T12:00:00.000Z",
+          plan: "pro",
           projectId: "prj_test",
           teamId: "team_test",
-          plan: "pro",
-          maxVcpus: 8,
-          limited: false,
-          observedAt: "2026-11-03T12:00:00.000Z",
+          version: 1,
         },
+        lintWorkers: 1,
+        memoryMiB: 16_384,
+        target: { sandboxId: record.sandboxId, workspaceDrive: record.workspaceDrive },
+        vcpus: 8,
+        version: 1,
       });
       let checkpoint = await journal.read();
       await activatePrivateComputeProfile(
         {
-          profile,
           appId: "example",
-          sessionId: context.session.id,
-          proposalDigest: record.proposalDigest,
           callId: "approved-resume",
+          profile,
+          proposalDigest: record.proposalDigest,
+          sessionId: context.session.id,
         },
         {
-          read: () => Promise.resolve(configured),
-          resume: () => Promise.resolve(active),
+          assertCurrent: () => {},
+          read: async () => configured,
           readActivation: async () => {
             checkpoint = await journal.read();
             return checkpoint.record;
           },
+          resume: async () => active,
           writeActivation: async (value) => {
             checkpoint = await journal.append(value, checkpoint);
           },
-          assertCurrent: () => {},
         },
       );
       sdk.get.mockResolvedValue(active);
@@ -218,7 +218,7 @@ describe("Builder Vercel provider", () => {
       expect(sdk.get.mock.calls.map(([options]) => options.resume)).toEqual([false, false]);
     } finally {
       vi.unstubAllEnvs();
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
 
@@ -228,9 +228,7 @@ describe("Builder Vercel provider", () => {
     authority.mockReset();
     drives.getOrCreate
       .mockReset()
-      .mockImplementation((options: { name: string }) =>
-        Promise.resolve(driveFixture(options.name)),
-      );
+      .mockImplementation(async (options: { name: string }) => driveFixture(options.name));
     drives.list.mockReset().mockResolvedValue(listedDrives(driveFixture()));
   });
   it("uploads multiple skill seeds together with their exact binary bytes and resolved paths", async () => {
@@ -240,8 +238,8 @@ describe("Builder Vercel provider", () => {
     const binary = Buffer.from([0, 255, 3]);
     const started = await createBuilderVercelProvider().start(context, undefined, {
       files: [
-        { path: "$HOME/.agents/skills/a.md", content: binary.toString("base64") },
-        { path: "$HOME/.agents/skills/b.md", content: Buffer.from("second").toString("base64") },
+        { content: binary.toString("base64"), path: "$HOME/.agents/skills/a.md" },
+        { content: Buffer.from("second").toString("base64"), path: "$HOME/.agents/skills/b.md" },
       ],
     });
     expect(files.get("/home/vercel/.agents/skills/a.md")).toEqual(binary);
@@ -262,9 +260,9 @@ describe("Builder Vercel provider", () => {
     const large = Buffer.alloc(9 * 1024 * 1024, 7);
     const started = await createBuilderVercelProvider().start(context, undefined, {
       files: [
-        { path: "/workspace/first", content: Buffer.from("first").toString("base64") },
-        { path: "/workspace/large", content: large.toString("base64") },
-        { path: "/workspace/last", content: Buffer.from("last").toString("base64") },
+        { content: Buffer.from("first").toString("base64"), path: "/workspace/first" },
+        { content: large.toString("base64"), path: "/workspace/large" },
+        { content: Buffer.from("last").toString("base64"), path: "/workspace/last" },
       ],
     });
     expect(files.get("/workspace/first")).toEqual(Buffer.from("first"));
@@ -286,8 +284,8 @@ describe("Builder Vercel provider", () => {
     sdk.create.mockResolvedValue(native);
     const started = await createBuilderVercelProvider().start(context, undefined, {
       files: [
-        { path: "same", content: Buffer.from("first").toString("base64") },
-        { path: "/workspace/same", content: Buffer.from("second").toString("base64") },
+        { content: Buffer.from("first").toString("base64"), path: "same" },
+        { content: Buffer.from("second").toString("base64"), path: "/workspace/same" },
       ],
     });
     expect(files.get("/workspace/same")).toEqual(Buffer.from("first"));
@@ -302,12 +300,14 @@ describe("Builder Vercel provider", () => {
     let ready = false;
     const pending = (async () => {
       const result = await createBuilderVercelProvider().start(context, undefined, {
-        files: [{ path: "/workspace/seed", content: Buffer.from("seed").toString("base64") }],
+        files: [{ content: Buffer.from("seed").toString("base64"), path: "/workspace/seed" }],
       });
       ready = true;
       return result;
     })();
-    await vi.waitFor(() => expect(native.writeFiles).toHaveBeenCalled());
+    await vi.waitFor(() => {
+      expect(native.writeFiles).toHaveBeenCalled();
+    });
     expect(ready).toBe(false);
     upload.resolve(null);
     const started = await pending;
@@ -321,8 +321,8 @@ describe("Builder Vercel provider", () => {
     const binary = Buffer.from([0, 255, 3]);
     const started = await createBuilderVercelProvider().start(context, undefined, {
       files: [
-        { path: "$HOME/.agents/skills/a.md", content: binary.toString("base64") },
-        { path: "$HOME/.agents/skills/b.md", content: Buffer.from("second").toString("base64") },
+        { content: binary.toString("base64"), path: "$HOME/.agents/skills/a.md" },
+        { content: Buffer.from("second").toString("base64"), path: "$HOME/.agents/skills/b.md" },
       ],
     });
     expect(files.get("/home/vercel/.agents/skills/a.md")).toEqual(binary);
@@ -343,9 +343,9 @@ describe("Builder Vercel provider", () => {
     const large = Buffer.alloc(9 * 1024 * 1024, 7);
     const started = await createBuilderVercelProvider().start(context, undefined, {
       files: [
-        { path: "/workspace/first", content: Buffer.from("first").toString("base64") },
-        { path: "/workspace/large", content: large.toString("base64") },
-        { path: "/workspace/last", content: Buffer.from("last").toString("base64") },
+        { content: Buffer.from("first").toString("base64"), path: "/workspace/first" },
+        { content: large.toString("base64"), path: "/workspace/large" },
+        { content: Buffer.from("last").toString("base64"), path: "/workspace/last" },
       ],
     });
     expect(files.get("/workspace/first")).toEqual(Buffer.from("first"));
@@ -358,7 +358,7 @@ describe("Builder Vercel provider", () => {
     expect(native.writeFiles).toHaveBeenCalledTimes(3);
     expect(native.writeFiles).toHaveBeenNthCalledWith(
       3,
-      [{ path: "/workspace/last", content: Buffer.from("last") }],
+      [{ content: Buffer.from("last"), path: "/workspace/last" }],
       {},
     );
     await started.handle.onSessionStop();
@@ -370,8 +370,8 @@ describe("Builder Vercel provider", () => {
     sdk.create.mockResolvedValue(native);
     const started = await createBuilderVercelProvider().start(context, undefined, {
       files: [
-        { path: "same", content: Buffer.from("first").toString("base64") },
-        { path: "/workspace/same", content: Buffer.from("second").toString("base64") },
+        { content: Buffer.from("first").toString("base64"), path: "same" },
+        { content: Buffer.from("second").toString("base64"), path: "/workspace/same" },
       ],
     });
     expect(files.get("/workspace/same")).toEqual(Buffer.from("first"));
@@ -386,12 +386,14 @@ describe("Builder Vercel provider", () => {
     let ready = false;
     const pending = (async () => {
       const result = await createBuilderVercelProvider().start(context, undefined, {
-        files: [{ path: "/workspace/seed", content: Buffer.from("seed").toString("base64") }],
+        files: [{ content: Buffer.from("seed").toString("base64"), path: "/workspace/seed" }],
       });
       ready = true;
       return result;
     })();
-    await vi.waitFor(() => expect(native.writeFiles).toHaveBeenCalled());
+    await vi.waitFor(() => {
+      expect(native.writeFiles).toHaveBeenCalled();
+    });
     expect(ready).toBe(false);
     upload.resolve(null);
     const started = await pending;
@@ -402,9 +404,9 @@ describe("Builder Vercel provider", () => {
     const provider = createBuilderVercelProvider();
     const artifact = await provider.prepare({
       files: {
-        list: () => Promise.resolve([]),
-        read: () => Promise.resolve(Buffer.alloc(0)),
-        readText: () => Promise.resolve(""),
+        list: async () => [],
+        read: async () => Buffer.alloc(0),
+        readText: async () => "",
       },
       host: {
         loadOptionalPackage: async () => {
@@ -682,8 +684,8 @@ describe("Builder Vercel provider", () => {
       expect.objectContaining({
         namePrefix: driveState.name,
         projectId: driveState.projectId,
-        sortBy: "name",
         signal,
+        sortBy: "name",
       }),
     );
     expect(drive.delete).toHaveBeenCalledWith({ signal });
@@ -897,16 +899,16 @@ describe("Builder Vercel provider", () => {
         message: `A sandbox with the name '${startedSandboxName}' already exists for this project. Use GET /sandboxes/:name to resume it or delete it first.`,
       }),
     );
-    sdk.get.mockImplementation((options) => {
+    sdk.get.mockImplementation(async (options) => {
       // The SDK rejects a projectId without matching teamId and token before
       // consulting OIDC; both recovery lookups must use project-scoped OIDC.
       if ("projectId" in options && options.projectId !== undefined) {
-        return Promise.reject(new Error("Missing credentials parameters"));
+        throw new Error("Missing credentials parameters");
       }
-      return Promise.resolve(options.resume === true ? running : stopped);
+      return options.resume === true ? running : stopped;
     });
     const started = await createBuilderVercelProvider().start(context, undefined, {
-      files: [{ path: "/workspace/private.txt", content: Buffer.from("seed").toString("base64") }],
+      files: [{ content: Buffer.from("seed").toString("base64"), path: "/workspace/private.txt" }],
     });
     expect(sdk.get.mock.calls.map(([options]) => options.resume)).toEqual([false, true]);
     expect(files.get("/workspace/private.txt")).toEqual(Buffer.from("retained"));
@@ -997,14 +999,14 @@ describe("Builder Vercel provider", () => {
     const started = await createBuilderVercelProvider().start(context, undefined, {
       files: [
         {
-          path: "/workspace/private.txt",
           content: Buffer.from("replacement workspace seed").toString("base64"),
+          path: "/workspace/private.txt",
         },
         {
-          path: "$HOME/.agents/skills/SKILL.md",
           content: Buffer.from("replacement skill seed").toString("base64"),
+          path: "$HOME/.agents/skills/SKILL.md",
         },
-        { path: "/workspace/new.txt", content: Buffer.from("new seed").toString("base64") },
+        { content: Buffer.from("new seed").toString("base64"), path: "/workspace/new.txt" },
       ],
     });
     expect(files.get("/workspace/private.txt")).toEqual(Buffer.from("private workspace bytes"));
@@ -1025,10 +1027,10 @@ describe("Builder Vercel provider", () => {
     const started = await createBuilderVercelProvider().start(context, undefined, {
       files: [
         {
-          path: "private.txt",
           content: Buffer.from("original seed").toString("base64"),
+          path: "private.txt",
         },
-        { path: "/workspace/new.txt", content: Buffer.from("new seed").toString("base64") },
+        { content: Buffer.from("new seed").toString("base64"), path: "/workspace/new.txt" },
       ],
     });
     expect(files.get("/workspace/private.txt")).toEqual(Buffer.from("retained workspace edit"));
@@ -1046,7 +1048,7 @@ describe("Builder Vercel provider", () => {
     await expect(
       createBuilderVercelProvider().start(context, undefined, {
         files: [
-          { path: "/workspace/private.txt", content: Buffer.from("seed").toString("base64") },
+          { content: Buffer.from("seed").toString("base64"), path: "/workspace/private.txt" },
         ],
       }),
     ).rejects.toBe(failure);
@@ -1122,7 +1124,7 @@ describe("Builder Vercel provider", () => {
     await expect(
       createBuilderVercelProvider().start(context, undefined, {
         files: [
-          { path: "/workspace/private.txt", content: Buffer.from("private").toString("base64") },
+          { content: Buffer.from("private").toString("base64"), path: "/workspace/private.txt" },
         ],
       }),
     ).rejects.toBe(failure);

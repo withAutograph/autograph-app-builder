@@ -7,58 +7,60 @@ import { z } from "zod";
 const id = z.string().min(1).max(256);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const generation = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+const previewEnvironment = z.literal("preview");
+const authorizeAppCentralCaller = "authorize-app-central-caller";
 export const centralExecutionLeaseSchema = z.strictObject({
-  leaseId: z.uuid(),
   fenceGeneration: generation,
+  leaseId: z.uuid(),
 });
 export const centralEffectReceiptSchema = z.discriminatedUnion("effect", [
   z.strictObject({
     effect: z.literal("prepare-central-resources"),
+    readbackSha256: digest,
     resourceId: id,
     resourceVersion: id,
-    readbackSha256: digest,
   }),
   z.strictObject({
+    centralPrincipalGeneration: generation,
+    configurationSha256: digest,
     effect: z.literal("install-central-schema"),
     resourceProfileId: id,
     schemaSha256: digest,
-    configurationSha256: digest,
-    centralPrincipalGeneration: generation,
   }),
   z.strictObject({ effect: z.literal("register-deployment-receiver"), id, secretSha256: digest }),
   z.strictObject({
-    effect: z.enum(["authorize-central-inspector", "authorize-app-central-caller"]),
-    projectId: id,
     callerProjectId: id,
+    effect: z.enum(["authorize-central-inspector", authorizeAppCentralCaller]),
     environment: z.enum(["preview", "production"]),
-    targetEnvironment: z.literal("preview"),
-    trustedSourcesSha256: digest,
+    projectId: id,
+    targetEnvironment: previewEnvironment,
     trustedSourcesGrantSha256: digest,
+    trustedSourcesSha256: digest,
   }),
   z.strictObject({ effect: z.literal("bind-central-preview-runtime"), environmentSha256: digest }),
   z.strictObject({
+    branch: id,
     effect: z.literal("publish-central-host-source"),
     repositoryId: id,
-    branch: id,
     sourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
   }),
 ]);
 export type CentralEffectReceipt = z.infer<typeof centralEffectReceiptSchema>;
 export const centralEffectAttemptSchema = z.strictObject({
-  attemptId: z.uuid(),
   attemptGeneration: generation,
-  grantAttempt: z.strictObject({ beforeSha256: digest, afterSha256: digest }).optional(),
+  attemptId: z.uuid(),
+  grantAttempt: z.strictObject({ afterSha256: digest, beforeSha256: digest }).optional(),
   receipt: centralEffectReceiptSchema.optional(),
 });
 export type CentralEffectAttempt = z.infer<typeof centralEffectAttemptSchema>;
 export const centralRuntimeBindingSchema = z.discriminatedUnion("state", [
   z.strictObject({ state: z.literal("idle") }),
   z.strictObject({
-    state: z.literal("pending"),
-    attemptGeneration: generation,
     acceptedEnvId: id.optional(),
+    attemptGeneration: generation,
+    state: z.literal("pending"),
   }),
-  z.strictObject({ state: z.literal("applied"), attemptGeneration: generation, acceptedEnvId: id }),
+  z.strictObject({ acceptedEnvId: id, attemptGeneration: generation, state: z.literal("applied") }),
 ]);
 export type CentralRuntimeBinding = z.infer<typeof centralRuntimeBindingSchema>;
 export const centralEffectReceiptMatches = (
@@ -68,7 +70,7 @@ export const centralEffectReceiptMatches = (
 ): boolean => {
   if (plan.kind === "central-integration-host-caller-v1") {
     return (
-      receipt.effect === "authorize-app-central-caller" &&
+      receipt.effect === authorizeAppCentralCaller &&
       receipt.projectId === plan.central.projectId &&
       receipt.callerProjectId === plan.caller.projectId &&
       receipt.environment === plan.caller.environment
@@ -107,7 +109,7 @@ export const centralEffectReceiptMatches = (
       );
     }
     // A caller grant cannot satisfy a distinct infrastructure setup effect.
-    case "authorize-app-central-caller": {
+    case authorizeAppCentralCaller: {
       return false;
     }
     default: {

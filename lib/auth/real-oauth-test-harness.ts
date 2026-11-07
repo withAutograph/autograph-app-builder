@@ -100,7 +100,7 @@ export const createRealOAuthHarness = async (
       ),
     },
   });
-  return getTestInstance(
+  return await getTestInstance(
     {
       basePath: "/api/auth",
       baseURL: origin,

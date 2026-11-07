@@ -10,11 +10,17 @@ import {
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration-schema";
 
 const profileSchema = z.strictObject({
-  id: z.string().min(1),
-  authority: hostedTenantAuthoritySchema,
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+  authority: hostedTenantAuthoritySchema,
   configuration: hostedOperatorSourceConfigurationSchema,
+  id: z.string().min(1),
 });
+
+const unavailable = () => new Error("Protected operator resource profile is unavailable.");
+const capability = (worker: { operationScope: string; subcommand: string } | undefined) =>
+  worker === undefined
+    ? undefined
+    : { operationScope: worker.operationScope, subcommand: worker.subcommand };
 
 /** Select only a deployment-owned profile bound to the authenticated canonical app owner. */
 export const resolveNativeTargetResourceProfile = (input: {
@@ -27,7 +33,6 @@ export const resolveNativeTargetResourceProfile = (input: {
   if (input.resourceProfileId === undefined) {
     return input.base;
   }
-  const unavailable = () => new Error("Protected operator resource profile is unavailable.");
   try {
     const authority = hostedTenantAuthoritySchema.parse(input.authority);
     const text = (input.environment ?? process.env).PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES;
@@ -39,7 +44,7 @@ export const resolveNativeTargetResourceProfile = (input: {
     if (selected.length !== 1) {
       throw unavailable();
     }
-    const profile = selected[0];
+    const [profile] = selected;
     if (
       profile === undefined ||
       profile.appId !== input.appId ||
@@ -77,40 +82,36 @@ export const nativeTargetResourceProfileAuthorityDigest = (
   input: HostedOperatorSourceConfiguration,
 ): string => {
   const config = validateHostedOperatorSourceConfiguration(input);
-  const capability = (worker: { operationScope: string; subcommand: string } | undefined) =>
-    worker === undefined
-      ? undefined
-      : { operationScope: worker.operationScope, subcommand: worker.subcommand };
   const authority = {
     authDatabase: config.authDatabase,
-    nativeNeon: {
-      store: config.nativeNeon.configuration.nativeStore,
-      scope: config.nativeNeon.scope,
-      connector: config.nativeNeon.configuration.connector,
-      operator: config.nativeNeon.configuration.operator,
-    },
+    builderCallbackOrigin: config.builderCallbackOrigin,
     gateway: {
-      projectId: config.gateway.projectId,
-      environment: config.gateway.environment,
-      branch: config.gateway.branch,
       authBrowserOrigin: config.gateway.authBrowserOrigin,
+      branch: config.gateway.branch,
+      environment: config.gateway.environment,
       gatewayOrigin: config.gateway.gatewayOrigin,
+      projectId: config.gateway.projectId,
       publicOrigin: config.gateway.publicOrigin,
       workload: config.gateway.workload,
     },
+    nativeNeon: {
+      connector: config.nativeNeon.configuration.connector,
+      operator: config.nativeNeon.configuration.operator,
+      scope: config.nativeNeon.scope,
+      store: config.nativeNeon.configuration.nativeStore,
+    },
     operator: {
-      projectId: config.operator.projectId,
       environment: config.operator.environment,
       origin: config.operator.origin,
+      projectId: config.operator.projectId,
     },
-    builderCallbackOrigin: config.builderCallbackOrigin,
     sandbox: {
-      projectId: config.sandbox.projectId,
-      teamId: config.sandbox.teamId,
-      resources: capability(config.sandbox.resourcesWorker),
-      auth: capability(config.sandbox.authWorker),
       access: capability(config.sandbox.accessWorker),
+      auth: capability(config.sandbox.authWorker),
       membership: capability(config.sandbox.membershipWorker),
+      projectId: config.sandbox.projectId,
+      resources: capability(config.sandbox.resourcesWorker),
+      teamId: config.sandbox.teamId,
     },
   };
   return createHash("sha256").update(JSON.stringify(authority)).digest("hex");

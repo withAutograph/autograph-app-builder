@@ -6,6 +6,13 @@ export interface CssSourceMap {
   mappings: string;
 }
 
+export interface CssSourceMapCandidate {
+  mappings: string;
+  sourceRoot?: string | null | object;
+  sources: (string | null)[];
+  version: number;
+}
+
 const base64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -35,14 +42,14 @@ function decodeVlq(encodedValue: string, start: number) {
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function originalCssSource(
-  map: CssSourceMap,
+  map: CssSourceMapCandidate,
   generatedLine: number,
   generatedColumn: number,
 ) {
+  if (map.version !== 3 || generatedLine < 0 || generatedColumn < 0) {
+    return;
+  }
   if (
-    map.version !== 3 ||
-    generatedLine < 0 ||
-    generatedColumn < 0 ||
     !Array.isArray(map.sources) ||
     !map.sources.every((source) => typeof source === "string") ||
     (map.sourceRoot !== undefined && typeof map.sourceRoot !== "string")
@@ -83,23 +90,23 @@ export function originalCssSource(
         if (line === generatedLine && generated <= generatedColumn) {
           candidate = undefined;
         }
-        continue;
-      }
-      if (fields.length !== 4 && fields.length !== 5) {
-        return;
-      }
-      if (
-        sourceDelta === undefined ||
-        originalLineDelta === undefined ||
-        originalColumnDelta === undefined
-      ) {
-        return;
-      }
-      source += sourceDelta;
-      originalLine += originalLineDelta;
-      originalColumn += originalColumnDelta;
-      if (line === generatedLine && generated <= generatedColumn) {
-        candidate = { originalColumn, originalLine, source };
+      } else {
+        if (fields.length !== 4 && fields.length !== 5) {
+          return;
+        }
+        if (
+          sourceDelta === undefined ||
+          originalLineDelta === undefined ||
+          originalColumnDelta === undefined
+        ) {
+          return;
+        }
+        source += sourceDelta;
+        originalLine += originalLineDelta;
+        originalColumn += originalColumnDelta;
+        if (line === generatedLine && generated <= generatedColumn) {
+          candidate = { originalColumn, originalLine, source };
+        }
       }
     }
     if (line === generatedLine && candidate) {
@@ -110,9 +117,10 @@ export function originalCssSource(
       return {
         column: candidate.originalColumn + 1,
         line: candidate.originalLine + 1,
-        path: map.sourceRoot
-          ? `${map.sourceRoot.replace(/\/$/u, "")}/${path.replace(/^\//u, "")}`
-          : path,
+        path:
+          map.sourceRoot !== undefined && map.sourceRoot !== ""
+            ? `${map.sourceRoot.replace(/\/$/u, "")}/${path.replace(/^\//u, "")}`
+            : path,
         sourceIndex: candidate.source,
       };
     }

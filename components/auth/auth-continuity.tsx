@@ -19,7 +19,9 @@ export function AuthContinuity({
   action?: "sign-in" | "sign-up";
 }) {
   const hasSavedBrief = useSyncExternalStore(
-    () => () => null,
+    () => () => {
+      sessionStorage.getItem(anonymousBriefStorageKey);
+    },
     () => (sessionStorage.getItem(anonymousBriefStorageKey) ?? "").trim().length > 0,
     () => false,
   );

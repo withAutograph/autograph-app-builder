@@ -15,10 +15,16 @@ export const createValidationToolingFailureObserver = (expectedAppCheckTask?: st
           expectedAppCheckTask !== undefined &&
           line === `mise ERROR no task ${expectedAppCheckTask} found`,
       );
-  const tails: Record<ValidationLogChannel, string> = { stdout: "", stderr: "" };
+  const tails: Record<ValidationLogChannel, string> = { stderr: "", stdout: "" };
   let nativeCheckerPanicked = false;
   let appTaskMissing = false;
   return {
+    classification() {
+      if (appTaskMissing || Object.values(tails).some((tail) => missingExpectedTask(tail, true))) {
+        return "missing-app-task" as const;
+      }
+      return nativeCheckerPanicked ? ("native-tool-panic" as const) : undefined;
+    },
     observe(channel: ValidationLogChannel, content: string) {
       // The bounded tail handles a diagnostic split across transport chunks.
       // Complete sanitized output continues through the ordinary durable log writer.
@@ -26,12 +32,6 @@ export const createValidationToolingFailureObserver = (expectedAppCheckTask?: st
       nativeCheckerPanicked ||= checkerPanic.test(text);
       appTaskMissing ||= missingExpectedTask(text, false);
       tails[channel] = text.slice(-CHUNK_BOUNDARY_CONTEXT);
-    },
-    classification() {
-      if (appTaskMissing || Object.values(tails).some((tail) => missingExpectedTask(tail, true))) {
-        return "missing-app-task" as const;
-      }
-      return nativeCheckerPanicked ? ("native-tool-panic" as const) : undefined;
     },
   };
 };

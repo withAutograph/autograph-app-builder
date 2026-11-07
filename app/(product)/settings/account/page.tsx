@@ -11,14 +11,15 @@ import {
 } from "@/lib/auth/workspace-onboarding";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function RedirectAccountVisitor() {
+async function redirectAccountVisitor() {
   const requestHeaders = await headers();
   const { origin } = new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:3000/api/auth");
-  const state = await resolveWorkspaceOnboardingState(() =>
-    ensurePreviewOAuthDeploymentSessionOrganization({
-      environment: process.env,
-      headers: requestHeaders,
-    }),
+  const state = await resolveWorkspaceOnboardingState(
+    async () =>
+      await ensurePreviewOAuthDeploymentSessionOrganization({
+        environment: process.env,
+        headers: requestHeaders,
+      }),
   );
   if (state.status === "anonymous") {
     redirect(signInForWorkspaceRedirect(origin));
@@ -37,9 +38,7 @@ export default function AccountSettingsPage() {
         <h1 className="text-2xl font-semibold">Account settings</h1>
         <AccountSettings />
       </main>
-      <Suspense fallback={null}>
-        <RedirectAccountVisitor />
-      </Suspense>
+      <Suspense fallback={null}>{redirectAccountVisitor()}</Suspense>
     </>
   );
 }

@@ -20,6 +20,15 @@ const descriptor = (backend: z.infer<typeof appDescriptionSchema>["backend"]) =>
     validation: { browser: null, check: { task: "check" }, test: { shards: 1, task: "test" } },
     version: 1,
   });
+const stream = (chunks: string[]) =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) {
+        controller.enqueue(new TextEncoder().encode(chunk));
+      }
+      controller.close();
+    },
+  });
 const generated: z.infer<typeof appDescriptionSchema>["backend"] = {
   authorization: "declared-policy",
   kind: "generated-postgres",
@@ -87,22 +96,22 @@ describe("private local preview setup", () => {
       })
       .mockResolvedValueOnce({
         exitCode: 1,
-        stdout: "",
         stderr:
           "Authenticated runtime requires schema-declared roles or explicit accepted AppSpec roles in APP_RUNTIME_ROLES",
+        stdout: "",
       });
     const result = await prepareAppLocalPreview({
       appId: "spend-review",
       root: "/workspace/repository",
       sandbox: { run },
     });
-    expect(result).toMatchObject({ status: "failed", exitCode: 1 });
+    expect(result).toMatchObject({ exitCode: 1, status: "failed" });
     expect(result.problem).toContain("CUE authorization roles and model/operation grants");
     expect(result.problem).toContain("ordinary implementation repair");
     expect(run).toHaveBeenLastCalledWith({
       command: `${sourceDeclaredToolchainActivationCommand()}\n${localPreviewExecutionCommand("spend-review")}`,
-      workingDirectory: "/workspace/repository",
       env: { APP_RUNTIME_STATE_DIR: runtimeStateDirectory },
+      workingDirectory: "/workspace/repository",
     });
   });
   it("preserves successful empty-role runtime setup instead of imposing an authentication requirement", async () => {
@@ -113,17 +122,17 @@ describe("private local preview setup", () => {
         stderr: "",
         stdout: descriptor({ ...generated, authorization: "app-owned", roles: [] }),
       })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: "Runtime ready", stderr: "" });
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "Runtime ready" });
     const result = await prepareAppLocalPreview({
       appId: "spend-review",
       root: "/workspace/repository",
       sandbox: { run },
     });
-    expect(result).toMatchObject({ status: "prepared", exitCode: 0 });
+    expect(result).toMatchObject({ exitCode: 0, status: "prepared" });
     expect(run).toHaveBeenLastCalledWith({
       command: `${sourceDeclaredToolchainActivationCommand()}\n${localPreviewExecutionCommand("spend-review")}`,
-      workingDirectory: "/workspace/repository",
       env: { APP_RUNTIME_STATE_DIR: runtimeStateDirectory },
+      workingDirectory: "/workspace/repository",
     });
   });
 
@@ -199,7 +208,7 @@ describe("private local preview setup", () => {
     const run = vi
       .fn()
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor({ kind: "static" }) })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: "Runtime ready", stderr: "" });
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "Runtime ready" });
     await prepareAppLocalPreview({
       appId: "spend-review",
       root: "/workspace/repository",
@@ -215,33 +224,24 @@ describe("private local preview setup", () => {
   it("retains streamed setup failure diagnostics while redacting split credentials", async () => {
     const run = vi
       .fn()
-      .mockResolvedValue({ exitCode: 0, stdout: descriptor(generated), stderr: "" });
-    const stream = (chunks: string[]) =>
-      new ReadableStream<Uint8Array>({
-        start(controller) {
-          for (const chunk of chunks) {
-            controller.enqueue(new TextEncoder().encode(chunk));
-          }
-          controller.close();
-        },
-      });
+      .mockResolvedValue({ exitCode: 0, stderr: "", stdout: descriptor(generated) });
     const spawn = vi.fn().mockResolvedValue({
+      kill: async () => {},
       pid: 1,
-      stdout: stream(["Auth setup\n"]),
       stderr: stream([
         "The recorded Auth origin cannot change outside the owned local preview handoff\npassword=split-",
         "secret postgres://user:private@host/db\n",
       ]),
-      wait: () => Promise.resolve({ exitCode: 1 }),
-      kill: () => Promise.resolve(),
+      stdout: stream(["Auth setup\n"]),
+      wait: async () => ({ exitCode: 1 }),
     });
     const result = await prepareAppLocalPreview({
       appId: "spend-review",
+      expectedPreviousAuthOrigin: "http://localhost:3000",
       root: "/workspace/repository",
       sandbox: { run, spawn },
-      expectedPreviousAuthOrigin: "http://localhost:3000",
     });
-    expect(result).toMatchObject({ status: "failed", exitCode: 1 });
+    expect(result).toMatchObject({ exitCode: 1, status: "failed" });
     expect(result.stderr).toContain("The recorded Auth origin cannot change");
     expect(JSON.stringify(result)).not.toContain("split-secret");
     expect(JSON.stringify(result)).not.toContain("postgres://");

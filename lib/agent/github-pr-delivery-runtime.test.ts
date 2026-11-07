@@ -53,45 +53,47 @@ const fixture = (receiptRepositoryId = "100") => {
     intendedOutcome: "publish-reviewed-change-set-as-draft-pull-request",
     name: "example-app",
     owner: "withAutograph",
-    releaseGate: { name: "REPOSITORY_RELEASE_ENABLED", configured: false },
+    releaseGate: { configured: false, name: "REPOSITORY_RELEASE_ENABLED" },
     repositoryId: "100",
     title: "Add example page",
     version: GITHUB_PUBLICATION_VERSION,
     visibility: "private",
   } satisfies Omit<DraftPullRequestProposal, "digest">);
   const receipt = signed({
-    version: GITHUB_PUBLICATION_VERSION,
-    kind: "draft-pull-request",
-    status: "succeeded",
-    proposalDigest: proposal.digest,
-    idempotencyKey,
     approvedByCallId: "draft-approval",
-    installationIdentityDigest: proposal.installationIdentityDigest,
-    repositoryId: receiptRepositoryId,
+    baseBranch: proposal.baseBranch,
+    baseSha: proposal.baseSha,
     branchName: proposal.branchName,
     branchSha: "8".repeat(40),
     branchTree: "9".repeat(40),
-    pullRequestId: "150000",
-    pullRequestNumber: 1500,
-    draft: true,
-    baseBranch: proposal.baseBranch,
-    baseSha: proposal.baseSha,
     changeSetDigest: proposal.changeSetDigest,
     changedContentDigest: proposal.changedContentDigest,
+    draft: true,
+    idempotencyKey,
+    installationIdentityDigest: proposal.installationIdentityDigest,
+    kind: "draft-pull-request",
     normalizedChangedPaths: proposal.approvedPaths,
-    releaseGateUnchanged: true,
-    recoveredFromPending: false,
+    proposalDigest: proposal.digest,
     providerReadBackDigest: "a".repeat(64),
+    pullRequestId: "150000",
+    pullRequestNumber: 1500,
+    recoveredFromPending: false,
+    releaseGateUnchanged: true,
+    repositoryId: receiptRepositoryId,
+    status: "succeeded",
+    version: GITHUB_PUBLICATION_VERSION,
   } satisfies Omit<DraftPullRequestSuccessReceipt, "digest">);
   const observation: GitHubPrDeliveryObservation = {
-    state: "open",
-    draft: true,
-    checks: "pending",
-    headSha: receipt.branchSha,
     baseBranch: receipt.baseBranch,
+    checks: "pending",
+    draft: true,
+    headSha: receipt.branchSha,
+    state: "open",
   };
-  const inspect = vi.fn(() => Promise.resolve(observation));
-  const unexpected = vi.fn(() => Promise.reject(new Error("Unexpected publication operation")));
+  const inspect = vi.fn().mockResolvedValue(observation);
+  const unexpected = vi.fn(async () => {
+    throw new Error("Unexpected publication operation");
+  });
   const compareAndSet = vi.fn();
   const inspectExistingDraft = vi.fn().mockImplementation(unexpected);
   const inspectAppliedDraftReconciliation = vi.fn().mockImplementation(unexpected);
@@ -105,9 +107,9 @@ const fixture = (receiptRepositoryId = "100") => {
       inspectFreshRepositoryOutcome: unexpected,
       inspectInstallation: unexpected,
       inspectRepository: unexpected,
+      prDelivery: { inspect, markReady: unexpected, merge: unexpected },
       publishDraftPullRequest: unexpected,
       updateExistingDraft: unexpected,
-      prDelivery: { inspect, markReady: unexpected, merge: unexpected },
     },
     enabled: true,
     proposals: { read: vi.fn().mockResolvedValue(proposal), save: unexpected },
@@ -139,10 +141,10 @@ it("reports draft checks as deferred using only the session's reviewed publicati
   const { compareAndSet, inspect, observation, proposal, reviewedTarget, runtime, unexpected } =
     fixture();
   mocks.getState.mockReturnValue({
-    phase: "reviewed",
     appSpec: { appId: "demo" },
     githubDestinationReview: { installation: { installationId: "300" } },
     githubDraftProposal: { proposal },
+    phase: "reviewed",
   });
   mocks.runtimeForSession.mockResolvedValue(runtime);
   const auth = { current: { principalId: "fixture-user" } };

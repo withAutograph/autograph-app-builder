@@ -31,7 +31,7 @@ export default defineTool({
       } else if (input.sourceKind === "fresh-template") {
         const receipt = await acquireCanonicalArrustedTemplate({
           callId: ctx.callId,
-          sandbox: () => ctx.getSandbox(),
+          sandbox: async () => await ctx.getSandbox(),
           sessionId: ctx.session.id,
         });
         sourceWorkflowState.update(() => ({
@@ -61,13 +61,15 @@ export default defineTool({
       sessionId: ctx.session.id,
     });
     const ownedDraftRecovery = ownedPublishedDraftRecovery(workflow);
-    const result = {
-      ...(applicationSourceImport === undefined ? {} : { applicationSourceImport }),
+    const importedSource = applicationSourceImport === undefined ? {} : { applicationSourceImport };
+    const sourceResult = {
+      ...importedSource,
       phase: state.phase,
       receipt: state.receipt,
       version: state.version,
-      ...(ownedDraftRecovery === null ? {} : { ownedDraftRecovery }),
     };
+    const result =
+      ownedDraftRecovery === null ? sourceResult : { ...sourceResult, ownedDraftRecovery };
     if (githubSource === undefined) {
       return result;
     }

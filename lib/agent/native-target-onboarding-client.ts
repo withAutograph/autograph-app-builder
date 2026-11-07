@@ -67,15 +67,15 @@ export const createNativeTargetOnboardingClient = (options: {
     let response: Response;
     try {
       response = await (options.fetch ?? fetch)(new URL("/v1/runtime", url), {
-        method: "POST",
-        redirect: "error",
-        signal,
+        body: JSON.stringify(body),
         headers: {
           authorization: `Bearer ${token}`,
           "content-type": "application/json",
           "x-vercel-trusted-oidc-idp-token": token,
         },
-        body: JSON.stringify(body),
+        method: "POST",
+        redirect: "error",
+        signal,
       });
     } catch {
       signal?.throwIfAborted();
@@ -171,9 +171,9 @@ export const createNativeTargetOnboardingClient = (options: {
   const common = (ctx: NativeTargetInvocation) => {
     assertInvocation(ctx.session);
     return {
-      ownerContext: owner,
       adapterSessionId: owner.adapterSessionId,
       callId: ctx.callId,
+      ownerContext: owner,
     };
   };
   const exactResult = (
@@ -192,6 +192,65 @@ export const createNativeTargetOnboardingClient = (options: {
     }
   };
   return {
+    async authorizeApprovalResponse(ctx) {
+      assertInvocation(ctx.session);
+      if (
+        ctx.request.toolInput === undefined ||
+        ctx.request.toolName !== "prepare-app-native-target"
+      ) {
+        throw denied();
+      }
+      const { responder } = ctx;
+      if (
+        responder.principalId !== owner.authority.ownerUserId ||
+        responder.principalType !== "user"
+      ) {
+        throw denied();
+      }
+      await send(
+        {
+          action: "native-target-approval-candidate",
+          adapterSessionId: owner.adapterSessionId,
+          callId: ctx.request.callId,
+          candidate: {
+            callId: ctx.request.callId,
+            requestId: ctx.request.requestId,
+            responder: {
+              authenticator: responder.authenticator,
+              principalId: responder.principalId,
+              principalType: responder.principalType,
+              ...(responder.issuer === undefined ? {} : { issuer: responder.issuer }),
+              ...(responder.subject === undefined ? {} : { subject: responder.subject }),
+            },
+            toolName: ctx.request.toolName,
+          },
+          input: ctx.request.toolInput,
+          ownerContext: owner,
+        },
+        nativeTargetTransportResponseSchemas["native-target-approval-candidate"],
+      );
+    },
+    async hasApproval(input, ctx) {
+      const output = await send(
+        { ...common(ctx), action: "native-target-approval-read", input },
+        nativeTargetTransportResponseSchemas["native-target-approval-read"],
+        ctx.abortSignal,
+      );
+      if (output.status === "pending") {
+        return false;
+      }
+      if (
+        ![
+          output.proof.planDigest === input.planDigest,
+          output.proof.publicSessionId === input.plan.origin.publicSessionId,
+          output.proof.responderPrincipalId === owner.authority.ownerUserId,
+          output.status === "approved",
+        ].every(Boolean)
+      ) {
+        throw denied();
+      }
+      return true;
+    },
     async plan(input, ctx, state) {
       if (state.appSpec !== undefined && state.appSpec.appId !== input.appId) {
         throw denied();
@@ -225,65 +284,6 @@ export const createNativeTargetOnboardingClient = (options: {
       exactResult(input, output);
       return output;
     },
-    async hasApproval(input, ctx) {
-      const output = await send(
-        { ...common(ctx), action: "native-target-approval-read", input },
-        nativeTargetTransportResponseSchemas["native-target-approval-read"],
-        ctx.abortSignal,
-      );
-      if (output.status === "pending") {
-        return false;
-      }
-      if (
-        ![
-          output.proof.planDigest === input.planDigest,
-          output.proof.publicSessionId === input.plan.origin.publicSessionId,
-          output.proof.responderPrincipalId === owner.authority.ownerUserId,
-          output.status === "approved",
-        ].every(Boolean)
-      ) {
-        throw denied();
-      }
-      return true;
-    },
-    async authorizeApprovalResponse(ctx) {
-      assertInvocation(ctx.session);
-      if (
-        ctx.request.toolInput === undefined ||
-        ctx.request.toolName !== "prepare-app-native-target"
-      ) {
-        throw denied();
-      }
-      const responder = ctx.responder;
-      if (
-        responder.principalId !== owner.authority.ownerUserId ||
-        responder.principalType !== "user"
-      ) {
-        throw denied();
-      }
-      await send(
-        {
-          ownerContext: owner,
-          adapterSessionId: owner.adapterSessionId,
-          callId: ctx.request.callId,
-          action: "native-target-approval-candidate",
-          input: ctx.request.toolInput,
-          candidate: {
-            requestId: ctx.request.requestId,
-            callId: ctx.request.callId,
-            toolName: ctx.request.toolName,
-            responder: {
-              authenticator: responder.authenticator,
-              principalId: responder.principalId,
-              principalType: responder.principalType,
-              ...(responder.issuer === undefined ? {} : { issuer: responder.issuer }),
-              ...(responder.subject === undefined ? {} : { subject: responder.subject }),
-            },
-          },
-        },
-        nativeTargetTransportResponseSchemas["native-target-approval-candidate"],
-      );
-    },
   };
 };
 
@@ -308,15 +308,15 @@ export const nativeTargetOnboardingClientForContext = async (
   const ownerContext = await (dependencies.resolveOwner ?? resolveHostedOperatorOwnerContext)({
     adapterSessionId: ctx.session.id,
     authority,
-    principal,
-    sessionAuth,
     environment,
     execution,
+    principal,
+    sessionAuth,
   });
   return createNativeTargetOnboardingClient({
     endpoint,
-    ownerContext,
     execution,
+    ownerContext,
     token: createVercelWorkloadIdentity().token,
   });
 };

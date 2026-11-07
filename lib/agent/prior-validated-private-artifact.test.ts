@@ -27,14 +27,14 @@ import type { AppBuilderWorkflowState } from "./workflow-state";
 
 afterEach(() => vi.unstubAllEnvs());
 
-const own = (operation: () => Promise<void>) =>
-  contextStorage.run(new ContextContainer(), operation);
+const own = async (operation: () => Promise<void>) =>
+  await contextStorage.run(new ContextContainer(), operation);
 const sign = <T extends object>(body: T) => ({ ...body, digest: sha256(JSON.stringify(body)) });
 
 const sourceFile = {
-  path: "apps/example/app/page.tsx",
-  mode: "644",
   digest: sha256("validated bytes"),
+  mode: "644",
+  path: "apps/example/app/page.tsx",
 };
 
 const seed = (
@@ -46,36 +46,36 @@ const seed = (
   }
   const appId = "example";
   const sessionId = "owned";
-  const appSpec = { appId, digest: "a".repeat(64), artifactPath: "app-spec.md" };
+  const appSpec = { appId, artifactPath: "app-spec.md", digest: "a".repeat(64) };
   const sourceReceipt = { digest: "c".repeat(64) };
   const workspace = {
+    sourceSha: "f".repeat(40),
+    workspaceDigest: "b".repeat(64),
     workspaceId: "sandbox",
     workspacePath: "/workspace/repository",
-    workspaceDigest: "b".repeat(64),
-    sourceSha: "f".repeat(40),
   };
   const contract = { appId, appSpec: { sha256: appSpec.digest } };
   const changes = [{ path: "apps/example/app/page.tsx" }];
   const target = {
-    operation: "iterate-existing-app",
     contract,
     iteration: { changes, digest: sha256(JSON.stringify(changes)) },
+    operation: "iterate-existing-app",
   };
   const proposal = (callId: string) =>
     sign({
       appSpecDigest: appSpec.digest,
-      workspaceDigest: workspace.workspaceDigest,
-      sourceReceiptDigest: sourceReceipt.digest,
       contractDigest: sha256(JSON.stringify(contract)),
-      target,
       plannedByCallId: callId,
+      sourceReceiptDigest: sourceReceipt.digest,
+      target,
+      workspaceDigest: workspace.workspaceDigest,
     });
   const common = {
-    version: 17,
     appSpec,
-    workspace,
-    sourceReceipt,
     identityReceipt: { identity: { appId } },
+    sourceReceipt,
+    version: 17,
+    workspace,
   };
   const current = {
     ...common,
@@ -85,48 +85,48 @@ const seed = (
   const priorProposal = proposal("previous");
   const postTree = canonicalOverlayFiles(files);
   const applyReceipt = sign({
-    version: 2,
-    status: "applied",
     appSpecDigest: appSpec.digest,
     appSpecPath: appSpec.artifactPath,
-    preparedTreeDigest: "d".repeat(64),
     applyRoot: workspace.workspacePath,
-    workspaceDigest: workspace.workspaceDigest,
-    sourceReceiptDigest: sourceReceipt.digest,
-    sourceSha: workspace.sourceSha,
-    targetReceipt: { appId },
-    proposalDigest: priorProposal.digest,
     postTree,
     postTreeDigest: sha256(JSON.stringify(postTree)),
+    preparedTreeDigest: "d".repeat(64),
+    proposalDigest: priorProposal.digest,
+    sourceReceiptDigest: sourceReceipt.digest,
+    sourceSha: workspace.sourceSha,
+    status: "applied",
+    targetReceipt: { appId },
+    version: 2,
+    workspaceDigest: workspace.workspaceDigest,
   }) as unknown as TargetApplyReceipt;
   const validationReceipt = sign({
     ...validationBinding(applyReceipt, []),
-    version: 3,
+    commands: [{ exitCode: 0, name: "test" }],
     status: "passed",
-    commands: [{ name: "test", exitCode: 0 }],
+    version: 3,
   });
   const prior = {
     ...common,
+    applyReceipt,
     phase: "validated",
     proposal: priorProposal,
-    applyReceipt,
     validationReceipt,
   } as unknown as Extract<AppBuilderWorkflowState, { phase: "validated" }>;
   appBuilderWorkflowState.update(() => current);
   existingAppRepairHistory.update(() => [
     {
-      proposalDigest: current.proposal.digest,
-      sessionId,
-      requestDigest: "f".repeat(64),
-      previousWorkflow: prior,
       approvedBase: prior,
+      previousWorkflow: prior,
+      proposalDigest: current.proposal.digest,
+      requestDigest: "f".repeat(64),
+      sessionId,
     },
   ]);
   const scope = {
     appId,
     appSpecDigest: appSpec.digest,
-    workspaceId: workspace.workspaceId,
     sessionId,
+    workspaceId: workspace.workspaceId,
   };
   const previousScope = { ...scope, proposalDigest: priorProposal.digest };
   requestPrivateApplyApproval(previousScope, "approved");
@@ -145,18 +145,18 @@ const seed = (
   }
   const result = (observed: readonly OverlayFile[] = postTree) => ({
     exitCode: 0,
-    stdout: observed.map(({ mode, digest, path }) => `${mode}\t${digest}\t${path}\n`).join(""),
     stderr: "",
+    stdout: observed.map(({ mode, digest, path }) => `${mode}\t${digest}\t${path}\n`).join(""),
   });
-  const run = vi.fn(() => Promise.resolve(result()));
+  const run = vi.fn(async () => result());
   const sandbox = { id: workspace.workspaceId, run } as unknown as SandboxSession;
   return {
-    input: { appId, sessionId, sandbox, state: current },
     current,
-    prior,
     currentScope,
-    run,
+    input: { appId, sandbox, sessionId, state: current },
+    prior,
     result,
+    run,
   };
 };
 
@@ -166,8 +166,8 @@ it("selects only the denied plan's last validated private bytes without rewritin
     const retained = [readPrivateApplyAuthority(), existingAppRepairHistory.get()];
     const selected = await priorValidatedPrivateArtifact(f.input);
     expect(selected).toMatchObject({
-      root: "/workspace/repository",
       revision: f.prior.applyReceipt.digest,
+      root: "/workspace/repository",
       validationDigest: f.prior.validationReceipt.digest,
     });
     expect(f.run).toHaveBeenCalledOnce();
@@ -220,11 +220,11 @@ it.each([
     await own(async () => {
       const f = seed();
       const selected = await priorValidatedPrivateArtifact(f.input);
-      f.run.mockImplementationOnce(() => {
+      f.run.mockImplementationOnce(async () => {
         if (drift === "authority") {
           requestPrivateApplyApproval(f.currentScope, "new-pending");
         }
-        return Promise.resolve(f.result(observed));
+        return f.result(observed);
       });
       await expect(selected.verifyCurrent()).rejects.toThrow("cannot be verified");
     }),
@@ -244,7 +244,7 @@ it("accepts mode-only changes on both workspace bins and rechecks only paths and
       "packages/microfrontends-shell/scripts/vercel-service-cli.mjs",
       "packages/microfrontends/scripts/vercel-service-cli.mjs",
     ];
-    const bins = paths.map((path) => ({ path, digest: sha256(path), mode: "755" }));
+    const bins = paths.map((path) => ({ digest: sha256(path), mode: "755", path }));
     const f = seed("denied", [sourceFile, ...bins]);
     const retained = [readPrivateApplyAuthority(), existingAppRepairHistory.get()];
     f.run.mockResolvedValue(
@@ -279,6 +279,6 @@ it("rejects source symlinks in strict overlay verification before accepting a di
     expect(denied.stdout).toBe("");
     expect(denied.stderr).toContain("Applied overlay contains an unsupported source entry.");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { force: true, recursive: true });
   }
 });

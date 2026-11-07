@@ -37,17 +37,17 @@ export function ChangeEmail({ className }: ChangeEmailProps) {
   });
 
   const [fieldErrors, setFieldErrors] = useState<{
-    email?: string;
+    email?: string | null;
   }>({});
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function handleSubmit(e: SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    const formData = new FormData(e.currentTarget);
+    const emailField = e.currentTarget.elements.namedItem("email");
     changeEmail({
       callbackURL: getViewURL(baseURL, basePaths.settings, viewPaths.settings.account),
-      newEmail: formData.get("email") as string,
+      newEmail: emailField instanceof HTMLInputElement ? emailField.value : "",
     });
   }
 
@@ -58,7 +58,13 @@ export function ChangeEmail({ className }: ChangeEmailProps) {
       <form onSubmit={handleSubmit}>
         <Card className={cn(className)}>
           <CardContent className="flex flex-col gap-6">
-            <Field data-invalid={!!fieldErrors.email}>
+            <Field
+              data-invalid={
+                fieldErrors.email !== null &&
+                fieldErrors.email !== undefined &&
+                fieldErrors.email !== ""
+              }
+            >
               <FieldLabel htmlFor="email">{localization.auth.email}</FieldLabel>
 
               {session ? (
@@ -75,17 +81,21 @@ export function ChangeEmail({ className }: ChangeEmailProps) {
                   onChange={() => {
                     setFieldErrors((prev) => ({
                       ...prev,
-                      email: undefined,
+                      email: null,
                     }));
                   }}
                   onInvalid={(e) => {
                     e.preventDefault();
                     setFieldErrors((prev) => ({
                       ...prev,
-                      email: (e.target as HTMLInputElement).validationMessage,
+                      email: e.currentTarget.validationMessage,
                     }));
                   }}
-                  aria-invalid={!!fieldErrors.email}
+                  aria-invalid={
+                    fieldErrors.email !== null &&
+                    fieldErrors.email !== undefined &&
+                    fieldErrors.email !== ""
+                  }
                 />
               ) : (
                 <Skeleton>

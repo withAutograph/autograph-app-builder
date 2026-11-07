@@ -8,16 +8,13 @@ import {
 } from "./self-reproduction-candidate-capability-probe";
 
 it("proves independent infrastructure operations and always stops the child", async () => {
-  const stop = vi.fn(async () => {
-    await Promise.resolve();
-  });
+  const stop = vi.fn(() => {});
   const receipt = await exerciseCandidateCapabilities({
-    createChild: () =>
-      Promise.resolve({
-        run: () => Promise.resolve({ exitCode: 0, stdout: "candidate-capability-ok" }),
-        stop,
-      }),
-    model: () => Promise.resolve("ready"),
+    createChild: () => ({
+      run: () => ({ exitCode: 0, stdout: "candidate-capability-ok" }),
+      stop,
+    }),
+    model: () => "ready",
   });
   expect(receipt.model.status).toBe("passed");
   expect(receipt.childSandbox.status).toBe("passed");
@@ -26,11 +23,17 @@ it("proves independent infrastructure operations and always stops the child", as
 });
 
 it("preserves model failure separately and cleans up after a failed child command", async () => {
-  const stop = vi.fn(() => Promise.resolve());
+  const stop = vi.fn(() => {});
   const receipt = await exerciseCandidateCapabilities({
-    createChild: () =>
-      Promise.resolve({ run: () => Promise.reject(new Error("raw-secret")), stop }),
-    model: () => Promise.reject(new Error("raw-secret")),
+    createChild: () => ({
+      run: () => {
+        throw new Error("raw-secret");
+      },
+      stop,
+    }),
+    model: () => {
+      throw new Error("raw-secret");
+    },
   });
   expect(receipt.model.status).toBe("blocked");
   expect(receipt.childSandbox.status).toBe("blocked");
@@ -40,12 +43,13 @@ it("preserves model failure separately and cleans up after a failed child comman
 
 it("fails incorrect command output and records cleanup failure", async () => {
   const receipt = await exerciseCandidateCapabilities({
-    createChild: () =>
-      Promise.resolve({
-        run: () => Promise.resolve({ exitCode: 0, stdout: "wrong" }),
-        stop: () => Promise.reject(new Error("failure")),
-      }),
-    model: () => Promise.resolve(""),
+    createChild: () => ({
+      run: () => ({ exitCode: 0, stdout: "wrong" }),
+      stop: () => {
+        throw new Error("failure");
+      },
+    }),
+    model: () => "",
   });
   expect(receipt.model.status).toBe("failed");
   expect(receipt.childSandbox.status).toBe("failed");
@@ -64,14 +68,16 @@ it("serializes a valid standalone Node module without credentials", () => {
 });
 
 it("retains failed scratch installation without attempting a product mutation", async () => {
-  const writeTextFile = vi.fn(() => Promise.resolve());
-  const run = vi.fn(() =>
-    Promise.resolve({ exitCode: 1, stderr: "install failed", stdout: "install output" }),
-  );
+  const writeTextFile = vi.fn(() => {});
+  const run = vi.fn(() => ({
+    exitCode: 1,
+    stderr: "install failed",
+    stdout: "install output",
+  }));
   const receipt = await runCandidateCapabilityProbe({
     abortSignal: new AbortController().signal,
     model: activeBuilderModelId,
-    session: { readBinaryFile: vi.fn(), readTextFile: vi.fn(), run, writeTextFile } as never,
+    session: { readBinaryFile: vi.fn(), readTextFile: vi.fn(), run, writeTextFile },
   });
   expect(writeTextFile).toHaveBeenCalledWith(
     expect.objectContaining({ path: ".scratch/self-reproduction-capabilities/package.json" }),
@@ -85,19 +91,18 @@ it("retains failed scratch installation without attempting a product mutation", 
 
 it("runs the standalone probe only after scratch tooling setup", async () => {
   const writes: string[] = [];
-  const run = vi.fn(() => Promise.resolve({ exitCode: 0, stderr: "", stdout: "" }));
+  const run = vi.fn(() => ({ exitCode: 0, stderr: "", stdout: "" }));
   const receipt = await runCandidateCapabilityProbe({
     abortSignal: new AbortController().signal,
     model: activeBuilderModelId,
     session: {
       readBinaryFile: vi.fn(),
-      readTextFile: () => Promise.resolve(JSON.stringify({ applicationFunctionalCredit: false })),
+      readTextFile: () => JSON.stringify({ applicationFunctionalCredit: false }),
       run,
       writeTextFile: ({ path }: { path: string }) => {
         writes.push(path);
-        return Promise.resolve();
       },
-    } as never,
+    },
   });
   expect(writes[0]).toBe(".scratch/self-reproduction-capabilities/package.json");
   expect(

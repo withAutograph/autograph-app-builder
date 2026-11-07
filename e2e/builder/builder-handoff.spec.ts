@@ -5,10 +5,7 @@ import type { Page } from "playwright/test";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { eq } from "drizzle-orm";
-
-import { cursorClientId, setupCursorClient } from "../../lib/auth/cursor-client";
-import * as schema from "../../lib/db/schema";
-
+import { z } from "zod";
 import {
   browserBoundaryState,
   appOrigin,
@@ -23,6 +20,26 @@ import {
   waitForHandoffContent,
 } from "../support/harness";
 
+import { cursorClientId, setupCursorClient } from "../../lib/auth/cursor-client";
+import { oauthClient, oauthClientResource } from "../../lib/db/schema";
+
+const handoffStatusSchema = z.looseObject({
+  cursorInstallReady: z.boolean().optional(),
+  handoffId: z.string(),
+  intent: z.looseObject({
+    appName: z.string(),
+    brief: z.string().optional(),
+    repository: z.looseObject({ requestedName: z.string().optional() }).optional(),
+  }),
+  status: z.string(),
+});
+const errorResponseSchema = z.strictObject({ error: z.string() });
+const cursorConfigSchema = z.strictObject({
+  auth: z.strictObject({ CLIENT_ID: z.string() }),
+  url: z.string(),
+});
+const sessionSchema = z.looseObject({ user: z.looseObject({ id: z.string() }) });
+
 // OAuth callbacks and browser cookies must not enter failure artifacts.
 test.use({ screenshot: "off", trace: "off", video: "off" });
 
@@ -35,7 +52,9 @@ test.use({ screenshot: "off", trace: "off", video: "off" });
 // or raw status responses. No native-client acceptance is claimed by this suite.
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-test.beforeEach(async () => resetApplicationState());
+test.beforeEach(async () => {
+  await resetApplicationState();
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function completeHandoff(page: Page) {
@@ -80,7 +99,7 @@ async function prepareNamedHandoff(
   const url = page.url();
   const { pathname } = new URL(url);
   const id = pathname.split("/").at(-1);
-  if (!id) throw new Error("Handoff URL is missing an ID");
+  if (id === null || id === undefined || id === "") throw new Error("Handoff URL is missing an ID");
   return { id, pathname, statusPath: `/api/builder/handoffs/${id}`, url };
 }
 
@@ -97,12 +116,20 @@ test("a lost handoff action response retries its saved checkpoint without resavi
   let interrupted = false;
   await page.route("**/*", async (route) => {
     const request = route.request();
+    const postData = request.postData();
+    if (interrupted) {
+      await route.continue();
+      return;
+    }
     if (
-      !interrupted &&
-      request.method() === "POST" &&
-      new URL(request.url()).pathname === "/" &&
-      request.postData()?.includes("draftCheckpoint")
+      request.method() !== "POST" ||
+      new URL(request.url()).pathname !== "/" ||
+      postData === null
     ) {
+      await route.continue();
+      return;
+    }
+    if (postData.includes("draftCheckpoint")) {
       interrupted = true;
       // Complete the real server mutation before dropping only its response.
       const response = await route.fetch();
@@ -169,7 +196,7 @@ test("multiple handoffs reload independently without replacing saved app context
       const response = await getWithTransientRetry(activePage, handoff.statusPath);
       expect(response.ok()).toBe(true);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const status = await response.json();
+      const status = handoffStatusSchema.parse(await response.json());
       expect(status.handoffId).toBe(handoff.id);
       expect(status.intent.appName).toBe(name);
       expect(status.intent.brief).toBe(brief);
@@ -201,8 +228,7 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
 }) => {
   await finishOAuth(page, "GitHub");
   const ownerSession = await currentSession(page);
-  const ownerId = ownerSession?.user?.id;
-  expect(typeof ownerId).toBe("string");
+  const ownerId = sessionSchema.parse(ownerSession).user.id;
   const handoff = await prepareNamedHandoff(
     page,
     "Owner Private Console",
@@ -218,7 +244,7 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
     const strangerPage = await stranger.newPage();
     const anonymousResponse = await getWithTransientRetry(strangerPage, handoff.statusPath);
     expect(anonymousResponse.status()).toBe(401);
-    const anonymousBody = await anonymousResponse.json();
+    const anonymousBody = errorResponseSchema.parse(await anonymousResponse.json());
     expect(Object.keys(anonymousBody)).toEqual(["error"]);
     expect(anonymousBody.error).toBe("authentication_required");
     expect(anonymousResponse.headers()["cache-control"]).toContain("no-store");
@@ -235,12 +261,11 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
     authenticator = await registerPasskey(stranger, strangerPage);
     await expect(strangerPage).toHaveURL(`${appOrigin}/`);
     const strangerSession = await currentSession(strangerPage);
-    const strangerId = strangerSession?.user?.id;
-    expect(typeof strangerId).toBe("string");
+    const strangerId = sessionSchema.parse(strangerSession).user.id;
     expect(strangerId).not.toBe(ownerId);
     const unavailableResponse = await getWithTransientRetry(strangerPage, handoff.statusPath);
     expect(unavailableResponse.status()).toBe(404);
-    const unavailableBody = await unavailableResponse.json();
+    const unavailableBody = errorResponseSchema.parse(await unavailableResponse.json());
     expect(Object.keys(unavailableBody)).toEqual(["error"]);
     expect(unavailableBody.error).toBe("handoff_unavailable");
     expect(unavailableResponse.headers()["cache-control"]).toContain("no-store");
@@ -255,7 +280,7 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
     await expect(strangerPage.getByRole("textbox", { name: "Handoff prompt" })).toHaveCount(0);
     const ownerResponse = await getWithTransientRetry(page, handoff.statusPath);
     expect(ownerResponse.ok()).toBe(true);
-    const ownerBody = await ownerResponse.json();
+    const ownerBody = handoffStatusSchema.parse(await ownerResponse.json());
     expect(ownerBody.status).toBe("prepared");
   } finally {
     try {
@@ -278,7 +303,9 @@ test("visible polling observes an explicit DB binding fixture (UI observation on
     "Observe server-confirmed continuation only.",
   );
   await page.bringToFront();
-  await expect.poll(() => page.evaluate(() => document.visibilityState)).toBe("visible");
+  await expect
+    .poll(async () => await page.evaluate(() => document.visibilityState))
+    .toBe("visible");
   const continued = page.getByText("Continued in your app.", { exact: false });
   // The server-rendered handoff never initiates a custom-protocol navigation
   // on arrival. Launching a client is an explicit, user-owned action.
@@ -287,7 +314,7 @@ test("visible polling observes an explicit DB binding fixture (UI observation on
   await expect(continued).toHaveCount(0);
   const before = await getWithTransientRetry(page, handoff.statusPath);
   expect(before.ok()).toBe(true);
-  const beforeBody = await before.json();
+  const beforeBody = handoffStatusSchema.parse(await before.json());
   expect(beforeBody.status).toBe("prepared");
 
   let polled = 0;
@@ -317,7 +344,7 @@ test("visible polling observes an explicit DB binding fixture (UI observation on
     expect(polled).toBeGreaterThan(0);
     const after = await getWithTransientRetry(page, handoff.statusPath);
     expect(after.ok()).toBe(true);
-    const afterBody = await after.json();
+    const afterBody = handoffStatusSchema.parse(await after.json());
     expect(afterBody.status).toBe("continued");
     expect(mcpRequests).toBe(0);
     const finalBoundaryState = await browserBoundaryState(page);
@@ -339,22 +366,20 @@ test("Cursor install link remains hidden until its dedicated local client is reg
 }) => {
   await finishOAuth(page, "GitHub");
   const sql = postgres(databaseUrl, { max: 1 });
-  const database = drizzle(sql, { schema });
+  const database = drizzle(sql, { schema: { oauthClient, oauthClientResource } });
   try {
     const clientsBefore = await database
       .select()
-      .from(schema.oauthClient)
-      .where(eq(schema.oauthClient.clientId, cursorClientId));
+      .from(oauthClient)
+      .where(eq(oauthClient.clientId, cursorClientId));
     const bindingsBefore = await database
       .select()
-      .from(schema.oauthClientResource)
-      .where(eq(schema.oauthClientResource.clientId, cursorClientId));
+      .from(oauthClientResource)
+      .where(eq(oauthClientResource.clientId, cursorClientId));
     try {
       // resetApplicationState does not necessarily remove this public client.
       // Target only the dedicated local registration and restore it in finally.
-      await database
-        .delete(schema.oauthClient)
-        .where(eq(schema.oauthClient.clientId, cursorClientId));
+      await database.delete(oauthClient).where(eq(oauthClient.clientId, cursorClientId));
       const handoff = await prepareNamedHandoff(
         page,
         "Cursor Setup Console",
@@ -374,26 +399,29 @@ test("Cursor install link remains hidden until its dedicated local client is reg
       ).toBeVisible();
       const before = await getWithTransientRetry(page, handoff.statusPath);
       expect(before.ok()).toBe(true);
-      const beforeBody = await before.json();
+      const beforeBody = handoffStatusSchema.parse(await before.json());
       expect(beforeBody.cursorInstallReady).toBe(false);
       await setupCursorClient(database, `${appOrigin}/mcp`);
       await expect(install).toBeVisible({ timeout: 15_000 });
       const installHref = await install.getAttribute("href");
-      if (!installHref) throw new Error("Cursor install link is missing an href");
+      if (installHref === null || installHref === undefined || installHref === "")
+        throw new Error("Cursor install link is missing an href");
       const installUrl = new URL(installHref);
       const installConfig = installUrl.searchParams.get("config");
-      if (!installConfig) throw new Error("Cursor install link is missing its configuration");
-      const config = JSON.parse(Buffer.from(installConfig, "base64").toString("utf-8"));
+      if (installConfig === null || installConfig === undefined || installConfig === "")
+        throw new Error("Cursor install link is missing its configuration");
+      const config = cursorConfigSchema.parse(
+        JSON.parse(Buffer.from(installConfig, "base64").toString("utf-8")),
+      );
       expect(Object.keys(config).toSorted()).toEqual(["auth", "url"]);
       expect(config.url).toBe(`${appOrigin}/mcp`);
       expect(Object.keys(config.auth)).toEqual(["CLIENT_ID"]);
       expect(config.auth.CLIENT_ID).toBe(cursorClientId);
     } finally {
       await database.transaction(async (tx) => {
-        await tx.delete(schema.oauthClient).where(eq(schema.oauthClient.clientId, cursorClientId));
-        if (clientsBefore.length) await tx.insert(schema.oauthClient).values(clientsBefore);
-        if (bindingsBefore.length)
-          await tx.insert(schema.oauthClientResource).values(bindingsBefore);
+        await tx.delete(oauthClient).where(eq(oauthClient.clientId, cursorClientId));
+        if (clientsBefore.length) await tx.insert(oauthClient).values(clientsBefore);
+        if (bindingsBefore.length) await tx.insert(oauthClientResource).values(bindingsBefore);
       });
     }
   } finally {
@@ -453,7 +481,7 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
     `/api/builder/handoffs/${new URL(handoffUrl).pathname.split("/").at(-1)}`,
   );
   expect(response.ok()).toBe(true);
-  const saved = await response.json();
+  const saved = handoffStatusSchema.parse(await response.json());
   expect(saved.status).toBe("prepared");
   expect(saved.intent.appName).toBe("Support Console");
   expect(saved.intent.repository.requestedName).toBe("support-console");
@@ -473,7 +501,8 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
   );
   expect(state.opened.at(-1)).toMatch(/^codex:\/\/new\?prompt=/u);
   const codexLaunchUrl = state.opened.at(-1);
-  if (!codexLaunchUrl) throw new Error("Codex launch URL is missing");
+  if (codexLaunchUrl === null || codexLaunchUrl === undefined || codexLaunchUrl === "")
+    throw new Error("Codex launch URL is missing");
   expect(new URL(codexLaunchUrl).searchParams.get("prompt")).toBe(state.clipboard[0]);
 
   await expect(page.getByText("Launch requested for Codex", { exact: false })).toBeVisible();
@@ -493,7 +522,10 @@ test("Cursor handoff carries the exact copied prompt", async ({ context, page })
   await finishOAuth(page, "Vercel");
   const sql = postgres(databaseUrl, { max: 1 });
   try {
-    await setupCursorClient(drizzle(sql, { schema }), `${appOrigin}/mcp`);
+    await setupCursorClient(
+      drizzle(sql, { schema: { oauthClient, oauthClientResource } }),
+      `${appOrigin}/mcp`,
+    );
   } finally {
     await sql.end();
   }
@@ -510,11 +542,15 @@ test("Cursor handoff carries the exact copied prompt", async ({ context, page })
   const install = page.getByRole("link", { name: "Add Autograph to Cursor" });
   await expect(install).toBeVisible();
   const installHref = await install.getAttribute("href");
-  if (!installHref) throw new Error("Cursor install link is missing an href");
+  if (installHref === null || installHref === undefined || installHref === "")
+    throw new Error("Cursor install link is missing an href");
   const installUrl = new URL(installHref);
   const installConfig = installUrl.searchParams.get("config");
-  if (!installConfig) throw new Error("Cursor install link is missing its configuration");
-  expect(JSON.parse(Buffer.from(installConfig, "base64").toString("utf-8"))).toEqual({
+  if (installConfig === null || installConfig === undefined || installConfig === "")
+    throw new Error("Cursor install link is missing its configuration");
+  expect(
+    cursorConfigSchema.parse(JSON.parse(Buffer.from(installConfig, "base64").toString("utf-8"))),
+  ).toEqual({
     auth: { CLIENT_ID: "autograph-cursor-desktop" },
     url: `${appOrigin}/mcp`,
   });
@@ -525,7 +561,8 @@ test("Cursor handoff carries the exact copied prompt", async ({ context, page })
   expect(state.clipboard[0]).not.toContain("codex plugin");
   expect(state.opened.at(-1)).toMatch(/^cursor:\/\/anysphere\.cursor-deeplink\/prompt\?text=/u);
   const cursorLaunchUrl = state.opened.at(-1);
-  if (!cursorLaunchUrl) throw new Error("Cursor launch URL is missing");
+  if (cursorLaunchUrl === null || cursorLaunchUrl === undefined || cursorLaunchUrl === "")
+    throw new Error("Cursor launch URL is missing");
   expect(new URL(cursorLaunchUrl).searchParams.get("text")).toBe(state.clipboard[0]);
   await expect(page.getByRole("button", { name: "Open in Cursor" })).toBeVisible();
 });
@@ -561,11 +598,12 @@ test("expired handoff renews in place without changing intent or provisioning re
 
   const handoffUrl = page.url();
   const handoffId = new URL(handoffUrl).pathname.split("/").at(-1);
-  if (!handoffId) throw new Error("Handoff URL is missing an ID");
+  if (handoffId === null || handoffId === undefined || handoffId === "")
+    throw new Error("Handoff URL is missing an ID");
   const statusPath = `/api/builder/handoffs/${handoffId}`;
   const preparedResponse = await getWithTransientRetry(page, statusPath);
   expect(preparedResponse.ok()).toBe(true);
-  const prepared = await preparedResponse.json();
+  const prepared = handoffStatusSchema.parse(await preparedResponse.json());
   expect(prepared.status).toBe("prepared");
 
   const provisioningRequests: string[] = [];
@@ -612,7 +650,7 @@ test("expired handoff renews in place without changing intent or provisioning re
 
     const statusResponse = await getWithTransientRetry(page, statusPath);
     expect(statusResponse.ok()).toBe(true);
-    const renewed = await statusResponse.json();
+    const renewed = handoffStatusSchema.parse(await statusResponse.json());
     expect(renewed.handoffId).toBe(handoffId);
     expect(renewed.status).toBe("prepared");
     expect(renewed.intent).toEqual(prepared.intent);

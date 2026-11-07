@@ -109,12 +109,12 @@ describe("approved apply and review continuation", () => {
     contextStorage.run(new ContextContainer(), () => {
       approveBuild();
       const applyFailure = {
-        reason: "command-failed" as const,
-        command: { name: "create-app", exitCode: 1 },
+        command: { exitCode: 1, name: "create-app" },
         commandFailureKind: "dependency" as const,
+        reason: "command-failed" as const,
       };
       // SAFETY: The classifier reads only the retained scope and command outcome.
-      const rejected = { ...failed, phase: "apply_failed", applyFailure } as unknown as Extract<
+      const rejected = { ...failed, applyFailure, phase: "apply_failed" } as unknown as Extract<
         AppBuilderWorkflowState,
         { phase: "apply_failed" }
       >;
@@ -251,16 +251,16 @@ describe("approved stopped build continuation", () => {
           ...failed,
           validationFailure: {
             ...failed.validationFailure,
+            commandFailure: { exitCode: 134, failureClass, name: "check-build" },
             reason: "tooling-prerequisite",
-            commandFailure: { name: "check-build", exitCode: 134, failureClass },
           },
         } as AppBuilderWorkflowState;
         expect(decide(state)).toMatchObject({
           decision: failureClass === "native-tool-panic" ? "runnable" : "blocked",
           validation: {
             exitCode: 134,
-            reason: "tooling-prerequisite",
             failureClass,
+            reason: "tooling-prerequisite",
           },
         });
         // SAFETY: An actual later apply phase has no pending validation failure authority.
@@ -289,11 +289,7 @@ describe("approved stopped build continuation", () => {
 it("projects only the independently acquired existing repository into private destination recovery", async () => {
   const { recordRepositoryAccessReceipt } = await import("./repository-access-state");
   const access = recordRepositoryAccessReceipt({
-    current: undefined,
-    sessionId: scope.sessionId,
-    confirmedByCallId: "actual-repository-acquisition",
     access: {
-      status: "ready",
       accessDigest: "3".repeat(64),
       repository: {
         archived: false,
@@ -307,42 +303,46 @@ it("projects only the independently acquired existing repository into private de
         visibility: "private",
       },
       scope: { accountLogin: "owned", accountType: "Organization", installationId: "10" },
+      status: "ready",
     },
+    confirmedByCallId: "actual-repository-acquisition",
+    current: undefined,
+    sessionId: scope.sessionId,
   });
   const state = {
     ...failed,
-    sourceReceipt: { ...failed.sourceReceipt, sourceKind: "existing-repository" as const },
     githubSource: {
-      version: 2 as const,
+      digest: "6".repeat(64),
+      installationIdentityDigest: "4".repeat(64),
       repository: {
-        version: 2 as const,
-        repositoryId: "200",
-        name: "existing-app",
-        owner: "owned",
-        visibility: "private" as const,
         defaultBranch: "main",
+        digest: "5".repeat(64),
         headSha: "1".repeat(40),
         headTree: "2".repeat(40),
         installationIdentityDigest: "4".repeat(64),
-        releaseGate: { name: "REPOSITORY_RELEASE_ENABLED" as const, configured: true },
-        digest: "5".repeat(64),
+        name: "existing-app",
+        owner: "owned",
+        releaseGate: { configured: true, name: "REPOSITORY_RELEASE_ENABLED" as const },
+        repositoryId: "200",
+        version: 2 as const,
+        visibility: "private" as const,
       },
-      installationIdentityDigest: "4".repeat(64),
+      resolvedByCallId: "actual-source-acquisition",
       resolvedRef: "refs/heads/main",
       resolvedSha: "1".repeat(40),
       resolvedTree: "2".repeat(40),
-      resolvedByCallId: "actual-source-acquisition",
-      digest: "6".repeat(64),
+      version: 2 as const,
     },
+    sourceReceipt: { ...failed.sourceReceipt, sourceKind: "existing-repository" as const },
   };
   const project = (repositoryAccess = access) =>
     decideApprovedBuildContinuation({
-      state,
-      repositoryAccess,
       adapterSessionId: scope.sessionId,
       approvalMatches: () => false,
       blocked: false,
       pendingInput: false,
+      repositoryAccess,
+      state,
       turnId: "revision-turn",
       turnSequence: 1,
     });
@@ -353,12 +353,12 @@ it("projects only the independently acquired existing repository into private de
   ).toBeUndefined();
   expect(
     decideApprovedBuildContinuation({
-      state: { ...state, sourceReceipt: { ...state.sourceReceipt, sourceKind: "fresh-template" } },
-      repositoryAccess: access,
       adapterSessionId: scope.sessionId,
       approvalMatches: () => false,
       blocked: false,
       pendingInput: false,
+      repositoryAccess: access,
+      state: { ...state, sourceReceipt: { ...state.sourceReceipt, sourceKind: "fresh-template" } },
       turnId: "revision-turn",
       turnSequence: 1,
     }).existingRepositorySource,

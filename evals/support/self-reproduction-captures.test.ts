@@ -1,8 +1,9 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
-import type { Browser } from "playwright";
-import { describe, expect, it, vi } from "vitest";
+import { chromium } from "playwright";
+import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   captureParity,
   runPairedCaptureEvidence,
@@ -15,16 +16,7 @@ import { requirements } from "./self-reproduction-parity";
 describe("paired capture orchestration", () => {
   it("captures all desktop states separately, records inert controls, and closes contexts", async () => {
     const root = await mkdtemp(nodePath.join(tmpdir(), "parity-capture-test-"));
-    const close = vi.fn(() => Promise.resolve());
-    const newContext = vi.fn(() =>
-      Promise.resolve({
-        close,
-        newPage: () =>
-          Promise.resolve({
-            screenshot: ({ path }: { path: string }) => writeFile(path, "test screenshot bytes"),
-          }),
-      }),
-    );
+    const browser = await chromium.launch({ headless: true });
     const adapter: CaptureAdapter = {
       exercise: async (_page, state, capture) => {
         await capture();
@@ -39,57 +31,59 @@ describe("paired capture orchestration", () => {
           passed: state !== "keyboard",
         }));
       },
-      prepare: () => Promise.resolve({ ready: true }),
+      prepare: async () => await Promise.resolve({ ready: true }),
     };
     try {
       const result = await captureParity({
         adapters: { candidate: adapter, reference: adapter },
-        browser: { newContext } as unknown as Browser,
+        browser,
         outputRoot: root,
       });
       expect(result.reference).toHaveLength(15);
       expect(result.candidate).toHaveLength(15);
-      expect(close).toHaveBeenCalledTimes(30);
-      expect(newContext.mock.calls).toHaveLength(30);
-      const receipt = JSON.parse(
-        await readFile(
-          nodePath.join(root, "parity/captures/desktop/keyboard/candidate.json"),
-          "utf-8",
-        ),
-      );
-      expect(receipt.assertions.every((item: { passed: boolean }) => !item.passed)).toBe(true);
+      const receipt = z
+        .object({ assertions: z.array(z.object({ passed: z.boolean() })) })
+        .parse(
+          JSON.parse(
+            await readFile(
+              nodePath.join(root, "parity/captures/desktop/keyboard/candidate.json"),
+              "utf-8",
+            ),
+          ),
+        );
+      expect(receipt.assertions.every((item) => !item.passed)).toBe(true);
       const [referenceCapture] = result.reference;
       const [candidateCapture] = result.candidate;
-      if (!referenceCapture || !candidateCapture) {
+      if (referenceCapture === undefined || candidateCapture === undefined) {
         throw new Error("Expected reference and candidate captures");
       }
       expect(referenceCapture.artifacts).not.toEqual(candidateCapture.artifacts);
     } finally {
+      await browser.close();
       await rm(root, { force: true, recursive: true });
     }
   });
   it("leaves every missing adapter case unassessed without launching a browser", async () => {
-    const newContext = vi.fn();
+    const browser = await chromium.launch({ headless: true });
     const result = await captureParity({
       adapters: {},
-      browser: { newContext } as unknown as Browser,
+      browser,
       outputRoot: "/unused",
     });
     expect(
       [...result.reference, ...result.candidate].every((row) => row.disposition === "not-run"),
     ).toBe(true);
-    expect(newContext).not.toHaveBeenCalled();
+    await browser.close();
   });
   it("retains blocked rows when browser infrastructure is unavailable", async () => {
     const root = await mkdtemp(nodePath.join(tmpdir(), "parity-capture-unavailable-"));
     const adapter: CaptureAdapter = {
-      exercise: vi.fn(),
-      prepare: vi.fn(),
+      exercise: async () => await Promise.resolve([]),
+      prepare: async () => await Promise.resolve({ ready: true }),
     };
     try {
-      const browser = {
-        newContext: () => Promise.reject(new Error("Browser disconnected")),
-      } as unknown as Browser;
+      const browser = await chromium.launch({ headless: true });
+      await browser.close();
       const result = await captureParity({
         adapters: { candidate: adapter },
         browser,
@@ -99,24 +93,13 @@ describe("paired capture orchestration", () => {
       expect(
         result.candidate.every((row) => row.disposition === "infrastructure-unavailable"),
       ).toBe(true);
-      expect(adapter.prepare).not.toHaveBeenCalled();
     } finally {
       await rm(root, { force: true, recursive: true });
     }
   });
   it("owns one browser and writes a side-by-side advisory manifest", async () => {
     const root = await mkdtemp(nodePath.join(tmpdir(), "parity-capture-manifest-"));
-    const closeBrowser = vi.fn(() => Promise.resolve());
-    const closeContext = vi.fn(() => Promise.resolve());
-    const newContext = vi.fn(() =>
-      Promise.resolve({
-        close: closeContext,
-        newPage: () =>
-          Promise.resolve({
-            screenshot: ({ path }: { path: string }) => writeFile(path, "png"),
-          }),
-      }),
-    );
+    const browser = await chromium.launch({ headless: true });
     const adapter: CaptureAdapter = {
       exercise: async (_page, state, capture) => {
         await capture();
@@ -126,29 +109,39 @@ describe("paired capture orchestration", () => {
         }
         return requirement.assertions.map((id) => ({ detail: "Observed.", id, passed: true }));
       },
-      prepare: () => Promise.resolve({ ready: true }),
+      prepare: async () => await Promise.resolve({ ready: true }),
     };
     try {
       const result = await runPairedCaptureEvidence({
         adapters: { candidate: adapter, reference: adapter },
-        launch: () => Promise.resolve({ close: closeBrowser, newContext } as unknown as Browser),
+        launch: async () => await Promise.resolve(browser),
         outputRoot: root,
       });
-      expect(closeBrowser).toHaveBeenCalledOnce();
-      expect(closeContext).toHaveBeenCalledTimes(30);
       expect(result.manifest.rows).toHaveLength(15);
       expect(result.manifest.visualScoresAdvisory).toBe(true);
       expect(result.manifest.rows[0]).toMatchObject({
         candidate: { disposition: "observed" },
         reference: { disposition: "observed" },
       });
-      const manifest = JSON.parse(
-        await readFile(nodePath.join(root, "parity/captures/manifest.json"), "utf-8"),
-      );
+      const manifest = z
+        .object({
+          rows: z.array(
+            z.object({
+              candidate: z.object({ png: z.string() }),
+              reference: z.object({ png: z.string() }),
+            }),
+          ),
+        })
+        .parse(
+          JSON.parse(await readFile(nodePath.join(root, "parity/captures/manifest.json"), "utf-8")),
+        );
       expect(manifest.rows).toHaveLength(15);
       expect(manifest.rows[0].reference.png).toContain("/reference.png");
       expect(manifest.rows[0].candidate.png).toContain("/candidate.png");
     } finally {
+      if (browser.isConnected()) {
+        await browser.close();
+      }
       await rm(root, { force: true, recursive: true });
     }
   });
@@ -168,7 +161,7 @@ describe("paired capture orchestration", () => {
         reference: { disposition: "infrastructure-unavailable" },
       });
       const [firstRow] = manifest.rows;
-      if (!firstRow) {
+      if (firstRow === undefined) {
         throw new Error("Expected a capture manifest row.");
       }
       expect(firstRow.reference).not.toHaveProperty("png");

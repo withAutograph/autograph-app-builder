@@ -50,11 +50,11 @@ export interface NormalActorCaptureDeploymentIo {
   keySet?: typeof createRemoteJWKSet;
 }
 const senderClaimsSchema = z.object({
-  iss: z.string(),
   aud: z.string(),
+  environment: z.string(),
+  iss: z.string(),
   owner_id: z.string(),
   project_id: z.string(),
-  environment: z.string(),
   sub: z.string(),
 });
 const unavailable = () => new Error("realm_browser_session_capture_unavailable");
@@ -75,25 +75,8 @@ export const createNormalActorCaptureDeploymentPorts = (
   }
   return {
     builderOrigin: configuration.builderCallbackOrigin,
-    sender:
-      resources.publicRealm === undefined
-        ? { ...configuration.gateway.workload, environment: "preview" }
-        : { ...resources.publicRealm.sender, publicEnrollment: resources.publicRealm.enrollment },
-    now: Date.now,
     journal: createNormalActorJournal(controlPlane.normalActorJournalPorts),
-    verifySender:
-      io.verifySender ??
-      (async (token, sender) => {
-        const verified = await (io.verifyNativeToken ?? verifyVercelOidcToken)(token, {
-          audience: sender.audience,
-          issuer: sender.issuer,
-          ownerId: sender.ownerId,
-          projectId: sender.projectId,
-          environment: sender.environment,
-          subject: sender.subject,
-        });
-        return senderClaimsSchema.parse(verified.payload);
-      }),
+    now: Date.now,
     async pending(selector) {
       const captured = await controlPlane.readPendingNormalActorCapture(selector);
       // The physical Auth binding is re-read after the canonical actor mapping and original account approval.
@@ -127,36 +110,7 @@ export const createNormalActorCaptureDeploymentPorts = (
         link.endpointOrigin,
       );
       return {
-        context,
         actorKey: captured.actorKey,
-        organizationId: captured.organizationId,
-        link: projectPendingRealmIdentityLink(link),
-        resource: staging.bootstrapResource,
-        getKey: (io.keySet ?? createRemoteJWKSet)(new URL(staging.jwksUrl), {
-          [customFetch]: async (...args) => {
-            const response = await transport(...args);
-            const pin = resources.publicRealm?.publicJwk;
-            if (pin === undefined || !response.ok) {
-              return response;
-            }
-            const payload = z
-              .object({ keys: z.array(z.record(z.string(), z.unknown())) })
-              .parse(await response.json());
-            if (
-              !payload.keys.some(
-                (key) =>
-                  key.kty === pin.kty &&
-                  key.crv === pin.crv &&
-                  key.x === pin.x &&
-                  key.kid === pin.kid,
-              )
-            ) {
-              throw unavailable();
-            }
-            return Response.json({ keys: [pin] });
-          },
-        }),
-        readback: async (request) => await transport(request),
         assertCurrent: async () => {
           await controlPlane.normalActorJournalPorts.assertAuthorized(context);
           const latest = await controlPlane.readPendingNormalActorCapture(selector);
@@ -184,16 +138,49 @@ export const createNormalActorCaptureDeploymentPorts = (
             throw unavailable();
           }
         },
+        context,
+        getKey: (io.keySet ?? createRemoteJWKSet)(new URL(staging.jwksUrl), {
+          [customFetch]: async (...args) => {
+            const response = await transport(...args);
+            const pin = resources.publicRealm?.publicJwk;
+            if (pin === undefined || !response.ok) {
+              return response;
+            }
+            const payload = z
+              .object({ keys: z.array(z.record(z.string(), z.unknown())) })
+              .parse(await response.json());
+            if (
+              !payload.keys.some(
+                (key) =>
+                  key.kty === pin.kty &&
+                  key.crv === pin.crv &&
+                  key.x === pin.x &&
+                  key.kid === pin.kid,
+              )
+            ) {
+              throw unavailable();
+            }
+            return Response.json({ keys: [pin] });
+          },
+        }),
+        link: projectPendingRealmIdentityLink(link),
+        organizationId: captured.organizationId,
+        readback: async (request) => await transport(request),
+        resource: staging.bootstrapResource,
       };
     },
+    sender:
+      resources.publicRealm === undefined
+        ? { ...configuration.gateway.workload, environment: "preview" }
+        : { ...resources.publicRealm.sender, publicEnrollment: resources.publicRealm.enrollment },
     async verifyCapturedActor(input) {
       const transport = await (io.normalTransport ?? createHostedOperatorNormalAuthTransport)({
+        assertCurrentOwner: controlPlane.normalActorJournalPorts.assertAuthorized,
+        assertPlanningAuthorized: controlPlane.assertPlanningAuthorized,
         configuration,
         context: input.context,
         origin: input.program.origin,
         sourceHost: "builder",
-        assertPlanningAuthorized: controlPlane.assertPlanningAuthorized,
-        assertCurrentOwner: controlPlane.normalActorJournalPorts.assertAuthorized,
       });
       const cookie = input.normalCookie;
       // A leading dot encodes the existing Domain-cookie semantics in Playwright storage;
@@ -203,12 +190,25 @@ export const createNormalActorCaptureDeploymentPorts = (
         domain: cookie.hostOnly ? cookie.domain : `.${cookie.domain.replace(/^\./u, "")}`,
       };
       const client = createHostedOperatorNormalAuthClient({
-        origin: input.program.origin,
         fetch: transport,
+        origin: input.program.origin,
         storageState: { cookies: [storageCookie], origins: [] },
       });
       return await client.getSession();
     },
+    verifySender:
+      io.verifySender ??
+      (async (token, sender) => {
+        const verified = await (io.verifyNativeToken ?? verifyVercelOidcToken)(token, {
+          audience: sender.audience,
+          environment: sender.environment,
+          issuer: sender.issuer,
+          ownerId: sender.ownerId,
+          projectId: sender.projectId,
+          subject: sender.subject,
+        });
+        return senderClaimsSchema.parse(verified.payload);
+      }),
   };
 };
 
@@ -262,8 +262,8 @@ export const createNormalActorCaptureDeploymentHandler =
           JSON.parse(Buffer.concat(chunks).toString("utf-8")),
         );
         const selector = {
-          ownerSessionId: hint.ownerSessionId,
           nonceSha256: realmIdentityNonceSha256(hint.reviewedNonce),
+          ownerSessionId: hint.ownerSessionId,
         };
         const selected =
           await resources.controlPlane.resolveRealmIdentityCallbackOwnerContext(selector);
@@ -281,8 +281,6 @@ export const createNormalActorCaptureDeploymentHandler =
           try {
             const configuration = await resolveOwnedStandardRuntimeConfiguration({
               configuration: resources.configuration,
-              resources: native,
-              environment,
               context: {
                 authority: selected.context.authority,
                 ownerContext: operatorOwnerContextSchema.parse(selected.context.ownerContext),
@@ -291,6 +289,8 @@ export const createNormalActorCaptureDeploymentHandler =
                   sessionId: selected.context.target.sessionId,
                 },
               },
+              environment,
+              resources: native,
             });
             const canonical = await openHostedOperatorConfigurationResources(
               configuration,
@@ -342,8 +342,8 @@ export const createNormalActorCaptureDeploymentHandler =
           JSON.parse(Buffer.concat(chunks).toString("utf-8")),
         );
         const selector = {
-          ownerSessionId: hint.ownerSessionId,
           nonceSha256: realmIdentityNonceSha256(hint.reviewedNonce),
+          ownerSessionId: hint.ownerSessionId,
         };
         const selected =
           await resources.controlPlane.resolveRealmIdentityCallbackOwnerContext(selector);
@@ -361,8 +361,6 @@ export const createNormalActorCaptureDeploymentHandler =
           try {
             const configuration = await resolveOwnedStandardRuntimeConfiguration({
               configuration: resources.configuration,
-              resources: native,
-              environment,
               context: {
                 authority: selected.context.authority,
                 ownerContext: operatorOwnerContextSchema.parse(selected.context.ownerContext),
@@ -371,6 +369,8 @@ export const createNormalActorCaptureDeploymentHandler =
                   sessionId: selected.context.target.sessionId,
                 },
               },
+              environment,
+              resources: native,
             });
             const canonical = await openHostedOperatorConfigurationResources(
               configuration,
@@ -395,8 +395,8 @@ export const createNormalActorCaptureDeploymentHandler =
       return Response.json(
         { error: "realm_browser_session_capture_unavailable" },
         {
-          status: 403,
           headers: { "cache-control": "no-store", "referrer-policy": "no-referrer" },
+          status: 403,
         },
       );
     } finally {

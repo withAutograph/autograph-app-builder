@@ -12,11 +12,12 @@ import {
 import type { BuilderPublicOriginScope } from "./builder-public-origin-contract";
 
 type Authority = z.infer<typeof hostedTenantAuthoritySchema>;
+const recordKind = "builder-public-origin-choice-v1";
 const recordSchema = z.strictObject({
-  kind: z.literal("builder-public-origin-choice-v1"),
-  selectionState: z.literal("selected"),
-  scope: builderPublicOriginScopeSchema,
+  kind: z.literal(recordKind),
   publicOrigin: builderPublicOriginSchema,
+  scope: builderPublicOriginScopeSchema,
+  selectionState: z.literal("selected"),
 });
 export interface BuilderPublicOriginStore {
   read: (input: {
@@ -35,7 +36,7 @@ const identity = (authority: Authority, scope: BuilderPublicOriginScope) => {
   const digest = createHash("sha256")
     .update(
       JSON.stringify([
-        "builder-public-origin-choice-v1",
+        recordKind,
         hostedTenantAuthoritySchema.parse(authority),
         builderPublicOriginScopeSchema.parse(scope),
       ]),
@@ -46,17 +47,17 @@ const identity = (authority: Authority, scope: BuilderPublicOriginScope) => {
     requestId: `${digest.slice(0, 8)}-${digest.slice(8, 12)}-5${digest.slice(13, 16)}-8${digest.slice(17, 20)}-${digest.slice(20, 32)}`,
   };
 };
+const predicate = (authority: Authority, requestId: string) =>
+  and(
+    eq(table.issuer, authority.issuer),
+    eq(table.audience, authority.audience),
+    eq(table.ownerUserId, authority.ownerUserId),
+    eq(table.workspaceId, authority.workspaceId),
+    eq(table.requestId, requestId),
+  );
 export const createBuilderPublicOriginStore = (
   database: ReturnType<typeof openHostedPostgresDatabase>,
 ): BuilderPublicOriginStore => {
-  const predicate = (authority: Authority, requestId: string) =>
-    and(
-      eq(table.issuer, authority.issuer),
-      eq(table.audience, authority.audience),
-      eq(table.ownerUserId, authority.ownerUserId),
-      eq(table.workspaceId, authority.workspaceId),
-      eq(table.requestId, requestId),
-    );
   const parse = (
     row: typeof table.$inferSelect | undefined,
     scope: BuilderPublicOriginScope,
@@ -84,7 +85,8 @@ export const createBuilderPublicOriginStore = (
         .from(table)
         .where(predicate(authority, key.requestId))
         .limit(1);
-      return parse(rows[0], scope, key.digest);
+      const [row] = rows;
+      return parse(row, scope, key.digest);
     },
     select: async (input) => {
       const publicOrigin = builderPublicOriginSchema.parse(input.publicOrigin);
@@ -100,18 +102,18 @@ export const createBuilderPublicOriginStore = (
             .insert(table)
             .values({
               ...authority,
-              requestId: key.requestId,
-              requestDigest: key.digest,
               createdAt: now,
-              updatedAt: now,
-              state: "settled",
-              revision: 1,
               record: {
-                kind: "builder-public-origin-choice-v1",
-                selectionState: "selected",
-                scope,
+                kind: recordKind,
                 publicOrigin,
+                scope,
+                selectionState: "selected",
               },
+              requestDigest: key.digest,
+              requestId: key.requestId,
+              revision: 1,
+              state: "settled",
+              updatedAt: now,
             })
             .onConflictDoNothing();
         }
@@ -121,7 +123,7 @@ export const createBuilderPublicOriginStore = (
           .where(predicate(authority, key.requestId))
           .limit(1)
           .for("update");
-        const row = rows[0];
+        const [row] = rows;
         const current = parse(row, scope, key.digest);
         await input.assertCurrent();
         if (current === publicOrigin) {
@@ -134,10 +136,10 @@ export const createBuilderPublicOriginStore = (
           .update(table)
           .set({
             record: {
-              kind: "builder-public-origin-choice-v1",
-              selectionState: "selected",
-              scope,
+              kind: recordKind,
               publicOrigin,
+              scope,
+              selectionState: "selected",
             },
             revision: row.revision + 1,
             updatedAt: now,

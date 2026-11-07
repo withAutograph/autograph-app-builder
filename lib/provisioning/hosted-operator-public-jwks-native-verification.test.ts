@@ -17,33 +17,33 @@ let createHostedOperatorPublicJwksReader: typeof PublicJwksReaderFactory;
 const origin = "https://gateway.example";
 const operator = {
   audience: "https://vercel.com/team",
+  environment: "preview" as const,
   issuer: "https://oidc.vercel.com/team",
   ownerId: "team",
   projectId: "operator-project",
-  environment: "preview" as const,
 };
 // SAFETY: This callback consumes only the target, Gateway and native-workload fields provided here.
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- The unrelated provider configuration is not reached by this real transport composition.
 const configuration = {
-  applications: { orchard: { projectId: "app-project", branch: "review" } },
-  gateway: { publicOrigin: origin, gatewayOrigin: origin },
-  operator: { projectId: operator.projectId, environment: operator.environment },
-  teamId: "team",
+  applications: { orchard: { branch: "review", projectId: "app-project" } },
+  gateway: { gatewayOrigin: origin, publicOrigin: origin },
   nativeNeon: { configuration: { operator } },
+  operator: { environment: operator.environment, projectId: operator.projectId },
+  teamId: "team",
 } as unknown as HostedOperatorSourceConfiguration;
 const authority = {
-  issuer: "https://builder.example/auth",
   audience: "https://builder.example/mcp",
+  issuer: "https://builder.example/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
 const context: HostedOperatorContext = {
   authority,
   ownerContext: {
-    kind: "direct",
     adapterGeneration: 1,
     adapterSessionId: "native-adapter",
     authority,
+    kind: "direct",
     principal: { ...authority, scopes: ["autograph:get"] },
     sessionId: "session",
   },
@@ -90,9 +90,9 @@ const variants = [
 ] as const;
 const signedToken = async (variant: (typeof variants)[number]) =>
   await new SignJWT({
-    project_id: variant === "foreign-project" ? "builder-project" : operator.projectId,
     environment: variant === "wrong-environment" ? "production" : operator.environment,
     owner_id: variant === "foreign-owner" ? "foreign-team" : operator.ownerId,
+    project_id: variant === "foreign-project" ? "builder-project" : operator.projectId,
   })
     .setProtectedHeader({ alg: "RS256", kid: verificationKey.kid })
     .setIssuer(
@@ -143,24 +143,24 @@ describe("public profile with the actual native OIDC signature and claim verifie
     const token = await signedToken(variant);
     const getOidc = vi.fn(async () => token);
     const gatewayFetch = vi.fn<typeof fetch>(async () => Response.json({ keys: [gatewayKey] }));
-    const assertPlanningAuthorized = vi.fn(async () => {});
-    const assertCurrentOwner = vi.fn(async () => {});
+    const assertPlanningAuthorized = vi.fn<() => Promise<void>>().mockResolvedValue();
+    const assertCurrentOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
     // No verifyOidc override: the installed @vercel/oidc SDK and Jose fetch keys and verify this RS256 token.
     const reader = createHostedOperatorPublicJwksReader(
-      { configuration, assertPlanningAuthorized, assertCurrentOwner },
-      { getOidc, fetch: gatewayFetch },
+      { assertCurrentOwner, assertPlanningAuthorized, configuration },
+      { fetch: gatewayFetch, getOidc },
     );
     const profile = readManagedRuntimePublicProfile({
       appId: "orchard",
       publicOrigin: origin,
-      readPublicJwks: (url) => reader(context, url),
+      readPublicJwks: async (url) => await reader(context, url),
     });
     if (variant === "valid") {
       await expect(profile).resolves.toMatchObject({
         appId: "orchard",
-        publicOrigin: origin,
         jwksUrl: `${origin}/_platform/jwks.json`,
         keys: [gatewayKey],
+        publicOrigin: origin,
       });
       expect(https.get).toHaveBeenCalled();
       expect(gatewayFetch).toHaveBeenCalledTimes(1);
@@ -173,12 +173,12 @@ describe("public profile with the actual native OIDC signature and claim verifie
       expect(assertCurrentOwner).toHaveBeenCalledTimes(2);
     } else {
       const expected = {
-        "foreign-project": /project_id/u,
-        "wrong-environment": /environment/u,
-        "foreign-owner": /owner_id/u,
-        "wrong-issuer": /iss/u,
-        "wrong-audience": /aud/u,
         "bad-signature": /signature verification failed/u,
+        "foreign-owner": /owner_id/u,
+        "foreign-project": /project_id/u,
+        "wrong-audience": /aud/u,
+        "wrong-environment": /environment/u,
+        "wrong-issuer": /iss/u,
       }[variant];
       await expect(profile).rejects.toThrow(expected);
       expect(gatewayFetch).not.toHaveBeenCalled();

@@ -9,7 +9,11 @@ import { readLocalEveCycleBinding, rotateLocalEveCycleBinding } from "./local-cy
 const roots: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true })));
+  await Promise.all(
+    roots.splice(0).map(async (root) => {
+      await rm(root, { recursive: true });
+    }),
+  );
 });
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

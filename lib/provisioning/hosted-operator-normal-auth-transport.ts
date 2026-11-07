@@ -67,7 +67,7 @@ const approvedRequest = (
   ) {
     throw mismatch();
   }
-  return { original, url, method, headers };
+  return { headers, method, original, url };
 };
 const requestBody = async (
   original: Request | undefined,

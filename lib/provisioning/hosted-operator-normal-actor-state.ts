@@ -34,9 +34,9 @@ const aad = (scope: NormalActorStateScope): string => {
   return JSON.stringify({
     ...authority,
     appId: program.appId,
+    operationRef: z.uuid().parse(scope.operationRef),
     origin: program.origin,
     ownerSessionId: z.string().min(1).parse(scope.ownerSessionId),
-    operationRef: z.uuid().parse(scope.operationRef),
     programDigest: normalActorProgramDigest(program),
     purpose: "normal-auth-actor-state-v1",
   });

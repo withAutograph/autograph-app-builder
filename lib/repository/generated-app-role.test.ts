@@ -12,7 +12,7 @@ describe("generated app product roles", () => {
   it("uses the AppDescription role contract throughout configuration, grants and identity projection", () => {
     const role = `review_${"custom_scope_".repeat(8)}`;
     expect(generatedAppRoleSchema.parse(role)).toBe(role);
-    const description = appDescriptionSchema.shape.backend.options[1];
+    const [, description] = appDescriptionSchema.shape.backend.options;
     expect(description.shape.roles.parse([role])).toEqual([role]);
     const application = hostedOperatorSourceConfigurationSchema.shape.applications.valueType;
     expect(application.shape.accessRoles.parse([role])).toEqual([role]);
@@ -29,8 +29,8 @@ describe("generated app product roles", () => {
     expect(
       normalActorIdentityManifestSchema.shape.actors.parse([
         {
-          actorKey: "actor",
           actorId: "actor-id",
+          actorKey: "actor",
           organizationId: "organization",
           roles: [role],
           storageState: "private-reference",

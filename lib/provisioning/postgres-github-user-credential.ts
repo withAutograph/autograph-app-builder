@@ -1,9 +1,8 @@
 import { and, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { HostedDatabase } from "../db/hosted-postgres";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { hostedGitHubUserCredentials } from "../db/schema";
-import type * as databaseSchema from "../db/schema";
 import {
   decryptGitHubUserTokens,
   encryptGitHubUserTokens,
@@ -16,7 +15,7 @@ import type {
 } from "./github-user-credential";
 import type { BuilderProvisionAuthority } from "./journal";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function predicate(authority: BuilderProvisionAuthority, providerUserId: string) {
@@ -104,7 +103,7 @@ export function createPostgresGitHubUserCredentialStore(input: {
           ],
         })
         .returning();
-      if (!rows[0]) {
+      if (rows.length === 0) {
         throw new Error("github-credential-not-durable");
       }
       return parse(rows[0]);
@@ -127,7 +126,7 @@ export function createPostgresGitHubUserCredentialStore(input: {
         .from(hostedGitHubUserCredentials)
         .where(predicate(authority, value.providerUserId))
         .limit(1);
-      return rows[0] ? parse(rows[0]) : undefined;
+      return rows.length > 0 ? parse(rows[0]) : undefined;
     },
     async rotate(value) {
       const authority = hostedTenantAuthoritySchema.parse(value.authority);
@@ -157,7 +156,7 @@ export function createPostgresGitHubUserCredentialStore(input: {
           ),
         )
         .returning();
-      return rows[0] ? parse(rows[0]) : undefined;
+      return rows.length > 0 ? parse(rows[0]) : undefined;
     },
   };
 }

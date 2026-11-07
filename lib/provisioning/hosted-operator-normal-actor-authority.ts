@@ -14,10 +14,10 @@ import type {
 
 const effectAuthority = z.object({
   effect: z.object({ id: z.string().min(1) }),
-  operationRef: z.uuid(),
-  plan: hostedOperatorPlanSchema,
   fenceGeneration: z.number().int().positive(),
   leaseId: z.uuid(),
+  operationRef: z.uuid(),
+  plan: hostedOperatorPlanSchema,
 });
 
 /** Deployment journal guards are reads: renewing a lease here would invalidate every CAS revision. */

@@ -27,29 +27,31 @@ describe("deployment-owned app publication configuration", () => {
     ).toMatchObject({ accessRoles: [], nativeTargetRegistration: true });
   });
   const hostProtection = {
-    mode: "externally-managed-trusted-sources",
-    teamId: "team",
     appPreview: {
+      from: "preview",
       sourceProjectId: "gateway",
       targetProjectId: "prj_actual_app",
-      from: "preview",
       to: "preview",
     },
     gatewayPreview: {
+      from: "preview",
       sourceProjectId: "prj_actual_app",
       targetProjectId: "gateway",
-      from: "preview",
       to: "preview",
     },
+    mode: "externally-managed-trusted-sources",
     observedAt: "2026-10-19T14:31:17Z",
     provenance: {
       kind: "administrator-provider-readback",
       reference: "independent-policy-readback",
     },
+    teamId: "team",
   } as const;
   it("accepts external administrator evidence only for the actual team and both project pairs", () => {
     const parsed = applications.parse({ actual: { ...application(), hostProtection } }).actual
-      .hostProtection!;
+      .hostProtection;
+    expect(parsed).toBeDefined();
+    if (!parsed) throw new Error("Expected host protection configuration");
     expect(matchesExternalTrustedSources(parsed, "team", "prj_actual_app", "gateway")).toBe(true);
     expect(matchesExternalTrustedSources(parsed, "foreign-team", "prj_actual_app", "gateway")).toBe(
       false,

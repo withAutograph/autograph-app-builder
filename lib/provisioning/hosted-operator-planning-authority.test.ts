@@ -167,38 +167,37 @@ describe("prepared Preview release planning", () => {
     const published = {
       ...selected,
       publishedSource: {
-        repositoryId: "approved-repository",
         branch: target.branch,
+        changeSetDigest: "1".repeat(64),
         gitSha: "e".repeat(40),
         gitTree: "f".repeat(40),
-        changeSetDigest: "1".repeat(64),
+        repositoryId: "approved-repository",
         reviewDigest: "2".repeat(64),
       },
     };
     const newer = {
       ...selected,
       artifactRef: `_protected-operator/artifacts/generated-release/spend-review/${"3".repeat(64)}`,
-      releaseId: "new-private-release",
       manifestSha256: "4".repeat(64),
+      releaseId: "new-private-release",
       schemaSha256: "5".repeat(64),
     };
     const plan = hostedOperatorPlanSchema.parse({
       access: [],
       action: "prepare",
-      stage: "app",
-      contextId: selected.appSpecDigest,
       appDatabase: {
         database: "app",
         migratorRole: "app_owner",
-        runtimeRole: "app_runtime",
         resourceId: "app-resource",
+        runtimeRole: "app_runtime",
       },
       authDatabase: {
         database: "auth",
         migratorRole: "auth_owner",
-        runtimeRole: "auth_runtime",
         resourceId: "auth-resource",
+        runtimeRole: "auth_runtime",
       },
+      contextId: selected.appSpecDigest,
       cost: { class: "shared-recovery-group", description: "Approved Preview", owner: "owner" },
       delivery: {
         branch: target.branch,
@@ -207,11 +206,11 @@ describe("prepared Preview release planning", () => {
         repoId: published.publishedSource.repositoryId,
       },
       effects: [
-        { id: "resources", kind: "resources", description: "Observe owned resources" },
-        { id: "install", kind: "install", description: "Observe prepared release" },
-        { id: "access", kind: "access", description: "Observe approved access" },
-        { id: "bindings", kind: "bindings", description: "Observe owned bindings" },
-        { id: "delivery", kind: "delivery", description: "Observe approved publication" },
+        { description: "Observe owned resources", id: "resources", kind: "resources" },
+        { description: "Observe prepared release", id: "install", kind: "install" },
+        { description: "Observe approved access", id: "access", kind: "access" },
+        { description: "Observe owned bindings", id: "bindings", kind: "bindings" },
+        { description: "Observe approved publication", id: "delivery", kind: "delivery" },
       ],
       installer: { reference: "worker", sha256: "6".repeat(64) },
       neon: {
@@ -234,26 +233,27 @@ describe("prepared Preview release planning", () => {
         projectId: target.projectId,
         sessionId: target.sessionId,
       },
+      stage: "app",
       version: 1,
     });
     const row: HostedRuntimeJournalRow = {
-      revision: 1,
       record: hostedRuntimeJournalRecordSchema.parse({
         approvedByCallId: "prepared-call",
         kind: "app-runtime",
-        request: target,
-        status: "prepared",
-        step: "bound",
-        version: 1,
         operator: {
-          mode: "protected-operator-v1",
           approvalId: "prepared-approval",
+          mode: "protected-operator-v1",
           operationRef: "00000000-0000-4000-8000-000000000001",
           plan,
           planDigest: operatorPlanDigest(plan),
           receipts: [],
         },
+        request: target,
+        status: "prepared",
+        step: "bound",
+        version: 1,
       }),
+      revision: 1,
     };
     const markers = [
       selected,
@@ -266,8 +266,8 @@ describe("prepared Preview release planning", () => {
       async (input) =>
         await Promise.resolve({
           action: input.action,
-          approved: true,
           approvalId: "prepared-approval",
+          approved: true,
           callId: input.callId,
           planDigest: input.planDigest,
         }),
@@ -284,17 +284,17 @@ describe("prepared Preview release planning", () => {
     );
     return {
       ...f,
+      controlPlane: { ...f.controlPlane, readApproval, readGeneratedSelection, store: { read } },
       markers,
       newer,
       published,
-      row,
       read,
       readApproval,
-      controlPlane: { ...f.controlPlane, readGeneratedSelection, store: { read }, readApproval },
+      row,
     };
   };
-  const restore = (f: ReturnType<typeof preparedFixture>) =>
-    readOwnedOperatorPlanningSelection({
+  const restore = async (f: ReturnType<typeof preparedFixture>) =>
+    await readOwnedOperatorPlanningSelection({
       context,
       controlPlane: f.controlPlane,
       releaseIntent: "prepared-preview",
@@ -313,9 +313,9 @@ describe("prepared Preview release planning", () => {
         appSpecDigest: selected.appSpecDigest,
         artifactRef: selected.artifactRef,
         publishedSource: {
-          repositoryId: f.published.publishedSource.repositoryId,
           branch: target.branch,
           gitSha: f.published.publishedSource.gitSha,
+          repositoryId: f.published.publishedSource.repositoryId,
         },
       },
     );
@@ -364,7 +364,7 @@ describe("prepared Preview release planning", () => {
   });
   it("denies a foreign prepared target before artifact access", async () => {
     const f = preparedFixture();
-    const operator = f.row.record.operator;
+    const { operator } = f.row.record;
     if (operator === undefined) {
       throw new Error("Missing prepared operator");
     }
@@ -375,7 +375,7 @@ describe("prepared Preview release planning", () => {
   });
   it("allows compatible legacy app stage and harmless journal progress metadata", async () => {
     const f = preparedFixture();
-    const operator = f.row.record.operator;
+    const { operator } = f.row.record;
     if (operator === undefined) {
       throw new Error("Missing prepared operator");
     }
@@ -393,7 +393,7 @@ describe("prepared Preview release planning", () => {
   it("rechecks the exact prepared journal after immutable artifact reads", async () => {
     const f = preparedFixture();
     const result = await restore(f);
-    const operator = f.row.record.operator;
+    const { operator } = f.row.record;
     if (operator === undefined) {
       throw new Error("Missing prepared operator");
     }

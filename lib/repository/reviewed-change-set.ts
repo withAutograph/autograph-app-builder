@@ -77,7 +77,13 @@ export const assertExistingAppReviewScope = (
   }
 };
 
-const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+type ChangeSetDigestInput =
+  | Omit<NormalizedChangeSet, "digest">
+  | NormalizedChangeSet
+  | (NormalizedChangeSet & { changeSetDigest: string; reviewedByCallId: string });
+
+const digest = (value: ChangeSetDigestInput) =>
+  createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function deriveNormalizedChangeSet(
@@ -87,8 +93,14 @@ export function deriveNormalizedChangeSet(
   repositoryContractDigest: string = contractDigest,
 ): NormalizedChangeSet {
   const canonicalChanges = apply.changes;
-  const unsigned = {
-    ...(apply.frameworkUpgrade === undefined ? {} : { frameworkUpgrade: apply.frameworkUpgrade }),
+  const frameworkFields: Pick<NormalizedChangeSet, "frameworkUpgrade"> = {};
+  if (apply.frameworkUpgrade !== undefined) {
+    frameworkFields.frameworkUpgrade = apply.frameworkUpgrade;
+  }
+  const unsigned: Omit<NormalizedChangeSet, "digest" | "frameworkUpgrade"> & {
+    frameworkUpgrade?: FrameworkVersions;
+  } = {
+    ...frameworkFields,
     appSpecDigest: apply.appSpecDigest,
     appSpecPath: apply.appSpecPath,
     applyDigest: apply.digest,

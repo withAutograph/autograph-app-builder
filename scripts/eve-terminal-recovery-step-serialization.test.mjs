@@ -8,6 +8,9 @@ import { pathToFileURL } from "node:url";
 import { it } from "vitest";
 
 const require = createRequire(import.meta.url);
+const SYNTHETIC_WORKFLOW_RUN_ID = "wrun-synthetic";
+const LOGICAL_SESSION_ID = "logical-fixture";
+const SERIALIZATION_RECEIVER_FIELD = ".thisVal.createHook";
 const sdk = pathToFileURL(`${path.dirname(require.resolve("eve/package.json"))}/dist/src/`);
 const runtimeUrl = new URL("compiled/@workflow/core/runtime.js", sdk);
 const runtimeSource = await readFile(runtimeUrl, "utf-8");
@@ -31,52 +34,52 @@ const { createDurableSessionState } = await import(
   new URL("execution/durable-session-store.js", sdk).href
 );
 const checkpoint = {
-  version: 9,
+  capabilities: { requestInput: true },
   serializedContext: {
-    "eve.sessionId": "logical-fixture",
     "eve.capabilities": { requestInput: true },
+    "eve.sessionId": LOGICAL_SESSION_ID,
   },
   sessionState: createDurableSessionState({
     session: {
-      sessionId: "logical-fixture",
-      continuationToken: "fixture-continuation",
-      history: [],
-      state: { approval: "retained-fixture" },
       agent: { system: "Synthetic serialization fixture", tools: new Map() },
       compaction: {},
+      continuationToken: "fixture-continuation",
+      history: [],
+      sessionId: LOGICAL_SESSION_ID,
+      state: { approval: "retained-fixture" },
     },
   }),
-  capabilities: { requestInput: true },
   sessionTimeoutMs: false,
+  version: 9,
 };
 const descriptor = {
-  version: 1,
+  logicalSessionId: LOGICAL_SESSION_ID,
   operationId: "fixture-recovery",
-  sourcePublicSessionId: "fixture-source",
-  sourceOwnerRunId: "wrun-fixture-source",
-  sourceAdapterGeneration: 1,
-  logicalSessionId: "logical-fixture",
   originalAuthoritySessionId: "fixture-source",
   parentCancellationRevision: 0,
+  sourceAdapterGeneration: 1,
+  sourceOwnerRunId: "wrun-fixture-source",
+  sourcePublicSessionId: "fixture-source",
+  version: 1,
 };
 const provenance = {
+  checkpointVersion: 1,
   kind: "committed-turn-output",
-  sourceStepId: "fixture-checkpoint-step",
   sourceEventId: "evnt_00000000000000000000000001",
   sourceSlot: 1,
-  checkpointVersion: 1,
+  sourceStepId: "fixture-checkpoint-step",
 };
 
 const fixture = () => {
   const queue = new Map();
   const context = {
-    generateUlid: () => "synthetic-correlation",
-    invocationsQueue: queue,
     eventsConsumer: {
       subscribe() {
         /* No event delivered: the real proxy remains suspended. */
       },
     },
+    generateUlid: () => "synthetic-correlation",
+    invocationsQueue: queue,
     promiseQueue: Promise.resolve(),
   };
   const validateCheckpoint = createUseStepForFixture(context)(
@@ -108,7 +111,7 @@ const fixture = () => {
     assert.equal(step.stepName, validateCheckpoint.stepId);
     return { args: step.args, closureVars: step.closureVars, thisVal: step.thisVal };
   };
-  return { ports, calls, queuedArguments };
+  return { calls, ports, queuedArguments };
 };
 
 it("reproduces the member-step receiver failure through the real compiled Workflow proxy", async () => {
@@ -118,8 +121,9 @@ it("reproduces the member-step receiver failure through the real compiled Workfl
   const input = f.queuedArguments();
   assert.equal(input.thisVal, f.ports);
   await assert.rejects(
-    dehydrateStepArguments(input, "wrun-synthetic", undefined),
-    (error) => error.name === "SerializationError" && error.message.includes(".thisVal.createHook"),
+    dehydrateStepArguments(input, SYNTHETIC_WORKFLOW_RUN_ID, undefined),
+    (error) =>
+      error.name === "SerializationError" && error.message.includes(SERIALIZATION_RECEIVER_FIELD),
   );
   assert.deepEqual(f.calls, []);
 });
@@ -128,19 +132,19 @@ it("serializes the actual terminal boot validation step without its function-bea
   const f = fixture();
   const suspended = bootTerminalRecoveryOwnerWithPorts(
     {
-      kind: "terminal-recovery",
+      activationToken: "fixture-activation",
       checkpoint,
       descriptor,
-      provenance,
-      activationToken: "fixture-activation",
+      kind: "terminal-recovery",
       ownerDeploymentId: "fixture-deployment",
+      provenance,
     },
     f.ports,
   );
   assert.ok(suspended instanceof Promise);
   const input = f.queuedArguments();
-  const encoded = await dehydrateStepArguments(input, "wrun-synthetic", undefined);
-  const decoded = await hydrateStepArguments(encoded, "wrun-synthetic", undefined);
+  const encoded = await dehydrateStepArguments(input, SYNTHETIC_WORKFLOW_RUN_ID, undefined);
+  const decoded = await hydrateStepArguments(encoded, SYNTHETIC_WORKFLOW_RUN_ID, undefined);
   assert.equal(input.thisVal, undefined);
   assert.equal(decoded.thisVal, undefined);
   assert.deepEqual(decoded.args, [{ checkpoint }]);

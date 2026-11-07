@@ -6,12 +6,12 @@ import { BUILD_READY_APP_SPEC } from "./support/app-spec";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
 
 const workflowStatus = z.object({
-  phase: z.string(),
   appSpec: z.object({ artifactRevision: z.string(), digest: z.string(), path: z.string() }),
-  proposal: z.object({ digest: z.string() }),
+  artifacts: z.array(z.object({ digest: z.string(), path: z.string(), revision: z.string() })),
   dependencies: z.object({ digest: z.string() }),
   identity: z.object({ digest: z.string() }),
-  artifacts: z.array(z.object({ path: z.string(), revision: z.string(), digest: z.string() })),
+  phase: z.string(),
+  proposal: z.object({ digest: z.string() }),
 });
 const readStatus = (message: string) =>
   workflowStatus.parse(JSON.parse(message.slice(message.indexOf("{"))));

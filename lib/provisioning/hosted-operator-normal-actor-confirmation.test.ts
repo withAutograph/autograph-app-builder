@@ -21,8 +21,8 @@ import type { NormalActorCapturedPayload } from "./hosted-operator-normal-actor-
 
 const accountOperationRef = "11111111-1111-4111-8111-111111111111";
 const authority = {
-  issuer: "https://builder.example.test/api/auth",
   audience: "https://builder.example.test/mcp",
+  issuer: "https://builder.example.test/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
@@ -30,56 +30,68 @@ const target = {
   appId: "normal-app",
   branch: "preview",
   environment: "preview" as const,
-  projectId: "prj_app",
-  sessionId: "owner-session",
   installationId: "installation",
+  projectId: "prj_app",
   scopeId: "team",
   scopeType: "team" as const,
+  sessionId: "owner-session",
 };
 const context = { authority, target };
 const program = normalActorProgramSchema.parse({
-  version: 1,
-  appId: target.appId,
-  origin: "https://apps.example.test",
   actors: [
-    { actorKey: "owner", email: "owner@example.test", name: "Owner", account: "capture-existing" },
+    { account: "capture-existing", actorKey: "owner", email: "owner@example.test", name: "Owner" },
   ],
-  organizations: [],
-  memberships: [],
   appAccess: [],
+  appId: target.appId,
+  memberships: [],
+  organizations: [],
+  origin: "https://apps.example.test",
+  version: 1,
 });
 const plan = hostedOperatorPlanSchema.parse({
-  version: 1,
-  stage: "auth-participants",
-  action: "prepare",
   access: [],
-  normalActorProgram: program,
-  selection: {
-    appId: target.appId,
-    branch: target.branch,
-    environment: target.environment,
-    projectId: target.projectId,
-    sessionId: target.sessionId,
-  },
+  action: "prepare",
   appDatabase: {
-    resourceId: "app-resource",
     database: "normal",
     migratorRole: "normal_owner",
+    resourceId: "app-resource",
     runtimeRole: "normal_runtime",
   },
   authDatabase: {
-    resourceId: "auth-resource",
     database: "auth",
     migratorRole: "auth_owner",
+    resourceId: "auth-resource",
     runtimeRole: "auth_runtime",
   },
   contextId: "accepted-spec",
   cost: { class: "shared-recovery-group", description: "Approved normal accounts", owner: "owner" },
+  deploymentBoundary: {
+    app: {
+      branch: target.branch,
+      deploymentId: "dpl_app",
+      environment: "preview",
+      projectId: target.projectId,
+    },
+    authority,
+    gateway: {
+      branch: target.branch,
+      deploymentId: "dpl_gateway",
+      environment: "preview",
+      projectId: "prj_gateway",
+    },
+    operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
+    teamId: "team",
+    verification: {
+      gatewayOrigin: "https://gateway.example.test",
+      jwksUrl: "https://gateway.example.test/_platform/jwks.json",
+      publicOrigin: program.origin,
+    },
+  },
   effects: [
     {
+      description: "Capture approved actual accounts",
       id: "normal-accounts",
       kind: "normal-accounts",
-      description: "Capture approved actual accounts",
     },
   ],
   installer: { reference: "owned-worker", sha256: "a".repeat(64) },
@@ -90,140 +102,128 @@ const plan = hostedOperatorPlanSchema.parse({
     projectId: "neon-owned",
     source: "synthetic-only",
   },
+  normalActorProgram: program,
+  publicGateway: { branch: target.branch, origin: program.origin, projectId: "prj_gateway" },
   release: { artifactRef: "owned-release", id: "release", sha256: "b".repeat(64) },
   retention: { expiresAt: "2030-01-01T00:00:00.000Z", policy: "Retain Auth" },
-  publicGateway: { branch: target.branch, origin: program.origin, projectId: "prj_gateway" },
-  deploymentBoundary: {
-    authority,
-    teamId: "team",
-    app: {
-      branch: target.branch,
-      deploymentId: "dpl_app",
-      environment: "preview",
-      projectId: target.projectId,
-    },
-    gateway: {
-      branch: target.branch,
-      deploymentId: "dpl_gateway",
-      environment: "preview",
-      projectId: "prj_gateway",
-    },
-    operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
-    verification: {
-      gatewayOrigin: "https://gateway.example.test",
-      jwksUrl: "https://gateway.example.test/_platform/jwks.json",
-      publicOrigin: program.origin,
-    },
+  selection: {
+    appId: target.appId,
+    branch: target.branch,
+    environment: target.environment,
+    projectId: target.projectId,
+    sessionId: target.sessionId,
   },
+  stage: "auth-participants",
+  version: 1,
 });
 const preparationInput = {
-  program,
-  programDigest: normalActorProgramDigest(program),
+  accountApprovalId: "initial-approval",
+  accountApprovedByCallId: "initial-call",
   accountOperationRef,
   accountPlan: plan,
   accountPlanDigest: operatorPlanDigest(plan),
-  accountApprovalId: "initial-approval",
-  accountApprovedByCallId: "initial-call",
+  program,
+  programDigest: normalActorProgramDigest(program),
 };
 const normalCookie = {
-  name: "__Secure-session",
-  value: "actual%2Fencoded%3Dcookie",
   domain: "apps.example.test",
-  path: "/",
   expires: -1 as const,
-  httpOnly: true as const,
-  secure: true as const,
-  sameSite: "Lax" as const,
   hostOnly: true,
+  httpOnly: true as const,
+  name: "__Secure-session",
+  path: "/",
+  sameSite: "Lax" as const,
+  secure: true as const,
+  value: "actual%2Fencoded%3Dcookie",
 };
 
 const keyring = { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" };
 const now = Date.parse("2026-10-14T16:30:00.000Z");
 const scope = {
   authority,
-  ownerSessionId: target.sessionId,
-  operationRef: accountOperationRef,
-  program,
   config: keyring,
+  operationRef: accountOperationRef,
+  ownerSessionId: target.sessionId,
+  program,
 };
 const proof = "actual-private-proof-fixture";
 const proofSha256 = createHash("sha256").update(proof).digest("hex");
 const nonceSha256 = "c".repeat(64);
 const proofRef = `_protected-operator/artifacts/realm-identity-proof/${target.appId}/${proofSha256}`;
 const session = {
-  reference: "22222222-2222-4222-8222-222222222222",
   actorId: "actual-owner",
-  realmSessionId: "actual-session",
-  origin: program.origin,
   expiresAt: "2030-01-01T00:00:00.000Z",
+  origin: program.origin,
+  realmSessionId: "actual-session",
+  reference: "22222222-2222-4222-8222-222222222222",
 };
 const fixture = () => {
   const payload: NormalActorCapturedPayload = {
-    version: 1,
     actorKey: "owner",
     nonceSha256,
-    proofSha256,
-    proof,
-    session,
     normalCookie,
+    proof,
+    proofSha256,
+    session,
+    version: 1,
   };
   const sealedState = encryptNormalActorState({
     ...scope,
     state: initialNormalActorState(program, accountOperationRef),
   });
   const record: HostedRuntimeJournalRecord = {
-    version: 1,
-    kind: "app-runtime",
-    request: target,
-    approvedByCallId: "initial-call",
-    status: "pending",
-    step: "reserved",
     accountPreparation: {
       ...preparationInput,
-      sealedState,
       captures: [
         {
-          reference: session.reference,
           actorKey: "owner",
-          nonceSha256,
-          proofSha256,
           expiresAt: session.expiresAt,
+          nonceSha256,
           normalCookieSha256: normalActorCaptureCookieDigest(normalCookie),
+          proofSha256,
+          reference: session.reference,
           sealed: sealedState,
         },
       ],
+      sealedState,
     },
+    approvedByCallId: "initial-call",
+    kind: "app-runtime",
     operator: {
+      identityLink: {
+        audience: program.origin,
+        authResourceId: "auth-resource",
+        bootstrapPlanDigest: preparationInput.accountPlanDigest,
+        browserOrigin: program.origin,
+        browserSession: {
+          operationRef: accountOperationRef,
+          participantProgramDigest: preparationInput.programDigest,
+        },
+        endpointOrigin: "https://gateway.example.test",
+        expiresAt: session.expiresAt,
+        issuer: program.origin,
+        nonceSha256,
+        organizationId: null,
+        ownerSessionId: target.sessionId,
+        sealedNonce: {
+          encryptedToken: "private",
+          keyVersion: "v1",
+          tokenIv: "iv",
+          tokenTag: "tag",
+        },
+      },
       mode: "protected-operator-v1",
       operationRef: accountOperationRef,
       plan,
       planDigest: operatorPlanDigest(plan),
       receipts: [],
-      identityLink: {
-        audience: program.origin,
-        issuer: program.origin,
-        endpointOrigin: "https://gateway.example.test",
-        authResourceId: "auth-resource",
-        browserOrigin: program.origin,
-        bootstrapPlanDigest: preparationInput.accountPlanDigest,
-        ownerSessionId: target.sessionId,
-        organizationId: null,
-        browserSession: {
-          operationRef: accountOperationRef,
-          participantProgramDigest: preparationInput.programDigest,
-        },
-        nonceSha256,
-        expiresAt: session.expiresAt,
-        sealedNonce: {
-          encryptedToken: "private",
-          tokenIv: "iv",
-          tokenTag: "tag",
-          keyVersion: "v1",
-        },
-      },
     },
+    request: target,
+    status: "pending",
+    step: "reserved",
+    version: 1,
   };
-  return { context, record, payload, nonceSha256, proofRef, proofSha256, keyring, now };
+  return { context, keyring, nonceSha256, now, payload, proofRef, proofSha256, record };
 };
 const readState = (record: HostedRuntimeJournalRecord) =>
   decryptNormalActorState({ ...scope, sealed: record.accountPreparation!.sealedState });
@@ -242,8 +242,8 @@ describe("human confirmation of private actual actor capture", () => {
     operator.pendingEffectAttempt = { id: "00000000-0000-4000-8000-000000000009" };
     const reservation = {
       operationRef: operator.operationRef,
-      planDigest: operator.planDigest,
       participantCapture: true,
+      planDigest: operator.planDigest,
     };
     expect(canReserveIdentityLink(input.record, reservation)).toBe(true);
     expect(
@@ -280,15 +280,15 @@ describe("human confirmation of private actual actor capture", () => {
     });
     expect(result.operator!.identityLink!.sealedNonce).toBeUndefined();
     expect(readState(result).actors[0]).toMatchObject({
-      signup: "complete",
       session,
+      signup: "complete",
       storageState: {
         cookies: [
           {
-            name: normalCookie.name,
-            value: normalCookie.value,
             domain: normalCookie.domain,
             expires: -1,
+            name: normalCookie.name,
+            value: normalCookie.value,
           },
         ],
         origins: [],
@@ -301,7 +301,7 @@ describe("human confirmation of private actual actor capture", () => {
     const input = fixture();
     const confirmed = confirmNormalActorCapture(input);
     expect(
-      confirmNormalActorCapture({ ...input, record: confirmed, now: Date.parse("2035-01-01") }),
+      confirmNormalActorCapture({ ...input, now: Date.parse("2035-01-01"), record: confirmed }),
     ).toBe(confirmed);
   });
   it.each([
@@ -391,8 +391,8 @@ describe("human confirmation of private actual actor capture", () => {
     expect(() =>
       confirmNormalActorCapture({
         ...input,
-        record,
         payload: { ...input.payload, normalCookie: { ...normalCookie, value: "switched-cookie" } },
+        record,
       }),
     ).toThrow("normal_actor_confirmation_unavailable");
   });
@@ -401,8 +401,8 @@ describe("human confirmation of private actual actor capture", () => {
     const state = initialNormalActorState(program, accountOperationRef);
     state.actors[0] = {
       actorKey: "owner",
-      signup: "complete",
       session: { ...session, actorId: "other-actual-owner" },
+      signup: "complete",
       storageState: { cookies: [], origins: [] },
     };
     input.record.accountPreparation!.sealedState = encryptNormalActorState({ ...scope, state });
@@ -413,10 +413,10 @@ describe("human confirmation of private actual actor capture", () => {
     const organizationId = "actual-org";
     const scopedProgram = normalActorProgramSchema.parse({
       ...program,
-      organizations: [
-        { organizationId, slug: "actual-org", name: "Actual organization", ownerActorKey: "owner" },
-      ],
       memberships: [{ actorKey: "owner", organizationId, role: "owner" }],
+      organizations: [
+        { name: "Actual organization", organizationId, ownerActorKey: "owner", slug: "actual-org" },
+      ],
     });
     const scopedPlan = hostedOperatorPlanSchema.parse({
       ...plan,
@@ -428,12 +428,12 @@ describe("human confirmation of private actual actor capture", () => {
     const state = initialNormalActorState(scopedProgram, accountOperationRef);
     state.actors[0] = {
       actorKey: "owner",
-      signup: "complete",
       session: {
         ...session,
-        reference: "55555555-5555-4555-8555-555555555555",
         realmSessionId: "actual-base-session",
+        reference: "55555555-5555-4555-8555-555555555555",
       },
+      signup: "complete",
       storageState: { cookies: [], origins: [] },
     };
     const base = structuredClone(state.actors[0]);

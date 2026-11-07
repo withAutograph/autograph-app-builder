@@ -297,7 +297,7 @@ export default defineTool({
         githubSource: selectedGitHubSource,
         sandbox: await getSourceBoundSandbox(ctx),
       });
-      return {
+      const retryResult = {
         githubSource: selectedGitHubSource,
         repository: access.access.repository,
         repositoryAccessReceiptDigest: access.receipt.digest,
@@ -306,36 +306,41 @@ export default defineTool({
           branch: selectedGitHubSource.resolvedRef.slice("refs/heads/".length),
           pullRequestNumber,
         },
-        ...(selectionCorrection === null ? {} : { selectionCorrection }),
-        ...(selectedBaseline?.receipt === undefined
-          ? {}
-          : { appBaseline: selectedBaseline.receipt }),
-        sourceReceipt: initialWorkflow.sourceReceipt,
-        workspace,
       };
+      const corrected =
+        selectionCorrection === null ? retryResult : { ...retryResult, selectionCorrection };
+      const baseline =
+        selectedBaseline?.receipt === undefined
+          ? corrected
+          : { ...corrected, appBaseline: selectedBaseline.receipt };
+      return { ...baseline, sourceReceipt: initialWorkflow.sourceReceipt, workspace };
     }
 
-    const prepared = await runtime.prepareExistingSource({
+    const preparationBase = {
       access: access.access,
       callId: ctx.callId,
       currentAccessReceipt: access.receipt,
-      ...(selectedBaseline === undefined ? {} : { appBaseline: selectedBaseline.selection }),
-      ...(revision === null
-        ? {}
-        : {
-            revision,
-          }),
+    };
+    const baselineInput =
+      selectedBaseline === undefined
+        ? preparationBase
+        : { ...preparationBase, appBaseline: selectedBaseline.selection };
+    const revisionInput = revision === null ? baselineInput : { ...baselineInput, revision };
+    const sourceInput =
+      initialSource.phase === "empty" || initialSource.githubSource === undefined
+        ? revisionInput
+        : { ...revisionInput, currentGitHubSource: initialSource.githubSource };
+    const preparationInput: Parameters<typeof runtime.prepareExistingSource>[0] = {
+      ...sourceInput,
       // Source credentials are resolved first. The backend consumes the
       // server-owned context while `getSandbox()` creates the provider
       // session, so Vercel performs the Git clone itself.
-      ...(initialSource.phase === "empty" || initialSource.githubSource === undefined
-        ? {}
-        : { currentGitHubSource: initialSource.githubSource }),
       repository: input.repository,
-      sandbox: () => ctx.getSandbox(),
+      sandbox: async () => await ctx.getSandbox(),
       selectedInstallationId: input.selectedInstallationId,
       sessionId: ctx.session.id,
-    });
+    };
+    const prepared = await runtime.prepareExistingSource(preparationInput);
     assertExactImmutableGitHubSourceReceipt(prepared.githubSource);
     const selectedPreparedSource = selectedGitHubSourceForSandboxRestore({
       sourceState: prepared.githubSource,
@@ -396,12 +401,18 @@ export default defineTool({
         workspace: prepared.workspace,
       };
     });
-    return {
+    const result = {
       githubSource: preparedGitHubSource,
       repository: access.access.repository,
       repositoryAccessReceiptDigest: prepared.accessReceipt.digest,
       scope: access.access.scope,
-      ...(prepared.appBaseline === undefined ? {} : { appBaseline: prepared.appBaseline }),
+    };
+    const withBaseline =
+      prepared.appBaseline === undefined
+        ? result
+        : { ...result, appBaseline: prepared.appBaseline };
+    return {
+      ...withBaseline,
       selectedSource: {
         branch: prepared.githubSource.resolvedRef.slice("refs/heads/".length),
         pullRequestNumber,

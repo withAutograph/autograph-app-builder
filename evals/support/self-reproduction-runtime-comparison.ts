@@ -11,6 +11,9 @@ export interface RuntimeComparisonResult {
   errors: string[];
 }
 
+const errorMessage = (error: Error | string): string =>
+  error instanceof Error ? error.message : error;
+
 /** Runs evaluator code against loopback while the caller retains the live sandbox. */
 export const runSandboxRuntimeComparison = async (input: {
   session: Pick<SandboxSession, "writeTextFile" | "run" | "readTextFile" | "readBinaryFile">;
@@ -54,7 +57,7 @@ export const runSandboxRuntimeComparison = async (input: {
       result.errors.push(`Evaluator exited with code ${command.exitCode}.`);
     }
   } catch (error) {
-    result.errors.push(error instanceof Error ? error.message : String(error));
+    result.errors.push(errorMessage(error));
   }
   // Recover partial output even after an evaluator exception or nonzero exit.
   try {
@@ -64,22 +67,27 @@ export const runSandboxRuntimeComparison = async (input: {
     }
     result.output = JSON.parse(output);
   } catch (error) {
-    result.errors.push(
-      `Comparison output: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    result.errors.push(`Comparison output: ${errorMessage(error)}`);
   }
-  for (const path of artifactPaths) {
-    try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve partial artifacts individually
-      const content = await input.session.readBinaryFile({ path: `${directory}/${path}` });
-      if (content === null) {
-        throw new Error("Evaluator artifact file is missing.");
+  const artifacts = await Promise.all(
+    artifactPaths.map(async (path) => {
+      try {
+        const content = await input.session.readBinaryFile({ path: `${directory}/${path}` });
+        if (content === null) {
+          throw new Error("Evaluator artifact file is missing.");
+        }
+        return { artifact: { content, path }, error: null };
+      } catch (error) {
+        return { artifact: null, error: `Artifact ${path}: ${errorMessage(error)}` };
       }
-      result.artifacts.push({ content, path });
-    } catch (error) {
-      result.errors.push(
-        `Artifact ${path}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    }),
+  );
+  for (const { artifact, error } of artifacts) {
+    if (artifact !== null) {
+      result.artifacts.push(artifact);
+    }
+    if (error !== null) {
+      result.errors.push(error);
     }
   }
   result.status = result.errors.length === 0 ? "completed" : "failed";

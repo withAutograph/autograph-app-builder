@@ -7,7 +7,7 @@ const dependencyRecovery =
 export function recoveryPromptForSession(record: DurableHostedSessionRecord): string | undefined {
   const { checkpoint } = record;
   if (checkpoint === undefined) {
-    return;
+    return undefined;
   }
   const messages = checkpoint.events
     .filter(

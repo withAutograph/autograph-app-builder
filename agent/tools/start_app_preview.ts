@@ -83,24 +83,29 @@ const resolveNativePreview = async (
   current: ReturnType<typeof appBuilderWorkflowState.get>,
 ) => {
   const protectedAppId = "appSpec" in current ? current.appSpec.appId : input.appId;
-  reportHostedRuntimeHandoffDiagnostic({
+  const diagnostic = {
     acceptedAppIdPresent: "appSpec" in current,
     inputAppIdPresent: input.appId !== undefined,
     lookupAttempted: protectedAppId !== undefined,
-    ...(input.appId === undefined || protectedAppId === undefined
-      ? {}
-      : { appIdMatches: input.appId === protectedAppId }),
-    stage: "native_preview_candidate",
-  });
+  };
+  if (input.appId === undefined || protectedAppId === undefined) {
+    reportHostedRuntimeHandoffDiagnostic({ ...diagnostic, stage: "native_preview_candidate" });
+  } else {
+    reportHostedRuntimeHandoffDiagnostic({
+      ...diagnostic,
+      appIdMatches: input.appId === protectedAppId,
+      stage: "native_preview_candidate",
+    });
+  }
   if (protectedAppId !== undefined) {
     if (input.appId !== undefined && input.appId !== protectedAppId) {
       throw new Error("The requested app does not match the accepted app.");
     }
     const bindings = await resolveProtectedRuntimeBindings({
       appId: protectedAppId,
+      callbackExecution: hostedOperatorCallbackExecution(ctx.session),
       sessionAuth: ctx.session.auth,
       sessionId: ctx.session.id,
-      callbackExecution: hostedOperatorCallbackExecution(ctx.session),
       signal: ctx.abortSignal,
     });
     if (bindings) {
@@ -143,9 +148,9 @@ export default defineTool({
         ? await priorValidatedPrivateArtifact({
             appId: input.appId,
             sandbox,
-            state: current,
             sessionId: ctx.session.id,
             signal: ctx.abortSignal,
+            state: current,
           })
         : undefined;
     const artifact =
@@ -166,11 +171,11 @@ export default defineTool({
       prior === undefined
         ? await resolvePreparedRuntimeExecution({
             appId: selected.appId,
+            callbackExecution: hostedOperatorCallbackExecution(ctx.session),
             root: selected.root,
             sandboxId: getBuilderSandboxId(sandbox),
             sessionAuth: ctx.session.auth,
             sessionId: ctx.session.id,
-            callbackExecution: hostedOperatorCallbackExecution(ctx.session),
             signal: ctx.abortSignal,
             state: current,
           })
@@ -304,6 +309,7 @@ export default defineTool({
     const preview = await startWorkingPreview({
       ...input,
       appId: selected.appId,
+      assertCurrent: prior?.assertCurrent,
       command: launch.command,
       cwd,
       environmentPath,
@@ -317,7 +323,6 @@ export default defineTool({
         });
       },
       prepareAuthenticatedOrigin,
-      assertCurrent: prior?.assertCurrent,
       previous,
       provider,
       requestDigest,
@@ -336,11 +341,11 @@ export default defineTool({
     };
   },
   inputSchema: z.object({
-    artifact: z.literal("prior-validated").optional(),
     appId: z
       .string()
       .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)
       .optional(),
+    artifact: z.literal("prior-validated").optional(),
     command: z.object({
       args: z.array(z.string().max(8192)).max(256),
       executable: z.string().min(1).max(1024),

@@ -86,12 +86,12 @@ export const executeProductReadback = async (input: {
     }
     const marker = randomUUID();
     const body = JSON.stringify({ ...input.scenario.body, [input.scenario.markerField]: marker });
-    const request = (url: string, options: RequestInit = {}) => {
+    const request = async (url: string, options: RequestInit = {}) => {
       signal.throwIfAborted();
       if (Date.now() >= input.authority.expiresAt) {
         throw new Error("Expired authority");
       }
-      return transport(url, { ...options, credentials: "omit", redirect: "manual", signal });
+      return await transport(url, { ...options, credentials: "omit", redirect: "manual", signal });
     };
     const access = await request(launch.href);
     const location = access.headers.get("location");

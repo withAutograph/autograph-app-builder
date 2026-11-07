@@ -21,21 +21,21 @@ const selectionBinding = (state: AppBuilderWorkflowState) =>
     ? {
         appId: state.appSpec.appId,
         appSpecDigest: state.appSpec.digest,
+        githubSourceDigest: state.githubSource?.digest,
         proposalDigest: state.proposal.digest,
         sourceReceiptDigest: state.sourceReceipt.digest,
+        sourceSha: state.workspace.sourceSha,
+        workspaceDigest: state.workspace.workspaceDigest,
         workspaceId: state.workspace.workspaceId,
         workspacePath: state.workspace.workspacePath,
-        workspaceDigest: state.workspace.workspaceDigest,
-        sourceSha: state.workspace.sourceSha,
-        githubSourceDigest: state.githubSource?.digest,
       }
     : undefined;
 
 const validationIdentity = (state: AppBuilderWorkflowState) =>
   state.phase === "validated"
     ? {
-        proposalDigest: state.proposal.digest,
         applyDigest: state.applyReceipt.digest,
+        proposalDigest: state.proposal.digest,
         validationDigest: state.validationReceipt.digest,
       }
     : undefined;
@@ -61,7 +61,7 @@ export const priorValidatedPrivateArtifact = async (input: {
   const authority = readPrivateApplyAuthority();
   const history = existingAppRepairHistory.get();
   const matches = history.filter((entry) => entry.proposalDigest === state.proposal.digest);
-  const entry = matches[0];
+  const [entry] = matches;
   const prior = entry?.approvedBase;
   if (
     authority.pending.length !== 0 ||
@@ -122,7 +122,7 @@ export const priorValidatedPrivateArtifact = async (input: {
     const retained = existingAppRepairHistory
       .get()
       .filter((row) => row.proposalDigest === state.proposal.digest);
-    const retainedEntry = retained[0];
+    const [retainedEntry] = retained;
     if (
       !isDeepStrictEqual(selectionBinding(appBuilderWorkflowState.get()), selected) ||
       currentAuthority.pending.length !== 0 ||
@@ -156,11 +156,11 @@ export const priorValidatedPrivateArtifact = async (input: {
   await verifyCurrent();
   return {
     appId: prior.appSpec.appId,
-    root: apply.applyRoot,
-    revision: apply.digest,
-    validationDigest: validation.digest,
-    reusable: true,
     assertCurrent,
+    reusable: true,
+    revision: apply.digest,
+    root: apply.applyRoot,
+    validationDigest: validation.digest,
     verifyCurrent,
   };
 };

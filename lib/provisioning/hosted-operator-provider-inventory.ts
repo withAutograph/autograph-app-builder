@@ -138,14 +138,14 @@ const invalidDeploymentObservation = (input: {
 }) => {
   const { deployment, reference, projectId, scopeId, resolveAlias } = input;
   return {
-    deployment_project: deployment.projectId !== projectId,
-    deployment_identity: !resolveAlias && deployment.id !== reference.deploymentId,
-    deployment_owner: deployment.ownerId !== undefined && deployment.ownerId !== scopeId,
-    deployment_ready: deployment.readyState !== "READY",
     deployment_environment:
       reference.environment === "production"
         ? deployment.target !== "production"
         : !isNativePreviewDeployment(deployment),
+    deployment_identity: !resolveAlias && deployment.id !== reference.deploymentId,
+    deployment_owner: deployment.ownerId !== undefined && deployment.ownerId !== scopeId,
+    deployment_project: deployment.projectId !== projectId,
+    deployment_ready: deployment.readyState !== "READY",
   };
 };
 
@@ -248,13 +248,13 @@ export const readHostedOperatorProviderInventory = async (input: {
     const config = input.configuration;
     const bootstrapPlanning = input.phase === "bootstrap-planning";
     const invalidConfiguration = {
+      app_branch: config.app.branch !== (input.approvedAppBranch ?? target.branch),
+      app_environment: config.app.environment !== "preview",
+      app_project: config.app.projectId !== target.projectId,
+      gateway_environment: config.gateway.environment !== "preview",
       project_separation:
         new Set([config.app.projectId, config.gateway.projectId, config.operator.projectId])
           .size !== 3,
-      app_project: config.app.projectId !== target.projectId,
-      app_branch: config.app.branch !== (input.approvedAppBranch ?? target.branch),
-      app_environment: config.app.environment !== "preview",
-      gateway_environment: config.gateway.environment !== "preview",
     };
     if (Object.values(invalidConfiguration).some(Boolean)) {
       reportOperatorPlanningMismatch(
@@ -267,23 +267,25 @@ export const readHostedOperatorProviderInventory = async (input: {
     await readWithDiagnostic(
       target.sessionId,
       {
-        target: "inventory",
         operation: "owner",
         phase: "owner",
+        target: "inventory",
       },
       input.diagnosticSink,
-      () => input.assertCurrentOwner(),
+      async () => {
+        await input.assertCurrentOwner();
+      },
     );
     const credential = await readWithDiagnostic(
       target.sessionId,
       {
-        target: "inventory",
         operation: "credential",
         phase: "credential",
+        target: "inventory",
       },
       input.diagnosticSink,
-      () =>
-        input.readVercelCredential({
+      async () =>
+        await input.readVercelCredential({
           authority,
           installationId: target.installationId,
         }),
@@ -293,9 +295,9 @@ export const readHostedOperatorProviderInventory = async (input: {
       reportOperatorInventoryReadFailure(
         target.sessionId,
         {
-          target: "inventory",
           operation: "credential",
           phase: "credential",
+          target: "inventory",
         },
         error,
         input.diagnosticSink,
@@ -323,9 +325,9 @@ export const readHostedOperatorProviderInventory = async (input: {
         reportOperatorInventoryReadFailure(
           target.sessionId,
           {
-            target: targetName,
             operation,
             phase: "schema",
+            target: targetName,
           },
           error,
           input.diagnosticSink,
@@ -343,12 +345,14 @@ export const readHostedOperatorProviderInventory = async (input: {
       await readWithDiagnostic(
         target.sessionId,
         {
-          target: readTarget,
           operation: "owner",
           phase: "owner",
+          target: readTarget,
         },
         input.diagnosticSink,
-        () => input.assertCurrentOwner(),
+        async () => {
+          await input.assertCurrentOwner();
+        },
       );
       const url = new URL(path, "https://api.vercel.com");
       if (target.scopeType === "team") {
@@ -369,12 +373,12 @@ export const readHostedOperatorProviderInventory = async (input: {
       const response = await readWithDiagnostic(
         target.sessionId,
         {
-          target: readTarget,
           operation,
           phase: "fetch",
+          target: readTarget,
         },
         input.diagnosticSink,
-        () => fetcher(url, options),
+        async () => await fetcher(url, options),
       );
       if (!response.ok) {
         if (allowMissing && response.status === 404) {
@@ -389,10 +393,10 @@ export const readHostedOperatorProviderInventory = async (input: {
         reportOperatorInventoryReadFailure(
           target.sessionId,
           {
-            target: readTarget,
+            httpStatus: response.status,
             operation,
             phase: "http_response",
-            httpStatus: response.status,
+            target: readTarget,
           },
           error,
           input.diagnosticSink,
@@ -403,13 +407,13 @@ export const readHostedOperatorProviderInventory = async (input: {
       const body = await readWithDiagnostic(
         target.sessionId,
         {
-          target: readTarget,
+          httpStatus: response.status,
           operation,
           phase: "json_decode",
-          httpStatus: response.status,
+          target: readTarget,
         },
         input.diagnosticSink,
-        async () => z.unknown().parse(await response.json()),
+        async (): Promise<unknown> => await response.json(),
       );
       try {
         return json.parse(body);
@@ -417,10 +421,10 @@ export const readHostedOperatorProviderInventory = async (input: {
         reportOperatorInventoryReadFailure(
           target.sessionId,
           {
-            target: readTarget,
+            httpStatus: response.status,
             operation,
             phase: "schema",
-            httpStatus: response.status,
+            target: readTarget,
           },
           error,
           input.diagnosticSink,
@@ -477,10 +481,10 @@ export const readHostedOperatorProviderInventory = async (input: {
       if (deployment !== undefined) {
         const invalidDeployment = invalidDeploymentObservation({
           deployment,
-          reference,
           projectId: project.id,
-          scopeId: target.scopeId,
+          reference,
           resolveAlias: planningAlias !== undefined,
+          scopeId: target.scopeId,
         });
         if (Object.values(invalidDeployment).some(Boolean)) {
           reportOperatorPlanningMismatch(
@@ -594,16 +598,16 @@ export const readHostedOperatorProviderInventory = async (input: {
         );
         const invalidPublicDeployment = invalidDeploymentObservation({
           deployment: publicDeployment,
-          reference: config.gateway,
           projectId: gateway.summary.projectId,
-          scopeId: target.scopeId,
+          reference: config.gateway,
           resolveAlias: true,
+          scopeId: target.scopeId,
         });
         ownsPublicOrigin = !Object.values(invalidPublicDeployment).some(Boolean);
       }
       const invalidOrigins = {
-        public_origin: !ownsPublicOrigin,
         gateway_origin: !ownsGatewayOrigin,
+        public_origin: !ownsPublicOrigin,
       };
       if (Object.values(invalidOrigins).some(Boolean)) {
         reportOperatorPlanningMismatch(target.sessionId, "gateway_origin", invalidOrigins);
@@ -640,8 +644,8 @@ export const readHostedOperatorProviderInventory = async (input: {
           return new HostedOperatorError("resource_mismatch");
         },
         projectId: config.operator.projectId,
-        request: (path) =>
-          request(
+        request: async (path) =>
+          await request(
             path,
             {},
             false,

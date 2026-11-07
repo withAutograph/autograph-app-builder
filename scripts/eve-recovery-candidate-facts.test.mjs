@@ -15,26 +15,26 @@ let sequence = 0;
 const fixture = () => {
   sequence += 1;
   const descriptor = {
-    version: 1,
-    operationId: `facts-${sequence}`,
-    sourcePublicSessionId: "public-source",
-    sourceOwnerRunId: "physical-source",
-    sourceAdapterGeneration: 1,
     logicalSessionId: "logical-source",
+    operationId: `facts-${sequence}`,
     originalAuthoritySessionId: "public-source",
     parentCancellationRevision: 0,
+    sourceAdapterGeneration: 1,
+    sourceOwnerRunId: "physical-source",
+    sourcePublicSessionId: "public-source",
+    version: 1,
   };
   const binding = {
-    ownerRunId: descriptor.sourceOwnerRunId,
     logicalSessionId: descriptor.logicalSessionId,
+    ownerRunId: descriptor.sourceOwnerRunId,
   };
   const payload = {
     binding,
     candidates: [],
-    nativeEvents: [],
     events: [],
-    issues: [],
     frontier: [],
+    issues: [],
+    nativeEvents: [],
     run: { status: "failed" },
   };
   const state = { authorized: 0, denied: false, effects: 0, receipt: null, reports: [] };
@@ -49,40 +49,40 @@ const fixture = () => {
         throw new Error("denied");
       }
     },
-    readReceipt: async () => state.receipt,
     authorizeActivation: effect,
     commitReceipt: effect,
+    readReceipt: async () => state.receipt,
   };
   const input = {
-    auth: { authenticator: "test", principalType: "user", principalId: "owner" },
+    auth: { authenticator: "test", principalId: "owner", principalType: "user" },
     descriptor,
     ports,
   };
   const deps = {
     collect: async ({ binding: selected, authorizeOwner }) => {
       await authorizeOwner(selected);
-      return { kind: "candidate", candidate: payload };
+      return { candidate: payload, kind: "candidate" };
     },
+    getHook: effect,
+    now: () => 0,
     readCandidate: (candidate) => candidate,
+    readEntry: effect,
+    reconcile: effect,
     recordObservation: (record) => {
-      state.reports.push({ record, authorized: state.authorized });
+      state.reports.push({ authorized: state.authorized, record });
       return true;
     },
-    now: () => 0,
-    start: effect,
     resumeHook: effect,
-    reconcile: effect,
-    readEntry: effect,
-    getHook: effect,
+    start: effect,
   };
-  return { input, deps, payload, state };
+  return { deps, input, payload, state };
 };
 
 test("trusted candidate facts run within exact-owner authorization, revalidate before emission and deduplicate only completed observation", async () => {
   const f = fixture();
   const facts = {
-    flags: { explicitlyAbsent: true, unavailable: null },
     counts: { candidates: 0 },
+    flags: { explicitlyAbsent: true, unavailable: null },
     hashes: { scopeHash: "a".repeat(64) },
   };
   let calls = 0;
@@ -120,7 +120,7 @@ test("authority revoked by the projection rejects observation before facts can b
   const f = fixture();
   f.input.ports.observeCandidateFacts = async () => {
     f.state.denied = true;
-    return { flags: {}, counts: {}, hashes: {} };
+    return { counts: {}, flags: {}, hashes: {} };
   };
   await assert.rejects(observeTerminalSession(f.input, f.deps), /denied/u);
   assert.equal(f.state.reports.length, 0);
@@ -130,7 +130,7 @@ test("receipt changed by the projection rejects observation before facts can be 
   const f = fixture();
   f.input.ports.observeCandidateFacts = async () => {
     f.state.receipt = { ...f.input.descriptor, ownerRunId: "different-owner" };
-    return { flags: {}, counts: {}, hashes: {} };
+    return { counts: {}, flags: {}, hashes: {} };
   };
   await assert.rejects(observeTerminalSession(f.input, f.deps), /receipt changed/u);
   assert.equal(f.state.reports.length, 0);
@@ -141,7 +141,7 @@ test("a mismatched collected owner never reaches the trusted callback", async ()
   let calls = 0;
   f.input.ports.observeCandidateFacts = async () => {
     calls += 1;
-    return { flags: {}, counts: {}, hashes: {} };
+    return { counts: {}, flags: {}, hashes: {} };
   };
   f.deps.readCandidate = () => ({
     ...f.payload,

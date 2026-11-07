@@ -21,10 +21,10 @@ export interface PublicReleaseBindingSnapshot {
 export { publicReleaseRequiresNativeGitEvent } from "./public-release-contract";
 const semantic = (plan: PublicReleasePlan) => ({
   ...plan,
-  purpose: plan.purpose ?? "application",
-  project: { ...plan.project, priorActiveDeploymentId: undefined },
-  source: { ...plan.source, expectedProductionSha: undefined },
   environment: plan.environment.map(({ key, sha256 }) => ({ key, sha256 })),
+  project: { ...plan.project, priorActiveDeploymentId: undefined },
+  purpose: plan.purpose ?? "application",
+  source: { ...plan.source, expectedProductionSha: undefined },
 });
 /** Existing frozen intent wins on resume; changed intent never passes another plan's uncertain effects. */
 export const reconcilePublicReleasePlanHistory = (input: {
@@ -101,7 +101,7 @@ export const readPublicReleasePlanHistory = async (input: {
   candidate: PublicReleasePlan;
   assertCurrentOwner: () => Promise<void>;
 }) => {
-  const authority = input.candidate.authority;
+  const { authority } = input.candidate;
   const records: PublicReleaseRecord[] = [];
   let cursor: string | undefined;
   /* oxlint-disable eslint/no-await-in-loop -- Each owner-checked page depends on the preceding immutable request-ID cursor. */

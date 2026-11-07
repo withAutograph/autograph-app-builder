@@ -22,16 +22,16 @@ export const prepareDevelopmentEveWrapperEnvironment = async (input: {
   let limits: Awaited<ReturnType<typeof observePrivateComputeLimits>> | undefined;
   try {
     limits = await observePrivateComputeLimits({
-      repositoryRoot: input.repositoryRoot,
-      vercelExecutable: input.vercelExecutable,
       environment: input.environment,
+      repositoryRoot: input.repositoryRoot,
       signal: input.signal,
+      vercelExecutable: input.vercelExecutable,
     });
   } catch {
     // The unselected default footprint needs no resource-change observation.
   }
   input.signal.throwIfAborted();
-  return {
+  const environment: NodeJS.ProcessEnv = {
     HOME: input.runtimeHome,
     LANG: input.environment.LANG ?? "C",
     LC_ALL: input.environment.LC_ALL ?? "C",
@@ -40,13 +40,18 @@ export const prepareDevelopmentEveWrapperEnvironment = async (input: {
     TMPDIR: input.environment.TMPDIR ?? "/tmp",
     TZ: input.environment.TZ ?? "UTC",
     ...input.closed,
-    ...(limits === undefined ? {} : { APP_BUILDER_PRIVATE_COMPUTE_LIMITS: JSON.stringify(limits) }),
-    APP_BUILDER_LOCAL_EVE_CYCLE_FILE: input.cycleFile,
+  };
+  if (limits !== undefined) {
+    environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS = JSON.stringify(limits);
+  }
+  return {
+    ...environment,
     APP_BUILDER_DEV_EVE_ROOT: input.applicationRoot,
     APP_BUILDER_DEV_RUNS_ROOT: input.runsRoot,
     APP_BUILDER_DEV_RUNTIME_HOME: input.runtimeHome,
     APP_BUILDER_DEV_SUPERVISOR_ROOT: input.supervisorRoot,
     APP_BUILDER_EVE_PORT: new URL(input.closed.EVE_AGENT_HOST).port,
+    APP_BUILDER_LOCAL_EVE_CYCLE_FILE: input.cycleFile,
     // Keep workflow redelivery on the same explicit loopback Eve endpoint.
     WORKFLOW_LOCAL_BASE_URL: input.closed.EVE_AGENT_HOST,
     WORKFLOW_LOCAL_DATA_DIR: input.workflowData,

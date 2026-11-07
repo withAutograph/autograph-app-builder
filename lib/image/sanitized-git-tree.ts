@@ -40,8 +40,7 @@ const git = (root: string, args: readonly string[]) =>
     maxBuffer: 32 * 1024 * 1024,
   }).trim();
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function ensureNoLinkPath(path: string, label: string): void {
+const ensureNoLinkPath = (path: string, label: string): void => {
   const canonical = nodePath.resolve(path);
   assertCanonicalRoot(canonical, realpathSync(canonical), label);
   if (nodePath.resolve(canonical, "/") === canonical) {
@@ -58,23 +57,50 @@ function ensureNoLinkPath(path: string, label: string): void {
     }
     cursor = parent;
   }
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function assertAbsoluteInput(path: string, label: string): void {
+const assertAbsoluteInput = (path: string, label: string): void => {
   if (!nodePath.isAbsolute(path) || nodePath.resolve(path) !== path) {
     throw new Error(`${label} must be an absolute normalized path.`);
   }
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function containsPath(root: string, candidate: string): boolean {
+const containsPath = (root: string, candidate: string): boolean => {
   const path = nodePath.relative(root, candidate);
   return path === "" || (!path.startsWith(`..${nodePath.sep}`) && path !== "..");
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function writeExactFile(path: string, bytes: Buffer, mode: number): void {
+const hasSafePathParts = (path: string): boolean =>
+  !path.includes("\\") &&
+  !path.includes("\uFFFD") &&
+  !path.split("/").some((part) => part === "" || part === "." || part === "..");
+
+const isSafeGitPath = (type: string | undefined, path: string | undefined): path is string => {
+  if (type !== "blob" || path === undefined) {
+    return false;
+  }
+  if (!hasSafePathParts(path)) {
+    return false;
+  }
+  if (path === ".git" || path.startsWith(".git/")) {
+    return false;
+  }
+  return path !== ".app-builder-source-manifest.json";
+};
+
+const isSafeSymlinkTarget = (target: string, root: string, parent: string): boolean => {
+  if (
+    target === "" ||
+    target.includes("\0") ||
+    target.includes("\uFFFD") ||
+    nodePath.isAbsolute(target)
+  ) {
+    return false;
+  }
+  return containsPath(root, nodePath.resolve(parent, target));
+};
+
+const writeExactFile = (path: string, bytes: Buffer, mode: number): void => {
   const descriptor = openSync(
     path,
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -91,7 +117,43 @@ function writeExactFile(path: string, bytes: Buffer, mode: number): void {
     closeSync(descriptor);
   }
   chmodSync(path, mode);
-}
+};
+
+const materializeEntry = (sourceRoot: string, destinationRoot: string, record: string): string => {
+  const match =
+    /^(?<mode>[0-9]{6}) (?<type>blob|commit) (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(record);
+  if (match === null) {
+    throw new Error("Sanitized context contains an unsupported Git entry.");
+  }
+  const [, mode, type, objectId, path] = match;
+  if (!isSafeGitPath(type, path)) {
+    throw new Error("Sanitized context contains an unsafe Git path.");
+  }
+  if (mode !== "100644" && mode !== "100755" && mode !== "120000") {
+    throw new Error("Sanitized context contains an unsupported Git mode.");
+  }
+  const absolute = nodePath.resolve(destinationRoot, path);
+  if (!containsPath(destinationRoot, absolute)) {
+    throw new Error("Sanitized context path escapes its root.");
+  }
+  const parent = nodePath.dirname(absolute);
+  mkdirSync(parent, { mode: 0o700, recursive: true });
+  ensureNoLinkPath(parent, `Sanitized context parent for ${path}`);
+  const bytes = execFileSync(fixedGit, ["-C", sourceRoot, "cat-file", "blob", objectId], {
+    env: sanitizedEnvironment(),
+    maxBuffer: 128 * 1024 * 1024,
+  });
+  if (mode === "120000") {
+    const target = bytes.toString("utf-8");
+    if (!isSafeSymlinkTarget(target, destinationRoot, parent)) {
+      throw new Error(`Sanitized context symlink ${path} is unsafe.`);
+    }
+    symlinkSync(target, absolute);
+  } else {
+    writeExactFile(absolute, bytes, mode === "100755" ? 0o755 : 0o644);
+  }
+  return `${mode}\0${objectId}\0${path}`;
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function materializeSanitizedGitTree(
@@ -123,56 +185,7 @@ export function materializeSanitizedGitTree(
   mkdirSync(destinationRoot, { mode: 0o700 });
   try {
     for (const row of listing.split("\0").filter(Boolean)) {
-      const match =
-        /^(?<mode>[0-9]{6}) (?<type>blob|commit) (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(
-          row,
-        );
-      if (match === null) {
-        throw new Error("Sanitized context contains an unsupported Git entry.");
-      }
-      const [, mode, type, objectId, path] = match;
-      if (
-        type !== "blob" ||
-        path === undefined ||
-        path.includes("\\") ||
-        path.includes("\uFFFD") ||
-        path.split("/").some((part) => part === "" || part === "." || part === "..") ||
-        path === ".git" ||
-        path.startsWith(".git/") ||
-        path === ".app-builder-source-manifest.json"
-      ) {
-        throw new Error("Sanitized context contains an unsafe Git path.");
-      }
-      if (mode !== "100644" && mode !== "100755" && mode !== "120000") {
-        throw new Error("Sanitized context contains an unsupported Git mode.");
-      }
-      const absolute = nodePath.resolve(destinationRoot, path);
-      if (!containsPath(destinationRoot, absolute)) {
-        throw new Error("Sanitized context path escapes its root.");
-      }
-      const parent = nodePath.dirname(absolute);
-      mkdirSync(parent, { mode: 0o700, recursive: true });
-      ensureNoLinkPath(parent, `Sanitized context parent for ${path}`);
-      const bytes = execFileSync(fixedGit, ["-C", sourceRoot, "cat-file", "blob", objectId], {
-        env: sanitizedEnvironment(),
-        maxBuffer: 128 * 1024 * 1024,
-      });
-      if (mode === "120000") {
-        const target = bytes.toString("utf-8");
-        if (
-          target === "" ||
-          target.includes("\0") ||
-          target.includes("\uFFFD") ||
-          nodePath.isAbsolute(target) ||
-          !containsPath(destinationRoot, nodePath.resolve(parent, target))
-        ) {
-          throw new Error(`Sanitized context symlink ${path} is unsafe.`);
-        }
-        symlinkSync(target, absolute);
-      } else {
-        writeExactFile(absolute, bytes, mode === "100755" ? 0o755 : 0o644);
-      }
-      records.push(`${mode}\0${objectId}\0${path}`);
+      records.push(materializeEntry(sourceRoot, destinationRoot, row));
     }
     const entriesDigest = hashArtifact(records.join("\n"));
     const manifest = {

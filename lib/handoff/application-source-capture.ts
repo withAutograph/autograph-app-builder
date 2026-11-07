@@ -6,6 +6,8 @@ import type { ApplicationSourceManifest } from "./application-source-contract";
 import { applicationSourceOmissionReason } from "./application-source-contract";
 import { validateApplicationSourceArtifact } from "./application-source-bytes";
 
+const sourceChangedDuringCapture = "Application source changed during capture";
+
 export const applicationSourceInventoryProgram = String.raw`import json,os,stat,sys
 root='/workspace/repository'
 app=sys.argv[1]
@@ -30,10 +32,10 @@ for directory,dirs,files in os.walk(base,followlinks=False):
 print(json.dumps(rows))`;
 const listingSchema = z.array(
   z.strictObject({
-    path: z.string(),
-    kind: z.enum(["file", "directory", "symlink", "unsupported"]),
     bytes: z.number().int().nonnegative().optional(),
+    kind: z.enum(["file", "directory", "symlink", "unsupported"]),
     mode: z.enum(["100644", "100755"]).optional(),
+    path: z.string(),
   }),
 );
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
@@ -87,14 +89,14 @@ export const captureApplicationSource = async (input: {
     const bytes = await input.sandbox.readBinaryFile({ path: `/workspace/repository/${row.path}` });
     input.signal.throwIfAborted();
     if (bytes === null || bytes.byteLength !== row.bytes) {
-      throw new Error("Application source changed during capture");
+      throw new Error(sourceChangedDuringCapture);
     }
     const data = Buffer.from(bytes);
-    files.push({ path: row.path, contentBase64: data.toString("base64") });
+    files.push({ contentBase64: data.toString("base64"), path: row.path });
     manifestFiles.push({
-      path: row.path,
-      mode: row.mode,
       bytes: data.byteLength,
+      mode: row.mode,
+      path: row.path,
       sha256: createHash("sha256").update(data).digest("hex"),
     });
   }
@@ -104,24 +106,24 @@ export const captureApplicationSource = async (input: {
     });
     input.signal.throwIfAborted();
     if (observed === null || createHash("sha256").update(observed).digest("hex") !== entry.sha256) {
-      throw new Error("Application source changed during capture");
+      throw new Error(sourceChangedDuringCapture);
     }
   }
   if (JSON.stringify(await list()) !== JSON.stringify(inventory)) {
-    throw new Error("Application source changed during capture");
+    throw new Error(sourceChangedDuringCapture);
   }
   await input.assertCurrent();
   input.signal.throwIfAborted();
   return validateApplicationSourceArtifact({
+    files,
     manifest: {
-      version: 1,
-      kind: "application-source-v1",
       appId: input.appId,
       displayName: input.displayName,
-      sourceSessionId: input.sourceSessionId,
       files: manifestFiles,
+      kind: "application-source-v1",
       omissions,
+      sourceSessionId: input.sourceSessionId,
+      version: 1,
     },
-    files,
   });
 };

@@ -271,11 +271,11 @@ export const createVercelSdkSession = (
     writeBinaryFile,
     async writeFile(options) {
       await writeVercelStream({
-        current,
         authorize,
-        target: resolvePath(options.path),
         content: options.content,
+        current,
         signal: options.abortSignal,
+        target: resolvePath(options.path),
       });
     },
     writeTextFile: (options) =>

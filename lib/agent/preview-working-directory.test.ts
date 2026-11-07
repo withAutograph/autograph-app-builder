@@ -28,10 +28,10 @@ const mocks = vi.hoisted(() => {
     invalidate: vi.fn(),
     nativeBindings: vi.fn().mockResolvedValue(null),
     nativePreview: vi.fn(),
-    prior: vi.fn(),
     prepare: vi.fn().mockResolvedValue({ status: "prepared" }),
     previewStateUpdate:
       vi.fn<(transition: (state: { commandId: string } | null) => null) => void>(),
+    prior: vi.fn(),
     runtime: vi.fn().mockResolvedValue(null),
     start: vi
       .fn()
@@ -120,7 +120,7 @@ describe("preview command working directory", () => {
         callId: "hosted-preview",
         getSandbox: vi.fn().mockResolvedValue({
           id: "sandbox_replacement",
-          readTextFile: () => Promise.resolve("{}"),
+          readTextFile: vi.fn().mockResolvedValue("{}"),
         }),
         getToken: vi.fn(),
         requireAuth: (): never => {
@@ -152,8 +152,8 @@ describe("preview command working directory", () => {
       sourceReceipt: { sourceKind: "existing-repository" },
       workspace: { workspacePath: "/workspace/repository" },
     };
-    const readTextFile = vi.fn(({ path }: { path: string }) =>
-      Promise.resolve(path.endsWith("package.json") ? "{}" : null),
+    const readTextFile = vi.fn(async ({ path }: { path: string }) =>
+      path.endsWith("package.json") ? "{}" : null,
     );
     try {
       await startAppPreview.execute(
@@ -203,20 +203,20 @@ describe("preview command working directory", () => {
       });
       mocks.prior.mockResolvedValueOnce({
         appId: "app",
-        root: "/workspace/repository",
-        revision: "prior-apply",
-        validationDigest: "prior-validation",
-        reusable: true,
         assertCurrent,
+        reusable: true,
+        revision: "prior-apply",
+        root: "/workspace/repository",
+        validationDigest: "prior-validation",
         verifyCurrent,
       });
       mocks.dependencies.mockClear();
       mocks.dependencies.mockResolvedValueOnce({
-        status: ready ? "reused" : "installed",
         attempts: [],
+        status: ready ? "reused" : "installed",
       });
       mocks.start.mockClear();
-      const signal = new AbortController().signal;
+      const { signal } = new AbortController();
       const result = startAppPreview.execute(
         {
           artifact: "prior-validated",
@@ -248,7 +248,7 @@ describe("preview command working directory", () => {
         dependencies: { status: ready ? "reused" : "installed" },
       });
       expect(mocks.dependencies).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({ root: "/workspace/repository", checkoutIdentity: "prior-apply" }),
+        expect.objectContaining({ checkoutIdentity: "prior-apply", root: "/workspace/repository" }),
       );
       expect(mocks.dependencies).not.toHaveBeenCalledWith(
         expect.objectContaining({ reconcileWorkspace: true }),
@@ -258,8 +258,8 @@ describe("preview command working directory", () => {
       expect(verifyCurrent).toHaveBeenCalledBefore(mocks.start);
       expect(mocks.start).toHaveBeenCalledWith(
         expect.objectContaining({
-          cwd: "/workspace/repository",
           command: { args: ["run", "preview"], executable: "pnpm" },
+          cwd: "/workspace/repository",
         }),
       );
       expect(mocks.workflowState).toBe(saved);
@@ -287,9 +287,10 @@ describe("preview command working directory", () => {
     await startAppPreview.execute(input, {
       abortSignal: new AbortController().signal,
       callId: "call",
-      getSandbox: vi
-        .fn()
-        .mockResolvedValue({ id: "sandbox", readTextFile: () => Promise.resolve(null) }),
+      getSandbox: vi.fn().mockResolvedValue({
+        id: "sandbox",
+        readTextFile: vi.fn().mockResolvedValue(null),
+      }),
       getToken: vi.fn(),
       requireAuth: (): never => {
         throw new Error("Unexpected auth request in preview test");
@@ -321,13 +322,13 @@ describe("preview command working directory", () => {
     };
     const sandbox = {
       id: "sandbox",
-      readTextFile: vi.fn(({ path }: { path: string }) => {
+      readTextFile: vi.fn(async ({ path }: { path: string }) => {
         if (path.endsWith("package.json")) {
-          return Promise.resolve(JSON.stringify({ dependencies: { next: "16" } }));
+          return JSON.stringify({ dependencies: { next: "16" } });
         }
-        return Promise.resolve(
-          path.endsWith("app-spec.md") ? "mise run app:local -- app setup" : '[tasks."app:local"]',
-        );
+        return path.endsWith("app-spec.md")
+          ? "mise run app:local -- app setup"
+          : '[tasks."app:local"]';
       }),
     };
     mocks.prepare.mockClear();
@@ -443,15 +444,13 @@ describe("preview command working directory", () => {
           callId: "call",
           getSandbox: vi.fn().mockResolvedValue({
             id: "sandbox",
-            readTextFile: ({ path }: { path: string }) => {
+            readTextFile: async ({ path }: { path: string }) => {
               if (path.endsWith("package.json")) {
-                return Promise.resolve(JSON.stringify({ dependencies: { next: "16" } }));
+                return JSON.stringify({ dependencies: { next: "16" } });
               }
-              return Promise.resolve(
-                path.endsWith("app-spec.md")
-                  ? "mise run app:local -- app setup"
-                  : '[tasks."app:local"]',
-              );
+              return path.endsWith("app-spec.md")
+                ? "mise run app:local -- app setup"
+                : '[tasks."app:local"]';
             },
           }),
           getToken: vi.fn(),

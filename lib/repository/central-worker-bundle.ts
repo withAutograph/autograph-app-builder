@@ -20,26 +20,26 @@ const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest(
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const worker = (id: string) => z.object({ id: z.literal(id), sha256: digest });
 const receiptSchema = z.object({
-  version: z.literal(1),
-  sourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
-  sourceTree: z.string().regex(/^[a-f0-9]{40}$/u),
-  files: z.array(
-    z.object({ path: z.string(), mode: z.enum(["100644", "100755", "120000"]), sha256: digest }),
-  ),
+  appWorker: worker("app-integration-bootstrap-v1"),
   deploymentProfile: z.literal("isolated-central-integrations-v1"),
+  files: z.array(
+    z.object({ mode: z.enum(["100644", "100755", "120000"]), path: z.string(), sha256: digest }),
+  ),
   serviceIds: z.tuple([z.literal("gateway"), z.literal("integrations")]),
   servicesManifestSha256: digest,
+  sourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
+  sourceTree: z.string().regex(/^[a-f0-9]{40}$/u),
+  version: z.literal(1),
   workers: z.object({
     resources: worker("neon-resource-bootstrap-v1"),
     schema: worker("central-integration-bootstrap-v1"),
   }),
-  appWorker: worker("app-integration-bootstrap-v1"),
 });
 const receiptPath = ".app-builder/central-source-build-receipt.json";
 const workerPaths = {
+  application: ".app-builder/central-workers/app-integration-bootstrap-worker.js",
   resources: ".app-builder/central-workers/neon-resource-bootstrap-worker.js",
   schema: ".app-builder/central-workers/central-integration-bootstrap-worker.js",
-  application: ".app-builder/central-workers/app-integration-bootstrap-worker.js",
 } as const;
 const safePath = (filename: string) => {
   if (
@@ -192,7 +192,7 @@ export const assembleCentralWorkerBundle = async (input: {
       if (!match?.groups) {
         throw new Error("central_bundle_unsupported_git_entry");
       }
-      return [match[3], { mode: match[1], blob: match[2] }] as const;
+      return [match[3], { blob: match[2], mode: match[1] }] as const;
     }),
   );
   if (tree.size !== receipt.files.length) {
@@ -204,9 +204,9 @@ export const assembleCentralWorkerBundle = async (input: {
   await mkdir(repository, { mode: 0o700 });
   await copySource(sourceRoot, repository, receipt.files, tree);
   const workers = {
+    application: receipt.appWorker,
     resources: receipt.workers.resources,
     schema: receipt.workers.schema,
-    application: receipt.appWorker,
   };
   for (const name of ["resources", "schema", "application"] as const) {
     const from = path.join(artifactRoot, workerPaths[name]);
@@ -232,13 +232,13 @@ export const assembleCentralWorkerBundle = async (input: {
   }
   await writeFile(path.join(repository, receiptPath), raw, { flag: "wx", mode: 0o600 });
   const descriptor = {
-    version: 1,
-    sourceSha: receipt.sourceSha,
-    sourceTree: receipt.sourceTree,
-    receiptSha256: input.receiptSha256,
     deploymentProfile: receipt.deploymentProfile,
+    receiptSha256: input.receiptSha256,
     serviceIds: receipt.serviceIds,
     servicesManifestSha256: receipt.servicesManifestSha256,
+    sourceSha: receipt.sourceSha,
+    sourceTree: receipt.sourceTree,
+    version: 1,
     workers: Object.fromEntries(
       (["resources", "schema", "application"] as const).map((name) => [
         name,

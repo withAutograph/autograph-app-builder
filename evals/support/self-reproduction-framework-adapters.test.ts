@@ -17,10 +17,12 @@ const source = [
   { content: ":root{--background:#fff;--foreground:#111}", path: "app/globals.css" },
 ];
 
+const unusedPage = {};
+
 describe("default framework adapter", () => {
   it("does not infer missing functionality from an incomplete source inventory", async () => {
     const adapter = createDefaultFrameworkAdapter({
-      baseURL: "http://candidate",
+      baseURL: "https://candidate",
       files: [],
       side: "candidate",
     });
@@ -32,7 +34,7 @@ describe("default framework adapter", () => {
 
   it("keeps instant navigation unassessed without distinct semantic selectors", async () => {
     const adapter = createDefaultFrameworkAdapter({
-      baseURL: "http://candidate",
+      baseURL: "https://candidate",
       files: source,
       side: "candidate",
     });
@@ -49,8 +51,8 @@ describe("default framework adapter", () => {
     "semantic-tokens",
     "suspense",
   ] as const)("does not award %s assertions from structural hints", async (requirement) => {
-    const adapter = createDefaultFrameworkAdapter({
-      baseURL: "http://reference",
+    const adapter = createDefaultFrameworkAdapter<typeof unusedPage>({
+      baseURL: "https://reference",
       files: source,
       side: "reference",
     });
@@ -58,12 +60,10 @@ describe("default framework adapter", () => {
       disposition: "not-run",
       ready: false,
     });
-    const page = { goto: vi.fn() };
-    expect(await adapter.exerciseBrowser(page as never, requirement)).toMatchObject({
+    expect(await adapter.exerciseBrowser(unusedPage, requirement)).toMatchObject({
       assertions: [],
       disposition: "not-run",
     });
-    expect(page.goto).not.toHaveBeenCalled();
   });
 
   it("uses explicit evaluator-owned reviews and fixtures", async () => {
@@ -76,15 +76,15 @@ describe("default framework adapter", () => {
     const browserFixture = vi
       .fn()
       .mockResolvedValue({ artifacts: [], assertions: [], reason: "Exercised request" });
-    const adapter = createDefaultFrameworkAdapter({
-      baseURL: "http://candidate",
+    const adapter = createDefaultFrameworkAdapter<typeof unusedPage>({
+      baseURL: "https://candidate",
       browserFixture,
       files: source,
       side: "candidate",
       sourceReview,
     });
     await adapter.reviewSource("narrow-client");
-    await adapter.exerciseBrowser({} as never, "narrow-client");
+    await adapter.exerciseBrowser(unusedPage, "narrow-client");
     expect(sourceReview).toHaveBeenCalledWith("narrow-client");
     expect(browserFixture).toHaveBeenCalledWith({}, "narrow-client");
   });

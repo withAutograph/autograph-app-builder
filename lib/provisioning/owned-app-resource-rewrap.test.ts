@@ -38,24 +38,24 @@ const fixture = () => {
     },
     bootstrap: { endpointId: "ep-fixture", maintenanceDatabase: "neondb", role: "neondb_owner" },
     contextId: "fixture",
+    cost: { class: "shared-recovery-group", description: "synthetic fixture", owner: "owner" },
     deploymentBoundary: {
-      composition: "single-project-services",
-      authority,
-      teamId: basePlan.project.teamId,
       app: { branch: "preview", environment: "preview", projectId: basePlan.project.projectId },
+      authority,
+      composition: "single-project-services",
       gateway: { branch: "preview", environment: "preview", projectId: basePlan.project.projectId },
       operator: {
         deploymentId: "operator-deployment",
         environment: "preview",
         projectId: "operator-infrastructure",
       },
+      teamId: basePlan.project.teamId,
       verification: {
         gatewayOrigin: basePlan.publicOrigin,
-        publicOrigin: basePlan.publicOrigin,
         jwksUrl: `${basePlan.publicOrigin}/_platform/jwks.json`,
+        publicOrigin: basePlan.publicOrigin,
       },
     },
-    cost: { class: "shared-recovery-group", description: "synthetic fixture", owner: "owner" },
     effects: [
       { description: "Auth", id: "auth-resources", kind: "resources", resourceId: "auth-resource" },
       { description: "App", id: "app-resources", kind: "resources", resourceId: "first-resource" },
@@ -77,35 +77,35 @@ const fixture = () => {
     release: { artifactRef: "source-release", id: "release", sha256: "f".repeat(64) },
     resourcesInstaller: { reference: "resource-worker", sha256: "e".repeat(64) },
     retention: { expiresAt: "2027-01-01T00:00:00Z", policy: "Retain shared Auth" },
+    runtimePreparation: "single-project-resources-v1",
     selection: {
       appId: basePlan.selection.appId,
-      sessionId: basePlan.selection.sessionId,
-      projectId: basePlan.project.projectId,
       branch: "preview",
       environment: "preview",
+      projectId: basePlan.project.projectId,
+      sessionId: basePlan.selection.sessionId,
     },
     stage: "auth-bootstrap",
-    runtimePreparation: "single-project-resources-v1",
     version: 1,
   });
   const retained = retainedOperatorAuthSchema.parse({
     approvalId: "source-approval",
     approvedByCallId: "source-call",
-    operationRef: basePlan.runtime.operationRef,
-    plan: sourcePlan,
-    planDigest: operatorPlanDigest(sourcePlan),
     authPreparation: {
       assetSha256: "9".repeat(64),
       catalogFingerprint: "b".repeat(64),
       database: "auth",
+      observedAt: "2026-11-03T00:00:00Z",
       runtimeRole: "auth_runtime",
       targetDigest: sourcePlan.authSchema?.targetDigest,
-      observedAt: "2026-11-03T00:00:00Z",
     },
+    operationRef: basePlan.runtime.operationRef,
+    plan: sourcePlan,
+    planDigest: operatorPlanDigest(sourcePlan),
     receipts: sourcePlan.effects.map((effect) => ({
       effectId: effect.id,
-      resourceVersion: "observed",
       observedAt: "2026-11-03T00:00:00Z",
+      resourceVersion: "observed",
     })),
   });
   const config = { tokenKey: Buffer.alloc(32, 9), tokenKeyVersion: "fixture" };
@@ -116,24 +116,24 @@ const fixture = () => {
     scopeType: "team" as const,
   };
   const record = hostedRuntimeJournalRecordSchema.parse({
-    version: 1,
-    kind: "app-runtime",
-    request: target,
-    status: "pending",
-    step: "reserved",
     approvedByCallId: retained.approvedByCallId,
-    retainedAuth: retained,
+    kind: "app-runtime",
     operator: {
       approvalId: retained.approvalId,
       authPreparation: retained.authPreparation,
+      mode: "protected-operator-v1",
       operationRef: retained.operationRef,
       plan: sourcePlan,
       planDigest: retained.planDigest,
       receipts: retained.receipts,
-      mode: "protected-operator-v1",
     },
+    request: target,
+    retainedAuth: retained,
+    status: "pending",
+    step: "reserved",
+    version: 1,
   });
-  const source: ResourceCredentialInput = { authority, config, plan: sourcePlan, target, record };
+  const source: ResourceCredentialInput = { authority, config, plan: sourcePlan, record, target };
   record.privateState = prepareHostedOperatorResourceCredentials({
     ...source,
     database: "authDatabase",
@@ -143,31 +143,31 @@ const fixture = () => {
     kind: "owned-app-resources-v1",
     scopeDigest: "a".repeat(64),
     source: {
-      target,
+      checkpointSha256: hash(record.privateState),
       operationRef: retained.operationRef,
       planDigest: retained.planDigest,
-      checkpointSha256: hash(record.privateState),
+      target,
     },
   });
   const nextPlan = hostedOperatorPlanSchema.parse({
     ...sourcePlan,
-    selection: { ...sourcePlan.selection, sessionId: nextTarget.sessionId },
     existingResources: reference,
+    selection: { ...sourcePlan.selection, sessionId: nextTarget.sessionId },
   });
   const nextRecord = hostedRuntimeJournalRecordSchema.parse({
-    version: 1,
+    approvedByCallId: "new-current-approval",
     kind: "app-runtime",
     request: nextTarget,
     status: "pending",
     step: "reserved",
-    approvedByCallId: "new-current-approval",
+    version: 1,
   });
   const targetInput: ResourceCredentialInput = {
     authority,
     config,
     plan: nextPlan,
-    target: nextTarget,
     record: nextRecord,
+    target: nextTarget,
   };
   return { source, target: targetInput };
 };
@@ -229,8 +229,8 @@ it("refuses an altered original sealed checkpoint before returning new ciphertex
   const { source, target } = fixture();
   source.record.privateState = prepareHostedOperatorResourceCredentials({
     ...source,
-    record: { ...source.record, privateState: undefined },
     database: "authDatabase",
+    record: { ...source.record, privateState: undefined },
   }).privateState;
   expect(() => rewrapOwnedAppResourceCredentials({ source, target })).toThrow("resource_mismatch");
 });

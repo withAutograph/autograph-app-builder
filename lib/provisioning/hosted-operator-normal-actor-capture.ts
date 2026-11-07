@@ -29,18 +29,18 @@ import type { HostedOperatorContext } from "./hosted-operator-service";
 export const NORMAL_ACTOR_CAPTURE_PATH = "/api/hosted-operator/realm-browser-session";
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const envelope = z.strictObject({
-  version: z.literal(1),
-  purpose: z.literal("realm-normal-browser-session-v1"),
-  ownerSessionId: z.string().min(1).max(200),
   operationRef: z.uuid(),
-  participantProgramDigest: digest,
-  reviewedNonce: digest,
-  proof: z.string().min(1).max(16_384),
   origin: z.url(),
+  ownerSessionId: z.string().min(1).max(200),
+  participantProgramDigest: digest,
+  proof: z.string().min(1).max(16_384),
+  purpose: z.literal("realm-normal-browser-session-v1"),
+  reviewedNonce: digest,
+  version: z.literal(1),
 });
 export const normalActorCaptureRequestSchema = z.discriminatedUnion("phase", [
   envelope.extend({ phase: z.literal("authorize") }),
-  envelope.extend({ phase: z.literal("capture"), normalCookie: normalActorCaptureCookieSchema }),
+  envelope.extend({ normalCookie: normalActorCaptureCookieSchema, phase: z.literal("capture") }),
 ]);
 interface RealmNativeSenderFields {
   issuer: string;
@@ -113,8 +113,8 @@ const readBody = async (request: Request) => {
 };
 const ack = (body: { authorized: true } | { captured: true }, status = 200) =>
   Response.json(body, {
-    status,
     headers: { "cache-control": "no-store", "referrer-policy": "no-referrer" },
+    status,
   });
 
 /** Two-phase private Auth sender protocol; never consumes the normal-owner callback nonce. */
@@ -152,7 +152,7 @@ export const createNormalActorCaptureHandler =
       }
       const input = normalActorCaptureRequestSchema.parse(JSON.parse(await readBody(request)));
       const nonceSha256 = realmIdentityNonceSha256(input.reviewedNonce);
-      const pending = await ports.pending({ ownerSessionId: input.ownerSessionId, nonceSha256 });
+      const pending = await ports.pending({ nonceSha256, ownerSessionId: input.ownerSessionId });
       const { link, context } = pending;
       if (ports.sender.environment === "production") {
         const enrollment = publicRealmEnrollmentSchema.parse(ports.sender.publicEnrollment);
@@ -198,13 +198,13 @@ export const createNormalActorCaptureHandler =
         throw new Error("realm_browser_session_capture_unavailable");
       }
       const verified = await readVerifiedRealmAccess({
-        pending: link,
-        resource: pending.resource,
-        getKey: pending.getKey,
-        readback: pending.readback,
         assertCurrent: pending.assertCurrent,
-        proof: input.proof,
+        getKey: pending.getKey,
         nonce: input.reviewedNonce,
+        pending: link,
+        proof: input.proof,
+        readback: pending.readback,
+        resource: pending.resource,
       });
       const proofSha256 = createHash("sha256").update(input.proof).digest("hex");
       if (verified.claims.browserSession === undefined) {
@@ -213,9 +213,6 @@ export const createNormalActorCaptureHandler =
       if (input.phase === "authorize") {
         await ports.journal.authorizeCapture(context, {
           actorKey: pending.actorKey,
-          organizationId: pending.organizationId,
-          nonceSha256,
-          proofSha256,
           expiresAt: new Date(
             Math.min(
               Date.parse(link.expiresAt),
@@ -223,6 +220,9 @@ export const createNormalActorCaptureHandler =
               Date.parse(verified.identity.expiresAt),
             ),
           ).toISOString(),
+          nonceSha256,
+          organizationId: pending.organizationId,
+          proofSha256,
         });
         return ack({ authorized: true });
       }
@@ -249,18 +249,18 @@ export const createNormalActorCaptureHandler =
         throw new Error("realm_browser_session_capture_unavailable");
       }
       const session = {
-        reference: stage.reference,
         actorId: verified.identity.actorId,
-        realmSessionId: verified.identity.sessionId,
-        origin: input.origin,
         expiresAt: verified.identity.expiresAt,
+        origin: input.origin,
+        realmSessionId: verified.identity.sessionId,
+        reference: stage.reference,
       };
       const actual = await ports.verifyCapturedActor({
-        context,
         actorKey: pending.actorKey,
+        context,
+        normalCookie: cookie,
         program: retained.preparation.program,
         session,
-        normalCookie: cookie,
       });
       if (
         actual === null ||
@@ -273,20 +273,20 @@ export const createNormalActorCaptureHandler =
       }
       await pending.assertCurrent();
       await ports.journal.capture(context, {
-        version: 1,
         actorKey: pending.actorKey,
         nonceSha256,
-        organizationId: pending.organizationId,
-        proofSha256,
-        proof: input.proof,
-        session,
         normalCookie: cookie,
+        organizationId: pending.organizationId,
+        proof: input.proof,
+        proofSha256,
+        session,
+        version: 1,
       });
       return ack({ captured: true });
     } catch {
       return Response.json(
         { error: "realm_browser_session_capture_unavailable" },
-        { status: 403, headers: { "cache-control": "no-store", "referrer-policy": "no-referrer" } },
+        { headers: { "cache-control": "no-store", "referrer-policy": "no-referrer" }, status: 403 },
       );
     }
   };

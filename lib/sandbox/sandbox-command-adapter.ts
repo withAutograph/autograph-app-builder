@@ -8,10 +8,10 @@ export const createAuthorizedSandboxSession = <Session extends SandboxSession>(i
   ...input.session,
   async run(options) {
     await input.authorize?.();
-    return input.session.run(options);
+    return await input.session.run(options);
   },
   async spawn(options) {
     await input.authorize?.();
-    return input.session.spawn(options);
+    return await input.session.spawn(options);
   },
 });

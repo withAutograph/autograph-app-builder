@@ -38,10 +38,10 @@ beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
   setArguments("--database-url-fd", "0");
-  mocks.sqlEnd.mockImplementation(() => Promise.resolve());
+  mocks.sqlEnd.mockImplementation(async () => {});
   mocks.postgres.mockReturnValue(sql);
   mocks.drizzle.mockReturnValue(migrationDb);
-  mocks.migrate.mockImplementation(() => Promise.resolve());
+  mocks.migrate.mockImplementation(async () => {});
   configureSyntheticFd(directUrl);
   // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the real CLI entrypoint while isolating its network driver.
   vi.doMock("postgres", () => ({ default: mocks.postgres }));

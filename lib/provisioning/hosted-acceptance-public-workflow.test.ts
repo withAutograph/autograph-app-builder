@@ -34,12 +34,12 @@ import {
 } from "./hosted-acceptance-recovery.test-fixture";
 
 const hooks = vi.hoisted(() => ({
-  state: new Map<string, unknown>(),
+  approval: vi.fn<(ctx: ApprovalContext<ContinuityApprovalToolInput>) => Promise<ApprovalStatus>>(),
   client: vi.fn(),
   projection: vi.fn(),
   repository: vi.fn(),
   sleep: vi.fn(),
-  approval: vi.fn<(ctx: ApprovalContext<ContinuityApprovalToolInput>) => Promise<ApprovalStatus>>(),
+  state: new Map<string, unknown>(),
 }));
 vi.mock("eve/context", () => ({
   defineState: <T>(key: string, initial: () => T) => ({
@@ -80,7 +80,11 @@ const roots: string[] = [];
 afterEach(async () => {
   hooks.state.clear();
   vi.clearAllMocks();
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(
+    roots.splice(0).map(async (root) => {
+      await rm(root, { force: true, recursive: true });
+    }),
+  );
 });
 
 it("uses actual planning and approval workflow tools to recover retained source and run focused managed acceptance", async () => {
@@ -106,8 +110,8 @@ it("uses actual planning and approval workflow tools to recover retained source 
     path.join(source, "apps", context.target.appId, ".config/app-spec.md"),
     "Controlled app contract",
   );
-  // oxlint-disable-next-line typescript/strict-void-return -- Node supplies execFile's stdout/stderr promisification.
-  const exec = promisify(execFile);
+  const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+  const exec = promisifyExecFile(execFile);
   const git = async (...args: string[]) => await exec("git", ["-C", source, ...args]);
   await git("init");
   await git("add", ".");
@@ -145,8 +149,8 @@ it("uses actual planning and approval workflow tools to recover retained source 
   });
   // The existing checkout retains private work but has lost its app contract.
   hooks.state.set("autograph-app-builder.workflow.v17", {
-    phase: "reviewed",
     githubSource: { digest: "retained-source" },
+    phase: "reviewed",
     sourceReceipt: { sourceKind: "existing-repository" },
     workspace: { workspacePath: "/workspace/stale" },
   });
@@ -161,9 +165,6 @@ it("uses actual planning and approval workflow tools to recover retained source 
     setNetworkPolicy: (policy: SandboxNetworkPolicy) => Promise<void>;
   } = {
     id: selection.runtime.sandboxId,
-    setNetworkPolicy: async (policy) => {
-      policies.push(policy);
-    },
     readTextFile: async ({ path: requested }: { path: string }) => {
       try {
         return await readFile(requested.replaceAll("/workspace", workspace), "utf-8");
@@ -195,10 +196,13 @@ it("uses actual planning and approval workflow tools to recover retained source 
       const result = await exec("/bin/sh", ["-c", localCommand], { cwd });
       return { ...result, exitCode: 0 };
     },
+    setNetworkPolicy: async (policy) => {
+      policies.push(policy);
+    },
   };
   hooks.client.mockResolvedValue({
-    sessionId: context.target.sessionId,
-    resolvePreviewTarget: async () => preparedPlan.selection,
+    continuityApproval: async (request: typeof old.request) =>
+      await f.operations.approval(context, request),
     planContinuity: async (
       _selected: OperatorSelection,
       runtime: typeof selection.runtime,
@@ -207,33 +211,33 @@ it("uses actual planning and approval workflow tools to recover retained source 
       recovery?: { predecessorIntentId: string },
     ) => await f.operations.plan(context, runtime, key, recovery),
     readContinuity: async (id: string) => await f.operations.readPlan(context, id),
-    continuityApproval: async (request: typeof old.request) =>
-      await f.operations.approval(context, request),
+    resolvePreviewTarget: async () => preparedPlan.selection,
     runContinuity: async (request: typeof old.request, callId: string) =>
       await f.operations.execute(context, request, callId),
+    sessionId: context.target.sessionId,
   });
   const ctx = {
-    session: {
-      id: context.target.sessionId,
-      auth: {},
-      ownerRunId: "owner-run",
-      ownerAnchorRunId: context.target.sessionId,
-    },
-    callId: "successor-planning",
     abortSignal: new AbortController().signal,
+    callId: "successor-planning",
     getSandbox: async () => sandbox,
+    session: {
+      auth: {},
+      id: context.target.sessionId,
+      ownerAnchorRunId: context.target.sessionId,
+      ownerRunId: "owner-run",
+    },
   };
   // SAFETY: Every context field consumed by these production tool/step paths is supplied above.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Controlled Eve context avoids replacing actual tool implementations.
   const toolCtx = ctx as never;
-  const browserSelection = { testName: "@acceptance", workers: 1, retries: 0, maxFailures: 1 };
+  const browserSelection = { maxFailures: 1, retries: 0, testName: "@acceptance", workers: 1 };
   const planned = await planTool.execute(
     {
       appId: context.target.appId,
+      browserSelection,
       environment: "preview",
       operation: "continuity",
       recoverContinuityIntentId: old.plan.intentId,
-      browserSelection,
     },
     toolCtx,
   );
@@ -254,34 +258,34 @@ it("uses actual planning and approval workflow tools to recover retained source 
     ),
   ).toBe("user-approval");
   const capture = createPrivateContinuityApprovalCapture({
-    plan: successor.plan,
-    request: successor.request,
-    principal: { ...authority, scopes: ["autograph:send"] },
     callId: ctx.callId,
+    plan: successor.plan,
+    principal: { ...authority, scopes: ["autograph:send"] },
+    request: successor.request,
   });
   f.deps.readApproval = async () => capture.read();
   expect(await f.operations.approval(context, successor.request)).toEqual({ approved: false });
   const approvalEvent: MessageStreamEvent = {
-    type: "input.requested",
-    meta: { at: "2026-11-03T00:00:00Z", id: "request-event" },
     data: {
+      requests: [
+        {
+          action: {
+            callId: ctx.callId,
+            input,
+            kind: "tool-call",
+            toolName: "run-app-continuity-tests",
+          },
+          kind: "tool-approval",
+          prompt: "Run focused acceptance",
+          requestId: "fresh-approval",
+        },
+      ],
       sequence: 1,
       stepIndex: 0,
       turnId: "retained-turn",
-      requests: [
-        {
-          kind: "tool-approval",
-          requestId: "fresh-approval",
-          prompt: "Run focused acceptance",
-          action: {
-            kind: "tool-call",
-            toolName: "run-app-continuity-tests",
-            callId: ctx.callId,
-            input,
-          },
-        },
-      ],
     },
+    meta: { at: "2026-11-03T00:00:00Z", id: "request-event" },
+    type: "input.requested",
   };
   // Exercise the actual public approval surface before consenting to the managed run.
   const publicRequests = outstandingInstalledEveRequests([approvalEvent]);
@@ -294,16 +298,16 @@ it("uses actual planning and approval workflow tools to recover retained source 
   capture.observe(approvalEvent);
   expect(capture.read()).toBeNull();
   capture.observe({
-    type: "approval.settled",
-    meta: { at: "2026-11-03T00:00:01Z", id: "settlement-event" },
     data: {
+      outcome: "approved",
+      requestId: z.string().parse(publicRequests[0]?.requestId),
+      responderPrincipalId: authority.ownerUserId,
       sequence: 2,
       stepIndex: 0,
       turnId: "retained-turn",
-      requestId: z.string().parse(publicRequests[0]?.requestId),
-      responderPrincipalId: authority.ownerUserId,
-      outcome: "approved",
     },
+    meta: { at: "2026-11-03T00:00:01Z", id: "settlement-event" },
+    type: "approval.settled",
   });
   expect(capture.read()?.approvalId).toBe("fresh-approval");
   installManagedAcceptanceSuite(f, successor.plan.runtime.root, fixture, browserSelection);
@@ -311,8 +315,8 @@ it("uses actual planning and approval workflow tools to recover retained source 
   expect(outcome).toMatchObject({ state: "settled" });
   expect(f.rows.get(old.plan.intentId)).toMatchObject({
     ...priorEvidence,
-    supersededBy: successor.plan.intentId,
     revision: (priorEvidence?.revision ?? 0) + 1,
+    supersededBy: successor.plan.intentId,
   });
   expect(await readFile(path.join(fixture, "durable.txt"), "utf-8")).toBe("preserved-value");
 });

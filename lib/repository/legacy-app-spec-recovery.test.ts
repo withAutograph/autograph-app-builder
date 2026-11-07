@@ -35,7 +35,7 @@ const git = (root: string, ...args: string[]): string =>
 
 afterEach(() => {
   for (const root of roots.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { force: true, recursive: true });
   }
 });
 
@@ -77,7 +77,7 @@ const fixture = (original?: string) => {
   );
   const sha = git(checkout, "rev-parse", "HEAD");
   const tree = git(checkout, "rev-parse", "HEAD^{tree}");
-  const repository = { repositoryId: "100", owner: "example", name: "source" };
+  const repository = { name: "source", owner: "example", repositoryId: "100" };
   const selection: AppBaselineSelection = {
     appId: "demo",
     historical: {
@@ -113,50 +113,50 @@ const fixture = (original?: string) => {
   mkdirSync(nodePath.dirname(markerPath), { recursive: true });
   writeFileSync(
     markerPath,
-    JSON.stringify({ receipt, platformFiles, unexposedReleasePrefixes: [] }),
+    JSON.stringify({ platformFiles, receipt, unexposedReleasePrefixes: [] }),
   );
   const unsignedApply: Omit<TargetApplyReceipt, "digest"> = {
-    version: 2,
-    status: "applied",
-    sourceSha: sha,
-    sourceTree: tree,
-    sourceReceiptDigest: digest,
-    eligibilityDigest: digest,
-    workspaceDigest: digest,
     appSpecDigest: hash(accepted),
     appSpecPath: specPath,
+    appliedByCallId: "apply",
+    applyRoot: checkout,
     artifactRevision: digest,
+    changedContentDigest: digest,
+    changes: [],
+    command: {
+      exitCode: 0,
+      name: "iterate-existing-app",
+      stderrDigest: digest,
+      stdoutDigest: digest,
+    },
+    dependencyCacheContentDigest: digest,
+    dependencyCacheDigest: digest,
     dependencyReceiptDigest: digest,
+    eligibilityDigest: digest,
     identityDigest: digest,
     imageDigest: digest,
-    dependencyCacheDigest: digest,
-    dependencyCacheContentDigest: digest,
-    proposalDigest: digest,
-    applyRoot: checkout,
     planningTreeDigest: digest,
-    preparedTreeDigest: digest,
+    postTree: [{ digest: hash(accepted), mode: "644", path: specPath }],
+    postTreeDigest: digest,
     preTree: [],
     preTreeDigest: digest,
-    command: {
-      name: "iterate-existing-app",
-      exitCode: 0,
-      stdoutDigest: digest,
-      stderrDigest: digest,
-    },
-    appliedByCallId: "apply",
-    postTree: [{ path: specPath, mode: "644", digest: hash(accepted) }],
-    postTreeDigest: digest,
-    changes: [],
-    changedContentDigest: digest,
+    preparedTreeDigest: digest,
+    proposalDigest: digest,
+    sourceReceiptDigest: digest,
+    sourceSha: sha,
+    sourceTree: tree,
+    status: "applied",
     targetReceipt: {
       appId: "demo",
       mutations: ["apps/demo", "microfrontends.json"],
       omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
       recovered: false,
-      topology: { path: "microfrontends.json", oldDigest: digest, newDigest: digest },
+      topology: { newDigest: digest, oldDigest: digest, path: "microfrontends.json" },
       version: 1,
       workspacePath: "apps/demo",
     },
+    version: 2,
+    workspaceDigest: digest,
   };
   const apply: TargetApplyReceipt = {
     ...unsignedApply,
@@ -165,28 +165,18 @@ const fixture = (original?: string) => {
   writeFileSync(nodePath.join(checkout, specPath), accepted);
   chmodSync(nodePath.join(checkout, specPath), 0o644);
   const sandbox: SandboxSession = {
-    readFile: vi.fn(),
-    writeFile: vi.fn(),
-    spawn: vi.fn(),
-    async writeTextFile({ path, content }) {
+    async readBinaryFile({ path }) {
       const file = nodePath.join(root, path);
-      await mkdir(nodePath.dirname(file), { recursive: true });
-      await writeFile(file, content);
+      return existsSync(file) ? await readFile(file) : null;
+    },
+    readFile: vi.fn(),
+    async readTextFile({ path }) {
+      return await readFile(nodePath.join(root, path), "utf-8");
     },
     async removePath({ path, force, recursive }) {
       await rm(nodePath.join(root, path), { force, recursive });
     },
     resolvePath: (path) => nodePath.resolve(root, path),
-    async readTextFile({ path }) {
-      return await readFile(nodePath.join(root, path), "utf-8");
-    },
-    async readBinaryFile({ path }) {
-      const file = nodePath.join(root, path);
-      return existsSync(file) ? await readFile(file) : null;
-    },
-    async writeBinaryFile({ path, content }) {
-      await writeFile(nodePath.join(root, path), content);
-    },
     async run({ command }) {
       await Promise.resolve();
       const result = spawnSync("/bin/sh", ["-c", command], {
@@ -197,22 +187,32 @@ const fixture = (original?: string) => {
           PATH: `${nodePath.dirname(process.execPath)}:${process.env.PATH ?? ""}`,
         },
       });
-      return { exitCode: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
+      return { exitCode: result.status ?? 1, stderr: result.stderr, stdout: result.stdout };
+    },
+    spawn: vi.fn(),
+    async writeBinaryFile({ path, content }) {
+      await writeFile(nodePath.join(root, path), content);
+    },
+    writeFile: vi.fn(),
+    async writeTextFile({ path, content }) {
+      const file = nodePath.join(root, path);
+      await mkdir(nodePath.dirname(file), { recursive: true });
+      await writeFile(file, content);
     },
   };
   const input = {
-    sandbox,
-    sessionId: "session",
-    repository,
     appId: "demo",
-    artifactRevision: digest,
     appSpecDigest: hash(accepted),
     apply,
-    baseline: { selection, receipt },
-    workspaceRoot: root,
+    artifactRevision: digest,
+    baseline: { receipt, selection },
     readAcceptedContent: async () => await Promise.resolve(accepted),
+    repository,
+    sandbox,
+    sessionId: "session",
+    workspaceRoot: root,
   };
-  return { root, checkout, input, markerPath };
+  return { checkout, input, markerPath, root };
 };
 
 describe("legacy accepted AppSpec transport recovery", () => {
@@ -268,8 +268,8 @@ describe("legacy accepted AppSpec transport recovery", () => {
   it("does not infer absence when the recorded commit has a markdown preimage", async () => {
     const f = fixture("canonical source markdown\n");
     const marker = {
-      receipt: f.input.baseline.receipt,
       platformFiles: [],
+      receipt: f.input.baseline.receipt,
       unexposedReleasePrefixes: [],
     };
     marker.platformFiles = [];
@@ -317,24 +317,24 @@ const compactionFixture = (transportPath = "prototype/demo/app-spec.md") => {
   mkdirSync(candidate, { recursive: true });
   writeFileSync(nodePath.join(candidate, "repair"), "unpublished app repair");
   const workflow = {
-    phase: "reviewed",
-    proposal: {
-      digest: "proposal",
-      contract: { appSpec: { path: transportPath, sha256: hash(accepted) } },
-    },
-    approval: { proposalDigest: "proposal" },
     appSpec: { appId: "demo", artifactRevision: digest, digest: hash(accepted) },
     applyRoot: f.checkout,
+    approval: { proposalDigest: "proposal" },
     candidateRoot: candidate,
+    phase: "reviewed",
+    proposal: {
+      contract: { appSpec: { path: transportPath, sha256: hash(accepted) } },
+      digest: "proposal",
+    },
   };
   const input = {
-    sandbox: f.input.sandbox,
     appId: workflow.appSpec.appId,
-    artifactRevision: workflow.appSpec.artifactRevision,
     appSpecDigest: workflow.appSpec.digest,
+    artifactRevision: workflow.appSpec.artifactRevision,
     proposalAppSpec: workflow.proposal.contract.appSpec,
+    readAcceptedContent: vi.fn().mockResolvedValue(accepted),
     retainedRoots: [workflow.applyRoot, workflow.candidateRoot],
-    readAcceptedContent: () => Promise.resolve(accepted),
+    sandbox: f.input.sandbox,
   };
   return { ...f, absoluteRoot, candidate, input, otherRevision, planningRoot, staleFile, workflow };
 };
@@ -368,14 +368,14 @@ describe("current accepted planning input compaction", () => {
     await expect(
       compactAcceptedPlanningInput({
         ...f.input,
-        readAcceptedContent: () => Promise.reject(failure),
+        readAcceptedContent: vi.fn().mockRejectedValue(failure),
       }),
     ).rejects.toBe(failure);
     expect(readFileSync(f.staleFile, "utf-8")).toBe("derived source copy");
     await expect(
       compactAcceptedPlanningInput({
         ...f.input,
-        readAcceptedContent: () => Promise.resolve("different content"),
+        readAcceptedContent: vi.fn().mockResolvedValue("different content"),
       }),
     ).rejects.toThrow("planning input was retained");
     expect(readFileSync(f.staleFile, "utf-8")).toBe("derived source copy");
@@ -387,18 +387,18 @@ describe("current accepted planning input compaction", () => {
       const f = compactionFixture();
       const path = "prototype/demo/app-spec.md";
       const artifact: PrototypeArtifactV2 = {
-        version: 2,
         appId: "demo",
-        path,
+        chunkCount: 2,
+        contentBytes: Buffer.byteLength(accepted),
         digest: hash(accepted),
+        mediaType: "text/markdown",
+        path,
+        recordedByCallId: "record",
         revision: hash(
           JSON.stringify({ digest: hash(accepted), mediaType: "text/markdown", path }),
         ),
-        mediaType: "text/markdown",
-        chunkCount: 2,
-        contentBytes: Buffer.byteLength(accepted),
         sessionId: "session",
-        recordedByCallId: "record",
+        version: 2,
       };
       const split = 10;
       const chunks = [accepted.slice(0, split), accepted.slice(split)];
@@ -406,9 +406,9 @@ describe("current accepted planning input compaction", () => {
         const parts: Buffer[] = [];
         for await (const chunk of streamVerifiedPrototypeArtifact({
           artifact,
-          readChunk: (index) => {
+          readChunk: async (index) => {
             expect(existsSync(f.staleFile)).toBe(true);
-            return Promise.resolve(missing && index === 1 ? undefined : chunks[index]);
+            return missing && index === 1 ? undefined : chunks[index];
           },
         })) {
           parts.push(Buffer.from(chunk));
@@ -430,12 +430,12 @@ describe("current accepted planning input compaction", () => {
     "retains a current planning root containing referenced %s working output",
     async () => {
       const f = compactionFixture();
-      const readAcceptedContent = vi.fn(() => Promise.resolve(accepted));
+      const readAcceptedContent = vi.fn().mockResolvedValue(accepted);
       await expect(
         compactAcceptedPlanningInput({
           ...f.input,
-          retainedRoots: [...f.input.retainedRoots, nodePath.join(f.absoluteRoot, "active-output")],
           readAcceptedContent,
+          retainedRoots: [...f.input.retainedRoots, nodePath.join(f.absoluteRoot, "active-output")],
         }),
       ).resolves.toEqual({ status: "retained" });
       expect(readAcceptedContent).not.toHaveBeenCalled();

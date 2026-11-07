@@ -37,7 +37,7 @@ function database() {
   const value: FakeDatabase = {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async transaction<T>(operation: (transaction: FakeDatabase) => Promise<T>) {
-      return operation(value);
+      return await operation(value);
     },
     update(table: unknown) {
       updates.push(table);

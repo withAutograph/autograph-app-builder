@@ -1,4 +1,3 @@
-import type { withSourceUploadAuthority } from "@/lib/handoff/source-upload-deployment";
 import { readAuthenticatedSourceUploadContext } from "@/lib/handoff/source-upload-deployment";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { continueBuilderHandoff, continueHandoffProvisioning } from "./builder";
@@ -8,10 +7,11 @@ import {
   getBuilderHandoffPageData,
 } from "@/lib/handoff/deployment";
 
-const providerInputs = vi.hoisted(() => [] as { deploymentAccess?: string; operation: string }[]);
-const sourceRead = vi.hoisted(() => vi.fn());
-const calls = vi.hoisted(() => [] as string[]);
-const drafts = vi.hoisted(() => ({ archive: vi.fn(), read: vi.fn() }));
+const providerInputs: unknown[] = [];
+const sourceRead =
+  vi.fn<(...args: never[]) => Promise<{ manifest: { appId: string } } | undefined>>();
+const calls: string[] = [];
+const drafts = { archive: vi.fn(), read: vi.fn() };
 const draftId = "123e4567-e89b-42d3-a456-426614174003";
 const storedForm = {
   appName: "Server Action App",
@@ -32,28 +32,18 @@ const input = {
   version: 1 as const,
 };
 
-vi.mock("@/lib/handoff/source-upload-deployment", async (importOriginal) => {
-  const actual = await importOriginal<{
-    readAuthenticatedSourceUploadContext: typeof readAuthenticatedSourceUploadContext;
-    withSourceUploadAuthority: typeof withSourceUploadAuthority;
-  }>();
-  return { ...actual, readAuthenticatedSourceUploadContext: vi.fn() };
-});
-
-vi.mock("@/lib/builder-drafts/deployment", () => ({
-  getAuthenticatedBuilderDraftContext: vi.fn(),
-}));
+const context = {
+  authority: {
+    audience: "https://app.test/mcp",
+    issuer: "https://app.test",
+    ownerUserId: "user",
+    workspaceId: "workspace",
+  },
+  drafts,
+};
 beforeEach(() => {
   providerInputs.length = 0;
-  vi.mocked(getAuthenticatedBuilderDraftContext).mockResolvedValue({
-    authority: {
-      audience: "https://app.test/mcp",
-      issuer: "https://app.test",
-      ownerUserId: "user",
-      workspaceId: "workspace",
-    },
-    drafts,
-  } as never);
+  vi.mocked(getAuthenticatedBuilderDraftContext).mockResolvedValue(context);
   drafts.read.mockResolvedValue({
     draftId,
     record: { draft: { form: storedForm }, version: 1 },
@@ -67,82 +57,6 @@ beforeEach(() => {
   });
 });
 
-vi.mock("next/cache", () => ({ refresh: vi.fn() }));
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-vi.mock("next/headers", () => ({ headers: vi.fn(async () => new Headers()) }));
-vi.mock("@/lib/auth/preview-oauth-runtime", () => ({
-  readPreviewOAuthRuntimeConfig: vi.fn(() => ({ issuer: "https://app.test" })),
-}));
-vi.mock("@/lib/provisioning/deployment", () => ({
-  getBuilderProvisioningDeploymentHandler: vi.fn(() => async (request: Request) => {
-    const requestInput = (await request.json()) as { deploymentAccess?: string; operation: string };
-    providerInputs.push(requestInput);
-    calls.push(
-      `${new URL(request.url).searchParams.get("mode") ?? "run"}:${requestInput.operation}`,
-    );
-    const github = {
-      defaultBranch: "main",
-      fullName: "autograph/server-action-app",
-      headSha: "a".repeat(40),
-      headTree: "b".repeat(40),
-      installationId: "101",
-      name: "server-action-app",
-      owner: "autograph",
-      repositoryId: "202",
-      scope: { id: "77", login: "autograph", type: "user" },
-      starter: {
-        archiveBytes: 1,
-        archiveSha256: "d".repeat(64),
-        manifestSha256: "e".repeat(64),
-        sourceSha: "c".repeat(40),
-        sourceTree: "b".repeat(40),
-      },
-      status: "succeeded",
-      url: "https://github.com/autograph/server-action-app",
-      visibility: "private",
-    };
-    const vercel = {
-      dashboardUrl: "https://vercel.com/autograph/server-action-app",
-      framework: "nextjs",
-      installationId: "vercel-team",
-      linkedGitHubRepository: "autograph/server-action-app",
-      name: "server-action-app",
-      projectId: "prj_303",
-      rootDirectory: "apps/server-action-app",
-      scope: { id: "team_1", slug: "autograph", type: "team" },
-      status: "succeeded",
-    };
-    return Response.json({
-      appId: "server-action-app",
-      ...(requestInput.deploymentAccess === undefined
-        ? {}
-        : { deploymentAccess: requestInput.deploymentAccess }),
-      github,
-      requestDigest: "f".repeat(64),
-      requestId: "123e4567-e89b-42d3-a456-426614174000",
-      status: "settled",
-      updatedAt: "2026-09-10T00:00:00.000Z",
-      vercel:
-        requestInput.operation === "vercel"
-          ? vercel
-          : { code: "not_selected", retryable: false, status: "skipped" },
-      version: 1,
-    });
-  }),
-}));
-vi.mock("@/lib/handoff/deployment", () => ({
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  getBuilderHandoffDeploymentHandler: vi.fn(() => async () => {
-    calls.push("handoff");
-    return Response.json({
-      expiresAt: "2026-09-11T00:00:00.000Z",
-      handoffId: "123e4567-e89b-42d3-a456-426614174001",
-      version: 1,
-    });
-  }),
-  getBuilderHandoffPageData: vi.fn(),
-}));
-
 afterEach(() => {
   calls.splice(0);
   vi.clearAllMocks();
@@ -151,19 +65,19 @@ afterEach(() => {
 describe("continueBuilderHandoff", () => {
   it("verifies uploaded ownership before provisioning and preserves app ID independently of display name", async () => {
     const reference = {
-      kind: "application-source-candidate-v1",
-      uploadId: "123e4567-e89b-42d3-a456-426614174099",
       appId: "supplier-spend",
+      kind: "application-source-candidate-v1",
       manifestDigest: "a".repeat(64),
+      uploadId: "123e4567-e89b-42d3-a456-426614174099",
     };
     drafts.read.mockResolvedValueOnce({
       draftId,
-      revision: 4,
       record: {
         draft: {
           form: { ...storedForm, appName: "Different display name", sourceCandidate: reference },
         },
       },
+      revision: 4,
     });
     const current = await getAuthenticatedBuilderDraftContext({
       environment: process.env,
@@ -176,31 +90,31 @@ describe("continueBuilderHandoff", () => {
     vi.mocked(readAuthenticatedSourceUploadContext).mockResolvedValue({
       authority: current.authority,
       store: { readCompleted: sourceRead },
-    } as never);
+    });
     expect(await continueBuilderHandoff(undefined, input)).toMatchObject({ status: "ready" });
     expect(sourceRead).toHaveBeenCalledWith(expect.objectContaining({ reference }));
     expect(providerInputs[0]).toMatchObject({ appName: "supplier-spend" });
   });
   it("denies an incomplete or foreign source before any provider reservation", async () => {
     const reference = {
-      kind: "application-source-candidate-v1",
-      uploadId: "123e4567-e89b-42d3-a456-426614174099",
       appId: "supplier-spend",
+      kind: "application-source-candidate-v1",
       manifestDigest: "a".repeat(64),
+      uploadId: "123e4567-e89b-42d3-a456-426614174099",
     };
     drafts.read.mockResolvedValueOnce({
       draftId,
-      revision: 4,
       record: { draft: { form: { ...storedForm, sourceCandidate: reference } } },
+      revision: 4,
     });
     vi.mocked(readAuthenticatedSourceUploadContext).mockResolvedValue(globalThis.undefined);
     expect(await continueBuilderHandoff(undefined, input)).toEqual({ status: "error" });
     expect(calls).toEqual([]);
   });
   it("accepts only an opaque checkpoint, never a second client form payload", async () => {
-    expect(
-      await continueBuilderHandoff(undefined, { ...input, form: storedForm } as never),
-    ).toEqual({ status: "error" });
+    // SAFETY: The extra form field is intentionally outside the action's accepted input contract.
+    const malformedInput = { ...input, form: storedForm };
+    expect(await continueBuilderHandoff(undefined, malformedInput)).toEqual({ status: "error" });
     expect(drafts.read).not.toHaveBeenCalled();
     expect(calls).toEqual([]);
   });
@@ -235,14 +149,14 @@ describe("continueBuilderHandoff", () => {
   });
 
   it("rejects missing tenant authority before reading a draft", async () => {
-    vi.mocked(getAuthenticatedBuilderDraftContext).mockResolvedValueOnce(undefined as undefined);
+    vi.mocked(getAuthenticatedBuilderDraftContext).mockResolvedValueOnce();
     expect(await continueBuilderHandoff(undefined, input)).toEqual({ status: "error" });
     expect(drafts.read).not.toHaveBeenCalled();
     expect(calls).toEqual([]);
   });
 
   it("rejects an inaccessible draft before provider work", async () => {
-    drafts.read.mockResolvedValueOnce(undefined as undefined);
+    drafts.read.mockResolvedValueOnce();
     expect(await continueBuilderHandoff(undefined, input)).toEqual({ status: "error" });
     expect(calls).toEqual([]);
   });
@@ -263,7 +177,8 @@ describe("continueBuilderHandoff", () => {
   });
 
   it("rejects malformed input before it reaches a deployment handler", async () => {
-    const result = await continueBuilderHandoff(undefined, {
+    // SAFETY: The malformed request ID intentionally violates the action's UUID input contract.
+    const malformedInput = {
       creationRequestId: "123e4567-e89b-42d3-a456-426614174002",
       form: {
         appName: "Server Action App",
@@ -277,7 +192,8 @@ describe("continueBuilderHandoff", () => {
       provisioningEnabled: false,
       requestId: "not-a-uuid",
       version: 1,
-    } as never);
+    };
+    const result = await continueBuilderHandoff(undefined, malformedInput);
 
     expect(result).toEqual({ status: "error" });
     expect(calls).toEqual([]);
@@ -292,11 +208,11 @@ describe("saved provisioning access policy", () => {
         intent: {
           appName: storedForm.appName,
           providers: { vercelInstallationId: storedForm.vercelInstallationId },
-          provisioningRequestId: input.requestId,
           provisioning: deploymentAccess === undefined ? {} : { deploymentAccess },
-          repository: { requestedName: storedForm.repository, private: true },
+          provisioningRequestId: input.requestId,
+          repository: { private: true, requestedName: storedForm.repository },
         },
-      } as never);
+      });
       expect(
         await continueHandoffProvisioning(undefined, {
           handoffId: "123e4567-e89b-42d3-a456-426614174001",

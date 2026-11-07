@@ -7,7 +7,9 @@ import { useAddPasskey } from "@better-auth-ui/react/plugins/passkey";
 import { Fingerprint } from "lucide-react";
 import { useRef } from "react";
 import type { SyntheticEvent } from "react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { z } from "zod";
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import {
   Dialog,
   DialogClose,
@@ -28,6 +30,17 @@ export interface AddPasskeyDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+const errorMessageSchema = z.object({ message: z.string() });
+const formNameSchema = z.string();
+
+const getErrorMessage = function getErrorMessage(error: unknown): string | undefined {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  const parsedError = errorMessageSchema.safeParse(error);
+  return parsedError.success ? parsedError.data.message : undefined;
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) {
   const { authClient, localization } = useAuth<PasskeyAuthClient>();
@@ -35,12 +48,12 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
     useAuthPlugin(passkeyPlugin);
 
   const addPasskey = useAddPasskey(authClient);
-  const pendingRequest = useRef<AddPasskeyParams<PasskeyAuthClient>>(undefined as undefined);
+  const pendingRequest = useRef<AddPasskeyParams<PasskeyAuthClient>>();
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
       addPasskey.reset();
-      pendingRequest.current = undefined;
+      pendingRequest.current = null;
     }
     onOpenChange(nextOpen);
   };
@@ -48,20 +61,32 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
   const submitRequest = (request: AddPasskeyParams<PasskeyAuthClient>) => {
     pendingRequest.current = request;
     addPasskey.mutate(request, {
-      onSuccess: () => handleOpenChange(false),
+      onSuccess: () => {
+        handleOpenChange(false);
+      },
     });
   };
 
   const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    const formData = new FormData(e.target as HTMLFormElement);
-    const name = (formData.get("name") as string)?.trim();
+    const formData = new FormData(e.currentTarget);
+    const name = formData
+      .getAll("name")
+      .map((value) => formNameSchema.safeParse(value))
+      .filter((result) => result.success)
+      .map((result) => result.data)
+      .join("")
+      .trim();
 
-    submitRequest({
-      ...(name ? { name } : {}),
-      ...(authenticatorAttachment ? { authenticatorAttachment } : {}),
-    } as AddPasskeyParams<PasskeyAuthClient>);
+    const request: AddPasskeyParams<PasskeyAuthClient> = {};
+    if (name) {
+      request.name = name;
+    }
+    if (authenticatorAttachment) {
+      request.authenticatorAttachment = authenticatorAttachment;
+    }
+    submitRequest(request);
   };
 
   const needsFreshSession = isSessionNotFreshError(addPasskey.error);
@@ -110,7 +135,11 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
 
               {addPasskey.error && (
                 <FieldError>
-                  {addPasskey.error.error?.message ?? addPasskey.error.message}
+                  {getErrorMessage(addPasskey.error.error) ??
+                    getErrorMessage(
+                      addPasskey.error instanceof Error ? addPasskey.error : undefined,
+                    ) ??
+                    ""}
                 </FieldError>
               )}
             </Field>

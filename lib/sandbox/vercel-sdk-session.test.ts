@@ -73,19 +73,18 @@ describe("Builder SDK session I/O", () => {
         throw result.error;
       }
       return {
-        wait: async () => ({ exitCode: result.status ?? 1 }),
         kill: vi.fn().mockResolvedValue(null),
+        wait: async () => ({ exitCode: result.status ?? 1 }),
       };
     });
     return {
+      cleanup: () => {
+        rmSync(directory, { force: true, recursive: true });
+      },
       directory,
       native,
-      uploads,
-
       target: path.join(directory, "output.bin"),
-      cleanup: () => {
-        rmSync(directory, { recursive: true, force: true });
-      },
+      uploads,
     };
   };
 
@@ -245,11 +244,11 @@ describe("Builder SDK session I/O", () => {
     const output = Buffer.from("x".repeat(100_000));
     native.runCommand.mockResolvedValue({
       kill,
-      wait,
       async *logs() {
-        yield { stream: "stdout", data: output.toString() };
-        yield { stream: "stderr", data: "diagnostic" };
+        yield { data: output.toString(), stream: "stdout" };
+        yield { data: "diagnostic", stream: "stderr" };
       },
+      wait,
     });
     const process = await createVercelSdkSession(native).spawn({
       command: "bun dev",
@@ -283,20 +282,20 @@ describe("Builder SDK session I/O", () => {
     let delivered = 0;
     const command = {
       kill: vi.fn().mockResolvedValue(null),
-      wait: vi.fn(async () => {
-        exited = true;
-        return { exitCode: 7 };
-      }),
       async *logs() {
         for (let index = 0; index < expected.length; index += 32_768) {
           // Model the installed SDK's HTTP log stream delivering after wait() has resolved.
           // oxlint-disable-next-line eslint/no-await-in-loop -- Each delayed chunk exercises independent log transport progress.
           await nextTurn();
           delivered += 1;
-          yield { stream: "stdout", data: expected.slice(index, index + 32_768) };
+          yield { data: expected.slice(index, index + 32_768), stream: "stdout" };
         }
-        yield { stream: "stderr", data: "lock generation diagnostic\n" };
+        yield { data: "lock generation diagnostic\n", stream: "stderr" };
       },
+      wait: vi.fn(async () => {
+        exited = true;
+        return { exitCode: 7 };
+      }),
     };
     native.runCommand.mockImplementation(
       async (params: Parameters<VercelSdkSessionNative["runCommand"]>[0]) => {
@@ -352,7 +351,7 @@ describe("Builder SDK session I/O", () => {
     native.runCommand.mockResolvedValue({
       kill,
       async *logs() {
-        yield { stream: "stdout", data: "" };
+        yield { data: "", stream: "stdout" };
       },
       wait: async () => {
         await Promise.resolve();
@@ -373,11 +372,11 @@ describe("Builder SDK session I/O", () => {
     const fail = new Error("SDK log transport disconnected");
     native.runCommand.mockResolvedValue({
       kill,
-      wait: async () => ({ exitCode: 0 }),
       async *logs() {
-        yield { stream: "stdout", data: "partial JSON" };
+        yield { data: "partial JSON", stream: "stdout" };
         throw fail;
       },
+      wait: async () => ({ exitCode: 0 }),
     });
     const process = await createVercelSdkSession(native).spawn({ command: "catalog-plan" });
     let capturedPrefix = "";
@@ -388,7 +387,7 @@ describe("Builder SDK session I/O", () => {
     })();
     const outcomes = await Promise.allSettled([process.wait(), stdout, text(process.stderr)]);
     for (const outcome of outcomes) {
-      expect(outcome).toMatchObject({ status: "rejected", reason: fail });
+      expect(outcome).toMatchObject({ reason: fail, status: "rejected" });
     }
     expect(capturedPrefix).toBe("partial JSON");
     expect(kill).toHaveBeenCalledWith("SIGTERM");
@@ -401,18 +400,18 @@ describe("Builder SDK session I/O", () => {
     let exited = false;
     native.runCommand.mockResolvedValue({
       kill,
+      async *logs() {
+        yield { data: "unread output", stream: "stdout" };
+      },
       wait: async () => {
         exited = true;
         return { exitCode: 0 };
       },
-      async *logs() {
-        yield { stream: "stdout", data: "unread output" };
-      },
     });
     try {
       const process = await createVercelSdkSession(native).spawn({
-        command: "catalog-plan",
         abortSignal: controller.signal,
+        command: "catalog-plan",
       });
       expect(exited).toBe(true);
       controller.abort(new Error("caller cancelled during output drain"));
@@ -435,10 +434,10 @@ describe("Builder SDK session I/O", () => {
     const kill = vi.fn().mockResolvedValue(null);
     native.runCommand.mockResolvedValue({
       kill,
-      wait: async () => ({ exitCode: 0 }),
       async *logs() {
-        yield { stream: "stdout", data: "unread output" };
+        yield { data: "unread output", stream: "stdout" };
       },
+      wait: async () => ({ exitCode: 0 }),
     });
     const process = await createVercelSdkSession(native).spawn({ command: "catalog-plan" });
     await process.stdout.cancel(new Error("output consumer abandoned"));
@@ -453,11 +452,11 @@ describe("Builder SDK session I/O", () => {
     const tail = Promise.withResolvers<boolean>();
     native.runCommand.mockResolvedValue({
       kill: vi.fn().mockResolvedValue(null),
-      wait: async () => ({ exitCode: 0 }),
       async *logs() {
         await tail.promise;
-        yield { stream: "stdout", data: "late tail" };
+        yield { data: "late tail", stream: "stdout" };
       },
+      wait: async () => ({ exitCode: 0 }),
     });
     try {
       const process = await createVercelSdkSession(native, () => native, authorize).spawn({
@@ -498,13 +497,13 @@ describe("Builder SDK session I/O", () => {
         kill: async () => {
           child.kill("SIGTERM");
         },
-        wait: async () => await exited.promise,
         async *logs() {
           for await (const bytes of child.stdout) {
-            yield { stream: "stdout", data: String(bytes) };
+            yield { data: String(bytes), stream: "stdout" };
           }
-          yield { stream: "stderr", data: await diagnostic };
+          yield { data: await diagnostic, stream: "stderr" };
         },
+        wait: async () => await exited.promise,
       };
     });
     const childProcess = await createVercelSdkSession(native).spawn({
@@ -624,17 +623,17 @@ it("kills a running command when renewal fails and leaves no idle renewal", asyn
 it("reapplies configured toolchain environment to commands on a replacement native handle, preserving command overrides", async () => {
   const native = fixture();
   native.runCommand.mockResolvedValue({
-    stdout: async () => "",
-    stderr: async () => "",
+    kill: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    stderr: vi.fn<() => Promise<string>>().mockResolvedValue(""),
+    stdout: vi.fn<() => Promise<string>>().mockResolvedValue(""),
     wait: async () => ({ exitCode: 0 }),
-    kill: async () => {},
   });
   const replacement = fixture();
   replacement.runCommand.mockResolvedValue({
-    stdout: async () => "",
-    stderr: async () => "",
+    kill: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    stderr: vi.fn<() => Promise<string>>().mockResolvedValue(""),
+    stdout: vi.fn<() => Promise<string>>().mockResolvedValue(""),
     wait: async () => ({ exitCode: 0 }),
-    kill: async () => {},
   });
   let active = native;
   const session = createVercelSdkSession(native, () => active, undefined, {
@@ -647,9 +646,9 @@ it("reapplies configured toolchain environment to commands on a replacement nati
     expect.objectContaining({
       env: {
         CARGO_HOME: "/private/cargo",
+        EXPLICIT: "retained",
         MISE_DATA_DIR: "/private/mise",
         PATH: "/private/bin:/usr/bin",
-        EXPLICIT: "retained",
       },
     }),
   );
@@ -672,17 +671,17 @@ it("reapplies configured toolchain environment to commands on a replacement nati
 it("reapplies configured toolchain environment to commands on a replacement native handle, preserving command overrides", async () => {
   const native = fixture();
   native.runCommand.mockResolvedValue({
-    stdout: async () => "",
-    stderr: async () => "",
+    kill: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    stderr: vi.fn<() => Promise<string>>().mockResolvedValue(""),
+    stdout: vi.fn<() => Promise<string>>().mockResolvedValue(""),
     wait: async () => ({ exitCode: 0 }),
-    kill: async () => {},
   });
   const replacement = fixture();
   replacement.runCommand.mockResolvedValue({
-    stdout: async () => "",
-    stderr: async () => "",
+    kill: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    stderr: vi.fn<() => Promise<string>>().mockResolvedValue(""),
+    stdout: vi.fn<() => Promise<string>>().mockResolvedValue(""),
     wait: async () => ({ exitCode: 0 }),
-    kill: async () => {},
   });
   let active = native;
   const session = createVercelSdkSession(native, () => active, undefined, {
@@ -695,9 +694,9 @@ it("reapplies configured toolchain environment to commands on a replacement nati
     expect.objectContaining({
       env: {
         CARGO_HOME: "/private/cargo",
+        EXPLICIT: "retained",
         MISE_DATA_DIR: "/private/mise",
         PATH: "/private/bin:/usr/bin",
-        EXPLICIT: "retained",
       },
     }),
   );

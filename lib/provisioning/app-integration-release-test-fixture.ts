@@ -11,12 +11,12 @@ import {
 } from "./app-integration-release-contract";
 
 const resource = (value: typeof plan.control.database) => ({
-  resourceId: value.resourceId,
+  database: value.database,
   hostname: value.hostname,
   port: value.port,
-  database: value.database,
-  schema: value.schema,
+  resourceId: value.resourceId,
   runtimeRole: value.runtimeRole,
+  schema: value.schema,
 });
 export const integrationTestConfiguration = JSON.stringify({
   reference: plan.privateConfigurationSeed.reference,
@@ -24,35 +24,35 @@ export const integrationTestConfiguration = JSON.stringify({
   setupProofSecret: "r".repeat(32),
 });
 export const integrationTestCapability = preparedAppIntegrationCapabilitySchema.parse({
-  kind: "app-integrations-development-v1",
-  appId: plan.selection.appId,
-  environment: "development",
-  resourceProfile: "isolated-development",
-  release: {
-    id: plan.release.id,
-    manifestSha256: plan.release.manifestSha256,
-    artifactSha256: plan.release.artifactSha256,
-  },
   appDatabase: resource(plan.runtime.appDatabase),
+  appId: plan.selection.appId,
   control: {
-    origin: plan.control.origin,
-    resourceProfileId: plan.control.resourceProfileId,
-    principalGeneration: 8,
-    database: resource(plan.control.database),
     activationKeyId: plan.control.activationKeyId,
     activationPublicKeySha256: plan.control.activationPublicKeySha256,
+    database: resource(plan.control.database),
+    origin: plan.control.origin,
+    principalGeneration: 8,
+    resourceProfileId: plan.control.resourceProfileId,
   },
-  provider: plan.provider,
-  serviceMemberships: plan.serviceMemberships.map((member) => ({ ...member, fenceGeneration: 7 })),
+  environment: "development",
+  kind: "app-integrations-development-v1",
   privateConfiguration: {
     reference: plan.privateConfigurationSeed.reference,
     sha256: createHash("sha256").update(integrationTestConfiguration).digest("hex"),
   },
+  provider: plan.provider,
+  release: {
+    artifactSha256: plan.release.artifactSha256,
+    id: plan.release.id,
+    manifestSha256: plan.release.manifestSha256,
+  },
+  resourceProfile: "isolated-development",
+  serviceMemberships: plan.serviceMemberships.map((member) => ({ ...member, fenceGeneration: 7 })),
 });
 export const integrationTestAttachment = appIntegrationReleaseAttachmentSchema.parse({
+  capability: integrationTestCapability,
   operationRef: appIntegrationCapabilityOperationRef(plan),
   planDigest: appIntegrationCapabilityPlanDigest(plan),
-  capability: integrationTestCapability,
-  scopeSha256: preparedIntegrationScopeDigest(integrationTestCapability),
   readinessPath: plan.readinessPath,
+  scopeSha256: preparedIntegrationScopeDigest(integrationTestCapability),
 });

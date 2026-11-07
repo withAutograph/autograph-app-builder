@@ -1,5 +1,5 @@
 /* oxlint-disable eslint/no-await-in-loop -- Sequential copying and readiness polling bound resource use. */
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { copyFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
@@ -36,19 +36,11 @@ export const snapshotReferenceSource = async (
   fixtureRoot: string,
 ): Promise<void> => {
   assertExternalReferenceRoot(sourceRoot, fixtureRoot);
-  const filesDeferred = Promise.withResolvers<string[]>();
-  const child = spawn("git", ["ls-files", "-z"], { cwd: sourceRoot });
-  {
-    const chunks: Buffer[] = [];
-    child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
-    child.on("error", filesDeferred.reject);
-    child.on("close", (code) =>
-      code === 0
-        ? filesDeferred.resolve(Buffer.concat(chunks).toString().split("\0").filter(Boolean))
-        : filesDeferred.reject(new Error("Cannot enumerate reference source.")),
-    );
+  const listing = spawnSync("/usr/bin/git", ["ls-files", "-z"], { cwd: sourceRoot });
+  if (listing.error || listing.status !== 0) {
+    throw new Error("Cannot enumerate reference source.");
   }
-  const files = await filesDeferred.promise;
+  const files = listing.stdout.toString().split("\0").filter(Boolean);
   await mkdir(fixtureRoot, { recursive: true });
   for (const file of files) {
     const source = path.join(sourceRoot, file);
@@ -62,7 +54,8 @@ export const snapshotReferenceSource = async (
       await mkdir(path.dirname(path.join(fixtureRoot, file)), { recursive: true });
       await copyFile(target, path.join(fixtureRoot, file));
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      // SAFETY: Node filesystem errors expose `code`; only ENOENT means a tracked path is absent.
+      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
         throw error;
       }
     }
@@ -73,29 +66,39 @@ const availablePort = async (requestedPort = 0): Promise<number> => {
   const server = createServer();
   const listenDeferred = Promise.withResolvers<null>();
   {
-    server.once("error", listenDeferred.reject);
-    server.listen(requestedPort, "127.0.0.1", () => listenDeferred.resolve(null));
+    server.once("error", (error: Error) => {
+      listenDeferred.reject(error);
+    });
+    server.listen(requestedPort, "127.0.0.1", () => {
+      listenDeferred.resolve(null);
+    });
   }
   await listenDeferred.promise;
   const address = server.address();
-  const port = typeof address === "object" && address ? address.port : 0;
+  const port = address !== null && "port" in address ? address.port : 0;
   const closeDeferred = Promise.withResolvers<null>();
-  server.close(() => closeDeferred.resolve(null));
+  server.close(() => {
+    closeDeferred.resolve(null);
+  });
   await closeDeferred.promise;
   return port;
 };
 
-const probe = (url: string): Promise<boolean> => {
+const probe = async (url: string): Promise<boolean> => {
   const deferred = Promise.withResolvers<boolean>();
   {
     const request = get(url, { rejectUnauthorized: false, timeout: 2000 }, (response) => {
       response.resume();
       deferred.resolve(response.statusCode !== undefined && response.statusCode < 500);
     });
-    request.on("error", () => deferred.resolve(false));
-    request.on("timeout", () => request.destroy());
+    request.on("error", () => {
+      deferred.resolve(false);
+    });
+    request.on("timeout", () => {
+      request.destroy();
+    });
   }
-  return deferred.promise;
+  return await deferred.promise;
 };
 
 export const startSelfReproductionReferenceRuntime = async (input: {
@@ -106,9 +109,12 @@ export const startSelfReproductionReferenceRuntime = async (input: {
 }): Promise<{ receipt: ReferenceRuntimeReceipt; stop: () => Promise<void> }> => {
   const fixtureRoot = path.join(path.resolve(input.runtimeRoot), `reference-${randomUUID()}`);
   assertExternalReferenceRoot(input.sourceRoot, fixtureRoot);
-  const appPort = await availablePort();
-  const databasePort = await availablePort();
-  let emulatorPort = await availablePort();
+  const [appPort, databasePort, initialEmulatorPort] = await Promise.all([
+    availablePort(),
+    availablePort(),
+    availablePort(),
+  ]);
+  let emulatorPort = initialEmulatorPort;
   for (;;) {
     try {
       await availablePort(emulatorPort + 1);
@@ -135,7 +141,7 @@ export const startSelfReproductionReferenceRuntime = async (input: {
     stateRoot: path.join(fixtureRoot, ".emulate"),
     status: "infrastructure-unavailable",
   };
-  let server: ReturnType<typeof spawn> | undefined;
+  let server: ReturnType<typeof spawn> | null = null;
   const run = async (args: string[], name: string): Promise<void> => {
     const log = path.join(fixtureRoot, `${name}.log`);
     receipt.logs.push(log);
@@ -146,7 +152,7 @@ export const startSelfReproductionReferenceRuntime = async (input: {
         ...process.env,
         ...environment,
         MISE_BIN_PATH: input.miseExecutable,
-        PATH: `${path.dirname(input.miseExecutable)}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        PATH: "/usr/bin:/bin",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -154,19 +160,23 @@ export const startSelfReproductionReferenceRuntime = async (input: {
     child.stderr.pipe(output, { end: false });
     try {
       const childDeferred = Promise.withResolvers<null>();
-      child.on("error", childDeferred.reject);
-      child.on("close", (code) =>
-        code === 0
-          ? childDeferred.resolve(null)
-          : childDeferred.reject(new Error(`${name} failed; see ${log}`)),
-      );
+      child.on("error", (error: Error) => {
+        childDeferred.reject(error);
+      });
+      child.on("close", (code) => {
+        if (code === 0) {
+          childDeferred.resolve(null);
+        } else {
+          childDeferred.reject(new Error(`${name} failed; see ${log}`));
+        }
+      });
       await childDeferred.promise;
     } finally {
       output.end();
     }
   };
   const stop = async (): Promise<void> => {
-    if (server?.pid && server.exitCode === null) {
+    if (server?.pid !== undefined && server.pid !== 0 && server.exitCode === null) {
       try {
         process.kill(-server.pid, "SIGTERM");
       } catch {
@@ -174,10 +184,12 @@ export const startSelfReproductionReferenceRuntime = async (input: {
       }
     }
     if (server) {
-      await run(["run", "auth-e2e:reset"], "reference-cleanup").catch(() => {
+      try {
+        await run(["run", "auth-e2e:reset"], "reference-cleanup");
+      } catch {
         // Cleanup is best effort after stopping the isolated server.
-      });
-      server = undefined;
+      }
+      server = null;
     }
   };
   try {
@@ -194,7 +206,7 @@ export const startSelfReproductionReferenceRuntime = async (input: {
         ...process.env,
         ...environment,
         MISE_BIN_PATH: input.miseExecutable,
-        PATH: `${path.dirname(input.miseExecutable)}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        PATH: "/usr/bin:/bin",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -204,10 +216,12 @@ export const startSelfReproductionReferenceRuntime = async (input: {
     });
     server.stdout?.pipe(output, { end: false });
     server.stderr?.pipe(output, { end: false });
-    server.on("close", () => output.end());
+    server.on("close", () => {
+      output.end();
+    });
     const deadline = Date.now() + (input.startupTimeoutMs ?? 300_000);
     while (Date.now() < deadline) {
-      if (startupError || server.exitCode !== null) {
+      if (startupError !== undefined || server.exitCode !== null) {
         throw new Error("Reference server exited during startup.");
       }
       if (await probe(`${receipt.referenceUrl}/auth/sign-in`)) {

@@ -38,10 +38,10 @@ const confirmedEffect = (pending: PendingReceipt, observation: GitHubPrDeliveryO
     observation.readyAt !== undefined
   ) {
     return createGitHubPrEffectReceipt({
-      intent,
       approvedByCallId,
-      status: "succeeded",
       evidence: { kind: "pr-ready", readyAt: observation.readyAt },
+      intent,
+      status: "succeeded",
     });
   }
   if (
@@ -51,10 +51,10 @@ const confirmedEffect = (pending: PendingReceipt, observation: GitHubPrDeliveryO
     observation.mergeCommitSha !== undefined
   ) {
     return createGitHubPrEffectReceipt({
-      intent,
       approvedByCallId,
-      status: "succeeded",
       evidence: { kind: "pr-merge", mergeCommitSha: observation.mergeCommitSha },
+      intent,
+      status: "succeeded",
     });
   }
   return null;
@@ -119,8 +119,8 @@ export const executeApprovedGitHubPrEffect = async ({
 }: ApprovedEffect): Promise<GitHubPrEffectReceipt> => {
   const { finish, intentDigest, read, reconcile, settle } = journalAccess({
     intent,
-    store,
     provider,
+    store,
   });
   const existing = await read();
   if (existing !== undefined) {
@@ -140,7 +140,7 @@ export const executeApprovedGitHubPrEffect = async ({
     throw new Error("The approved GitHub pull request no longer has a passing current ready run.");
   }
 
-  const pending = createGitHubPrEffectReceipt({ intent, approvedByCallId, status: "pending" });
+  const pending = createGitHubPrEffectReceipt({ approvedByCallId, intent, status: "pending" });
   if (pending.status !== "pending") {
     throw new Error("Expected a pending GitHub effect receipt.");
   }
@@ -153,10 +153,10 @@ export const executeApprovedGitHubPrEffect = async ({
     return await reconcile(concurrent);
   }
 
-  const rejectEffect = (code: "provider-rejected" | "cancelled") =>
-    finish(
+  const rejectEffect = async (code: "provider-rejected" | "cancelled") =>
+    await finish(
       pending,
-      createGitHubPrEffectReceipt({ intent, approvedByCallId, status: "failed", code }),
+      createGitHubPrEffectReceipt({ approvedByCallId, code, intent, status: "failed" }),
     );
   if (abortSignal?.aborted === true) {
     return await rejectEffect("cancelled");

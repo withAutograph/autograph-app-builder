@@ -27,7 +27,7 @@ export const createApplicationReviewSandboxReader = async (
   };
   await guard();
   const get: NonNullable<ApplicationReviewSandboxReaderDependencies["get"]> =
-    dependencies.get ?? ((options) => Sandbox.get(options));
+    dependencies.get ?? (async (options) => await Sandbox.get(options));
   const sandbox = await get({
     name: input.sandboxName,
     resume: false,

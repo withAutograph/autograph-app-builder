@@ -58,9 +58,9 @@ export const createHostedRuntimeApprovedReferenceReader = (ports: ReferencePorts
   ) => {
     ctx.abortSignal.throwIfAborted();
     const { authoritySession: session, currentSession } = await readHostedOperatorCallbackOwner({
-      store: ports.store,
-      owner,
       execution: hostedOperatorCallbackExecution(ctx.session),
+      owner,
+      store: ports.store,
     });
     ctx.abortSignal.throwIfAborted();
     const matches = [
@@ -84,7 +84,7 @@ export const createHostedRuntimeApprovedReferenceReader = (ports: ReferencePorts
     if (!matches || !snapshotMatches) {
       throw denied();
     }
-    return { session, currentSession };
+    return { currentSession, session };
   };
   const assertCurrent = async (
     snapshot: HostedRuntimeResumeSnapshot,
@@ -108,10 +108,10 @@ export const createHostedRuntimeApprovedReferenceReader = (ports: ReferencePorts
     }
     const { session, currentSession } = await readOwned(ctx, owner);
     const snapshot: HostedRuntimeResumeSnapshot = {
-      sessionId: session.sessionId,
-      adapterSessionId: currentSession.adapterSessionId,
       adapterGeneration: currentSession.adapterGeneration,
+      adapterSessionId: currentSession.adapterSessionId,
       cancellationRevision: currentSession.cancellationRevision ?? 0,
+      sessionId: session.sessionId,
     };
     const matching = (session.privateApprovalReceipts ?? [])
       .filter(
@@ -179,11 +179,11 @@ const deployedReferenceReader = async (ctx: Context) => {
   const store = await approval.openHostedRuntimeApprovalStore();
   ctx.abortSignal.throwIfAborted();
   const readPrior = approval.createHostedRuntimePriorApprovalReader({
-    store,
     now: Date.now,
     recoverOriginalPlan: false,
+    store,
   });
-  return { operator, reader: createHostedRuntimeApprovedReferenceReader({ store, readPrior }) };
+  return { operator, reader: createHostedRuntimeApprovedReferenceReader({ readPrior, store }) };
 };
 
 export const loadHostedRuntimeApprovedReference = async (

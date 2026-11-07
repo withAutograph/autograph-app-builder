@@ -34,14 +34,14 @@ export const currentAuthoringDecision = (
 ) =>
   decidePreapprovalAuthoring({
     ...boundary,
-    correction: currentPlannedAuthoringCorrection(ctx),
     adapterSessionId: ctx.session.id,
-    turnId: ctx.session.turn.id,
-    turnSequence: ctx.session.turn.sequence,
-    state: appBuilderWorkflowState.get(),
+    correction: currentPlannedAuthoringCorrection(ctx),
     pendingApproval: readPrivateApplyAuthority().pending.length > 0,
     sourcePrerequisite:
       currentLocalSourcePrerequisite(appBuilderWorkflowState.get(), ctx.session.id) !== undefined,
+    state: appBuilderWorkflowState.get(),
+    turnId: ctx.session.turn.id,
+    turnSequence: ctx.session.turn.sequence,
   });
 /** An internal correction must produce a successor, never re-request its denied Build. */
 export const internalCorrectionRequiresSuccessor = (ctx: Pick<HookContext, "session">): boolean => {
@@ -50,8 +50,8 @@ export const internalCorrectionRequiresSuccessor = (ctx: Pick<HookContext, "sess
     return false;
   }
   const current = currentAuthoringDecision(ctx, {
-    completed: false,
     blocked: false,
+    completed: false,
     pendingInput: false,
   });
   return current.scope?.correction !== undefined && current.scopeDigest === delivered.scopeDigest;
@@ -77,9 +77,9 @@ export const recordPreapprovalAuthoringDecision = async (
     throw new Error("Authoring decision persistence unavailable.");
   }
   await store.recordPreapprovalAuthoringDecision({
+    decision: parsed,
     principal,
     sessionId: owner.sessionId,
-    decision: parsed,
   });
 };
 /** Unauthenticated marker text is retained as an ordinary user message. */
@@ -94,22 +94,22 @@ export const authenticatedInternalAuthoringMessage = async (
     }
     if (localAuthoringConfigured()) {
       const scopeDigest = await readLocalAuthoringMarkerScope(ctx, {
-        operationId: marker.operationId,
         nonce: marker.nonce,
+        operationId: marker.operationId,
       });
       if (scopeDigest === undefined) {
         return false;
       }
       const claimed = await claimLocalAuthoringMessage(ctx, {
         ...input,
-        operationId: marker.operationId,
         nonce: marker.nonce,
+        operationId: marker.operationId,
         scopeDigest,
       });
       if (claimed) {
         authenticatedAuthoringDelivery.update(() => ({
-          turnId: input.turnId,
           scopeDigest,
+          turnId: input.turnId,
         }));
       }
       return claimed;
@@ -125,23 +125,23 @@ export const authenticatedInternalAuthoringMessage = async (
     ) {
       return false;
     }
-    const scopeDigest = reserved.decision.scopeDigest;
+    const { scopeDigest } = reserved.decision;
     const claimed =
       (await store.claimInternalAuthoringMessage?.({
-        principal,
-        sessionId: owner.sessionId,
         logicalSessionId: ctx.session.id,
-        operationId: marker.operationId,
+        messageSequence: input.messageSequence,
         nonce: marker.nonce,
+        operationId: marker.operationId,
+        principal,
+        scopeDigest,
+        sessionId: owner.sessionId,
         turnId: input.turnId,
         turnSequence: ctx.session.turn.sequence,
-        messageSequence: input.messageSequence,
-        scopeDigest,
       })) ?? false;
     if (claimed) {
       authenticatedAuthoringDelivery.update(() => ({
-        turnId: input.turnId,
         scopeDigest,
+        turnId: input.turnId,
       }));
     }
     return claimed;

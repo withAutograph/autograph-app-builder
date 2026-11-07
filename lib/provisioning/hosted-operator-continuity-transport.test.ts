@@ -32,41 +32,32 @@ import { createContinuityCapabilityCustody } from "./hosted-operator-continuity-
 import { createOperatorWorkloadVerifier } from "./hosted-operator-workload";
 
 const authority = {
-  issuer: "https://builder.fixture.test/api/auth",
   audience: "https://builder.fixture.test/mcp",
+  issuer: "https://builder.fixture.test/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
 const target = {
   appId: "orchard",
-  sessionId: "session",
   branch: "feature",
   environment: "preview" as const,
-  projectId: "prj_app",
   installationId: "installation",
+  projectId: "prj_app",
   scopeId: "team",
   scopeType: "team" as const,
+  sessionId: "session",
 };
 const context: HostedOperatorContext = { authority, target };
 const gateway = {
-  projectId: "prj_gateway",
-  ownerId: "team",
   environment: "preview" as const,
+  ownerId: "team",
+  projectId: "prj_gateway",
   publicOrigin: "https://gateway.fixture.test",
 };
 const sha = "a".repeat(40);
 const preparedPlan = hostedOperatorPlanSchema.parse({
-  version: 1,
-  action: "prepare",
-  contextId: "accepted-spec",
-  selection: {
-    appId: target.appId,
-    sessionId: target.sessionId,
-    branch: target.branch,
-    environment: target.environment,
-    projectId: target.projectId,
-  },
   access: [{ actorId: "actor", organizationId: "org", roles: ["ordinary_role"] }],
+  action: "prepare",
   appDatabase: {
     database: "app",
     migratorRole: "app_owner",
@@ -79,7 +70,39 @@ const preparedPlan = hostedOperatorPlanSchema.parse({
     resourceId: "auth",
     runtimeRole: "auth_runtime",
   },
+  contextId: "accepted-spec",
   cost: { class: "shared-recovery-group", description: "Approved managed journey", owner: "owner" },
+  delivery: { branch: target.branch, gitSha: sha, projectId: target.projectId, repoId: "app-repo" },
+  deploymentBoundary: {
+    app: { branch: target.branch, environment: "preview", projectId: target.projectId },
+    authority,
+    gateway: { branch: "gateway-main", environment: "preview", projectId: gateway.projectId },
+    operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
+    teamId: "team",
+    verification: {
+      gatewayOrigin: gateway.publicOrigin,
+      jwksUrl: `${gateway.publicOrigin}/_platform/jwks.json`,
+      publicOrigin: gateway.publicOrigin,
+    },
+  },
+  effects: [
+    { description: "resources", id: "resources", kind: "resources" },
+    { description: "install", id: "install", kind: "install" },
+    { description: "access", id: "access", kind: "access" },
+    { description: "bindings", id: "bindings", kind: "bindings" },
+    { description: "delivery", id: "delivery", kind: "delivery" },
+    {
+      description: "Deliver approved managed route",
+      id: "gateway-delivery",
+      kind: "gateway-delivery",
+    },
+  ],
+  gatewayDelivery: {
+    branch: "gateway-main",
+    gitSha: sha,
+    projectId: gateway.projectId,
+    repoId: "gateway-repo",
+  },
   installer: { reference: "worker", sha256: "b".repeat(64) },
   neon: {
     branchId: "branch",
@@ -88,44 +111,21 @@ const preparedPlan = hostedOperatorPlanSchema.parse({
     projectId: "project",
     source: "synthetic-only",
   },
-  release: { artifactRef: "private-release", id: "release", sha256: "c".repeat(64) },
-  retention: { expiresAt: "2099-01-01T00:00:00Z", policy: "owned cleanup" },
   publicGateway: {
-    projectId: gateway.projectId,
     branch: "gateway-main",
     origin: gateway.publicOrigin,
-  },
-  gatewayDelivery: {
     projectId: gateway.projectId,
-    branch: "gateway-main",
-    repoId: "gateway-repo",
-    gitSha: sha,
   },
-  delivery: { projectId: target.projectId, branch: target.branch, repoId: "app-repo", gitSha: sha },
-  deploymentBoundary: {
-    authority,
-    teamId: "team",
-    app: { projectId: target.projectId, branch: target.branch, environment: "preview" },
-    gateway: { projectId: gateway.projectId, branch: "gateway-main", environment: "preview" },
-    operator: { projectId: "prj_operator", deploymentId: "dpl_operator", environment: "preview" },
-    verification: {
-      gatewayOrigin: gateway.publicOrigin,
-      publicOrigin: gateway.publicOrigin,
-      jwksUrl: `${gateway.publicOrigin}/_platform/jwks.json`,
-    },
+  release: { artifactRef: "private-release", id: "release", sha256: "c".repeat(64) },
+  retention: { expiresAt: "2099-01-01T00:00:00Z", policy: "owned cleanup" },
+  selection: {
+    appId: target.appId,
+    branch: target.branch,
+    environment: target.environment,
+    projectId: target.projectId,
+    sessionId: target.sessionId,
   },
-  effects: [
-    { id: "resources", kind: "resources", description: "resources" },
-    { id: "install", kind: "install", description: "install" },
-    { id: "access", kind: "access", description: "access" },
-    { id: "bindings", kind: "bindings", description: "bindings" },
-    { id: "delivery", kind: "delivery", description: "delivery" },
-    {
-      id: "gateway-delivery",
-      kind: "gateway-delivery",
-      description: "Deliver approved managed route",
-    },
-  ],
+  version: 1,
 });
 const ownerContext = {
   adapterGeneration: 1,
@@ -135,31 +135,31 @@ const ownerContext = {
   principal: { ...authority, scopes: ["autograph:send"] },
   sessionId: target.sessionId,
 };
-const logicalRuntime = { sandboxId: "sandbox", root: "/owned/source" };
+const logicalRuntime = { root: "/owned/source", sandboxId: "sandbox" };
 const workloadPolicy = {
-  issuer: "https://oidc.vercel.com/fixture-team",
   audience: "https://vercel.com/fixture-team",
-  subject: "owner:fixture-team:project:builder:environment:production",
+  environment: "production" as const,
+  issuer: "https://oidc.vercel.com/fixture-team",
   ownerId: "team",
   projectId: "prj_builder",
-  environment: "production" as const,
+  subject: "owner:fixture-team:project:builder:environment:production",
 };
 const signing = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const publicJwk = {
   ...signing.publicKey.export({ format: "jwk" }),
-  kid: "fixture",
   alg: "RS256",
+  kid: "fixture",
   use: "sig",
 };
 const verifyWorkload = createOperatorWorkloadVerifier(
   workloadPolicy,
   createLocalJWKSet({ keys: [publicJwk] }),
 );
-const signedWorkload = () =>
-  new SignJWT({
+const signedWorkload = async () =>
+  await new SignJWT({
+    environment: workloadPolicy.environment,
     owner_id: workloadPolicy.ownerId,
     project_id: workloadPolicy.projectId,
-    environment: workloadPolicy.environment,
   })
     .setProtectedHeader({ alg: "RS256", kid: "fixture" })
     .setIssuer(workloadPolicy.issuer)
@@ -196,24 +196,24 @@ const setup = () => {
   const requests: string[] = [];
   const bound: string[] = [];
   const stats = {
-    storeReads: 0,
-    reservations: 0,
     authorizations: 0,
-    readAuthorizations: 0,
-    starts: 0,
+    bound,
+    closes: 0,
     publishes: 0,
+    readAuthorizations: 0,
+    requests,
+    reservations: 0,
+    revokes: 0,
+    starts: 0,
+    storeReads: 0,
     suiteDispatches: 0,
     suiteInspections: 0,
-    closes: 0,
-    revokes: 0,
-    requests,
-    bound,
   };
   const faults = {
-    mutateCarrier: false,
+    invalidToken: false,
     loseExecuteResponse: false,
     loseSuiteResult: false,
-    invalidToken: false,
+    mutateCarrier: false,
   };
   const bindings = new WeakMap<
     HostedOperatorContext,
@@ -237,65 +237,8 @@ const setup = () => {
     expect(binding.token()).not.toBe("changed-after-verification");
   };
   const dependencies: HostedContinuityDependencies = {
-    store: {
-      async read(input) {
-        stats.storeReads += 1;
-        if (
-          record === undefined ||
-          record.requestId !== input.intentId ||
-          !isDeepStrictEqual(record.plan.authority, input.authority)
-        ) {
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing rows and CAS conflicts are explicit optional store results.
-          return undefined;
-        }
-        return read();
-      },
-      async reserve(input) {
-        if (record !== undefined) {
-          throw new Error("Duplicate controlled reserve");
-        }
-        stats.reservations += 1;
-        record = continuityRecordSchema.parse(input.record);
-        snapshots.push(read());
-        return read();
-      },
-      async compareAndSet(input) {
-        if (record?.revision !== input.expectedRevision) {
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing rows and CAS conflicts are explicit optional store results.
-          return undefined;
-        }
-        record = continuityRecordSchema.parse(input.record);
-        snapshots.push(read());
-        return read();
-      },
-    },
+    ...custody,
     assertOwner,
-    async resolvePlan(ctx, runtime) {
-      await assertOwner(ctx);
-      expect(runtime).toEqual(logicalRuntime);
-      return {
-        version: 1,
-        kind: "app-continuity-plan",
-        authority,
-        target,
-        originalSetup: {
-          operationRef: "40000000-0000-4000-8000-000000000004",
-          planDigest: "d".repeat(64),
-          approvalId: "original-approved",
-          approvedByCallId: "original-call",
-        },
-        preparedPlan,
-        runtime: {
-          ...runtime,
-          projectId: "prj_builder",
-          ownerId: "team",
-          appPort: 3000,
-          bridgePort: 3443,
-        },
-        gateway,
-        actors: [{ actorId: "actor", organizationId: "org" }],
-      };
-    },
     async assertSetup(ctx, plan) {
       await assertOwner(ctx);
       if (
@@ -306,6 +249,27 @@ const setup = () => {
         throw new HostedOperatorError("authorization_required");
       }
     },
+    projection: {
+      async publish(ctx, current, _capabilities, assertCurrent, checkpoint) {
+        await assertOwner(ctx);
+        await assertCurrent();
+        if (!live || current.current?.state !== "ready") {
+          throw new Error("Published without owned ready runtime");
+        }
+        stats.publishes += 1;
+        await checkpoint({ deliveryAttempted: true });
+      },
+      async revoke(ctx, _current, assertCurrent, checkpoint) {
+        await assertOwner(ctx);
+        await assertCurrent();
+        if (live) {
+          throw new Error("Revoked before owned runtime closed");
+        }
+        stats.revokes += 1;
+        await checkpoint([]);
+      },
+    },
+
     async readApproval(ctx, request, callId) {
       await assertOwner(ctx);
       if (!approved) {
@@ -319,69 +283,43 @@ const setup = () => {
       receipts.set(request.planDigest, receipt);
       return receipt;
     },
-    ...custody,
-    async withResourceLease(input, run) {
-      if (held) {
-        throw new HostedOperatorError("operation_in_progress");
-      }
-      held = true;
-      try {
-        await input.initializeUnderLock?.();
-        const fence = await input.readCurrentFence();
-        return await run(async () => {
-          expect(await input.readCurrentFence()).toEqual(fence);
-        });
-      } finally {
-        held = false;
-      }
+    async resolvePlan(ctx, runtime) {
+      await assertOwner(ctx);
+      expect(runtime).toEqual(logicalRuntime);
+      return {
+        actors: [{ actorId: "actor", organizationId: "org" }],
+        authority,
+        gateway,
+        kind: "app-continuity-plan",
+        originalSetup: {
+          approvalId: "original-approved",
+          approvedByCallId: "original-call",
+          operationRef: "40000000-0000-4000-8000-000000000004",
+          planDigest: "d".repeat(64),
+        },
+        preparedPlan,
+        runtime: {
+          ...runtime,
+          appPort: 3000,
+          bridgePort: 3443,
+          ownerId: "team",
+          projectId: "prj_builder",
+        },
+        target,
+        version: 1,
+      };
     },
     runtime: {
-      async start(ctx, current, capabilities, assertCurrent, checkpoint) {
+      async close(ctx) {
         await assertOwner(ctx);
-        await assertCurrent();
-        if (live) {
-          throw new Error("Duplicate owned start");
+        stats.closes += 1;
+        live = false;
+      },
+      async renew(ctx) {
+        await assertOwner(ctx);
+        if (!live) {
+          throw new Error("Renewed closed owned runtime");
         }
-        stats.starts += 1;
-        live = true;
-        expect(custody.unseal(current)).toEqual(capabilities);
-        expect(receipts.has(current.planDigest)).toBe(true);
-        const ownerScope = { ...authority, sessionId: target.sessionId };
-        const provider = {
-          projectId: current.plan.runtime.projectId,
-          ownerId: current.plan.runtime.ownerId,
-          sandboxId: logicalRuntime.sandboxId,
-          providerSessionId: "observed-provider-session",
-          origin: "https://managed.fixture.test",
-          bridgePort: current.plan.runtime.bridgePort,
-        };
-        const identity = {
-          intentId: current.requestId,
-          approvalRef: required(current.approval).approvalId,
-          owner: ownerScope,
-          appId: target.appId,
-          runtimeAttemptId: required(current.attemptId),
-          fence: current.fence,
-          sandboxId: provider.sandboxId,
-          providerSessionId: provider.providerSessionId,
-        };
-        await checkpoint({
-          locator: {
-            ...logicalRuntime,
-            providerSessionId: provider.providerSessionId,
-            commandId: "owned-command",
-            worker: {
-              id: "managed-app-runtime-v1",
-              executablePath: "/opt/worker",
-              sha256: "e".repeat(64),
-              operationScope: "managed-app-runtime-v1",
-              subcommand: "protected-managed-app-runtime",
-            },
-            attemptId: identity.runtimeAttemptId,
-            rootDirectory: "/private/attempt",
-          },
-          current: { ...identity, state: "ready", leaseExpiresAt: "2099-01-01T00:00:00Z" },
-        });
       },
       async runSuite(ctx, current, capabilities, assertCurrent, checkpoint, allowDispatch) {
         await assertOwner(ctx);
@@ -405,37 +343,98 @@ const setup = () => {
         }
         return { exitCode: 0 };
       },
-      async close(ctx) {
-        await assertOwner(ctx);
-        stats.closes += 1;
-        live = false;
-      },
-      async renew(ctx) {
-        await assertOwner(ctx);
-        if (!live) {
-          throw new Error("Renewed closed owned runtime");
-        }
-      },
-    },
-    projection: {
-      async publish(ctx, current, _capabilities, assertCurrent, checkpoint) {
-        await assertOwner(ctx);
-        await assertCurrent();
-        if (!live || current.current?.state !== "ready") {
-          throw new Error("Published without owned ready runtime");
-        }
-        stats.publishes += 1;
-        await checkpoint({ deliveryAttempted: true });
-      },
-      async revoke(ctx, _current, assertCurrent, checkpoint) {
+      async start(ctx, current, capabilities, assertCurrent, checkpoint) {
         await assertOwner(ctx);
         await assertCurrent();
         if (live) {
-          throw new Error("Revoked before owned runtime closed");
+          throw new Error("Duplicate owned start");
         }
-        stats.revokes += 1;
-        await checkpoint([]);
+        stats.starts += 1;
+        live = true;
+        expect(custody.unseal(current)).toEqual(capabilities);
+        expect(receipts.has(current.planDigest)).toBe(true);
+        const ownerScope = { ...authority, sessionId: target.sessionId };
+        const provider = {
+          bridgePort: current.plan.runtime.bridgePort,
+          origin: "https://managed.fixture.test",
+          ownerId: current.plan.runtime.ownerId,
+          projectId: current.plan.runtime.projectId,
+          providerSessionId: "observed-provider-session",
+          sandboxId: logicalRuntime.sandboxId,
+        };
+        const identity = {
+          appId: target.appId,
+          approvalRef: required(current.approval).approvalId,
+          fence: current.fence,
+          intentId: current.requestId,
+          owner: ownerScope,
+          providerSessionId: provider.providerSessionId,
+          runtimeAttemptId: required(current.attemptId),
+          sandboxId: provider.sandboxId,
+        };
+        await checkpoint({
+          current: { ...identity, leaseExpiresAt: "2099-01-01T00:00:00Z", state: "ready" },
+          locator: {
+            ...logicalRuntime,
+            attemptId: identity.runtimeAttemptId,
+            commandId: "owned-command",
+            providerSessionId: provider.providerSessionId,
+            rootDirectory: "/private/attempt",
+            worker: {
+              executablePath: "/opt/worker",
+              id: "managed-app-runtime-v1",
+              operationScope: "managed-app-runtime-v1",
+              sha256: "e".repeat(64),
+              subcommand: "protected-managed-app-runtime",
+            },
+          },
+        });
       },
+    },
+    store: {
+      async compareAndSet(input): Promise<ContinuityRecord | undefined> {
+        if (record?.revision !== input.expectedRevision) {
+          return undefined;
+        }
+        record = continuityRecordSchema.parse(input.record);
+        snapshots.push(read());
+        return read();
+      },
+      async read(input): Promise<ContinuityRecord | undefined> {
+        stats.storeReads += 1;
+        if (
+          record === undefined ||
+          record.requestId !== input.intentId ||
+          !isDeepStrictEqual(record.plan.authority, input.authority)
+        ) {
+          return undefined;
+        }
+        return read();
+      },
+      async reserve(input) {
+        if (record !== undefined) {
+          throw new Error("Duplicate controlled reserve");
+        }
+        stats.reservations += 1;
+        record = continuityRecordSchema.parse(input.record);
+        snapshots.push(read());
+        return read();
+      },
+    },
+    async withResourceLease(input, run) {
+      if (held) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      held = true;
+      try {
+        await input.initializeUnderLock?.();
+        const fence = await input.readCurrentFence();
+        return await run(async () => {
+          expect(await input.readCurrentFence()).toEqual(fence);
+        });
+      } finally {
+        held = false;
+      }
     },
   };
   const operations = createHostedContinuityOperations(dependencies);
@@ -456,32 +455,6 @@ const setup = () => {
     return { ...context, ownerContext };
   };
   const dispatcher = createContinuityDispatcher({
-    store: dependencies.store,
-    operations,
-    readVerifiedActors: async (ctx, intentId) => {
-      await operations.readPlan(ctx, intentId);
-      return { requestCorrelation: "not_established" as const, actors: [] };
-    },
-    readTenantBindings: async (ctx, intentId) => {
-      const saved = await operations.readPlan(ctx, intentId);
-      return {
-        bindings: saved.plan.preparedPlan.access.flatMap((access) =>
-          access.roles.map((role) => ({
-            appId: ctx.target.appId,
-            actorId: access.actorId,
-            organizationId: access.organizationId,
-            role,
-            status: "actor_active" as const,
-          })),
-        ),
-      };
-    },
-    verifyWorkload: async (request) => {
-      await verifyWorkload(request);
-      if (faults.mutateCarrier) {
-        incoming?.headers.set("authorization", "Bearer changed-after-verification");
-      }
-    },
     authorize,
     authorizeRead: async (request, ctx) => {
       stats.readAuthorizations += 1;
@@ -496,27 +469,53 @@ const setup = () => {
       return ctx;
     },
     bindWorkload: (ctx, token, signal) => {
-      bindings.set(ctx, { token, signal });
+      bindings.set(ctx, { signal, token });
       stats.bound.push(token());
+    },
+    operations,
+    readTenantBindings: async (ctx, intentId) => {
+      const saved = await operations.readPlan(ctx, intentId);
+      return {
+        bindings: saved.plan.preparedPlan.access.flatMap((access) =>
+          access.roles.map((role) => ({
+            actorId: access.actorId,
+            appId: ctx.target.appId,
+            organizationId: access.organizationId,
+            role,
+            status: "actor_active" as const,
+          })),
+        ),
+      };
+    },
+    readVerifiedActors: async (ctx, intentId) => {
+      await operations.readPlan(ctx, intentId);
+      return { actors: [], requestCorrelation: "not_established" as const };
+    },
+    store: dependencies.store,
+    verifyWorkload: async (request) => {
+      await verifyWorkload(request);
+      if (faults.mutateCarrier) {
+        incoming?.headers.set("authorization", "Bearer changed-after-verification");
+      }
     },
   });
   const handler = createProtectedHostedOperatorHandler({
-    authorize,
     assertAuthorized: rejectUnexpected,
+    authorize,
+    bindings: rejectUnexpected,
+    continuityRequest: dispatcher,
+    executeEffect: rejectUnexpected,
     plan: rejectUnexpected,
     readApproval: rejectUnexpected,
-    withResourceLease: rejectUnexpected,
     reconcile: rejectUnexpected,
-    executeEffect: rejectUnexpected,
-    verify: rejectUnexpected,
-    bindings: rejectUnexpected,
     store: {
+      compareAndSet: rejectUnexpected,
       read: rejectUnexpected,
       reserve: rejectUnexpected,
-      compareAndSet: rejectUnexpected,
       reserveFenceGeneration: rejectUnexpected,
     },
-    continuityRequest: dispatcher,
+    verify: rejectUnexpected,
+    withResourceLease: rejectUnexpected,
   });
   const transport: typeof fetch = async (url, init) => {
     expect(init).toHaveProperty("dispatcher");
@@ -536,9 +535,9 @@ const setup = () => {
   const clientFor = (hint = ownerContext) =>
     createHostedOperatorClient({
       endpoint: "https://operator.fixture.test",
+      fetch: transport,
       ownerContext: hint,
       sessionId: target.sessionId,
-      fetch: transport,
       token: async () => {
         const token = faults.invalidToken ? "invalid-signature" : await signedWorkload();
         tokens.push(token);
@@ -546,26 +545,20 @@ const setup = () => {
       },
     });
   return {
-    client: clientFor(),
-    clientFor,
-    handler,
-    stats,
-    faults,
-    tokens,
-    snapshots,
-    dependencies,
-    custody,
-    get record() {
-      return read();
-    },
-    get live() {
-      return live;
-    },
     approve() {
       approved = true;
     },
-    setOwner(value: boolean) {
-      owner = value;
+    client: clientFor(),
+    clientFor,
+    custody,
+    dependencies,
+    faults,
+    handler,
+    get live() {
+      return live;
+    },
+    get record() {
+      return read();
     },
     revokeOriginal() {
       originalApproved = false;
@@ -573,6 +566,12 @@ const setup = () => {
     selectPreparedTarget(selection: typeof preparedPlan.selection) {
       currentSelection = selection;
     },
+    setOwner(value: boolean) {
+      owner = value;
+    },
+    snapshots,
+    stats,
+    tokens,
   };
 };
 
@@ -599,16 +598,16 @@ it("uses the real client/handler/dispatcher/service through exact approval and c
   expect(f.stats.revokes).toBe(1);
   expect(f.live).toBe(false);
   const counts = {
-    starts: f.stats.starts,
     publishes: f.stats.publishes,
+    starts: f.stats.starts,
     suite: f.stats.suiteDispatches,
   };
   const status = await f.client.continuityStatus(planned.plan.intentId);
   expect(status.state).toBe("settled");
   await f.client.runContinuity(planned.request, "execute-call");
   expect({
-    starts: f.stats.starts,
     publishes: f.stats.publishes,
+    starts: f.stats.starts,
     suite: f.stats.suiteDispatches,
   }).toEqual(counts);
   expect(f.record.plan.originalSetup).toEqual(planned.plan.originalSetup);
@@ -625,7 +624,7 @@ it("reads the exact saved continuity intent after the prepared target changes wi
   );
   const original = f.record;
   const writes = f.snapshots.length;
-  const authorizations = f.stats.authorizations;
+  const { authorizations } = f.stats;
   f.selectPreparedTarget({
     ...preparedPlan.selection,
     branch: "new-preview",
@@ -677,8 +676,8 @@ it.each(["initial", "owner-checked"] as const)(
     reads.mockRejectedValueOnce(new Error("private journal detail"));
     await expect(f.client.readContinuity(planned.plan.intentId)).rejects.toMatchObject({
       code: "operator_unavailable",
-      recoveryStage: "canonical_read",
       message: "operator_unavailable",
+      recoveryStage: "canonical_read",
     });
     expect(f.record).toEqual(before);
     expect(f.stats.reservations).toBe(1);
@@ -700,8 +699,8 @@ it("reads saved checkpoints and verified actor facts only for the owner without 
   expect(checkpoints.intentId).toBe(planned.plan.intentId);
   expect(checkpoints.checkpoints.suiteDispatch).toBe("unrecorded");
   expect(await f.client.readContinuityVerifiedActors(planned.plan.intentId)).toEqual({
-    requestCorrelation: "not_established",
     actors: [],
+    requestCorrelation: "not_established",
   });
   expect(f.record).toEqual(before);
   f.setOwner(false);
@@ -727,8 +726,8 @@ it("reads approved binding status through the owner-verified transport without d
   const result = await f.client.readContinuityBindings(planned.plan.intentId);
   expect(result.bindings).toEqual([
     {
-      appId: target.appId,
       actorId: "actor",
+      appId: target.appId,
       organizationId: "org",
       role: "ordinary_role",
       status: "actor_active",
@@ -779,9 +778,9 @@ it("rejects a continuity response belonging to a different requested intent or o
   const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(planned));
   const client = createHostedOperatorClient({
     endpoint: "https://operator.fixture.test",
+    fetch: fetcher,
     ownerContext,
     sessionId: target.sessionId,
-    fetch: fetcher,
     token: async () => "controlled-workload",
   });
   await expect(client.readContinuity(randomUUID())).rejects.toMatchObject({
@@ -814,9 +813,9 @@ it("rejects missing or invalid signed workload before any private hint lookup", 
   expect(f.stats.starts).toBe(0);
   const response = await f.handler(
     new Request("https://operator.fixture.test/v1/runtime", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "continuity-status", intentId: randomUUID(), ownerContext }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
     }),
   );
   expect(await response.json()).toMatchObject({

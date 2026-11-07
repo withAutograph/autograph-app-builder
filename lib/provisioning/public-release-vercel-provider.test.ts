@@ -28,8 +28,8 @@ const fixture = () => {
   plan.environment = [{ key: "INVOICE_APP_DATABASE_URL", sha256: hash(value) }];
   const invocation = {
     authority: plan.authority,
-    sessionId: plan.selection.sessionId,
     callId: "current-approved-call",
+    sessionId: plan.selection.sessionId,
     signal: new AbortController().signal,
   };
   const states: Awaited<ReturnType<PublicReleaseEffectContext["bindings"]["read"]>> = {
@@ -48,23 +48,23 @@ const fixture = () => {
   let loseWriteResponse = false;
   let writeAccepted = true;
   const project = {
-    id: plan.project.projectId,
     accountId: plan.project.teamId,
     framework: "services",
-    rootDirectory: ".",
+    id: plan.project.projectId,
     link: {
-      type: "github",
-      repoId: plan.source.repositoryId,
       productionBranch: plan.source.productionBranch,
+      repoId: plan.source.repositoryId,
+      type: "github",
     },
-    ssoProtection: { deploymentType: "prod_deployment_urls_and_all_previews" },
     oidcTokenConfig: { enabled: true, issuerMode: "team" },
+    rootDirectory: ".",
+    ssoProtection: { deploymentType: "prod_deployment_urls_and_all_previews" },
     targets: { production: { id: "active-deployment" } },
   };
   const alias = {
     alias: "app.example",
-    projectId: plan.project.projectId,
     deploymentId: "active-deployment",
+    projectId: plan.project.projectId,
   };
   const fetcher = vi.fn<typeof fetch>(async (url, init) => {
     const parsed = requestUrl(url);
@@ -76,22 +76,22 @@ const fixture = () => {
       expect(states.INVOICE_APP_DATABASE_URL.state).toBe("pending");
       const body = z
         .object({
-          key: z.string(),
-          value: z.string(),
-          type: z.string(),
-          target: z.array(z.string()),
           comment: z.string(),
+          key: z.string(),
+          target: z.array(z.string()),
+          type: z.string(),
+          value: z.string(),
         })
         .parse(JSON.parse(z.string().parse(init.body)));
       writes.push(parsed.pathname);
       const id =
         init.method === "PATCH" ? (parsed.pathname.split("/").at(-1) ?? "missing") : "new-env";
       const row = {
+        comment: body.comment,
         id,
         key: body.key,
-        type: body.type,
         target: body.target,
-        comment: body.comment,
+        type: body.type,
       };
       if (writeAccepted) {
         const existing = rows.findIndex((item) => item.id === id);
@@ -118,11 +118,11 @@ const fixture = () => {
     }
     if (parsed.pathname === "/v13/deployments/active-deployment") {
       return Response.json({
+        gitSource: { sha: plan.source.sourceSha },
         id: "active-deployment",
         projectId: plan.project.projectId,
-        target: "production",
         readyState: "READY",
-        gitSource: { sha: plan.source.sourceSha },
+        target: "production",
       });
     }
     if (/\/v10\/projects\/[^/]+\/env$/u.test(parsed.pathname)) {
@@ -135,40 +135,34 @@ const fixture = () => {
     throw new Error("Unexpected provider route");
   });
   const deps: PublicReleaseVercelDependencies = {
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- Vitest requires an explicit void fulfillment value.
-    assertCurrent: vi.fn().mockResolvedValue(undefined),
+    assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    fetch: fetcher,
     readCredential: vi.fn().mockResolvedValue({
-      token: "synthetic-private-provider-token",
       binding: {
-        installationId: plan.project.installationId,
-        scopeId: plan.project.teamId,
-        scopeType: "team",
         active: true,
         displayName: "Synthetic",
-        slug: "synthetic",
+        installationId: plan.project.installationId,
         plan: "pro",
+        scopeId: plan.project.teamId,
+        scopeType: "team",
+        slug: "synthetic",
         updatedAt: new Date(0),
       },
+      token: "synthetic-private-provider-token",
     }),
-    readRuntimeBindings: vi.fn().mockResolvedValue([{ key: "INVOICE_APP_DATABASE_URL", value }]),
     readDeliveredRelease: vi.fn().mockResolvedValue({ releaseId: plan.runtime.releaseId }),
-    fetch: fetcher,
+    readRuntimeBindings: vi.fn().mockResolvedValue([{ key: "INVOICE_APP_DATABASE_URL", value }]),
   };
   const context: PublicReleaseEffectContext = {
-    invocation,
-    plan,
-    operationRef,
-    effect: "bind-production-runtime",
-    priorPhase: "idle",
     bindings: {
-      async read() {
-        return structuredClone(states);
-      },
       async claim(key) {
         if (states[key].state === "idle") {
           states[key] = { ...states[key], state: "pending" };
         }
         return states[key];
+      },
+      async read() {
+        return structuredClone(states);
       },
       async recordAccepted(key, acceptedEnvId) {
         expect(states[key].state).toBe("pending");
@@ -178,33 +172,38 @@ const fixture = () => {
         states[key] = { ...states[key], state: "applied" };
       },
     },
+    effect: "bind-production-runtime",
+    invocation,
+    operationRef,
+    plan,
+    priorPhase: "idle",
   };
   return {
-    plan,
-    invocation,
+    alias,
     context,
-    states,
-    rows,
-    values,
-    writes,
     deps,
     fetcher,
-    project,
-    alias,
-    provider: createPublicReleaseVercelProvider(deps),
-    marker,
-    value,
+    invocation,
     loseResponse(accepted: boolean) {
       loseWriteResponse = true;
       writeAccepted = accepted;
     },
+    marker,
+    plan,
+    project,
+    provider: createPublicReleaseVercelProvider(deps),
+    rows,
+    states,
+    value,
+    values,
+    writes,
   };
 };
 
 it("persists a per-key dispatch before creating and independently reading an encrypted Production binding", async () => {
   const f = fixture();
   await f.provider.bindRuntime(f.context);
-  expect(f.states.INVOICE_APP_DATABASE_URL).toEqual({ state: "applied", acceptedEnvId: "new-env" });
+  expect(f.states.INVOICE_APP_DATABASE_URL).toEqual({ acceptedEnvId: "new-env", state: "applied" });
   expect(await f.provider.reconcileBindings({ ...f.context, priorPhase: "applied" })).toBe(
     "applied",
   );
@@ -236,11 +235,11 @@ it("does not treat a missing row after unknown dispatch as permission to retry",
 it("refuses foreign bindings before any mutation", async () => {
   const f = fixture();
   f.rows.push({
+    comment: "unrelated-owner",
     id: "foreign",
     key: "INVOICE_APP_DATABASE_URL",
-    type: "encrypted",
     target: ["production"],
-    comment: "unrelated-owner",
+    type: "encrypted",
   });
   await expect(f.provider.bindRuntime(f.context)).rejects.toThrow("provider_mismatch");
   expect(f.writes).toHaveLength(0);
@@ -277,12 +276,12 @@ it("observes only the provider-active Production binding and delivered release",
   const f = fixture();
   const result = await f.provider.observe(f.invocation, f.plan);
   expect(result).toEqual({
-    status: "ready",
     deploymentId: "active-deployment",
-    projectId: f.plan.project.projectId,
     environment: "production",
+    projectId: f.plan.project.projectId,
     publicOrigin: f.plan.publicOrigin,
     releaseId: f.plan.runtime.releaseId,
+    status: "ready",
   });
   expect(JSON.stringify(result)).not.toContain("synthetic-private");
   expect(
@@ -315,11 +314,11 @@ it("updates only the exact prior owned binding named by the approved plan", asyn
     valueSha256: hash("old-private-value"),
   };
   f.rows.push({
+    comment: `autograph:public-app-release:${previousOperation}`,
     id: "old-env",
     key: "INVOICE_APP_DATABASE_URL",
-    type: "encrypted",
     target: ["production"],
-    comment: `autograph:public-app-release:${previousOperation}`,
+    type: "encrypted",
   });
   f.values.set("old-env", "old-private-value");
   await f.provider.bindRuntime(f.context);
@@ -336,11 +335,11 @@ it("detects a later conflicting binding before writing earlier absent keys", asy
     { key: "BETTER_AUTH_SECRET", value: "private-auth" },
   ]);
   f.rows.push({
+    comment: "foreign-owner",
     id: "foreign",
     key: "BETTER_AUTH_SECRET",
-    type: "encrypted",
     target: ["production"],
-    comment: "foreign-owner",
+    type: "encrypted",
   });
   await expect(f.provider.bindRuntime(f.context)).rejects.toThrow("provider_mismatch");
   expect(f.writes).toHaveLength(0);
@@ -363,12 +362,12 @@ it("refuses a production binding shared with a custom environment before any wri
     valueSha256: hash("old"),
   };
   f.rows.push({
-    id: "existing-env",
-    key: "INVOICE_APP_DATABASE_URL",
-    type: "encrypted",
-    target: ["production"],
     comment: "autograph:public-app-release:44444444-4444-4444-a444-444444444444",
     customEnvironmentIds: ["staging"],
+    id: "existing-env",
+    key: "INVOICE_APP_DATABASE_URL",
+    target: ["production"],
+    type: "encrypted",
   });
   f.values.set("existing-env", "old");
   await expect(f.provider.bindRuntime(f.context)).rejects.toThrow(
@@ -381,7 +380,7 @@ it.each([
   [
     JSON.stringify({ error: { code: "forbidden", message: "private-token-should-never-persist" } }),
     "iad1::request_123",
-    { statusCode: 403, code: "forbidden", requestRef: "iad1::request_123" },
+    { code: "forbidden", requestRef: "iad1::request_123", statusCode: 403 },
   ],
   [
     JSON.stringify({
@@ -393,22 +392,22 @@ it.each([
   [
     "not-json-private-token-should-never-persist",
     "iad1::request_123",
-    { statusCode: 403, requestRef: "iad1::request_123" },
+    { requestRef: "iad1::request_123", statusCode: 403 },
   ],
-  ["x".repeat(20_000), "iad1::request_123", { statusCode: 403, requestRef: "iad1::request_123" }],
+  ["x".repeat(20_000), "iad1::request_123", { requestRef: "iad1::request_123", statusCode: 403 }],
 ])(
   "projects only bounded allowlisted facts from a provider rejection",
   async (body, requestRef, diagnostic) => {
     const f = fixture();
     f.fetcher.mockResolvedValue(
       new Response(body, {
-        status: 403,
         headers: { "x-vercel-id": requestRef },
+        status: 403,
       }),
     );
     await expect(f.provider.observe(f.invocation, f.plan)).rejects.toMatchObject({
-      name: "PublicReleaseProviderError",
       diagnostic,
+      name: "PublicReleaseProviderError",
     });
   },
 );
@@ -427,26 +426,23 @@ it("persists the actual adapter rejection with the pending key and never retries
       return Response.json(
         { error: { code: "forbidden", message: "private-provider-payload" } },
         {
-          status: 403,
           headers: { "x-vercel-id": "iad1::denial_123" },
+          status: 403,
         },
       );
     }
     return await originalFetch(url, init);
   });
   const handler = createPublicReleaseHandler({
+    applyEffect: async (context) => {
+      await f.provider.bindRuntime(context);
+    },
+    assertApproved: async () => {},
+    assertAuthorized: async () => {},
+    observe: async () => ({ status: "pending" }),
+    reconcileEffect: async (context) => await f.provider.reconcileBindings(context),
+    resolve: async () => f.plan,
     store: {
-      async reserve(plan) {
-        row ??= {
-          operationRef: publicReleaseOperationRef(plan),
-          revision: 1,
-          record: initialPublicReleaseRecord(plan),
-        };
-        return structuredClone(row);
-      },
-      async read() {
-        return row === undefined ? undefined : structuredClone(row);
-      },
       async compareAndSet(prior, record) {
         if (row?.revision !== prior.revision) {
           // oxlint-disable-next-line unicorn/no-useless-undefined -- A stale durable compare-and-set returns no record.
@@ -455,16 +451,19 @@ it("persists the actual adapter rejection with the pending key and never retries
         row = { ...row, record, revision: row.revision + 1 };
         return structuredClone(row);
       },
+      async read() {
+        return row === undefined ? undefined : structuredClone(row);
+      },
+      async reserve(plan) {
+        row ??= {
+          operationRef: publicReleaseOperationRef(plan),
+          record: initialPublicReleaseRecord(plan),
+          revision: 1,
+        };
+        return structuredClone(row);
+      },
     },
-    resolve: async () => f.plan,
-    assertAuthorized: async () => {},
-    assertApproved: async () => {},
     withTargetLease: async (_invocation, _plan, run) => await run(),
-    reconcileEffect: async (context) => await f.provider.reconcileBindings(context),
-    applyEffect: async (context) => {
-      await f.provider.bindRuntime(context);
-    },
-    observe: async () => ({ status: "pending" }),
   });
   const selected = await handler.plan(f.invocation, f.plan.selection.appId);
   await expect(
@@ -474,8 +473,8 @@ it("persists the actual adapter rejection with the pending key and never retries
     bindings: { INVOICE_APP_DATABASE_URL: { state: "pending" } },
     effects: { "bind-production-runtime": "pending", "publish-release-source": "idle" },
     lastProviderFailure: {
+      diagnostic: { code: "forbidden", requestRef: "iad1::denial_123", statusCode: 403 },
       phase: "bind-production-runtime",
-      diagnostic: { statusCode: 403, code: "forbidden", requestRef: "iad1::denial_123" },
     },
   });
   expect(JSON.stringify(row)).not.toContain("private-provider-payload");
@@ -493,11 +492,11 @@ it("does not report a stale provider-active source as the requested app release 
     if (parsed.pathname === "/v13/deployments/active-deployment") {
       expect(parsed.searchParams.get("withGitRepoInfo")).toBe("true");
       return Response.json({
+        gitSource: { sha: "f".repeat(40) },
         id: "active-deployment",
         projectId: f.plan.project.projectId,
-        target: "production",
         readyState: "READY",
-        gitSource: { sha: "f".repeat(40) },
+        target: "production",
       });
     }
     if (!original) {
@@ -517,8 +516,8 @@ it("reads only bounded prior binding facts for new plan construction, without re
     assertCurrent: async () => {
       await f.deps.assertCurrent(f.invocation, f.plan, false);
     },
-    readCredential: async () => await f.deps.readCredential(f.invocation, f.plan),
     fetch: f.fetcher,
+    readCredential: async () => await f.deps.readCredential(f.invocation, f.plan),
   });
   const snapshot = await read({
     ...f.plan.project,
@@ -527,8 +526,8 @@ it("reads only bounded prior binding facts for new plan construction, without re
   });
   expect(snapshot).toEqual([
     {
-      key: "INVOICE_APP_DATABASE_URL",
       id: "new-env",
+      key: "INVOICE_APP_DATABASE_URL",
       operationRef: f.context.operationRef,
       sha256: f.plan.environment[0].sha256,
     },
@@ -539,18 +538,18 @@ it("reads only bounded prior binding facts for new plan construction, without re
 it("refuses foreign production binding scope while planning before decrypting or writing", async () => {
   const f = fixture();
   f.rows.push({
+    comment: "foreign",
     id: "foreign",
     key: "INVOICE_APP_DATABASE_URL",
-    type: "encrypted",
     target: ["production"],
-    comment: "foreign",
+    type: "encrypted",
   });
   const read = createPublicReleaseVercelBindingSnapshot({
     assertCurrent: async () => {
       await f.deps.assertCurrent(f.invocation, f.plan, false);
     },
-    readCredential: async () => await f.deps.readCredential(f.invocation, f.plan),
     fetch: f.fetcher,
+    readCredential: async () => await f.deps.readCredential(f.invocation, f.plan),
   });
   await expect(
     read({ ...f.plan.project, keys: ["INVOICE_APP_DATABASE_URL"], signal: f.invocation.signal }),
@@ -567,14 +566,16 @@ it("does not accept the prior active deployment when changed runtime values requ
 it("takes a current owner-bound active deployment snapshot without selecting or mutating a deployment", async () => {
   const f = fixture();
   const read = createPublicReleaseVercelActiveDeploymentSnapshot({
-    assertCurrent: () => f.deps.assertCurrent(f.invocation, f.plan, false),
-    readCredential: () => f.deps.readCredential(f.invocation, f.plan),
+    assertCurrent: async () => {
+      await f.deps.assertCurrent(f.invocation, f.plan, false);
+    },
     fetch: f.fetcher,
+    readCredential: async () => await f.deps.readCredential(f.invocation, f.plan),
   });
   const scope = {
     ...f.plan.project,
-    repositoryId: f.plan.source.repositoryId,
     productionBranch: f.plan.source.productionBranch,
+    repositoryId: f.plan.source.repositoryId,
     signal: f.invocation.signal,
   };
   expect(await read(scope)).toEqual({ priorActiveDeploymentId: "active-deployment" });
@@ -586,15 +587,17 @@ it("records absent Production activation explicitly rather than inventing a depl
   const f = fixture();
   f.fetcher.mockResolvedValueOnce(Response.json({ ...f.project, targets: { production: null } }));
   const read = createPublicReleaseVercelActiveDeploymentSnapshot({
-    assertCurrent: () => f.deps.assertCurrent(f.invocation, f.plan, false),
-    readCredential: () => f.deps.readCredential(f.invocation, f.plan),
+    assertCurrent: async () => {
+      await f.deps.assertCurrent(f.invocation, f.plan, false);
+    },
     fetch: f.fetcher,
+    readCredential: async () => await f.deps.readCredential(f.invocation, f.plan),
   });
   expect(
     await read({
       ...f.plan.project,
-      repositoryId: f.plan.source.repositoryId,
       productionBranch: f.plan.source.productionBranch,
+      repositoryId: f.plan.source.repositoryId,
       signal: f.invocation.signal,
     }),
   ).toEqual({ priorActiveDeploymentId: null });
@@ -611,8 +614,8 @@ it("can reuse the provider active deployment when every approved runtime value i
     },
   }));
   expect(await f.provider.observe(f.invocation, f.plan)).toMatchObject({
-    status: "ready",
     deploymentId: "active-deployment",
+    status: "ready",
   });
 });
 it("requires a newly reviewed snapshot for changed-runtime plans with no retained activation fence", async () => {

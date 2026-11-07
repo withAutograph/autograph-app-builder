@@ -31,7 +31,7 @@ const directory = (root: string) => {
 };
 const replace = (target: string, bytes: string) => {
   const temporary = `${target}.${randomUUID()}`;
-  writeFileSync(temporary, bytes, { mode: 0o600, flag: "wx" });
+  writeFileSync(temporary, bytes, { flag: "wx", mode: 0o600 });
   renameSync(temporary, target);
 };
 
@@ -52,9 +52,9 @@ export const publishLocalDevelopmentOidcLease = (input: {
     readOwnerBoundLocalFile(path.join(input.repositoryRoot, ".env.local"), { confidential: true }),
   );
   const claims = validateLocalVercelOidcClaims({
+    nowEpochSeconds: input.nowEpochSeconds ?? Math.floor(Date.now() / 1000),
     project,
     token,
-    nowEpochSeconds: input.nowEpochSeconds ?? Math.floor(Date.now() / 1000),
   });
   const metadata = path.join(input.applicationRoot, ".vercel");
   directory(metadata);

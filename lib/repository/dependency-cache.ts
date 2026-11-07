@@ -836,9 +836,9 @@ export const detachCheckoutDependencyView = async (input: {
   const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
   const viewRoot = `${input.workspaceRoot}/.app-builder/dependency-views/checkout/${sha256(input.candidateRoot)}`;
   const result = await input.sandbox.run({
+    abortSignal: input.signal,
     command: `node -e ${quote(detachCheckoutDependencyViewScript)} ${[input.checkoutRoot, input.candidateRoot, viewRoot, input.workspaceRoot].map(quote).join(" ")}`,
     workingDirectory: input.workspaceRoot,
-    abortSignal: input.signal,
   });
   if (result.exitCode !== 0) {
     throw new Error(

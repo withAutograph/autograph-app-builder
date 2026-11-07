@@ -13,24 +13,26 @@ import type { VercelTokenKeyringConfig } from "../integrations/vercel-installati
 import { integrationCapabilityResourceSchema } from "./app-integration-capability-contract";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const custodyKind = "app-integration-private-custody-v1";
 export const integrationPrivateAppScopeSchema = z.strictObject({
-  authority: hostedTenantAuthoritySchema,
   appId: z.string().min(1),
-  projectId: z.string().min(1),
-  provisioningRequestId: z.uuid(),
-  provisioningDigest: digest,
-  resourceProfileId: z.string().min(1),
-  controlResource: integrationCapabilityResourceSchema,
+  authority: hostedTenantAuthoritySchema,
   controlNeon: z.strictObject({
-    projectId: z.string().min(1),
     branchId: z.string().min(1),
     endpointId: z.string().min(1),
+    projectId: z.string().min(1),
     source: z.literal("synthetic-only"),
   }),
+  controlResource: integrationCapabilityResourceSchema,
+  projectId: z.string().min(1),
+  provisioningDigest: digest,
+  provisioningRequestId: z.uuid(),
+  resourceProfileId: z.string().min(1),
 });
 export type IntegrationPrivateAppScope = z.infer<typeof integrationPrivateAppScopeSchema>;
 const scopeSchema = z.strictObject({
   app: integrationPrivateAppScopeSchema,
+  checkpoint: z.string().min(1),
   purpose: z.enum([
     "app-seed",
     "runtime-configuration",
@@ -39,31 +41,28 @@ const scopeSchema = z.strictObject({
     "provider-destination-key",
   ]),
   version: z.literal(1),
-  checkpoint: z.string().min(1),
 });
 export type IntegrationPrivateScope = z.infer<typeof scopeSchema>;
 const sealedSchema = z.strictObject({
   encryptedToken: z.string().min(1),
+  keyVersion: z.string().min(1),
   tokenIv: z.string().min(1),
   tokenTag: z.string().min(1),
-  keyVersion: z.string().min(1),
 });
 const recordSchema = z.strictObject({
-  kind: z.literal("app-integration-private-custody-v1"),
+  kind: z.literal(custodyKind),
+  plaintextSha256: digest,
   scope: scopeSchema,
   sealed: sealedSchema,
-  plaintextSha256: digest,
 });
 const jsonSchema = z.json();
 export type IntegrationPrivateJson = z.infer<typeof jsonSchema>;
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const unavailable = () => new Error("app_integration_private_custody_unavailable");
 const identity = (scope: IntegrationPrivateScope) => {
-  const sha256 = hash(
-    JSON.stringify(["app-integration-private-custody-v1", scopeSchema.parse(scope)]),
-  );
+  const sha256 = hash(JSON.stringify([custodyKind, scopeSchema.parse(scope)]));
   const reference = `${sha256.slice(0, 8)}-${sha256.slice(8, 12)}-5${sha256.slice(13, 16)}-a${sha256.slice(17, 20)}-${sha256.slice(20, 32)}`;
-  return { sha256, reference };
+  return { reference, sha256 };
 };
 /** Existing owner-scoped encrypted journal custody. The first sealed bytes win; no update or key rotation on retry. */
 export const createAppIntegrationPrivateCustody = (input: {
@@ -127,8 +126,8 @@ export const createAppIntegrationPrivateCustody = (input: {
     }
   };
   return {
-    reference: (scope: IntegrationPrivateScope) => identity(parseScope(scope)).reference,
     read,
+    reference: (scope: IntegrationPrivateScope) => identity(parseScope(scope)).reference,
     reserve: async (raw: IntegrationPrivateScope, prepare: () => IntegrationPrivateJson) => {
       const scope = parseScope(raw);
       const prior = await read(scope);
@@ -138,17 +137,17 @@ export const createAppIntegrationPrivateCustody = (input: {
       const key = identity(scope);
       const plaintext = JSON.stringify(jsonSchema.parse(prepare()));
       const record = recordSchema.parse({
-        kind: "app-integration-private-custody-v1",
-        scope,
+        kind: custodyKind,
         plaintextSha256: hash(plaintext),
+        scope,
         sealed: {
           ...encryptVercelToken({
-            key: input.keyring.tokenKey,
-            token: plaintext,
             associatedData: JSON.stringify({
-              purpose: "app-integration-private-custody-v1",
+              purpose: custodyKind,
               ...key,
             }),
+            key: input.keyring.tokenKey,
+            token: plaintext,
           }),
           keyVersion: input.keyring.tokenKeyVersion,
         },
@@ -158,12 +157,12 @@ export const createAppIntegrationPrivateCustody = (input: {
         .insert(builderProvisioningJournals)
         .values({
           ...app.authority,
-          requestId: key.reference,
-          requestDigest: key.sha256,
+          createdAt: new Date(),
           record,
+          requestDigest: key.sha256,
+          requestId: key.reference,
           revision: 1,
           state: "pending",
-          createdAt: new Date(),
           updatedAt: new Date(),
         })
         .onConflictDoNothing();
@@ -176,19 +175,19 @@ export const createAppIntegrationPrivateCustody = (input: {
   };
 };
 export const appIntegrationPrivateSeedSchema = z.strictObject({
-  controlRuntimePassword: z.string().min(32),
-  serviceSecret: z.string().min(32),
   catalogAuthoritySecret: z.string().min(32),
-  setupProofSecret: z.string().min(32),
+  controlRuntimePassword: z.string().min(32),
   ingressSecret: z.string().min(32),
+  serviceSecret: z.string().min(32),
+  setupProofSecret: z.string().min(32),
 });
 export const createFreshAppIntegrationPrivateSeed = () =>
   appIntegrationPrivateSeedSchema.parse({
-    controlRuntimePassword: randomBytes(32).toString("base64url"),
-    serviceSecret: randomBytes(32).toString("base64url"),
     catalogAuthoritySecret: randomBytes(32).toString("base64url"),
-    setupProofSecret: randomBytes(32).toString("base64url"),
+    controlRuntimePassword: randomBytes(32).toString("base64url"),
     ingressSecret: randomBytes(32).toString("base64url"),
+    serviceSecret: randomBytes(32).toString("base64url"),
+    setupProofSecret: randomBytes(32).toString("base64url"),
   });
 /** Shared canonical sealed-envelope digest: includes ciphertext and all metadata, never returned raw. */
 export const canonicalIntegrationPrivateJsonBytes = (value: IntegrationPrivateJson): string => {

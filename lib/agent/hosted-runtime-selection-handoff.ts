@@ -106,10 +106,10 @@ export const resolveHostedRuntimePreparationSelection = async (
   const ctx = {
     abortSignal: input.signal ?? new AbortController().signal,
     session: {
-      id: input.sessionId,
       auth: input.sessionAuth,
-      ownerRunId: input.callbackExecution?.ownerRunId,
+      id: input.sessionId,
       ownerAnchorRunId: input.callbackExecution?.ownerAnchorRunId,
+      ownerRunId: input.callbackExecution?.ownerRunId,
     },
   };
   ctx.abortSignal.throwIfAborted();

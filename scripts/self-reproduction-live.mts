@@ -109,20 +109,19 @@ const waitForEveAttempt = async (
     // The development process is expected to take time while it prepares its isolated runtime.
   }
   await delay(500);
-  return waitForEveAttempt(url, signal, deadline);
+  await waitForEveAttempt(url, signal, deadline);
 };
 
-const waitForEve = (url: string, signal: AbortSignal) =>
-  waitForEveAttempt(url, signal, Date.now() + 120_000);
+const waitForEve = async (url: string, signal: AbortSignal) => {
+  await waitForEveAttempt(url, signal, Date.now() + 120_000);
+};
 
 const availableDistinctLoopbackPort = async (
   excludedPort: number,
   configured: string | undefined,
 ): Promise<number> => {
   const port = await availableLoopbackPort(configured);
-  return port === excludedPort
-    ? availableDistinctLoopbackPort(excludedPort, undefined as undefined)
-    : port;
+  return port === excludedPort ? await availableDistinctLoopbackPort(excludedPort) : port;
 };
 
 const answerFor = (result: unknown, answers: Record<string, string>) => {
@@ -161,7 +160,7 @@ const resumeInvocation = async (
     { input: invocation.stdout, timeoutMs: generationTimeoutMs },
   );
   await appendFile(transcriptPath, `${resumed.stdout}\n${resumed.stderr}\n`);
-  return resumeInvocation(resumed, remainingTurns - 1, url, answers);
+  return await resumeInvocation(resumed, remainingTurns - 1, url, answers);
 };
 
 const main = async () => {
@@ -203,7 +202,9 @@ const main = async () => {
     },
   );
   const developmentExited = once(development, "close");
-  development.once("close", () => controller.abort());
+  development.once("close", () => {
+    controller.abort();
+  });
   development.stdout.on("data", async (chunk: Buffer) => {
     await appendFile(transcriptPath, String(chunk));
   });

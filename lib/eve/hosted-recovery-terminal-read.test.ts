@@ -72,13 +72,15 @@ const fixture = async () => {
   } | null = null;
   const beforeRead = vi.fn<
     NonNullable<Parameters<typeof createHostedEveSessionService>[0]["beforeRead"]>
-  >(() => Promise.reject(new Error("beforeRead must stay fenced")));
-  const assertNativeRecoveryOwner = vi.fn(() =>
-    ownerAllowed ? Promise.resolve() : Promise.reject(new Error("Current owner revoked")),
-  );
-  const activateRecovery = vi.fn<NonNullable<HostedEveTransport["activateRecovery"]>>(() =>
-    Promise.reject(new Error("Native activation HTTP 503")),
-  );
+  >(async () => {
+    throw new Error("beforeRead must stay fenced");
+  });
+  const assertNativeRecoveryOwner = vi.fn(async () => {
+    await (ownerAllowed ? Promise.resolve() : Promise.reject(new Error("Current owner revoked")));
+  });
+  const activateRecovery = vi.fn<NonNullable<HostedEveTransport["activateRecovery"]>>(async () => {
+    throw new Error("Native activation HTTP 503");
+  });
   const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (input) => {
     expect(input.adapterSessionId).toBe("run_child");
     expect(input.sessionId).toBe(childSessionId);
@@ -116,11 +118,11 @@ const fixture = async () => {
         ...recovery,
         ownerRunId: "run_child",
         provenance: {
+          checkpointVersion: 1 as const,
           kind: "failed-turn-input" as const,
-          sourceStepId: "step_terminal",
           sourceEventId: "event_terminal",
           sourceSlot: 1,
-          checkpointVersion: 1 as const,
+          sourceStepId: "step_terminal",
         },
       };
       await base.commitNativeRecoveryReceipt({
@@ -133,11 +135,11 @@ const fixture = async () => {
     });
   const transport: HostedEveTransport = {
     activateRecovery,
-    cancel: vi.fn(() => Promise.resolve({ events: [], status: "cancelled" as const })),
-    get: vi.fn(() => Promise.resolve(working)),
+    cancel: vi.fn(async () => ({ events: [], status: "cancelled" as const })),
+    get: vi.fn().mockResolvedValue(working),
     observe,
-    respond: vi.fn(() => Promise.resolve(working)),
-    send: vi.fn(() => Promise.resolve(working)),
+    respond: vi.fn().mockResolvedValue(working),
+    send: vi.fn().mockResolvedValue(working),
     start,
   };
   const seed = createHostedEveSessionService({
@@ -153,7 +155,7 @@ const fixture = async () => {
       for await (const event of input.events) {
         events.push(event);
       }
-      page = { id: checkpointId, digest: checkpointDigest, events, metadata: input.metadata };
+      page = { digest: checkpointDigest, events, id: checkpointId, metadata: input.metadata };
       childSessionId = input.session.sessionId;
       return await base.settleSucceeded({
         ...input,
@@ -174,19 +176,19 @@ const fixture = async () => {
       ? publishedChild
       : await base.getSession(owner, sessionId);
   };
-  const readCheckpointPage: NonNullable<HostedEveStore["readCheckpointPage"]> = (input) => {
+  const readCheckpointPage: NonNullable<HostedEveStore["readCheckpointPage"]> = async (input) => {
     const current = page;
     if (current === null || current.id !== input.checkpointRef.id) {
       throw new Error("Unknown checkpoint page");
     }
     const events = current.events.slice(input.cursor, input.cursor + input.limit);
-    return Promise.resolve({
+    return {
       checkpointDigest: current.digest,
       cursor: input.cursor + events.length,
       events,
       metadata: current.metadata,
       totalEvents: current.events.length,
-    });
+    };
   };
   const observeSessionPaged = vi.fn<NonNullable<HostedEveStore["observeSessionPaged"]>>(
     async (input) => {
@@ -199,9 +201,9 @@ const fixture = async () => {
         events.push(event);
       }
       page = {
-        id: observedCheckpointId,
         digest: observedCheckpointDigest,
         events,
+        id: observedCheckpointId,
         metadata: input.metadata,
       };
       publishedChild = durableHostedSessionRecordSchema.parse({
@@ -293,12 +295,12 @@ describe("recovered child terminal read after activation transport failure", () 
     });
     f.beforeRead.mockResolvedValue();
     f.setMode("working");
-    const result = await f.service.get({ sessionId: f.childSessionId, cursor: 0, limit: 25 });
+    const result = await f.service.get({ cursor: 0, limit: 25, sessionId: f.childSessionId });
     expect(result.status).toBe("working");
     expect(f.beforeRead).toHaveBeenCalledOnce();
     expect(await f.base.getSession(principal, f.originalSessionId)).toMatchObject({
-      status: "failed",
       resumability: "terminal",
+      status: "failed",
     });
     expect(f.observeSessionPaged).toHaveBeenCalledOnce();
   });
@@ -308,7 +310,7 @@ describe("recovered child terminal read after activation transport failure", () 
     async (status) => {
       const f = await fixture();
       f.setMode(status);
-      const result = await f.service.get({ sessionId: f.childSessionId, cursor: 0, limit: 25 });
+      const result = await f.service.get({ cursor: 0, limit: 25, sessionId: f.childSessionId });
       expect(result.status).toBe(status);
       expect(result.events).toMatchObject([{ text: `Native ${status} terminal observation` }]);
       expect(f.observe).toHaveBeenCalledOnce();
@@ -327,7 +329,7 @@ describe("recovered child terminal read after activation transport failure", () 
       const f = await fixture();
       f.setMode(mode);
       await expect(
-        f.service.get({ sessionId: f.childSessionId, cursor: 0, limit: 25 }),
+        f.service.get({ cursor: 0, limit: 25, sessionId: f.childSessionId }),
       ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
       expect(f.beforeRead).not.toHaveBeenCalled();
       expect(f.observeSessionPaged).not.toHaveBeenCalled();
@@ -339,11 +341,11 @@ describe("recovered child terminal read after activation transport failure", () 
   it("does not substitute a cached terminal checkpoint when the fresh native read is unavailable", async () => {
     const f = await fixture();
     await expect(
-      f.service.get({ sessionId: f.childSessionId, cursor: 0, limit: 25 }),
+      f.service.get({ cursor: 0, limit: 25, sessionId: f.childSessionId }),
     ).resolves.toMatchObject({ status: "failed" });
     f.setMode("unavailable");
     await expect(
-      f.service.get({ sessionId: f.childSessionId, cursor: 0, limit: 25 }),
+      f.service.get({ cursor: 0, limit: 25, sessionId: f.childSessionId }),
     ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     expect(f.beforeRead).not.toHaveBeenCalled();
     expect(f.transport.get).not.toHaveBeenCalled();
@@ -353,7 +355,7 @@ describe("recovered child terminal read after activation transport failure", () 
     const f = await fixture();
     f.setOwnerAllowed(false);
     await expect(
-      f.service.get({ sessionId: f.childSessionId, cursor: 0, limit: 25 }),
+      f.service.get({ cursor: 0, limit: 25, sessionId: f.childSessionId }),
     ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     expect(f.observe).not.toHaveBeenCalled();
     expect(f.beforeRead).not.toHaveBeenCalled();
@@ -371,7 +373,7 @@ describe("recovered child terminal read after activation transport failure", () 
         });
       });
       await expect(
-        f.service.get({ sessionId: f.childSessionId, cursor: 0, limit: 25 }),
+        f.service.get({ cursor: 0, limit: 25, sessionId: f.childSessionId }),
       ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
       expect(f.observe).toHaveBeenCalledOnce();
       expect(f.observeSessionPaged).not.toHaveBeenCalled();
@@ -389,7 +391,7 @@ describe("recovered child terminal read after activation transport failure", () 
       });
     });
     await expect(
-      f.service.get({ sessionId: f.childSessionId, cursor: 0, limit: 25 }),
+      f.service.get({ cursor: 0, limit: 25, sessionId: f.childSessionId }),
     ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     expect(f.observeSessionPaged).toHaveBeenCalledOnce();
     expect(f.beforeRead).not.toHaveBeenCalled();

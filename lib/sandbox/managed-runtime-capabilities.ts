@@ -15,8 +15,11 @@ const origin = z.string().refine((value) => {
   }
 });
 const publicKey = z.strictObject({
-  kty: z.literal("OKP"),
+  alg: z.literal("EdDSA"),
   crv: z.literal("Ed25519"),
+  kid: identifier,
+  kty: z.literal("OKP"),
+  use: z.literal("sig"),
   x: z
     .string()
     .refine(
@@ -25,18 +28,15 @@ const publicKey = z.strictObject({
         Buffer.from(value, "base64url").length === 32 &&
         Buffer.from(value, "base64url").toString("base64url") === value,
     ),
-  kid: identifier,
-  alg: z.literal("EdDSA"),
-  use: z.literal("sig"),
 });
 /** Wire-compatible with Arrusted's managed public verification adapter; no private JWK fields. */
 export const managedRuntimePublicProfileSchema = z
   .strictObject({
-    version: z.literal(1),
     appId: identifier,
-    publicOrigin: origin,
     jwksUrl: z.url(),
     keys: z.array(publicKey).min(1),
+    publicOrigin: origin,
+    version: z.literal(1),
   })
   .superRefine((value, ctx) => {
     if (
@@ -48,24 +48,25 @@ export const managedRuntimePublicProfileSchema = z
   });
 export type ManagedRuntimePublicProfile = z.infer<typeof managedRuntimePublicProfileSchema>;
 export const managedRuntimeOwnerSchema = z.strictObject({
-  issuer: identifier,
   audience: identifier,
-  workspaceId: identifier,
+  issuer: identifier,
   ownerUserId: identifier,
   sessionId: identifier,
+  workspaceId: identifier,
 });
 export const managedRuntimeIdentitySchema = z.strictObject({
-  intentId: z.uuid(),
-  approvalRef: identifier,
-  owner: managedRuntimeOwnerSchema,
   appId: identifier,
-  runtimeAttemptId: z.uuid(),
+  approvalRef: identifier,
   fence: z.number().int().positive().refine(Number.isSafeInteger),
-  sandboxId: identifier,
+  intentId: z.uuid(),
+  owner: managedRuntimeOwnerSchema,
   providerSessionId: identifier,
+  runtimeAttemptId: z.uuid(),
+  sandboxId: identifier,
 });
 export type ManagedRuntimeIdentity = z.infer<typeof managedRuntimeIdentitySchema>;
 export const managedRuntimeCurrentSchema = managedRuntimeIdentitySchema.extend({
+  leaseExpiresAt: z.iso.datetime(),
   state: z.enum([
     "starting",
     "ready",
@@ -74,7 +75,6 @@ export const managedRuntimeCurrentSchema = managedRuntimeIdentitySchema.extend({
     "expired",
     "reconciliation-required",
   ]),
-  leaseExpiresAt: z.iso.datetime(),
 });
 export type ManagedRuntimeCurrent = z.infer<typeof managedRuntimeCurrentSchema>;
 export const managedCapabilitySha256 = (value: string) =>
@@ -93,12 +93,12 @@ export const createPrivateManagedRuntimeCapabilities = () => {
   const transport = randomBytes(32).toString("base64url");
   const lifecycle = randomBytes(32).toString("base64url");
   return {
-    private: { suiteSelector, transport, lifecycle },
+    lifecycleSha256: managedCapabilitySha256(lifecycle),
+    private: { lifecycle, suiteSelector, transport },
     projection: {
       suiteSelectorSha256: managedCapabilitySha256(suiteSelector),
       transportSha256: managedCapabilitySha256(transport),
     },
-    lifecycleSha256: managedCapabilitySha256(lifecycle),
   };
 };
 export const verifyManagedCapability = (bearer: string | undefined, expectedSha256: string) => {
@@ -126,10 +126,10 @@ export const readManagedRuntimePublicProfile = async (input: {
     .strictObject({ keys: z.array(publicKey).min(1) })
     .parse(await input.readPublicJwks(jwksUrl));
   return managedRuntimePublicProfileSchema.parse({
-    version: 1,
     appId: input.appId,
-    publicOrigin,
     jwksUrl,
     keys: document.keys,
+    publicOrigin,
+    version: 1,
   });
 };

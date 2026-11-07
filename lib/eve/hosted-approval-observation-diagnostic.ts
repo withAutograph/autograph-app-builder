@@ -31,14 +31,19 @@ const approvalReference = (
   value: Pick<PrivateResourceApprovalReceipt, "callId" | "requestId" | "toolInput">,
   source: ApprovalReference["source"],
   outcome?: ApprovalReference["outcome"],
-): ApprovalReference => ({
-  callHash: identifierHash(value.callId),
-  operationHash: identifierHash(value.toolInput.operationRef),
-  planDigest: value.toolInput.planDigest,
-  requestHash: identifierHash(value.requestId),
-  source,
-  ...(outcome === undefined ? {} : { outcome }),
-});
+): ApprovalReference => {
+  const reference: ApprovalReference = {
+    callHash: identifierHash(value.callId),
+    operationHash: identifierHash(value.toolInput.operationRef),
+    planDigest: value.toolInput.planDigest,
+    requestHash: identifierHash(value.requestId),
+    source,
+  };
+  if (outcome !== undefined) {
+    reference.outcome = outcome;
+  }
+  return reference;
+};
 
 const nativeInputObservations = (nativeState: NativeStateForDiagnostic | undefined) => {
   const nativePending = nativeState?.privateInputState?.pending.flatMap((batch) =>
@@ -47,8 +52,8 @@ const nativeInputObservations = (nativeState: NativeStateForDiagnostic | undefin
   const nativeResolved = nativeState?.privateInputState?.resolved.flatMap((entry) =>
     entry.resolutions.map((resolution) => ({
       kind: resolution.kind,
-      outcome: resolution.outcome,
       optionId: resolution.response?.optionId,
+      outcome: resolution.outcome,
       requestId: resolution.requestId,
     })),
   );
@@ -113,7 +118,7 @@ export const createHostedApprovalObservationDiagnostic = (input: {
       const nativeResolution = nativeResolved?.find(
         (entry) => entry.requestId === request.requestId,
       );
-      return {
+      const summary = {
         capturePending: capturePendingMatch !== undefined,
         captureReceipt: captureReceiptMatch !== undefined,
         inlineReceipt: inlineReceiptMatch !== undefined,
@@ -121,50 +126,50 @@ export const createHostedApprovalObservationDiagnostic = (input: {
         nativePending: nativePendingMatch,
         nativeResolved: nativeResolution !== undefined,
         requestHash: identifierHash(request.requestId),
-        ...(nativeResolution === undefined
-          ? {}
-          : {
-              resolution: {
-                approvedOptionMatch:
-                  nativeResolution.optionId === undefined
-                    ? undefined
-                    : (request.options?.some(
-                        (option) =>
-                          option.id === nativeResolution.optionId && option.id === "approve",
-                      ) ?? false),
-                kind: nativeResolution.kind,
-                outcome: nativeResolution.outcome,
-              },
-            }),
-        ...(approvalMatch === undefined
-          ? {}
-          : {
-              callHash: identifierHash(approvalMatch.callId),
-              operationHash: identifierHash(approvalMatch.toolInput.operationRef),
-              planDigest: approvalMatch.toolInput.planDigest,
-            }),
       };
+      if (nativeResolution !== undefined) {
+        Object.assign(summary, {
+          resolution: {
+            approvedOptionMatch:
+              nativeResolution.optionId === undefined
+                ? undefined
+                : (request.options?.some(
+                    (option) => option.id === nativeResolution.optionId && option.id === "approve",
+                  ) ?? false),
+            kind: nativeResolution.kind,
+            outcome: nativeResolution.outcome,
+          },
+        });
+      }
+      if (approvalMatch !== undefined) {
+        Object.assign(summary, {
+          callHash: identifierHash(approvalMatch.callId),
+          operationHash: identifierHash(approvalMatch.toolInput.operationRef),
+          planDigest: approvalMatch.toolInput.planDigest,
+        });
+      }
+      return summary;
     });
     return {
       captureMismatch: hasRelevantCaptureMismatch,
       coldReadProgress: input.coldReadProgress,
       event: "builder.hosted_approval_observation" as const,
       inlineReceiptCount: input.inlineReceipts.length,
-      nativeStatePresent: input.nativeState !== undefined,
       nativeNextIndex: input.nativeState?.nextNativeIndex ?? null,
       nativePendingCount: nativePending?.length ?? 0,
       nativePublicEventCount: input.nativeState?.publicEventCount ?? null,
-      privateCapturePresent: input.privateCapture !== undefined,
+      nativeStatePresent: input.nativeState !== undefined,
       privateCapturePendingCount: capturePending.length,
+      privateCapturePresent: input.privateCapture !== undefined,
       privateCaptureReceiptCount: captureReceipts.length,
+      protectedApprovalReferenceCount:
+        capturePending.length + captureReceipts.length + input.inlineReceipts.length,
+      protectedApprovalReferences: references.slice(-32),
+      protectedApprovalReferencesTruncated:
+        capturePending.length + captureReceipts.length + input.inlineReceipts.length > 32,
       publicPendingRequestCount: input.publicPendingRequests.length,
       publicPendingRequests: requests.slice(0, 32),
       publicPendingRequestsTruncated: input.publicPendingRequests.length > requests.length,
-      protectedApprovalReferenceCount:
-        capturePending.length + captureReceipts.length + input.inlineReceipts.length,
-      protectedApprovalReferencesTruncated:
-        capturePending.length + captureReceipts.length + input.inlineReceipts.length > 32,
-      protectedApprovalReferences: references.slice(-32),
       sessionHash: identifierHash(input.sessionId),
     };
   };

@@ -3,6 +3,7 @@ import type { ResumeRealmContinuation } from "./realm-continuation-read";
 import { createRealmContinuationRead } from "./realm-continuation-read";
 
 const read = {
+  adapterSessionId: "native_current",
   principal: {
     audience: "https://builder.example.test/mcp",
     issuer: "https://builder.example.test/api/auth",
@@ -11,13 +12,12 @@ const read = {
     workspaceId: "workspace",
   },
   sessionId: "ses_public",
-  adapterSessionId: "native_current",
   sourceHandoffId: "d46aad10-99a1-41c1-a496-ec452643c066",
 };
 
 describe("owned read Realm continuation", () => {
   it("passes the actual owner, scopes and both saved session identities unchanged", async () => {
-    const resume = vi.fn<ResumeRealmContinuation>().mockImplementation(() => Promise.resolve());
+    const resume = vi.fn<ResumeRealmContinuation>().mockResolvedValue();
     const environment = { EVE_HOSTED_ADAPTER: "1" };
     await createRealmContinuationRead({ environment, resume })(read);
     expect(resume).toHaveBeenCalledTimes(1);

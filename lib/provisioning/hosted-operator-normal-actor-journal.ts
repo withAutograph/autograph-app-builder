@@ -45,30 +45,30 @@ import type { CompletedParticipantBootstrap } from "./hosted-operator-participan
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const actorKey = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 export const normalActorCaptureCookieSchema = z.strictObject({
+  domain: z.string().min(1).max(256),
+  expires: z.literal(-1),
+  hostOnly: z.boolean(),
+  httpOnly: z.literal(true),
   name: z.string().regex(/^[A-Za-z0-9_.-]{1,256}$/u),
+  path: z.string().startsWith("/").max(2048),
+  sameSite: z.enum(["Strict", "Lax", "None"]),
+  secure: z.literal(true),
   value: z
     .string()
     .min(1)
     .max(8192)
     .regex(/^[\u0021\u0023-\u002B\u002D-\u003A\u003C-\u005B\u005D-\u007E]+$/u),
-  domain: z.string().min(1).max(256),
-  path: z.string().startsWith("/").max(2048),
-  expires: z.literal(-1),
-  httpOnly: z.literal(true),
-  secure: z.literal(true),
-  sameSite: z.enum(["Strict", "Lax", "None"]),
-  hostOnly: z.boolean(),
 });
 export type NormalActorCaptureCookie = z.infer<typeof normalActorCaptureCookieSchema>;
 const captureReferenceSchema = z
   .strictObject({
-    reference: z.uuid(),
     actorKey,
-    organizationId: z.string().min(1).max(512).optional(),
-    nonceSha256: digest,
-    proofSha256: digest,
     expiresAt: z.iso.datetime({ offset: true }),
+    nonceSha256: digest,
     normalCookieSha256: digest.optional(),
+    organizationId: z.string().min(1).max(512).optional(),
+    proofSha256: digest,
+    reference: z.uuid(),
     sealed: sealedNormalActorStateSchema.optional(),
   })
   .refine(
@@ -77,16 +77,12 @@ const captureReferenceSchema = z
   );
 export const normalActorPendingCaptureSchema = z.strictObject({
   actorKey,
-  organizationId: z.string().min(1).optional(),
-  nonceSha256: digest,
   expiresAt: z.iso.datetime({ offset: true }),
+  nonceSha256: digest,
+  organizationId: z.string().min(1).optional(),
 });
 export type NormalActorPendingCapture = z.infer<typeof normalActorPendingCaptureSchema>;
 export const normalActorOrganizationProofSchema = z.strictObject({
-  organizationId: z.string().min(1),
-  ownerActorKey: actorKey,
-  owner: normalActorSessionRefSchema,
-  link: operatorRealmIdentityLinkSchema,
   bootstrap: z
     .strictObject({
       auth: retainedOperatorAuthSchema,
@@ -94,6 +90,10 @@ export const normalActorOrganizationProofSchema = z.strictObject({
       gateway: retainedOperatorAuthSchema.optional(),
     })
     .optional(),
+  link: operatorRealmIdentityLinkSchema,
+  organizationId: z.string().min(1),
+  owner: normalActorSessionRefSchema,
+  ownerActorKey: actorKey,
   transportSource:
     hostedOperatorOwnedOrganizationSpecSchema.shape.identityVerification.shape.transportSource,
 });
@@ -113,16 +113,16 @@ export type NormalActorOrganizationProofBinding = Pick<
   | "publicRelease"
 > & { transportSource: NormalActorOrganizationProof["transportSource"] };
 export const normalActorAccountPreparationSchema = normalActorPreparationSchema.extend({
-  program: normalActorProgramSchema,
-  predecessor: normalActorPredecessorSchema.optional(),
-  capturePredecessor: normalActorCapturePredecessorSchema.optional(),
   accountPlan: hostedOperatorPlanSchema,
-  sealedState: sealedNormalActorStateSchema,
+  accountsCompletedAt: z.iso.datetime({ offset: true }).optional(),
+  capturePredecessor: normalActorCapturePredecessorSchema.optional(),
   captures: z.array(captureReferenceSchema),
   organizationProofs: z.array(normalActorOrganizationProofSchema).optional(),
-  supersededOrganizationProofs: z.array(normalActorOrganizationProofSchema).optional(),
   pendingCaptures: z.array(normalActorPendingCaptureSchema).optional(),
-  accountsCompletedAt: z.iso.datetime({ offset: true }).optional(),
+  predecessor: normalActorPredecessorSchema.optional(),
+  program: normalActorProgramSchema,
+  sealedState: sealedNormalActorStateSchema,
+  supersededOrganizationProofs: z.array(normalActorOrganizationProofSchema).optional(),
 });
 export type NormalActorAccountPreparation = z.infer<typeof normalActorAccountPreparationSchema>;
 export type NormalActorAccountProvenance = Omit<
@@ -135,14 +135,14 @@ export type NormalActorAccountProvenance = Omit<
   | "pendingCaptures"
 >;
 export const normalActorCapturedPayloadSchema = z.strictObject({
-  version: z.literal(1),
   actorKey,
-  organizationId: z.string().min(1).max(512).optional(),
   nonceSha256: digest,
-  proofSha256: digest,
-  proof: z.string().min(1).max(16_384),
-  session: normalActorSessionRefSchema,
   normalCookie: normalActorCaptureCookieSchema,
+  organizationId: z.string().min(1).max(512).optional(),
+  proof: z.string().min(1).max(16_384),
+  proofSha256: digest,
+  session: normalActorSessionRefSchema,
+  version: z.literal(1),
 });
 export type NormalActorCapturedPayload = z.infer<typeof normalActorCapturedPayloadSchema>;
 export interface NormalActorJournalPorts {
@@ -195,8 +195,8 @@ const validateProvenance = (
 };
 const stateScope = (context: HostedOperatorContext, preparation: NormalActorAccountProvenance) => ({
   authority: context.authority,
-  ownerSessionId: context.target.sessionId,
   operationRef: preparation.accountOperationRef,
+  ownerSessionId: context.target.sessionId,
   program: preparation.program,
 });
 const captureAad = (
@@ -368,8 +368,8 @@ const organizationProofAad = (
     ...stateScope(context, preparation),
     organizationId: input.organizationId,
     ownerActorKey: input.ownerActorKey,
-    realmSessionId: input.owner.realmSessionId,
     purpose: "normal-actor-organization-proof-nonce-v1",
+    realmSessionId: input.owner.realmSessionId,
   });
 const assertOrganizationProofOwner = (
   preparation: NormalActorAccountPreparation,
@@ -461,7 +461,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     context: HostedOperatorContext,
     prior: NonNullable<HostedRuntimeJournalRow["record"]["participantPreparationHistory"]>[number],
   ) => {
-    const approvalId = prior.operator.approvalId;
+    const { approvalId } = prior.operator;
     if (approvalId === undefined) {
       throw new Error("normal_actor_journal_authority_mismatch");
     }
@@ -469,11 +469,11 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     await ports.assertAccountApproval(context, provenance(prior.preparation));
     await ports.assertAccountApproval(context, {
       ...provenance(prior.preparation),
+      accountApprovalId: approvalId,
+      accountApprovedByCallId: prior.approvedByCallId,
       accountOperationRef: prior.operator.operationRef,
       accountPlan: prior.operator.plan,
       accountPlanDigest: prior.operator.planDigest,
-      accountApprovalId: approvalId,
-      accountApprovedByCallId: prior.approvedByCallId,
     });
   };
   const assertCapturePredecessorApprovals = async (
@@ -484,35 +484,39 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     await ports.assertAccountApproval(context, provenance(prior.account));
     await ports.assertAccountApproval(context, {
       ...provenance(prior.account),
+      accountApprovalId: prior.bootstrap.auth.approvalId,
+      accountApprovedByCallId: prior.bootstrap.auth.approvedByCallId,
       accountOperationRef: prior.bootstrap.auth.operationRef,
       accountPlan: prior.bootstrap.auth.plan,
       accountPlanDigest: prior.bootstrap.auth.planDigest,
-      accountApprovalId: prior.bootstrap.auth.approvalId,
-      accountApprovedByCallId: prior.bootstrap.auth.approvedByCallId,
     });
     if (prior.bootstrap.gateway !== undefined) {
       await ports.assertAccountApproval(context, {
         ...provenance(prior.account),
+        accountApprovalId: prior.bootstrap.gateway.approvalId,
+        accountApprovedByCallId: prior.bootstrap.gateway.approvedByCallId,
         accountOperationRef: prior.bootstrap.gateway.operationRef,
         accountPlan: prior.bootstrap.gateway.plan,
         accountPlanDigest: prior.bootstrap.gateway.planDigest,
-        accountApprovalId: prior.bootstrap.gateway.approvalId,
-        accountApprovedByCallId: prior.bootstrap.gateway.approvedByCallId,
       });
     }
   };
   const read = async (context: HostedOperatorContext, guard?: () => Promise<void>) => {
-    await guarded(() => ports.assertAuthorized(context), guard);
-    const row = await guarded(() => ports.store.read(context), guard);
+    await guarded(async () => {
+      await ports.assertAuthorized(context);
+    }, guard);
+    const row = await guarded(async () => await ports.store.read(context), guard);
     if (row === undefined) {
       throw new Error("normal_actor_journal_unavailable");
     }
     const preparation = row.record.accountPreparation;
     if (preparation === undefined) {
-      return { row, preparation: undefined, state: undefined };
+      return { preparation: undefined, row, state: undefined };
     }
     validateProvenance(context, preparation);
-    await guarded(() => ports.assertAccountApproval(context, provenance(preparation)), guard);
+    await guarded(async () => {
+      await ports.assertAccountApproval(context, provenance(preparation));
+    }, guard);
     if (preparation.predecessor !== undefined) {
       const prior = readParticipantSuccessorPredecessor(
         row.record,
@@ -522,7 +526,9 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       if (prior === undefined) {
         throw new Error("normal_actor_journal_authority_mismatch");
       }
-      await guarded(() => assertPredecessorApprovals(context, prior), guard);
+      await guarded(async () => {
+        await assertPredecessorApprovals(context, prior);
+      }, guard);
     }
     if (preparation.capturePredecessor !== undefined) {
       const prior = readUnapprovedCapturePredecessor(
@@ -533,7 +539,9 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       if (prior === undefined) {
         throw new Error("normal_actor_journal_authority_mismatch");
       }
-      await guarded(() => assertCapturePredecessorApprovals(context, prior), guard);
+      await guarded(async () => {
+        await assertCapturePredecessorApprovals(context, prior);
+      }, guard);
     }
     const state = decryptNormalActorState({
       ...stateScope(context, preparation),
@@ -541,12 +549,14 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       sealed: preparation.sealedState,
     });
     assertCarriedActors(context, row, preparation, state, ports.keyring, ports.now());
-    await guarded(() => ports.assertAuthorized(context), guard);
-    const latest = await guarded(() => ports.store.read(context), guard);
+    await guarded(async () => {
+      await ports.assertAuthorized(context);
+    }, guard);
+    const latest = await guarded(async () => await ports.store.read(context), guard);
     if (!sameJournalAfterLeaseRenewal(row, latest, ports.now()) || latest === undefined) {
       throw new Error("normal_actor_journal_changed");
     }
-    return { row: latest, preparation, state };
+    return { preparation, row: latest, state };
   };
   const mutate = async (
     context: HostedOperatorContext,
@@ -556,13 +566,21 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
   ) => {
     for (;;) {
       const { row } = await read(context, guard);
-      await guarded(() => ports.assertMutationAuthority(context, row, mode), guard);
+      await guarded(async () => {
+        await ports.assertMutationAuthority(context, row, mode);
+      }, guard);
       const preparation = normalActorAccountPreparationSchema.parse(change(row));
       validateProvenance(context, preparation);
-      await guarded(() => ports.assertAccountApproval(context, provenance(preparation)), guard);
-      await guarded(() => ports.assertAuthorized(context), guard);
-      await guarded(() => ports.assertMutationAuthority(context, row, mode), guard);
-      const latest = await guarded(() => ports.store.read(context), guard);
+      await guarded(async () => {
+        await ports.assertAccountApproval(context, provenance(preparation));
+      }, guard);
+      await guarded(async () => {
+        await ports.assertAuthorized(context);
+      }, guard);
+      await guarded(async () => {
+        await ports.assertMutationAuthority(context, row, mode);
+      }, guard);
+      const latest = await guarded(async () => await ports.store.read(context), guard);
       if (!sameJournalAfterLeaseRenewal(row, latest, ports.now()) || latest === undefined) {
         continue;
       }
@@ -570,12 +588,12 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
         return preparation;
       }
       const saved = await guarded(
-        () =>
-          ports.store.compareAndSet({
+        async () =>
+          await ports.store.compareAndSet({
             ...context,
-            record: { ...latest.record, accountPreparation: preparation },
             expectedRevision: latest.revision,
             now: new Date(ports.now()),
+            record: { ...latest.record, accountPreparation: preparation },
           }),
         guard,
       );
@@ -673,12 +691,12 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
           );
           return {
             ...input,
+            captures: [],
             sealedState: encryptNormalActorState({
               ...stateScope(context, input),
               config: ports.keyring,
               state,
             }),
-            captures: [],
           };
         },
         guard,
@@ -714,12 +732,12 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
         }
         return {
           ...input,
+          captures: [],
           sealedState: encryptNormalActorState({
             ...stateScope(context, input),
             config: ports.keyring,
             state: initialNormalActorState(input.program, input.accountOperationRef),
           }),
-          captures: [],
         };
       });
     },
@@ -828,7 +846,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
         input.bootstrap === undefined
           ? undefined
           : await guarded(
-              () => import("./hosted-operator-participant-bootstrap"),
+              async () => await import("./hosted-operator-participant-bootstrap"),
               input.assertBootstrapCurrent,
             );
       const preparation = await mutate(
@@ -898,10 +916,10 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
             owner: input.owner,
             link: {
               ...linkBinding,
+              expiresAt,
+              nonceSha256: createHash("sha256").update(nonce).digest("hex"),
               organizationId: null,
               ownerSessionId: context.target.sessionId,
-              nonceSha256: createHash("sha256").update(nonce).digest("hex"),
-              expiresAt,
               sealedNonce: {
                 ...encryptVercelToken({
                   associatedData: organizationProofAad(context, current, input),
@@ -954,7 +972,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       if (createHash("sha256").update(nonce).digest("hex") !== retained.link.nonceSha256) {
         throw new Error("normal_actor_organization_proof_mismatch");
       }
-      return { record: retained, nonce };
+      return { nonce, record: retained };
     },
     async completeOrganizationProof(
       context: HostedOperatorContext,
@@ -1168,7 +1186,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       reference: string,
     ): Promise<NormalActorCapturedPayload | undefined> {
       const result = await read(context);
-      let preparation = result.preparation;
+      let { preparation } = result;
       if (preparation?.captures.some((entry) => entry.reference === reference) !== true) {
         preparation = result.row.record.participantPreparationHistory
           ?.map((entry) => entry.preparation)

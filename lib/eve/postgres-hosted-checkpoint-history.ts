@@ -36,22 +36,22 @@ type Bytes = AsyncIterable<Uint8Array>;
 /** Private, resumable replay; sourceCheckpoint remains the original trusted prefix. */
 export const approvalReplayProgressSchema = z
   .strictObject({
-    version: z.literal(1),
     binding: z.strictObject({
+      adapterGeneration: z.number().int().positive(),
+      adapterSessionId: z.string().min(1),
+      approvalSessionId: z.string().min(1),
       principal: hostedPrincipalSchema,
       sessionId: z.string().min(1),
-      approvalSessionId: z.string().min(1),
-      adapterSessionId: z.string().min(1),
-      adapterGeneration: z.number().int().positive(),
-    }),
-    sourceCheckpoint: z.strictObject({
-      id: z.uuid(),
-      digest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
-      eventCount: z.number().int().nonnegative(),
     }),
     events: z.array(publicEveEventSchema),
     nativeObservationState: nativeObservationStateSchema,
     privateApprovalCaptureState: privateHostedApprovalCaptureStateSchema,
+    sourceCheckpoint: z.strictObject({
+      digest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+      eventCount: z.number().int().nonnegative(),
+      id: z.uuid(),
+    }),
+    version: z.literal(1),
   })
   .superRefine((progress, context) => {
     if (
@@ -435,7 +435,7 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
         throw new Error("Hosted checkpoint stage manifest does not match its items.");
       }
       const [countRow] = await transaction
-        .select({ chunkCount: sql<number>`count(*)::integer` })
+        .select({ chunkCount: sql`count(*)::integer`.mapWith(Number) })
         .from(agentSessionCheckpointChunks)
         .where(
           and(

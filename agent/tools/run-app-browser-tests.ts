@@ -31,6 +31,17 @@ import {
 export { appBrowserTestCommand } from "../../lib/agent/app-browser-test-runner";
 
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
+const previewIdentity = (value: NonNullable<ReturnType<typeof workingPreviewState.get>>) =>
+  JSON.stringify([
+    value.commandId,
+    value.providerSessionId,
+    value.sandboxId,
+    value.receipt.appId,
+    value.receipt.url,
+    value.receipt.expiresAt,
+    value.requestDigest,
+    value.priorValidatedArtifact,
+  ]);
 
 // oxlint-disable-next-line eslint/complexity -- Keep explicit prior-preview selection separate from existing hosted and local paths.
 export const runAppBrowserTests = async (input: {
@@ -70,11 +81,11 @@ export const runAppBrowserTests = async (input: {
   const run = async (environment?: Record<string, string>, assertPreview?: () => void) => {
     await priorArtifact?.verifyCurrent();
     assertPreview?.();
-    return await runResolvedAppBrowserTests({
-      ...runInput,
-      runtime,
-      ...(environment ? { privateBrowserEnvironment: environment } : {}),
-    });
+    const testInput: Parameters<typeof runResolvedAppBrowserTests>[0] = { ...runInput, runtime };
+    if (environment !== undefined) {
+      testInput.privateBrowserEnvironment = environment;
+    }
+    return await runResolvedAppBrowserTests(testInput);
   };
   if (priorArtifact !== undefined && execution === undefined) {
     throw new Error("The prior validated artifact requires an owned private preview.");
@@ -83,17 +94,6 @@ export const runAppBrowserTests = async (input: {
     return await run();
   }
   const preview = workingPreviewState.get();
-  const identity = (value: NonNullable<typeof preview>) =>
-    JSON.stringify([
-      value.commandId,
-      value.providerSessionId,
-      value.sandboxId,
-      value.receipt.appId,
-      value.receipt.url,
-      value.receipt.expiresAt,
-      value.requestDigest,
-      value.priorValidatedArtifact,
-    ]);
   try {
     if (
       priorArtifact !== undefined &&
@@ -115,13 +115,13 @@ export const runAppBrowserTests = async (input: {
       }
       return await run();
     }
-    const frozenIdentity = identity(preview);
+    const frozenIdentity = previewIdentity(preview);
     const assertCurrent = () => {
       priorArtifact?.assertCurrent();
       const current = workingPreviewState.get();
       if (
         !current ||
-        identity(current) !== frozenIdentity ||
+        previewIdentity(current) !== frozenIdentity ||
         !hasCurrentProductBehaviorPreview(preview.commandId)
       ) {
         throw new PrivatePreviewBrowserPrerequisiteError();
@@ -129,13 +129,13 @@ export const runAppBrowserTests = async (input: {
     };
     return await withPrivatePreviewBrowserAccess({
       appId: input.appId,
-      root: input.root,
-      sandboxId: execution.sandboxId,
-      preview,
-      sandbox: input.sandbox,
-      signal: input.signal,
       assertCurrent,
       operation: async (environment) => await run(environment, assertCurrent),
+      preview,
+      root: input.root,
+      sandbox: input.sandbox,
+      sandboxId: execution.sandboxId,
+      signal: input.signal,
     });
   } catch (error) {
     input.signal?.throwIfAborted();
@@ -143,13 +143,13 @@ export const runAppBrowserTests = async (input: {
       throw error;
     }
     return {
-      status: "failed" as const,
-      reason: error.code,
-      problem: error.message,
       command: appBrowserTestCommand(input.appId),
       exitCode: null,
-      stdout: "",
+      problem: error.message,
+      reason: error.code,
+      status: "failed" as const,
       stderr: "",
+      stdout: "",
     };
   }
 };
@@ -165,42 +165,42 @@ export default defineTool({
         ? await priorValidatedPrivateArtifact({
             appId: input.appId,
             sandbox,
-            state,
             sessionId: ctx.session.id,
             signal: ctx.abortSignal,
+            state,
           })
         : undefined;
     const selected =
       priorArtifact ??
       (await runnableSelectedApp({
         appId: input.appId,
-        state,
         resolveRoot: async ({ appId, root }) =>
-          await resolveAcceptanceRuntimeRoot({ appId, fallbackRoot: root, sandbox, state, ctx }),
+          await resolveAcceptanceRuntimeRoot({ appId, ctx, fallbackRoot: root, sandbox, state }),
+        state,
       }));
-    const root = selected.root;
+    const { root } = selected;
     return await runAppBrowserTests({
       appId: selected.appId,
       execution: {
         appId: selected.appId,
+        callbackExecution: hostedOperatorCallbackExecution(ctx.session),
         root,
         sandboxId: getBuilderSandboxId(sandbox),
         sessionAuth: ctx.session.auth,
         sessionId: ctx.session.id,
-        callbackExecution: hostedOperatorCallbackExecution(ctx.session),
         signal: ctx.abortSignal,
         state,
       },
+      priorArtifact,
       root,
       sandbox,
-      signal: ctx.abortSignal,
       selection: input.selection,
-      priorArtifact,
+      signal: ctx.abortSignal,
     });
   },
   inputSchema: z.strictObject({
-    artifact: z.literal("prior-validated").optional(),
     appId: appIdSchema.optional(),
+    artifact: z.literal("prior-validated").optional(),
     selection: browserTestSelectionSchema.optional(),
   }),
 });

@@ -30,14 +30,14 @@ describe("development runtime change observation", () => {
       const expectedFingerprint = await fingerprintDevelopmentRuntime(root);
       observed = (async () => {
         await observeDevelopmentRuntimeChanges({
-          repositoryRoot: root,
-          expectedFingerprint,
-          signal: watcher.signal,
-          debounceMs: 5,
           auditMs: 20,
+          debounceMs: 5,
+          expectedFingerprint,
           onChanged: () => {
             notifications += 1;
           },
+          repositoryRoot: root,
+          signal: watcher.signal,
         });
         observerEnded = true;
       })();
@@ -61,7 +61,7 @@ describe("development runtime change observation", () => {
       watcher.abort();
       await observed;
       await stopDevelopmentChild(worker);
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
   it("fingerprints tracked provisioning and dependency patch edits", async () => {
@@ -89,7 +89,7 @@ describe("development runtime change observation", () => {
       await writeFile(nodePath.join(root, "docs/notes.md"), "documentation only");
       expect(await fingerprintDevelopmentRuntime(root)).toBe(changedWorkspace);
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
   it.each([

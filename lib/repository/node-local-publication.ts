@@ -587,7 +587,9 @@ export const inspectLocalPublicationDestination =
     const parsed = parseGitStatusV2(
       await git(canonicalPath, ["status", "--porcelain=v2", "-z", "--untracked-files=all"]),
     );
-    const dirty = await Promise.all(parsed.map((entry) => dirtyEntry(canonicalPath, entry)));
+    const dirty = await Promise.all(
+      parsed.map(async (entry) => await dirtyEntry(canonicalPath, entry)),
+    );
     const indexPaths = [
       ...new Set(
         parsed

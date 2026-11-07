@@ -9,27 +9,30 @@ import {
 
 const html = (page: Page) => page.locator("html");
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function expectTheme(
+const readStoredTheme = async (page: Page): Promise<string | null> =>
+  await page.evaluate(() => localStorage.getItem("theme"));
+
+const expectTheme = async (
   page: Page,
   theme: "light" | "dark",
   storedTheme?: "system" | "light" | "dark",
-) {
+) => {
   await expect(html(page)).toHaveClass(new RegExp(`(^|\\s)${theme}(\\s|$)`, "u"));
   await expect(html(page)).toHaveCSS("color-scheme", theme);
   if (storedTheme) {
-    await expect.poll(() => page.evaluate(() => localStorage.theme)).toBe(storedTheme);
+    await expect.poll(async () => await readStoredTheme(page)).toBe(storedTheme);
   }
-}
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function openAccountMenu(page: Page) {
+const openAccountMenu = async (page: Page) => {
   await page.getByRole("button", { name: "Account" }).click();
   await expect(page.getByRole("menuitem", { name: /Theme/u })).toBeVisible();
-}
+};
 
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-test.beforeEach(async () => resetApplicationState());
+test.beforeEach(async () => {
+  await resetApplicationState();
+});
 
 test("first visit follows System and reacts to an OS preference change", async ({ page }) => {
   const hydrationMessages: string[] = [];
@@ -43,7 +46,7 @@ test("first visit follows System and reacts to an OS preference change", async (
   await page.goto("/");
   await expectTheme(page, "dark");
   await expect(page.getByRole("heading", { name: "Build an app" })).toBeVisible();
-  await expect.poll(() => page.evaluate(() => localStorage.theme ?? null)).toBeNull();
+  await expect.poll(async () => await readStoredTheme(page)).toBeNull();
 
   await page.emulateMedia({ colorScheme: "light" });
   await expectTheme(page, "light");
@@ -64,7 +67,7 @@ test("stock menu and Appearance card share a persistent cross-tab preference", a
   await expectTheme(page, "dark");
   await page.getByRole("button", { name: "Continue with GitHub" }).click();
   await expect
-    .poll(() => currentSession(page), { timeout: 30_000 })
+    .poll(async () => await currentSession(page), { timeout: 30_000 })
     .toMatchObject({ user: { email: "dev@autograph.local" } });
 
   await page.goto("/");
@@ -105,7 +108,9 @@ test("stock menu and Appearance card share a persistent cross-tab preference", a
 test("explicit Dark remains active across anonymous, auth, builder, and account surfaces", async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem("theme", "dark"));
+  await page.addInitScript(() => {
+    localStorage.setItem("theme", "dark");
+  });
 
   await page.goto("/");
   await expectTheme(page, "dark", "dark");
@@ -121,7 +126,7 @@ test("explicit Dark remains active across anonymous, auth, builder, and account 
   await expectTheme(page, "dark", "dark");
   await page.getByRole("button", { name: "Continue with GitHub" }).click();
   await expect
-    .poll(() => currentSession(page), { timeout: 30_000 })
+    .poll(async () => await currentSession(page), { timeout: 30_000 })
     .toMatchObject({ user: { email: "dev@autograph.local" } });
 
   await page.goto("/");

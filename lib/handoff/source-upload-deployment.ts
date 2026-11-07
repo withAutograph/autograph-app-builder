@@ -66,18 +66,18 @@ export const createSourceUploadActions = (readContext: () => Promise<Context | u
       async ({ authority, store }) => await store.begin({ authority, header }),
     );
   },
-  async put(untrusted: z.input<typeof sourceUploadChunkSchema>) {
-    const input = sourceUploadChunkSchema.parse(untrusted);
-    return await withSourceUploadAuthority(
-      readContext,
-      async ({ authority, store }) => await store.put({ authority, ...input }),
-    );
-  },
   async complete(untrusted: z.input<typeof sourceCandidateReferenceSchema>) {
     const reference = sourceCandidateReferenceSchema.parse(untrusted);
     return await withSourceUploadAuthority(
       readContext,
       async ({ authority, store }) => await store.complete({ authority, reference }),
+    );
+  },
+  async put(untrusted: z.input<typeof sourceUploadChunkSchema>) {
+    const input = sourceUploadChunkSchema.parse(untrusted);
+    return await withSourceUploadAuthority(
+      readContext,
+      async ({ authority, store }) => await store.put({ authority, ...input }),
     );
   },
   async status(untrusted: z.input<typeof sourceCandidateReferenceSchema>) {

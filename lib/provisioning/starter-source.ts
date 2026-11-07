@@ -89,9 +89,12 @@ export interface StarterSource {
 const git = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
 
 // oxlint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function restrictedGit(args: string[], askpass?: { credentialFile: string; askpassFile: string }) {
+async function restrictedGit(
+  args: string[],
+  askpass?: { credentialFile: string; askpassFile: string },
+) {
   // oxlint-disable-next-line promise/avoid-new -- Spawn completion is reported through child process events.
-  return new Promise<{ stdout: string }>((resolve, reject) => {
+  return await new Promise<{ stdout: string }>((resolve, reject) => {
     const child = spawn(
       git,
       [

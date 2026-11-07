@@ -7,9 +7,9 @@ import type { Adapter } from "flags";
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createVercelAdapter() {
   return <ValueType, EntitiesType>(): Adapter<ValueType, EntitiesType> => ({
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
     async decide({ defaultValue }) {
-      return defaultValue as ValueType;
+      await Promise.resolve();
+      return defaultValue;
     },
   });
 }

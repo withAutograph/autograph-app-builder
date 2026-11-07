@@ -10,7 +10,11 @@ const maxStreamMs = 30_000;
 const heartbeatIntervalMs = 10_000;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function event(data: unknown, id: string, name = "snapshot") {
+function event(
+  data: BuilderProvisionProjection | { error: string },
+  id: string,
+  name = "snapshot",
+) {
   return encoder.encode(`id: ${id}\nevent: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
@@ -24,19 +28,21 @@ function heartbeat() {
  * the source of truth; SSE only provides a low-latency projection of its
  * revisions and therefore survives reconnects through the normal GET route.
  */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function GET(request: Request) {
+const handleProvisioningStream = async (
+  request: Request,
+  getHandler: typeof getBuilderProvisioningDeploymentHandler,
+) => {
   const source = new URL(request.url);
   const requestId = source.searchParams.get("requestId");
-  if (!requestId) {
+  if (requestId === null || requestId.length === 0) {
     return Response.json({ error: "request_invalid" }, { status: 400 });
   }
 
-  const handler = getBuilderProvisioningDeploymentHandler(process.env);
+  const handler = getHandler(process.env);
   const headers = new Headers(request.headers);
   headers.set("accept", "application/json");
-  const read = () =>
-    handler(
+  const read = async () =>
+    await handler(
       new Request(
         `${source.origin}/api/builder/provision?projection=1&requestId=${encodeURIComponent(requestId)}`,
         { headers, method: "GET" },
@@ -119,4 +125,15 @@ export async function GET(request: Request) {
       "X-Accel-Buffering": "no",
     },
   });
-}
+};
+
+export const createProvisioningStreamHandler =
+  (
+    getHandler: typeof getBuilderProvisioningDeploymentHandler = getBuilderProvisioningDeploymentHandler,
+  ) =>
+  async (request: Request) =>
+    await handleProvisioningStream(request, getHandler);
+
+const getProvisioningStream = createProvisioningStreamHandler();
+
+export { getProvisioningStream as GET };

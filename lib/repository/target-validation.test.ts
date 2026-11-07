@@ -187,7 +187,7 @@ printf 'ran selected native build\n'
   if (hasEnvironmentHelper) {
     write(
       "node_modules/@autograph/microfrontends/package.json",
-      JSON.stringify({ name: "@autograph/microfrontends", exports: { "./config": "./config.js" } }),
+      JSON.stringify({ exports: { "./config": "./config.js" }, name: "@autograph/microfrontends" }),
     );
     write(
       "node_modules/@autograph/microfrontends/config.js",
@@ -426,7 +426,7 @@ describe("target validation", () => {
         runTask,
         stateDirectory: "/private-state",
       };
-      const executor = sandboxValidationCommandExecutor({ runtime, alreadyCompiled });
+      const executor = sandboxValidationCommandExecutor({ alreadyCompiled, runtime });
       const onChunk = vi.fn();
       const environment = { APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]' };
       const result = await executor({
@@ -561,8 +561,8 @@ describe("target validation", () => {
         ...attempt,
         commands: [
           {
-            name: "check-build",
             command: "mise run --no-deps --skip-tools app:check example",
+            name: "check-build",
             validationRoot: apply.applyRoot,
           },
         ],
@@ -577,33 +577,33 @@ describe("target validation", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected a missing task prerequisite");
     expect(result.receipt).toMatchObject({
+      commandFailure: { exitCode: 1, failureClass: "missing-app-task", name: "check-build" },
       reason: "tooling-prerequisite",
-      commandFailure: { name: "check-build", exitCode: 1, failureClass: "missing-app-task" },
     });
     expect(result.receipt.commandFailure?.hint).toContain("executable mode");
     // SAFETY: Project the precise trusted workflow fields consumed by the classifier;
     // actual approval retention is exercised in approved-build-continuation.test.ts.
     const state = {
-      phase: "validation_failed",
       appSpec: { appId: "example", digest: apply.appSpecDigest },
-      proposal: { digest: apply.proposalDigest },
-      workspace: { workspaceId: "owned-private-workspace" },
-      validationFailure: result.receipt,
       applyReceipt: apply,
+      phase: "validation_failed",
+      proposal: { digest: apply.proposalDigest },
+      validationFailure: result.receipt,
+      workspace: { workspaceId: "owned-private-workspace" },
     } as AppBuilderWorkflowState;
     expect(
       decideApprovedBuildContinuation({
-        state,
         adapterSessionId: "owned-session",
-        turnId: "actual-validation",
-        turnSequence: 1,
+        approvalMatches: () => true,
         blocked: false,
         pendingInput: false,
-        approvalMatches: () => true,
+        state,
+        turnId: "actual-validation",
+        turnSequence: 1,
       }),
     ).toMatchObject({
       decision: "blocked",
-      validation: { reason: "tooling-prerequisite", failureClass: "missing-app-task" },
+      validation: { failureClass: "missing-app-task", reason: "tooling-prerequisite" },
     });
   });
   it("retains complete repair diagnostics while redacting common credentials", () => {
@@ -811,7 +811,6 @@ describe("target validation", () => {
         appId: "example",
         apply,
         attempt: createTargetValidationAttempt(apply, "checker-panic"),
-        sandbox,
         dependencyLayout: { kind: "fixture", roots: [], version: 1, workspaceLinks: [] },
         executor: async ({ onChunk }) => {
           if (delivery === "streamed") {
@@ -820,11 +819,11 @@ describe("target validation", () => {
           }
           return { exitCode: 134, stderr: delivery === "returned" ? panic : "", stdout: "" };
         },
+        sandbox,
       });
       expect(result).toMatchObject({
         ok: false,
         receipt: {
-          reason: "tooling-prerequisite",
           commandFailure: {
             name: "check-build",
             exitCode: 134,
@@ -832,6 +831,7 @@ describe("target validation", () => {
             // oxlint-disable-next-line typescript/no-unsafe-assignment -- Vitest asymmetric matcher checks the safe prerequisite hint.
             hint: expect.stringContaining("repairOnly"),
           },
+          reason: "tooling-prerequisite",
         },
       });
     },
@@ -842,13 +842,13 @@ describe("target validation", () => {
       appId: "example",
       apply,
       attempt: createTargetValidationAttempt(apply, "unknown-134"),
-      sandbox,
       dependencyLayout: { kind: "fixture", roots: [], version: 1, workspaceLinks: [] },
       executor: () => Promise.resolve({ exitCode: 134, stderr: "no diagnostic", stdout: "" }),
+      sandbox,
     });
     expect(result).toMatchObject({
       ok: false,
-      receipt: { reason: "command-failed", commandFailure: { exitCode: 134 } },
+      receipt: { commandFailure: { exitCode: 134 }, reason: "command-failed" },
     });
   });
   it("identifies a provider failure before the first validation command returns", async () => {
@@ -968,11 +968,11 @@ describe("target validation", () => {
       const routePath = `apps/example/app/${segment}/page.tsx`;
       expect(compilerDiagnostics(`${routePath}(4,2): error TS2304: private source text`)).toEqual([
         {
-          path: routePath,
-          line: 4,
-          column: 2,
           code: "TS2304",
+          column: 2,
+          line: 4,
           message: "A referenced name is missing; inspect its declaration or import.",
+          path: routePath,
         },
       ]);
       expect(
@@ -1026,8 +1026,8 @@ describe("target validation", () => {
 
       const result = await sandboxValidationCommandExecutor({ alreadyCompiled })({
         appId: "example",
-        environment: { APP_RUNTIME_ALREADY_COMPILED: "untrusted" },
         command,
+        environment: { APP_RUNTIME_ALREADY_COMPILED: "untrusted" },
         sandbox,
         validationRoot: "/workspace/repository",
       });
@@ -1128,8 +1128,8 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
           appId: "example",
           command: validationCommand,
           environment: {
-            APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
             APP_RUNTIME_STATE_DIR: "/untrusted-state-directory",
+            APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
             OPTIONAL_INPUT: undefined,
           },
           onChunk: streaming
@@ -1145,8 +1145,8 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
         expect(streaming ? chunks.join("") : result.stdout).toContain(stateDirectory);
         expect(streaming ? spawn : run).toHaveBeenCalledOnce();
         expect((streaming ? spawn : run).mock.calls[0]?.[0].env).toEqual({
-          APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
           APP_RUNTIME_STATE_DIR: stateDirectory,
+          APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
         });
         expect(streaming ? run : spawn).not.toHaveBeenCalled();
       } finally {
@@ -1157,20 +1157,20 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
   );
 
   it.each([
-    { outcome: "build", exitCode: 0 },
-    { outcome: "already compiled", alreadyCompiled: true as const, exitCode: 0 },
-    { outcome: "native output rejected", exitCode: 42 },
-    { outcome: "compile failed", exitCode: 43 },
-    { outcome: "private runner with catalog helper", privateRunner: true, exitCode: 0 },
+    { exitCode: 0, outcome: "build" },
+    { alreadyCompiled: true as const, exitCode: 0, outcome: "already compiled" },
+    { exitCode: 42, outcome: "native output rejected" },
+    { exitCode: 43, outcome: "compile failed" },
+    { exitCode: 0, outcome: "private runner with catalog helper", privateRunner: true },
     {
+      exitCode: 0,
+      legacyEnv: true,
       outcome: "oldest runner helper names",
       privateRunner: true,
-      legacyEnv: true,
-      exitCode: 0,
     },
-    { outcome: "catalog failed", privateRunner: true, exitCode: 45 },
-    { outcome: "build failed", privateRunner: true, exitCode: 44 },
-    { outcome: "private verifier rejected", privateRunner: true, exitCode: 1 },
+    { exitCode: 45, outcome: "catalog failed", privateRunner: true },
+    { exitCode: 44, outcome: "build failed", privateRunner: true },
+    { exitCode: 1, outcome: "private verifier rejected", privateRunner: true },
   ])("executes the selected checkout's build without lint: $outcome", async (scenario) => {
     const directory = mkdtempSync(path.join(tmpdir(), "builder-native-delivery-"));
     const environmentPath = localRuntimeEnvironmentPath(directory, "example");
@@ -1268,8 +1268,8 @@ exit 134
             ...process.env,
             ...input.env,
             BETTER_AUTH_SECRET: "",
-            FIXTURE_OUTCOME: scenario.outcome,
             FIXTURE_NODE: process.execPath,
+            FIXTURE_OUTCOME: scenario.outcome,
             FIXTURE_SOURCE_PATH: process.env.PATH ?? "",
             PATH: `${directory}:${process.env.PATH ?? ""}`,
           },
@@ -1350,8 +1350,8 @@ exit 99
         if (result.error) throw result.error;
         return Promise.resolve({
           exitCode: result.status ?? -1,
-          stdout: result.stdout,
           stderr: result.stderr,
+          stdout: result.stdout,
         });
       });
       const result = await sandboxValidationCommandExecutor()({
@@ -1364,7 +1364,7 @@ exit 99
       expect(result.stdout).toContain("declared tool installation failed");
       expect(result.stdout).not.toContain("validation must not run");
     } finally {
-      rmSync(directory, { recursive: true, force: true });
+      rmSync(directory, { force: true, recursive: true });
     }
   });
 

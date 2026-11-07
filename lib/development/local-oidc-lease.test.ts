@@ -17,7 +17,7 @@ import { publishLocalDevelopmentOidcLease } from "./local-oidc-lease";
 const roots: string[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { force: true, recursive: true });
   }
 });
 const fixture = () => {
@@ -34,7 +34,7 @@ const fixture = () => {
   ]) {
     mkdirSync(directory, { mode: 0o700, recursive: true });
   }
-  const project = { projectId: "prj_owned", orgId: "team_owned", projectName: "builder" };
+  const project = { orgId: "team_owned", projectId: "prj_owned", projectName: "builder" };
   writeFileSync(path.join(repositoryRoot, ".vercel/project.json"), JSON.stringify(project), {
     mode: 0o600,
   });
@@ -43,17 +43,17 @@ const fixture = () => {
       Buffer.from("{}").toString("base64url"),
       Buffer.from(
         JSON.stringify({
-          iss: "https://oidc.vercel.com/owned",
           aud: "https://vercel.com/owned",
+          environment: "development",
+          exp: expiresAt,
+          iat: Math.floor(Date.now() / 1000) - 60,
+          iss: "https://oidc.vercel.com/owned",
+          nbf: Math.floor(Date.now() / 1000) - 60,
           owner: "owned",
           owner_id: project.orgId,
           project: project.projectName,
           project_id: project.projectId,
-          environment: "development",
           sub: "owner:owned:project:builder:environment:development",
-          iat: Math.floor(Date.now() / 1000) - 60,
-          nbf: Math.floor(Date.now() / 1000) - 60,
-          exp: expiresAt,
         }),
       ).toString("base64url"),
       "fixture",
@@ -63,7 +63,7 @@ const fixture = () => {
       mode: 0o600,
     });
   };
-  return { root, repositoryRoot, applicationRoot, runtimeHome, token, install, project };
+  return { applicationRoot, install, project, repositoryRoot, root, runtimeHome, token };
 };
 it("the actual OIDC SDK recovers an expired process token from the renewed isolated project lease", () => {
   const f = fixture();
@@ -80,15 +80,15 @@ it("the actual OIDC SDK recovers an expired process token from the renewed isola
     ],
     {
       cwd: f.applicationRoot,
+      encoding: "utf-8",
       env: {
+        EXPECTED_FIXTURE_TOKEN: current,
+        HOME: f.runtimeHome,
         NODE_ENV: "test",
         PATH: process.env.PATH,
-        HOME: f.runtimeHome,
-        XDG_DATA_HOME: path.join(f.runtimeHome, "data"),
         VERCEL_OIDC_TOKEN: f.token(now - 1),
-        EXPECTED_FIXTURE_TOKEN: current,
+        XDG_DATA_HOME: path.join(f.runtimeHome, "data"),
       },
-      encoding: "utf-8",
     },
   );
   expect(probe.status, probe.stderr).toBe(0);

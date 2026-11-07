@@ -26,12 +26,7 @@ import {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function release(
   ctx: HookContext,
-  reason:
-    | "turn-completed"
-    | "turn-cancelled"
-    | "turn-failed"
-    | "session-completed"
-    | "session-failed",
+  reason: Parameters<typeof releaseHostedSandboxExecutionLease>[0]["reason"],
 ) {
   const environment = process.env;
   const hosted = isHostedSandboxExecutionEnabled(environment);
@@ -86,20 +81,20 @@ async function release(
 
 export default defineHook({
   events: {
-    "session.completed"(_event, ctx) {
-      return release(ctx, "session-completed");
+    async "session.completed"(_event, ctx) {
+      await release(ctx, "session-completed");
     },
-    "session.failed"(_event, ctx) {
-      return release(ctx, "session-failed");
+    async "session.failed"(_event, ctx) {
+      await release(ctx, "session-failed");
     },
-    "turn.cancelled"(_event, ctx) {
-      return release(ctx, "turn-cancelled");
+    async "turn.cancelled"(_event, ctx) {
+      await release(ctx, "turn-cancelled");
     },
-    "turn.completed"(_event, ctx) {
-      return release(ctx, "turn-completed");
+    async "turn.completed"(_event, ctx) {
+      await release(ctx, "turn-completed");
     },
-    "turn.failed"(_event, ctx) {
-      return release(ctx, "turn-failed");
+    async "turn.failed"(_event, ctx) {
+      await release(ctx, "turn-failed");
     },
     async "turn.started"(_event, ctx) {
       const environment = process.env;
@@ -127,7 +122,7 @@ export default defineHook({
         restoreSelectedGitHubSandboxSource({
           accessReceipt: repositoryAccessReceiptState.get(),
           githubSource,
-          runtime: () => repositoryAccessRuntimeForSession(ctx.session.auth),
+          runtime: async () => await repositoryAccessRuntimeForSession(ctx.session.auth),
           sessionId: ctx.session.id,
         });
       }

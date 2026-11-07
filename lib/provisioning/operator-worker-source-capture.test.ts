@@ -5,7 +5,7 @@ import { bytes, capture, worker } from "./operator-worker-source-capture.test-fi
 describe("actual operator worker source capture", () => {
   it("matches the frozen two-repository receipt and selected binary path/hash", async () => {
     const readFile = vi.fn().mockResolvedValue(bytes);
-    await verifyOperatorWorkerSourceCapture({ worker, readFile });
+    await verifyOperatorWorkerSourceCapture({ readFile, worker });
     expect(readFile).toHaveBeenCalledExactlyOnceWith(capture.catalogPath);
   });
   it.each(["receipt", "source", "worker", "path"])(
@@ -23,9 +23,8 @@ describe("actual operator worker source capture", () => {
       }
       await expect(
         verifyOperatorWorkerSourceCapture({
+          readFile: async () => Buffer.from(kind === "receipt" ? "wrong receipt" : bytes),
           worker: changed,
-          readFile: () =>
-            Promise.resolve(Buffer.from(kind === "receipt" ? "wrong receipt" : bytes)),
         }),
       ).rejects.toMatchObject({ message: "operator_worker_source_capture_mismatch" });
     },
@@ -33,8 +32,8 @@ describe("actual operator worker source capture", () => {
   it("preserves a legacy frozen descriptor without claiming source provenance", async () => {
     const readFile = vi.fn();
     await verifyOperatorWorkerSourceCapture({
-      worker: { executablePath: worker.executablePath, sha256: worker.sha256 },
       readFile,
+      worker: { executablePath: worker.executablePath, sha256: worker.sha256 },
     });
     expect(readFile).not.toHaveBeenCalled();
   });

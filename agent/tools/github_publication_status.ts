@@ -8,7 +8,7 @@ export default defineTool({
     "Report the typed least-privilege GitHub acquisition/publication capability without reading credentials, calling GitHub, or mutating any repository, branch, pull request, release gate, or provider state.",
   async execute(_input, ctx) {
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
-    return runtime.status();
+    return await runtime.status();
   },
   inputSchema: z.strictObject({}),
 });

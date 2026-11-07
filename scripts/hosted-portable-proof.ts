@@ -15,34 +15,28 @@ const hex64 = z.string().regex(/^[0-9a-f]{64}$/u);
 const repositoryName = z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u);
 const gitRef = z.string().regex(/^refs\/(?:heads|tags)\/[A-Za-z0-9._/-]+$/u);
 
-const expectedApprovalSchema = z
-  .object({
-    receipt: approvalReceiptSchema,
-    requestTitle: z.string().min(1),
-    response: z.literal("approve"),
-  })
-  .strict();
+const expectedApprovalSchema = z.strictObject({
+  receipt: approvalReceiptSchema,
+  requestTitle: z.string().min(1),
+  response: z.literal("approve"),
+});
 
-const targetProofSchema = z
-  .object({
-    appSpecDigest: hex64,
-    baseRef: gitRef,
-    baseSha: objectId,
-    changeSetDigest: hex64,
-    headRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]+$/u),
-    proposalDigest: hex64,
-    repository: repositoryName,
-    repositoryId: z.string().regex(/^\d+$/u),
-  })
-  .strict();
+const targetProofSchema = z.strictObject({
+  appSpecDigest: hex64,
+  baseRef: gitRef,
+  baseSha: objectId,
+  changeSetDigest: hex64,
+  headRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]+$/u),
+  proposalDigest: hex64,
+  repository: repositoryName,
+  repositoryId: z.string().regex(/^\d+$/u),
+});
 
-const oauthProofSchema = z
-  .object({
-    audience: z.string().min(1),
-    issuer: z.string().url().startsWith("https://"),
-    resource: z.string().url().startsWith("https://"),
-  })
-  .strict();
+const oauthProofSchema = z.strictObject({
+  audience: z.string().min(1),
+  issuer: z.url().startsWith("https://"),
+  resource: z.url().startsWith("https://"),
+});
 
 export const hostedProofScenarioSchema = z
   .object({
@@ -55,13 +49,11 @@ export const hostedProofScenarioSchema = z
     oauth: oauthProofSchema,
     pollIntervalMs: z.number().int().min(100).max(10_000).default(1000),
     questionResponses: z.array(
-      z
-        .object({
-          optionId: z.string().min(1).optional(),
-          requestTitle: z.string().min(1),
-          value: z.string().max(16_000),
-        })
-        .strict(),
+      z.strictObject({
+        optionId: z.string().min(1).optional(),
+        requestTitle: z.string().min(1),
+        value: z.string().max(16_000),
+      }),
     ),
     target: targetProofSchema,
   })
@@ -158,13 +150,13 @@ const tokenClaimsSchema = z
   .object({
     aud: z.string(),
     exp: z.number().int(),
-    iss: z.string().url().startsWith("https://"),
+    iss: z.url().startsWith("https://"),
     nbf: z.number().int(),
     scope: z.string().min(1),
     sub: z.string().min(1),
     workspace_id: z.string().min(1),
   })
-  .passthrough();
+  .loose();
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function tokenClaims(token: string) {
@@ -216,36 +208,32 @@ export function verifyWorkspaceTokenPair(input: {
   };
 }
 
-const protectedResourceMetadataSchema = z
-  .object({
-    authorization_servers: z.array(z.string().url().startsWith("https://")).length(1),
-    bearer_methods_supported: z.tuple([z.literal("header")]),
-    resource: z.string().url().startsWith("https://"),
-    scopes_supported: z.tuple([
-      z.literal("autograph:session"),
-      z.literal("autograph:start"),
-      z.literal("autograph:get"),
-      z.literal("autograph:send"),
-      z.literal("autograph:respond"),
-      z.literal("autograph:cancel"),
-    ]),
-  })
-  .strict();
+const protectedResourceMetadataSchema = z.strictObject({
+  authorization_servers: z.array(z.url().startsWith("https://")).length(1),
+  bearer_methods_supported: z.tuple([z.literal("header")]),
+  resource: z.url().startsWith("https://"),
+  scopes_supported: z.tuple([
+    z.literal("autograph:session"),
+    z.literal("autograph:start"),
+    z.literal("autograph:get"),
+    z.literal("autograph:send"),
+    z.literal("autograph:respond"),
+    z.literal("autograph:cancel"),
+  ]),
+});
 
-const draftPrReceiptSchema = z
-  .object({
-    baseRef: gitRef,
-    baseSha: objectId,
-    changeSetDigest: hex64,
-    draft: z.literal(true),
-    format: z.literal("autograph-draft-pr-publication-receipt-v1"),
-    headRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]+$/u),
-    headSha: objectId,
-    outcome: z.literal("draft-pr-created"),
-    repository: repositoryName,
-    url: z.string().url().startsWith("https://github.com/"),
-  })
-  .strict();
+const draftPrReceiptSchema = z.strictObject({
+  baseRef: gitRef,
+  baseSha: objectId,
+  changeSetDigest: hex64,
+  draft: z.literal(true),
+  format: z.literal("autograph-draft-pr-publication-receipt-v1"),
+  headRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]+$/u),
+  headSha: objectId,
+  outcome: z.literal("draft-pr-created"),
+  repository: repositoryName,
+  url: z.url().startsWith("https://github.com/"),
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function verifiedDraftPrEvidence(text: string, scenario: HostedProofScenario) {
@@ -286,12 +274,12 @@ function jsonRpcPayload(text: string) {
   const payload = JSON.parse(contentTypePayload ?? text) as unknown;
   return z
     .object({
-      error: z.object({ code: z.number(), message: z.string() }).passthrough().optional(),
+      error: z.object({ code: z.number(), message: z.string() }).loose().optional(),
       id: z.union([z.string(), z.number()]).optional(),
       jsonrpc: z.literal("2.0"),
       result: z.unknown().optional(),
     })
-    .passthrough()
+    .loose()
     .parse(payload);
 }
 
@@ -384,8 +372,8 @@ export class HostedMcpProofClient {
       throw new Error(`MCP tools/list failed with HTTP ${response.status}.`);
     }
     const listed = z
-      .object({ tools: z.array(z.object({ name: z.string() }).passthrough()) })
-      .passthrough()
+      .object({ tools: z.array(z.object({ name: z.string() }).loose()) })
+      .loose()
       .parse(response.payload?.result);
     if ("nextCursor" in listed) {
       throw new Error("Hosted tools/list unexpectedly required pagination.");
@@ -403,7 +391,7 @@ export class HostedMcpProofClient {
         isError: z.boolean().optional(),
         structuredContent: z.unknown().optional(),
       })
-      .passthrough()
+      .loose()
       .parse(response.payload?.result);
     return {
       isError: result.isError === true,
@@ -424,7 +412,7 @@ export class HostedMcpProofClient {
         isError: z.boolean().optional(),
         structuredContent: z.unknown(),
       })
-      .passthrough()
+      .loose()
       .parse(response.payload?.result);
     const resultRejected = result.isError === true;
     if (resultRejected) {
@@ -456,8 +444,8 @@ export class HostedMcpProofClient {
     return result;
   }
 
-  rawInitialize(authenticate = true) {
-    return this.post(
+  async rawInitialize(authenticate = true) {
+    return await this.post(
       "initialize",
       {
         capabilities: {},

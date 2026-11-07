@@ -32,7 +32,7 @@ export async function readSource(root: string, current = root): Promise<SourceFi
       }
       const filePath = path.join(current, entry.name);
       if (entry.isDirectory()) {
-        return readSource(root, filePath);
+        return await readSource(root, filePath);
       }
       if (!entry.isFile() || !/\.(?:[cm]?tsx?|css|mdx?)$/u.test(entry.name)) {
         return [];
@@ -68,9 +68,9 @@ const codeExtensions = [
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function clientImportGraph(files: SourceFile[]) {
   const byPath = new Map(files.map((file) => [file.path.replaceAll("\\", "/"), file]));
-  const resolveImport = (from: string, specifier: string) => {
+  const resolveImport = (from: string, specifier: string): string | undefined => {
     if (!specifier.startsWith(".") && !specifier.startsWith("@/")) {
-      return;
+      return undefined;
     }
     const base = specifier.startsWith("@/")
       ? specifier.slice(2)
@@ -83,23 +83,27 @@ function clientImportGraph(files: SourceFile[]) {
         }
       }
     }
+    return undefined;
   };
   const dependencies = new Map<string, string[]>();
   for (const file of files) {
-    const imports = [
-      ...file.content.matchAll(
-        /(?:import(?:[\s\S]*?from\s*)?|export[\s\S]*?from\s*)["'](?<path>[^"']+)["']/gu,
-      ),
-    ]
-      .map((match) => resolveImport(file.path, match.groups?.path ?? ""))
-      .filter((dependencyPath): dependencyPath is string => dependencyPath !== undefined);
+    const imports: string[] = [];
+    for (const match of file.content.matchAll(
+      /(?:import(?:[\s\S]*?from\s*)?|export[\s\S]*?from\s*)["'](?<path>[^"']+)["']/gu,
+    )) {
+      const dependencyPath = resolveImport(file.path, match.groups?.path ?? "");
+      if (dependencyPath !== undefined) {
+        imports.push(dependencyPath);
+      }
+    }
     dependencies.set(file.path, imports);
   }
-  const routeRoots = files
-    .filter((file) =>
-      /(?:^|\/)app\/(?:.*\/)?(?:page|layout|template)\.[cm]?[jt]sx?$/u.test(file.path),
-    )
-    .map((file) => file.path);
+  const routeRoots: string[] = [];
+  for (const file of files) {
+    if (/(?:^|\/)app\/(?:.*\/)?(?:page|layout|template)\.[cm]?[jt]sx?$/u.test(file.path)) {
+      routeRoots.push(file.path);
+    }
+  }
   const clientRouteRoots = routeRoots.filter((routePath) =>
     /^\s*["']use client["']/mu.test(byPath.get(routePath)?.content ?? ""),
   );
@@ -167,25 +171,37 @@ export function buildRequirements(
   const candidateAvailable = candidate !== undefined;
   const text = candidate?.map((file) => file.content).join("\n") ?? "";
   const has = (expression: RegExp) => expression.test(text);
-  const sourceStatus = (id: string, expression: RegExp): RequirementStatus =>
-    candidateAvailable
-      ? (workflowEvidence?.[id]?.status ?? (has(expression) ? "unassessed" : "failed"))
-      : "blocked";
-  const workflow = (id: string, title: string, expression: RegExp, expected: string) => ({
-    evidence: candidateAvailable
+  const sourceStatus = (id: string, expression: RegExp): RequirementStatus => {
+    if (!candidateAvailable) {
+      return "blocked";
+    }
+    const existingStatus = workflowEvidence?.[id]?.status;
+    if (existingStatus !== undefined) {
+      return existingStatus;
+    }
+    return has(expression) ? "unassessed" : "failed";
+  };
+  const workflow = (id: string, title: string, expression: RegExp, expected: string) => {
+    const workflowEvidenceText = workflowEvidence?.[id]?.evidence;
+    const evidence = candidateAvailable
       ? [
           `Candidate source scan: ${has(expression) ? "matching implementation found" : "no matching implementation found"}.`,
-          ...(workflowEvidence?.[id]?.evidence ? [workflowEvidence[id].evidence] : []),
         ]
-      : ["Candidate generation output was unavailable."],
-    expected,
-    id,
-    likelyLayer: "Generated application",
-    recommendation:
-      "Exercise this workflow in the candidate runtime and retain the result in workflow-results.json.",
-    status: sourceStatus(id, expression),
-    title,
-  });
+      : ["Candidate generation output was unavailable."];
+    if (candidateAvailable && workflowEvidenceText !== undefined && workflowEvidenceText !== "") {
+      evidence.push(workflowEvidenceText);
+    }
+    return {
+      evidence,
+      expected,
+      id,
+      likelyLayer: "Generated application",
+      recommendation:
+        "Exercise this workflow in the candidate runtime and retain the result in workflow-results.json.",
+      status: sourceStatus(id, expression),
+      title,
+    };
+  };
   return [
     workflow(
       "anonymous-entry",
@@ -308,14 +324,19 @@ export function frameworkRequirements(
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function prioritizedGaps(requirements: Requirement[]) {
-  return requirements
-    .filter((requirement) => requirement.status === "failed" || requirement.status === "blocked")
-    .map((requirement) => ({
+  const gaps = [];
+  for (const requirement of requirements) {
+    if (requirement.status !== "failed" && requirement.status !== "blocked") {
+      continue;
+    }
+    gaps.push({
       priority:
         requirement.id.includes("independent") || requirement.id.includes("durable")
           ? "high"
           : "medium",
       ...requirement,
       confirmed: requirement.status === "failed",
-    }));
+    });
+  }
+  return gaps;
 }

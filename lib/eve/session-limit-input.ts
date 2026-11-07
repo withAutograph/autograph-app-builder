@@ -152,14 +152,23 @@ export const reducePrivateInput = (state: PrivateInputState, event: MessageStrea
     ];
     const parsed = nativeInputBatchSchema.safeParse({
       ...event.data,
-      requests: event.data.requests.map((request) => ({
-        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- Preserve absence in private native request metadata.
-        ...(request.allowFreeform === undefined ? {} : { allowFreeform: request.allowFreeform }),
-        kind: request.kind,
-        optionIds: (request.options ?? []).map((option) => option.id),
-        requestId: request.requestId,
-        toolName: request.action?.toolName ?? "",
-      })),
+      requests: event.data.requests.map((request) => {
+        if (request.allowFreeform !== undefined) {
+          return {
+            allowFreeform: request.allowFreeform,
+            kind: request.kind,
+            optionIds: (request.options ?? []).map((option) => option.id),
+            requestId: request.requestId,
+            toolName: request.action?.toolName ?? "",
+          };
+        }
+        return {
+          kind: request.kind,
+          optionIds: (request.options ?? []).map((option) => option.id),
+          requestId: request.requestId,
+          toolName: request.action?.toolName ?? "",
+        };
+      }),
     });
     // Older development histories may omit native coordinates. Preserve their public input,
     // but never invent private framework continuation provenance for them.

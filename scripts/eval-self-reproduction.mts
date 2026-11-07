@@ -328,7 +328,7 @@ const readCandidateSource = async (
       }
       const path = join(current, entry.name);
       if (entry.isDirectory()) {
-        return readCandidateSource(directory, path);
+        return await readCandidateSource(directory, path);
       }
       if (
         !entry.isFile() ||
@@ -540,20 +540,30 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
         }
       };
       kill("SIGTERM");
-      force = setTimeout(() => kill("SIGKILL"), 5000);
+      force = setTimeout(() => {
+        kill("SIGKILL");
+      }, 5000);
     };
-    const onInt = () => stop("SIGINT");
-    const onTerm = () => stop("SIGTERM");
+    const onInt = () => {
+      stop("SIGINT");
+    };
+    const onTerm = () => {
+      stop("SIGTERM");
+    };
     process.once("SIGINT", onInt);
     process.once("SIGTERM", onTerm);
-    const timer = setTimeout(() => stop("generation deadline exceeded"), deadline + 30_000);
+    const timer = setTimeout(() => {
+      stop("generation deadline exceeded");
+    }, deadline + 30_000);
     child.stdout.setEncoding("utf-8");
     child.stderr.setEncoding("utf-8");
     child.stdout.on("data", (chunk: string) => {
       rawOutput += chunk;
       stdout.write(chunk);
     });
-    child.stderr.on("data", (chunk: string) => stderr.write(chunk));
+    child.stderr.on("data", (chunk: string) => {
+      stderr.write(chunk);
+    });
     let spawnError: string | undefined;
     child.on("error", (error) => {
       spawnError = error.message;

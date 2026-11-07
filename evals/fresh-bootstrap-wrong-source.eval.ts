@@ -21,10 +21,12 @@ export default defineEval({
       createFreshBootstrapEvalCapability(),
     ]);
     try {
-      const turn = await withFreshBootstrapTestCapability(fixture.capability, () =>
-        session.send(
-          `Inspect fresh repository bootstrap at ${path.join(fixture.allowedRoot, "wrong-source")}.`,
-        ),
+      const turn = await withFreshBootstrapTestCapability(
+        fixture.capability,
+        async () =>
+          await session.send(
+            `Inspect fresh repository bootstrap at ${path.join(fixture.allowedRoot, "wrong-source")}.`,
+          ),
       );
       t.succeeded();
       t.check(turn.message, includes("rejected without target mutation"));

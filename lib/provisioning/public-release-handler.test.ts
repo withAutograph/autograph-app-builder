@@ -22,13 +22,22 @@ import { authority, plan } from "./public-release-test-fixture";
 
 const invocation = () => ({
   authority,
-  sessionId: "saved-session",
   callId: "current-call",
+  sessionId: "saved-session",
   signal: new AbortController().signal,
 });
 const fixture = () => {
   let row: PublicReleaseRow | undefined;
   const store: PublicReleaseStore = {
+    // oxlint-disable-next-line eslint/require-await -- Durable store test double.
+    async compareAndSet(previous, record: PublicReleaseRecord) {
+      if (!row || row.revision !== previous.revision) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- A stale CAS explicitly returns no row under the storage port.
+        return undefined;
+      }
+      row = { ...row, record: structuredClone(record), revision: row.revision + 1 };
+      return structuredClone(row);
+    },
     // oxlint-disable-next-line eslint/require-await -- Durable store test double.
     async read(owner, operationRef) {
       return row &&
@@ -41,32 +50,15 @@ const fixture = () => {
     async reserve(selected) {
       row ??= {
         operationRef: publicReleaseOperationRef(selected),
-        revision: 1,
         record: initialPublicReleaseRecord(selected),
+        revision: 1,
       };
-      return structuredClone(row);
-    },
-    // oxlint-disable-next-line eslint/require-await -- Durable store test double.
-    async compareAndSet(previous, record: PublicReleaseRecord) {
-      if (!row || row.revision !== previous.revision) {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- A stale CAS explicitly returns no row under the storage port.
-        return undefined;
-      }
-      row = { ...row, revision: row.revision + 1, record: structuredClone(record) };
       return structuredClone(row);
     },
   };
   const applied = new Set<string>();
   const writes: string[] = [];
   const ports: PublicReleasePorts = {
-    store,
-    resolve: vi.fn().mockResolvedValue(plan),
-    assertAuthorized: vi.fn<PublicReleasePorts["assertAuthorized"]>(() => Promise.resolve()),
-    assertApproved: vi.fn<PublicReleasePorts["assertApproved"]>(() => Promise.resolve()),
-    withTargetLease: async (_ctx, _plan, run) => await run(),
-    reconcileEffect: vi.fn<PublicReleasePorts["reconcileEffect"]>(async ({ effect }) =>
-      applied.has(effect) ? "applied" : "not-applied",
-    ),
     applyEffect: vi.fn<PublicReleasePorts["applyEffect"]>(async ({ effect, bindings }) => {
       if (effect === "bind-production-runtime") {
         for (const entry of plan.environment) {
@@ -78,16 +70,24 @@ const fixture = () => {
       writes.push(effect);
       applied.add(effect);
     }),
+    assertApproved: vi.fn<PublicReleasePorts["assertApproved"]>(async () => {}),
+    assertAuthorized: vi.fn<PublicReleasePorts["assertAuthorized"]>(async () => {}),
     observe: vi.fn().mockResolvedValue({
-      status: "ready",
       deploymentId: "active-native-deployment",
-      projectId: plan.project.projectId,
       environment: "production",
+      projectId: plan.project.projectId,
       publicOrigin: plan.publicOrigin,
       releaseId: plan.runtime.releaseId,
+      status: "ready",
     }),
+    reconcileEffect: vi.fn<PublicReleasePorts["reconcileEffect"]>(async ({ effect }) =>
+      applied.has(effect) ? "applied" : "not-applied",
+    ),
+    resolve: vi.fn().mockResolvedValue(plan),
+    store,
+    withTargetLease: async (_ctx, _plan, run) => await run(),
   };
-  return { ports, store, writes, applied, handler: createPublicReleaseHandler(ports) };
+  return { applied, handler: createPublicReleaseHandler(ports), ports, store, writes };
 };
 describe("public app release lifecycle", () => {
   it("reports Auth bootstrap as its separate approved purpose without authenticated app acceptance", async () => {
@@ -105,8 +105,8 @@ describe("public app release lifecycle", () => {
       selected.planDigest,
     );
     expect(result).toMatchObject({
-      purpose: "auth-bootstrap",
       authenticatedBehavior: "unassessed",
+      purpose: "auth-bootstrap",
     });
   });
 
@@ -117,7 +117,7 @@ describe("public app release lifecycle", () => {
     expect(selected.plan.project.projectId).toBe(plan.project.projectId);
     expect(f.writes).toEqual([]);
     const first = await f.handler.release(ctx, selected.operationRef, selected.planDigest);
-    expect(first).toMatchObject({ status: "ready", authenticatedBehavior: "unassessed" });
+    expect(first).toMatchObject({ authenticatedBehavior: "unassessed", status: "ready" });
     expect(f.writes).toEqual(["bind-production-runtime", "publish-release-source"]);
     await f.handler.release(ctx, selected.operationRef, selected.planDigest);
     expect(f.writes).toHaveLength(2);
@@ -136,11 +136,11 @@ describe("public app release lifecycle", () => {
     const followup = { ...ctx, callId: "later-read" };
     expect(
       await f.handler.observe(followup, selected.operationRef, selected.planDigest),
-    ).toMatchObject({ status: "ready", authenticatedBehavior: "unassessed" });
+    ).toMatchObject({ authenticatedBehavior: "unassessed", status: "ready" });
     const readyRow = await f.store.read(authority, selected.operationRef);
     expect(readyRow?.record.observation).toMatchObject({
-      status: "ready",
       deploymentId: "active-native-deployment",
+      status: "ready",
     });
     expect(f.ports.assertApproved).not.toHaveBeenCalled();
     expect(f.ports.reconcileEffect).not.toHaveBeenCalled();
@@ -168,7 +168,7 @@ describe("public app release lifecycle", () => {
         selected.operationRef,
         selected.planDigest,
       ),
-    ).toMatchObject({ status: "reconciliation-required", effect: "bind-production-runtime" });
+    ).toMatchObject({ effect: "bind-production-runtime", status: "reconciliation-required" });
     expect(f.ports.observe).not.toHaveBeenCalled();
     f.ports.reconcileEffect = vi.fn().mockResolvedValue("unknown");
     expect(await f.handler.release(ctx, selected.operationRef, selected.planDigest)).toMatchObject({
@@ -197,8 +197,8 @@ describe("public app release lifecycle", () => {
     ).rejects.toThrow("interrupted after receipt");
     const saved = await f.store.read(authority, selected.operationRef);
     expect(saved?.record.bindings.INVOICE_APP_DATABASE_URL).toEqual({
-      state: "pending",
       acceptedEnvId: "env-accepted",
+      state: "pending",
     });
     const normalReconcile = f.ports.reconcileEffect;
     f.ports.reconcileEffect = async (context) => {
@@ -257,12 +257,12 @@ describe("public app release lifecycle", () => {
     const ctx = invocation();
     const selected = await f.handler.plan(ctx, plan.selection.appId);
     f.ports.observe = vi.fn().mockResolvedValue({
-      status: "ready",
       deploymentId: "foreign",
-      projectId: "foreign",
       environment: "production",
+      projectId: "foreign",
       publicOrigin: plan.publicOrigin,
       releaseId: plan.runtime.releaseId,
+      status: "ready",
     });
     await expect(
       f.handler.release(ctx, selected.operationRef, selected.planDigest),
@@ -302,7 +302,7 @@ describe("public app release lifecycle", () => {
 it("records observation failures without changing completed effects or claiming readiness", async () => {
   const f = fixture();
   vi.mocked(f.ports.observe).mockRejectedValue(
-    new PublicReleaseProviderError({ statusCode: 403, code: "forbidden" }),
+    new PublicReleaseProviderError({ code: "forbidden", statusCode: 403 }),
   );
   const ctx = invocation();
   const selected = await f.handler.plan(ctx, plan.selection.appId);
@@ -311,8 +311,8 @@ it("records observation failures without changing completed effects or claiming 
   );
   const row = await f.store.read(authority, selected.operationRef);
   expect(row?.record.lastProviderFailure).toEqual({
+    diagnostic: { code: "forbidden", statusCode: 403 },
     phase: "observe-production",
-    diagnostic: { statusCode: 403, code: "forbidden" },
   });
   expect(Object.values(row?.record.effects ?? {})).toEqual(["applied", "applied"]);
   expect(row?.record.observation).toBeUndefined();
@@ -322,23 +322,23 @@ it.each([
   [
     403,
     { message: "private-provider-body" },
-    { provider: "github", statusCode: 403, code: "forbidden", requestRef: "ABCD:1234:AA00:1234" },
+    { code: "forbidden", provider: "github", requestRef: "ABCD:1234:AA00:1234", statusCode: 403 },
   ],
   [
     200,
     {
-      errors: [{ type: "FORBIDDEN", message: "private-provider-body", path: ["private"] }],
       data: null,
+      errors: [{ message: "private-provider-body", path: ["private"], type: "FORBIDDEN" }],
     },
-    { provider: "github", statusCode: 200, code: "FORBIDDEN", requestRef: "ABCD:1234:AA00:1234" },
+    { code: "FORBIDDEN", provider: "github", requestRef: "ABCD:1234:AA00:1234", statusCode: 200 },
   ],
   [
     200,
     {
-      errors: [{ type: "private-unrecognized-type", message: "private-provider-body" }],
       data: null,
+      errors: [{ message: "private-provider-body", type: "private-unrecognized-type" }],
     },
-    { provider: "github", statusCode: 200, requestRef: "ABCD:1234:AA00:1234" },
+    { provider: "github", requestRef: "ABCD:1234:AA00:1234", statusCode: 200 },
   ],
 ])(
   "persists bounded actual GitHub denial metadata at HTTP%s without another branch dispatch",
@@ -347,11 +347,6 @@ it.each([
     let posts = 0;
     const github = createPublicReleaseGitHubProvider({
       assertCurrent: async () => {},
-      readCredential: async () => ({
-        token: "private-test-token",
-        repositoryId: plan.source.repositoryId,
-        installationId: plan.source.installationId,
-      }),
       fetch: async (resource) => {
         const parsed = z
           .union([z.string(), z.instanceof(URL), z.instanceof(Request)])
@@ -360,19 +355,19 @@ it.each([
         if (url.pathname.endsWith("/graphql")) {
           posts += 1;
           return Response.json(body, {
-            status,
             headers: {
-              "x-github-request-id": "ABCD:1234:AA00:1234",
               "set-cookie": "private-cookie",
+              "x-github-request-id": "ABCD:1234:AA00:1234",
             },
+            status,
           });
         }
         if (url.pathname.startsWith("/repositories/")) {
           return Response.json({
-            id: plan.source.repositoryId,
             description: `Created by Autograph App Builder request ${plan.source.deliveryScope.provisioningRequestId}`,
-            node_id: "repository-node",
+            id: plan.source.repositoryId,
             name: "app",
+            node_id: "repository-node",
             owner: { login: "owner" },
           });
         }
@@ -386,6 +381,11 @@ it.each([
         }
         throw new Error("Unexpected request");
       },
+      readCredential: async () => ({
+        installationId: plan.source.installationId,
+        repositoryId: plan.source.repositoryId,
+        token: "private-test-token",
+      }),
     });
     const apply = f.ports.applyEffect;
     const reconcile = f.ports.reconcileEffect;
@@ -405,8 +405,8 @@ it.each([
     ).rejects.toThrow("public_release_provider_rejected");
     const row = await f.store.read(authority, selected.operationRef);
     expect(row?.record.lastProviderFailure).toEqual({
-      phase: "publish-release-source",
       diagnostic,
+      phase: "publish-release-source",
     });
     expect(row?.record.effects).toEqual({
       "bind-production-runtime": "applied",

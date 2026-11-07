@@ -14,7 +14,7 @@ const publicAddresses: LookupAddress[] = [
 ];
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function runLookup(options: LookupOptions) {
+async function runLookup(options: LookupOptions) {
   const lookup = new EventTarget();
   let lookupAddress: string | LookupAddress[] | undefined;
   let lookupError: Error | null = null;
@@ -32,7 +32,7 @@ function runLookup(options: LookupOptions) {
       lookup.dispatchEvent(new Event("result"));
     },
   );
-  return result.then(() => {
+  return await result.then(() => {
     if (lookupError) {
       throw lookupError;
     }
@@ -150,7 +150,9 @@ describe("Preview CIMD transport", () => {
     const requestHttps = vi.fn();
     const fetchMetadata = createPreviewCimdTransport({
       requestHttps,
-      resolveHostname: vi.fn(() => once(new EventTarget(), "pending") as Promise<LookupAddress[]>),
+      resolveHostname: vi.fn(
+        async () => await (once(new EventTarget(), "pending") as Promise<LookupAddress[]>),
+      ),
       timeoutSignal,
     });
 
@@ -169,7 +171,9 @@ describe("Preview CIMD transport", () => {
     const requestHttps = vi.fn();
     const fetchMetadata = createPreviewCimdTransport({
       requestHttps,
-      resolveHostname: vi.fn(() => once(new EventTarget(), "pending") as Promise<LookupAddress[]>),
+      resolveHostname: vi.fn(
+        async () => await (once(new EventTarget(), "pending") as Promise<LookupAddress[]>),
+      ),
     });
 
     const rejection = expect(

@@ -9,14 +9,14 @@ import {
 } from "./app-integration-capability-contract";
 
 const common = {
-  ownerContext: operatorOwnerContextSchema,
   adapterSessionId: z.string().min(1),
   callId: z.string().min(1),
   execution: z.strictObject({
     logicalSessionId: z.string().min(1),
-    ownerRunId: z.string().min(1).optional(),
     ownerAnchorRunId: z.string().min(1).optional(),
+    ownerRunId: z.string().min(1).optional(),
   }),
+  ownerContext: operatorOwnerContextSchema,
 };
 export const appIntegrationCapabilityTransportRequestSchema = z
   .discriminatedUnion("action", [
@@ -44,16 +44,16 @@ export const appIntegrationCapabilityTransportRequestSchema = z
 export { appIntegrationCapabilityApprovalInputSchema as appIntegrationCapabilityPlanResultSchema } from "./app-integration-capability-contract";
 export const appIntegrationCapabilityResultSchema = z.union([
   z.strictObject({
-    status: z.literal("prepared"),
-    operationRef: z.uuid(),
     capability: preparedAppIntegrationCapabilitySchema,
-    providerActivation: z.literal("unassessed"),
     hostedAcceptance: z.literal("unassessed"),
+    operationRef: z.uuid(),
+    providerActivation: z.literal("unassessed"),
+    status: z.literal("prepared"),
   }),
   z.strictObject({
-    status: z.literal("reconciliation-required"),
-    operationRef: z.uuid(),
-    effect: integrationCapabilityEffectSchema,
     diagnostic: integrationProviderDiagnosticSchema.optional(),
+    effect: integrationCapabilityEffectSchema,
+    operationRef: z.uuid(),
+    status: z.literal("reconciliation-required"),
   }),
 ]);

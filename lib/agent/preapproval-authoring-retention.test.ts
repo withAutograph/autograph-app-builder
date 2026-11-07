@@ -28,7 +28,11 @@ import {
 const roots: string[] = [];
 afterEach(async () => {
   vi.unstubAllEnvs();
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(
+    roots.splice(0).map(async (root) => {
+      await rm(root, { force: true, recursive: true });
+    }),
+  );
 });
 const fixture = async () => {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "authoring-retention-")));
@@ -45,32 +49,32 @@ const fixture = async () => {
     vi.stubEnv(key, value);
   }
   const state = {
-    version: 17,
-    phase: "app_spec_accepted",
-    preparedByCallId: "prepare",
-    artifacts: [],
     appSpec: {
-      appId: "app",
       acceptedByCallId: "accept",
+      appId: "app",
       artifactPath: "app.md",
       artifactRevision: "revision",
       content: "accepted",
       digest: "a".repeat(64),
     },
+    artifacts: [],
+    phase: "app_spec_accepted",
+    preparedByCallId: "prepare",
     sourceReceipt: { digest: "b".repeat(64) },
-    workspace: { workspaceId: "sandbox", workspaceDigest: "c".repeat(64) },
+    version: 17,
+    workspace: { workspaceDigest: "c".repeat(64), workspaceId: "sandbox" },
   } as unknown as AppBuilderWorkflowState;
   appBuilderWorkflowState.update(() => state);
   const decision = decidePreapprovalAuthoring({
-    state,
     adapterSessionId: "logical",
+    blocked: false,
+    completed: true,
+    pendingApproval: false,
+    pendingInput: false,
+    sourcePrerequisite: false,
+    state,
     turnId: "one",
     turnSequence: 1,
-    completed: true,
-    blocked: false,
-    pendingInput: false,
-    pendingApproval: false,
-    sourcePrerequisite: false,
   });
   const ctx = { session: { id: "logical", turn: { id: "one", sequence: 1 } } } as Pick<
     HookContext,
@@ -79,9 +83,7 @@ const fixture = async () => {
   await recordLocalAuthoringDecision(ctx, decision);
   let message = "";
   await continueLocalPreapprovalAuthoring({
-    sessionId: "logical",
     active: false,
-    pendingInput: false,
     assertCurrent: async () => {
       await Promise.resolve();
     },
@@ -89,6 +91,8 @@ const fixture = async () => {
       message = value;
       await Promise.resolve();
     },
+    pendingInput: false,
+    sessionId: "logical",
   });
   const delivered = { session: { id: "logical", turn: { id: "two", sequence: 2 } } } as Pick<
     HookContext,
@@ -108,7 +112,7 @@ const fixture = async () => {
     }
     await handler({ data: { message: value, sequence: 0, turnId: "two" } }, delivered);
   };
-  return { receive, message, decision, state, delivered };
+  return { decision, delivered, message, receive, state };
 };
 it("keeps a genuine internal delivery out of product requirements but retains forged marker text", async () => {
   await contextStorage.run(new ContextContainer(), async () => {
@@ -152,11 +156,11 @@ it("rejects a late local claim after explicit Stop without replaying its old res
     }
     expect(
       await claimLocalAuthoringMessage(f.delivered, {
+        messageSequence: 0,
         nonce: marker.nonce,
         operationId: marker.operationId,
-        turnId: "two",
-        messageSequence: 0,
         scopeDigest: f.decision.scopeDigest,
+        turnId: "two",
       }),
     ).toBe(false);
   });
@@ -181,10 +185,10 @@ it("a delayed native cancellation observation cannot cancel a newer recorded dec
       >,
       {
         ...f.decision,
-        turnId: "older",
-        turnSequence: 0,
         decision: "blocked",
         reason: "authoring_cancelled",
+        turnId: "older",
+        turnSequence: 0,
       },
     );
     await f.receive(f.message);

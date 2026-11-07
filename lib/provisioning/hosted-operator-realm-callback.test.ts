@@ -100,7 +100,13 @@ const fixture = async (ownerSessionId = "original-public-session") => {
     ),
   };
   const ports = {
-    assertCurrent: vi.fn(async () => {}),
+    afterLinked: vi.fn(
+      async (
+        _context: HostedOperatorContext,
+        _observed: { nonceSha256: string; proofRef: string; proofSha256: string },
+      ) => {},
+    ),
+    assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
     authenticate: vi.fn<RealmIdentityCallbackPorts["authenticate"]>(async () => context),
     builderOrigin: "https://builder.example",
     consume: vi.fn(async () => {
@@ -134,20 +140,14 @@ const fixture = async (ownerSessionId = "original-public-session") => {
         resource,
       });
     }),
-    afterLinked: vi.fn(
-      async (
-        _context: HostedOperatorContext,
-        _observed: { nonceSha256: string; proofRef: string; proofSha256: string },
-      ) => {},
-    ),
     identityHandoff: {
+      artifacts: store,
+      context: vi.fn(async () => context),
       verifySender: vi.fn(async (request: Request) => {
         if (request.headers.get("authorization") !== "Bearer trusted.gateway.token") {
           throw new Error("foreign sender");
         }
       }),
-      context: vi.fn(async () => context),
-      artifacts: store,
     },
     keyring: { tokenKey: Buffer.alloc(32, 5), tokenKeyVersion: "fixture-v1" },
     publish: vi.fn(async (_context: HostedOperatorContext, value: string) => ({
@@ -177,20 +177,20 @@ const fixture = async (ownerSessionId = "original-public-session") => {
   const nativePost = async (changes: { body?: object; headers?: Record<string, string> } = {}) =>
     await handler(
       new Request("https://builder.example/api/hosted-operator/realm-identity", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: "Bearer trusted.gateway.token",
-          ...changes.headers,
-        },
         body: JSON.stringify({
-          version: 1,
-          purpose: "realm-owner-identity-stage-v1",
-          origin: link.browserOrigin,
           nonce,
+          origin: link.browserOrigin,
           proof,
+          purpose: "realm-owner-identity-stage-v1",
+          version: 1,
           ...changes.body,
         }),
+        headers: {
+          authorization: "Bearer trusted.gateway.token",
+          "content-type": "application/json",
+          ...changes.headers,
+        },
+        method: "POST",
       }),
     );
   return {
@@ -358,9 +358,9 @@ describe("native private Realm identity handoff", () => {
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ code: "auth_identity_required" });
     expect(log).toHaveBeenCalledExactlyOnceWith("realm_identity_callback_failure", {
-      stage,
-      errorClass: "operator_error",
       code,
+      errorClass: "operator_error",
+      stage,
     });
   });
   it("allowlists JOSE codes while discarding private error details", async () => {
@@ -368,15 +368,15 @@ describe("native private Realm identity handoff", () => {
     const f = await fixture();
     f.ports.fetch.mockRejectedValue(
       Object.assign(new Error(`private ${f.proof}`), {
-        code: "ERR_JWKS_TIMEOUT",
         cause: { cookie: "private-cookie", nonce: f.nonce },
+        code: "ERR_JWKS_TIMEOUT",
       }),
     );
     expect((await f.nativePost()).status).toBe(401);
     expect(log).toHaveBeenCalledExactlyOnceWith("realm_identity_callback_failure", {
-      stage: "proof_verification",
-      errorClass: "jose_error",
       code: "ERR_JWKS_TIMEOUT",
+      errorClass: "jose_error",
+      stage: "proof_verification",
     });
     expect(JSON.stringify(log.mock.calls)).not.toContain(f.proof);
     expect(JSON.stringify(log.mock.calls)).not.toContain(f.nonce);
@@ -389,48 +389,48 @@ describe("native private Realm identity handoff", () => {
     expected: { httpStatus: number; contentType: string; vercelError?: string };
   }>([
     {
-      status: 403,
+      expected: {
+        contentType: "html",
+        httpStatus: 403,
+        vercelError: "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH",
+      },
       headers: {
         "content-type": "text/html; charset=utf-8",
         "x-vercel-error": "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH",
       },
-      expected: {
-        httpStatus: 403,
-        contentType: "html",
-        vercelError: "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH",
-      },
+      status: 403,
     },
     {
-      status: 403,
+      expected: { contentType: "other", httpStatus: 403, vercelError: "other" },
       headers: {
         "content-type": "private-content-type; private-parameter=private-value",
         "x-vercel-error": "private-provider-error",
       },
-      expected: { httpStatus: 403, contentType: "other", vercelError: "other" },
+      status: 403,
     },
     {
-      status: 200,
+      expected: { contentType: "json", httpStatus: 200 },
       headers: { "content-type": "application/json; private-parameter=private-value" },
-      expected: { httpStatus: 200, contentType: "json" },
+      status: 200,
     },
     {
-      status: 404,
+      expected: { contentType: "missing", httpStatus: 404, vercelError: "DEPLOYMENT_NOT_FOUND" },
       headers: { "x-vercel-error": "DEPLOYMENT_NOT_FOUND" },
-      expected: { httpStatus: 404, contentType: "missing", vercelError: "DEPLOYMENT_NOT_FOUND" },
+      status: 404,
     },
   ])("reports only closed JWKS response metadata on failure: $expected", async (input) => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const f = await fixture();
-    const denied = new Response(null, { status: input.status, headers: input.headers });
+    const denied = new Response(null, { headers: input.headers, status: input.status });
     f.ports.fetch.mockResolvedValue(denied);
     const response = await f.nativePost();
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ code: "auth_identity_required" });
     expect(log).toHaveBeenCalledExactlyOnceWith("realm_identity_callback_failure", {
-      stage: "proof_verification",
-      errorClass: "jose_error",
       code: "ERR_JOSE_GENERIC",
+      errorClass: "jose_error",
       jwks: input.expected,
+      stage: "proof_verification",
     });
     expect(f.ports.fetch).toHaveBeenCalledOnce();
     expect(f.ports.identityHandoff.artifacts.put).not.toHaveBeenCalled();
@@ -464,8 +464,8 @@ describe("native private Realm identity handoff", () => {
     expect((await f.nativePost()).status).toBe(401);
     expect(readCode).not.toHaveBeenCalled();
     expect(log.mock.calls).toEqual([
-      ["realm_identity_callback_failure", { stage: "canonical_pending", errorClass: "unknown" }],
-      ["realm_identity_callback_failure", { stage: "canonical_pending", errorClass: "unknown" }],
+      ["realm_identity_callback_failure", { errorClass: "unknown", stage: "canonical_pending" }],
+      ["realm_identity_callback_failure", { errorClass: "unknown", stage: "canonical_pending" }],
     ]);
   });
   it("preserves the denial when the diagnostic sink throws", async () => {
@@ -484,7 +484,7 @@ describe("native private Realm identity handoff", () => {
     const response = await f.nativePost();
     expect(response.status).toBe(200);
     const body = z
-      .object({ version: z.literal(1), continuationUrl: z.url() })
+      .object({ continuationUrl: z.url(), version: z.literal(1) })
       .parse(await response.json());
     const url = new URL(body.continuationUrl);
     expect(url.origin).toBe(f.ports.builderOrigin);
@@ -558,17 +558,17 @@ describe("native private Realm identity handoff", () => {
       url.searchParams.set("handoff", `${url.searchParams.get("handoff") ?? ""}tampered`);
     } else if (kind === "expired-ticket") {
       const ticket = {
-        version: 1,
-        ownerSessionId: f.ownerSessionId,
-        nonceSha256: f.link.nonceSha256,
         claimSecret: "c".repeat(64),
         expiresAt: Date.now() - 1,
+        nonceSha256: f.link.nonceSha256,
+        ownerSessionId: f.ownerSessionId,
+        version: 1,
       };
       const envelope = {
         ...encryptVercelToken({
+          associatedData: `realm-owner-identity-handoff-v1:${f.ports.builderOrigin}:/api/hosted-operator/realm-identity`,
           key: f.ports.keyring.tokenKey,
           token: JSON.stringify(ticket),
-          associatedData: `realm-owner-identity-handoff-v1:${f.ports.builderOrigin}:/api/hosted-operator/realm-identity`,
         }),
         keyVersion: f.ports.keyring.tokenKeyVersion,
       };
@@ -587,7 +587,7 @@ describe("native private Realm identity handoff", () => {
         f.artifacts.set(key, "tampered");
       }
     } else {
-      url.search = new URLSearchParams({ session: f.ownerSessionId, nonce: f.nonce }).toString();
+      url.search = new URLSearchParams({ nonce: f.nonce, session: f.ownerSessionId }).toString();
     }
     expect((await f.handler(new Request(url))).status).toBe(401);
     expect(f.ports.publish).not.toHaveBeenCalled();
@@ -615,19 +615,19 @@ describe("native private Realm identity handoff", () => {
 });
 
 const nativeSender = {
-  issuer: "https://oidc.vercel.com/team",
   audience: "https://vercel.com/team",
+  environment: "preview" as const,
+  issuer: "https://oidc.vercel.com/team",
   ownerId: "team",
   projectId: "gateway",
-  environment: "preview" as const,
   subject: "gateway-preview",
 };
 const senderPayload = {
-  iss: nativeSender.issuer,
   aud: nativeSender.audience,
+  environment: nativeSender.environment,
+  iss: nativeSender.issuer,
   owner_id: nativeSender.ownerId,
   project_id: nativeSender.projectId,
-  environment: nativeSender.environment,
   sub: nativeSender.subject,
 };
 describe("exact native Gateway sender", () => {
@@ -643,10 +643,10 @@ describe("exact native Gateway sender", () => {
     );
     expect(verify).toHaveBeenCalledWith("signed.native.token", {
       audience: nativeSender.audience,
+      environment: nativeSender.environment,
       issuer: nativeSender.issuer,
       ownerId: nativeSender.ownerId,
       projectId: nativeSender.projectId,
-      environment: nativeSender.environment,
       subject: nativeSender.subject,
     });
   });

@@ -10,6 +10,7 @@ import {
 } from "@better-auth-ui/react/plugins/passkey";
 import { Fingerprint } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
+import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -25,9 +26,11 @@ export interface PasskeyButtonProps {
   view?: AuthView;
 }
 
-interface OnboardingResponse {
-  context?: unknown;
-}
+const onboardingResponseSchema = z.object({
+  code: z.string().optional(),
+  context: z.string().optional(),
+  error: z.object({ code: z.string().optional() }).optional(),
+});
 
 const passkeyResponseTimeoutMs = 3000;
 
@@ -36,10 +39,9 @@ async function awaitPasskeyResponse<T>(operation: Promise<T>): Promise<T> {
   let timeout: number | undefined;
   try {
     const timeoutRejection = Promise.withResolvers<never>();
-    timeout = window.setTimeout(
-      () => timeoutRejection.reject(new Error("Passkey verification timed out.")),
-      passkeyResponseTimeoutMs,
-    );
+    timeout = window.setTimeout(() => {
+      timeoutRejection.reject(new Error("Passkey verification timed out."));
+    }, passkeyResponseTimeoutMs);
     return await Promise.race([operation, timeoutRejection.promise]);
   } finally {
     if (timeout !== undefined) {
@@ -82,10 +84,11 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
   // form is open. The button stays for anyone who dismisses it.
   usePasskeyAutoFill(authClient, {
     enabled: view !== "signUp",
-    onSuccess: () =>
+    onSuccess: () => {
       navigate({
         to: resolvePasskeyRedirectTo(redirectTo, window.location.search, window.location.origin),
-      }),
+      });
+    },
   });
 
   const continueWithPasskey = async () => {
@@ -137,21 +140,28 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         }),
         preferredPasskeyAuthenticatorAttachment(),
       ]);
-      const body = (await response.json()) as OnboardingResponse;
+      const parsedBody = onboardingResponseSchema.safeParse(await response.json());
+      if (!parsedBody.success) {
+        throw new Error("Passkey registration is unavailable.");
+      }
+      const body = parsedBody.data;
       if (isPasskeyOnboardingAlreadyAuthenticated(body)) {
         navigate({ replace: true, to: resolvedRedirectTo });
         return;
       }
-      if (!response.ok || typeof body.context !== "string") {
+      if (!response.ok || body.context === undefined || body.context.length === 0) {
         throw new Error("Passkey registration is unavailable.");
       }
 
-      const result = await addPasskey.mutateAsync({
+      const passkeyOptions = {
         context: body.context,
         createSession: true,
         name: "Primary passkey",
-        ...(authenticatorAttachment ? { authenticatorAttachment } : {}),
-      });
+      };
+      if (authenticatorAttachment !== undefined && authenticatorAttachment !== null) {
+        passkeyOptions.authenticatorAttachment = authenticatorAttachment;
+      }
+      const result = await addPasskey.mutateAsync(passkeyOptions);
       if (isPasskeyOnboardingAlreadyAuthenticated(result)) {
         navigate({ replace: true, to: resolvedRedirectTo });
         return;
@@ -162,7 +172,11 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
       }
       navigate({ to: resolvedRedirectTo });
     } catch (error) {
-      if (authenticatedRedirectTo && isPasskeyOnboardingAlreadyAuthenticated(error)) {
+      if (
+        authenticatedRedirectTo !== undefined &&
+        authenticatedRedirectTo.length > 0 &&
+        isPasskeyOnboardingAlreadyAuthenticated(error)
+      ) {
         navigate({ replace: true, to: authenticatedRedirectTo });
         return;
       }
@@ -190,7 +204,13 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
           failed &&
             "border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive",
         )}
-        onClick={view === "signUp" ? createPasskey : continueWithPasskey}
+        onClick={() => {
+          if (view === "signUp") {
+            void createPasskey();
+          } else {
+            void continueWithPasskey();
+          }
+        }}
       >
         {pending ? <Spinner /> : <Fingerprint />}
         {failed

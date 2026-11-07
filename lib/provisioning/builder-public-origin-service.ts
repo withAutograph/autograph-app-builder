@@ -10,8 +10,8 @@ import type { BuilderDestinationEpoch } from "./builder-session-destination-cont
 import type { BuilderPublicOriginStore } from "./builder-public-origin-store";
 
 const authorityFor = (principal: HostedPrincipal) => ({
-  issuer: principal.issuer,
   audience: principal.audience,
+  issuer: principal.issuer,
   ownerUserId: principal.ownerUserId,
   workspaceId: principal.workspaceId,
 });
@@ -37,9 +37,9 @@ export const createBuilderPublicOriginService = (deps: {
     });
     await target.assertCurrent();
     return {
-      scope: target.scope,
       expected: target.expected,
       origins,
+      scope: target.scope,
       selectedPublicOrigin: selectedPublicOrigin ?? null,
     };
   },
@@ -61,11 +61,11 @@ export const createBuilderPublicOriginService = (deps: {
     }
     await target.assertCurrent();
     await deps.store.select({
-      authority: authorityFor(principal),
-      scope: target.scope,
-      publicOrigin: selected.publicOrigin,
-      expectedPublicOrigin: selected.expectedPublicOrigin,
       assertCurrent: target.assertCurrent,
+      authority: authorityFor(principal),
+      expectedPublicOrigin: selected.expectedPublicOrigin,
+      publicOrigin: selected.publicOrigin,
+      scope: target.scope,
     });
     await target.assertCurrent();
   },
@@ -90,23 +90,23 @@ export const createBuilderPublicOriginAction =
       const parsed = builderPublicOriginSelectionSchema.parse(input);
       if (headers.get("origin") !== ports.origin || !(await ports.enabled())) {
         return {
-          status: "error",
           message: "Public domain selection is unavailable. Your app is preserved.",
+          status: "error",
         };
       }
       const context = await ports.open(headers);
       await context.publicOrigins.select(context.principal, parsed);
       ports.refresh();
       return {
-        status: "ready",
         message:
           "Public domain selected. Continue the saved build to review its fresh Auth and release plan.",
+        status: "ready",
       };
     } catch {
       return {
-        status: "error",
         message:
           "The domain choice changed or is unavailable. Refresh this page; your app and previous approvals are preserved.",
+        status: "error",
       };
     }
   };

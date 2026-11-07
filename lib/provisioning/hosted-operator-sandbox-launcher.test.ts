@@ -1360,10 +1360,10 @@ describe("resource bootstrap launcher", () => {
       },
       { createSandbox: f.createSandbox, diagnosticSink: f.diagnostics },
     );
-    const run = () =>
+    const run = async () =>
       inspect
-        ? launcher.inspect(input)
-        : launcher.execute({
+        ? await launcher.inspect(input)
+        : await launcher.execute({
             ...resourceInput(),
             bindWorkerContext,
           });

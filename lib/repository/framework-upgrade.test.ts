@@ -81,14 +81,14 @@ const registry = (overrides: Record<string, RegistryMetadata> = {}) => {
       [
         "next",
         {
-          version: "16.4.3",
           peerDependencies: { react: "^18.2.0 || ^19.0.0", "react-dom": "^18.2.0 || ^19.0.0" },
+          version: "16.4.3",
         },
       ],
       ["react", { version: "19.3.1" }],
-      ["react-dom", { version: "19.3.1", peerDependencies: { react: "^19.3.1" } }],
+      ["react-dom", { peerDependencies: { react: "^19.3.1" }, version: "19.3.1" }],
       ["@types/react", { version: "19.3.0" }],
-      ["@types/react-dom", { version: "19.3.0", peerDependencies: { "@types/react": "^19.0.0" } }],
+      ["@types/react-dom", { peerDependencies: { "@types/react": "^19.0.0" }, version: "19.3.0" }],
       ...Object.entries(overrides),
     ]);
     const current = packages.get(name);
@@ -97,10 +97,10 @@ const registry = (overrides: Record<string, RegistryMetadata> = {}) => {
     }
     let legacy: RegistryMetadata = { version: "18.3.1" };
     if (name === "react-dom") {
-      legacy = { version: "18.3.1", peerDependencies: { react: "^18.3.1" } };
+      legacy = { peerDependencies: { react: "^18.3.1" }, version: "18.3.1" };
     }
     if (name === "@types/react-dom") {
-      legacy = { version: "18.3.1", peerDependencies: { "@types/react": "^18.0.0" } };
+      legacy = { peerDependencies: { "@types/react": "^18.0.0" }, version: "18.3.1" };
     }
     return Response.json(
       metadataRequest
@@ -148,7 +148,7 @@ describe("framework upgrade planning and apply", () => {
   it("selects the latest stable compatible pair when npm latest has incompatible peers", async () => {
     await expect(
       resolveLatestFrameworkVersions(
-        registry({ next: { version: "16.4.3", peerDependencies: { react: "^18.0.0" } } }),
+        registry({ next: { peerDependencies: { react: "^18.0.0" }, version: "16.4.3" } }),
       ),
     ).resolves.toMatchObject({
       react: "18.3.1",
@@ -165,7 +165,7 @@ describe("framework upgrade planning and apply", () => {
       }
       if (url.endsWith("/react-dom")) {
         return Response.json({
-          versions: { "18.3.1": { version: "18.3.1", peerDependencies: { react: "^18.3.1" } } },
+          versions: { "18.3.1": { peerDependencies: { react: "^18.3.1" }, version: "18.3.1" } },
         });
       }
       return await fallback(url, init);
@@ -181,38 +181,38 @@ describe("framework upgrade planning and apply", () => {
     ).rejects.toThrow();
   });
   it("auto-plans concrete versions for new apps and supports version-only existing app plans", async () => {
-    const resolver = vi.fn(async () => versions);
+    const resolver = vi.fn().mockResolvedValue(versions);
     let existing = false;
     const sandbox = sandboxFixture({
       readBinaryFile: async () => null,
       readTextFile: async () => null,
-      writeTextFile: async () => {},
       removePath: async () => {},
       run: async ({ command }: { command: string }) => ({
         exitCode: fixtureCommandExit(command, existing),
+        stderr: "",
         stdout: command.startsWith("mise run --no-deps app:describe")
           ? JSON.stringify({
-              version: 1,
               app: { id: "example", routes: ["/example"], workspacePath: "apps/example" },
               backend: { kind: "static" },
               validation: {
-                check: { task: "check" },
-                test: { task: "test", shards: 1 },
                 browser: null,
+                check: { task: "check" },
+                test: { shards: 1, task: "test" },
               },
+              version: 1,
             })
           : "",
-        stderr: "",
       }),
+      writeTextFile: async () => {},
     });
     const input = {
-      sandbox,
       appId: "example",
       appSpecContent: "Example",
       appSpecDigest: "a".repeat(64),
       artifactRevision: "b".repeat(64),
       executor: fixtureTargetCommandExecutor(),
       resolveFrameworkVersions: resolver,
+      sandbox,
     };
     const created = await executeTargetIdentityAndPlanning(input);
     expect(created.proposal.frameworkUpgrade?.versions).toEqual(versions);
@@ -222,15 +222,15 @@ describe("framework upgrade planning and apply", () => {
       frameworkUpgradeRequested: true,
     });
     expect(iteration.proposal).toMatchObject({
-      operation: "iterate-existing-app",
-      iteration: { changes: [] },
       frameworkUpgrade: { versions },
+      iteration: { changes: [] },
+      operation: "iterate-existing-app",
     });
     expect(resolver).toHaveBeenCalledTimes(2);
     const ordinary = await executeTargetIdentityAndPlanning({
       ...input,
       existingAppChanges: [
-        { path: "apps/example/app/page.tsx", content: "Existing product feature edit" },
+        { content: "Existing product feature edit", path: "apps/example/app/page.tsx" },
       ],
     });
     expect(ordinary.proposal.frameworkUpgrade).toBeUndefined();
@@ -240,24 +240,24 @@ describe("framework upgrade planning and apply", () => {
     const sandbox = sandboxFixture({
       readBinaryFile: async () => null,
       readTextFile: async () => null,
-      writeTextFile: async () => {},
       removePath: async () => {},
       run: async ({ command }: { command: string }) => ({
         exitCode: fixtureCommandExit(command, true),
         stderr: "",
         stdout: command.startsWith("mise run --no-deps app:describe")
           ? JSON.stringify({
-              version: 1,
               app: { id: "example", routes: ["/example"], workspacePath: "apps/example" },
               backend: { kind: "static" },
               validation: {
-                check: { task: "check" },
-                test: { task: "test", shards: 1 },
                 browser: null,
+                check: { task: "check" },
+                test: { shards: 1, task: "test" },
               },
+              version: 1,
             })
           : "",
       }),
+      writeTextFile: async () => {},
     });
     const sourceReceipt = {
       adapter: "arrusted-development-v0" as const,
@@ -272,36 +272,36 @@ describe("framework upgrade planning and apply", () => {
       version: 3 as const,
     };
     const localSourceReconciliation = {
-      kind: "local-source-reconciliation-v1" as const,
       appId: "example",
       appSpecDigest: "a".repeat(64),
-      workspaceId: "saved-workspace",
+      checkpointRef: `refs/app-builder/local-source-checkpoints/${"4".repeat(64)}/${"5".repeat(40)}/${"6".repeat(40)}`,
+      kind: "local-source-reconciliation-v1" as const,
       previousApplyDigest: "b".repeat(64),
       previousProposalDigest: "c".repeat(64),
       previousSourceReceiptDigest: "d".repeat(64),
-      sourceReceiptDigest: sourceReceipt.digest,
       previousWorkspaceDigest: "1".repeat(64),
-      workspaceDigest: "2".repeat(64),
-      sourceSnapshotTree: "3".repeat(40),
-      checkpointRef: `refs/app-builder/local-source-checkpoints/${"4".repeat(64)}/${"5".repeat(40)}/${"6".repeat(40)}`,
       reconciledByCallId: "prepare-new-base",
+      sourceReceiptDigest: sourceReceipt.digest,
+      sourceSnapshotTree: "3".repeat(40),
+      workspaceDigest: "2".repeat(64),
+      workspaceId: "saved-workspace",
     };
     const input = {
-      sandbox,
       appId: "example",
       appSpecContent: "Accepted unchanged product",
       appSpecDigest: "a".repeat(64),
       artifactRevision: "b".repeat(64),
-      executor: fixtureTargetCommandExecutor(),
       environment: developmentExecutionEnvironment,
-      sourceReceipt,
+      executor: fixtureTargetCommandExecutor(),
       localSourceReconciliation,
+      sandbox,
+      sourceReceipt,
     };
     const result = await executeTargetIdentityAndPlanning(input);
     expect(result.proposal).toMatchObject({
+      iteration: { changes: [] },
       operation: "iterate-existing-app",
       sourceReconciliation: localSourceReconciliation,
-      iteration: { changes: [] },
     });
     expect(result.proposal.frameworkUpgrade).toBeUndefined();
     await expect(executeTargetIdentityAndPlanning({ ...input, environment: {} })).rejects.toThrow(
@@ -330,19 +330,19 @@ describe("framework upgrade planning and apply", () => {
     const sandbox = sandboxFixture({
       readBinaryFile: async ({ path }: { path: string }) =>
         path.endsWith("package.json") ? Buffer.from("old package") : null,
-      run: async () => ({ exitCode: 0, stdout: "644", stderr: "" }),
+      run: async () => ({ exitCode: 0, stderr: "", stdout: "644" }),
     });
     const planned = await planFrameworkUpgrade(sandbox, versions);
     const changed = {
       files: [
-        { path: "package.json", mode: "644", digest: "f".repeat(64) },
-        { path: "bun.lock", mode: "644", digest: "e".repeat(64) },
+        { digest: "f".repeat(64), mode: "644", path: "package.json" },
+        { digest: "e".repeat(64), mode: "644", path: "bun.lock" },
       ],
       treeDigest: "changed",
     };
     expect(
       overlayChanges(iterationBaselineSnapshot(changed, planned.baseline), changed).map(
-        ({ path, kind }) => ({ path, kind }),
+        ({ path, kind }) => ({ kind, path }),
       ),
     ).toEqual([
       { kind: "added", path: "bun.lock" },
@@ -352,19 +352,19 @@ describe("framework upgrade planning and apply", () => {
   it("upgrades an existing app without regenerating or overwriting app source", async () => {
     const calls: string[] = [];
     const sandbox = sandboxFixture({
-      setNetworkPolicy: async () => {},
+      readBinaryFile: vi.fn(),
       run: async ({ command }: { command: string }) => {
         calls.push(command);
-        return { exitCode: 0, stdout: "{}", stderr: "" };
+        return { exitCode: 0, stderr: "", stdout: "{}" };
       },
+      setNetworkPolicy: async () => {},
       writeTextFile: vi.fn(),
-      readBinaryFile: vi.fn(),
     });
     const result = await sandboxApplyCommandExecutor()({
-      sandbox,
       appId: "example",
       applyRoot: "/workspace/repository",
       proposal: proposal(),
+      sandbox,
     });
     expect(result.exitCode).toBe(0);
     expect(calls).toContain(frameworkUpgradeCommand(upgrade, "example"));
@@ -376,21 +376,21 @@ describe("framework upgrade planning and apply", () => {
     const calls: string[] = [];
     let fail = true;
     const sandbox = sandboxFixture({
-      setNetworkPolicy: async () => {},
       run: async ({ command }: { command: string }) => {
         calls.push(command);
         if (command.includes("repository:upgrade-framework") && fail) {
-          return { exitCode: 1, stdout: "", stderr: "network timeout" };
+          return { exitCode: 1, stderr: "network timeout", stdout: "" };
         }
-        return { exitCode: 0, stdout: "{}", stderr: "" };
+        return { exitCode: 0, stderr: "", stdout: "{}" };
       },
+      setNetworkPolicy: async () => {},
     });
-    const apply = () =>
-      sandboxApplyCommandExecutor()({
-        sandbox,
+    const apply = async () =>
+      await sandboxApplyCommandExecutor()({
         appId: "example",
         applyRoot: "/workspace/repository",
         proposal: proposal(),
+        sandbox,
       });
     const failed = await apply();
     expect(failed.exitCode).toBe(1);
@@ -408,27 +408,27 @@ describe("framework upgrade planning and apply", () => {
     p.iteration.changes = [];
     const calls: string[] = [];
     const sandbox = sandboxFixture({
-      setNetworkPolicy: async () => {},
       run: async ({ command }: { command: string }) => {
         calls.push(command);
-        return { exitCode: 0, stdout: "{}", stderr: "" };
+        return { exitCode: 0, stderr: "", stdout: "{}" };
       },
+      setNetworkPolicy: async () => {},
     });
     await sandboxApplyCommandExecutor()({
-      sandbox,
       appId: "example",
       applyRoot: "/workspace/repository",
       proposal: p,
+      sandbox,
     });
     expect(calls).toContain(workspaceBinInstallCommand("/workspace/repository", false));
     expect(calls.some((c) => c.includes("upgrade-framework"))).toBe(false);
   });
   it("exports approved shared framework files for both ordinary and baseline app review", () => {
     const changes = [
-      { path: "apps/example/app/page.tsx", kind: "modified" as const },
-      { path: "package.json", kind: "modified" as const },
-      { path: "bun.lock", kind: "modified" as const },
-      { path: "apps/other/app/page.tsx", kind: "modified" as const },
+      { kind: "modified" as const, path: "apps/example/app/page.tsx" },
+      { kind: "modified" as const, path: "package.json" },
+      { kind: "modified" as const, path: "bun.lock" },
+      { kind: "modified" as const, path: "apps/other/app/page.tsx" },
     ];
     const reviewed = reviewableChanges(changes, "example", true, true);
     expect(reviewed.map(({ path }) => path)).toEqual([
@@ -449,13 +449,13 @@ describe("framework upgrade planning and apply", () => {
   it("binds shared dependency edits to upgrade review while ordinary edits stay app-scoped", () => {
     const before = {
       files: [
-        { path: "apps/example/app/page.tsx", mode: "644", digest: "a".repeat(64) },
-        { path: "package.json", mode: "644", digest: "b".repeat(64) },
+        { digest: "a".repeat(64), mode: "644", path: "apps/example/app/page.tsx" },
+        { digest: "b".repeat(64), mode: "644", path: "package.json" },
       ],
       treeDigest: "before",
     };
     const after = {
-      files: [before.files[0], { path: "package.json", mode: "644", digest: "c".repeat(64) }],
+      files: [before.files[0], { digest: "c".repeat(64), mode: "644", path: "package.json" }],
       treeDigest: "after",
     };
     expect(reviewedOverlayTreeDigest(before, "example", true)).toBe(
@@ -496,14 +496,14 @@ it("plans an unchanged imported application under its own fresh Build proposal",
     ...base,
     applicationSourceImport: {
       appId: "example",
-      manifestDigest: "c".repeat(64),
       importedSessionId: "new-authenticated-session",
+      manifestDigest: "c".repeat(64),
       registration: {
-        oldDigest: "d".repeat(64),
-        newDigest: "e".repeat(64),
-        proposedBytes: "{}",
-        projectName: "example",
         assetRoute: "/example/:path*",
+        newDigest: "e".repeat(64),
+        oldDigest: "d".repeat(64),
+        projectName: "example",
+        proposedBytes: "{}",
       },
     },
   });

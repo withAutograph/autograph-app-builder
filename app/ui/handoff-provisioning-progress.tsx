@@ -8,12 +8,6 @@ import type { HandoffProvisioningContinuationState } from "@/app/actions/builder
 import { builderProvisionProjectionSchema } from "@/lib/provisioning/contracts-schema";
 import type { BuilderProvisionProjection } from "@/lib/provisioning/contracts-schema";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function readProjection(value: unknown): BuilderProvisionProjection | undefined {
-  const parsed = builderProvisionProjectionSchema.safeParse(value);
-  return parsed.success && Number.isSafeInteger(parsed.data.revision) ? parsed.data : undefined;
-}
-
 /**
  * A deliberately narrow browser leaf: the server-rendered handoff owns the
  * durable state while this component consumes its revisioned SSE projection
@@ -28,7 +22,9 @@ export function HandoffProvisioningProgress({
   initial: BuilderProvisionProjection;
 }) {
   const router = useRouter();
-  const [snapshot, setSnapshot] = useState(initial);
+  const [streamProjection, setStreamProjection] = useState<BuilderProvisionProjection>();
+  const snapshot =
+    streamProjection && streamProjection.revision > initial.revision ? streamProjection : initial;
   const [connection, setConnection] = useState<"connecting" | "connected" | "reconnecting">(
     "connecting",
   );
@@ -49,16 +45,11 @@ export function HandoffProvisioningProgress({
         return { status: "error" };
       }
     },
-    undefined as undefined,
   );
 
   useEffect(() => {
-    if (initial.revision <= latestRevision.current) {
-      return;
-    }
-    latestRevision.current = initial.revision;
-    setSnapshot(initial);
-  }, [initial]);
+    latestRevision.current = Math.max(latestRevision.current, initial.revision);
+  }, [initial.revision]);
 
   useEffect(() => {
     if (snapshot.provisioning.status !== "settled" || settledRefresh.current) {
@@ -73,64 +64,68 @@ export function HandoffProvisioningProgress({
       return;
     }
     dispatched.current = true;
-    startTransition(() => dispatch({ handoffId }));
+    startTransition(() => {
+      dispatch({ handoffId });
+    });
   }, [dispatch, handoffId, snapshot.provisioning.status]);
 
   useEffect(() => {
-    if (typeof EventSource === "undefined" || snapshot.provisioning.status === "settled") {
-      return;
-    }
     let closed = false;
-    let source: EventSource | undefined;
-    const connect = () => {
-      if (closed || latestRevision.current <= 0) {
+    if (typeof EventSource === "undefined" || snapshot.provisioning.status === "settled") {
+      return () => {
+        closed = true;
+      };
+    }
+    const source = new EventSource(
+      `/api/builder/provision/stream?requestId=${encodeURIComponent(
+        snapshot.provisioning.requestId,
+      )}&afterRevision=${latestRevision.current}`,
+    );
+    const receive = (event: MessageEvent<string>) => {
+      if (closed) {
         return;
       }
-      source = new EventSource(
-        `/api/builder/provision/stream?requestId=${encodeURIComponent(
-          snapshot.provisioning.requestId,
-        )}&afterRevision=${latestRevision.current}`,
-      );
-      const receive = (event: MessageEvent<string>) => {
-        if (closed) {
+      try {
+        const parsed = builderProvisionProjectionSchema.safeParse(JSON.parse(event.data));
+        const next =
+          parsed.success && Number.isSafeInteger(parsed.data.revision) ? parsed.data : undefined;
+        if (
+          !next ||
+          next.provisioning.requestId !== snapshot.provisioning.requestId ||
+          next.revision <= latestRevision.current
+        ) {
           return;
         }
-        try {
-          const next = readProjection(JSON.parse(event.data));
-          if (
-            !next ||
-            next.provisioning.requestId !== snapshot.provisioning.requestId ||
-            next.revision <= latestRevision.current
-          ) {
-            return;
-          }
-          latestRevision.current = next.revision;
-          setSnapshot(next);
-        } catch {
-          // Malformed stream data never replaces the last authenticated state.
-        }
-      };
-      source.addEventListener("snapshot", receive);
-      source.addEventListener("end", receive);
-      source.addEventListener("open", () => {
-        if (!closed) {
-          setConnection("connected");
-        }
-      });
-      source.addEventListener("error", () => {
-        if (closed) {
-          return;
-        }
+        latestRevision.current = next.revision;
+        setStreamProjection(next);
+      } catch {
+        // Malformed stream data never replaces the last authenticated state.
+      }
+    };
+    const opened = () => {
+      if (!closed) {
+        setConnection("connected");
+      }
+    };
+    const errored = () => {
+      if (!closed) {
         setConnection("reconnecting");
         // Keep this EventSource alive: its native reconnect sends the most
         // recent SSE event id as Last-Event-ID. Replacing it here would lose
         // that cursor and turn a transient disconnect into a full replay.
-      });
+      }
     };
-    connect();
+    source.addEventListener("snapshot", receive);
+    source.addEventListener("end", receive);
+    source.addEventListener("open", opened);
+    source.addEventListener("error", errored);
     return () => {
       closed = true;
-      source?.close();
+      source.removeEventListener("snapshot", receive);
+      source.removeEventListener("end", receive);
+      source.removeEventListener("open", opened);
+      source.removeEventListener("error", errored);
+      source.close();
     };
   }, [snapshot.provisioning.requestId, snapshot.provisioning.status, streamAttempt]);
 
@@ -145,7 +140,9 @@ export function HandoffProvisioningProgress({
     if (pending) {
       return;
     }
-    startTransition(() => dispatch({ handoffId }));
+    startTransition(() => {
+      dispatch({ handoffId });
+    });
   };
   return (
     <section aria-label="Provisioning progress">

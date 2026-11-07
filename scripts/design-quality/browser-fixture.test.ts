@@ -4,11 +4,13 @@ import { capturePreview } from "./browser";
 
 const browser = vi.hoisted(() => {
   const page = {
-    evaluate: vi.fn(() => Promise.reject(new Error("measurement reached"))),
-    goto: vi.fn(() => Promise.resolve({ ok: () => true })),
+    evaluate: vi.fn(async () => {
+      throw new Error("measurement reached");
+    }),
+    goto: vi.fn(async () => ({ ok: () => true })),
     screenshot: vi.fn(),
   };
-  const close = vi.fn(() => Promise.resolve());
+  const close = vi.fn(async () => {});
   return { close, page };
 });
 vi.mock("playwright", () => ({
@@ -46,7 +48,9 @@ it("does not measure or capture an anonymous fallback after fixture failure", as
   await expect(
     capturePreview({
       output: "/tmp/fixture-test",
-      preparePage: () => Promise.reject(new Error("auth unavailable")),
+      preparePage: async () => {
+        throw new Error("auth unavailable");
+      },
       scenarios: [],
       tokens: {},
       url: "https://localhost:3001",

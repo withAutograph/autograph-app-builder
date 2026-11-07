@@ -18,91 +18,91 @@ import { publicApprovalDescription } from "../agent/approval-receipt";
 
 const fixture = tenantExportWireFixtureSchema.parse(wire);
 const authority = {
-  issuer: "https://builder.test/api/auth",
   audience: "https://builder.test/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.test/api/auth",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 const plan = hostedTenantExportPlanSchema.parse({
-  version: 1,
-  kind: "tenant-export-plan",
-  exportId: fixture.worker.exportId,
-  planRef: `_protected-operator/export-plans/${fixture.worker.exportId}`,
   authority,
-  target: {
-    sessionId: "session",
-    appId: fixture.worker.scope.appId,
-    projectId: "project",
-    branch: "preview",
+  destination: {
+    artifactPrefix: `_protected-operator/artifacts/tenant-export/${fixture.worker.exportId}`,
+    kind: "owner-private-builder-artifact",
   },
+  exportId: fixture.worker.exportId,
+  format: fixture.worker.format,
+  kind: "tenant-export-plan",
   originalSetup: {
-    operationRef: "40000000-0000-4000-8000-000000000004",
-    planDigest: "a".repeat(64),
     approvalId: "setup-approval",
     approvedByCallId: "setup-call",
+    operationRef: "40000000-0000-4000-8000-000000000004",
+    planDigest: "a".repeat(64),
   },
-  scope: fixture.worker.scope,
-  resource: fixture.worker.resource,
+  planRef: `_protected-operator/export-plans/${fixture.worker.exportId}`,
   release: fixture.worker.release,
+  resource: fixture.worker.resource,
+  scope: fixture.worker.scope,
   selection: fixture.worker.selection,
-  format: fixture.worker.format,
-  destination: {
-    kind: "owner-private-builder-artifact",
-    artifactPrefix: `_protected-operator/artifacts/tenant-export/${fixture.worker.exportId}`,
+  target: {
+    appId: fixture.worker.scope.appId,
+    branch: "preview",
+    projectId: "project",
+    sessionId: "session",
   },
+  version: 1,
 });
 const request = {
   action: "export" as const,
-  planRef: plan.planRef,
-  planDigest: tenantExportPlanDigest(plan),
   idempotencyKey: "original-request",
+  planDigest: tenantExportPlanDigest(plan),
+  planRef: plan.planRef,
 };
 const input = { ...request, plan };
 const requested = (
   options: { toolName?: string; callId?: string; toolInput?: typeof input } = {},
 ): MessageStreamEvent => ({
-  type: "input.requested",
-  meta: { at: "2026-10-20T00:00:00Z", id: "request-event" },
   data: {
+    requests: [
+      {
+        action: {
+          callId: options.callId ?? "export-call",
+          input: options.toolInput ?? input,
+          kind: "tool-call",
+          toolName: options.toolName ?? "export-app-hosted-data",
+        },
+        kind: "tool-approval",
+        prompt: "Approve this export",
+        requestId: "human-request",
+      },
+    ],
     sequence: 1,
     stepIndex: 0,
     turnId: "turn",
-    requests: [
-      {
-        kind: "tool-approval",
-        requestId: "human-request",
-        prompt: "Approve this export",
-        action: {
-          kind: "tool-call",
-          toolName: options.toolName ?? "export-app-hosted-data",
-          callId: options.callId ?? "export-call",
-          input: options.toolInput ?? input,
-        },
-      },
-    ],
   },
+  meta: { at: "2026-10-20T00:00:00Z", id: "request-event" },
+  type: "input.requested",
 });
 const settled = (
   owner = "owner",
   outcome: "approved" | "cancelled" = "approved",
 ): MessageStreamEvent => ({
-  type: "approval.settled",
-  meta: { at: "2026-10-20T00:00:01Z", id: "settled-event" },
   data: {
+    outcome,
+    requestId: "human-request",
+    responderPrincipalId: owner,
     sequence: 2,
     stepIndex: 0,
     turnId: "turn",
-    requestId: "human-request",
-    responderPrincipalId: owner,
-    outcome,
   },
+  meta: { at: "2026-10-20T00:00:01Z", id: "settled-event" },
+  type: "approval.settled",
 });
 const capture = () =>
   createPrivateTenantExportApprovalCapture({
-    plan,
-    request,
-    principal: { ...authority, scopes: ["autograph:send"] },
     callId: "export-call",
+    plan,
+    principal: { ...authority, scopes: ["autograph:send"] },
+    request,
   });
 describe("native private tenant export approval", () => {
   it("requires the exact authored request plus authenticated human settlement", () => {
@@ -134,9 +134,9 @@ describe("native private tenant export approval", () => {
     }
     reader.observe(
       requested({
-        toolName: failure === "wrong tool" ? "prepare-app-hosted-runtime" : undefined,
         callId: failure === "wrong call" ? "other-call" : undefined,
         toolInput: changed,
+        toolName: failure === "wrong tool" ? "prepare-app-hosted-runtime" : undefined,
       }),
     );
     reader.observe(
@@ -162,14 +162,14 @@ describe("native private tenant export approval", () => {
 });
 
 describe("resumable export approval capture", () => {
-  const options = { plan, request, principal: { ...authority, scopes: ["autograph:send"] } };
+  const options = { plan, principal: { ...authority, scopes: ["autograph:send"] }, request };
   it("retains a pending exact-intent pair across readers and filters the requested call", () => {
     const prefix = createPrivateTenantExportApprovalCapture(options);
     prefix.observe(requested());
     const resumed = createPrivateTenantExportApprovalCapture({
       ...options,
-      state: prefix.snapshot(),
       callId: "export-call",
+      state: prefix.snapshot(),
     });
     resumed.observe(settled());
     expect(resumed.read()).toMatchObject({
@@ -179,8 +179,8 @@ describe("resumable export approval capture", () => {
     expect(
       createPrivateTenantExportApprovalCapture({
         ...options,
-        state: resumed.snapshot(),
         callId: "another-call",
+        state: resumed.snapshot(),
       }).read(),
     ).toBeNull();
   });
@@ -224,17 +224,17 @@ describe("resumable export approval capture", () => {
 
 describe("approval history binding and cancellation", () => {
   const owner = operatorOwnerContextSchema.parse({
-    kind: "direct",
+    adapterGeneration: 1,
+    adapterSessionId: "native-original",
     authority,
+    kind: "direct",
     principal: { ...authority, scopes: ["autograph:send"] },
     sessionId: plan.target.sessionId,
-    adapterSessionId: "native-original",
-    adapterGeneration: 1,
   });
-  const options = { plan, request, principal: owner.principal };
+  const options = { plan, principal: owner.principal, request };
   const binding = {
-    adapterSessionId: owner.adapterSessionId,
     adapterGeneration: owner.adapterGeneration,
+    adapterSessionId: owner.adapterSessionId,
   };
   it.each([false, true])(
     "restarts a replacement adapter without pairing old pending requests, preserving proved settlement=%s",
@@ -245,20 +245,22 @@ describe("approval history binding and cancellation", () => {
         prefix.observe(settled());
         prefix.proveComplete();
       }
-      const save = vi.fn(() => Promise.resolve());
-      const history = vi.fn((startIndex: number, onEvent: (event: MessageStreamEvent) => void) => {
-        expect(startIndex).toBe(0);
-        onEvent(settled());
-        return Promise.resolve({ nextNativeIndex: 1, nativeTailIndex: 0, complete: true });
-      });
-      const receipt = await readPrivateOperatorApproval({
-        owner: { ...owner, adapterSessionId: "native-replacement", adapterGeneration: 2 },
-        observation: {
-          state: { ...binding, nextNativeIndex: 500, capture: prefix.snapshot() },
-          save,
+      const save = vi.fn(async () => {});
+      const history = vi.fn(
+        async (startIndex: number, onEvent: (event: MessageStreamEvent) => void) => {
+          expect(startIndex).toBe(0);
+          onEvent(settled());
+          return { complete: true, nativeTailIndex: 0, nextNativeIndex: 1 };
         },
+      );
+      const receipt = await readPrivateOperatorApproval({
+        assertOwner: async () => {},
         capture: (state) => createPrivateTenantExportApprovalCapture({ ...options, state }),
-        assertOwner: () => Promise.resolve(),
+        observation: {
+          save,
+          state: { ...binding, capture: prefix.snapshot(), nextNativeIndex: 500 },
+        },
+        owner: { ...owner, adapterGeneration: 2, adapterSessionId: "native-replacement" },
         readHistory: history,
       });
       expect(receipt?.approvalId ?? null).toBe(proved ? "human-request" : null);
@@ -268,30 +270,30 @@ describe("approval history binding and cancellation", () => {
   it("does not promote a partial approval when replacement hides the unread old cancellation", async () => {
     const oldTail = [requested(), settled(), settled("owner", "cancelled")];
     let checkpoint: PrivateOperatorApprovalObservation | undefined;
-    const save = (value: PrivateOperatorApprovalObservation) => {
+    const save = async (value: PrivateOperatorApprovalObservation) => {
       checkpoint = structuredClone(value);
-      return Promise.resolve();
+      return;
     };
     const shared = {
-      owner,
+      assertOwner: async () => {},
       capture: (state?: Parameters<typeof createPrivateTenantExportApprovalCapture>[0]["state"]) =>
         createPrivateTenantExportApprovalCapture({ ...options, state }),
-      assertOwner: () => Promise.resolve(),
+      owner,
     };
     await expect(
       readPrivateOperatorApproval({
         ...shared,
         observation: { save },
-        readHistory: (start, onEvent) => {
+        readHistory: async (start, onEvent) => {
           expect(start).toBe(0);
           for (const event of oldTail.slice(0, 2)) {
             onEvent(event);
           }
-          return Promise.resolve({
-            nextNativeIndex: 2,
-            nativeTailIndex: oldTail.length - 1,
+          return {
             complete: false,
-          });
+            nativeTailIndex: oldTail.length - 1,
+            nextNativeIndex: 2,
+          };
         },
       }),
     ).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
@@ -301,11 +303,11 @@ describe("approval history binding and cancellation", () => {
     });
     const result = await readPrivateOperatorApproval({
       ...shared,
-      owner: { ...owner, adapterSessionId: "replacement", adapterGeneration: 2 },
-      observation: { state: checkpoint, save },
-      readHistory: (start) => {
+      observation: { save, state: checkpoint },
+      owner: { ...owner, adapterGeneration: 2, adapterSessionId: "replacement" },
+      readHistory: async (start) => {
         expect(start).toBe(0);
-        return Promise.resolve({ nextNativeIndex: 0, nativeTailIndex: -1, complete: true });
+        return { complete: true, nativeTailIndex: -1, nextNativeIndex: 0 };
       },
     });
     expect(result).toBeNull();
@@ -313,23 +315,23 @@ describe("approval history binding and cancellation", () => {
   });
   it("retains a prior complete cancellation through a later partial read and replacement", async () => {
     let checkpoint: PrivateOperatorApprovalObservation | undefined;
-    const save = (value: PrivateOperatorApprovalObservation) => {
+    const save = async (value: PrivateOperatorApprovalObservation) => {
       checkpoint = structuredClone(value);
-      return Promise.resolve();
+      return;
     };
     const shared = {
-      owner,
+      assertOwner: async () => {},
       capture: (state?: Parameters<typeof createPrivateTenantExportApprovalCapture>[0]["state"]) =>
         createPrivateTenantExportApprovalCapture({ ...options, state }),
-      assertOwner: () => Promise.resolve(),
+      owner,
     };
     await readPrivateOperatorApproval({
       ...shared,
       observation: { save },
-      readHistory: (_start, onEvent) => {
+      readHistory: async (_start, onEvent) => {
         onEvent(requested());
         onEvent(settled("owner", "cancelled"));
-        return Promise.resolve({ nextNativeIndex: 2, nativeTailIndex: 1, complete: true });
+        return { complete: true, nativeTailIndex: 1, nextNativeIndex: 2 };
       },
     });
     expect(checkpoint?.capture.entries[0]?.completedCancelled).toBe(true);
@@ -346,54 +348,53 @@ describe("approval history binding and cancellation", () => {
     await expect(
       readPrivateOperatorApproval({
         ...shared,
-        observation: { state: checkpoint, save },
-        readHistory: (start, onEvent) => {
+        observation: { save, state: checkpoint },
+        readHistory: async (start, onEvent) => {
           expect(start).toBe(2);
           onEvent(pending);
           onEvent(approved);
-          return Promise.resolve({ nextNativeIndex: 4, nativeTailIndex: 4, complete: false });
+          return { complete: false, nativeTailIndex: 4, nextNativeIndex: 4 };
         },
       }),
     ).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
     await expect(
       readPrivateOperatorApproval({
         ...shared,
-        observation: { state: checkpoint, save },
-        readHistory: (start, onEvent) => {
+        observation: { save, state: checkpoint },
+        readHistory: async (start, onEvent) => {
           expect(start).toBe(4);
           onEvent(requested({ toolName: "unrelated-tool" }));
-          return Promise.resolve({ nextNativeIndex: 5, nativeTailIndex: 5, complete: false });
+          return { complete: false, nativeTailIndex: 5, nextNativeIndex: 5 };
         },
       }),
     ).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
     const result = await readPrivateOperatorApproval({
       ...shared,
-      owner: { ...owner, adapterSessionId: "replacement", adapterGeneration: 2 },
-      observation: { state: checkpoint, save },
-      readHistory: (start) => {
+      observation: { save, state: checkpoint },
+      owner: { ...owner, adapterGeneration: 2, adapterSessionId: "replacement" },
+      readHistory: async (start) => {
         expect(start).toBe(0);
-        return Promise.resolve({ nextNativeIndex: 0, nativeTailIndex: -1, complete: true });
+        return { complete: true, nativeTailIndex: -1, nextNativeIndex: 0 };
       },
     });
     expect(result).toBeNull();
     expect(checkpoint?.capture.entries).toHaveLength(1);
     expect(checkpoint?.capture.entries[0]).toMatchObject({
-      requestId: "human-request",
       cancelled: true,
       completedCancelled: true,
+      requestId: "human-request",
     });
   });
   it.each([false, true])(
     "keeps partial cancellation sticky after a prior completed approval and replacement, other request=%s",
     async (otherRequest) => {
       let checkpoint: PrivateOperatorApprovalObservation | undefined;
-      const save = (value: PrivateOperatorApprovalObservation) => {
+      const save = async (value: PrivateOperatorApprovalObservation) => {
         checkpoint = structuredClone(value);
-        return Promise.resolve();
+        return;
       };
       const shared = {
-        owner,
-        assertOwner: () => Promise.resolve(),
+        assertOwner: async () => {},
         capture: (
           state?: Parameters<typeof createPrivateTenantExportApprovalCapture>[0]["state"],
         ) =>
@@ -402,16 +403,17 @@ describe("approval history binding and cancellation", () => {
             callId: "waiting-for-other-call",
             state,
           }),
+        owner,
       };
       // A complete historical approval is retained, but does not authorize the different requested call.
       expect(
         await readPrivateOperatorApproval({
           ...shared,
           observation: { save },
-          readHistory: (_start, onEvent) => {
+          readHistory: async (_start, onEvent) => {
             onEvent(requested());
             onEvent(settled());
-            return Promise.resolve({ nextNativeIndex: 2, nativeTailIndex: 1, complete: true });
+            return { complete: true, nativeTailIndex: 1, nextNativeIndex: 2 };
           },
         }),
       ).toBeNull();
@@ -431,34 +433,34 @@ describe("approval history binding and cancellation", () => {
       await expect(
         readPrivateOperatorApproval({
           ...shared,
-          observation: { state: checkpoint, save },
-          readHistory: (start, onEvent) => {
+          observation: { save, state: checkpoint },
+          readHistory: async (start, onEvent) => {
             expect(start).toBe(2);
             if (otherRequest) {
               onEvent(pending);
             }
             onEvent(cancelled);
-            return Promise.resolve({
-              nextNativeIndex: otherRequest ? 4 : 3,
-              nativeTailIndex: 4,
+            return {
               complete: false,
-            });
+              nativeTailIndex: 4,
+              nextNativeIndex: otherRequest ? 4 : 3,
+            };
           },
         }),
       ).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
       const receipt = await readPrivateOperatorApproval({
         ...shared,
-        owner: { ...owner, adapterSessionId: "replacement", adapterGeneration: 2 },
-        observation: { state: checkpoint, save },
         capture: (state) =>
           createPrivateTenantExportApprovalCapture({
             ...options,
             ...(otherRequest ? {} : { callId: "export-call" }),
             state,
           }),
-        readHistory: (start) => {
+        observation: { save, state: checkpoint },
+        owner: { ...owner, adapterGeneration: 2, adapterSessionId: "replacement" },
+        readHistory: async (start) => {
           expect(start).toBe(0);
-          return Promise.resolve({ nextNativeIndex: 0, nativeTailIndex: -1, complete: true });
+          return { complete: true, nativeTailIndex: -1, nextNativeIndex: 0 };
         },
       });
       expect(receipt).toBeNull();
@@ -466,13 +468,13 @@ describe("approval history binding and cancellation", () => {
       if (otherRequest) {
         const unaffected = await readPrivateOperatorApproval({
           ...shared,
-          owner: { ...owner, adapterSessionId: "replacement", adapterGeneration: 2 },
-          observation: { state: checkpoint, save },
           capture: (state) =>
             createPrivateTenantExportApprovalCapture({ ...options, callId: "export-call", state }),
-          readHistory: (start) => {
+          observation: { save, state: checkpoint },
+          owner: { ...owner, adapterGeneration: 2, adapterSessionId: "replacement" },
+          readHistory: async (start) => {
             expect(start).toBe(0);
-            return Promise.resolve({ nextNativeIndex: 0, nativeTailIndex: -1, complete: true });
+            return { complete: true, nativeTailIndex: -1, nextNativeIndex: 0 };
           },
         });
         expect(unaffected?.approvalId).toBe("human-request");
@@ -481,35 +483,35 @@ describe("approval history binding and cancellation", () => {
   );
   it("does not grant an approval from a partial tail before a later cancellation", async () => {
     let checkpoint: PrivateOperatorApprovalObservation | undefined;
-    const save = (value: PrivateOperatorApprovalObservation) => {
+    const save = async (value: PrivateOperatorApprovalObservation) => {
       checkpoint = structuredClone(value);
-      return Promise.resolve();
+      return;
     };
     const shared = {
-      owner,
+      assertOwner: async () => {},
       capture: (state?: Parameters<typeof createPrivateTenantExportApprovalCapture>[0]["state"]) =>
         createPrivateTenantExportApprovalCapture({ ...options, state }),
-      assertOwner: () => Promise.resolve(),
+      owner,
     };
     await expect(
       readPrivateOperatorApproval({
         ...shared,
         observation: { save },
-        readHistory: (_start, onEvent) => {
+        readHistory: async (_start, onEvent) => {
           onEvent(requested());
           onEvent(settled());
-          return Promise.resolve({ nextNativeIndex: 2, nativeTailIndex: 2, complete: false });
+          return { complete: false, nativeTailIndex: 2, nextNativeIndex: 2 };
         },
       }),
     ).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
     expect(checkpoint?.nextNativeIndex).toBe(2);
     const result = await readPrivateOperatorApproval({
       ...shared,
-      observation: { state: checkpoint, save },
-      readHistory: (start, onEvent) => {
+      observation: { save, state: checkpoint },
+      readHistory: async (start, onEvent) => {
         expect(start).toBe(2);
         onEvent(settled("owner", "cancelled"));
-        return Promise.resolve({ nextNativeIndex: 3, nativeTailIndex: 2, complete: true });
+        return { complete: true, nativeTailIndex: 2, nextNativeIndex: 3 };
       },
     });
     expect(result).toBeNull();
@@ -520,29 +522,31 @@ describe("approval history binding and cancellation", () => {
 it("rechecks a quiet native tail without rewriting unchanged approval progress", async () => {
   const principal = { ...authority, scopes: ["autograph:send"] };
   const owner = operatorOwnerContextSchema.parse({
-    kind: "direct",
+    adapterGeneration: 1,
+    adapterSessionId: "native",
     authority,
+    kind: "direct",
     principal,
     sessionId: plan.target.sessionId,
-    adapterSessionId: "native",
-    adapterGeneration: 1,
   });
   let checkpoint: PrivateOperatorApprovalObservation | undefined;
-  const save = vi.fn((value: PrivateOperatorApprovalObservation) => {
+  const save = vi.fn(async (value: PrivateOperatorApprovalObservation) => {
     checkpoint = structuredClone(value);
-    return Promise.resolve();
+    return;
   });
-  const assertOwner = vi.fn(() => Promise.resolve());
-  const readHistory = vi.fn(() =>
-    Promise.resolve({ nextNativeIndex: 0, nativeTailIndex: -1, complete: true }),
-  );
-  const read = () =>
-    readPrivateOperatorApproval({
-      owner,
-      observation: { state: checkpoint, save },
-      capture: (state) =>
-        createPrivateTenantExportApprovalCapture({ plan, request, principal, state }),
+  const assertOwner = vi.fn(async () => {});
+  const readHistory = vi.fn(async () => ({
+    complete: true,
+    nativeTailIndex: -1,
+    nextNativeIndex: 0,
+  }));
+  const read = async () =>
+    await readPrivateOperatorApproval({
       assertOwner,
+      capture: (state) =>
+        createPrivateTenantExportApprovalCapture({ plan, principal, request, state }),
+      observation: { save, state: checkpoint },
+      owner,
       readHistory,
     });
   expect(await read()).toBeNull();

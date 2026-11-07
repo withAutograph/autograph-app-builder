@@ -218,7 +218,7 @@ export const createProvisioningEventHandlers = (
             claim.adapterSessionId,
             targetRequestId === undefined ? "unknown" : "accepted",
           ),
-          { status: 200, headers: { "cache-control": "no-store" } },
+          { headers: { "cache-control": "no-store" }, status: 200 },
         );
       }
       if (previousReceipt === "unknown") {
@@ -226,19 +226,19 @@ export const createProvisioningEventHandlers = (
         if (accepted) {
           await dependencies.acceptDelivery(claim, dispatchId);
           return Response.json(receipt(dispatchId, claim.adapterSessionId, "accepted"), {
-            status: 200,
             headers: { "cache-control": "no-store" },
+            status: 200,
           });
         }
         return Response.json(receipt(dispatchId, claim.adapterSessionId, "unknown"), {
-          status: 200,
           headers: { "cache-control": "no-store" },
+          status: 200,
         });
       }
     } catch {
       return Response.json(receipt(dispatchId, claim.adapterSessionId, "unknown"), {
-        status: 200,
         headers: { "cache-control": "no-store" },
+        status: 200,
       });
     }
     return undefined;
@@ -271,13 +271,13 @@ export const createProvisioningEventHandlers = (
         }
         return Response.json(
           receipt(dispatchId, claim.adapterSessionId, applied ? "accepted" : "unknown"),
-          { status: 200, headers: { "cache-control": "no-store" } },
+          { headers: { "cache-control": "no-store" }, status: 200 },
         );
       }
     } catch {
       return Response.json(receipt(dispatchId, claim.adapterSessionId, "unknown"), {
-        status: 200,
         headers: { "cache-control": "no-store" },
+        status: 200,
       });
     }
     return undefined;
@@ -362,7 +362,7 @@ export const createProvisioningEventHandlers = (
           await dependencies.acceptDelivery(authorized.claim, input.dispatchId);
           return Response.json(
             receipt(input.dispatchId, authorized.claim.adapterSessionId, "accepted"),
-            { status: 200, headers: { "cache-control": "no-store" } },
+            { headers: { "cache-control": "no-store" }, status: 200 },
           );
         }
         return Response.json(
@@ -371,13 +371,13 @@ export const createProvisioningEventHandlers = (
             authorized.claim.adapterSessionId,
             alreadyClaimed ? "unknown" : notSubmitted,
           ),
-          { status: 200, headers: { "cache-control": "no-store" } },
+          { headers: { "cache-control": "no-store" }, status: 200 },
         );
       }
     } catch {
       return Response.json(
         receipt(input.dispatchId, authorized.claim.adapterSessionId, "unknown"),
-        { status: 200, headers: { "cache-control": "no-store" } },
+        { headers: { "cache-control": "no-store" }, status: 200 },
       );
     }
 
@@ -407,7 +407,7 @@ export const createProvisioningEventHandlers = (
           authorized.claim.adapterSessionId,
           applied ? "accepted" : "unknown",
         ),
-        { status: 200, headers: { "cache-control": "no-store" } },
+        { headers: { "cache-control": "no-store" }, status: 200 },
       );
     } catch {
       // Session.respond has no public idempotency key. Once the receiver claim is
@@ -415,7 +415,7 @@ export const createProvisioningEventHandlers = (
       // a second logical event.
       return Response.json(
         receipt(input.dispatchId, authorized.claim.adapterSessionId, "unknown"),
-        { status: 200, headers: { "cache-control": "no-store" } },
+        { headers: { "cache-control": "no-store" }, status: 200 },
       );
     }
   };
@@ -442,7 +442,7 @@ export const createProvisioningEventHandlers = (
             authorized.claim.adapterSessionId,
             targetRequestId === undefined ? "unknown" : "accepted",
           ),
-          { status: 200, headers: { "cache-control": "no-store" } },
+          { headers: { "cache-control": "no-store" }, status: 200 },
         );
       }
       const accepted = await wasApplied(authorized.claim, input.dispatchId, attachSession);
@@ -450,13 +450,13 @@ export const createProvisioningEventHandlers = (
         await dependencies.acceptDelivery(authorized.claim, input.dispatchId);
         return Response.json(
           receipt(input.dispatchId, authorized.claim.adapterSessionId, "accepted"),
-          { status: 200, headers: { "cache-control": "no-store" } },
+          { headers: { "cache-control": "no-store" }, status: 200 },
         );
       }
       if (persistedReceipt === "unknown") {
         return Response.json(
           receipt(input.dispatchId, authorized.claim.adapterSessionId, "unknown"),
-          { status: 200, headers: { "cache-control": "no-store" } },
+          { headers: { "cache-control": "no-store" }, status: 200 },
         );
       }
       const claimed = await dependencies.readDeliveryClaim(authorized.claim, input.dispatchId);
@@ -466,7 +466,7 @@ export const createProvisioningEventHandlers = (
           authorized.claim.adapterSessionId,
           claimed ? "unknown" : notSubmitted,
         ),
-        { status: 200, headers: { "cache-control": "no-store" } },
+        { headers: { "cache-control": "no-store" }, status: 200 },
       );
     } catch {
       return Response.json({ error: "unauthorized" }, { status: 401 });
@@ -483,12 +483,13 @@ export const createProvisioningEventsChannel = (
   // Eve's Vercel route transform preserves /eve/v1, so registrations include that prefix.
   return defineChannel({
     routes: [
-      POST("/eve/v1/internal/hosted-operator/realm-continuation", (request, { attachSession }) =>
-        handlers.dispatch(request, attachSession),
+      POST(
+        "/eve/v1/internal/hosted-operator/realm-continuation",
+        async (request, { attachSession }) => await handlers.dispatch(request, attachSession),
       ),
       POST(
         "/eve/v1/internal/hosted-operator/realm-continuation/reconcile",
-        (request, { attachSession }) => handlers.reconcile(request, attachSession),
+        async (request, { attachSession }) => await handlers.reconcile(request, attachSession),
       ),
     ],
   });
@@ -633,17 +634,13 @@ export const wasRealmContinuationResponseApplied: ProvisioningEventRouteDependen
 
 /** Server-owned adapter: verifies caller OIDC before opening Builder control-plane state. */
 const productionDependencies = (): ProvisioningEventRouteDependencies => ({
-  async readIdentityWait(claim) {
+  async acceptDelivery(claim, dispatchId) {
     const { controlPlane } = await openHostedOperatorCompositionResources(process.env);
     try {
-      return await controlPlane.readRealmIdentityWaitDelivery(claim);
+      await controlPlane.acceptRealmContinuationDelivery(claim, dispatchId);
     } finally {
       await controlPlane.close();
     }
-  },
-  async resumeIdentityWait(token, event) {
-    const { resumeHook } = await import("workflow/api");
-    await resumeHook(token, event);
   },
   async authorize(request, opaqueAuthority) {
     const configuration = readHostedOperatorSourceConfiguration(process.env);
@@ -679,30 +676,6 @@ const productionDependencies = (): ProvisioningEventRouteDependencies => ({
       await controlPlane.close();
     }
   },
-  async readDeliveryClaim(claim, dispatchId) {
-    const { controlPlane } = await openHostedOperatorCompositionResources(process.env);
-    try {
-      return await controlPlane.readRealmContinuationDeliveryClaim(claim, dispatchId);
-    } finally {
-      await controlPlane.close();
-    }
-  },
-  async readDeliveryStartIndex(claim, dispatchId) {
-    const { controlPlane } = await openHostedOperatorCompositionResources(process.env);
-    try {
-      return await controlPlane.readRealmContinuationDeliveryStartIndex(claim, dispatchId);
-    } finally {
-      await controlPlane.close();
-    }
-  },
-  async readDeliveryTargetRequestId(claim, dispatchId) {
-    const { controlPlane } = await openHostedOperatorCompositionResources(process.env);
-    try {
-      return await controlPlane.readRealmContinuationDeliveryTargetRequestId(claim, dispatchId);
-    } finally {
-      await controlPlane.close();
-    }
-  },
   async findObsoleteAuthWait(claim, pendingRequests) {
     const { controlPlane } = await openHostedOperatorCompositionResources(process.env);
     try {
@@ -725,6 +698,14 @@ const productionDependencies = (): ProvisioningEventRouteDependencies => ({
       await controlPlane.close();
     }
   },
+  async readDeliveryClaim(claim, dispatchId) {
+    const { controlPlane } = await openHostedOperatorCompositionResources(process.env);
+    try {
+      return await controlPlane.readRealmContinuationDeliveryClaim(claim, dispatchId);
+    } finally {
+      await controlPlane.close();
+    }
+  },
   async readDeliveryReceipt(claim, dispatchId) {
     const { controlPlane } = await openHostedOperatorCompositionResources(process.env);
     try {
@@ -733,18 +714,29 @@ const productionDependencies = (): ProvisioningEventRouteDependencies => ({
       await controlPlane.close();
     }
   },
-  async acceptDelivery(claim, dispatchId) {
+  async readDeliveryStartIndex(claim, dispatchId) {
     const { controlPlane } = await openHostedOperatorCompositionResources(process.env);
     try {
-      await controlPlane.acceptRealmContinuationDelivery(claim, dispatchId);
+      return await controlPlane.readRealmContinuationDeliveryStartIndex(claim, dispatchId);
     } finally {
       await controlPlane.close();
     }
   },
-  respond: respondToRealmContinuationWait,
-  wasAccepted: wasRealmContinuationResponseApplied,
-  async streamTailIndex(sessionId, attachSession) {
-    return await attachSession(sessionId).getStreamTailIndex();
+  async readDeliveryTargetRequestId(claim, dispatchId) {
+    const { controlPlane } = await openHostedOperatorCompositionResources(process.env);
+    try {
+      return await controlPlane.readRealmContinuationDeliveryTargetRequestId(claim, dispatchId);
+    } finally {
+      await controlPlane.close();
+    }
+  },
+  async readIdentityWait(claim) {
+    const { controlPlane } = await openHostedOperatorCompositionResources(process.env);
+    try {
+      return await controlPlane.readRealmIdentityWaitDelivery(claim);
+    } finally {
+      await controlPlane.close();
+    }
   },
   async readPendingRequests(claim, attachSession) {
     const { controlPlane } = await openHostedOperatorCompositionResources(process.env);
@@ -759,6 +751,15 @@ const productionDependencies = (): ProvisioningEventRouteDependencies => ({
       baseline,
     );
   },
+  respond: respondToRealmContinuationWait,
+  async resumeIdentityWait(token, event) {
+    const { resumeHook } = await import("workflow/api");
+    await resumeHook(token, event);
+  },
+  async streamTailIndex(sessionId, attachSession) {
+    return await attachSession(sessionId).getStreamTailIndex();
+  },
+  wasAccepted: wasRealmContinuationResponseApplied,
 });
 
 export default createProvisioningEventsChannel(productionDependencies());

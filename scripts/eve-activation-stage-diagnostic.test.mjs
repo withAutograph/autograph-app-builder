@@ -15,26 +15,27 @@ const { WorkflowWorldError, RunExpiredError, HookNotFoundError, RuntimeDecryptio
   await import(`${sdk}compiled/@workflow/errors/index.js`);
 const canary = "NEVER_LOG_private_token_auth_ID_URL_state";
 const prefix = "[eve:terminal-recovery-activation] ";
+const failureEvent = "eve.terminal_recovery_activation_failed";
 const fixture = () => {
   const descriptor = {
-    version: 1,
-    operationId: `${canary}-operation`,
-    sourcePublicSessionId: `${canary}-public`,
-    sourceOwnerRunId: `${canary}-source`,
-    sourceAdapterGeneration: 1,
     logicalSessionId: `${canary}-logical`,
+    operationId: `${canary}-operation`,
     originalAuthoritySessionId: `${canary}-authority`,
     parentCancellationRevision: 0,
+    sourceAdapterGeneration: 1,
+    sourceOwnerRunId: `${canary}-source`,
+    sourcePublicSessionId: `${canary}-public`,
+    version: 1,
   };
   const receipt = {
     ...descriptor,
     ownerRunId: `${canary}-child`,
     provenance: {
+      checkpointVersion: 1,
       kind: "committed-turn-output",
-      sourceStepId: `${canary}-step`,
       sourceEventId: `${canary}-event`,
       sourceSlot: 1,
-      checkpointVersion: 1,
+      sourceStepId: `${canary}-step`,
     },
   };
   const state = { authorizations: 0, resumes: 0 };
@@ -48,19 +49,19 @@ const fixture = () => {
   };
   const deps = {
     async getHook() {
-      return { runId: receipt.ownerRunId, metadata: Promise.resolve({ recoveryBinding: receipt }) };
+      return { metadata: Promise.resolve({ recoveryBinding: receipt }), runId: receipt.ownerRunId };
     },
+    isHookNotFound: HookNotFoundError.is,
     async resumeHook() {
       state.resumes += 1;
     },
-    isHookNotFound: HookNotFoundError.is,
   };
   const input = {
-    auth: { authenticator: canary, principalType: "user", principalId: canary },
+    auth: { authenticator: canary, principalId: canary, principalType: "user" },
     descriptor,
     ports,
   };
-  return { input, deps, receipt, state };
+  return { deps, input, receipt, state };
 };
 const captureFailure = async (f, original, expectedStage) => {
   const logged = [];
@@ -81,7 +82,7 @@ const captureFailure = async (f, original, expectedStage) => {
   assert.equal(line.startsWith(prefix), true);
   assert.equal(line.includes(canary), false);
   const summary = JSON.parse(line.slice(prefix.length));
-  assert.equal(summary.event, "eve.terminal_recovery_activation_failed");
+  assert.equal(summary.event, failureEvent);
   assert.equal(summary.stage, expectedStage);
   assert.equal(
     Object.keys(summary).every((key) =>
@@ -95,19 +96,19 @@ const captureFailure = async (f, original, expectedStage) => {
 test("receipt read errors retain identity and log only closed compiled error facts", async () => {
   const f = fixture();
   const failure = new WorkflowWorldError(canary, {
-    status: 503,
-    code: "TRANSPORT",
-    url: canary,
     cause: new RunExpiredError(canary, canary),
+    code: "TRANSPORT",
+    status: 503,
+    url: canary,
   });
   f.input.ports.readReceipt = async () => {
     throw failure;
   };
   assert.deepEqual(await captureFailure(f, failure, "receipt_read"), {
-    event: "eve.terminal_recovery_activation_failed",
-    stage: "receipt_read",
-    errorClass: "WorkflowWorldError",
     code: "TRANSPORT",
+    errorClass: "WorkflowWorldError",
+    event: failureEvent,
+    stage: "receipt_read",
     status: 503,
   });
   assert.equal(f.state.resumes, 0);
@@ -126,10 +127,10 @@ test("an actual expired hook lookup remains a failure and is never treated as a 
     throw failure;
   };
   assert.deepEqual(await captureFailure(f, failure, "hook_lookup"), {
-    event: "eve.terminal_recovery_activation_failed",
-    stage: "hook_lookup",
-    errorClass: "RunExpiredError",
     code: "run-expired",
+    errorClass: "RunExpiredError",
+    event: failureEvent,
+    stage: "hook_lookup",
     status: 410,
   });
   assert.equal(f.state.resumes, 0);
@@ -138,23 +139,23 @@ test("metadata decryption errors never expose their message or private context",
   const f = fixture();
   const failure = new RuntimeDecryptionError(canary, { context: { private: canary } });
   f.deps.getHook = async () => ({
-    runId: f.receipt.ownerRunId,
     get metadata() {
       return Promise.reject(failure);
     },
+    runId: f.receipt.ownerRunId,
   });
   assert.deepEqual(await captureFailure(f, failure, "hook_metadata"), {
-    event: "eve.terminal_recovery_activation_failed",
-    stage: "hook_metadata",
     errorClass: "RuntimeDecryptionError",
+    event: failureEvent,
+    stage: "hook_metadata",
   });
   assert.equal(f.state.resumes, 0);
 });
 test("a changed hook binding retains the existing receipt comparison rejection", async () => {
   const f = fixture();
   f.deps.getHook = async () => ({
-    runId: `${canary}-other`,
     metadata: Promise.resolve({ recoveryBinding: f.receipt }),
+    runId: `${canary}-other`,
   });
   await captureFailure(f, undefined, "hook_validate");
   assert.equal(f.state.resumes, 0);
@@ -187,19 +188,19 @@ test("unknown names, arbitrary codes, invalid status and deep causes cannot leak
   const f = fixture();
   const hidden = new WorkflowWorldError(canary, { code: "TIMEOUT", status: 504 });
   const failure = {
-    name: canary,
-    code: canary,
-    status: 600,
-    message: canary,
     cause: { cause: { cause: hidden } },
+    code: canary,
+    message: canary,
+    name: canary,
+    status: 600,
   };
   f.input.ports.readReceipt = async () => {
     throw failure;
   };
   assert.deepEqual(await captureFailure(f, failure, "receipt_read"), {
-    event: "eve.terminal_recovery_activation_failed",
-    stage: "receipt_read",
     errorClass: "other",
+    event: failureEvent,
+    stage: "receipt_read",
   });
 });
 test("hostile error getters are not called and cause cycles terminate", async () => {
@@ -268,8 +269,8 @@ test("actual missing hooks and already-consumed resume hooks retain successful n
     });
     assert.equal(f.state.resumes, 0);
     f.deps.getHook = async () => ({
-      runId: f.receipt.ownerRunId,
       metadata: Promise.resolve({ recoveryBinding: f.receipt }),
+      runId: f.receipt.ownerRunId,
     });
     f.deps.resumeHook = async () => {
       f.state.resumes += 1;

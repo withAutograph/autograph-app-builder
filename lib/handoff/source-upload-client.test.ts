@@ -11,58 +11,56 @@ it("uploads multiple bounded chunks, reconciles unknown completion and retains i
   const content = Buffer.alloc(90_000, 255);
   const path = "apps/supplier-spend/public/asset.bin";
   const artifact = {
+    files: [{ contentBase64: content.toString("base64"), path }],
     manifest: {
-      version: 1,
-      kind: "application-source-v1",
       appId: "supplier-spend",
       displayName: "An edited display name",
-      sourceSessionId: "local-original",
-      files: [{ path, mode: "100644", bytes: content.length, sha256: hash(content) }],
+      files: [{ bytes: content.length, mode: "100644", path, sha256: hash(content) }],
+      kind: "application-source-v1",
       omissions: [],
+      sourceSessionId: "local-original",
+      version: 1,
     },
-    files: [{ path, contentBase64: content.toString("base64") }],
   };
   const rows = new Map<string, string>();
   const store = createImmutableSourceArtifactStore({
-    get: (key) => Promise.resolve(rows.get(JSON.stringify(key))),
-    put: (key, value) => {
+    get: async (key) => rows.get(JSON.stringify(key)),
+    put: async (key, value) => {
       const id = JSON.stringify(key);
       if (rows.has(id) && rows.get(id) !== value) {
         throw new SourceUploadError("source_upload_conflict");
       }
       rows.set(id, value);
-      return Promise.resolve();
     },
   });
   const authority = {
-    issuer: "https://builder.example/api/auth",
     audience: "https://builder.example/mcp",
-    workspaceId: "workspace",
+    issuer: "https://builder.example/api/auth",
     ownerUserId: "user",
+    workspaceId: "workspace",
   };
   let writes = 0;
   const id = randomUUID();
   const uploaded = await uploadApplicationSource({
     file: new File([JSON.stringify(artifact)], "app-source.json"),
-    uploadIdForDigest: () => id,
     ports: {
-      begin: (header) => store.begin({ authority, header }),
-      put: async (input) => {
-        writes += 1;
-        return await store.put({ authority, ...input });
-      },
+      begin: async (header) => await store.begin({ authority, header }),
       complete: async (reference) => {
         await store.complete({ authority, reference });
         throw new Error("response lost after durable completion");
       },
-      status: (reference) => store.status({ authority, reference }),
+      put: async (input) => {
+        writes += 1;
+        return await store.put({ authority, ...input });
+      },
+      status: async (reference) => await store.status({ authority, reference }),
     },
+    uploadIdForDigest: () => id,
   });
   expect(writes).toBeGreaterThan(1);
   expect(uploaded.reference.uploadId).toBe(id);
   expect(uploaded.reference.appId).toBe("supplier-spend");
   const draft = builderDraftFormSchema.parse({
-    sourceCandidate: uploaded.reference,
     appName: uploaded.displayName,
     brief: "Continue the existing app",
     buildDestination: "codex",
@@ -70,6 +68,7 @@ it("uploads multiple bounded chunks, reconciles unknown completion and retains i
     modelId: "openai/model",
     privateRepository: true,
     repository: "same-app",
+    sourceCandidate: uploaded.reference,
   });
   expect(draft.appName).toBe("An edited display name");
   expect(draft.sourceCandidate?.appId).toBe("supplier-spend");

@@ -27,6 +27,9 @@ import {
 type RepairInspectionInput =
   | { kind: "changes"; against: "base" | "head"; cursor?: number }
   | { kind: "diff"; against: "base" | "head"; cursor?: number; path?: string };
+const DRAFT_HEAD = "draft-head" as const;
+const PUBLICATION_RECOVERY = "publication-recovery" as const;
+const UNVERIFIED = "unverified" as const;
 const inspectPublishedDraftRepair = async (
   input: RepairInspectionInput,
   candidate: Extract<DraftReconciliationCandidate, { kind: "published-draft-repair" }>,
@@ -35,19 +38,19 @@ const inspectPublishedDraftRepair = async (
   const review = candidate.repairReview;
   if (review === undefined || candidate.validation === undefined) {
     return {
-      status: "candidate" as const,
-      kind: "published-draft-repair" as const,
-      baseline: "draft-head" as const,
-      root: candidate.root,
+      baseline: DRAFT_HEAD,
       headSha: candidate.headSha,
+      kind: "published-draft-repair" as const,
       nextAction:
         "Inspect app files through edit_github_draft_pr_candidate, format or edit privately, then validate and review this draft-head repair.",
+      root: candidate.root,
+      status: "candidate" as const,
     };
   }
   if (input.kind === "changes") {
     return {
       status: "changes" as const,
-      against: "draft-head" as const,
+      against: DRAFT_HEAD,
       ...summarizeReconciliationChanges(review.changes, candidate.appId, input.cursor),
       reviewDigest: review.digest,
     };
@@ -61,13 +64,13 @@ const inspectPublishedDraftRepair = async (
     sandbox: await getSourceBoundSandbox(ctx),
   });
   return {
-    status: "diff" as const,
-    against: "draft-head" as const,
+    against: DRAFT_HEAD,
     content: Buffer.from(page.chunkBase64, "base64").toString("utf-8"),
     cursor: page.cursor,
-    path: input.path,
     nextCursor: page.nextCursor,
+    path: input.path,
     reviewDigest: review.digest,
+    status: "diff" as const,
     totalBytes: page.totalBytes,
   };
 };
@@ -84,19 +87,19 @@ const inspectRepairCandidate = (
 const publicationRecoveryCall = (completion: DraftPublicationCompletion) =>
   "kind" in completion
     ? {
-        tool: "update_github_draft_pr" as const,
         arguments: {
-          expectedProposalDigest: completion.proposal.digest,
           approvalReceipt: approvalReceiptForExistingDraftUpdate(completion.proposal),
+          expectedProposalDigest: completion.proposal.digest,
         },
+        tool: "update_github_draft_pr" as const,
       }
     : {
-        tool: "reconcile_github_draft_pr" as const,
         arguments: {
-          expectedProposalDigest: completion.proposal.digest,
           approvalReceipt: approvalReceiptForExistingDraftUpdate(completion.proposal),
+          expectedProposalDigest: completion.proposal.digest,
           recordCurrentEquivalentRelease: true as const,
         },
+        tool: "reconcile_github_draft_pr" as const,
       };
 
 export default defineTool({
@@ -108,7 +111,7 @@ export default defineTool({
     const workflow = appBuilderWorkflowState.get();
     const state =
       resolveDraftReviewedWorkflow(workflow, draftReconciliationState.get()) ?? workflow;
-    if (input.kind === "publication-recovery") {
+    if (input.kind === PUBLICATION_RECOVERY) {
       const currentAppSpec = "appSpec" in state ? state.appSpec : undefined;
       const completions = [
         ...draftReconciliationCompletions.get(),
@@ -119,13 +122,19 @@ export default defineTool({
           completion.appId === currentAppSpec.appId &&
           completion.appReview.appSpecDigest === currentAppSpec.digest,
       );
-      const recoveries = [];
+      const recoveries: {
+        branch: string;
+        nextCall: ReturnType<typeof publicationRecoveryCall>;
+        proposalDigest: string;
+        releaseId?: string;
+        repositoryId: string;
+      }[] = [];
       for (const completion of completions) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- Revalidate owner and accepted selection before exposing each retained context.
         await assertReconciliationCompletionOwnerForSession({
-          completion,
           adapterSessionId: ctx.session.id,
           callbackExecution: hostedOperatorCallbackExecution(ctx.session),
+          completion,
           sessionAuth: ctx.session.auth,
         });
         const current = appBuilderWorkflowState.get();
@@ -135,31 +144,32 @@ export default defineTool({
           current.appSpec.digest !== completion.appReview.appSpecDigest
         ) {
           return {
-            status: "selection-changed" as const,
-            verification: "unverified" as const,
-            recoveries: [],
             nextAction:
               "The accepted app specification changed while reading retained publication context. Read publication-recovery again for the current selection; no publication or association was attempted.",
+            recoveries: [],
+            status: "selection-changed" as const,
+            verification: UNVERIFIED,
           };
         }
-        recoveries.push({
+        const recovery = {
           proposalDigest: completion.proposal.digest,
           repositoryId: completion.proposal.repositoryId,
           branch: completion.proposal.branchName,
-          ...(completion.compilation.release.status === "published"
-            ? { releaseId: completion.compilation.release.selection.releaseId }
-            : {}),
-          nextCall: publicationRecoveryCall(completion),
-        });
+        };
+        const withRelease =
+          completion.compilation.release.status === "published"
+            ? { ...recovery, releaseId: completion.compilation.release.selection.releaseId }
+            : recovery;
+        recoveries.push({ ...withRelease, nextCall: publicationRecoveryCall(completion) });
       }
       return {
-        status: "publication-recovery" as const,
-        verification: "unverified" as const,
-        recoveries,
         nextAction:
           recoveries.length === 0
             ? "No retained publication completion matches the current app and accepted specification. No publication, approval or source association was inferred. Continue the normal source-recording recovery in this session without republishing an already accepted Git result."
             : "Copy a retained nextCall to the existing reconciliation tool. These are unverified recovery candidates and approval-subject metadata, not approval grants or proof of applied Git publication. Normal approval, exact provider verification and full current-release matching still apply; no Git write is authorized by this listing.",
+        recoveries,
+        status: PUBLICATION_RECOVERY,
+        verification: UNVERIFIED,
       };
     }
     const candidate = draftReconciliationState.get();
@@ -217,15 +227,15 @@ export default defineTool({
       against: input.against,
       content: Buffer.from(page.chunkBase64, "base64").toString("utf-8"),
       cursor: page.cursor,
-      path: input.path,
       nextCursor: page.nextCursor,
+      path: input.path,
       reviewDigest: candidate.review.digest,
       status: "diff" as const,
       totalBytes: page.totalBytes,
     };
   },
   inputSchema: z.discriminatedUnion("kind", [
-    z.strictObject({ kind: z.literal("publication-recovery") }),
+    z.strictObject({ kind: z.literal(PUBLICATION_RECOVERY) }),
     z.strictObject({ kind: z.literal("conflict"), path: z.string().min(1) }),
     z.strictObject({
       against: z.enum(["base", "head"]),

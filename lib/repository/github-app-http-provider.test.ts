@@ -30,7 +30,7 @@ import type {
 } from "./github-draft-reconciliation";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();
+const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" });
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 const sourceSha = "1".repeat(40);
@@ -894,14 +894,14 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         }
         if (url.pathname === "/repos/withAutograph/example-app/pulls/7") {
           return json({
-            number: 7,
-            node_id: "PR_node",
-            state: "open",
-            draft: false,
-            merged: false,
-            merge_commit_sha: null,
-            head: { sha: head, ref: "builder", repo: { id: 100 } },
             base: { ref: "main", repo: { id: 100 } },
+            draft: false,
+            head: { ref: "builder", repo: { id: 100 }, sha: head },
+            merge_commit_sha: null,
+            merged: false,
+            node_id: "PR_node",
+            number: 7,
+            state: "open",
           });
         }
         if (url.pathname === "/graphql") {
@@ -915,11 +915,11 @@ describe("GitHub App fixed-origin HTTP provider", () => {
           return json({
             data: {
               node: {
-                headRefOid: head,
+                baseChanges: { nodes: [] },
                 baseRefName: "main",
+                headRefOid: head,
                 isDraft: false,
                 timelineItems: { nodes: [] },
-                baseChanges: { nodes: [] },
               },
             },
           });
@@ -927,15 +927,15 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         throw new Error("unexpected request");
       };
       const result = createProvider(request).prDelivery.inspect({
-        repositoryId: "100",
-        owner: "withAutograph",
-        name: "example-app",
-        pullRequestNumber: 7,
-        headSha: head,
         baseBranch: "main",
+        headSha: head,
+        name: "example-app",
+        owner: "withAutograph",
+        pullRequestNumber: 7,
+        repositoryId: "100",
       });
       await (repositoryId === 100
-        ? expect(result).resolves.toMatchObject({ state: "open", checks: "pending" })
+        ? expect(result).resolves.toMatchObject({ checks: "pending", state: "open" })
         : expect(result).rejects.toThrow("repository-identity-changed"));
       expect(tokenRequests).toEqual([
         {
@@ -961,14 +961,14 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       }
       if (url.pathname === "/repos/withAutograph/example-app/pulls/7") {
         return json({
-          number: 7,
-          node_id: "PR_node",
-          state: "open",
-          draft: true,
-          merged: false,
-          merge_commit_sha: null,
-          head: { sha: head, ref: "builder", repo: { id: 100 } },
           base: { ref: "main", repo: { id: 100 } },
+          draft: true,
+          head: { ref: "builder", repo: { id: 100 }, sha: head },
+          merge_commit_sha: null,
+          merged: false,
+          node_id: "PR_node",
+          number: 7,
+          state: "open",
         });
       }
       if (url.pathname === "/graphql") {
@@ -977,12 +977,12 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       return await mock.implementation(input, init);
     };
     const result = createProvider(request).prDelivery.markReady({
-      repositoryId: "100",
-      owner: "withAutograph",
-      name: "example-app",
-      pullRequestNumber: 7,
-      headSha: head,
       baseBranch: "main",
+      headSha: head,
+      name: "example-app",
+      owner: "withAutograph",
+      pullRequestNumber: 7,
+      repositoryId: "100",
     });
     await expect(result).rejects.toThrow(
       status === 403 ? "github-delivery-provider-rejected" : "github-request-failed",

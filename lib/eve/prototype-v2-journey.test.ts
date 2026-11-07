@@ -60,7 +60,11 @@ describe("hosted v2 prototype journey", () => {
             toolName: "record_prototype_artifact",
           },
         ],
+        sequence: 1,
+        stepIndex: 0,
+        turnId: "turn-1",
       },
+      meta: { at: "2026-11-03T00:00:00Z", id: "event-1" },
       type: "actions.requested",
     });
     reducer.accept({
@@ -71,8 +75,12 @@ describe("hosted v2 prototype journey", () => {
           output: durablePrototypeToolReceipt(saved),
           toolName: "record_prototype_artifact",
         },
+        sequence: 2,
         status: "completed",
+        stepIndex: 0,
+        turnId: "turn-1",
       },
+      meta: { at: "2026-11-03T00:00:00Z", id: "event-2" },
       type: "action.result",
     });
     const reference = reducer.snapshot();

@@ -23,8 +23,8 @@ const claim: RealmContinuationEventClaim = {
   appId: "app-1",
   approvedPlanDigest: "b".repeat(64),
   authority: {
-    issuer: "https://builder.example.test/api/auth",
     audience: "https://builder.example.test/mcp",
+    issuer: "https://builder.example.test/api/auth",
     ownerUserId: "owner-1",
     workspaceId: "workspace-1",
   },
@@ -63,64 +63,64 @@ const auth: SessionAuthContext = {
 };
 const request = () =>
   new Request("https://builder.example.test/eve/v1/internal/hosted-operator/realm-continuation", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
     body: JSON.stringify({ authority, dispatchId, version: 1 }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
   });
 const fixture = () => {
   const delivered = new Set<string>();
   const accepted = new Set<string>();
   const dependencies = {
+    acceptDelivery: vi
+      .fn<ProvisioningEventRouteDependencies["acceptDelivery"]>()
+      .mockImplementation(async (_claim, id) => {
+        accepted.add(id);
+        return Promise.resolve();
+      }),
     authorize: vi
       .fn<ProvisioningEventRouteDependencies["authorize"]>()
       .mockResolvedValue({ claim, auth }),
-    findObsoleteAuthWait: vi
-      .fn<ProvisioningEventRouteDependencies["findObsoleteAuthWait"]>()
-      .mockResolvedValue({ requestId: "legacy-auth-wait" }),
     claimDelivery: vi
       .fn<ProvisioningEventRouteDependencies["claimDelivery"]>()
-      .mockImplementation((_claim, id, _streamStartIndex) => {
+      .mockImplementation(async (_claim, id, _streamStartIndex) => {
         if (delivered.has(id)) {
           return Promise.resolve(false);
         }
         delivered.add(id);
         return Promise.resolve(true);
       }),
+    findObsoleteAuthWait: vi
+      .fn<ProvisioningEventRouteDependencies["findObsoleteAuthWait"]>()
+      .mockResolvedValue({ requestId: "legacy-auth-wait" }),
     readDeliveryClaim: vi
       .fn<ProvisioningEventRouteDependencies["readDeliveryClaim"]>()
-      .mockImplementation((_claim, id) => Promise.resolve(delivered.has(id))),
+      .mockImplementation(async (_claim, id) => Promise.resolve(delivered.has(id))),
+    readDeliveryReceipt: vi
+      .fn<ProvisioningEventRouteDependencies["readDeliveryReceipt"]>()
+      .mockImplementation(async (_claim, id) => {
+        if (accepted.has(id)) {
+          return Promise.resolve("accepted");
+        }
+        return Promise.resolve(delivered.has(id) ? "unknown" : "not-submitted");
+      }),
     readDeliveryStartIndex: vi
       .fn<ProvisioningEventRouteDependencies["readDeliveryStartIndex"]>()
       .mockResolvedValue(0),
     readDeliveryTargetRequestId: vi
       .fn<ProvisioningEventRouteDependencies["readDeliveryTargetRequestId"]>()
       .mockResolvedValue("legacy-auth-wait"),
-    readDeliveryReceipt: vi
-      .fn<ProvisioningEventRouteDependencies["readDeliveryReceipt"]>()
-      .mockImplementation((_claim, id) => {
-        if (accepted.has(id)) {
-          return Promise.resolve("accepted");
-        }
-        return Promise.resolve(delivered.has(id) ? "unknown" : "not-submitted");
-      }),
-    acceptDelivery: vi
-      .fn<ProvisioningEventRouteDependencies["acceptDelivery"]>()
-      .mockImplementation((_claim, id) => {
-        accepted.add(id);
-        return Promise.resolve();
-      }),
-    wasAccepted: vi
-      .fn<ProvisioningEventRouteDependencies["wasAccepted"]>()
-      .mockResolvedValue(false),
-    streamTailIndex: vi
-      .fn<ProvisioningEventRouteDependencies["streamTailIndex"]>()
-      .mockResolvedValue(7),
     readPendingRequests: vi
       .fn<ProvisioningEventRouteDependencies["readPendingRequests"]>()
       .mockResolvedValue([{ requestId: "legacy-auth-wait" }]),
     respond: vi
       .fn<ProvisioningEventRouteDependencies["respond"]>()
       .mockResolvedValue({ status: "accepted", sessionId: claim.adapterSessionId }),
+    streamTailIndex: vi
+      .fn<ProvisioningEventRouteDependencies["streamTailIndex"]>()
+      .mockResolvedValue(7),
+    wasAccepted: vi
+      .fn<ProvisioningEventRouteDependencies["wasAccepted"]>()
+      .mockResolvedValue(false),
   } satisfies ProvisioningEventRouteDependencies;
   return { dependencies, handlers: createProvisioningEventHandlers(dependencies) };
 };
@@ -130,7 +130,7 @@ describe("authored identity hook delivery", () => {
     const { dependencies } = fixture();
     const readIdentityWait = vi
       .fn<NonNullable<ProvisioningEventRouteDependencies["readIdentityWait"]>>()
-      .mockResolvedValue({ token: "private-hook", eventId: dispatchId, observed: false });
+      .mockResolvedValue({ eventId: dispatchId, observed: false, token: "private-hook" });
     const resumeIdentityWait = vi
       .fn<NonNullable<ProvisioningEventRouteDependencies["resumeIdentityWait"]>>()
       .mockResolvedValue();
@@ -153,9 +153,9 @@ describe("authored identity hook delivery", () => {
     await handlers.dispatch(request(), attachSession);
     expect(resumeIdentityWait).toHaveBeenCalledTimes(1);
     readIdentityWait.mockResolvedValue({
-      token: "private-hook",
       eventId: dispatchId,
       observed: true,
+      token: "private-hook",
     });
     const reconciled = await handlers.reconcile(request(), attachSession);
     expect(await reconciled.json()).toMatchObject({ status: "accepted" });
@@ -166,7 +166,7 @@ describe("authored identity hook delivery", () => {
     const { dependencies } = fixture();
     const readIdentityWait = vi
       .fn<NonNullable<ProvisioningEventRouteDependencies["readIdentityWait"]>>()
-      .mockResolvedValue({ token: "private-hook", eventId: dispatchId, observed: false });
+      .mockResolvedValue({ eventId: dispatchId, observed: false, token: "private-hook" });
     const resumeIdentityWait = vi
       .fn<NonNullable<ProvisioningEventRouteDependencies["resumeIdentityWait"]>>()
       .mockRejectedValue(new Error("hook delivery outcome unknown"));
@@ -192,7 +192,7 @@ describe("authored identity hook delivery", () => {
       ...dependencies,
       readIdentityWait: vi
         .fn<NonNullable<ProvisioningEventRouteDependencies["readIdentityWait"]>>()
-        .mockResolvedValue({ token: "private-hook", eventId: "f".repeat(64), observed: false }),
+        .mockResolvedValue({ eventId: "f".repeat(64), observed: false, token: "private-hook" }),
       resumeIdentityWait,
     });
     const response = await handlers.dispatch(request(), attachSession);
@@ -207,23 +207,23 @@ describe("private Realm continuation event handlers", () => {
   it.each([
     new Request("https://builder.example.test/internal/hosted-operator/realm-continuation"),
     new Request("https://builder.example.test/internal/hosted-operator/realm-continuation", {
-      method: "POST",
       body: "{}",
+      method: "POST",
     }),
     new Request("https://builder.example.test/internal/hosted-operator/realm-continuation", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
       body: "not-json",
+      headers: { "content-type": "application/json" },
+      method: "POST",
     }),
     new Request("https://builder.example.test/internal/hosted-operator/realm-continuation", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
       body: JSON.stringify({ authority, dispatchId: "invalid", version: 1 }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
     }),
     new Request("https://builder.example.test/internal/hosted-operator/realm-continuation", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
       body: JSON.stringify({ authority: "x".repeat(16_385), dispatchId, version: 1 }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
     }),
   ])("rejects malformed input before authorization", async (invalid) => {
     const { dependencies, handlers } = fixture();
@@ -273,11 +273,11 @@ describe("private Realm continuation event handlers", () => {
     const { dependencies, handlers } = fixture();
     dependencies.respond.mockRejectedValue(new Error("connection interrupted after dispatch"));
     const first = await handlers.dispatch(request(), attachSession);
-    expect(await first.json()).toMatchObject({ status: "unknown", dispatchId });
+    expect(await first.json()).toMatchObject({ dispatchId, status: "unknown" });
     const readback = await handlers.reconcile(request(), attachSession);
-    expect(await readback.json()).toMatchObject({ status: "unknown", dispatchId });
+    expect(await readback.json()).toMatchObject({ dispatchId, status: "unknown" });
     const duplicate = await handlers.dispatch(request(), attachSession);
-    expect(await duplicate.json()).toMatchObject({ status: "unknown", dispatchId });
+    expect(await duplicate.json()).toMatchObject({ dispatchId, status: "unknown" });
     expect(dependencies.respond).toHaveBeenCalledTimes(1);
   });
 
@@ -327,9 +327,9 @@ describe("private Realm continuation event handlers", () => {
     const { dependencies, handlers } = fixture();
     const expiredClaim = {
       ...claim,
-      reason: { kind: "expired-technical-wait" as const, expiresAt: "2026-10-15T00:00:00.000Z" },
+      reason: { expiresAt: "2026-10-15T00:00:00.000Z", kind: "expired-technical-wait" as const },
     };
-    dependencies.authorize.mockResolvedValue({ claim: expiredClaim, auth });
+    dependencies.authorize.mockResolvedValue({ auth, claim: expiredClaim });
     const response = await handlers.dispatch(request(), attachSession);
     expect(response.status).toBe(200);
     const [[, event]] = dependencies.respond.mock.calls;
@@ -381,7 +381,7 @@ type FixtureNativeEvent =
   | { type: "session.waiting" }
   | { type: "message.received"; data: { message: string | undefined } };
 const nativeEvent = (event: FixtureNativeEvent): NativeEvent => {
-  const meta = { id: "event-1", at: "2026-10-15T00:00:00.000Z" };
+  const meta = { at: "2026-10-15T00:00:00.000Z", id: "event-1" };
   const coordinates = { sequence: 0, stepIndex: 0, turnId: "turn_0" };
   switch (event.type) {
     case "input.requested": {
@@ -403,7 +403,7 @@ const nativeEvent = (event: FixtureNativeEvent): NativeEvent => {
     case "message.received": {
       return {
         ...event,
-        data: { sequence: 0, turnId: "turn_0", message: event.data.message ?? "" },
+        data: { message: event.data.message ?? "", sequence: 0, turnId: "turn_0" },
         meta,
       };
     }
@@ -413,31 +413,33 @@ const nativeEvent = (event: FixtureNativeEvent): NativeEvent => {
   }
 };
 const question = (requestId: string): InputRequest => ({
-  requestId,
-  kind: "question",
-  prompt: "Technical wait",
   action: {
     callId: requestId,
     input: {},
     kind: "tool-call",
     toolName: "prepare-app-hosted-runtime",
   },
+  kind: "question",
+  prompt: "Technical wait",
+  requestId,
 });
 const streamSession = (events: NativeEvent[], live = false) => {
-  const getEventStream = vi.fn<NativeSession["getEventStream"]>().mockImplementation((options) =>
-    Promise.resolve(
-      new ReadableStream<NativeEvent>({
-        start(controller) {
-          for (const event of events.slice(options?.startIndex ?? 0)) {
-            controller.enqueue(event);
-          }
-          if (!live) {
-            controller.close();
-          }
-        },
-      }),
-    ),
-  );
+  const getEventStream = vi
+    .fn<NativeSession["getEventStream"]>()
+    .mockImplementation(async (options) =>
+      Promise.resolve(
+        new ReadableStream<NativeEvent>({
+          start(controller) {
+            for (const event of events.slice(options?.startIndex ?? 0)) {
+              controller.enqueue(event);
+            }
+            if (!live) {
+              controller.close();
+            }
+          },
+        }),
+      ),
+    );
   const respond = vi
     .fn<
       (
@@ -446,24 +448,24 @@ const streamSession = (events: NativeEvent[], live = false) => {
       ) => Promise<{ status: "accepted"; sessionId: string }>
     >()
     .mockResolvedValue({
-      status: "accepted",
       sessionId: claim.adapterSessionId,
+      status: "accepted",
     });
   const getStreamTailIndex = vi
     .fn<NativeSession["getStreamTailIndex"]>()
-    .mockImplementation(() => Promise.resolve(events.length - 1));
+    .mockImplementation(async () => Promise.resolve(events.length - 1));
   const session: NativeSession = {
-    id: claim.adapterSessionId,
+    cancel: vi.fn<NativeSession["cancel"]>().mockResolvedValue({ status: "no_active_turn" }),
+    clear: vi.fn<NativeSession["clear"]>().mockResolvedValue({ status: "no_active_session" }),
+    compact: vi.fn<NativeSession["compact"]>().mockResolvedValue({ status: "no_active_session" }),
     getEventStream,
     getStreamTailIndex,
-    respond: (responses, options) => respond(responses, options),
+    id: claim.adapterSessionId,
+    reset: vi.fn<NativeSession["reset"]>().mockResolvedValue({ status: "no_active_session" }),
+    respond: async (responses, options) => respond(responses, options),
     send: vi
       .fn<NativeSession["send"]>()
       .mockRejectedValue(new Error("Fixture must not send generic messages.")),
-    cancel: vi.fn<NativeSession["cancel"]>().mockResolvedValue({ status: "no_active_turn" }),
-    compact: vi.fn<NativeSession["compact"]>().mockResolvedValue({ status: "no_active_session" }),
-    clear: vi.fn<NativeSession["clear"]>().mockResolvedValue({ status: "no_active_session" }),
-    reset: vi.fn<NativeSession["reset"]>().mockResolvedValue({ status: "no_active_session" }),
   };
   const attach = vi.fn<AttachSessionFn>().mockReturnValue(session);
   return { attach, getEventStream, getStreamTailIndex, respond, session };
@@ -475,22 +477,22 @@ describe("exact legacy technical response and owner proof", () => {
     const pending = new Set(["legacy-auth-wait", "product-decision"]);
     const events: NativeEvent[] = [];
     const native = streamSession(events, true);
-    native.respond.mockImplementation((responses, options) => {
+    native.respond.mockImplementation(async (responses, options) => {
       expect(options.auth).toBe(auth);
       for (const response of responses) {
         pending.delete(response.requestId);
         events.push(
           nativeEvent({
-            type: "input.resolved",
             data: {
               resolutions: [
                 { kind: "question", outcome: "answered", requestId: response.requestId, response },
               ],
             },
+            type: "input.resolved",
           }),
         );
       }
-      return Promise.resolve({ status: "accepted", sessionId: claim.adapterSessionId });
+      return Promise.resolve({ sessionId: claim.adapterSessionId, status: "accepted" });
     });
     dependencies.respond.mockImplementation(respondToRealmContinuationWait);
     dependencies.wasAccepted.mockImplementation(wasRealmContinuationResponseApplied);
@@ -516,9 +518,9 @@ describe("exact legacy technical response and owner proof", () => {
     const pending = new Set(["product-decision"]);
     const events: NativeEvent[] = [];
     const native = streamSession(events, true);
-    native.respond.mockImplementation((responses) => {
-      events.push(nativeEvent({ type: "message.received", data: { message: responses[0]?.text } }));
-      return Promise.resolve({ status: "accepted", sessionId: claim.adapterSessionId });
+    native.respond.mockImplementation(async (responses) => {
+      events.push(nativeEvent({ data: { message: responses[0]?.text }, type: "message.received" }));
+      return Promise.resolve({ sessionId: claim.adapterSessionId, status: "accepted" });
     });
     dependencies.respond.mockImplementation(respondToRealmContinuationWait);
     dependencies.wasAccepted.mockImplementation(wasRealmContinuationResponseApplied);
@@ -546,7 +548,6 @@ describe("exact legacy technical response and owner proof", () => {
     const submitted = dependencies.respond.mock.calls[0]?.[1];
     const native = streamSession([
       nativeEvent({
-        type: "input.resolved",
         data: {
           resolutions: [
             {
@@ -557,6 +558,7 @@ describe("exact legacy technical response and owner proof", () => {
             },
           ],
         },
+        type: "input.resolved",
       }),
     ]);
     dependencies.wasAccepted.mockImplementation(wasRealmContinuationResponseApplied);
@@ -591,9 +593,8 @@ describe("exact legacy technical response and owner proof", () => {
       const events = [
         nativeEvent(
           variant === "message-only"
-            ? { type: "message.received", data: { message: submitted.text } }
+            ? { data: { message: submitted.text }, type: "message.received" }
             : {
-                type: "input.resolved",
                 data: {
                   resolutions: [
                     {
@@ -605,6 +606,7 @@ describe("exact legacy technical response and owner proof", () => {
                     },
                   ],
                 },
+                type: "input.resolved",
               },
         ),
       ];
@@ -667,17 +669,17 @@ describe("canonical pending baseline and finite native replay", () => {
     const older = question("older-auth-wait");
     const newer = question("newer-product-decision");
     const events = [
-      nativeEvent({ type: "input.requested", data: { requests: [older] } }),
-      nativeEvent({ type: "turn.started", data: { turnId: "later" } }),
-      nativeEvent({ type: "input.requested", data: { requests: [newer] } }),
+      nativeEvent({ data: { requests: [older] }, type: "input.requested" }),
+      nativeEvent({ data: { turnId: "later" }, type: "turn.started" }),
+      nativeEvent({ data: { requests: [newer] }, type: "input.requested" }),
       nativeEvent({ type: "session.waiting" }),
       nativeEvent({
-        type: "input.resolved",
         data: {
           resolutions: [{ kind: "question", outcome: "answered", requestId: newer.requestId }],
         },
+        type: "input.resolved",
       }),
-      nativeEvent({ type: "turn.started", data: { turnId: "active" } }),
+      nativeEvent({ data: { turnId: "active" }, type: "turn.started" }),
     ];
     const native = streamSession(events, true);
     const pending = await readPendingRealmContinuationRequests(native.session, {
@@ -692,7 +694,7 @@ describe("canonical pending baseline and finite native replay", () => {
   it("adds native input that arrived after the checkpoint baseline", async () => {
     const fresh = question("fresh-question");
     const native = streamSession([
-      nativeEvent({ type: "input.requested", data: { requests: [fresh] } }),
+      nativeEvent({ data: { requests: [fresh] }, type: "input.requested" }),
     ]);
     expect(
       await readPendingRealmContinuationRequests(native.session, {

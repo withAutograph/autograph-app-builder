@@ -23,21 +23,24 @@ export const createPrivateAppIntegrationCapabilityApprovalCapture = (input: {
   state?: PrivateOperatorApprovalCapture;
 }) => {
   const expected = appIntegrationCapabilityApprovalInputSchema.parse({
+    operationRef: appIntegrationCapabilityOperationRef(input.plan),
     plan: input.plan,
     planDigest: appIntegrationCapabilityPlanDigest(input.plan),
-    operationRef: appIntegrationCapabilityOperationRef(input.plan),
   });
-  const capture = createPrivateOperatorApprovalCapture({
+  const captureInput: Parameters<typeof createPrivateOperatorApprovalCapture>[0] = {
+    callId: input.callId,
+    ownerUserId: input.plan.authority.ownerUserId,
     request: {
       action: "app-integration-capability",
-      planRef: expected.operationRef,
-      planDigest: expected.planDigest,
       idempotencyKey: input.plan.selection.appId,
+      planDigest: expected.planDigest,
+      planRef: expected.operationRef,
     },
-    ownerUserId: input.plan.authority.ownerUserId,
-    callId: input.callId,
-    ...(input.state === undefined ? {} : { state: input.state }),
-  });
+  };
+  if (input.state !== undefined) {
+    captureInput.state = input.state;
+  }
+  const capture = createPrivateOperatorApprovalCapture(captureInput);
   return {
     observe(event: MessageStreamEvent) {
       if (event.type === "input.requested") {
@@ -59,6 +62,7 @@ export const createPrivateAppIntegrationCapabilityApprovalCapture = (input: {
         capture.settle(event);
       }
     },
+    proveComplete: capture.proveComplete,
     read() {
       // A prior cancellation denies the same plan, even when the new call has consent.
       if (capture.snapshot().entries.some((entry) => entry.cancelled)) {
@@ -67,7 +71,6 @@ export const createPrivateAppIntegrationCapabilityApprovalCapture = (input: {
       return capture.read();
     },
     snapshot: capture.snapshot,
-    proveComplete: capture.proveComplete,
   };
 };
 export const readPrivateAppIntegrationCapabilityApproval = async (input: {
@@ -87,16 +90,25 @@ export const readPrivateAppIntegrationCapabilityApproval = async (input: {
   ) {
     throw new Error("Integration capability approval owner changed");
   }
-  return await readPrivateOperatorApproval({
-    owner: input.owner,
-    ...(input.observation === undefined ? {} : { observation: input.observation }),
-    capture: (state) =>
-      createPrivateAppIntegrationCapabilityApprovalCapture({
-        plan: input.plan,
-        callId: input.callId,
-        ...(state === undefined ? {} : { state }),
-      }),
-    readHistory: input.readHistory,
+  const approvalInput: Parameters<typeof readPrivateOperatorApproval>[0] = {
     assertOwner: input.assertOwner,
-  });
+    capture: (state) => {
+      const captureInput: Parameters<
+        typeof createPrivateAppIntegrationCapabilityApprovalCapture
+      >[0] = {
+        callId: input.callId,
+        plan: input.plan,
+      };
+      if (state !== undefined) {
+        captureInput.state = state;
+      }
+      return createPrivateAppIntegrationCapabilityApprovalCapture(captureInput);
+    },
+    owner: input.owner,
+    readHistory: input.readHistory,
+  };
+  if (input.observation !== undefined) {
+    approvalInput.observation = input.observation;
+  }
+  return await readPrivateOperatorApproval(approvalInput);
 };

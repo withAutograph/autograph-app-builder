@@ -14,16 +14,16 @@ const sealInput = (): SealInput => ({
     originalReviewDigest: "private-app-review",
     review: { digest: "private-merge-review" },
     reviewReadProgress: {
-      reviewDigest: "private-merge-review",
       baseComplete: true,
       headComplete: true,
+      reviewDigest: "private-merge-review",
     },
     validation: { resolvedTree: "private-tree" },
   },
   expectedReviewDigest: "private-merge-review",
   state: {
-    phase: "reviewed",
     githubSource: { digest: "private-source-binding" },
+    phase: "reviewed",
     reviewReceipt: { digest: "private-app-review" },
     sourceReceipt: { sourceKind: "existing-repository" },
   },
@@ -44,60 +44,60 @@ interface SealCase {
 
 const sealCases: SealCase[] = [
   {
-    reason: "candidate_missing",
-    recovery: "prepare-reconciliation",
     change: (input) => {
       input.candidate = null;
     },
+    reason: "candidate_missing",
+    recovery: "prepare-reconciliation",
   },
   {
-    reason: "candidate_review_missing",
-    recovery: "review-candidate",
     change: (input) => {
       delete candidateFor(input).review;
     },
+    reason: "candidate_review_missing",
+    recovery: "review-candidate",
   },
   {
-    reason: "candidate_validation_missing",
-    recovery: "resume-validation",
     change: (input) => {
       delete candidateFor(input).validation;
     },
+    reason: "candidate_validation_missing",
+    recovery: "resume-validation",
   },
   {
-    reason: "workflow_not_reviewed",
-    recovery: "review-app",
     change: (input) => {
       input.state.phase = "validated";
     },
+    reason: "workflow_not_reviewed",
+    recovery: "review-app",
   },
   {
-    reason: "selected_source_missing",
-    recovery: "select-source",
     change: (input) => {
       delete input.state.githubSource;
     },
+    reason: "selected_source_missing",
+    recovery: "select-source",
   },
   {
-    reason: "source_binding_changed",
-    recovery: "prepare-reconciliation",
     change: (input) => {
       input.state.githubSource = { digest: "private-new-source" };
     },
+    reason: "source_binding_changed",
+    recovery: "prepare-reconciliation",
   },
   {
-    reason: "app_review_changed",
-    recovery: "prepare-reconciliation",
     change: (input) => {
       input.state.reviewReceipt = { digest: "private-new-app-review" };
     },
+    reason: "app_review_changed",
+    recovery: "prepare-reconciliation",
   },
   {
-    reason: "seal_review_input_changed",
-    recovery: "use-current-review",
     change: (input) => {
       input.expectedReviewDigest = "private-old-merge-review";
     },
+    reason: "seal_review_input_changed",
+    recovery: "use-current-review",
   },
 ];
 
@@ -151,14 +151,14 @@ describe("draft reconciliation prerequisite diagnostics", () => {
     { name: "absent" },
     {
       name: "partial",
-      progress: { reviewDigest: "private-merge-review", baseComplete: true, headComplete: false },
+      progress: { baseComplete: true, headComplete: false, reviewDigest: "private-merge-review" },
     },
     {
       name: "stale",
       progress: {
-        reviewDigest: "private-old-merge-review",
         baseComplete: false,
         headComplete: false,
+        reviewDigest: "private-old-merge-review",
       },
     },
   ])("does not require $name optional inspection progress", ({ progress }) => {

@@ -1,13 +1,11 @@
 import { authQueryKeys } from "@better-auth-ui/core";
-import type { SessionData } from "@better-auth-ui/core";
 import type { Preview } from "@storybook/nextjs-vite";
 import { expect } from "storybook/test";
 
-import appStyles from "../app/ui/app-builder.module.css";
 import { AppShell } from "../components/app-shell";
 import { AuthRouteProvider } from "../components/providers";
-import type { authClient } from "../lib/auth-client";
 import { getQueryClient } from "../lib/query-client";
+import { storybookAuthenticatedSession } from "./auth-session";
 import "../app/globals.css";
 import "./preview.css";
 
@@ -33,7 +31,9 @@ const preview: Preview = {
   afterEach: ({ canvasElement, title }) => {
     if (!usesCreateAppShell(title)) return;
 
-    expect(canvasElement.querySelector("[data-create-app-story-environment]")).toBeInTheDocument();
+    void expect(
+      canvasElement.querySelector("[data-create-app-story-environment]"),
+    ).toBeInTheDocument();
   },
   decorators: [
     (Story, context) => (
@@ -44,7 +44,7 @@ const preview: Preview = {
           passkeysEnabled={false}
         >
           {usesCreateAppShell(context.title) ? (
-            <div className={appStyles.appShell} data-create-app-story-environment>
+            <div className="appShell" data-create-app-story-environment>
               <Story />
             </div>
           ) : (
@@ -55,11 +55,10 @@ const preview: Preview = {
     ),
   ],
   loaders: [
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-    async ({ parameters }) => {
+    ({ parameters }) => {
       storybookQueryClient.setQueryData(
         authQueryKeys.session,
-        (parameters.authSession ?? null) as SessionData<typeof authClient>,
+        parameters.authSession === null ? null : storybookAuthenticatedSession,
       );
 
       return {};

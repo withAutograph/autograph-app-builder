@@ -19,14 +19,15 @@ import { z } from "zod";
 
 const fixtureConfigSchema = z.strictObject({
   action: z.enum(["plan", "execute"]),
-  operation: z.enum(["prepare", "cleanup"]).optional(),
   authority: z.strictObject({
     audience: z.url(),
     issuer: z.url(),
     ownerUserId: z.uuid(),
     workspaceId: z.uuid(),
   }),
+  dsn: z.url(),
   failure: z.string().optional(),
+  operation: z.enum(["prepare", "cleanup"]).optional(),
   operationRef: z.uuid().optional(),
   plan: z.unknown(),
   planDigest: z.string().optional(),
@@ -37,7 +38,6 @@ const fixtureConfigSchema = z.strictObject({
     scopeId: z.string().min(1),
     scopeType: z.enum(["team", "user"]),
   }),
-  dsn: z.url(),
 });
 
 const resourceIdentitySchema = z.strictObject({
@@ -237,50 +237,26 @@ const receiptIdentity = (input: { plan: typeof plan }) => ({
   projectId: input.plan.neon.projectId,
 });
 const dependencies: ProtectedHostedOperatorDependencies = {
-  store,
-  authorize(request, selection) {
+  async assertAuthorized() {
+    return;
+  },
+  async authorize(request, selection) {
     if (
       request.headers.get("authorization") !== "Bearer local-fixture" ||
       selection.sessionId !== config.selection.sessionId
     ) {
       throw new HostedOperatorError("authorization_required");
     }
-    return Promise.resolve({ authority: config.authority, target: config.target });
+    return { authority: config.authority, target: config.target };
   },
-  assertAuthorized() {
-    return Promise.resolve();
-  },
-  plan() {
-    return Promise.resolve(plan);
-  },
-  readApproval(input) {
-    return Promise.resolve({
-      action: input.action,
-      approvalId: "owner-approved-local-fixture",
-      approved: true,
-      callId: input.callId,
-      planDigest: input.planDigest,
-    });
-  },
-  withResourceLease,
-  async reconcile(input) {
-    if (config.failure === "unknown") {
-      return { status: "unknown" };
-    }
-    const [row] = await sql<
-      { receipt: unknown; resource_identity: unknown }[]
-    >`select receipt, resource_identity from a515_synthetic_effects where operation_ref=${input.operationRef} and effect_id=${input.effect.id} limit 1`;
-    if (row === undefined) {
-      return { status: "absent" };
-    }
-    const observedIdentity = resourceIdentitySchema.parse(row.resource_identity);
-    const expectedIdentity = receiptIdentity(input);
-    assert.deepEqual(
-      observedIdentity,
-      expectedIdentity,
-      "Frozen provider resource IDs changed during recovery",
-    );
-    return { status: "applied", receipt: operatorReceiptSchema.parse(row.receipt) };
+  async bindings() {
+    return {
+      PLATFORM_ORIGIN: "https://gateway.fixture.test",
+      PLATFORM_PUBLIC_ORIGIN: "https://app.fixture.test",
+      PLATFORM_JWKS_URL: "https://gateway.fixture.test/_platform/jwks.json",
+      PLATFORM_APP_BOUNDARY: "{}",
+      SPEND_REVIEW_DATABASE_URL: "postgres://synthetic-only",
+    };
   },
   async executeEffect(input) {
     await input.assertCurrent();
@@ -319,14 +295,46 @@ const dependencies: ProtectedHostedOperatorDependencies = {
       effectId: input.effect.id,
       fenceGeneration: input.fenceGeneration,
       operationId: input.operationRef,
-      receipt: { state: "applied", readbackSha256: "e".repeat(64) },
+      receipt: { readbackSha256: "e".repeat(64), state: "applied" },
       resourceId: input.plan.appDatabase.resourceId,
       sequence: 1,
       tenantId: "synthetic-org",
     });
     return receipt;
   },
-  verify() {
+  async plan() {
+    return plan;
+  },
+  async readApproval(input) {
+    return {
+      action: input.action,
+      approvalId: "owner-approved-local-fixture",
+      approved: true,
+      callId: input.callId,
+      planDigest: input.planDigest,
+    };
+  },
+  async reconcile(input) {
+    if (config.failure === "unknown") {
+      return { status: "unknown" };
+    }
+    const [row] = await sql<
+      { receipt: unknown; resource_identity: unknown }[]
+    >`select receipt, resource_identity from a515_synthetic_effects where operation_ref=${input.operationRef} and effect_id=${input.effect.id} limit 1`;
+    if (row === undefined) {
+      return { status: "absent" };
+    }
+    const observedIdentity = resourceIdentitySchema.parse(row.resource_identity);
+    const expectedIdentity = receiptIdentity(input);
+    assert.deepEqual(
+      observedIdentity,
+      expectedIdentity,
+      "Frozen provider resource IDs changed during recovery",
+    );
+    return { receipt: operatorReceiptSchema.parse(row.receipt), status: "applied" };
+  },
+  store,
+  async verify() {
     if (config.failure === "verify-before") {
       throw new Error("fixture failed before proof read");
     }
@@ -341,17 +349,9 @@ const dependencies: ProtectedHostedOperatorDependencies = {
     if (config.failure === "verify-after") {
       process.exit(87);
     }
-    return Promise.resolve(proof);
+    return proof;
   },
-  bindings() {
-    return Promise.resolve({
-      PLATFORM_ORIGIN: "https://gateway.fixture.test",
-      PLATFORM_PUBLIC_ORIGIN: "https://app.fixture.test",
-      PLATFORM_JWKS_URL: "https://gateway.fixture.test/_platform/jwks.json",
-      PLATFORM_APP_BOUNDARY: "{}",
-      SPEND_REVIEW_DATABASE_URL: "postgres://synthetic-only",
-    });
-  },
+  withResourceLease,
 };
 const handler = createProtectedHostedOperatorHandler(dependencies);
 const ownerContext = {
@@ -367,27 +367,27 @@ const body =
     ? {
         action: "plan",
         operation: config.operation ?? "prepare",
-        selection: config.selection,
         ownerContext,
+        selection: config.selection,
       }
     : {
         action: "execute",
         callId: "fixture-owner-approval",
         operationRef: config.operationRef,
+        ownerContext,
         planDigest: config.planDigest,
         selection: config.selection,
-        ownerContext,
       };
 try {
   const response = await handler(
     new Request("https://operator.fixture.test/v1/runtime", {
-      method: "POST",
+      body: JSON.stringify(body),
       headers: {
         authorization: "Bearer local-fixture",
         "content-type": "application/json",
         "x-vercel-trusted-oidc-idp-token": "local-fixture",
       },
-      body: JSON.stringify(body),
+      method: "POST",
     }),
   );
   console.log(`A515_RESULT ${JSON.stringify(await response.json())}`);

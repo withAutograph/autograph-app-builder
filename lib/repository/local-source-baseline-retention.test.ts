@@ -9,11 +9,10 @@ import { localSourceBaselineManifestSchema } from "./local-source-baseline-contr
 import { retainPreparedLocalSourceBaseline } from "./local-source-baseline-retention";
 
 const mock = { authority: vi.fn(), capture: vi.fn(), retain: vi.fn() };
-const dependencies = { readAuthority: mock.authority, capture: mock.capture, retain: mock.retain };
+const dependencies = { capture: mock.capture, readAuthority: mock.authority, retain: mock.retain };
 const expected = {
-  sourcePath: "/owned/live",
-  sourceSha: "a".repeat(40),
   eligibilityDigest: "b".repeat(64),
+  generation: "d".repeat(40),
   names: ["source.ts"],
   sourceFiles: [
     {
@@ -23,8 +22,9 @@ const expected = {
       sha256: "c".repeat(64),
     },
   ],
+  sourcePath: "/owned/live",
+  sourceSha: "a".repeat(40),
   workspaceDigest: "d".repeat(64),
-  generation: "d".repeat(40),
 };
 describe("retained first local planning baseline", () => {
   beforeEach(() => vi.resetAllMocks());
@@ -34,26 +34,26 @@ describe("retained first local planning baseline", () => {
     const pack = new ReadableStream<Uint8Array>();
     const dispose = vi.fn();
     mock.capture.mockResolvedValue({
-      generation: expected,
       capturedBase: () => ({
         sourceSha: "e".repeat(40),
         sourceTree: "f".repeat(40),
         streamPack: () => pack,
       }),
       dispose,
+      generation: expected,
     });
     await retainPreparedLocalSourceBaseline(expected, dependencies);
     expect(mock.capture).toHaveBeenCalledWith(expected.sourcePath, expected.sourceSha);
     expect(mock.retain).toHaveBeenCalledWith({
       authority,
       manifest: {
-        version: 1,
         kind: "local-planning-source-baseline",
         originalSourceSha: expected.sourceSha,
-        workspaceDigest: expected.workspaceDigest,
+        provenance: { kind: "captured-live-source", sourcePath: expected.sourcePath },
         sourceSha: "e".repeat(40),
         sourceTree: "f".repeat(40),
-        provenance: { kind: "captured-live-source", sourcePath: expected.sourcePath },
+        version: 1,
+        workspaceDigest: expected.workspaceDigest,
       },
       pack,
     });
@@ -64,13 +64,13 @@ describe("retained first local planning baseline", () => {
     const dispose = vi.fn();
     const pack = new ReadableStream<Uint8Array>();
     const captured = {
-      generation: expected,
       capturedBase: () => ({
         sourceSha: "e".repeat(40),
         sourceTree: "f".repeat(40),
         streamPack: () => pack,
       }),
       dispose,
+      generation: expected,
     };
     await retainPreparedLocalSourceBaseline(expected, { ...dependencies, captured });
     expect(mock.capture).not.toHaveBeenCalled();
@@ -82,8 +82,8 @@ describe("retained first local planning baseline", () => {
     mock.authority.mockResolvedValue({ kind: "local", ownerUid: 501, stateRoot: "/owned/state" });
     const dispose = vi.fn();
     mock.capture.mockResolvedValue({
-      generation: { ...expected, workspaceDigest: "f".repeat(64) },
       dispose,
+      generation: { ...expected, workspaceDigest: "f".repeat(64) },
     });
     await expect(retainPreparedLocalSourceBaseline(expected, dependencies)).rejects.toThrow(
       "changed before its original baseline",
@@ -124,7 +124,7 @@ describe("retained first local planning baseline", () => {
       writeFileSync(path.join(source, "dirty.txt"), "actual initial dirty bytes\n");
       const initial = await inspectDevelopmentSourceGeneration(source);
       const authority = { kind: "local" as const, ownerUid: process.getuid?.() ?? -1, stateRoot };
-      const readAuthority = () => Promise.resolve(authority);
+      const readAuthority = vi.fn().mockResolvedValue(authority);
       await retainPreparedLocalSourceBaseline(initial, { readAuthority });
       const manifestPath = path.join(
         stateRoot,
@@ -143,7 +143,7 @@ describe("retained first local planning baseline", () => {
       expect(capture.originalBase(initial.workspaceDigest).sourceSha).toBe(manifest.sourceSha);
     } finally {
       capture?.dispose();
-      rmSync(directory, { recursive: true, force: true });
+      rmSync(directory, { force: true, recursive: true });
     }
   });
 });

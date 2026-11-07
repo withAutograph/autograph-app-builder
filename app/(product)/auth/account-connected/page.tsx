@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Account connected | Autograph",
   referrer: "no-referrer",
-  robots: { index: false, follow: false },
+  robots: { follow: false, index: false },
+  title: "Account connected | Autograph",
 };
 
 export default function AccountConnectedPage() {

@@ -7,9 +7,9 @@ import inspectReconciliation from "../../agent/tools/inspect_github_draft_pr_rec
 const digest = "a".repeat(64);
 const mocks = vi.hoisted(() => ({
   candidate: null as Record<string, unknown> | null,
-  workflow: null as Record<string, unknown> | null,
   readDiff: vi.fn(),
   sandbox: vi.fn(),
+  workflow: null as Record<string, unknown> | null,
 }));
 vi.mock("eve/tools", () => ({ defineTool: <T>(value: T): T => value }));
 vi.mock("./draft-reconciliation-state", () => ({
@@ -34,14 +34,14 @@ describe("optional reconciliation inspection", () => {
       githubSourceDigest: digest,
       originalReviewDigest: digest,
       review: {
-        digest,
-        resolvedTree: "b".repeat(40),
         baseChanges: [],
-        headChanges: [{ kind: "added", path: "docs/platform.md", after: { mode: "644", digest } }],
+        digest,
+        headChanges: [{ after: { digest, mode: "644" }, kind: "added", path: "docs/platform.md" }],
+        resolvedTree: "b".repeat(40),
       },
       validation: { resolvedTree: "b".repeat(40) },
     };
-    mocks.workflow = { phase: "reviewed", githubSource: { digest }, reviewReceipt: { digest } };
+    mocks.workflow = { githubSource: { digest }, phase: "reviewed", reviewReceipt: { digest } };
     mocks.readDiff.mockResolvedValue({
       chunkBase64: Buffer.from("tail").toString("base64"),
       cursor: 40,
@@ -54,7 +54,7 @@ describe("optional reconciliation inspection", () => {
     const previous = structuredClone(mocks.candidate);
     await expect(
       inspectReconciliation.execute(
-        { kind: "diff", against: "head", cursor: 40, path: "docs/platform.md" },
+        { against: "head", cursor: 40, kind: "diff", path: "docs/platform.md" },
         context,
       ),
     ).resolves.toMatchObject({ content: "tail", cursor: 40, path: "docs/platform.md" });
@@ -66,13 +66,13 @@ describe("optional reconciliation inspection", () => {
 
   it("exposes non-app metadata without reading raw diff bytes", async () => {
     await expect(
-      inspectReconciliation.execute({ kind: "changes", against: "head" }, context),
+      inspectReconciliation.execute({ against: "head", kind: "changes" }, context),
     ).resolves.toMatchObject({
+      appOwnedFiles: 0,
+      changes: [expect.objectContaining({ path: "docs/platform.md" })],
+      nonAppFiles: 1,
       status: "changes",
       totalFiles: 1,
-      appOwnedFiles: 0,
-      nonAppFiles: 1,
-      changes: [expect.objectContaining({ path: "docs/platform.md" })],
     });
     expect(mocks.readDiff).not.toHaveBeenCalled();
     expect(mocks.sandbox).not.toHaveBeenCalled();
@@ -80,12 +80,12 @@ describe("optional reconciliation inspection", () => {
 
   it("retains the selected-source boundary for optional reads", async () => {
     mocks.workflow = {
-      phase: "reviewed",
       githubSource: { digest: "c".repeat(64) },
+      phase: "reviewed",
       reviewReceipt: { digest },
     };
     await expect(
-      inspectReconciliation.execute({ kind: "changes", against: "head" }, context),
+      inspectReconciliation.execute({ against: "head", kind: "changes" }, context),
     ).rejects.toThrow("Prepare the current draft reconciliation");
     expect(mocks.readDiff).not.toHaveBeenCalled();
   });

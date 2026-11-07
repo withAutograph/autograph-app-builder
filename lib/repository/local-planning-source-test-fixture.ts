@@ -6,17 +6,18 @@ import path from "node:path";
 import type { BuilderSandboxSession } from "../sandbox/builder-sandbox";
 import { prepareDevelopmentSandboxWorkspace } from "./supported-template";
 
+const writeFixtureFile = (base: string, file: string, content: string) => {
+  const target = path.join(base, file);
+  mkdirSync(path.dirname(target), { recursive: true });
+  writeFileSync(target, content);
+};
+
 export const localPlanningSourceArchiveFixture = async () => {
   const root = realpathSync(mkdtempSync(path.join(tmpdir(), "owned-archive-source-")));
   const source = path.join(root, "source");
   const workspace = path.join(root, "workspace");
   mkdirSync(source);
   mkdirSync(workspace);
-  const write = (base: string, file: string, content: string) => {
-    const target = path.join(base, file);
-    mkdirSync(path.dirname(target), { recursive: true });
-    writeFileSync(target, content);
-  };
   const git = (...args: string[]) =>
     execFileSync(
       "/usr/bin/git",
@@ -26,12 +27,12 @@ export const localPlanningSourceArchiveFixture = async () => {
   git("init", "--quiet");
   git("config", "user.name", "Fixture");
   git("config", "user.email", "fixture@example.test");
-  write(source, "seed.txt", "shared ancestor\n");
+  writeFixtureFile(source, "seed.txt", "shared ancestor\n");
   git("add", ".");
   git("commit", "--quiet", "-m", "shared ancestor");
-  write(source, ".gitignore", ".app-builder/\nnode_modules/\n.env.local\n");
-  write(source, "shared.txt", "old trusted source\n");
-  write(source, "apps/example/app/page.tsx", "old source app\n");
+  writeFixtureFile(source, ".gitignore", ".app-builder/\nnode_modules/\n.env.local\n");
+  writeFixtureFile(source, "shared.txt", "old trusted source\n");
+  writeFixtureFile(source, "apps/example/app/page.tsx", "old source app\n");
   git("add", ".");
   git("commit", "--quiet", "-m", "original source");
   const translate = (value: string) =>
@@ -55,25 +56,7 @@ export const localPlanningSourceArchiveFixture = async () => {
   };
   const sandbox: BuilderSandboxSession = {
     id: "same-owned-workspace",
-    setNetworkPolicy: async () => {
-      /* File-backed fixture has no network lifecycle. */
-    },
-    resolvePath: translate,
-    run: async (options) => {
-      const result = spawnSync(
-        "/bin/bash",
-        ["-c", options.command.replaceAll("/workspace", workspace)],
-        {
-          cwd: translate(options.workingDirectory ?? "."),
-          env: { NODE_ENV: "test", PATH: `${path.dirname(process.execPath)}:/usr/bin:/bin` },
-          encoding: "utf-8",
-        },
-      );
-      return { exitCode: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
-    },
-    spawn: async () => {
-      throw new Error("unused spawn");
-    },
+    readBinaryFile: async (options) => read(options.path),
     readFile: async (options) => {
       const bytes = read(options.path);
       return bytes === null
@@ -85,43 +68,65 @@ export const localPlanningSourceArchiveFixture = async () => {
             },
           });
     },
-    readBinaryFile: async (options) => read(options.path),
     readTextFile: async (options) => read(options.path)?.toString("utf-8") ?? null,
-    writeFile: async (options) => {
-      store(options.path, new Uint8Array(await new Response(options.content).arrayBuffer()));
-    },
-    writeBinaryFile: async (options) => {
-      store(options.path, options.content);
-    },
-    writeTextFile: async (options) => {
-      store(options.path, options.content);
-    },
     removePath: async (options) => {
       rmSync(translate(options.path), {
         force: options.force ?? false,
         recursive: options.recursive ?? false,
       });
     },
+    resolvePath: translate,
+    run: async (options) => {
+      const result = spawnSync(
+        "/bin/bash",
+        ["-c", options.command.replaceAll("/workspace", workspace)],
+        {
+          cwd: translate(options.workingDirectory ?? "."),
+          encoding: "utf-8",
+          env: { NODE_ENV: "test", PATH: `${path.dirname(process.execPath)}:/usr/bin:/bin` },
+        },
+      );
+      return { exitCode: result.status ?? 1, stderr: result.stderr, stdout: result.stdout };
+    },
+    setNetworkPolicy: async () => {
+      /* File-backed fixture has no network lifecycle. */
+    },
+    spawn: async () => {
+      throw new Error("unused spawn");
+    },
+    writeBinaryFile: async (options) => {
+      store(options.path, options.content);
+    },
+    writeFile: async (options) => {
+      store(options.path, new Uint8Array(await new Response(options.content).arrayBuffer()));
+    },
+    writeTextFile: async (options) => {
+      store(options.path, options.content);
+    },
   };
   const original = await prepareDevelopmentSandboxWorkspace(source, sandbox, "normal-prepare");
   const candidate = path.join(workspace, "repository");
-  write(candidate, "apps/example/app/page.tsx", "saved private app\n");
-  write(candidate, "apps/example/.config/mise/tasks/check", "saved app task\n");
-  write(candidate, "apps/example/schema/release/v1/release.json", "saved immutable release\n");
-  write(candidate, ".config/app-specs/example.md", "saved product\n");
-  write(candidate, ".env.local", "private retained\n");
-  write(candidate, "node_modules/cache", "retained dependency cache\n");
-  return {
-    root,
-    source,
-    workspace,
+  writeFixtureFile(candidate, "apps/example/app/page.tsx", "saved private app\n");
+  writeFixtureFile(candidate, "apps/example/.config/mise/tasks/check", "saved app task\n");
+  writeFixtureFile(
     candidate,
-    sandbox,
-    original,
-    git,
-    write,
+    "apps/example/schema/release/v1/release.json",
+    "saved immutable release\n",
+  );
+  writeFixtureFile(candidate, ".config/app-specs/example.md", "saved product\n");
+  writeFixtureFile(candidate, ".env.local", "private retained\n");
+  writeFixtureFile(candidate, "node_modules/cache", "retained dependency cache\n");
+  return {
+    candidate,
     dispose: () => {
       rmSync(root, { force: true, recursive: true });
     },
+    git,
+    original,
+    root,
+    sandbox,
+    source,
+    workspace,
+    write: writeFixtureFile,
   };
 };

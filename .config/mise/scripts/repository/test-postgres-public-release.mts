@@ -26,6 +26,8 @@ const scratch = await mkdtemp(path.join(tmpdir(), "a469-public-release-pg-"));
 const pgdata = path.join(scratch, "data");
 const passwordFile = path.join(scratch, "password");
 const password = randomBytes(24).toString("hex");
+const pendingState = "pending" as const;
+const observedEnvId = "env-observed";
 const run = (binary: string, args: string[]) => {
   const result = spawnSync(path.join(postgresBin, binary), args, { encoding: "utf-8" });
   if (result.status !== 0) {
@@ -40,7 +42,7 @@ const address = z.object({ port: z.number().int().positive() }).safeParse(listen
 if (!address.success) {
   throw new Error("Local fixture port unavailable");
 }
-const port = address.data.port;
+const { port } = address.data;
 const closed = once(listener, "close");
 listener.close();
 await closed;
@@ -103,20 +105,20 @@ try {
   );
   const pending = await store.compareAndSet(initial, {
     ...initial.record,
-    effects: { ...initial.record.effects, "bind-production-runtime": "pending" },
-    bindings: { APP_DATABASE_URL: { state: "pending" } },
+    bindings: { APP_DATABASE_URL: { state: pendingState } },
+    effects: { ...initial.record.effects, "bind-production-runtime": pendingState },
   });
   assert.ok(pending);
   assert.equal(await store.compareAndSet(initial, initial.record), undefined);
   const accepted = await store.compareAndSet(pending, {
     ...pending.record,
-    bindings: { APP_DATABASE_URL: { state: "pending", acceptedEnvId: "env-observed" } },
+    bindings: { APP_DATABASE_URL: { acceptedEnvId: observedEnvId, state: pendingState } },
   });
   assert.ok(accepted);
   await assert.rejects(
     store.compareAndSet(accepted, {
       ...accepted.record,
-      bindings: { APP_DATABASE_URL: { state: "pending", acceptedEnvId: "foreign-env" } },
+      bindings: { APP_DATABASE_URL: { acceptedEnvId: "foreign-env", state: pendingState } },
     }),
   );
   await assert.rejects(
@@ -127,13 +129,13 @@ try {
   );
   const verified = await store.compareAndSet(accepted, {
     ...accepted.record,
-    bindings: { APP_DATABASE_URL: { state: "applied", acceptedEnvId: "env-observed" } },
+    bindings: { APP_DATABASE_URL: { acceptedEnvId: observedEnvId, state: "applied" } },
   });
   assert.ok(verified);
   await assert.rejects(
     store.compareAndSet(verified, {
       ...verified.record,
-      bindings: { APP_DATABASE_URL: { state: "pending", acceptedEnvId: "env-observed" } },
+      bindings: { APP_DATABASE_URL: { acceptedEnvId: observedEnvId, state: pendingState } },
     }),
   );
   const otherRef = randomUUID();
@@ -151,5 +153,5 @@ try {
   if (started) {
     run("pg_ctl", ["-D", pgdata, "-m", "immediate", "-w", "stop"]);
   }
-  await rm(scratch, { recursive: true, force: true });
+  await rm(scratch, { force: true, recursive: true });
 }

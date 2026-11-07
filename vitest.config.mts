@@ -32,6 +32,7 @@ export default defineConfig({
             "**/e2e/**",
           ],
           maxWorkers: 2,
+          name: "unit",
           pool: "threads",
           testTimeout: 10_000,
         },

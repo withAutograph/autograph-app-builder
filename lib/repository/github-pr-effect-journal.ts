@@ -5,14 +5,14 @@ const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
 const shaSchema = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const readyAtSchema = z.iso.datetime({ offset: true });
 const intentFields = {
-  publicationDigest: digestSchema,
-  installationIdentityDigest: digestSchema,
-  repositoryId: z.string().regex(/^[1-9][0-9]*$/u),
-  owner: z.string().regex(/^[A-Za-z0-9_.-]+$/u),
-  name: z.string().regex(/^[A-Za-z0-9_.-]+$/u),
-  pullRequestNumber: z.int().positive(),
-  headSha: shaSchema,
   baseBranch: z.string().min(1),
+  headSha: shaSchema,
+  installationIdentityDigest: digestSchema,
+  name: z.string().regex(/^[A-Za-z0-9_.-]+$/u),
+  owner: z.string().regex(/^[A-Za-z0-9_.-]+$/u),
+  publicationDigest: digestSchema,
+  pullRequestNumber: z.int().positive(),
+  repositoryId: z.string().regex(/^[1-9][0-9]*$/u),
 };
 const intentSchema = z.discriminatedUnion("kind", [
   z.strictObject({
@@ -32,28 +32,28 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 
 export const githubPrEffectIntentDigest = (input: GitHubPrEffectIntent): string =>
   hash(
-    JSON.stringify({ version: "github-pr-effect-intent-v1", intent: intentSchema.parse(input) }),
+    JSON.stringify({ intent: intentSchema.parse(input), version: "github-pr-effect-intent-v1" }),
   );
 
 const receiptFields = {
-  intent: intentSchema,
   approvedByCallId: z.string().min(1),
+  intent: intentSchema,
 };
 const receiptInputSchema = z
   .discriminatedUnion("status", [
     z.strictObject({ ...receiptFields, status: z.literal("pending") }),
     z.strictObject({
       ...receiptFields,
-      status: z.literal("succeeded"),
       evidence: z.discriminatedUnion("kind", [
         z.strictObject({ kind: z.literal("pr-ready"), readyAt: readyAtSchema }),
         z.strictObject({ kind: z.literal("pr-merge"), mergeCommitSha: shaSchema }),
       ]),
+      status: z.literal("succeeded"),
     }),
     z.strictObject({
       ...receiptFields,
-      status: z.literal("failed"),
       code: z.enum(["provider-rejected", "cancelled"]),
+      status: z.literal("failed"),
     }),
   ])
   .refine(
@@ -74,8 +74,8 @@ export const createGitHubPrEffectReceipt = (
   const canonical = receiptInputSchema.parse(input);
   const unsigned = {
     ...canonical,
-    version: "github-pr-effect-receipt-v1" as const,
     intentDigest: githubPrEffectIntentDigest(canonical.intent),
+    version: "github-pr-effect-receipt-v1" as const,
   };
   return { ...unsigned, digest: hash(JSON.stringify(unsigned)) };
 };

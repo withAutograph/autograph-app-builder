@@ -15,6 +15,11 @@ import {
 } from "./resource-approval-response";
 import type { PrivateInputState } from "./session-limit-input";
 
+const nativeTargetToolName = "prepare-app-native-target";
+const toolApprovalKind = "tool-approval";
+const targetIdentityKeys = ["appId", "operationRef", "planDigest"] as const;
+const resolutionOutcomes = new Set(["approved", "denied"]);
+
 /**
  * Reconstruct one unknown response only from fully settled owner-bound native batches.
  * The exact request digest is the final authority; no subsets or response dispatches
@@ -54,7 +59,7 @@ export const reconstructNativeApprovalResponse = (input: {
   }
   const receipts = persisted.flatMap((receipt) => (receipt.success ? [receipt.data] : []));
   const isTarget = (receipt: PrivateResourceApprovalReceipt) => {
-    if (receipt.toolName !== "prepare-app-native-target") {
+    if (receipt.toolName !== nativeTargetToolName) {
       return false;
     }
     return [
@@ -70,20 +75,16 @@ export const reconstructNativeApprovalResponse = (input: {
   // Any still-pending native request without a clearly different target is ambiguous.
   for (const batch of input.state.pending) {
     for (const request of batch.requests) {
-      if (request.kind !== "tool-approval" || request.toolName !== "prepare-app-native-target") {
+      if (request.kind !== toolApprovalKind || request.toolName !== nativeTargetToolName) {
         continue;
       }
       const pending = capture.pendingRequests.filter(
         (entry) => entry.requestId === request.requestId,
       );
-      if (pending.length !== 1 || pending[0]?.toolName !== "prepare-app-native-target") {
+      if (pending.length !== 1 || pending[0]?.toolName !== nativeTargetToolName) {
         return undefined;
       }
-      if (
-        pending[0].toolInput.appId === input.target.appId &&
-        pending[0].toolInput.operationRef === input.target.operationRef &&
-        pending[0].toolInput.planDigest === input.target.planDigest
-      ) {
+      if (targetIdentityKeys.every((key) => pending[0].toolInput[key] === input.target[key])) {
         return undefined;
       }
     }
@@ -92,28 +93,25 @@ export const reconstructNativeApprovalResponse = (input: {
   const selected: typeof input.state.resolved = [];
   for (const resolved of input.state.resolved) {
     const native = resolved.batch.requests.filter(
-      (request) =>
-        request.kind === "tool-approval" && request.toolName === "prepare-app-native-target",
+      (request) => request.kind === toolApprovalKind && request.toolName === nativeTargetToolName,
     );
-    if (native.length === 0) {
-      continue;
+    if (native.length > 0) {
+      const captured = native.map((request) =>
+        capture.receipts.filter((receipt) => receipt.requestId === request.requestId),
+      );
+      if (captured.some((matches) => matches.length !== 1)) {
+        return undefined;
+      }
+      const targetCount = captured.filter(
+        (matches) => matches[0] !== undefined && isTarget(matches[0]),
+      ).length;
+      if (targetCount > 0) {
+        if (targetCount !== resolved.batch.requests.length) {
+          return undefined;
+        }
+        selected.push(resolved);
+      }
     }
-    const captured = native.map((request) =>
-      capture.receipts.filter((receipt) => receipt.requestId === request.requestId),
-    );
-    if (captured.some((matches) => matches.length !== 1)) {
-      return undefined;
-    }
-    const targetCount = captured.filter(
-      (matches) => matches[0] !== undefined && isTarget(matches[0]),
-    ).length;
-    if (targetCount === 0) {
-      continue;
-    }
-    if (targetCount !== resolved.batch.requests.length) {
-      return undefined;
-    }
-    selected.push(resolved);
   }
   if (selected.length === 0) {
     return undefined;
@@ -142,8 +140,10 @@ export const reconstructNativeApprovalResponse = (input: {
       const resolution = item.resolutions.filter((entry) => entry.requestId === request.requestId);
       const matched = capture.receipts.filter((entry) => entry.requestId === request.requestId);
       const saved = receipts.filter((entry) => entry.requestId === request.requestId);
-      const terminal = matched[0];
-      if (terminal === undefined || resolution[0] === undefined) {
+      const [terminal] = matched;
+      const [resolutionEntry] = resolution;
+      const [savedReceipt] = saved;
+      if (terminal === undefined || resolutionEntry === undefined) {
         return undefined;
       }
       const matches = [
@@ -151,11 +151,11 @@ export const reconstructNativeApprovalResponse = (input: {
         matched.length === 1,
         saved.length === 1,
         isTarget(terminal),
-        isDeepStrictEqual(terminal, saved[0]),
+        isDeepStrictEqual(terminal, savedReceipt),
         terminal.responderPrincipalId === input.ownerUserId,
-        resolution[0].kind === "tool-approval",
-        ["approved", "denied"].includes(resolution[0].outcome),
-        terminal.outcome === (resolution[0].outcome === "approved" ? "approved" : "cancelled"),
+        resolutionEntry.kind === toolApprovalKind,
+        resolutionOutcomes.has(resolutionEntry.outcome),
+        terminal.outcome === (resolutionEntry.outcome === "approved" ? "approved" : "cancelled"),
       ];
       if (!matches.every(Boolean)) {
         return undefined;
@@ -166,13 +166,13 @@ export const reconstructNativeApprovalResponse = (input: {
       });
     }
   }
-  const request = { clientRequestId: input.clientRequestId, sessionId: input.sessionId, responses };
+  const request = { clientRequestId: input.clientRequestId, responses, sessionId: input.sessionId };
   if (digest({ kind: "respond", request, sessionId: input.sessionId }) !== input.requestDigest) {
     return undefined;
   }
   const parsedProof = resourceApprovalResponseProofSchema.safeParse({
-    adapterSessionId: input.adapterSessionId,
     adapterGeneration: input.adapterGeneration,
+    adapterSessionId: input.adapterSessionId,
     checkpointDigest: input.checkpointDigest,
     request,
   });
@@ -181,14 +181,14 @@ export const reconstructNativeApprovalResponse = (input: {
   }
   if (
     !provesResourceApprovalResponse({
+      capture,
       clientRequestId: input.clientRequestId,
-      requestDigest: input.requestDigest,
-      sessionId: input.sessionId,
       ownerUserId: input.ownerUserId,
       proof: parsedProof.data,
-      state: input.state,
-      capture,
       receipts,
+      requestDigest: input.requestDigest,
+      sessionId: input.sessionId,
+      state: input.state,
     })
   ) {
     return undefined;

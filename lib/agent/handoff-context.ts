@@ -26,10 +26,11 @@ export function createPreparedHandoffReader(input: {
       throw new BuilderHandoffUnavailableError();
     }
     const record = builderHandoffRecordSchema.parse(stored);
+    const recordAuthority: Record<string, string> = record.authority;
     if (
       record.handoffId !== handoffId ||
       Object.entries(authority).some(
-        ([key, value]) => record.authority[key as keyof HostedSessionTenantAuthority] !== value,
+        ([key, value]) => recordAuthority[key] !== value,
       )
     ) {
       throw new BuilderHandoffUnavailableError();
@@ -60,7 +61,7 @@ async function createDeploymentPreparedHandoffReader() {
     issuer: config.issuer,
   });
   const read = createPreparedHandoffReader({
-    isActiveMember: (value) => membership.isActiveMember(value),
+    isActiveMember: async (value) => await membership.isActiveMember(value),
     read: createPostgresBuilderHandoffStore(database).read,
   });
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
@@ -69,7 +70,7 @@ async function createDeploymentPreparedHandoffReader() {
     if (authority.issuer !== config.issuer || authority.audience !== config.resource) {
       throw new BuilderHandoffUnavailableError();
     }
-    return read(sessionAuth);
+    return await read(sessionAuth);
   };
 }
 
@@ -92,5 +93,7 @@ export async function readPreparedHandoffContext(sessionAuth: unknown) {
     throw error;
   });
   // oxlint-enable promise/prefer-await-to-callbacks
-  return (await deploymentReader)(sessionAuth);
+  return await (
+    await deploymentReader
+  )(sessionAuth);
 }

@@ -6,7 +6,7 @@ export const readOperatorExecutionObservation = (
   record: HostedRuntimeJournalRecord,
   now: number,
 ): NonNullable<OperatorPublicResult["execution"]> => {
-  const operator = record.operator;
+  const { operator } = record;
   const saved = record.executionObservation;
   const matching =
     // oxlint-disable-next-line sonarjs/expression-complexity -- Match all original approval identity dimensions before exposing private settlement.
@@ -21,7 +21,7 @@ export const readOperatorExecutionObservation = (
     saved.state === "settled" &&
     (record.leaseId === undefined || record.leaseId === saved.attemptRef)
   ) {
-    return { state: "settled", outcome: saved.outcome };
+    return { outcome: saved.outcome, state: "settled" };
   }
   if (
     record.leaseId !== undefined &&
@@ -36,7 +36,7 @@ export const readOperatorExecutionObservation = (
     record.status === "cleaned" ||
     record.status === "participants-prepared"
   ) {
-    return { state: "settled", outcome: { status: record.status } };
+    return { outcome: { status: record.status }, state: "settled" };
   }
   return { state: "unknown" };
 };
@@ -62,5 +62,5 @@ export const settleOperatorExecution = (
   ) {
     return record;
   }
-  return { ...record, executionObservation: { ...saved, state: "settled", outcome } };
+  return { ...record, executionObservation: { ...saved, outcome, state: "settled" } };
 };

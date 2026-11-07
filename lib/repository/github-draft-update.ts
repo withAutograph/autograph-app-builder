@@ -325,10 +325,10 @@ export const inspectAppliedExistingDraftUpdate = async (input: {
     throw new Error("GitHub installation access changed before draft update recovery.");
   }
   const observation = await adapter.inspectDraft({
-    repositoryId: proposal.repositoryId,
-    owner: proposal.owner,
     name: proposal.name,
     number: proposal.pullRequestNumber,
+    owner: proposal.owner,
+    repositoryId: proposal.repositoryId,
   });
   if (!sameDraft(proposal, observation)) {
     throw new Error("The retained publication is no longer this same open draft.");
@@ -367,7 +367,7 @@ export const updateExistingDraft = async (input: {
     review: input.review,
     source: input.contentSource,
   });
-  const inspectApplied = (observed: ExistingDraftObservation) =>
+  const inspectApplied = async (observed: ExistingDraftObservation) =>
     (!isPublishedDraftRepairReview(input.review) ||
       observed.headTree === input.review.resolvedTree) &&
     input.adapter.inspectAppliedUpdate(proposal, content, observed);

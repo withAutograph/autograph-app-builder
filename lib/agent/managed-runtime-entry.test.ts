@@ -14,8 +14,8 @@ import { createManagedOwnedChildLauncher } from "../sandbox/managed-runtime-supe
 import { createManagedRuntimeIpcClient } from "../sandbox/managed-runtime-ipc";
 import { managedRuntimeEntryInputSchema, managedRuntimeReadySchema } from "./managed-runtime-entry";
 
-// oxlint-disable-next-line typescript/strict-void-return -- Node execFile intentionally returns a child handle in addition to its documented completion callback.
-const executeFile = promisify(execFile);
+const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+const executeFile = promisifyExecFile(execFile);
 // This cross-repository assembly acceptance is explicitly opt-in. Normal Builder
 // CI does not acquire another repository, install tools or manufacture a verifier.
 const arrustedRoot = process.env.ARRUSTED_MANAGED_RUNTIME_TEST_ROOT;
@@ -41,18 +41,18 @@ const exchange = async (port: number, token: string, transport: string, body: Bu
   await new Promise<{ status: number; body: Buffer }>((resolve, reject) => {
     const outgoing = request(
       {
-        hostname: "127.0.0.1",
-        port,
-        method: "POST",
-        path: "/orchard/action?view=one",
         headers: {
           authorization: `Bearer ${transport}`,
-          "x-platform-principal": token,
+          "content-length": String(body.length),
           "x-platform-managed-suite": "must-not-reach-app",
+          "x-platform-principal": token,
           "x-vercel-oidc-token": "controlled-transport-secret",
           "x-vercel-trusted-oidc-idp-token": "controlled-transport-secret-two",
-          "content-length": String(body.length),
         },
+        hostname: "127.0.0.1",
+        method: "POST",
+        path: "/orchard/action?view=one",
+        port,
       },
       (response) => {
         const parts: Buffer[] = [];
@@ -61,7 +61,7 @@ const exchange = async (port: number, token: string, transport: string, body: Bu
         });
         response.once("error", reject);
         response.once("end", () => {
-          resolve({ status: response.statusCode ?? 0, body: Buffer.concat(parts) });
+          resolve({ body: Buffer.concat(parts), status: response.statusCode ?? 0 });
         });
       },
     );
@@ -69,19 +69,19 @@ const exchange = async (port: number, token: string, transport: string, body: Bu
     outgoing.end(body);
   });
 const observationSchema = z.object({
+  argv: z.array(z.string()),
+  body: z.string(),
+  environment: z.record(z.string(), z.string()),
+  generation: z.number().int().positive(),
+  headers: z.record(z.string(), z.union([z.string(), z.array(z.string())])),
+  method: z.string(),
+  pid: z.number().int().positive(),
+  target: z.string(),
   verified: z.object({
     actorId: z.string(),
+    grants: z.array(z.object({ fenceGeneration: z.number(), role: z.string() })),
     organizationId: z.string(),
-    grants: z.array(z.object({ role: z.string(), fenceGeneration: z.number() })),
   }),
-  generation: z.number().int().positive(),
-  pid: z.number().int().positive(),
-  method: z.string(),
-  target: z.string(),
-  body: z.string(),
-  headers: z.record(z.string(), z.union([z.string(), z.array(z.string())])),
-  environment: z.record(z.string(), z.string()),
-  argv: z.array(z.string()),
 });
 const readJson = async <T>(file: string, schema: z.ZodType<T>): Promise<T> =>
   schema.parse(JSON.parse(await readFile(file, "utf-8")));
@@ -141,13 +141,13 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
         ["scripts/build-managed-runtime-worker.mjs", selectedArrustedRoot, executable, target],
         {
           cwd: process.cwd(),
-          timeout: 30_000,
           encoding: "utf-8",
+          timeout: 30_000,
         },
       );
       const build: unknown = JSON.parse(built.stdout);
       expect(
-        z.object({ sha256: z.string(), bytes: z.number().positive() }).parse(build).sha256,
+        z.object({ bytes: z.number().positive(), sha256: z.string() }).parse(build).sha256,
       ).toBe(
         createHash("sha256")
           .update(await readFile(executable))
@@ -178,84 +178,84 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
       const appPort = await availablePort();
       const bridgePort = await availablePort();
       const current = {
-        intentId: randomUUID(),
+        appId: "orchard",
         approvalRef: "controlled-owner-approval",
+        fence: 1,
+        intentId: randomUUID(),
+        leaseExpiresAt: new Date(Date.now() + 300_000).toISOString(),
         owner: {
-          issuer: "https://builder.example/api/auth",
           audience: "https://builder.example/mcp",
-          workspaceId: "workspace",
+          issuer: "https://builder.example/api/auth",
           ownerUserId: "owner",
           sessionId: "saved-session",
+          workspaceId: "workspace",
         },
-        appId: "orchard",
-        runtimeAttemptId: randomUUID(),
-        fence: 1,
-        sandboxId: "controlled-sandbox",
         providerSessionId: "controlled-provider-session",
+        runtimeAttemptId: randomUUID(),
+        sandboxId: "controlled-sandbox",
         state: "starting",
-        leaseExpiresAt: new Date(Date.now() + 300_000).toISOString(),
       };
       const input = managedRuntimeEntryInputSchema.parse({
-        version: 1,
+        actors: [{ actorId: "fixture-actor", organizationId: "fixture-organization" }],
+        appEnvironment: {
+          ORCHARD_DATABASE_URL: "postgresql://controlled.invalid/same-resource",
+          PLATFORM_APP_BOUNDARY: JSON.stringify({
+            appId: "orchard",
+            mode: "protected-gateway-v1",
+            runtime: {
+              database: "orchard",
+              environment: "hosted",
+              hostname: "controlled.invalid",
+              port: 5432,
+              runtimeRole: "orchard_runtime",
+            },
+            verification: { jwksUrl: `${nativeOrigin}/_platform/jwks.json`, publicOrigin },
+            version: 1,
+          }),
+          PLATFORM_JWKS_URL: `${nativeOrigin}/_platform/jwks.json`,
+          PLATFORM_ORIGIN: nativeOrigin,
+          PLATFORM_PUBLIC_ORIGIN: publicOrigin,
+        },
+        appPort,
+        bridgePort,
         current,
+        lifecycleSha256: capabilities.lifecycleSha256,
         profile: {
-          version: 1,
           appId: "orchard",
-          publicOrigin,
           jwksUrl: `${publicOrigin}/_platform/jwks.json`,
           keys: [
             {
               ...publicKey.export({ format: "jwk" }),
-              kid: "fixture-key",
               alg: "EdDSA",
+              kid: "fixture-key",
               use: "sig",
             },
           ],
+          publicOrigin,
+          version: 1,
         },
-        actors: [{ actorId: "fixture-actor", organizationId: "fixture-organization" }],
         root: directory,
         rootDirectory: directory,
-        appPort,
-        bridgePort,
-        appEnvironment: {
-          ORCHARD_DATABASE_URL: "postgresql://controlled.invalid/same-resource",
-          PLATFORM_ORIGIN: nativeOrigin,
-          PLATFORM_PUBLIC_ORIGIN: publicOrigin,
-          PLATFORM_JWKS_URL: `${nativeOrigin}/_platform/jwks.json`,
-          PLATFORM_APP_BOUNDARY: JSON.stringify({
-            version: 1,
-            mode: "protected-gateway-v1",
-            appId: "orchard",
-            verification: { publicOrigin, jwksUrl: `${nativeOrigin}/_platform/jwks.json` },
-            runtime: {
-              hostname: "controlled.invalid",
-              port: 5432,
-              database: "orchard",
-              runtimeRole: "orchard_runtime",
-              environment: "hosted",
-            },
-          }),
-        },
-        lifecycleSha256: capabilities.lifecycleSha256,
         transportSha256: capabilities.projection.transportSha256,
+        version: 1,
       });
       const inputText = JSON.stringify(input);
       for (const bearer of Object.values(capabilities.private)) {
         expect(inputText).not.toContain(bearer);
       }
-      await writeFile(inputFile, inputText, { mode: 0o600, flag: "wx" });
+      await writeFile(inputFile, inputText, { flag: "wx", mode: 0o600 });
       owned = await createManagedOwnedChildLauncher({
-        executable,
-        args: ["protected-managed-app-runtime", "--input-file", inputFile],
-        cwd: directory,
         appEnvironment: {
-          PATH: `${bin}:${path.dirname(process.execPath)}:/usr/bin:/bin`,
-          HOME: directory,
-          VERCEL_OIDC_TOKEN: "worker-only-provider-token",
           BETTER_AUTH_SECRET: "worker-only-auth-secret",
+          HOME: directory,
+          PATH: `${bin}:${path.dirname(process.execPath)}:/usr/bin:/bin`,
           PLATFORM_AUTH_DATABASE_URL: "postgresql://worker-only.invalid/auth",
           PLATFORM_MANAGED_GATEWAY_PUBLIC_PROFILE: "worker-only-untrusted-profile",
+          VERCEL_OIDC_TOKEN: "worker-only-provider-token",
         },
+        args: ["protected-managed-app-runtime", "--input-file", inputFile],
+        cwd: directory,
+        executable,
         stopTimeoutMs: 2000,
       })();
       await awaitFile(path.join(directory, "ready.json"), owned.closed);
@@ -274,22 +274,22 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
         await readJson(
           path.join(directory, "launch.json"),
           z.object({
+            environmentMode: z.number(),
             inputRemoved: z.boolean(),
+            runtimeEnvironment: z.record(z.string(), z.string()),
             stateDirectory: z.string(),
             stateMode: z.number(),
-            environmentMode: z.number(),
-            runtimeEnvironment: z.record(z.string(), z.string()),
           }),
         ),
       ).toMatchObject({
-        inputRemoved: true,
-        stateDirectory: path.join(input.rootDirectory, "app-state"),
-        stateMode: 0o700,
         environmentMode: 0o600,
+        inputRemoved: true,
         runtimeEnvironment: {
           ...input.appEnvironment,
           PLATFORM_MANAGED_GATEWAY_PUBLIC_PROFILE: JSON.stringify(input.profile),
         },
+        stateDirectory: path.join(input.rootDirectory, "app-state"),
+        stateMode: 0o700,
       });
       await expect(access(inputFile)).rejects.toThrow();
       const body = Buffer.from('{"content":"租户😀"}\n');
@@ -299,19 +299,19 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
       const timestamp = Math.floor(Date.now() / 1000);
       const payload = Buffer.from(
         JSON.stringify({
-          iss: publicOrigin,
+          appActorGrants: [{ fenceGeneration: 1, role: "fixture_operator" }],
           aud: "orchard",
-          sub: "fixture-actor",
-          organizationId: "fixture-organization",
-          customerId: "fixture-organization",
-          organizationRole: "member",
-          appActorGrants: [{ role: "fixture_operator", fenceGeneration: 1 }],
-          method: "POST",
-          path: "/orchard/action?view=one",
           bodySha256: createHash("sha256").update(body).digest("base64url"),
-          iat: timestamp,
+          customerId: "fixture-organization",
           exp: timestamp + 60,
+          iat: timestamp,
+          iss: publicOrigin,
           jti: randomUUID(),
+          method: "POST",
+          organizationId: "fixture-organization",
+          organizationRole: "member",
+          path: "/orchard/action?view=one",
+          sub: "fixture-actor",
         }),
       ).toString("base64url");
       const signingInput = `${header}.${payload}`;
@@ -320,21 +320,21 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
       expect(accepted.status).toBe(200);
       const first = observationSchema.parse(JSON.parse(accepted.body.toString()));
       expect(first).toMatchObject({
+        body: body.toString("base64"),
         generation: 1,
         method: "POST",
         target: "/orchard/action?view=one",
-        body: body.toString("base64"),
       });
       expect(first.verified).toEqual({
         actorId: "fixture-actor",
+        grants: [{ fenceGeneration: 1, role: "fixture_operator" }],
         organizationId: "fixture-organization",
-        grants: [{ role: "fixture_operator", fenceGeneration: 1 }],
       });
       const terminal = await readJson(
         path.join(directory, "terminal.json"),
         z.object({
-          cwd: z.string(),
           argv: z.array(z.string()),
+          cwd: z.string(),
           environment: z.record(z.string(), z.string()),
         }),
       );
@@ -378,16 +378,16 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
       );
       expect(wrongTransport.status).toBe(403);
       const client = createManagedRuntimeIpcClient({
-        socketPath: ready.socketPath,
         lifecycleCapability: capabilities.private.lifecycle,
+        socketPath: ready.socketPath,
       });
-      const stopped = await client.execute({ operation: "stop-and-wait", commandId: randomUUID() });
+      const stopped = await client.execute({ commandId: randomUUID(), operation: "stop-and-wait" });
       expect(stopped.state).toBe("stopped");
       expect(() => process.kill(first.pid, 0)).toThrow();
-      await client.execute({ operation: "start-same-environment", commandId: randomUUID() });
+      await client.execute({ commandId: randomUUID(), operation: "start-same-environment" });
       let readiness = await client.execute({
-        operation: "observe-readiness",
         commandId: randomUUID(),
+        operation: "observe-readiness",
       });
       const deadline = Date.now() + 5000;
       while (readiness.state !== "ready" && Date.now() < deadline) {
@@ -395,8 +395,8 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
         await delay(25);
         // oxlint-disable-next-line eslint/no-await-in-loop -- Each observation concerns only this owned local fixture process.
         readiness = await client.execute({
-          operation: "observe-readiness",
           commandId: randomUUID(),
+          operation: "observe-readiness",
         });
       }
       expect(readiness.state).toBe("ready");
@@ -421,7 +421,7 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
       ).rejects.toThrow();
     } finally {
       await owned?.terminate();
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { force: true, recursive: true });
     }
   },
   60_000,
@@ -447,7 +447,7 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
           executable,
           `bun-${process.platform}-${process.arch === "arm64" ? "arm64" : "x64"}`,
         ],
-        { cwd: process.cwd(), timeout: 30_000, encoding: "utf-8" },
+        { cwd: process.cwd(), encoding: "utf-8", timeout: 30_000 },
       );
       await installRepositoryRuntimeShim(directory, selectedArrustedRoot);
       // The real entry's readiness HTTP request establishes this barrier. The
@@ -464,82 +464,82 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
       const appPort = await availablePort();
       const bridgePort = await availablePort();
       const input = managedRuntimeEntryInputSchema.parse({
-        version: 1,
+        actors: [{ actorId: "fixture-actor", organizationId: "fixture-organization" }],
+        appEnvironment: {
+          ORCHARD_DATABASE_URL: "postgresql://controlled.invalid/same-resource",
+          PLATFORM_APP_BOUNDARY: JSON.stringify({
+            appId: "orchard",
+            mode: "protected-gateway-v1",
+            runtime: {
+              database: "orchard",
+              environment: "hosted",
+              hostname: "controlled.invalid",
+              port: 5432,
+              runtimeRole: "orchard_runtime",
+            },
+            verification: { jwksUrl: `${nativeOrigin}/_platform/jwks.json`, publicOrigin },
+            version: 1,
+          }),
+          PLATFORM_JWKS_URL: `${nativeOrigin}/_platform/jwks.json`,
+          PLATFORM_ORIGIN: nativeOrigin,
+          PLATFORM_PUBLIC_ORIGIN: publicOrigin,
+        },
+        appPort,
+        bridgePort,
         current: {
-          intentId: randomUUID(),
+          appId: "orchard",
           approvalRef: "controlled-owner-approval",
+          fence: 1,
+          intentId: randomUUID(),
+          leaseExpiresAt: new Date(Date.now() + 30_000).toISOString(),
           owner: {
-            issuer: "https://builder.example/api/auth",
             audience: "https://builder.example/mcp",
-            workspaceId: "workspace",
+            issuer: "https://builder.example/api/auth",
             ownerUserId: "owner",
             sessionId: "saved-session",
+            workspaceId: "workspace",
           },
-          appId: "orchard",
-          runtimeAttemptId: randomUUID(),
-          fence: 1,
-          sandboxId: "controlled-sandbox",
           providerSessionId: "controlled-provider-session",
+          runtimeAttemptId: randomUUID(),
+          sandboxId: "controlled-sandbox",
           state: "starting",
-          leaseExpiresAt: new Date(Date.now() + 30_000).toISOString(),
         },
+        lifecycleSha256: capabilities.lifecycleSha256,
         profile: {
-          version: 1,
           appId: "orchard",
-          publicOrigin,
           jwksUrl: `${publicOrigin}/_platform/jwks.json`,
           keys: [
             {
               ...publicKey.export({ format: "jwk" }),
-              kid: "fixture-key",
               alg: "EdDSA",
+              kid: "fixture-key",
               use: "sig",
             },
           ],
+          publicOrigin,
+          version: 1,
         },
-        actors: [{ actorId: "fixture-actor", organizationId: "fixture-organization" }],
         root: directory,
         rootDirectory: directory,
-        appPort,
-        bridgePort,
-        appEnvironment: {
-          ORCHARD_DATABASE_URL: "postgresql://controlled.invalid/same-resource",
-          PLATFORM_ORIGIN: nativeOrigin,
-          PLATFORM_PUBLIC_ORIGIN: publicOrigin,
-          PLATFORM_JWKS_URL: `${nativeOrigin}/_platform/jwks.json`,
-          PLATFORM_APP_BOUNDARY: JSON.stringify({
-            version: 1,
-            mode: "protected-gateway-v1",
-            appId: "orchard",
-            verification: { publicOrigin, jwksUrl: `${nativeOrigin}/_platform/jwks.json` },
-            runtime: {
-              hostname: "controlled.invalid",
-              port: 5432,
-              database: "orchard",
-              runtimeRole: "orchard_runtime",
-              environment: "hosted",
-            },
-          }),
-        },
-        lifecycleSha256: capabilities.lifecycleSha256,
         transportSha256: capabilities.projection.transportSha256,
+        version: 1,
       });
-      await writeFile(inputFile, JSON.stringify(input), { mode: 0o600, flag: "wx" });
+      await writeFile(inputFile, JSON.stringify(input), { flag: "wx", mode: 0o600 });
       owned = await createManagedOwnedChildLauncher({
-        executable,
+        appEnvironment: {
+          HOME: directory,
+          PATH: `${bin}:${path.dirname(process.execPath)}:/usr/bin:/bin`,
+        },
         args: ["protected-managed-app-runtime", "--input-file", inputFile],
         cwd: directory,
-        appEnvironment: {
-          PATH: `${bin}:${path.dirname(process.execPath)}:/usr/bin:/bin`,
-          HOME: directory,
-        },
+        executable,
         stopTimeoutMs: 2000,
       })();
       const barrierPath = path.join(directory, "startup-barrier.json");
       await awaitFile(barrierPath, owned.closed);
       const barrier = await readJson(
         barrierPath,
-        z.object({ pid: z.number().int().positive(), inputRemoved: z.boolean() }),
+        z.object({ inputRemoved: z.boolean(), pid: z.number().int().positive() }),
       );
       expect(barrier.inputRemoved).toBe(true);
       await expect(access(path.join(directory, "ready.json"))).rejects.toThrow();
@@ -564,7 +564,7 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
       // a PID, command, app effect or production restart API.
       await writeFile(path.join(directory, "cleanup-request"), "cleanup");
       await owned?.terminate();
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { force: true, recursive: true });
     }
   },
   60_000,

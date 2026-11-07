@@ -99,11 +99,11 @@ const selection = (letter: string): CompiledOperatorReleaseSelection => ({
 
 describe("published source selection persistence", () => {
   const source = {
-    repositoryId: "fixture-repository",
     branch: "app-builder/fixture",
+    changeSetDigest: "e".repeat(64),
     gitSha: "c".repeat(40),
     gitTree: "d".repeat(40),
-    changeSetDigest: "e".repeat(64),
+    repositoryId: "fixture-repository",
     reviewDigest: "f".repeat(64),
   };
   it("associates an equivalent recapture idempotently without promoting an older selection", async () => {
@@ -122,12 +122,12 @@ describe("published source selection persistence", () => {
       }
       const input = {
         approvedSelection: approved,
-        publishedSource: source,
         operationId: "original-proposal",
+        publishedSource: source,
       };
       expect(await associate(f.context, input)).toEqual({
-        status: "recorded",
         selection: { ...approved, publishedSource: source },
+        status: "recorded",
       });
       const [owned] = await readdir(path.join(f.stateRoot, "operator-artifacts"));
       if (owned === undefined) {
@@ -141,8 +141,8 @@ describe("published source selection persistence", () => {
       );
       const beforeRetry = await readdir(frames);
       expect(await associate(f.context, input)).toEqual({
-        status: "recorded",
         selection: { ...approved, publishedSource: source },
+        status: "recorded",
       });
       expect(new Set(await readdir(frames))).toEqual(new Set(beforeRetry));
       expect(await storage.selections.read(f.context, approved.appSpecDigest)).toEqual({
@@ -169,8 +169,8 @@ describe("published source selection persistence", () => {
       await Promise.all([
         associate(f.context, {
           approvedSelection: approved,
-          publishedSource: source,
           operationId: "original-proposal",
+          publishedSource: source,
         }),
         storage.selections.record(f.context, "concurrent-new-capture", newer),
       ]);
@@ -190,8 +190,8 @@ describe("published source selection persistence", () => {
       }
       const input = {
         approvedSelection: approved,
-        publishedSource: source,
         operationId: "original-proposal",
+        publishedSource: source,
       };
       expect(
         await associate(f.context, {
@@ -218,11 +218,11 @@ describe("published source selection persistence", () => {
     await contextStorage.run(f.container, async () => {
       const storage = await createLocalOperatorArtifactStorage(f);
       const publishedSource = {
-        repositoryId: "fixture-repository",
         branch: "app-builder/fixture",
+        changeSetDigest: "e".repeat(64),
         gitSha: "c".repeat(40),
         gitTree: "d".repeat(40),
-        changeSetDigest: "e".repeat(64),
+        repositoryId: "fixture-repository",
         reviewDigest: "f".repeat(64),
       };
       await storage.selections.record(f.context, "old-approved-publication", {

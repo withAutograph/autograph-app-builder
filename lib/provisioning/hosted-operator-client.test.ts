@@ -26,7 +26,7 @@ const clientFor = (response: Record<string, string | undefined>) =>
   });
 
 describe("operator Auth identity input results", () => {
-  const request = { action: "auth-identity-input" as const, selection, operationRef };
+  const request = { action: "auth-identity-input" as const, operationRef, selection };
   const success = {
     browserUrl: "https://auth.example/api/auth/platform/operator-link?nonce=private-nonce",
     expiresAt: "2026-10-15T20:00:00.000Z",
@@ -40,13 +40,15 @@ describe("operator Auth identity input results", () => {
     "authorization_required",
     undefined,
   ] as const)("preserves a blocked operator result code (%s)", async (code) => {
-    const result = clientFor({
+    const baseResponse = {
       appId: selection.appId,
       authenticatedBehavior: "unassessed",
-      status: "blocked",
       operationRef,
-      ...(code === undefined ? {} : { code }),
-    }).authIdentityInput(request);
+      status: "blocked",
+    };
+    const response: typeof baseResponse & { code?: typeof code } = baseResponse;
+    if (code !== undefined) response.code = code;
+    const result = clientFor(response).authIdentityInput(request);
     await expect(result).rejects.toBeInstanceOf(HostedOperatorError);
     await expect(result).rejects.toMatchObject({ code: code ?? "operator_unavailable" });
   });
@@ -70,8 +72,8 @@ describe("operator Auth identity input results", () => {
     {
       appId: selection.appId,
       authenticatedBehavior: "unassessed",
-      status: "blocked",
       code: "unrecognized-code",
+      status: "blocked",
     },
   ])("preserves schema validation for malformed responses (%j)", async (malformed) => {
     await expect(clientFor(malformed).authIdentityInput(request)).rejects.toBeInstanceOf(
@@ -81,7 +83,7 @@ describe("operator Auth identity input results", () => {
 });
 
 describe("closed outbound operator action diagnostics", () => {
-  const diagnosticRequest = { action: "status" as const, selection, operationRef };
+  const diagnosticRequest = { action: "status" as const, operationRef, selection };
 
   it("negotiates optional status observations and accepts the legacy status response", async () => {
     const transport = vi.fn<typeof fetch>(async (_url, init) => {
@@ -92,8 +94,8 @@ describe("closed outbound operator action diagnostics", () => {
         Response.json({
           appId: selection.appId,
           authenticatedBehavior: "unassessed",
-          status: "pending",
           operationRef,
+          status: "pending",
         }),
       );
     });
@@ -109,23 +111,23 @@ describe("closed outbound operator action diagnostics", () => {
   it.each([
     [
       "plan",
-      (client: ReturnType<typeof createHostedOperatorClient>) =>
-        client.request({ action: "plan", operation: "prepare", selection }),
+      async (client: ReturnType<typeof createHostedOperatorClient>) =>
+        await client.request({ action: "plan", operation: "prepare", selection }),
     ],
     [
       "bindings",
-      (client: ReturnType<typeof createHostedOperatorClient>) =>
-        client.bindings({ action: "bindings", selection, operationRef }),
+      async (client: ReturnType<typeof createHostedOperatorClient>) =>
+        await client.bindings({ action: "bindings", operationRef, selection }),
     ],
     [
       "auth-identity-input",
-      (client: ReturnType<typeof createHostedOperatorClient>) =>
-        client.authIdentityInput({ action: "auth-identity-input", selection, operationRef }),
+      async (client: ReturnType<typeof createHostedOperatorClient>) =>
+        await client.authIdentityInput({ action: "auth-identity-input", operationRef, selection }),
     ],
     [
       "neon-authorization",
-      (client: ReturnType<typeof createHostedOperatorClient>) =>
-        client.neonAuthorization({
+      async (client: ReturnType<typeof createHostedOperatorClient>) =>
+        await client.neonAuthorization({
           action: "neon-authorization",
           phase: "check",
           sessionId: selection.sessionId,
@@ -133,8 +135,8 @@ describe("closed outbound operator action diagnostics", () => {
     ],
     [
       "resolve-preview-target",
-      (client: ReturnType<typeof createHostedOperatorClient>) =>
-        client.resolvePreviewTarget({
+      async (client: ReturnType<typeof createHostedOperatorClient>) =>
+        await client.resolvePreviewTarget({
           action: "resolve-preview-target",
           appId: selection.appId,
           sessionId: selection.sessionId,
@@ -156,8 +158,8 @@ describe("closed outbound operator action diagnostics", () => {
       expect(logs).toHaveBeenCalledWith(
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
-          operatorResponse: "schema_invalid",
           accessClass: "other_failed",
+          operatorResponse: "schema_invalid",
         }),
       );
       expect(JSON.stringify(logs.mock.calls)).not.toContain("private");
@@ -183,8 +185,8 @@ describe("closed outbound operator action diagnostics", () => {
       expect(logs).toHaveBeenCalledWith(
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
-          httpStatus: 200,
           accessClass: "other_failed",
+          httpStatus: 200,
           operatorResponse: "decode_failed",
         }),
       );
@@ -199,9 +201,9 @@ describe("closed outbound operator action diagnostics", () => {
     const result = {
       appId: selection.appId,
       authenticatedBehavior: "unassessed",
-      status: "blocked",
-      operationRef,
       code: "operation_in_progress",
+      operationRef,
+      status: "blocked",
     };
     const transport = vi.fn<typeof fetch>(async () => await Promise.resolve(Response.json(result)));
     const client = createHostedOperatorClient({
@@ -216,8 +218,8 @@ describe("closed outbound operator action diagnostics", () => {
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           httpStatus: 200,
-          operatorResponse: "blocked",
           operatorCode: "operation_in_progress",
+          operatorResponse: "blocked",
         }),
       );
     } finally {
@@ -232,15 +234,18 @@ describe("closed outbound operator action diagnostics", () => {
       const result = {
         appId: selection.appId,
         authenticatedBehavior: "unassessed",
+        operationRef,
         status: "pending",
-        operationRef,
       };
-      const requestPayload = {
+      const baseRequestPayload = {
         action,
-        selection,
         operationRef,
-        ...(action === "execute" ? { callId: "private-call", planDigest: "a".repeat(64) } : {}),
+        selection,
       };
+      const requestPayload =
+        action === "execute"
+          ? { ...baseRequestPayload, callId: "private-call", planDigest: "a".repeat(64) }
+          : baseRequestPayload;
       const transport = vi.fn<typeof fetch>(async (_url, init) => {
         const body = z.string().parse(init?.body);
         expect(JSON.parse(body)).toEqual(requestPayload);
@@ -263,12 +268,12 @@ describe("closed outbound operator action diagnostics", () => {
           action === "execute"
             ? await client.request({
                 action,
-                selection,
-                operationRef,
                 callId: "private-call",
+                operationRef,
                 planDigest: "a".repeat(64),
+                selection,
               })
-            : await client.request({ action, selection, operationRef });
+            : await client.request({ action, operationRef, selection });
         expect(value).toEqual(result);
         expect(transport).toHaveBeenCalledTimes(1);
         expect(logs).toHaveBeenCalledWith(
@@ -277,7 +282,7 @@ describe("closed outbound operator action diagnostics", () => {
         );
         expect(logs).toHaveBeenCalledWith(
           "[builder:hosted-neon-consent]",
-          expect.objectContaining({ operatorAction: action, httpStatus: 200, outcome: "verified" }),
+          expect.objectContaining({ httpStatus: 200, operatorAction: action, outcome: "verified" }),
         );
         const serialized = JSON.stringify(logs.mock.calls);
         for (const secret of ["private-session", "private-call", "private-bearer", operationRef]) {
@@ -294,27 +299,27 @@ describe("operator request transport", () => {
   const pending = {
     appId: selection.appId,
     authenticatedBehavior: "unassessed",
-    status: "pending",
     operationRef,
+    status: "pending",
   };
-  const request = { action: "status" as const, selection, operationRef };
+  const request = { action: "status" as const, operationRef, selection };
 
   it("configures real Agent pools for the operator duration without a global override", async () => {
     const mock = new MockAgent();
     mock.disableNetConnect();
     mock
       .get("https://operator.example")
-      .intercept({ path: "/v1/runtime", method: "POST" })
+      .intercept({ method: "POST", path: "/v1/runtime" })
       .reply(200, pending);
     const dispatcher = createHostedOperatorDispatcher((origin, options) => {
-      expect(options).toMatchObject({ headersTimeout: 1_800_000, bodyTimeout: 1_800_000 });
+      expect(options).toMatchObject({ bodyTimeout: 1_800_000, headersTimeout: 1_800_000 });
       return mock.get(origin.toString());
     });
     try {
       const response = await dispatcher.request({
+        method: "POST",
         origin: "https://operator.example",
         path: "/v1/runtime",
-        method: "POST",
       });
       expect(await response.body.json()).toEqual(pending);
     } finally {
@@ -411,10 +416,10 @@ describe("operator request transport", () => {
     });
     const result = client.request({
       action: "execute",
-      selection,
-      operationRef,
       callId: "private-call",
+      operationRef,
       planDigest: "a".repeat(64),
+      selection,
     });
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The predicate narrows the transport error with the exported guard.
     await expect(result).rejects.toSatisfy((error: unknown) => {
@@ -436,10 +441,10 @@ describe("operator request transport", () => {
     });
     const executeRequest = {
       action: "execute" as const,
-      selection,
-      operationRef,
       callId: "private-call",
+      operationRef,
       planDigest: "a".repeat(64),
+      selection,
     };
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The predicate narrows the unknown transport failure with the exported guard.
     await expect(client.request(executeRequest)).rejects.toSatisfy((error: unknown) => {
@@ -472,18 +477,18 @@ describe("operator request transport", () => {
       await expect(
         client.request({
           action: "execute",
-          selection,
-          operationRef,
           callId: "private-call",
+          operationRef,
           planDigest: "a".repeat(64),
+          selection,
         }),
       ).rejects.toBeInstanceOf(z.ZodError);
       expect(logs).toHaveBeenCalledWith(
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
+          accessClass: "other_failed",
           operatorAction: "execute",
           operatorResponse: "schema_invalid",
-          accessClass: "other_failed",
         }),
       );
       expect(JSON.stringify(logs.mock.calls)).not.toContain("private");
@@ -496,15 +501,16 @@ describe("operator request transport", () => {
 describe("continuity planning failure diagnostics", () => {
   it("preserves malformed request validation without fetching or resolving a token", async () => {
     const authority = {
-      issuer: "https://builder.fixture.test",
       audience: "https://builder.fixture.test/mcp",
-      workspaceId: "workspace",
+      issuer: "https://builder.fixture.test",
       ownerUserId: "owner",
+      workspaceId: "workspace",
     };
     const token = vi.fn<() => Promise<string>>().mockResolvedValue("private-bearer");
     const transport = vi.fn<typeof fetch>();
     const client = createHostedOperatorClient({
       endpoint: "https://operator.example",
+      fetch: transport,
       ownerContext: {
         adapterGeneration: 1,
         adapterSessionId: "adapter",
@@ -514,7 +520,6 @@ describe("continuity planning failure diagnostics", () => {
         sessionId: selection.sessionId,
       },
       token,
-      fetch: transport,
     });
     const originalParse = continuityTransportRequestSchema.parse.bind(
       continuityTransportRequestSchema,
@@ -536,7 +541,7 @@ describe("continuity planning failure diagnostics", () => {
       const pending = client.planContinuity(
         // @ts-expect-error -- Exercise the malformed runtime boundary while preserving its public TypeScript contract.
         undefined,
-        { sandboxId: "sandbox", root: "/owned/source" },
+        { root: "/owned/source", sandboxId: "sandbox" },
         "continuity-call",
       );
       await expect(pending).rejects.toBeInstanceOf(z.ZodError);

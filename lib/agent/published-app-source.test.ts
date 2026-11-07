@@ -98,8 +98,8 @@ describe("actual published app source recording", () => {
       .mockResolvedValue({ selection: selected, status: "recorded" });
     await recordPublishedAppSourceForSession({
       ...session,
-      review,
       publication: { ...initial, recoveredFromPending: true },
+      review,
     });
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -115,12 +115,12 @@ describe("actual published app source recording", () => {
       .spyOn(compiledArtifacts, "recordPublishedOperatorSourceForSession")
       .mockResolvedValue({ selection: selected, status: "recorded" });
     const root = "/workspace/.app-builder/candidate";
-    await recordPublishedAppSourceForSession({ ...session, root, review, publication: updated });
+    await recordPublishedAppSourceForSession({ ...session, publication: updated, review, root });
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({
         callId: session.callId,
-        root,
         publishedSource: publishedAppSourceFromResult(review, updated),
+        root,
       }),
     );
   });
@@ -129,8 +129,8 @@ describe("actual published app source recording", () => {
     await expect(
       recordPublishedAppSourceForSession({
         ...session,
-        review: { ...review, appSpecDigest: "f".repeat(64) },
         publication: initial,
+        review: { ...review, appSpecDigest: "f".repeat(64) },
       }),
     ).rejects.toThrow("artifact is unavailable");
     expect(record).not.toHaveBeenCalled();
@@ -142,9 +142,9 @@ describe("actual published app source recording", () => {
     const reconciliationReview = { digest: "d".repeat(64) };
     await recordPublishedAppSourceForSession({
       ...session,
-      review,
-      reconciliationReview,
       publication: updated,
+      reconciliationReview,
+      review,
     });
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -163,18 +163,18 @@ describe("actual published app source recording", () => {
     // SAFETY: This source-mapping fixture consumes only the sealed proposal's verified source tuple and review digest.
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The trusted mapping port consumes only the proposal source tuple and review metadata.
     const completion = {
+      appReview: review,
       proposal: {
-        repositoryId: updated.repositoryId,
         branchName: updated.headBranch,
+        repositoryId: updated.repositoryId,
         resolvedTree: updated.headTree,
       },
-      appReview: review,
       review: { digest: "d".repeat(64) },
     } as DraftReconciliationCompletion;
     await recordPublishedReconciliationForSession({
+      adapterSessionId: session.adapterSessionId,
       completion,
       publication: updated,
-      adapterSessionId: session.adapterSessionId,
       sessionAuth: session.sessionAuth,
     });
     expect(record).toHaveBeenCalledWith(
@@ -188,9 +188,9 @@ describe("actual published app source recording", () => {
     );
     await expect(
       recordPublishedReconciliationForSession({
+        adapterSessionId: session.adapterSessionId,
         completion,
         publication: { ...updated, headTree: "f".repeat(40) },
-        adapterSessionId: session.adapterSessionId,
         sessionAuth: session.sessionAuth,
       }),
     ).rejects.toThrow("artifact is unavailable");

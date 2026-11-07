@@ -164,8 +164,8 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
       }
       throw new HostedOperatorError(code, {
         cause: error,
-        recoveryStage: stage,
         recoveryProgressAdvanced: progress,
+        recoveryStage: stage,
       });
     }
   };
@@ -192,9 +192,9 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
     const changed = change(structuredClone(record));
     changed.revision = record.revision + 1;
     const saved = await deps.store.compareAndSet({
-      record: continuityRecordSchema.parse(changed),
       expectedRevision: record.revision,
       now: now(),
+      record: continuityRecordSchema.parse(changed),
     });
     if (saved === undefined) {
       throw new HostedOperatorError("operation_in_progress");
@@ -206,8 +206,9 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
   ): PrivateOperatorApprovalObservationPort => ({
     ...(record.approvalObservation === undefined ? {} : { state: record.approvalObservation }),
     save: async (state) => {
-      await approvalStage("journal", () =>
-        update(record, (value) => ({ ...value, approvalObservation: state })),
+      await approvalStage(
+        "journal",
+        async () => await update(record, (value) => ({ ...value, approvalObservation: state })),
       );
     },
   });
@@ -252,9 +253,9 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
     await deps.assertSetup(context, record.plan);
     const request = {
       action: "continuity" as const,
-      planRef: record.plan.planRef,
-      planDigest: record.planDigest,
       idempotencyKey: record.idempotencyKey,
+      planDigest: record.planDigest,
+      planRef: record.plan.planRef,
     };
     const approved =
       record.approval ??
@@ -271,6 +272,424 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
     return approved;
   };
   return {
+    async approval(context: HostedOperatorContext, request: HostedContinuityRequest) {
+      const intentId = z.uuid().parse(request.planRef.split("/").at(-1));
+      let record = await approvalStage("canonical_read", async () => await read(context, intentId));
+      parseContinuityRequestForPlan(request, record.plan);
+      if (request.idempotencyKey !== record.idempotencyKey) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      await assertRecovery(context, record);
+      if (record.approval !== undefined) {
+        return { approved: true };
+      }
+      await approvalStage("setup", async () => {
+        await deps.assertSetup(context, record.plan);
+      });
+      const receipt = await approvalStage(
+        "native_history",
+        async () =>
+          await deps.readApproval(context, request, undefined, approvalObservation(record)),
+      );
+      if (receipt === null) {
+        record = await approvalStage("journal", async () => await read(context, intentId));
+        await assertRecovery(context, record);
+        const cancelled = record.approvalObservation?.capture.entries.some(
+          (entry) => entry.cancelled || entry.completedCancelled,
+        );
+        if (cancelled === true) {
+          throw new HostedOperatorError("authorization_required", {
+            recoveryStage: "native_history",
+          });
+        }
+        if (
+          record.approval === undefined &&
+          record.approvalObservation?.capture.entries.some((entry) => !entry.approved) === true
+        ) {
+          return { approved: false, pending: true };
+        }
+      } else {
+        await approvalStage("journal", async () => {
+          try {
+            record = await update(record, (value) => ({
+              ...value,
+              approval: receipt,
+              state: "approved",
+            }));
+          } catch (error) {
+            if (!(error instanceof HostedOperatorError) || error.code !== "operation_in_progress") {
+              throw error;
+            }
+            // A concurrent observation may win the revision without changing consent.
+            // Re-read the owner-scoped winner; never overwrite a newer attempt or denial.
+            record = await read(context, intentId);
+            await assertRecovery(context, record);
+            if (record.approval === undefined) {
+              throw error;
+            }
+            if (!isDeepStrictEqual(record.approval, receipt)) {
+              throw new HostedOperatorError("reconciliation_required");
+            }
+          }
+        });
+      }
+      return { approved: record.approval !== undefined };
+    },
+    async execute(
+      context: HostedOperatorContext,
+      request: HostedContinuityRequest,
+      callId: string,
+      signal?: AbortSignal,
+    ) {
+      const intentId = z.uuid().parse(request.planRef.split("/").at(-1));
+      let current = await read(context, intentId);
+      parseContinuityRequestForPlan(request, current.plan);
+      if (request.idempotencyKey !== current.idempotencyKey) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      if (current.state === "settled" || current.state === "revoked") {
+        return continuityStatus(current);
+      }
+      const approved = await approval(context, current, callId);
+      if (current.approval === undefined) {
+        current = await update(current, (value) => ({
+          ...value,
+          approval: approved,
+          state: "approved",
+        }));
+      }
+      return await deps.withResourceLease(
+        {
+          initializeUnderLock: async () => {
+            current = await read(context, intentId);
+            if (current.state === "settled" || current.state === "revoked") {
+              return;
+            }
+            await approval(context, current, callId);
+            if (current.attemptId === undefined) {
+              const capabilities = {
+                lifecycle: randomBytes(32).toString("base64url"),
+                suiteSelector: randomBytes(32).toString("base64url"),
+                transport: randomBytes(32).toString("base64url"),
+              };
+              current = await update(current, (value) => {
+                if (
+                  ![
+                    value.supersededBy === undefined,
+                    value.attemptId === undefined,
+                    value.locator === undefined,
+                    value.fence === 0,
+                    value.state === "approved",
+                  ].every(Boolean)
+                ) {
+                  throw unavailable();
+                }
+                value.fence += 1;
+                value.attemptId = randomUUID();
+                value.privateState = deps.seal(value, capabilities);
+                value.state = "starting";
+                value.pendingStage = "runtime";
+                return value;
+              });
+            }
+          },
+          lockKeys: [
+            JSON.stringify([
+              "hosted_protected_operator_vercel_project_v1",
+              current.plan.gateway.ownerId,
+              current.plan.gateway.projectId,
+            ]),
+          ],
+          readCurrentFence: async () => {
+            const latest = await read(context, intentId);
+            if (latest.fence !== current.fence || latest.attemptId !== current.attemptId) {
+              throw unavailable();
+            }
+            if (latest.state !== "settled") {
+              await approval(context, latest, callId);
+            }
+            return {
+              fenceGeneration: latest.fence,
+              leaseId: latest.attemptId ?? intentId,
+              operationRef: intentId,
+            };
+          },
+        },
+        async (assertFence) => {
+          let renewalFailure: Error | undefined;
+          const assertCurrent = async () => {
+            signal?.throwIfAborted();
+            if (renewalFailure !== undefined) {
+              throw renewalFailure;
+            }
+            await assertFence();
+          };
+          if (current.state === "settled" || current.state === "revoked") {
+            return continuityStatus(current);
+          }
+          const capabilities = deps.unseal(current);
+          const checkpointCleanup = async (
+            workerAsset: NonNullable<ContinuityRecord["workerAsset"]>,
+          ) => {
+            await assertFence();
+            current = await update(current, (value) => ({ ...value, workerAsset }));
+          };
+          const checkpointRuntime: Parameters<
+            HostedContinuityDependencies["runtime"]["start"]
+          >[4] = async (patch) => {
+            await assertCurrent();
+            current = await update(current, (value) => {
+              const sessionChanged = [
+                patch.locator !== undefined &&
+                  value.locator !== undefined &&
+                  patch.locator.providerSessionId !== value.locator.providerSessionId,
+                patch.current !== undefined &&
+                  value.current !== undefined &&
+                  patch.current.providerSessionId !== value.current.providerSessionId,
+              ].some(Boolean);
+              if (sessionChanged) {
+                const nextSession = patch.locator?.providerSessionId;
+                if (
+                  !canRebindUndispatchedContinuityRuntime(value) ||
+                  nextSession === undefined ||
+                  patch.current === undefined
+                ) {
+                  throw unavailable();
+                }
+                const validPair = [
+                  patch.current.providerSessionId === nextSession,
+                  Object.keys(patch).every((key) => key === "locator" || key === "current"),
+                  isDeepStrictEqual(patch.locator, {
+                    ...value.locator,
+                    providerSessionId: nextSession,
+                  }),
+                  isDeepStrictEqual(patch.current, {
+                    ...value.current,
+                    leaseExpiresAt: patch.current.leaseExpiresAt,
+                    providerSessionId: nextSession,
+                  }),
+                  Date.parse(patch.current.leaseExpiresAt) > now().getTime(),
+                ].every(Boolean);
+                if (!validPair) {
+                  throw unavailable();
+                }
+              }
+              return { ...value, ...patch };
+            });
+          };
+          let renewalTask: Promise<void> | undefined;
+          let stopping = false;
+          const renewal = setInterval(() => {
+            if (stopping || renewalTask !== undefined) {
+              return;
+            }
+            renewalTask = (async () => {
+              try {
+                await assertCurrent();
+                // Before dispatch there is no owned process lease to renew. In
+                // particular, do not let a queued renewal overwrite a resumed
+                // worker's identity with the old physical session after rebind.
+                const processMayExist =
+                  current.locator?.dispatchAttempted === true ||
+                  current.locator?.commandId !== undefined;
+                if (!stopping && processMayExist) {
+                  await deps.runtime.renew(context, current);
+                }
+              } catch (error) {
+                renewalFailure = error instanceof Error ? error : unavailable();
+                try {
+                  await deps.runtime.close(context, current, checkpointCleanup);
+                } catch {
+                  /* Durable locator remains available for reconciliation. */
+                }
+              }
+            })().finally(() => {
+              renewalTask = undefined;
+            });
+          }, 15_000);
+          const stopRenewal = async () => {
+            stopping = true;
+            clearInterval(renewal);
+            await renewalTask;
+          };
+          const recoverFailure = async () => {
+            await stopRenewal();
+            const publicationFailed = current.pendingStage === "publication";
+            if (publicationFailed) {
+              try {
+                await assertFence();
+                current = await update(current, (value) => ({
+                  ...value,
+                  failure: {
+                    reason: "runtime-closed-before-publication-completed",
+                    stage: "publication",
+                  },
+                  pendingStage: "revocation",
+                  state: "reconciliation-required",
+                }));
+              } catch {
+                // Cleanup must still run if the final authority/CAS write fails.
+                // Retained command liveness prevents publishing a closed target.
+              }
+            }
+            // Closing the owned command is required even when cancellation/revocation
+            // makes ordinary execution authorization fail. It never targets another VM.
+            let closed = false;
+            try {
+              await deps.runtime.close(context, current, checkpointCleanup);
+              closed = true;
+            } catch {
+              /* Retained locator, never redispatch. */
+            }
+            await assertFence();
+            const cancelled = signal?.aborted === true;
+            current = await update(current, (value) => ({
+              ...value,
+              state: "reconciliation-required",
+              ...(cancelled ? { cancelled: true, pendingStage: "revocation" as const } : {}),
+              ...(publicationFailed
+                ? {
+                    failure: {
+                      reason: "runtime-closed-before-publication-completed" as const,
+                      stage: "publication" as const,
+                    },
+                    pendingStage: "revocation" as const,
+                  }
+                : {}),
+            }));
+            if ((cancelled || current.failure !== undefined) && closed) {
+              try {
+                await deps.projection.revoke(
+                  context,
+                  current,
+                  assertFence,
+                  async (environmentRows) => {
+                    await assertFence();
+                    current = await update(current, (value) => ({ ...value, environmentRows }));
+                  },
+                );
+                await assertFence();
+                current = await update(current, (value) => {
+                  value.state = "revoked";
+                  if (value.current !== undefined) {
+                    value.current.state = "revoked";
+                  }
+                  delete value.pendingStage;
+                  return value;
+                });
+              } catch {
+                /* Keep the same pending revocation for exact read-first reconciliation. */
+              }
+            }
+          };
+          try {
+            let runtimeObserved = false;
+            if (current.pendingStage === "runtime") {
+              await deps.runtime.start(
+                context,
+                current,
+                capabilities,
+                assertCurrent,
+                checkpointRuntime,
+              );
+              runtimeObserved = true;
+              await assertCurrent();
+              current = await update(current, (value) => ({
+                ...value,
+                pendingStage: "publication",
+                state: "publishing",
+              }));
+            }
+            if (current.pendingStage === "publication") {
+              // A previous failed journal write may have left this stage after owned
+              // cleanup. Observe the retained command before any publication recovery.
+              if (!runtimeObserved) {
+                await deps.runtime.start(
+                  context,
+                  current,
+                  capabilities,
+                  assertCurrent,
+                  checkpointRuntime,
+                );
+              }
+              await deps.projection.publish(
+                context,
+                current,
+                capabilities,
+                assertCurrent,
+                async (patch) => {
+                  await assertCurrent();
+                  current = await update(current, (value) => ({ ...value, ...patch }));
+                },
+              );
+              await assertCurrent();
+              current = await update(current, (value) => ({
+                ...value,
+                pendingStage: "suite",
+                state: "ready",
+              }));
+            }
+            if (current.pendingStage === "suite") {
+              const allowDispatch = current.suiteDispatched !== true;
+              if (allowDispatch) {
+                current = await update(current, (value) => ({ ...value, suiteDispatched: true }));
+              }
+              const result = await deps.runtime.runSuite(
+                context,
+                current,
+                capabilities,
+                assertCurrent,
+                async (suiteCommandId) => {
+                  await assertCurrent();
+                  current = await update(current, (value) => ({ ...value, suiteCommandId }));
+                },
+                allowDispatch,
+              );
+              await assertCurrent();
+              current = await update(current, (value) => ({
+                ...value,
+                outcome: { completedAt: now().toISOString(), exitCode: result.exitCode },
+                pendingStage: "revocation",
+                state: "revoking",
+              }));
+            }
+            if (current.pendingStage !== "revocation") {
+              throw unavailable();
+            }
+            await stopRenewal();
+            if (renewalFailure !== undefined) {
+              throw renewalFailure;
+            }
+            await deps.runtime.close(context, current, checkpointCleanup);
+            await deps.projection.revoke(
+              context,
+              current,
+              assertCurrent,
+              async (environmentRows) => {
+                await assertCurrent();
+                current = await update(current, (value) => ({ ...value, environmentRows }));
+              },
+            );
+            await assertCurrent();
+            current = await update(current, (value) => {
+              value.state =
+                value.cancelled === true || value.failure !== undefined ? "revoked" : "settled";
+              if (value.current !== undefined) {
+                value.current.state = "revoked";
+              }
+              delete value.pendingStage;
+              return value;
+            });
+            return continuityStatus(current);
+          } catch (error) {
+            await recoverFailure();
+            throw error instanceof HostedOperatorError ? error : unavailable();
+          } finally {
+            await stopRenewal();
+          }
+        },
+      );
+    },
     async plan(
       context: HostedOperatorContext,
       runtime: ContinuityRuntimeSelection,
@@ -361,420 +780,6 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
     },
     async status(context: HostedOperatorContext, intentId: string) {
       return continuityStatus(await read(context, z.uuid().parse(intentId)));
-    },
-    async approval(context: HostedOperatorContext, request: HostedContinuityRequest) {
-      const intentId = z.uuid().parse(request.planRef.split("/").at(-1));
-      let record = await approvalStage("canonical_read", () => read(context, intentId));
-      parseContinuityRequestForPlan(request, record.plan);
-      if (request.idempotencyKey !== record.idempotencyKey) {
-        throw new HostedOperatorError("resource_mismatch");
-      }
-      await assertRecovery(context, record);
-      if (record.approval !== undefined) {
-        return { approved: true };
-      }
-      await approvalStage("setup", () => deps.assertSetup(context, record.plan));
-      const receipt = await approvalStage("native_history", () =>
-        deps.readApproval(context, request, undefined, approvalObservation(record)),
-      );
-      if (receipt === null) {
-        record = await approvalStage("journal", () => read(context, intentId));
-        await assertRecovery(context, record);
-        const cancelled = record.approvalObservation?.capture.entries.some(
-          (entry) => entry.cancelled || entry.completedCancelled,
-        );
-        if (cancelled === true) {
-          throw new HostedOperatorError("authorization_required", {
-            recoveryStage: "native_history",
-          });
-        }
-        if (
-          record.approval === undefined &&
-          record.approvalObservation?.capture.entries.some((entry) => !entry.approved) === true
-        ) {
-          return { approved: false, pending: true };
-        }
-      } else {
-        await approvalStage("journal", async () => {
-          try {
-            record = await update(record, (value) => ({
-              ...value,
-              approval: receipt,
-              state: "approved",
-            }));
-          } catch (error) {
-            if (!(error instanceof HostedOperatorError) || error.code !== "operation_in_progress") {
-              throw error;
-            }
-            // A concurrent observation may win the revision without changing consent.
-            // Re-read the owner-scoped winner; never overwrite a newer attempt or denial.
-            record = await read(context, intentId);
-            await assertRecovery(context, record);
-            if (record.approval === undefined) {
-              throw error;
-            }
-            if (!isDeepStrictEqual(record.approval, receipt)) {
-              throw new HostedOperatorError("reconciliation_required");
-            }
-          }
-        });
-      }
-      return { approved: record.approval !== undefined };
-    },
-    async execute(
-      context: HostedOperatorContext,
-      request: HostedContinuityRequest,
-      callId: string,
-      signal?: AbortSignal,
-    ) {
-      const intentId = z.uuid().parse(request.planRef.split("/").at(-1));
-      let current = await read(context, intentId);
-      parseContinuityRequestForPlan(request, current.plan);
-      if (request.idempotencyKey !== current.idempotencyKey) {
-        throw new HostedOperatorError("resource_mismatch");
-      }
-      if (current.state === "settled" || current.state === "revoked") {
-        return continuityStatus(current);
-      }
-      const approved = await approval(context, current, callId);
-      if (current.approval === undefined) {
-        current = await update(current, (value) => ({
-          ...value,
-          approval: approved,
-          state: "approved",
-        }));
-      }
-      return await deps.withResourceLease(
-        {
-          lockKeys: [
-            JSON.stringify([
-              "hosted_protected_operator_vercel_project_v1",
-              current.plan.gateway.ownerId,
-              current.plan.gateway.projectId,
-            ]),
-          ],
-          initializeUnderLock: async () => {
-            current = await read(context, intentId);
-            if (current.state === "settled" || current.state === "revoked") {
-              return;
-            }
-            await approval(context, current, callId);
-            if (current.attemptId === undefined) {
-              const capabilities = {
-                suiteSelector: randomBytes(32).toString("base64url"),
-                transport: randomBytes(32).toString("base64url"),
-                lifecycle: randomBytes(32).toString("base64url"),
-              };
-              current = await update(current, (value) => {
-                if (
-                  ![
-                    value.supersededBy === undefined,
-                    value.attemptId === undefined,
-                    value.locator === undefined,
-                    value.fence === 0,
-                    value.state === "approved",
-                  ].every(Boolean)
-                ) {
-                  throw unavailable();
-                }
-                value.fence += 1;
-                value.attemptId = randomUUID();
-                value.privateState = deps.seal(value, capabilities);
-                value.state = "starting";
-                value.pendingStage = "runtime";
-                return value;
-              });
-            }
-          },
-          readCurrentFence: async () => {
-            const latest = await read(context, intentId);
-            if (latest.fence !== current.fence || latest.attemptId !== current.attemptId) {
-              throw unavailable();
-            }
-            if (latest.state !== "settled") {
-              await approval(context, latest, callId);
-            }
-            return {
-              operationRef: intentId,
-              leaseId: latest.attemptId ?? intentId,
-              fenceGeneration: latest.fence,
-            };
-          },
-        },
-        async (assertFence) => {
-          let renewalFailure: Error | undefined;
-          const assertCurrent = async () => {
-            signal?.throwIfAborted();
-            if (renewalFailure !== undefined) {
-              throw renewalFailure;
-            }
-            await assertFence();
-          };
-          if (current.state === "settled" || current.state === "revoked") {
-            return continuityStatus(current);
-          }
-          const capabilities = deps.unseal(current);
-          const checkpointCleanup = async (
-            workerAsset: NonNullable<ContinuityRecord["workerAsset"]>,
-          ) => {
-            await assertFence();
-            current = await update(current, (value) => ({ ...value, workerAsset }));
-          };
-          const checkpointRuntime: Parameters<
-            HostedContinuityDependencies["runtime"]["start"]
-          >[4] = async (patch) => {
-            await assertCurrent();
-            current = await update(current, (value) => {
-              const sessionChanged = [
-                patch.locator !== undefined &&
-                  value.locator !== undefined &&
-                  patch.locator.providerSessionId !== value.locator.providerSessionId,
-                patch.current !== undefined &&
-                  value.current !== undefined &&
-                  patch.current.providerSessionId !== value.current.providerSessionId,
-              ].some(Boolean);
-              if (sessionChanged) {
-                const nextSession = patch.locator?.providerSessionId;
-                if (
-                  !canRebindUndispatchedContinuityRuntime(value) ||
-                  nextSession === undefined ||
-                  patch.current === undefined
-                ) {
-                  throw unavailable();
-                }
-                const validPair = [
-                  patch.current.providerSessionId === nextSession,
-                  Object.keys(patch).every((key) => key === "locator" || key === "current"),
-                  isDeepStrictEqual(patch.locator, {
-                    ...value.locator,
-                    providerSessionId: nextSession,
-                  }),
-                  isDeepStrictEqual(patch.current, {
-                    ...value.current,
-                    providerSessionId: nextSession,
-                    leaseExpiresAt: patch.current.leaseExpiresAt,
-                  }),
-                  Date.parse(patch.current.leaseExpiresAt) > now().getTime(),
-                ].every(Boolean);
-                if (!validPair) {
-                  throw unavailable();
-                }
-              }
-              return { ...value, ...patch };
-            });
-          };
-          let renewalTask: Promise<void> | undefined;
-          let stopping = false;
-          const renewal = setInterval(() => {
-            if (stopping || renewalTask !== undefined) {
-              return;
-            }
-            renewalTask = (async () => {
-              try {
-                await assertCurrent();
-                // Before dispatch there is no owned process lease to renew. In
-                // particular, do not let a queued renewal overwrite a resumed
-                // worker's identity with the old physical session after rebind.
-                const processMayExist =
-                  current.locator?.dispatchAttempted === true ||
-                  current.locator?.commandId !== undefined;
-                if (!stopping && processMayExist) {
-                  await deps.runtime.renew(context, current);
-                }
-              } catch (error) {
-                renewalFailure = error instanceof Error ? error : unavailable();
-                try {
-                  await deps.runtime.close(context, current, checkpointCleanup);
-                } catch {
-                  /* Durable locator remains available for reconciliation. */
-                }
-              }
-            })().finally(() => {
-              renewalTask = undefined;
-            });
-          }, 15_000);
-          const stopRenewal = async () => {
-            stopping = true;
-            clearInterval(renewal);
-            await renewalTask;
-          };
-          const recoverFailure = async () => {
-            await stopRenewal();
-            const publicationFailed = current.pendingStage === "publication";
-            if (publicationFailed) {
-              try {
-                await assertFence();
-                current = await update(current, (value) => ({
-                  ...value,
-                  state: "reconciliation-required",
-                  pendingStage: "revocation",
-                  failure: {
-                    stage: "publication",
-                    reason: "runtime-closed-before-publication-completed",
-                  },
-                }));
-              } catch {
-                // Cleanup must still run if the final authority/CAS write fails.
-                // Retained command liveness prevents publishing a closed target.
-              }
-            }
-            // Closing the owned command is required even when cancellation/revocation
-            // makes ordinary execution authorization fail. It never targets another VM.
-            let closed = false;
-            try {
-              await deps.runtime.close(context, current, checkpointCleanup);
-              closed = true;
-            } catch {
-              /* Retained locator, never redispatch. */
-            }
-            await assertFence();
-            const cancelled = signal?.aborted === true;
-            current = await update(current, (value) => ({
-              ...value,
-              state: "reconciliation-required",
-              ...(cancelled ? { cancelled: true, pendingStage: "revocation" as const } : {}),
-              ...(publicationFailed
-                ? {
-                    pendingStage: "revocation" as const,
-                    failure: {
-                      stage: "publication" as const,
-                      reason: "runtime-closed-before-publication-completed" as const,
-                    },
-                  }
-                : {}),
-            }));
-            if ((cancelled || current.failure !== undefined) && closed) {
-              try {
-                await deps.projection.revoke(
-                  context,
-                  current,
-                  assertFence,
-                  async (environmentRows) => {
-                    await assertFence();
-                    current = await update(current, (value) => ({ ...value, environmentRows }));
-                  },
-                );
-                await assertFence();
-                current = await update(current, (value) => {
-                  value.state = "revoked";
-                  if (value.current !== undefined) {
-                    value.current.state = "revoked";
-                  }
-                  delete value.pendingStage;
-                  return value;
-                });
-              } catch {
-                /* Keep the same pending revocation for exact read-first reconciliation. */
-              }
-            }
-          };
-          try {
-            let runtimeObserved = false;
-            if (current.pendingStage === "runtime") {
-              await deps.runtime.start(
-                context,
-                current,
-                capabilities,
-                assertCurrent,
-                checkpointRuntime,
-              );
-              runtimeObserved = true;
-              await assertCurrent();
-              current = await update(current, (value) => ({
-                ...value,
-                state: "publishing",
-                pendingStage: "publication",
-              }));
-            }
-            if (current.pendingStage === "publication") {
-              // A previous failed journal write may have left this stage after owned
-              // cleanup. Observe the retained command before any publication recovery.
-              if (!runtimeObserved) {
-                await deps.runtime.start(
-                  context,
-                  current,
-                  capabilities,
-                  assertCurrent,
-                  checkpointRuntime,
-                );
-              }
-              await deps.projection.publish(
-                context,
-                current,
-                capabilities,
-                assertCurrent,
-                async (patch) => {
-                  await assertCurrent();
-                  current = await update(current, (value) => ({ ...value, ...patch }));
-                },
-              );
-              await assertCurrent();
-              current = await update(current, (value) => ({
-                ...value,
-                state: "ready",
-                pendingStage: "suite",
-              }));
-            }
-            if (current.pendingStage === "suite") {
-              const allowDispatch = current.suiteDispatched !== true;
-              if (allowDispatch) {
-                current = await update(current, (value) => ({ ...value, suiteDispatched: true }));
-              }
-              const result = await deps.runtime.runSuite(
-                context,
-                current,
-                capabilities,
-                assertCurrent,
-                async (suiteCommandId) => {
-                  await assertCurrent();
-                  current = await update(current, (value) => ({ ...value, suiteCommandId }));
-                },
-                allowDispatch,
-              );
-              await assertCurrent();
-              current = await update(current, (value) => ({
-                ...value,
-                outcome: { exitCode: result.exitCode, completedAt: now().toISOString() },
-                state: "revoking",
-                pendingStage: "revocation",
-              }));
-            }
-            if (current.pendingStage !== "revocation") {
-              throw unavailable();
-            }
-            await stopRenewal();
-            if (renewalFailure !== undefined) {
-              throw renewalFailure;
-            }
-            await deps.runtime.close(context, current, checkpointCleanup);
-            await deps.projection.revoke(
-              context,
-              current,
-              assertCurrent,
-              async (environmentRows) => {
-                await assertCurrent();
-                current = await update(current, (value) => ({ ...value, environmentRows }));
-              },
-            );
-            await assertCurrent();
-            current = await update(current, (value) => {
-              value.state =
-                value.cancelled === true || value.failure !== undefined ? "revoked" : "settled";
-              if (value.current !== undefined) {
-                value.current.state = "revoked";
-              }
-              delete value.pendingStage;
-              return value;
-            });
-            return continuityStatus(current);
-          } catch (error) {
-            await recoverFailure();
-            throw error instanceof HostedOperatorError ? error : unavailable();
-          } finally {
-            await stopRenewal();
-          }
-        },
-      );
     },
   };
 };

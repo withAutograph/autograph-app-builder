@@ -35,24 +35,23 @@ export const observePrivateApplyDecisionEvent = (
       ) {
         continue;
       }
-      const callId = request.action.callId;
+      const { callId } = request.action;
       if (
-        !authority.pending.some(
+        authority.pending.some(
           (entry) => entry.callId === callId && entry.scope.sessionId === sessionId,
         )
       ) {
-        continue;
-      }
-      const prior = rows.find((row) => row.callId === callId);
-      if (prior === undefined) {
-        rows.push({
-          sessionId,
-          callId,
-          requestId: request.requestId,
-          requestEventId: event.meta.id,
-        });
-      } else if (prior.requestId !== request.requestId || prior.sessionId !== sessionId) {
-        rows = rows.map((row) => (row === prior ? { ...row, conflict: true } : row));
+        const prior = rows.find((row) => row.callId === callId);
+        if (prior === undefined) {
+          rows.push({
+            callId,
+            requestEventId: event.meta.id,
+            requestId: request.requestId,
+            sessionId,
+          });
+        } else if (prior.requestId !== request.requestId || prior.sessionId !== sessionId) {
+          rows = rows.map((row) => (row === prior ? { ...row, conflict: true } : row));
+        }
       }
     }
   }
@@ -65,7 +64,7 @@ export const observePrivateApplyDecisionEvent = (
         if (row.resolution !== undefined && row.resolution.outcome !== resolution.outcome) {
           return { ...row, conflict: true };
         }
-        return { ...row, resolution: { outcome: resolution.outcome, eventId: event.meta.id } };
+        return { ...row, resolution: { eventId: event.meta.id, outcome: resolution.outcome } };
       });
     }
   }
@@ -96,11 +95,11 @@ export const observePrivateApplyDecisionEvent = (
     expected: authority,
     proofs: [
       createPrivateApplyDenialEvidence({
-        sessionId,
         callId: row.callId,
-        requestId: row.requestId,
-        status: negative.status,
         eventIds: [row.requestEventId, row.resolution.eventId, event.meta.id],
+        requestId: row.requestId,
+        sessionId,
+        status: negative.status,
       }),
     ],
   });

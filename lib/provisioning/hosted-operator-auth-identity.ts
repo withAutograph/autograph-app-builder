@@ -24,33 +24,32 @@ export const realmPhysicalResourceSchema = z.strictObject({
   version: z.literal(1),
 });
 export const realmLinkClaimsSchema = z.strictObject({
-  publicRelease: publicRealmReleaseBindingSchema.optional(),
   aud: z.url(),
+  authResourceId: id,
+  bootstrapPlanDigest: hash,
   browserSession: realmBrowserSessionCorrelationSchema
     .extend({
       normalCookieSha256: hash,
     })
     .optional(),
-  authResourceId: id,
-  bootstrapPlanDigest: hash,
   exp: z.number().int().nonnegative(),
   iat: z.number().int().nonnegative(),
   iss: z.url(),
   nonceSha256: hash,
   organizationId: id.nullable(),
   ownerSessionId: id,
+  publicRelease: publicRealmReleaseBindingSchema.optional(),
   purpose: z.literal("realm-operator-link-v1"),
   resource: realmPhysicalResourceSchema,
   sessionId: id,
   sub: id,
 });
 export const pendingRealmIdentityLinkSchema = z.object({
-  publicRelease: publicRealmReleaseBindingSchema.optional(),
   audience: z.url(),
-  browserSession: realmBrowserSessionCorrelationSchema.optional(),
   authResourceId: id,
   bootstrapPlanDigest: hash,
   browserOrigin: z.url(),
+  browserSession: realmBrowserSessionCorrelationSchema.optional(),
   consumedAt: z.iso.datetime({ offset: true }).optional(),
   endpointOrigin: z.url(),
   expiresAt: z.iso.datetime({ offset: true }),
@@ -60,6 +59,7 @@ export const pendingRealmIdentityLinkSchema = z.object({
   ownerSessionId: id,
   proofRef: id.optional(),
   proofSha256: hash.optional(),
+  publicRelease: publicRealmReleaseBindingSchema.optional(),
 });
 export type PendingRealmIdentityLink = z.infer<typeof pendingRealmIdentityLinkSchema>;
 const nativeIdentitySchema = z.strictObject({
@@ -159,7 +159,7 @@ export const verifyCapturedRealmIdentityProof = async (
   ) {
     throw new HostedOperatorError("auth_identity_required");
   }
-  return await verifySignedRealmIdentityProof({ ...input, pending, now: new Date(capturedAt) });
+  return await verifySignedRealmIdentityProof({ ...input, now: new Date(capturedAt), pending });
 };
 
 /** Uses the configured trusted HTTP/OIDC reader; no Realm cookies, SQL URLs or admin credentials enter Builder. */

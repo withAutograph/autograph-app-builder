@@ -47,9 +47,9 @@ export const continuationOwnerStore = async (ctx: Pick<HookContext, "session">) 
     adapterSessionId: ctx.session.id,
     authority,
     environment: process.env,
+    execution: hostedOperatorCallbackExecution(ctx.session),
     principal,
     sessionAuth: ctx.session.auth,
-    execution: hostedOperatorCallbackExecution(ctx.session),
   });
   // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Establish current owner authority before opening the private persistence adapter.
   const [
@@ -165,7 +165,6 @@ export const emitCurrentBuildWorkflowProjection = async (
     ]);
   const decision = decideApprovedBuildContinuation({
     adapterSessionId: ctx.session.id,
-    repositoryAccess: repositoryAccessReceiptState.get(),
     approvalMatches: (scope) => {
       try {
         assertApprovedPrivateApplySession(scope);
@@ -176,11 +175,12 @@ export const emitCurrentBuildWorkflowProjection = async (
     },
     blocked: false,
     pendingInput: false,
-    state: appBuilderWorkflowState.get(),
+    repositoryAccess: repositoryAccessReceiptState.get(),
     sourcePrerequisite: currentLocalSourcePrerequisite(
       appBuilderWorkflowState.get(),
       ctx.session.id,
     ),
+    state: appBuilderWorkflowState.get(),
     turnId: ctx.session.turn.id,
     turnSequence: ctx.session.turn.sequence,
   });

@@ -12,6 +12,8 @@ import { branchWorktreePublicationProposalSchema } from "@/lib/agent/branch-work
 import { exactBranchWorktreePublicationProposal } from "./branch_worktree_publication_status";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
+const simulatedPublicationCapability = "simulated-publication";
+
 export default defineTool({
   approval: always(),
   description:
@@ -35,61 +37,66 @@ export default defineTool({
     }
     let pendingWorkflow: ReturnType<typeof appBuilderWorkflowState.get> | undefined;
     const relativeRoot = workflow.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
-    const result = await publishReviewedChangeSetToBranchWorktree({
-      hooks: {
-        afterPendingJournal: () => {
-          updateExactWorkflow({
-            expected: workflow,
-            operation: "branch publication pending recording",
-            transition: (current) => {
-              if (current.phase !== "reviewed") {
-                throw new Error("The reviewed workflow changed before publication.");
-              }
-              return {
-                ...current,
-                branchPublicationCallId: ctx.callId,
-                branchPublicationProposal: proposal,
-                phase: "branch_publication_pending",
-              };
-            },
-          });
-          pendingWorkflow = appBuilderWorkflowState.get();
-        },
-        beforePendingJournal:
-          hasTestCapability("simulated-publication") &&
-          workflow.appSpec.appId === "branch-publication-pre-journal-interruption"
-            ? () => {
-                throw new Error("Fixture interruption before durable branch publication intent.");
-              }
-            : undefined,
-        ...(hasTestCapability("simulated-publication") &&
-        workflow.appSpec.appId === "branch-publication-lost-response"
-          ? {
-              beforeTerminalJournal: () => {
-                throw new Error("Fixture interruption after branch-worktree side effects.");
-              },
-              preserveNonterminalJournal: true,
+    const hooks: NonNullable<
+      Parameters<typeof publishReviewedChangeSetToBranchWorktree>[0]["hooks"]
+    > = {
+      afterPendingJournal: () => {
+        updateExactWorkflow({
+          expected: workflow,
+          operation: "branch publication pending recording",
+          transition: (current) => {
+            if (current.phase !== "reviewed") {
+              throw new Error("The reviewed workflow changed before publication.");
             }
-          : {}),
-        ...(hasTestCapability("simulated-publication") &&
-        workflow.appSpec.appId === "branch-publication-partial-failure"
-          ? {
-              afterPathMutation: (_path: string, index: number) => {
-                if (index === 0) {
-                  throw new Error("Fixture partial branch-worktree apply failure.");
-                }
-              },
-            }
-          : {}),
+            return {
+              ...current,
+              branchPublicationCallId: ctx.callId,
+              branchPublicationProposal: proposal,
+              phase: "branch_publication_pending",
+            };
+          },
+        });
+        pendingWorkflow = appBuilderWorkflowState.get();
       },
+      beforePendingJournal:
+        hasTestCapability(simulatedPublicationCapability) &&
+        workflow.appSpec.appId === "branch-publication-pre-journal-interruption"
+          ? () => {
+              throw new Error("Fixture interruption before durable branch publication intent.");
+            }
+          : undefined,
+    };
+    if (
+      hasTestCapability(simulatedPublicationCapability) &&
+      workflow.appSpec.appId === "branch-publication-lost-response"
+    ) {
+      hooks.beforeTerminalJournal = () => {
+        throw new Error("Fixture interruption after branch-worktree side effects.");
+      };
+      hooks.preserveNonterminalJournal = true;
+    }
+    if (
+      hasTestCapability(simulatedPublicationCapability) &&
+      workflow.appSpec.appId === "branch-publication-partial-failure"
+    ) {
+      hooks.afterPathMutation = (_path: string, index: number) => {
+        if (index === 0) {
+          throw new Error("Fixture partial branch-worktree apply failure.");
+        }
+      };
+    }
+    const result = await publishReviewedChangeSetToBranchWorktree({
+      hooks,
       proposal,
       publishedByCallId: ctx.callId,
-      readOverlayFile: (path) =>
-        ctx
-          .getSandbox()
-          .then((sandbox) => sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` })),
-      readOverlayFileStream: (path) =>
-        ctx.getSandbox().then((sandbox) => sandbox.readFile({ path: `${relativeRoot}/${path}` })),
+      readOverlayFile: async (path) => {
+        const sandbox = await ctx.getSandbox();
+        return await sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` });
+      },
+      readOverlayFileStream: async (path) => {
+        const sandbox = await ctx.getSandbox();
+        return await sandbox.readFile({ path: `${relativeRoot}/${path}` });
+      },
       review: workflow.reviewReceipt,
       sourceReceipt: workflow.sourceReceipt,
     });

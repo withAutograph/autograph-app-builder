@@ -2,15 +2,6 @@ import { z } from "zod";
 
 /** Private server binding. Public MCP inputs never accept native run authority. */
 export const nativeRecoveryDescriptorSchema = z.strictObject({
-  version: z.literal(1),
-  operationId: z.string().min(1),
-  sourcePublicSessionId: z.string().min(1),
-  sourceOwnerRunId: z.string().min(1),
-  sourceAdapterGeneration: z.number().int().positive(),
-  logicalSessionId: z.string().min(1),
-  originalAuthoritySessionId: z.string().min(1),
-  parentCancellationRevision: z.number().int().nonnegative(),
-  sourceHandoffId: z.uuid().optional(),
   /** Explicit owner-requested transfer of a parked native execution, never a user cancellation. */
   executionTransfer: z
     .strictObject({
@@ -18,6 +9,15 @@ export const nativeRecoveryDescriptorSchema = z.strictObject({
       sourceCheckpointDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
     })
     .optional(),
+  logicalSessionId: z.string().min(1),
+  operationId: z.string().min(1),
+  originalAuthoritySessionId: z.string().min(1),
+  parentCancellationRevision: z.number().int().nonnegative(),
+  sourceAdapterGeneration: z.number().int().positive(),
+  sourceHandoffId: z.uuid().optional(),
+  sourceOwnerRunId: z.string().min(1),
+  sourcePublicSessionId: z.string().min(1),
+  version: z.literal(1),
 });
 export type NativeRecoveryDescriptor = z.infer<typeof nativeRecoveryDescriptorSchema>;
 
@@ -25,18 +25,18 @@ export const nativeRecoveryBindingSchema = nativeRecoveryDescriptorSchema
   .extend({
     ownerRunId: z.string().min(1),
     provenance: z.strictObject({
+      checkpointOwnerRunId: z.string().min(1).optional(),
+      checkpointVersion: z.literal(1),
       kind: z.enum([
         "terminal-finalizer-input",
         "completed-terminal-turn-input",
         "failed-turn-input",
         "committed-turn-output",
       ]),
-      sourceStepId: z.string().min(1),
+      resumePhase: z.literal("await-input").optional(),
       sourceEventId: z.string().min(1),
       sourceSlot: z.number().int().nonnegative(),
-      checkpointOwnerRunId: z.string().min(1).optional(),
-      resumePhase: z.literal("await-input").optional(),
-      checkpointVersion: z.literal(1),
+      sourceStepId: z.string().min(1),
     }),
   })
   .superRefine((binding, context) => {
@@ -67,9 +67,9 @@ export const assertNativeRecoveryReceipt = (
 
 /** Exact source coordinates for advisory native reads; never recovery or dispatch authority. */
 export const nativeSourceObservationSchema = z.strictObject({
-  sourcePublicSessionId: z.string().min(1),
-  sourceAdapterSessionId: z.string().min(1),
-  sourceAdapterGeneration: z.number().int().positive(),
   cancellationRevision: z.number().int().nonnegative(),
+  sourceAdapterGeneration: z.number().int().positive(),
+  sourceAdapterSessionId: z.string().min(1),
+  sourcePublicSessionId: z.string().min(1),
 });
 export type NativeSourceObservation = z.infer<typeof nativeSourceObservationSchema>;

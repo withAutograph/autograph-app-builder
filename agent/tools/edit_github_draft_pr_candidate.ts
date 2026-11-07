@@ -47,7 +47,7 @@ export default defineTool({
           "Read the preserved app review through change_set_status with includeContent. This reader opens only retained draft candidates.",
         );
       }
-      return {
+      const result = {
         ...(await readDraftReconciliationCandidateFilePage({
           cursor: input.cursor,
           expectedDigest: input.expectedDigest,
@@ -56,19 +56,21 @@ export default defineTool({
           sandbox,
         })),
         path: input.path,
-        ...(preserved === undefined
-          ? {}
-          : {
-              source: {
-                kind: "preserved-draft-candidate" as const,
-                preservedWorkspaceIndex: input.preservedWorkspaceIndex,
-                reviewDigest: preserved.reviewDigest,
-                nextAction:
-                  "This digest belongs to preserved content. Read the current candidate separately before a deliberate replacement using its current digest.",
-              },
-            }),
-        status: preserved === undefined ? ("current_file" as const) : ("preserved_file" as const),
       };
+      if (preserved !== undefined) {
+        return {
+          ...result,
+          source: {
+            kind: "preserved-draft-candidate" as const,
+            nextAction:
+              "This digest belongs to preserved content. Read the current candidate separately before a deliberate replacement using its current digest.",
+            preservedWorkspaceIndex: input.preservedWorkspaceIndex,
+            reviewDigest: preserved.reviewDigest,
+          },
+          status: "preserved_file" as const,
+        };
+      }
+      return { ...result, status: "current_file" as const };
     }
     const result =
       input.kind === "restore"

@@ -14,21 +14,18 @@ export const latestInstalledApplicationSource = (events: readonly MessageStreamE
           requested.add(action.callId);
         }
       }
-    }
-    if (
+    } else if (
       event.type !== "action.result" ||
       event.data.status !== "completed" ||
       event.data.result.kind !== "tool-result" ||
       event.data.result.toolName !== "export-application-source"
     ) {
-      continue;
-    }
-    if (!requested.has(event.data.result.callId)) {
-      continue;
-    }
-    const result = applicationSourceExportReferenceSchema.safeParse(event.data.result.output);
-    if (result.success) {
-      latest = result.data;
+      // Ignore events that cannot provide an exported source reference.
+    } else if (requested.has(event.data.result.callId)) {
+      const result = applicationSourceExportReferenceSchema.safeParse(event.data.result.output);
+      if (result.success) {
+        latest = result.data;
+      }
     }
   }
   return latest;

@@ -17,55 +17,55 @@ vi.mock("./deployment-repository-access-runtime", () => ({
 }));
 const owned = { repository: "owner/app", repositoryId: "123", selectedInstallationId: "456" };
 // SAFETY: Only callId and this exact session/auth projection are consumed; repository/provider effect ports are unavailable in this fixture.
-const ctx = { callId: "review", session: { id: "saved", auth: {} } } as unknown as ToolContext;
+const ctx = { callId: "review", session: { auth: {}, id: "saved" } } as unknown as ToolContext;
 const repository = {
-  version: 2 as const,
-  repositoryId: "123",
-  owner: "owner",
-  name: "app",
-  visibility: "private" as const,
   defaultBranch: "main",
+  digest: "d".repeat(64),
   headSha: "a".repeat(40),
   headTree: "b".repeat(40),
   installationIdentityDigest: "c".repeat(64),
-  releaseGate: { name: "REPOSITORY_RELEASE_ENABLED" as const, configured: false },
-  digest: "d".repeat(64),
+  name: "app",
+  owner: "owner",
+  releaseGate: { configured: false, name: "REPOSITORY_RELEASE_ENABLED" as const },
+  repositoryId: "123",
+  version: 2 as const,
+  visibility: "private" as const,
 };
 const source: ImmutableGitHubSourceReceipt = {
-  version: 2,
+  digest: "e".repeat(64),
+  installationIdentityDigest: repository.installationIdentityDigest,
   repository,
+  resolvedByCallId: "acquire",
   resolvedRef: "refs/heads/main",
   resolvedSha: repository.headSha,
   resolvedTree: repository.headTree,
-  installationIdentityDigest: repository.installationIdentityDigest,
-  resolvedByCallId: "acquire",
-  digest: "e".repeat(64),
+  version: 2,
 };
 const access = (installationId: string) => ({
-  kind: "ready" as const,
   access: {
-    status: "ready" as const,
     accessDigest: "f".repeat(64),
     repository: { ...repository, archived: false as const, repositoryVariableNames: [] },
     scope: { accountLogin: "owner", accountType: "Organization" as const, installationId },
+    status: "ready" as const,
   },
+  kind: "ready" as const,
   receipt: recordRepositoryAccessReceipt({
-    current: undefined,
-    sessionId: "saved",
-    confirmedByCallId: "review",
     access: {
-      status: "ready",
       accessDigest: "f".repeat(64),
       repository: { ...repository, archived: false, repositoryVariableNames: [] },
       scope: { accountLogin: "owner", accountType: "Organization", installationId },
+      status: "ready",
     },
+    confirmedByCallId: "review",
+    current: undefined,
+    sessionId: "saved",
   }),
 });
 const request = {
-  ctx,
   appId: "app",
-  sourceKind: "existing-repository" as const,
+  ctx,
   githubSource: source,
+  sourceKind: "existing-repository" as const,
 };
 beforeEach(() => {
   vi.resetAllMocks();

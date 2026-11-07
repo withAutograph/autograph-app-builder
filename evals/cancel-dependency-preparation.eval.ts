@@ -1,8 +1,27 @@
 import { defineEval } from "eve/evals";
 import { equals, includes, satisfies } from "eve/evals/expect";
+import { z } from "zod";
 
 import { BUILD_READY_APP_SPEC } from "./support/app-spec";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
+
+const planningStatusSchema = z.object({
+  dependencies: z.object({ digest: z.string().regex(/^[a-f0-9]{64}$/u) }),
+  phase: z.literal("planned"),
+});
+
+const hasPlanningReceipt = (reply: string): boolean => {
+  const objectStart = reply.indexOf("{");
+  if (objectStart === -1) {
+    return false;
+  }
+
+  try {
+    return planningStatusSchema.safeParse(JSON.parse(reply.slice(objectStart))).success;
+  } catch {
+    return false;
+  }
+};
 
 export default defineEval({
   description:
@@ -19,19 +38,7 @@ export default defineEval({
     const recordedStatus = turn1.message;
     t.check(
       recordedStatus,
-      satisfies((reply) => {
-        if (typeof reply !== "string") {
-          return false;
-        }
-        try {
-          const state = JSON.parse(reply.slice(reply.indexOf("{")));
-          return (
-            state.phase === "planned" && /^[a-f0-9]{64}$/u.test(state.dependencies?.digest ?? "")
-          );
-        } catch {
-          return false;
-        }
-      }, "planning recorded a durable dependency receipt"),
+      satisfies(hasPlanningReceipt, "planning recorded a durable dependency receipt"),
     );
 
     const preparation = await session.send("Prepare offline target dependencies.");

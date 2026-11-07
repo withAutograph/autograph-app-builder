@@ -14,6 +14,7 @@ import type { NormalActorProgram } from "./hosted-operator-normal-actor-program"
 import { normalActorProgramDigest } from "./hosted-operator-normal-actor-program";
 
 type Predecessor = NonNullable<HostedRuntimeJournalRecord["participantPreparationHistory"]>[number];
+const PARTICIPANT_STAGE = "auth-participants";
 
 /** Organization-proof migration is deliberately outside this capture-only successor. */
 export const isAdditiveCaptureParticipantProgram = (
@@ -56,7 +57,7 @@ const completed = (record: HostedRuntimeJournalRecord, now: number): Predecessor
     preparation.accountsCompletedAt !== undefined,
     preparation.programDigest === normalActorProgramDigest(preparation.program),
     preparation.accountPlanDigest === operatorPlanDigest(preparation.accountPlan),
-    preparation.accountPlan.stage === "auth-participants",
+    preparation.accountPlan.stage === PARTICIPANT_STAGE,
     preparation.accountPlan.normalActorProgram !== undefined &&
       normalActorProgramDigest(preparation.accountPlan.normalActorProgram) ===
         preparation.programDigest,
@@ -85,7 +86,7 @@ const completed = (record: HostedRuntimeJournalRecord, now: number): Predecessor
     ),
   ].every(Boolean);
   return eligible
-    ? { preparation, operator, approvedByCallId: record.approvedByCallId, proof: record.proof }
+    ? { approvedByCallId: record.approvedByCallId, operator, preparation, proof: record.proof }
     : undefined;
 };
 
@@ -107,7 +108,7 @@ export const readParticipantSuccessorPredecessor = (
 ): Predecessor | undefined => {
   const pointer = plan.normalActorPredecessor;
   const program = plan.normalActorProgram;
-  if (pointer === undefined || program === undefined || plan.stage !== "auth-participants") {
+  if (pointer === undefined || program === undefined || plan.stage !== PARTICIPANT_STAGE) {
     return undefined;
   }
   const candidates = [completed(record, now), ...(record.participantPreparationHistory ?? [])];
@@ -189,40 +190,41 @@ export const createParticipantSuccessorPlan = (
   void authMembership;
   void authSignupPolicy;
   void normalActorPreparation;
-  const gatewayBindings = prior.operator.plan.gatewayBindings;
+  const { gatewayBindings } = prior.operator.plan;
   const trustedSources = gatewayBindings?.trustedSources;
-  return hostedOperatorPlanSchema.parse({
+  const planBase: Omit<typeof base, "gatewayBindings"> & { gatewayBindings?: unknown } = {
     ...base,
-    ...(gatewayBindings === undefined
-      ? {}
-      : {
-          gatewayBindings: {
-            ...gatewayBindings,
-            // Existing app/JWKS grants stay provider facts; this account-only plan cannot authorize them.
-            trustedSources:
-              trustedSources !== undefined && "gatewayPreview" in trustedSources
-                ? { gatewayPreview: trustedSources.gatewayPreview }
-                : undefined,
-          },
-        }),
-    stage: "auth-participants",
+  };
+  if (gatewayBindings !== undefined) {
+    planBase.gatewayBindings = {
+      ...gatewayBindings,
+      // Existing app/JWKS grants stay provider facts; this account-only plan cannot authorize them.
+      trustedSources:
+        trustedSources !== undefined && "gatewayPreview" in trustedSources
+          ? { gatewayPreview: trustedSources.gatewayPreview }
+          : undefined,
+    };
+  }
+  return hostedOperatorPlanSchema.parse({
+    ...planBase,
     access: [],
-    normalActorProgram: program,
-    normalActorPredecessor: {
-      preparation: normalActorPreparationSchema.strip().parse(prior.preparation),
-      operationRef: prior.operator.operationRef,
-      planDigest: prior.operator.planDigest,
-      approvalId: prior.operator.approvalId,
-      approvedByCallId: prior.approvedByCallId,
-    },
     effects: [
       {
-        id: "normal-accounts",
-        kind: "normal-accounts",
         description:
           "Prepare only the explicitly approved additional participants; preserve the original verified personal capture.",
+        id: "normal-accounts",
+        kind: "normal-accounts",
       },
     ],
+    normalActorPredecessor: {
+      approvalId: prior.operator.approvalId,
+      approvedByCallId: prior.approvedByCallId,
+      operationRef: prior.operator.operationRef,
+      planDigest: prior.operator.planDigest,
+      preparation: normalActorPreparationSchema.strip().parse(prior.preparation),
+    },
+    normalActorProgram: program,
+    stage: PARTICIPANT_STAGE,
   });
 };
 
@@ -239,7 +241,7 @@ export const isParticipantProgramSuccessor = (
     completed(record, now)?.operator.operationRef === prior.operator.operationRef ||
     [
       record.operator?.planDigest === operatorPlanDigest(plan),
-      record.operator?.plan.stage === "auth-participants",
+      record.operator?.plan.stage === PARTICIPANT_STAGE,
       record.leaseId === undefined,
       record.leaseExpiresAt === undefined,
       record.operator?.pendingEffectId === undefined,

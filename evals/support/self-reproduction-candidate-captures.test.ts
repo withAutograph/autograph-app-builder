@@ -1,4 +1,4 @@
-import { Script } from "node:vm";
+import ts from "typescript";
 import { expect, it } from "vitest";
 import { captureStates, desktopViewports } from "./self-reproduction-parity";
 import { sandboxCandidateInteractionCaptures } from "./self-reproduction-candidate-captures";
@@ -14,7 +14,13 @@ it("covers existing desktop state combinations without phone or tablet captures"
 it("emits syntactically executable portable code with conservative transient evidence", () => {
   const { script } = sandboxCandidateInteractionCaptures();
   const body = script.replaceAll(/^import .*;$/gmu, "");
-  expect(() => new Script(`(async function() {${body}})`)).not.toThrow();
+  const parsed = ts.createSourceFile(
+    "candidate.js",
+    `(async function() {${body}})`,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  expect(parsed.parseDiagnostics).toEqual([]);
   expect(script).toContain("'not-run'");
   expect(script).toContain("'missing-functionality' : 'not-run'");
   expect(script).not.toContain("Finish preview");

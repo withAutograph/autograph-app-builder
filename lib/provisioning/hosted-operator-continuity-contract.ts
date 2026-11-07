@@ -15,52 +15,53 @@ import {
 
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const reconciliationRequired = "reconciliation-required";
 const origin = z.url().refine((value) => {
   const url = new URL(value);
   return url.protocol === "https:" && url.origin === value && !url.username && !url.password;
 });
 export const managedRuntimeWorkerDescriptorSchema = z.strictObject({
-  id,
   executablePath: id,
-  sha256: digest,
+  id,
   operationScope: z.literal("managed-app-runtime-v1"),
+  sha256: digest,
   subcommand: z.literal("protected-managed-app-runtime"),
 });
 export const continuityRuntimeSelectionSchema = z.strictObject({
-  sandboxId: id,
-  root: id,
   browserSelection: browserTestSelectionSchema.optional(),
+  root: id,
+  sandboxId: id,
 });
 export type ContinuityRuntimeSelection = z.infer<typeof continuityRuntimeSelectionSchema>;
 export const hostedContinuityPlanSchema = z
   .strictObject({
-    version: z.literal(1),
-    kind: z.literal("app-continuity-plan"),
-    intentId: z.uuid(),
-    predecessorIntentId: z.uuid().optional(),
-    planRef: id,
+    actors: z.array(z.strictObject({ actorId: id, organizationId: id })).min(1),
     authority: hostedTenantAuthoritySchema,
-    target: hostedRuntimeTargetSchema,
-    originalSetup: z.strictObject({
-      operationRef: z.uuid(),
-      planDigest: digest,
-      approvalId: id,
-      approvedByCallId: id,
-    }),
-    preparedPlan: hostedOperatorPlanSchema,
-    runtime: continuityRuntimeSelectionSchema.extend({
-      projectId: id,
-      ownerId: id,
-      appPort: z.number().int().min(1).max(65_535),
-      bridgePort: z.number().int().min(1).max(65_535),
-    }),
     gateway: z.strictObject({
-      projectId: id,
-      ownerId: id,
       environment: z.literal("preview"),
+      ownerId: id,
+      projectId: id,
       publicOrigin: origin,
     }),
-    actors: z.array(z.strictObject({ actorId: id, organizationId: id })).min(1),
+    intentId: z.uuid(),
+    kind: z.literal("app-continuity-plan"),
+    originalSetup: z.strictObject({
+      approvalId: id,
+      approvedByCallId: id,
+      operationRef: z.uuid(),
+      planDigest: digest,
+    }),
+    planRef: id,
+    predecessorIntentId: z.uuid().optional(),
+    preparedPlan: hostedOperatorPlanSchema,
+    runtime: continuityRuntimeSelectionSchema.extend({
+      appPort: z.number().int().min(1).max(65_535),
+      bridgePort: z.number().int().min(1).max(65_535),
+      ownerId: id,
+      projectId: id,
+    }),
+    target: hostedRuntimeTargetSchema,
+    version: z.literal(1),
   })
   .superRefine((value, ctx) => {
     if (
@@ -79,9 +80,9 @@ export const continuityPlanDigest = (plan: HostedContinuityPlan) =>
     .digest("hex");
 export const hostedContinuityRequestSchema = z.strictObject({
   action: z.literal("continuity"),
-  planRef: id,
-  planDigest: digest,
   idempotencyKey: id,
+  planDigest: digest,
+  planRef: id,
 });
 export type HostedContinuityRequest = z.infer<typeof hostedContinuityRequestSchema>;
 export const parseContinuityRequestForPlan = (
@@ -113,96 +114,110 @@ export const continuityApprovalSchema = hostedContinuityRequestSchema.extend({
 });
 export type ContinuityApproval = z.infer<typeof continuityApprovalSchema>;
 export const continuityIdentitySchema = z.strictObject({
-  intentId: z.uuid(),
-  approvalRef: id,
-  owner: hostedTenantAuthoritySchema.extend({ sessionId: id }),
   appId: id,
-  runtimeAttemptId: z.uuid(),
+  approvalRef: id,
   fence: z.number().int().positive(),
-  sandboxId: id,
+  intentId: z.uuid(),
+  owner: hostedTenantAuthoritySchema.extend({ sessionId: id }),
   providerSessionId: id,
+  runtimeAttemptId: z.uuid(),
+  sandboxId: id,
 });
 export const continuityCurrentSchema = continuityIdentitySchema.extend({
-  state: z.enum([
-    "starting",
-    "ready",
-    "restarting",
-    "revoked",
-    "expired",
-    "reconciliation-required",
-  ]),
   leaseExpiresAt: z.iso.datetime(),
+  state: z.enum(["starting", "ready", "restarting", "revoked", "expired", reconciliationRequired]),
 });
 export type ContinuityCurrent = z.infer<typeof continuityCurrentSchema>;
 const providerTarget = z.strictObject({
-  projectId: id,
-  ownerId: id,
-  sandboxId: id,
-  providerSessionId: id,
-  origin,
   bridgePort: z.number().int().min(1).max(65_535),
+  origin,
+  ownerId: id,
+  projectId: id,
+  providerSessionId: id,
+  sandboxId: id,
 });
 /** Same public wire accepted by Arrusted's trusted managed-target receiver. Not live provider evidence. */
 export const continuityProjectionSchema = z.strictObject({
-  version: z.literal(1),
-  provenance: z.literal("trusted-operator-published-managed-target"),
-  intentId: z.uuid(),
-  approvalRef: id,
-  owner: hostedTenantAuthoritySchema.extend({ sessionId: id }),
-  appId: id,
-  preparedOperationRef: id,
-  gateway: hostedContinuityPlanSchema.shape.gateway,
-  approvedTarget: providerTarget,
-  observation: providerTarget.extend({ expiresAt: z.iso.datetime() }),
-  runtimeAttemptId: z.uuid(),
-  fence: z.number().int().positive(),
-  leaseExpiresAt: z.iso.datetime(),
-  state: continuityCurrentSchema.shape.state,
   actors: hostedContinuityPlanSchema.shape.actors,
+  appId: id,
+  approvalRef: id,
+  approvedTarget: providerTarget,
+  fence: z.number().int().positive(),
+  gateway: hostedContinuityPlanSchema.shape.gateway,
+  intentId: z.uuid(),
+  leaseExpiresAt: z.iso.datetime(),
+  observation: providerTarget.extend({ expiresAt: z.iso.datetime() }),
+  owner: hostedTenantAuthoritySchema.extend({ sessionId: id }),
+  preparedOperationRef: id,
+  provenance: z.literal("trusted-operator-published-managed-target"),
+  runtimeAttemptId: z.uuid(),
+  state: continuityCurrentSchema.shape.state,
   suiteSelectorSha256: digest,
   transportSha256: digest,
+  version: z.literal(1),
 });
 export type ContinuityProjection = z.infer<typeof continuityProjectionSchema>;
 export const continuityCapabilitiesSchema = z.strictObject({
+  lifecycle: id,
   suiteSelector: id,
   transport: id,
-  lifecycle: id,
 });
 export type ContinuityCapabilities = z.infer<typeof continuityCapabilitiesSchema>;
 export const continuityPrivateStateSchema = z.strictObject({
   encryptedToken: id,
+  keyVersion: id,
   tokenIv: id,
   tokenTag: id,
-  keyVersion: id,
 });
 export const continuityRuntimeLocatorSchema = z.strictObject({
   ...continuityRuntimeSelectionSchema.shape,
-  providerSessionId: id,
+  attemptId: z.uuid(),
   commandId: id.optional(),
   dispatchAttempted: z.boolean().optional(),
-  worker: managedRuntimeWorkerDescriptorSchema,
-  attemptId: z.uuid(),
+  providerSessionId: id,
   rootDirectory: id,
+  worker: managedRuntimeWorkerDescriptorSchema,
 });
 export type ContinuityRuntimeLocator = z.infer<typeof continuityRuntimeLocatorSchema>;
 export const managedRuntimeWorkerAssetSchema = z.strictObject({
+  disposed: z.boolean().optional(),
+  installed: z.boolean().optional(),
   sourceCreationAttempted: z.boolean().optional(),
   sourceSandboxId: z.string().min(1).optional(),
-  installed: z.boolean().optional(),
-  disposed: z.boolean().optional(),
 });
 export type ManagedRuntimeWorkerAssetState = z.infer<typeof managedRuntimeWorkerAssetSchema>;
 export const continuityRecordSchema = z
   .strictObject({
-    kind: z.literal("app-continuity"),
-    requestId: z.uuid(),
-    supersededBy: z.uuid().optional(),
-    revision: z.number().int().nonnegative(),
-    idempotencyKey: id,
-    plan: hostedContinuityPlanSchema,
-    planDigest: digest,
     approval: continuityApprovalSchema.optional(),
     approvalObservation: privateOperatorApprovalObservationSchema.optional(),
+    attemptId: z.uuid().optional(),
+    cancelled: z.boolean().optional(),
+    current: continuityCurrentSchema.optional(),
+    deliveryAttempted: z.boolean().optional(),
+    deliveryCandidates: z.array(operatorDeploymentCandidateSchema),
+    environmentRows: z.array(managedOperatorEnvironmentRowSchema),
+    environmentWrites: z.array(z.strictObject({ key: id, sha256: digest })),
+    failure: z
+      .strictObject({
+        reason: z.literal("runtime-closed-before-publication-completed"),
+        stage: z.literal("publication"),
+      })
+      .optional(),
+    fence: z.number().int().nonnegative(),
+    idempotencyKey: id,
+    kind: z.literal("app-continuity"),
+    locator: continuityRuntimeLocatorSchema.optional(),
+    outcome: z
+      .strictObject({ completedAt: z.iso.datetime(), exitCode: z.number().int() })
+      .optional(),
+    pendingStage: z.enum(["runtime", "publication", "suite", "revocation"]).optional(),
+    plan: hostedContinuityPlanSchema,
+    planDigest: digest,
+    privateState: continuityPrivateStateSchema.optional(),
+    projection: continuityProjectionSchema.optional(),
+    publicProfile: managedRuntimePublicProfileSchema.optional(),
+    requestId: z.uuid(),
+    revision: z.number().int().nonnegative(),
     state: z.enum([
       "planned",
       "approved",
@@ -212,33 +227,12 @@ export const continuityRecordSchema = z
       "revoking",
       "revoked",
       "settled",
-      "reconciliation-required",
+      reconciliationRequired,
     ]),
-    fence: z.number().int().nonnegative(),
-    attemptId: z.uuid().optional(),
-    privateState: continuityPrivateStateSchema.optional(),
-    workerAsset: managedRuntimeWorkerAssetSchema.optional(),
-    publicProfile: managedRuntimePublicProfileSchema.optional(),
-    current: continuityCurrentSchema.optional(),
-    projection: continuityProjectionSchema.optional(),
-    locator: continuityRuntimeLocatorSchema.optional(),
-    environmentRows: z.array(managedOperatorEnvironmentRowSchema),
-    environmentWrites: z.array(z.strictObject({ key: id, sha256: digest })),
-    deliveryAttempted: z.boolean().optional(),
-    deliveryCandidates: z.array(operatorDeploymentCandidateSchema),
     suiteCommandId: id.optional(),
     suiteDispatched: z.boolean().optional(),
-    cancelled: z.boolean().optional(),
-    failure: z
-      .strictObject({
-        stage: z.literal("publication"),
-        reason: z.literal("runtime-closed-before-publication-completed"),
-      })
-      .optional(),
-    outcome: z
-      .strictObject({ exitCode: z.number().int(), completedAt: z.iso.datetime() })
-      .optional(),
-    pendingStage: z.enum(["runtime", "publication", "suite", "revocation"]).optional(),
+    supersededBy: z.uuid().optional(),
+    workerAsset: managedRuntimeWorkerAssetSchema.optional(),
   })
   .superRefine((value, ctx) => {
     if (
@@ -283,14 +277,14 @@ export const canRebindUndispatchedContinuityRuntime = (record: ContinuityRecord)
     record.suiteCommandId === undefined,
     current.state === "starting",
     isDeepStrictEqual(continuityIdentitySchema.strip().parse(current), {
-      intentId: record.requestId,
-      approvalRef: approval.approvalId,
-      owner: { ...plan.authority, sessionId: plan.target.sessionId },
       appId: plan.target.appId,
-      runtimeAttemptId: attemptId,
+      approvalRef: approval.approvalId,
       fence: record.fence,
-      sandboxId: locator.sandboxId,
+      intentId: record.requestId,
+      owner: { ...plan.authority, sessionId: plan.target.sessionId },
       providerSessionId: locator.providerSessionId,
+      runtimeAttemptId: attemptId,
+      sandboxId: locator.sandboxId,
     }),
   ].every(Boolean);
 };
@@ -298,39 +292,47 @@ export const canRebindUndispatchedContinuityRuntime = (record: ContinuityRecord)
 /** Journal markers are observations only. An unrecorded marker is never proof of no effect. */
 const checkpointMarker = (recorded: boolean) =>
   recorded ? ("recorded" as const) : ("unrecorded" as const);
-export const continuityStatus = (record: ContinuityRecord) => ({
-  intentId: record.requestId,
-  planRef: record.plan.planRef,
-  state: record.state,
-  ...(record.supersededBy === undefined ? {} : { supersededBy: record.supersededBy }),
-  ...(record.outcome === undefined ? {} : { outcome: record.outcome }),
-  ...(record.failure === undefined ? {} : { failure: record.failure }),
-  ...(record.current === undefined
-    ? {}
-    : {
-        runtime: {
-          runtimeAttemptId: record.current.runtimeAttemptId,
-          state: record.current.state,
-          leaseExpiresAt: record.current.leaseExpiresAt,
-        },
-      }),
-});
+export const continuityStatus = (record: ContinuityRecord) => {
+  const status: ContinuityStatus = {
+    intentId: record.requestId,
+    planRef: record.plan.planRef,
+    state: record.state,
+  };
+  if (record.supersededBy !== undefined) {
+    status.supersededBy = record.supersededBy;
+  }
+  if (record.outcome !== undefined) {
+    status.outcome = record.outcome;
+  }
+  if (record.failure !== undefined) {
+    status.failure = record.failure;
+  }
+  if (record.current !== undefined) {
+    status.runtime = {
+      leaseExpiresAt: record.current.leaseExpiresAt,
+      runtimeAttemptId: record.current.runtimeAttemptId,
+      state: record.current.state,
+    };
+  }
+  return status;
+};
 
 export const continuityStatusSchema = z.strictObject({
-  intentId: z.uuid(),
-  planRef: id,
-  state: continuityRecordSchema.shape.state,
-  supersededBy: z.uuid().optional(),
-  outcome: continuityRecordSchema.shape.outcome,
   failure: continuityRecordSchema.shape.failure,
+  intentId: z.uuid(),
+  outcome: continuityRecordSchema.shape.outcome,
+  planRef: id,
   runtime: z
     .strictObject({
+      leaseExpiresAt: z.iso.datetime(),
       runtimeAttemptId: z.uuid(),
       state: continuityCurrentSchema.shape.state,
-      leaseExpiresAt: z.iso.datetime(),
     })
     .optional(),
+  state: continuityRecordSchema.shape.state,
+  supersededBy: z.uuid().optional(),
 });
+type ContinuityStatus = z.infer<typeof continuityStatusSchema>;
 /** A separate opt-in read keeps legacy strict status consumers compatible. */
 export const continuityCheckpointSchema = continuityStatusSchema.extend({
   checkpoints: z.strictObject({

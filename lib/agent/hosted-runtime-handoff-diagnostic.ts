@@ -80,21 +80,21 @@ const projectActionResult = (input: OwnerActionResultDiagnostic) => {
   const operationRef = ownDataProperty(input, "operationRef");
   const planDigest = ownDataProperty(input, "planDigest");
   return {
+    appIdPresent: appId !== undefined,
+    appIdValid: operatorPublicResultSchema.shape.appId.safeParse(appId?.value).success,
     eventCompleted: diagnosticBoolean.parse(input.eventCompleted),
     isError: diagnosticBoolean.parse(input.isError),
-    outputKind: projectOutputKind(input),
-    outputStatus: projectOutputStatus(status),
-    statusPresent: status !== undefined,
-    appIdPresent: appId !== undefined,
     operationRefPresent: operationRef !== undefined,
-    planDigestPresent: planDigest !== undefined,
-    appIdValid: operatorPublicResultSchema.shape.appId.safeParse(appId?.value).success,
     operationRefValid: operatorPublicResultSchema.shape.operationRef
       .unwrap()
       .safeParse(operationRef?.value).success,
+    outputKind: projectOutputKind(input),
+    outputStatus: projectOutputStatus(status),
+    planDigestPresent: planDigest !== undefined,
     planDigestValid: operatorPublicResultSchema.shape.planDigest
       .unwrap()
       .safeParse(planDigest?.value).success,
+    statusPresent: status !== undefined,
   };
 };
 
@@ -124,7 +124,7 @@ export const reportHostedRuntimeHandoffDiagnostic = (
         const outcome = captureOutcome.safeParse(input.outcome);
         if (outcome.success) {
           console.info(
-            JSON.stringify({ event, stage: "reference_capture", outcome: outcome.data }),
+            JSON.stringify({ event, outcome: outcome.data, stage: "reference_capture" }),
           );
         }
         break;
@@ -132,32 +132,32 @@ export const reportHostedRuntimeHandoffDiagnostic = (
       case "owner_selection_read": {
         const state = referenceState.safeParse(input.referenceState);
         if (state.success) {
-          console.info(
-            JSON.stringify({
-              event,
-              stage: "owner_selection_read",
-              referenceState: state.data,
-              ...(input.selectionPresent === undefined
-                ? {}
-                : { selectionPresent: diagnosticBoolean.parse(input.selectionPresent) }),
-            }),
-          );
+          const base = {
+            event,
+            referenceState: state.data,
+            stage: "owner_selection_read" as const,
+          };
+          const diagnostic =
+            input.selectionPresent === undefined
+              ? base
+              : { ...base, selectionPresent: diagnosticBoolean.parse(input.selectionPresent) };
+          console.info(JSON.stringify(diagnostic));
         }
         break;
       }
       case "native_preview_candidate": {
-        console.info(
-          JSON.stringify({
-            event,
-            stage: "native_preview_candidate",
-            acceptedAppIdPresent: diagnosticBoolean.parse(input.acceptedAppIdPresent),
-            inputAppIdPresent: diagnosticBoolean.parse(input.inputAppIdPresent),
-            lookupAttempted: diagnosticBoolean.parse(input.lookupAttempted),
-            ...(input.appIdMatches === undefined
-              ? {}
-              : { appIdMatches: diagnosticBoolean.parse(input.appIdMatches) }),
-          }),
-        );
+        const base = {
+          acceptedAppIdPresent: diagnosticBoolean.parse(input.acceptedAppIdPresent),
+          event,
+          inputAppIdPresent: diagnosticBoolean.parse(input.inputAppIdPresent),
+          lookupAttempted: diagnosticBoolean.parse(input.lookupAttempted),
+          stage: "native_preview_candidate" as const,
+        };
+        const diagnostic =
+          input.appIdMatches === undefined
+            ? base
+            : { ...base, appIdMatches: diagnosticBoolean.parse(input.appIdMatches) };
+        console.info(JSON.stringify(diagnostic));
         break;
       }
       default: {

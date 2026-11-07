@@ -127,12 +127,12 @@ const exportTextPathChunk = async (input: {
     }),
     offsetBytes,
   });
+  const cursor =
+    chunk.nextOffsetBytes < contentBytes
+      ? { contentCursor: { digest, offsetBytes: chunk.nextOffsetBytes, path: input.path } }
+      : {};
   return {
-    ...(chunk.nextOffsetBytes < contentBytes
-      ? {
-          contentCursor: { digest, offsetBytes: chunk.nextOffsetBytes, path: input.path },
-        }
-      : {}),
+    ...cursor,
     file: { content: chunk.content, digest, offsetBytes, path: input.path },
   };
 };
@@ -486,17 +486,16 @@ export const observeNormalizedChangeSet = async (input: {
           includeBaselinePlanningSpecs,
           input.state.proposal.target.frameworkUpgrade !== undefined,
         );
+  const applyReceipt = { ...input.state.applyReceipt };
+  if (selectedBaseline !== undefined || destination !== undefined) {
+    applyReceipt.preTree = preTree;
+    applyReceipt.preTreeDigest = createHash("sha256")
+      .update(JSON.stringify(canonicalOverlayFiles(preTree)))
+      .digest("hex");
+  }
   const changeSet = deriveNormalizedChangeSet(
     {
-      ...input.state.applyReceipt,
-      ...(selectedBaseline === undefined && destination === undefined
-        ? {}
-        : {
-            preTree,
-            preTreeDigest: createHash("sha256")
-              .update(JSON.stringify(canonicalOverlayFiles(preTree)))
-              .digest("hex"),
-          }),
+      ...applyReceipt,
       changedContentDigest: createHash("sha256").update(JSON.stringify(changes)).digest("hex"),
       changes,
       postTree: observed.files,
@@ -726,8 +725,8 @@ export default defineTool({
           cursor: input.detailCursor,
           expectedReviewDigest: input.expectedReviewDigest,
           metadata,
-          sessionId: ctx.session.id,
           section: input.detailSection,
+          sessionId: ctx.session.id,
           sourceAssessmentBindingDigest: input.sourceAssessmentBindingDigest,
           state,
         }),

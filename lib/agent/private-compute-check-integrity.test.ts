@@ -15,26 +15,26 @@ import type { PrivateComputeProfile } from "../sandbox/private-compute-profile";
 
 const hash = createHash("sha256").update(PRIVATE_COMPUTE_CHECK_TASK).digest("hex");
 const profile: PrivateComputeProfile = {
-  version: 1,
-  id: "private-checks-16gib-v1",
-  vcpus: 8,
-  memoryMiB: 16_384,
-  lintWorkers: 1,
   checkPolicy: {
-    path: "apps/example/.config/mise/tasks/check",
-    beforeSha256: hash,
     afterSha256: hash,
+    beforeSha256: hash,
+    path: "apps/example/.config/mise/tasks/check",
   },
-  target: { sandboxId: "sandbox", workspaceDrive: "drive" },
+  id: "private-checks-16gib-v1",
   limits: {
-    version: 1,
-    teamId: "team_example",
-    projectId: "prj_example",
-    plan: "pro",
-    maxVcpus: 8,
     limited: false,
+    maxVcpus: 8,
     observedAt: "2026-11-04T00:00:00Z",
+    plan: "pro",
+    projectId: "prj_example",
+    teamId: "team_example",
+    version: 1,
   },
+  lintWorkers: 1,
+  memoryMiB: 16_384,
+  target: { sandboxId: "sandbox", workspaceDrive: "drive" },
+  vcpus: 8,
+  version: 1,
 };
 describe("frozen private check policy", () => {
   it("rejects explicit deletion only for the selected frozen task", () => {
@@ -52,8 +52,8 @@ describe("frozen private check policy", () => {
     expect(
       await verifyPrivateComputeCheckIntegrity({
         appId: "example",
-        root: "/workspace/repository",
         profile: undefined,
+        root: "/workspace/repository",
         sandbox: { run },
       }),
     ).toBe(true);
@@ -92,10 +92,10 @@ describe("frozen private check policy", () => {
             cwd: root,
             env: {
               ...process.env,
-              PATH: `${path.dirname(process.execPath)}:${miseDirectory}:${process.env.PATH ?? ""}:/usr/bin:/bin`,
-              MISE_STATE_DIR: path.join(root, ".mise-state"),
               MISE_GLOBAL_CONFIG_FILE: globalConfig,
+              MISE_STATE_DIR: path.join(root, ".mise-state"),
               MISE_TRUSTED_CONFIG_PATHS: root,
+              PATH: `${path.dirname(process.execPath)}:${miseDirectory}:${process.env.PATH ?? ""}:/usr/bin:/bin`,
             },
           },
         );
@@ -105,14 +105,14 @@ describe("frozen private check policy", () => {
         if (!observed.success) {
           throw error;
         }
-        return { stdout: observed.data.stdout, stderr: "", exitCode: 1 };
+        return { exitCode: 1, stderr: "", stdout: observed.data.stdout };
       }
     };
-    const check = () =>
-      verifyPrivateComputeCheckIntegrity({
+    const check = async () =>
+      await verifyPrivateComputeCheckIntegrity({
         appId: "example",
-        root: "/workspace/repository",
         profile,
+        root: "/workspace/repository",
         sandbox: { run },
       });
     try {
@@ -131,9 +131,9 @@ describe("frozen private check policy", () => {
       expect(replacement.exitCode).toBe(0);
       expect(
         z
-          .object({ source: z.string(), file: z.null(), run: z.array(z.string()) })
+          .object({ file: z.null(), run: z.array(z.string()), source: z.string() })
           .parse(JSON.parse(replacement.stdout)),
-      ).toEqual({ source: path.join(config, "config.toml"), file: null, run: ["vp check"] });
+      ).toEqual({ file: null, run: ["vp check"], source: path.join(config, "config.toml") });
       expect(await check()).toBe(false);
       await writeFile(
         path.join(config, "config.toml"),
@@ -146,7 +146,7 @@ describe("frozen private check policy", () => {
       await writeFile(task, "#!/bin/sh\nexit 0\n");
       expect(await check()).toBe(false);
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
 });

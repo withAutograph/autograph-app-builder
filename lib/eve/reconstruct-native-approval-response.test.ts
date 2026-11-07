@@ -17,61 +17,61 @@ const principal = {
   workspaceId: "workspace_1",
 };
 const nativePlan = nativeTargetOnboardingPlanSchema.parse({
-  version: 1,
+  appDatabase: {
+    database: "requests_data",
+    migratorRole: "requests_owner",
+    resourceId: "resource",
+    runtimeRole: "requests_runtime",
+  },
   appId: "requests-app",
+  branch: "preview",
+  conflictPolicy: "stop-on-conflict",
+  cost: { description: "Preview usage", ownership: "current-owner" },
+  nativeNeon: {
+    approvalReference: "scope",
+    nativeStore: { configurationId: "config", resourceId: "store", sourceProjectId: "source" },
+    scope: {
+      branchId: "branch",
+      endpointId: "endpoint",
+      hostname: "ep-fixture.neon.tech",
+      maintenanceDatabase: "maintenance",
+      maintenanceRole: "installer",
+      projectId: "project",
+    },
+  },
   origin: {
-    publicSessionId: "session_fixture",
-    adapterSessionId: "adapter_1",
     adapterGeneration: 1,
+    adapterSessionId: "adapter_1",
     appSpecDigest: "a".repeat(64),
+    publicSessionId: "session_fixture",
     release: {
-      id: "release",
       artifactRef: "artifact",
+      id: "release",
       manifestSha256: "b".repeat(64),
       schemaSha256: "c".repeat(64),
     },
   },
+  productRoles: [],
   project: {
-    name: "requests-app",
-    teamId: "team",
     installationId: "installation",
+    name: "requests-app",
     projectSettings: {
       framework: "nextjs",
       rootDirectory: "apps/requests",
       sourceFilesOutsideRootDirectory: true,
     },
     protection: nativeTargetRequiredProjectProtection,
+    teamId: "team",
   },
-  branch: "preview",
-  appDatabase: {
-    resourceId: "resource",
-    database: "requests_data",
-    migratorRole: "requests_owner",
-    runtimeRole: "requests_runtime",
-  },
-  productRoles: [],
-  nativeNeon: {
-    approvalReference: "scope",
-    nativeStore: { configurationId: "config", resourceId: "store", sourceProjectId: "source" },
-    scope: {
-      projectId: "project",
-      branchId: "branch",
-      endpointId: "endpoint",
-      hostname: "ep-fixture.neon.tech",
-      maintenanceDatabase: "maintenance",
-      maintenanceRole: "installer",
-    },
-  },
+  retention: { policy: "Until approved cleanup" },
+  version: 1,
   worker: {
-    id: "worker",
     executablePath: "/trusted/worker",
-    sha256: "d".repeat(64),
+    id: "worker",
     operationScope: "generated-app-release-install-v1",
+    sha256: "d".repeat(64),
     subcommand: "protected-generated-app-install",
   },
-  cost: { ownership: "current-owner", description: "Preview usage" },
-  retention: { policy: "Until approved cleanup" },
-  conflictPolicy: "stop-on-conflict",
 });
 
 const sessionId = "session_fixture";
@@ -82,21 +82,18 @@ const toolInput = {
   planDigest: nativeTargetOnboardingPlanDigest(nativePlan),
 };
 const receipts = ["one", "two"].map((requestId, sequence) => ({
-  requestId,
   callId: `call-${requestId}`,
-  toolName: "prepare-app-native-target" as const,
-  toolInput,
   format: "autograph-hosted-approval-v1" as const,
   outcome: "approved" as const,
+  requestId,
   responderPrincipalId: principal.ownerUserId,
   sequence,
+  toolInput,
+  toolName: "prepare-app-native-target" as const,
   turnId: "",
 }));
 const batches = receipts.map((receipt, index) => ({
   batch: {
-    sequence: index + 1,
-    stepIndex: 0,
-    turnId: `turn-${index}`,
     requests: [
       {
         kind: "tool-approval" as const,
@@ -105,6 +102,9 @@ const batches = receipts.map((receipt, index) => ({
         toolName: receipt.toolName,
       },
     ],
+    sequence: index + 1,
+    stepIndex: 0,
+    turnId: `turn-${index}`,
   },
   resolutions: [
     { kind: "tool-approval" as const, outcome: "approved" as const, requestId: receipt.requestId },
@@ -112,11 +112,11 @@ const batches = receipts.map((receipt, index) => ({
 }));
 const request = {
   clientRequestId: "response",
-  sessionId,
   responses: ["one", "two"].map((requestId) => ({
     requestId,
     response: { kind: "approve" as const },
   })),
+  sessionId,
 };
 const fixture = () => ({
   clientRequestId: request.clientRequestId,
@@ -132,12 +132,12 @@ const fixture = () => ({
     planDigest: toolInput.planDigest,
   },
   // SAFETY: The fixture uses the same validated resolved-batch shape as the capture contract.
-  state: { version: 1, pending: [], resolved: structuredClone(batches) } as PrivateInputState,
+  state: { pending: [], resolved: structuredClone(batches), version: 1 } as PrivateInputState,
   capture: {
-    version: 1 as const,
-    sessionId,
     pendingRequests: [],
     receipts: structuredClone(receipts),
+    sessionId,
+    version: 1 as const,
   },
   receipts: structuredClone(receipts),
 });
@@ -186,9 +186,6 @@ describe("reconstruct native approval response", () => {
     const other = fixture();
     other.state.resolved.unshift({
       batch: {
-        sequence: 0,
-        stepIndex: 0,
-        turnId: "other",
         requests: [
           {
             kind: "question",
@@ -197,6 +194,9 @@ describe("reconstruct native approval response", () => {
             toolName: "question",
           },
         ],
+        sequence: 0,
+        stepIndex: 0,
+        turnId: "other",
       },
       resolutions: [{ kind: "question", outcome: "answered", requestId: "q" }],
     });

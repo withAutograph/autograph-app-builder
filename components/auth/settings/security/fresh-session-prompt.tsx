@@ -3,7 +3,7 @@
 import { isTwoFactorRedirect } from "@better-auth-ui/core/plugins/two-factor";
 import { useAuth, useSession, useSignInEmail } from "@better-auth-ui/react";
 import { useState } from "react";
-import type { FormEvent } from "react";
+import type { SubmitEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useSignInContinuation } from "@/lib/auth/use-sign-in-continuation";
 
 export interface FreshSessionPromptProps {
-  onFresh: () => unknown | Promise<unknown>;
+  onFresh: () => void | Promise<void>;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -22,7 +22,9 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
   const [password, setPassword] = useState("");
   const signIn = useSignInEmail(auth.authClient, {
     meta: { errorPresentation: "inline" },
-    onError: () => setPassword(""),
+    onError: () => {
+      setPassword("");
+    },
     onSuccess: async (data) => {
       if (isTwoFactorRedirect(data)) {
         continueSignIn(data);
@@ -33,10 +35,10 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
     },
   });
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const email = session.data?.user.email;
-    if (!email) {
+    if (email === null || email === undefined || email === "") {
       return;
     }
     signIn.mutate({ email, password });
@@ -60,12 +62,22 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
                 autoComplete="current-password"
                 disabled={signIn.isPending}
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                }}
                 type="password"
                 required
               />
-              {signIn.error && (
-                <FieldError>{signIn.error.error?.message ?? signIn.error.message}</FieldError>
+              {signIn.error !== null && signIn.error !== undefined && (
+                <FieldError>
+                  {(typeof signIn.error.error === "object" &&
+                  signIn.error.error !== null &&
+                  "message" in signIn.error.error &&
+                  typeof signIn.error.error.message === "string"
+                    ? signIn.error.error.message
+                    : undefined) ??
+                    (signIn.error instanceof Error ? signIn.error.message : undefined)}
+                </FieldError>
               )}
             </Field>
             <Button disabled={!password || signIn.isPending} type="submit">
@@ -75,11 +87,11 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
           </form>
         ) : (
           <Button
-            onClick={() =>
+            onClick={() => {
               auth.navigate({
                 to: `${auth.basePaths.auth}/${auth.viewPaths.auth.signIn}`,
-              })
-            }
+              });
+            }}
           >
             {auth.localization.settings.freshSessionSignIn}
           </Button>

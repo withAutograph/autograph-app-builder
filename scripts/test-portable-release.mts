@@ -180,8 +180,8 @@ try {
     mutation(receipt);
     await writeFile(path, `${JSON.stringify(receipt, null, 2)}\n`);
     await expectRejected(
-      () =>
-        verifyPortableProofArtifact({
+      async () =>
+        await verifyPortableProofArtifact({
           installRoot: installs,
           releaseRoot: root,
           repositoryRoot: pathResolve("."),
@@ -240,8 +240,8 @@ try {
   missingAssetReceipt.codexMarketplaceArchive.sha256 = sha256(missingAssetArchive);
   await writeFile(missingAssetReceiptPath, `${JSON.stringify(missingAssetReceipt, null, 2)}\n`);
   await expectRejected(
-    () =>
-      verifyPortableProofArtifact({
+    async () =>
+      await verifyPortableProofArtifact({
         installRoot: installs,
         releaseRoot: missingMarketplaceAsset,
         repositoryRoot: pathResolve("."),
@@ -266,8 +266,8 @@ try {
   tamperedAssetReceipt.codexMarketplaceAssets[missingAssetPath] = sha256(tamperedAssetFile);
   await writeFile(tamperedAssetReceiptPath, `${JSON.stringify(tamperedAssetReceipt, null, 2)}\n`);
   await expectRejected(
-    () =>
-      verifyPortableProofArtifact({
+    async () =>
+      await verifyPortableProofArtifact({
         installRoot: installs,
         releaseRoot: tamperedMarketplaceAsset,
         repositoryRoot: pathResolve("."),
@@ -314,8 +314,8 @@ try {
   await writeFile(treeDriftReceiptPath, `${JSON.stringify(treeDriftReceipt, null, 2)}\n`);
   await writeFile(join(checkoutDriftRepository, "assets", "autograph-icon.png"), treeDriftBytes);
   await expectRejected(
-    () =>
-      verifyPortableProofArtifact({
+    async () =>
+      await verifyPortableProofArtifact({
         installRoot: installs,
         releaseRoot: fullyReboundTreeDrift,
         repositoryRoot: checkoutDriftRepository,
@@ -328,8 +328,8 @@ try {
   const archivePath = join(archiveTamper, archiveName);
   await writeFile(archivePath, Buffer.concat([await readFile(archivePath), Buffer.from("tamper")]));
   await expectRejected(
-    () =>
-      verifyPortableProofArtifact({
+    async () =>
+      await verifyPortableProofArtifact({
         installRoot: installs,
         releaseRoot: archiveTamper,
         repositoryRoot: pathResolve("."),
@@ -344,8 +344,8 @@ try {
   harness.transport.url = "https://wrong.autograph.dev/mcp";
   await writeFile(codexHarness, `${JSON.stringify(harness, null, 2)}\n`);
   await expectRejected(
-    () =>
-      verifyPortableProofArtifact({
+    async () =>
+      await verifyPortableProofArtifact({
         installRoot: installedTamper,
         releaseRoot: first,
         repositoryRoot: pathResolve("."),

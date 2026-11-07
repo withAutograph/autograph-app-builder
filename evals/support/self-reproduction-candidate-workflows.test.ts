@@ -1,5 +1,6 @@
 /* oxlint-disable eslint/require-await -- asynchronous browser fixture methods mirror Playwright. */
 import { expect, it, vi } from "vitest";
+import type { Browser } from "playwright";
 import {
   exerciseCandidateBrowserWorkflows,
   candidateWorkflowReceipts,
@@ -56,10 +57,13 @@ const browserFixture = (
   return { newContext: async () => context };
 };
 
+const candidateBrowser = (options?: Parameters<typeof browserFixture>) =>
+  browserFixture(...options) satisfies Pick<Browser, "newContext">;
+
 it("leaves unfamiliar layouts unassessed and retains each partial outcome", async () => {
   const retain = vi.fn();
   const outcomes = await exerciseCandidateBrowserWorkflows(
-    browserFixture() as never,
+    candidateBrowser(),
     "https://candidate.example/app/",
     retain,
   );
@@ -70,7 +74,7 @@ it("leaves unfamiliar layouts unassessed and retains each partial outcome", asyn
 
 it("does not award readable documentation to an inert Docs button", async () => {
   const outcomes = await exerciseCandidateBrowserWorkflows(
-    browserFixture(true) as never,
+    candidateBrowser([true]),
     "https://candidate.example/app/",
     vi.fn(),
   );
@@ -80,7 +84,7 @@ it("does not award readable documentation to an inert Docs button", async () => 
 
 it("blocks unavailable runtime separately from absent product controls", async () => {
   const outcomes = await exerciseCandidateBrowserWorkflows(
-    browserFixture(false, false) as never,
+    candidateBrowser([false, false]),
     "https://candidate.example/app/",
     vi.fn(),
   );
@@ -96,7 +100,7 @@ it("provides standalone evaluator code without injecting candidate source", () =
 
 it("fails a draft whose edited values are lost on reload", async () => {
   const outcomes = await exerciseCandidateBrowserWorkflows(
-    browserFixture(true) as never,
+    candidateBrowser([true]),
     "https://candidate.example/app/",
     vi.fn(),
   );
@@ -107,7 +111,7 @@ it("fails a draft whose edited values are lost on reload", async () => {
 
 it("fails an absent Docs control within the supported candidate layout", async () => {
   const outcomes = await exerciseCandidateBrowserWorkflows(
-    browserFixture(true, true, true) as never,
+    candidateBrowser([true, true, true]),
     "https://candidate.example/app/",
     vi.fn(),
   );
@@ -135,7 +139,7 @@ it("preserves unknown assertions when converting retained evaluator outcomes", (
 
 it("does not fail an unfinished backend creation merely because no link appeared immediately", async () => {
   const outcomes = await exerciseCandidateBrowserWorkflows(
-    browserFixture(true, true, false, true) as never,
+    candidateBrowser([true, true, false, true]),
     "https://candidate.example/app/",
     vi.fn(),
   );

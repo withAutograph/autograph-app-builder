@@ -46,13 +46,13 @@ export const retainPreparedLocalSourceBaseline = async (
     await (dependencies.retain ?? retainLocalSourceBaseline)({
       authority,
       manifest: {
-        version: 1,
         kind: "local-planning-source-baseline",
         originalSourceSha: expected.sourceSha,
-        workspaceDigest: expected.workspaceDigest,
+        provenance: { kind: "captured-live-source", sourcePath: expected.sourcePath },
         sourceSha: baseline.sourceSha,
         sourceTree: baseline.sourceTree,
-        provenance: { kind: "captured-live-source", sourcePath: expected.sourcePath },
+        version: 1,
+        workspaceDigest: expected.workspaceDigest,
       },
       pack: baseline.streamPack(),
     });

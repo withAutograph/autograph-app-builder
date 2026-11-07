@@ -21,26 +21,26 @@ const authoritySessionId = "original-public-session";
 const childSessionId = "recovered-public-session";
 const physicalOwnerRunId = "recovered-physical-run";
 const scope = {
-  authoritySessionId: logicalSessionId,
+  acceptedByCallId: "accepted",
   appId: "spend-review",
   appSpecDigest: "a".repeat(64),
-  acceptedByCallId: "accepted",
   artifactPath: "app-spec.md",
   artifactRevision: "revision",
-  sourceReceiptDigest: "b".repeat(64),
-  workspaceId: "same-private-workspace",
-  workspaceDigest: "c".repeat(64),
+  authoritySessionId: logicalSessionId,
   planningStateDigest: "d".repeat(64),
+  sourceReceiptDigest: "b".repeat(64),
+  workspaceDigest: "c".repeat(64),
+  workspaceId: "same-private-workspace",
 };
 const decision = {
-  version: 1 as const,
-  kind: "preapproval-authoring-decision-v1" as const,
   adapterSessionId: logicalSessionId,
   decision: "runnable" as const,
+  kind: "preapproval-authoring-decision-v1" as const,
   scope,
   scopeDigest: authoringScopeDigest(scope),
   turnId: "recovered-authoring-turn",
   turnSequence: 14,
+  version: 1 as const,
 };
 const persistHostedAuthoringDecision = async (input: {
   decision: typeof decision;
@@ -67,8 +67,8 @@ const claimHostedAuthoringMessage = async (input: {
 }) =>
   await input.store.claimInternalAuthoringMessage({
     ...input,
-    sessionId: input.ownerSessionId,
     scopeDigest: decision.scopeDigest,
+    sessionId: input.ownerSessionId,
   });
 
 describe("recovered accepted authoring continuation", () => {
@@ -116,24 +116,24 @@ describe("recovered accepted authoring continuation", () => {
       },
     });
     const recovery = {
-      version: 1 as const,
-      operationId: "recovery-operation",
-      sourcePublicSessionId: authoritySessionId,
-      sourceOwnerRunId: logicalSessionId,
-      sourceAdapterGeneration: 1,
       logicalSessionId,
+      operationId: "recovery-operation",
       originalAuthoritySessionId: authoritySessionId,
       parentCancellationRevision: 0,
+      sourceAdapterGeneration: 1,
+      sourceOwnerRunId: logicalSessionId,
+      sourcePublicSessionId: authoritySessionId,
+      version: 1 as const,
     };
     const receipt = {
       ...recovery,
       ownerRunId: physicalOwnerRunId,
       provenance: {
+        checkpointVersion: 1 as const,
         kind: "failed-turn-input" as const,
-        sourceStepId: "step-one",
         sourceEventId: "event-one",
         sourceSlot: 1,
-        checkpointVersion: 1 as const,
+        sourceStepId: "step-one",
       },
     };
     const recoveryStart = {
@@ -210,8 +210,8 @@ describe("recovered accepted authoring continuation", () => {
     });
     // SAFETY: The controller exercises only this transport port; all persistence uses the real store.
     const transport = {
+      observe: async () => ({ pendingRequests: [], status: "waiting" }),
       sendAccepted,
-      observe: async () => ({ status: "waiting", pendingRequests: [] }),
     } as unknown as HostedEveTransport;
     const controller = {
       assertCurrentOwner: vi.fn(async () => {

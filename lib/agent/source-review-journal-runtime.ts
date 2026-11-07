@@ -128,20 +128,20 @@ export const sourceReviewContextStoreForSession = async (input: {
   let store;
   if (localAuthority === undefined) {
     store = createPostgresOperatorArtifactStore({
-      database: openHostedPostgresDatabase(process.env.DATABASE_URL ?? ""),
       assertCurrentOwner: assertArtifactOwner,
+      database: openHostedPostgresDatabase(process.env.DATABASE_URL ?? ""),
     });
   } else {
     const local = await createLocalOperatorArtifactStorage({
-      authority: localAuthority,
       assertCurrentOwner: assertArtifactOwner,
+      authority: localAuthority,
     });
-    store = local.store;
+    ({ store } = local);
   }
   return createApplicationReviewContextStore({
-    store,
-    context,
-    assertCurrentOwner,
     abortSignal: input.abortSignal,
+    assertCurrentOwner,
+    context,
+    store,
   });
 };

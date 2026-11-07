@@ -9,7 +9,8 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { useRouter } from "next/navigation";
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
+import { z } from "zod";
 
 import { renewBuilderHandoff } from "@/app/actions/handoff-renewal";
 import type { HandoffControlData, HandoffRenewalActionState } from "@/app/actions/handoff-renewal";
@@ -23,30 +24,43 @@ import handoffStyles from "./handoff.module.css";
 
 export type { HandoffControlData } from "@/app/actions/handoff-renewal";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function readStatus(value: HandoffControlData, handoffId: string): HandoffControlData {
-  if (
-    value.version !== 1 ||
-    value.handoffId !== handoffId ||
-    !["prepared", "continued", "expired"].includes(value.status) ||
-    !["codex", "cursor"].includes(value.destination) ||
-    typeof value.cursorInstallReady !== "boolean" ||
-    typeof value.mcpUrl !== "string" ||
-    typeof value.expiresAt !== "string" ||
-    Number.isNaN(Date.parse(value.expiresAt))
-  ) {
-    throw new Error("handoff-response-invalid");
-  }
-  return {
-    cursorInstallReady: value.cursorInstallReady,
-    destination: value.destination,
-    expiresAt: value.expiresAt,
-    handoffId,
-    mcpUrl: value.mcpUrl,
-    status: value.status,
-    version: 1,
-  };
-}
+const handoffStatusSchema = z.object({
+  cursorInstallReady: z.boolean(),
+  destination: z.enum(["codex", "cursor"]),
+  expiresAt: z.string(),
+  handoffId: z.string(),
+  mcpUrl: z.string(),
+  status: z.enum(["prepared", "continued", "expired"]),
+  version: z.literal(1),
+});
+
+const useHandoffStatus = (initial: HandoffControlData, enabled: boolean) =>
+  useQuery({
+    enabled,
+    queryFn: async ({ signal }): Promise<HandoffControlData> => {
+      const response = await fetch(
+        `/api/builder/handoffs/${encodeURIComponent(initial.handoffId)}`,
+        {
+          cache: "no-store",
+          signal,
+        },
+      );
+      if (response.status === 401 || response.status === 403 || response.status === 404) {
+        throw new Error(`handoff-access-${response.status}`);
+      }
+      if (!response.ok) {
+        throw new Error("handoff-status-unavailable");
+      }
+      const value: HandoffControlData = handoffStatusSchema.parse(await response.json());
+      if (value.handoffId !== initial.handoffId || Number.isNaN(Date.parse(value.expiresAt))) {
+        throw new Error("handoff-response-invalid");
+      }
+      return value;
+    },
+    queryKey: ["builder-handoff", initial.handoffId],
+    refetchInterval: (query) => (query.state.data?.status === "continued" ? false : 5000),
+    refetchIntervalInBackground: false,
+  });
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function subscribeToClientSnapshot() {
@@ -59,14 +73,23 @@ const renderCursorSetupLink = (destination: string, url?: string) => {
   if (destination !== "cursor") {
     return null;
   }
-  if (url) {
+  if (url !== undefined && url.length > 0) {
     return <a href={url}>Add Autograph to Cursor</a>;
   }
   return <p>Cursor connection setup is not available yet.</p>;
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting.
-export function HandoffControls({ initial }: { initial: HandoffControlData }) {
+export const HandoffControls = ({ initial }: { initial: HandoffControlData }) => {
+  const [queryClient] = useState(() => new QueryClient());
+  return (
+    <QueryClientProvider client={queryClient}>
+      <HandoffControlsContent initial={initial} />
+    </QueryClientProvider>
+  );
+};
+
+const HandoffControlsContent = ({ initial }: { initial: HandoffControlData }) => {
   // The instant server shell is visible before browser event handlers exist.
   // Do not expose an enabled action that can silently discard that first click.
   const isClientReady = useSyncExternalStore(
@@ -74,18 +97,12 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     () => true,
     () => false,
   );
-  const router = useRouter();
-  const [data, setData] = useState(initial);
   const [destination, setDestination] = useState(initial.destination);
-  const [notice, setNotice] = useState("");
   const [renewalNotice, setRenewalNotice] = useState("");
   const [launchNotice, setLaunchNotice] = useState("");
   const [copyNotice, setCopyNotice] = useState("");
-  const [access, setAccess] = useState<"ready" | "sign-in" | "unavailable">("ready");
-  const renewalRequest = useRef<{ handoffId: string; id: string } | undefined>(
-    undefined as undefined,
-  );
-  const reconciledRenewal = useRef<HandoffRenewalActionState | undefined>(undefined as undefined);
+  const renewalRequest = useRef<{ handoffId: string; id: string } | undefined>();
+  const reconciledRenewal = useRef<HandoffRenewalActionState | undefined>();
   const runRenewalAction = useCallback(
     async (
       previous: HandoffRenewalActionState | undefined,
@@ -100,10 +117,28 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     },
     [],
   );
-  const [renewal, dispatchRenewal, renewalPending] = useActionState(
-    runRenewalAction,
-    undefined as undefined,
+  const [renewal, dispatchRenewal, renewalPending] = useActionState(runRenewalAction);
+  const queryClient = useQueryClient();
+  const statusQuery = useHandoffStatus(
+    initial,
+    isClientReady && !renewalPending && initial.status !== "continued",
   );
+  const data =
+    renewal?.status === "renewed" && renewal.handoff.handoffId === initial.handoffId
+      ? renewal.handoff
+      : (statusQuery.data ?? initial);
+  const denied =
+    statusQuery.error instanceof Error && statusQuery.error.message.startsWith("handoff-access-");
+  const access =
+    renewal?.status === "sign-in" || (denied && statusQuery.error?.message === "handoff-access-401")
+      ? "sign-in"
+      : renewal?.status === "unavailable" || denied
+        ? "unavailable"
+        : "ready";
+  const notice =
+    statusQuery.error !== null && statusQuery.error !== undefined && !denied
+      ? "Status is temporarily unavailable. Your prepared app is saved; we’ll retry while this page is open."
+      : "";
   const handoffPath = `/handoff/${encodeURIComponent(data.handoffId)}`;
   const signInUrl = `/auth/sign-in?callbackURL=${encodeURIComponent(handoffPath)}`;
   const label = destination === "codex" ? "Codex" : "Cursor";
@@ -116,95 +151,14 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
       : undefined;
 
   useEffect(() => {
-    if (access !== "ready" || renewalPending || data.status === "continued") {
-      return;
-    }
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let controller: AbortController | undefined;
-    let disposed = false;
-    const stop = () => {
-      clearTimeout(timer);
-      controller?.abort();
-    };
-    const refresh = async () => {
-      if (disposed || document.visibilityState !== "visible") {
-        return;
-      }
-      const request = new AbortController();
-      controller = request;
-      let complete = false;
-      try {
-        const response = await fetch(
-          `/api/builder/handoffs/${encodeURIComponent(data.handoffId)}`,
-          {
-            cache: "no-store",
-            signal: request.signal,
-          },
-        );
-        if (request.signal.aborted || disposed) {
-          return;
-        }
-        if (response.status === 401 || response.status === 403 || response.status === 404) {
-          complete = true;
-          setAccess(response.status === 401 ? "sign-in" : "unavailable");
-          return;
-        }
-        if (!response.ok) {
-          throw new Error("handoff-status-unavailable");
-        }
-        const next = readStatus(await response.json(), data.handoffId);
-        if (request.signal.aborted || disposed) {
-          return;
-        }
-        complete = next.status === "continued";
-        setData(next);
-        setNotice("");
-      } catch {
-        if (!request.signal.aborted && !disposed) {
-          setNotice(
-            "Status is temporarily unavailable. Your prepared app is saved; we’ll retry while this page is open.",
-          );
-        }
-      } finally {
-        if (
-          !disposed &&
-          !request.signal.aborted &&
-          !complete &&
-          document.visibilityState === "visible"
-        ) {
-          timer = setTimeout(() => {
-            refresh();
-          }, 5000);
-        }
-      }
-    };
-    const visibilityChanged = () => {
-      stop();
-      if (document.visibilityState === "visible") {
-        refresh();
-      }
-    };
-    document.addEventListener("visibilitychange", visibilityChanged);
-    refresh();
-    return () => {
-      disposed = true;
-      clearTimeout(timer);
-      controller?.abort();
-      document.removeEventListener("visibilitychange", visibilityChanged);
-    };
-  }, [access, data.handoffId, data.status, renewalPending]);
-
-  useEffect(() => {
     if (!renewal || renewalPending || reconciledRenewal.current === renewal) {
       return;
     }
     reconciledRenewal.current = renewal;
     if (renewal.status === "sign-in") {
-      setAccess("sign-in");
       return;
     }
     if (renewal.status === "unavailable") {
-      setAccess("unavailable");
       return;
     }
     if (renewal.status === "error") {
@@ -214,13 +168,12 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
       return;
     }
     setRenewalNotice("");
-    buildAppHandoffPrompt(renewal.handoff.handoffId, destination);
     if (renewal.handoff.handoffId === data.handoffId) {
-      setData(renewal.handoff);
+      queryClient.setQueryData(["builder-handoff", data.handoffId], renewal.handoff);
     } else {
-      router.replace(`/handoff/${encodeURIComponent(renewal.handoff.handoffId)}`);
+      window.location.replace(`/handoff/${encodeURIComponent(renewal.handoff.handoffId)}`);
     }
-  }, [data.handoffId, destination, renewal, renewalPending, router]);
+  }, [data.handoffId, queryClient, renewal, renewalPending]);
 
   const renew = () => {
     if (!isClientReady || renewalPending || access !== "ready") {
@@ -234,7 +187,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
       } catch {
         // Session storage is optional.
       }
-      const id = saved && /^[0-9a-f-]{36}$/iu.test(saved) ? saved : crypto.randomUUID();
+      const id = saved !== null && /^[0-9a-f-]{36}$/iu.test(saved) ? saved : crypto.randomUUID();
       renewalRequest.current = { handoffId: data.handoffId, id };
       try {
         sessionStorage.setItem(storageKey, id);
@@ -247,12 +200,12 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     if (!request) {
       return;
     }
-    startTransition(() =>
+    startTransition(() => {
       dispatchRenewal({
         creationRequestId: request.id,
         handoffId: data.handoffId,
-      }),
-    );
+      });
+    });
   };
 
   let statusMessage =
@@ -339,13 +292,15 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
             className={handoffStyles.secondaryButton}
             type="button"
             disabled={disabled}
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(prompt);
-                setCopyNotice("Prompt copied.");
-              } catch {
-                setCopyNotice("Copy failed. Select and copy the prompt below manually.");
-              }
+            onClick={() => {
+              void navigator.clipboard.writeText(prompt).then(
+                () => {
+                  setCopyNotice("Prompt copied.");
+                },
+                () => {
+                  setCopyNotice("Copy failed. Select and copy the prompt below manually.");
+                },
+              );
             }}
           >
             Copy prompt
@@ -380,4 +335,4 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
       {renewalNotice ? <p role="alert">{renewalNotice}</p> : null}
     </section>
   );
-}
+};

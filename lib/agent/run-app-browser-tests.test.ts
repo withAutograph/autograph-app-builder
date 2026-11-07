@@ -20,24 +20,24 @@ describe("private app browser tests", () => {
   const marker = "[private browser prerequisite] private-preview-refresh-required";
 
   it.each([
-    { stdout: `other line\n${marker}\n[private browser] run failed`, exitCode: 1, refresh: true },
-    { stdout: `other line\r\n${marker}\r\n`, exitCode: 1, refresh: true },
+    { exitCode: 1, refresh: true, stdout: `other line\n${marker}\n[private browser] run failed` },
+    { exitCode: 1, refresh: true, stdout: `other line\r\n${marker}\r\n` },
     {
-      stdout: `[private browser] failed: ${marker} (tests/e2e/page.spec.ts:28)`,
       exitCode: 1,
       refresh: false,
+      stdout: `[private browser] failed: ${marker} (tests/e2e/page.spec.ts:28)`,
     },
-    { stdout: `\u001B${marker}`, exitCode: 1, refresh: false },
-    { stdout: `${marker} extra`, exitCode: 1, refresh: false },
-    { stdout: "[private browser stage] preview-refresh-required", exitCode: 1, refresh: false },
-    { stdout: marker, exitCode: 0, refresh: false },
+    { exitCode: 1, refresh: false, stdout: `\u001B${marker}` },
+    { exitCode: 1, refresh: false, stdout: `${marker} extra` },
+    { exitCode: 1, refresh: false, stdout: "[private browser stage] preview-refresh-required" },
+    { exitCode: 0, refresh: false, stdout: marker },
   ])(
     "only classifies an exact standalone failure marker ($stdout)",
     async ({ stdout, exitCode, refresh }) => {
       const result = await runResolvedAppBrowserTests({
         appId: "spend-review",
         root: "/workspace/repository",
-        sandbox: { run: vi.fn().mockResolvedValue({ exitCode, stdout, stderr: "" }) },
+        sandbox: { run: vi.fn().mockResolvedValue({ exitCode, stderr: "", stdout }) },
       });
       expect(result).toMatchObject({ exitCode, status: exitCode === 0 ? "passed" : "failed" });
       if (refresh) {
@@ -52,12 +52,12 @@ describe("private app browser tests", () => {
     {
       origin: "https://stale-private.vercel.run",
       readExit: 0,
-      status: "failed",
       runBrowser: false,
+      status: "failed",
     },
-    { origin: "http://localhost:3000", readExit: 0, status: "passed", runBrowser: true },
-    { origin: null, readExit: 0, status: "passed", runBrowser: true },
-    { origin: null, readExit: 1, status: "failed", runBrowser: false },
+    { origin: "http://localhost:3000", readExit: 0, runBrowser: true, status: "passed" },
+    { origin: null, readExit: 0, runBrowser: true, status: "passed" },
+    { origin: null, readExit: 1, runBrowser: false, status: "failed" },
   ])(
     "uses the owned local Auth origin before unbound browser dispatch ($origin, $readExit)",
     async ({ origin, readExit, status, runBrowser }) => {
@@ -68,30 +68,30 @@ describe("private app browser tests", () => {
       try {
         const run = vi
           .fn<SandboxSession["run"]>()
-          .mockResolvedValueOnce({ exitCode: readExit, stdout: JSON.stringify(origin), stderr: "" })
-          .mockResolvedValueOnce({ exitCode: 0, stdout: "2 passed", stderr: "" });
+          .mockResolvedValueOnce({ exitCode: readExit, stderr: "", stdout: JSON.stringify(origin) })
+          .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "2 passed" });
         const appId = "spend-review";
         const root = "/workspace/repository";
         const result = await runAppBrowserTests({
           appId,
-          root,
-          sandbox: { run },
           execution: {
             appId,
             root,
-            sessionId: "owner-session",
             sandboxId: "owned",
             sessionAuth: {},
+            sessionId: "owner-session",
             state: { phase: "validated" },
           },
+          root,
+          sandbox: { run },
         });
         expect(result).toMatchObject({ status });
         if (runBrowser) {
           expect(run.mock.calls[1]?.[0].command).toBe(appBrowserTestCommand(appId));
         } else {
           expect(result).toMatchObject({
-            reason: "private-preview-refresh-required",
             exitCode: null,
+            reason: "private-preview-refresh-required",
             stdout: "",
           });
           expect(run).toHaveBeenCalledTimes(1);
@@ -105,43 +105,43 @@ describe("private app browser tests", () => {
 
   it("requires an exact prior-artifact preview before any browser command", async () => {
     const preview = vi.spyOn(workingPreviewState, "get").mockReturnValue({
-      sandboxId: "owned",
-      providerSessionId: "provider",
       commandId: "ordinary",
+      providerSessionId: "provider",
       receipt: {
         appId: "spend-review",
         expiresAt: "2026-11-06T00:00:00Z",
-        verifiedAt: "2026-11-05T00:00:00Z",
-        url: "https://preview.example",
         status: "ready",
+        url: "https://preview.example",
+        verifiedAt: "2026-11-05T00:00:00Z",
       },
+      sandboxId: "owned",
     });
     const run = vi.fn<SandboxSession["run"]>();
     const verifyCurrent = vi.fn<() => Promise<void>>();
     try {
       const result = await runAppBrowserTests({
         appId: "spend-review",
-        root: "/workspace/repository",
-        sandbox: { run },
         execution: {
           appId: "spend-review",
           root: "/workspace/repository",
-          sessionId: "owner-session",
           sandboxId: "owned",
           sessionAuth: {},
+          sessionId: "owner-session",
           state: { phase: "planned" },
         },
         priorArtifact: {
           appId: "spend-review",
-          root: "/workspace/repository",
-          revision: "prior-apply",
-          validationDigest: "prior-validation",
-          reusable: true,
           assertCurrent: vi.fn<() => void>(),
+          reusable: true,
+          revision: "prior-apply",
+          root: "/workspace/repository",
+          validationDigest: "prior-validation",
           verifyCurrent,
         },
+        root: "/workspace/repository",
+        sandbox: { run },
       });
-      expect(result).toMatchObject({ reason: "private-preview-refresh-required", exitCode: null });
+      expect(result).toMatchObject({ exitCode: null, reason: "private-preview-refresh-required" });
       expect(run).not.toHaveBeenCalled();
       expect(verifyCurrent).not.toHaveBeenCalled();
     } finally {
@@ -152,10 +152,9 @@ describe("private app browser tests", () => {
   it("forwards the focused selection through the prepared hosted runtime", async () => {
     const runTask = vi
       .fn<PreparedRuntimeExecution["runTask"]>()
-      .mockResolvedValue({ exitCode: 0, stdout: "selected passed", stderr: "" });
+      .mockResolvedValue({ exitCode: 0, stderr: "", stdout: "selected passed" });
     const runtime: PreparedRuntimeExecution = {
       environmentPath: "/private/environment.json",
-      stateDirectory: "/private",
       installationProof: {
         actors: 1,
         appId: "spend-review",
@@ -170,18 +169,19 @@ describe("private app browser tests", () => {
       },
       prepareAuthenticatedOrigin: vi.fn(),
       runTask,
+      stateDirectory: "/private",
     };
-    const selection = { testName: "@acceptance", workers: 1, retries: 0, maxFailures: 1 };
+    const selection = { maxFailures: 1, retries: 0, testName: "@acceptance", workers: 1 };
     const result = await runAppBrowserTests({
       appId: "spend-review",
       root: "/workspace/published",
-      sandbox: { run: vi.fn() },
       runtime,
+      sandbox: { run: vi.fn() },
       selection,
     });
     expect(result).toMatchObject({ status: "passed" });
     expect(runTask).toHaveBeenCalledWith(
-      expect.objectContaining({ task: "test-e2e", browserSelection: selection }),
+      expect.objectContaining({ browserSelection: selection, task: "test-e2e" }),
     );
   });
   it("passes a literal focused selection to the private browser task", async () => {
@@ -192,7 +192,7 @@ describe("private app browser tests", () => {
       sandbox: { run },
       selection: { testName: "@acceptance", workers: 1 },
     });
-    expect(result).toMatchObject({ status: "passed", exitCode: 0 });
+    expect(result).toMatchObject({ exitCode: 0, status: "passed" });
     expect(run).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
         command:
@@ -454,9 +454,9 @@ describe("private app browser tests", () => {
       );
     const result = await runResolvedAppBrowserTests({
       appId: "reports",
+      resolveRuntime,
       root: "/workspace/repository",
       sandbox: { run },
-      resolveRuntime,
     });
     expect(result).toMatchObject({ exitCode: null, status: "failed" });
     expect(result.problem).toContain("Binding failed");
@@ -468,12 +468,11 @@ describe("private app browser tests", () => {
   it("runs an already resolved task through the shared path with retained command continuation", async () => {
     const runTask = vi
       .fn<PreparedRuntimeExecution["runTask"]>()
-      .mockResolvedValue({ exitCode: 0, stdout: "scenario passed", stderr: "" });
+      .mockResolvedValue({ exitCode: 0, stderr: "", stdout: "scenario passed" });
     const resolveRuntime = vi.fn<() => Promise<PreparedRuntimeExecution | null>>();
     const checkpoint = vi.fn<(commandId: string) => Promise<void>>();
     const runtime: PreparedRuntimeExecution = {
       environmentPath: "/private-state/environment.json",
-      stateDirectory: "/private-state",
       installationProof: {
         actors: 1,
         appId: "reports",
@@ -488,26 +487,27 @@ describe("private app browser tests", () => {
       },
       prepareAuthenticatedOrigin: vi.fn(),
       runTask,
+      stateDirectory: "/private-state",
     };
     const result = await runResolvedAppBrowserTests({
       appId: "reports",
-      root: "/workspace/repository",
-      sandbox: { run: vi.fn<SandboxSession["run"]>() },
-      runtime,
-      resolveRuntime,
       continuation: {
-        commandId: "retained-command",
-        commandCheckpoint: checkpoint,
         allowDispatch: false,
+        commandCheckpoint: checkpoint,
+        commandId: "retained-command",
       },
+      resolveRuntime,
+      root: "/workspace/repository",
+      runtime,
+      sandbox: { run: vi.fn<SandboxSession["run"]>() },
     });
     expect(result).toMatchObject({ status: "passed", stdout: "scenario passed" });
     expect(runTask).toHaveBeenCalledWith(
       expect.objectContaining({
-        task: "test-e2e",
-        commandId: "retained-command",
-        commandCheckpoint: checkpoint,
         allowDispatch: false,
+        commandCheckpoint: checkpoint,
+        commandId: "retained-command",
+        task: "test-e2e",
       }),
     );
     expect(resolveRuntime).not.toHaveBeenCalled();
@@ -529,12 +529,11 @@ it.each(["/actual-catalog-route", null, undefined])(
   async (browserTestEntryPath) => {
     const runTask = vi
       .fn<PreparedRuntimeExecution["runTask"]>()
-      .mockResolvedValue({ exitCode: 0, stdout: "passed", stderr: "" });
+      .mockResolvedValue({ exitCode: 0, stderr: "", stdout: "passed" });
     const runtime: PreparedRuntimeExecution = {
       browserTestBaseUrl: "https://public-owned.example",
       browserTestEntryPath,
       environmentPath: "/private/environment.json",
-      stateDirectory: "/private",
       installationProof: {
         actors: 1,
         appId: "spend-review",
@@ -549,12 +548,13 @@ it.each(["/actual-catalog-route", null, undefined])(
       },
       prepareAuthenticatedOrigin: vi.fn(),
       runTask,
+      stateDirectory: "/private",
     };
     const result = await runResolvedAppBrowserTests({
       appId: "spend-review",
       root: "/workspace/repository",
-      sandbox: { run: vi.fn() },
       runtime,
+      sandbox: { run: vi.fn() },
     });
     if (browserTestEntryPath === null) {
       expect(result.status).toBe("failed");
@@ -562,14 +562,14 @@ it.each(["/actual-catalog-route", null, undefined])(
       return;
     }
     expect(result.status).toBe("passed");
+    const baseEnvironment = { APP_TEST_BASE_URL: "https://public-owned.example" };
+    const expectedEnvironment =
+      browserTestEntryPath === undefined
+        ? baseEnvironment
+        : { ...baseEnvironment, APP_TEST_ENTRY_PATH: browserTestEntryPath };
     expect(runTask).toHaveBeenCalledWith(
       expect.objectContaining({
-        environment: {
-          APP_TEST_BASE_URL: "https://public-owned.example",
-          ...(browserTestEntryPath === undefined
-            ? {}
-            : { APP_TEST_ENTRY_PATH: browserTestEntryPath }),
-        },
+        environment: expectedEnvironment,
       }),
     );
     expect(runtime.prepareAuthenticatedOrigin).not.toHaveBeenCalled();

@@ -15,13 +15,13 @@ const principal = (ownerUserId: string): HostedPrincipal => ({
   workspaceId: "workspace_1",
 });
 
-const acquire = (
+const acquire = async (
   store: InMemorySandboxExecutionLeaseStore,
   ownerUserId: string,
   sessionId: string,
   nowEpochMs = 1000,
 ) =>
-  store.acquire({
+  await store.acquire({
     adapterSessionId: sessionId,
     nowEpochMs,
     policy: SANDBOX_EXECUTION_POLICY,
@@ -101,8 +101,7 @@ describe("sandbox execution lease", () => {
       { disposition: "rejected", reason: "recovery-in-progress" },
       { disposition: "rejected", reason: "recovery-in-progress" },
     ]);
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const retryStop = vi.fn(async () => {});
+    const retryStop = vi.fn<() => Promise<void>>().mockResolvedValue();
     const retried = await reconcileExpiredSandboxLeases({
       nowEpochMs: 2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
       stopSandbox: retryStop,
@@ -165,7 +164,7 @@ describe("sandbox execution lease", () => {
       nowEpochMs: 1 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
     });
     expect(claim).toBeDefined();
-    if (!claim) {
+    if (claim === undefined) {
       throw new Error("expected an expired lease claim");
     }
     await expect(
@@ -204,8 +203,7 @@ describe("sandbox execution lease", () => {
     await acquire(store, "user_2", "session_2", 1);
     const settle = vi.spyOn(store, "settleRecovery");
     settle.mockRejectedValueOnce(new Error("settlement unavailable"));
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const stopSandbox = vi.fn(async () => {});
+    const stopSandbox = vi.fn<() => Promise<void>>().mockResolvedValue();
     const result = await reconcileExpiredSandboxLeases({
       nowEpochMs: 1 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
       stopSandbox,

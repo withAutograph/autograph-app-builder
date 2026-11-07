@@ -21,63 +21,63 @@ it("settles native approval before dispatch, preserves results and authorizers, 
     ["one", "two", "free"].map((name) => [
       name,
       {
+        approval: () => true,
+        inputSchema: { type: "object" },
         name,
         workflowId: `workflow:${name}`,
-        inputSchema: { type: "object" },
-        approval: () => true,
       },
     ]),
   );
   const auth = { authenticator: "test", principalId: "owner", principalType: "user" };
   const fixture = (names = ["one"], batches = [["one"]]) => {
     const calls = names.map((name) => ({
-      type: "tool-call",
-      toolName: name,
-      toolCallId: `call-${name}`,
       input: {},
+      toolCallId: `call-${name}`,
+      toolName: name,
+      type: "tool-call",
     }));
     const approvals = batches.flat().map((name) => ({
-      type: "tool-approval-request",
       approvalId: `request-${name}`,
       toolCallId: `call-${name}`,
+      type: "tool-approval-request",
     }));
     let session = {
-      agent: { system: "", tools: [], modelReference: { id: "model", provider: "test" } },
-      sessionId: "session",
+      agent: { modelReference: { id: "model", provider: "test" }, system: "", tools: [] },
+      compaction: { recentWindowSize: 10, threshold: 1e6 },
       continuationToken: "token",
-      compaction: { threshold: 1e6, recentWindowSize: 10 },
-      history: [{ role: "assistant", content: [...calls, ...approvals] }],
+      history: [{ content: [...calls, ...approvals], role: "assistant" }],
+      sessionId: "session",
     };
     session = setPendingCoordinationBatch({
-      session,
       event,
+      responseMessages: [],
       runtimeActions: [],
+      session,
       tasks: names.map((name) => ({
-        kind: "workflow-task",
-        toolName: name,
         callId: `call-${name}`,
         input: {},
+        kind: "workflow-task",
+        toolName: name,
         workflowId: `workflow:${name}`,
       })),
-      responseMessages: [],
     });
     for (const batch of batches) {
       session = appendPendingInputBatch({
-        session,
         event,
         requests: batch.map((name) => ({
+          action: { callId: `call-${name}`, input: {}, kind: "tool-call", toolName: name },
+          allowFreeform: false,
+          display: "confirmation",
           kind: "tool-approval",
-          requestId: `request-${name}`,
-          action: { callId: `call-${name}`, toolName: name, input: {}, kind: "tool-call" },
           options: [
             { id: "approve", label: "Approve" },
             { id: "cancel", label: "Cancel" },
           ],
           prompt: "approve",
-          allowFreeform: false,
-          display: "confirmation",
+          requestId: `request-${name}`,
         })),
         responseMessages: [],
+        session,
       });
     }
     return session;
@@ -85,16 +85,16 @@ it("settles native approval before dispatch, preserves results and authorizers, 
   const answer = async (session, decisions) => {
     const events = [];
     const run = createToolLoopHarness({
-      tools,
       handleEvent: async (streamEvent) => {
         await Promise.resolve(events.push(streamEvent));
       },
       resolveModel: async () => await Promise.reject(new Error("unexpected model call")),
+      tools,
     });
     let result = await run(session, {
       attributedInputResponses: Object.entries(decisions).map(([name, optionId]) => ({
         auth,
-        response: { requestId: `request-${name}`, optionId },
+        response: { optionId, requestId: `request-${name}` },
       })),
     });
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- StepNext intentionally distinguishes a continuation function from a terminal record.
@@ -102,7 +102,7 @@ it("settles native approval before dispatch, preserves results and authorizers, 
       // oxlint-disable-next-line eslint/no-await-in-loop -- Each SDK step consumes the preceding durable state.
       result = await result.next(result.session);
     }
-    return { result, events };
+    return { events, result };
   };
   const session = fixture();
   assert.equal(derivePendingState(session).pendingCoordinationCallIds, undefined);
@@ -138,13 +138,13 @@ it("settles native approval before dispatch, preserves results and authorizers, 
   );
   const settled = await resolvePendingCoordination({
     session: result.session,
-    tools,
     stepInput: {
       runtimeActionResults: [
-        { kind: "tool-result", callId: "call-one", toolName: "one", output: "one-result" },
-        { kind: "tool-result", callId: "call-free", toolName: "free", output: "free-result" },
+        { callId: "call-one", kind: "tool-result", output: "one-result", toolName: "one" },
+        { callId: "call-free", kind: "tool-result", output: "free-result", toolName: "free" },
       ],
     },
+    tools,
   });
   assert.equal(settled.outcome, "resolved");
   assert.equal(getPendingCoordinationBatch(settled.session.state), undefined);
@@ -158,8 +158,8 @@ it("settles native approval before dispatch, preserves results and authorizers, 
   const { SessionKey } = await import(`${sdk}context/keys.js`);
   const ctx = new ContextContainer();
   ctx.set(SessionKey, {
-    sessionId: "session",
     auth: { current: auth, initiator: auth },
+    sessionId: "session",
     turn: { id: "turn-one" },
   });
   const { z } = await import("zod");
@@ -169,8 +169,8 @@ it("settles native approval before dispatch, preserves results and authorizers, 
   const model = new MockLanguageModelV4({
     doGenerate: async () =>
       await Promise.resolve({
-        content: [{ type: "tool-call", toolCallId: "call-one", toolName: "one", input: "{}" }],
-        finishReason: { unified: "tool-calls", raw: "tool_calls" },
+        content: [{ input: "{}", toolCallId: "call-one", toolName: "one", type: "tool-call" }],
+        finishReason: { raw: "tool_calls", unified: "tool-calls" },
         usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
         warnings: [],
       }),
@@ -179,7 +179,7 @@ it("settles native approval before dispatch, preserves results and authorizers, 
   delete initial.state;
   initial.history = [];
   const generated = await contextStorage.run(ctx, () =>
-    createToolLoopHarness({ tools, resolveModel: async () => await Promise.resolve(model) })(
+    createToolLoopHarness({ resolveModel: async () => await Promise.resolve(model), tools })(
       initial,
       {
         message: "do work",
@@ -196,16 +196,16 @@ it("settles native approval before dispatch, preserves results and authorizers, 
     const [pending] = getPendingInputBatches(generated.session.state);
     const generatedEvents = [];
     const run = createToolLoopHarness({
-      tools,
       handleEvent: async (e) => await Promise.resolve(generatedEvents.push(e)),
       resolveModel: async () => await Promise.reject(new Error("unexpected replay model call")),
+      tools,
     });
     const generatedResult = await run(generated.session, {
       attributedInputResponses: [
-        { auth, response: { requestId: pending.requests[0].requestId, optionId } },
+        { auth, response: { optionId, requestId: pending.requests[0].requestId } },
       ],
     });
-    return { result: generatedResult, events: generatedEvents };
+    return { events: generatedEvents, result: generatedResult };
   };
   const generatedApproved = await generatedDecision("approve");
   assert.deepEqual(
@@ -232,14 +232,14 @@ it("settles native approval before dispatch, preserves results and authorizers, 
     "request-one": "old-identity",
   };
   const changedRun = createToolLoopHarness({
-    tools,
-    toolReplayIdentity: () => "new-identity",
     resolveModel: async () => await Promise.reject(new Error("unexpected model call")),
+    toolReplayIdentity: () => "new-identity",
+    tools,
   });
   await assert.rejects(
     changedRun(changed, {
       attributedInputResponses: [
-        { auth, response: { requestId: "request-one", optionId: "approve" } },
+        { auth, response: { optionId: "approve", requestId: "request-one" } },
       ],
     }),
     /connection for this tool call changed/u,
@@ -254,7 +254,7 @@ it("settles native approval before dispatch, preserves results and authorizers, 
     },
   };
   const authorizedGenerated = await contextStorage.run(ctx, () =>
-    createToolLoopHarness({ tools, resolveModel: async () => await Promise.resolve(model) })(
+    createToolLoopHarness({ resolveModel: async () => await Promise.resolve(model), tools })(
       initial,
       {
         message: "do work",
@@ -266,15 +266,15 @@ it("settles native approval before dispatch, preserves results and authorizers, 
     authorizedPending.requests[0].requestId,
   ]);
   const authorizedRun = createToolLoopHarness({
-    tools,
     resolveModel: async () => await Promise.reject(new Error("unexpected model call")),
+    tools,
   });
   let authorized = await contextStorage.run(ctx, () =>
     authorizedRun(authorizedGenerated.session, {
       attributedInputResponses: [
         {
           auth,
-          response: { requestId: authorizedPending.requests[0].requestId, optionId: "approve" },
+          response: { optionId: "approve", requestId: authorizedPending.requests[0].requestId },
         },
       ],
     }),
@@ -290,10 +290,10 @@ it("settles native approval before dispatch, preserves results and authorizers, 
 });
 
 it.each([
-  { withInput: false, optionId: "approve" },
-  { withInput: true, optionId: "approve" },
-  { withInput: false, optionId: "cancel" },
-  { withInput: false, optionId: "approve", cancelBeforeReplay: true },
+  { optionId: "approve", withInput: false },
+  { optionId: "approve", withInput: true },
+  { optionId: "cancel", withInput: false },
+  { cancelBeforeReplay: true, optionId: "approve", withInput: false },
 ])(
   "replays native decisions with coordinated results (%o)",
   async ({ withInput, optionId, cancelBeforeReplay }) => {
@@ -306,8 +306,8 @@ it.each([
     const auth = { authenticator: "test", principalId: "owner", principalType: "user" };
     const ctx = new ContextContainer();
     ctx.set(SessionKey, {
-      sessionId: "mixed-session",
       auth: { current: auth, initiator: auth },
+      sessionId: "mixed-session",
       turn: { id: "mixed-turn" },
     });
     let executions = 0;
@@ -316,39 +316,39 @@ it.each([
       [
         "native",
         {
-          name: "native",
-          inputSchema: z.object({ value: z.string() }),
           approval: () => "user-approval",
           execute: (input) => {
             executions += 1;
             return `native-result:${input.value}`;
           },
+          inputSchema: z.object({ value: z.string() }),
+          name: "native",
         },
       ],
       [
         "deferred",
         {
-          name: "deferred",
           inputSchema: z.object({}),
+          name: "deferred",
           workflowId: "workflow:deferred",
         },
       ],
     ]);
     const model = new MockLanguageModelV4({
-      doGenerate: ({ prompt }) => {
+      doGenerate: async ({ prompt }) => {
         requests += 1;
         if (requests === 1) {
-          return Promise.resolve({
+          return {
             content: ["native", "deferred"].map((name) => ({
-              type: "tool-call",
+              input: name === "native" ? JSON.stringify({ value: "retained-native-input" }) : "{}",
               toolCallId: `mixed-${name}`,
               toolName: name,
-              input: name === "native" ? JSON.stringify({ value: "retained-native-input" }) : "{}",
+              type: "tool-call",
             })),
-            finishReason: { unified: "tool-calls", raw: "tool_calls" },
+            finishReason: { raw: "tool_calls", unified: "tool-calls" },
             usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
             warnings: [],
-          });
+          };
         }
         const parts = prompt.flatMap((message) =>
           Array.isArray(message.content) ? message.content : [],
@@ -373,30 +373,30 @@ it.each([
         }
         assert.equal(JSON.stringify(prompt).includes("new product reply"), requests > 2);
         assert.ok(JSON.stringify(prompt).includes("retained client context"));
-        return Promise.resolve({
-          content: [{ type: "text", text: "complete" }],
-          finishReason: { unified: "stop", raw: "stop" },
+        return {
+          content: [{ text: "complete", type: "text" }],
+          finishReason: { raw: "stop", unified: "stop" },
           usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
           warnings: [],
-        });
+        };
       },
     });
-    const run = createToolLoopHarness({ tools, resolveModel: () => Promise.resolve(model) });
+    const run = createToolLoopHarness({ resolveModel: async () => model, tools });
     const invoke = (session, input) => contextStorage.run(ctx, () => run(session, input));
     const initial = {
-      agent: { system: "", tools: [], modelReference: { id: "model", provider: "test" } },
-      sessionId: "mixed-session",
+      agent: { modelReference: { id: "model", provider: "test" }, system: "", tools: [] },
+      compaction: { recentWindowSize: 10, threshold: 1e6 },
       continuationToken: "token",
       history: [],
+      sessionId: "mixed-session",
       state: {
         "eve.harness.emission": {
-          sessionStarted: true,
           sequence: 1,
+          sessionStarted: true,
           stepIndex: 0,
           turnId: "mixed-turn",
         },
       },
-      compaction: { threshold: 1e6, recentWindowSize: 10 },
     };
     const { attachClientContext } = await import(`${sdk}internal/client-context.js`);
     const firstInput = { message: "do work" };
@@ -406,7 +406,7 @@ it.each([
     const approved = await invoke(generated.session, {
       attributedInputResponses: pending.requests.map((request) => ({
         auth,
-        response: { requestId: request.requestId, optionId },
+        response: { optionId, requestId: request.requestId },
       })),
     });
     assert.equal(executions, 0);
@@ -414,19 +414,19 @@ it.each([
       const abort = new AbortController();
       abort.abort(new Error("cancelled before replay"));
       const cancelled = createToolLoopHarness({
-        tools,
         abortSignal: abort.signal,
-        resolveModel: () => Promise.resolve(model),
+        resolveModel: async () => model,
+        tools,
       });
       await assert.rejects(
         contextStorage.run(ctx, () =>
           cancelled(approved.session, {
             runtimeActionResults: [
               {
-                kind: "tool-result",
                 callId: "mixed-deferred",
-                toolName: "deferred",
+                kind: "tool-result",
                 output: "deferred-result",
+                toolName: "deferred",
               },
             ],
           }),
@@ -438,13 +438,13 @@ it.each([
       return;
     }
     let completed = await invoke(approved.session, {
-      ...(withInput ? { message: "new product reply", context: ["new product context"] } : {}),
+      ...(withInput ? { context: ["new product context"], message: "new product reply" } : {}),
       runtimeActionResults: [
         {
-          kind: "tool-result",
           callId: "mixed-deferred",
-          toolName: "deferred",
+          kind: "tool-result",
           output: "deferred-result",
+          toolName: "deferred",
         },
       ],
     });
@@ -462,34 +462,34 @@ it.each([
 it("preserves approval tail metadata without changing original message parts", async () => {
   const { coalesceApprovalReplayTail } = await import(`${sdk}harness/approval-coordination.js`);
   const messages = [
-    { role: "assistant", content: "prefix" },
+    { content: "prefix", role: "assistant" },
     {
-      role: "tool",
-      providerOptions: { test: { message: true, precedence: "message" } },
       content: [
         {
-          type: "tool-approval-response",
           approvalId: "first",
           approved: true,
           providerOptions: { test: { part: true, precedence: "part" } },
+          type: "tool-approval-response",
         },
       ],
+      providerOptions: { test: { message: true, precedence: "message" } },
+      role: "tool",
     },
     {
+      content: [{ approvalId: "second", approved: false, type: "tool-approval-response" }],
       role: "tool",
-      content: [{ type: "tool-approval-response", approvalId: "second", approved: false }],
     },
     {
-      role: "tool",
-      providerOptions: { test: { final: true } },
       content: [
         {
-          type: "tool-result",
+          output: { type: "text", value: "actual-result" },
           toolCallId: "completed",
           toolName: "deferred",
-          output: { type: "text", value: "actual-result" },
+          type: "tool-result",
         },
       ],
+      providerOptions: { test: { final: true } },
+      role: "tool",
     },
   ];
   const before = structuredClone(messages);
@@ -520,8 +520,8 @@ it.each([400, 503])(
     const auth = { authenticator: "test", principalId: "owner", principalType: "user" };
     const ctx = new ContextContainer();
     ctx.set(SessionKey, {
-      sessionId: "failed-session",
       auth: { current: auth, initiator: auth },
+      sessionId: "failed-session",
       turn: { id: "failed-turn" },
     });
     let executions = 0;
@@ -531,22 +531,22 @@ it.each([400, 503])(
       [
         "native",
         {
-          name: "native",
-          inputSchema: z.object({}),
           approval: () => "user-approval",
           execute: () => {
             executions += 1;
             return "native-completed";
           },
+          inputSchema: z.object({}),
+          name: "native",
         },
       ],
       [
         "deferred",
-        { name: "deferred", inputSchema: z.object({}), workflowId: "workflow:deferred" },
+        { inputSchema: z.object({}), name: "deferred", workflowId: "workflow:deferred" },
       ],
     ]);
     const model = new MockLanguageModelV4({
-      doGenerate: ({ prompt }) => {
+      doGenerate: async ({ prompt }) => {
         generatedRequests += 1;
         if (generatedRequests > 1) {
           const parts = prompt.flatMap((message) =>
@@ -560,61 +560,58 @@ it.each([400, 503])(
               1,
             );
           }
-          return Promise.resolve({
-            content: [{ type: "text", text: "continued" }],
-            finishReason: { unified: "stop", raw: "stop" },
+          return {
+            content: [{ text: "continued", type: "text" }],
+            finishReason: { raw: "stop", unified: "stop" },
             usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
             warnings: [],
-          });
+          };
         }
-        return Promise.resolve({
+        return {
           content: ["native", "deferred"].map((name) => ({
-            type: "tool-call",
+            input: "{}",
             toolCallId: `failed-${name}`,
             toolName: name,
-            input: "{}",
+            type: "tool-call",
           })),
-          finishReason: { unified: "tool-calls", raw: "tool_calls" },
+          finishReason: { raw: "tool_calls", unified: "tool-calls" },
           usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
           warnings: [],
-        });
+        };
       },
-      doStream: () => {
+      doStream: async () => {
         providerRequests += 1;
-        return Promise.reject(
-          new APICallError({
-            message: "Synthetic nonretryable provider rejection",
-            url: "https://synthetic.invalid/model",
-            requestBodyValues: {},
-            statusCode,
-            responseBody: "synthetic rejection",
-            isRetryable: false,
-          }),
-        );
+        throw new APICallError({
+          isRetryable: false,
+          message: "Synthetic nonretryable provider rejection",
+          requestBodyValues: {},
+          responseBody: "synthetic rejection",
+          statusCode,
+          url: "https://synthetic.invalid/model",
+        });
       },
     });
     const invoke = (session, input, events) =>
       contextStorage.run(ctx, () =>
         createToolLoopHarness({
+          resolveModel: async () => model,
           tools,
-          resolveModel: () => Promise.resolve(model),
           ...(events === undefined
             ? {}
             : {
-                handleEvent: (event) => {
+                handleEvent: async (event) => {
                   events.push(event);
-                  return Promise.resolve();
                 },
               }),
         })(session, input),
       );
     const generated = await invoke(
       {
-        agent: { system: "", tools: [], modelReference: { id: "model", provider: "test" } },
-        sessionId: "failed-session",
+        agent: { modelReference: { id: "model", provider: "test" }, system: "", tools: [] },
+        compaction: { recentWindowSize: 10, threshold: 1e6 },
         continuationToken: "token",
         history: [],
-        compaction: { threshold: 1e6, recentWindowSize: 10 },
+        sessionId: "failed-session",
       },
       { message: "do work" },
     );
@@ -622,7 +619,7 @@ it.each([400, 503])(
     const approved = await invoke(generated.session, {
       attributedInputResponses: pending.requests.map((request) => ({
         auth,
-        response: { requestId: request.requestId, optionId: "approve" },
+        response: { optionId: "approve", requestId: request.requestId },
       })),
     });
     const events = [];
@@ -631,10 +628,10 @@ it.each([400, 503])(
       {
         runtimeActionResults: [
           {
-            kind: "tool-result",
             callId: "failed-deferred",
-            toolName: "deferred",
+            kind: "tool-result",
             output: "deferred-completed",
+            toolName: "deferred",
           },
         ],
       },
@@ -644,11 +641,11 @@ it.each([400, 503])(
       Array.isArray(message.content) ? message.content : [],
     );
     const summary = {
-      nativeExecutions: executions,
       callCount: parts.filter((part) => part.type === "tool-call").length,
-      resultCount: parts.filter((part) => part.type === "tool-result").length,
-      pendingInputs: getPendingInputBatches(failed.session.state).length,
+      nativeExecutions: executions,
       pendingCoordination: getPendingCoordinationBatch(failed.session.state) !== undefined,
+      pendingInputs: getPendingInputBatches(failed.session.state).length,
+      resultCount: parts.filter((part) => part.type === "tool-result").length,
       terminal: failed.next?.done === true,
     };
     console.log("provider rejection retained state", summary);
@@ -658,11 +655,11 @@ it.each([400, 503])(
       ),
     );
     assert.deepEqual(summary, {
-      nativeExecutions: 1,
       callCount: 2,
-      resultCount: 2,
-      pendingInputs: 0,
+      nativeExecutions: 1,
       pendingCoordination: false,
+      pendingInputs: 0,
+      resultCount: 2,
       terminal: statusCode === 400,
     });
     assert.equal(providerRequests, statusCode === 400 ? 1 : 3);
@@ -699,8 +696,8 @@ it.each(["generic", "typed"])(
     const auth = { authenticator: "test", principalId: "owner", principalType: "user" };
     const ctx = new ContextContainer();
     ctx.set(SessionKey, {
-      sessionId: "cancel-authorizer",
       auth: { current: auth, initiator: auth },
+      sessionId: "cancel-authorizer",
       turn: { id: "cancel-turn" },
     });
     let authorizations = 0;
@@ -710,8 +707,6 @@ it.each(["generic", "typed"])(
       [
         "protected",
         {
-          name: "protected",
-          inputSchema: z.object({}),
           approval: {
             request: () => true,
             response: async () => {
@@ -725,50 +720,52 @@ it.each(["generic", "typed"])(
             executions += 1;
             return "must not execute";
           },
+          inputSchema: z.object({}),
+          name: "protected",
         },
       ],
     ]);
     let session = appendPendingInputBatch({
-      session: {
-        agent: { system: "", tools: [], modelReference: { id: "model", provider: "test" } },
-        sessionId: "cancel-authorizer",
-        continuationToken: "token",
-        history: [],
-        compaction: { threshold: 1e6, recentWindowSize: 10 },
-      },
       requests: [
         {
-          kind: "tool-approval",
-          requestId: "request-protected",
-          action: { kind: "tool-call", callId: "call-protected", toolName: "protected", input: {} },
-          options: [{ id: "approve", label: "Approve" }],
-          prompt: "Approve",
+          action: { callId: "call-protected", input: {}, kind: "tool-call", toolName: "protected" },
           allowFreeform: false,
           display: "confirmation",
+          kind: "tool-approval",
+          options: [{ id: "approve", label: "Approve" }],
+          prompt: "Approve",
+          requestId: "request-protected",
         },
       ],
       responseAuthRequiredRequestIds: ["request-protected"],
       responseMessages: [],
+      session: {
+        agent: { modelReference: { id: "model", provider: "test" }, system: "", tools: [] },
+        compaction: { recentWindowSize: 10, threshold: 1e6 },
+        continuationToken: "token",
+        history: [],
+        sessionId: "cancel-authorizer",
+      },
     });
     session = {
       ...session,
       state: createApprovalCandidate({
-        state: session.state,
         candidateIdPrefix: "candidate",
-        requestId: "request-protected",
-        responder: auth,
         createdAt: Date.now(),
         expiresAt: Number.MAX_SAFE_INTEGER,
+        requestId: "request-protected",
+        responder: auth,
+        state: session.state,
       }).state,
     };
     const before = JSON.stringify(session.state);
     const run = createToolLoopHarness({
-      tools,
       abortSignal: abort.signal,
-      resolveModel: () => {
+      resolveModel: async () => {
         models += 1;
-        return Promise.reject(new Error("must not resolve model"));
+        throw new Error("must not resolve model");
       },
+      tools,
     });
     await assert.rejects(
       contextStorage.run(ctx, () => run(session)),

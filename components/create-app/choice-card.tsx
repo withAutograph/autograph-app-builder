@@ -38,7 +38,7 @@ export function ChoiceCard({
       {icon}
       <span>
         {children}
-        {badge ? <small>{badge}</small> : null}
+        {badge !== undefined && badge !== "" ? <small>{badge}</small> : null}
       </span>
       <input
         type={inputType}

@@ -53,9 +53,6 @@ export function toolVersionMatches(tool: RequiredTool, version: string): boolean
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function sandboxRevalidationKey(
-  image: string | undefined = undefined,
-  backend = "local",
-): string {
+export function sandboxRevalidationKey(image?: string, backend = "local"): string {
   return `autograph-app-builder-toolchain-v2:${backend}:${image ?? "unconfigured"}`;
 }

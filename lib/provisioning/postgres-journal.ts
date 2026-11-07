@@ -1,9 +1,8 @@
 import { and, asc, eq, or, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { HostedDatabase } from "../db/hosted-postgres";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { builderProvisioningJournals } from "../db/schema";
-import type * as databaseSchema from "../db/schema";
 import { builderProvisionRequestDigest } from "./contracts";
 import {
   builderProvisionJournalRecordSchema,
@@ -15,7 +14,7 @@ import type {
   BuilderProvisionJournalStore,
 } from "./journal";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function predicate(authority: BuilderProvisionAuthority, requestId: string) {
@@ -45,7 +44,7 @@ function parseRow(
     requestDigest: row.requestDigest,
     requestId: row.requestId,
     revision: row.revision,
-    state: row.state as "pending" | "settled",
+    state: row.state,
     updatedAt: row.updatedAt,
   };
 }
@@ -61,9 +60,29 @@ export function createPostgresBuilderProvisionJournalStore(
       .from(builderProvisioningJournals)
       .where(predicate(authority, input.requestId))
       .limit(1);
-    return rows[0] ? parseRow(rows[0]) : undefined;
+    return rows.length > 0 ? parseRow(rows[0]) : undefined;
   };
   return {
+    async compareAndSet(input) {
+      const authority = hostedTenantAuthoritySchema.parse(input.authority);
+      const record = builderProvisionJournalRecordSchema.parse(input.record);
+      const rows = await database
+        .update(builderProvisioningJournals)
+        .set({
+          record,
+          revision: input.expectedRevision + 1,
+          state: record.response.status,
+          updatedAt: input.now,
+        })
+        .where(
+          and(
+            predicate(authority, input.requestId),
+            eq(builderProvisioningJournals.revision, input.expectedRevision),
+          ),
+        )
+        .returning();
+      return rows.length > 0 ? parseRow(rows[0]) : undefined;
+    },
     async findSettledAppRepository(input) {
       const authority = hostedTenantAuthoritySchema.parse(input.authority);
       const rows = await database
@@ -86,26 +105,6 @@ export function createPostgresBuilderProvisionJournalStore(
         )
         .limit(2);
       return rows.map(parseRow);
-    },
-    async compareAndSet(input) {
-      const authority = hostedTenantAuthoritySchema.parse(input.authority);
-      const record = builderProvisionJournalRecordSchema.parse(input.record);
-      const rows = await database
-        .update(builderProvisioningJournals)
-        .set({
-          record,
-          revision: input.expectedRevision + 1,
-          state: record.response.status,
-          updatedAt: input.now,
-        })
-        .where(
-          and(
-            predicate(authority, input.requestId),
-            eq(builderProvisioningJournals.revision, input.expectedRevision),
-          ),
-        )
-        .returning();
-      return rows[0] ? parseRow(rows[0]) : undefined;
     },
     async listDue(input) {
       const cursor = input.after;
@@ -156,7 +155,7 @@ export function createPostgresBuilderProvisionJournalStore(
       const page: Awaited<ReturnType<NonNullable<BuilderProvisionJournalStore["listDue"]>>> = {
         items,
       };
-      if (last && rows.length === input.limit) {
+      if (last !== undefined && rows.length === input.limit) {
         page.nextCursor = {
           audience: last.audience,
           issuer: last.issuer,
@@ -185,9 +184,10 @@ export function createPostgresBuilderProvisionJournalStore(
         })
         .onConflictDoNothing()
         .returning();
-      const row = rows[0]
-        ? parseRow(rows[0])
-        : await read({ authority, requestId: input.request.requestId });
+      const row =
+        rows.length > 0
+          ? parseRow(rows[0])
+          : await read({ authority, requestId: input.request.requestId });
       if (!row) {
         throw new Error("provision-journal-not-durable");
       }

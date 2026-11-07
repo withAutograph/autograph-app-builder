@@ -119,9 +119,9 @@ export const evaluateHostedRuntimePreparationApproval = async (
       /* Preserve the original denial. */
     }
     return {
-      type: "denied",
       reason:
         "The current owner and saved approval could not be verified. Retry the same preparation when access is restored.",
+      type: "denied",
     };
   }
 };
@@ -151,17 +151,17 @@ export async function hostedRuntimePreparationApproval(
       { ...ctx, toolInput },
       prior.readHostedRuntimePriorApproval,
       {
-        onStarted: () =>
-          diagnostic?.reportRuntimePreparationStarted(ctx.session.id, "approval_evaluation"),
         onFailure: (error) =>
           diagnostic?.reportRuntimePreparationFailure(ctx.session.id, "approval_evaluation", error),
+        onStarted: () =>
+          diagnostic?.reportRuntimePreparationStarted(ctx.session.id, "approval_evaluation"),
       },
     );
   } catch (error) {
     diagnostic?.reportRuntimePreparationFailure(ctx.session.id, "approval_module_loading", error);
     return {
-      type: "denied",
       reason: "Saved preparation authority is unavailable. Retry when access is restored.",
+      type: "denied",
     };
   }
 }
@@ -230,16 +230,16 @@ export default defineWorkflowTool({
       },
     });
     return yield* continueHostedRuntimeOwnerPreparation(approved, ctx, prepare, {
+      acknowledge,
+      createHook: () => createHook<HostedRuntimeIdentityWake>(),
       execution: {
-        snapshot: approval.snapshot,
         read: readHostedRuntimeExecutionStep,
         sleepUntil: async (deadline) => {
           await sleep(deadline);
         },
+        snapshot: approval.snapshot,
       },
-      createHook: () => createHook<HostedRuntimeIdentityWake>(),
       register,
-      acknowledge,
       sleepUntil: async (expiresAt) => {
         await sleep(expiresAt);
       },

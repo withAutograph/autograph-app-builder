@@ -7,7 +7,8 @@ import { useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { toast } from "sonner";
 import { UserAvatar } from "@/components/auth/user/user-avatar";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,14 +48,21 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
     setIsUploading(true);
 
     try {
-      const resized = (await avatar.resize?.(file, avatar.size, avatar.extension)) || file;
+      const resizedResult = await avatar.resize?.(file, avatar.size, avatar.extension);
+      const resized = resizedResult ?? file;
 
-      const image = (await avatar.upload?.(resized)) || (await fileToAvatarDataUrl(resized));
+      const uploadedImage = await avatar.upload?.(resized);
+      const image =
+        uploadedImage !== null && uploadedImage !== undefined && uploadedImage !== ""
+          ? uploadedImage
+          : await fileToAvatarDataUrl(resized);
 
       updateUser(
         { image },
         {
-          onSuccess: () => toast.success(localization.settings.avatarChangedSuccess),
+          onSuccess: () => {
+            toast.success(localization.settings.avatarChangedSuccess);
+          },
         },
       );
     } catch (error) {
@@ -74,7 +82,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
       { image: null },
       {
         onSuccess: async () => {
-          if (currentImage) {
+          if (currentImage !== null && currentImage !== undefined && currentImage !== "") {
             setIsDeleting(true);
             try {
               await avatar.delete?.(currentImage);
@@ -98,7 +106,9 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
         type="file"
         accept="image/*"
         className="hidden"
-        onChange={handleFileChange}
+        onChange={(event) => {
+          handleFileChange(event);
+        }}
       />
 
       <div className="flex items-center gap-4">
@@ -131,8 +141,14 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
 
             <DropdownMenuItem
               variant="destructive"
-              disabled={!session?.user.image}
-              onClick={handleDelete}
+              disabled={
+                session?.user.image === null ||
+                session?.user.image === undefined ||
+                session.user.image === ""
+              }
+              onClick={() => {
+                handleDelete();
+              }}
             >
               <Trash2 />
 

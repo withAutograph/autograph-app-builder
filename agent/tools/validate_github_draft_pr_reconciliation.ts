@@ -45,7 +45,6 @@ import {
   validationOutputExcerpt,
 } from "@/lib/repository/target-validation";
 import { ValidationLogWriter } from "@/lib/repository/validation-log";
-import type { ValidationLogStore } from "@/lib/repository/validation-log";
 import { validationLogStoreForSession } from "@/lib/agent/validation-log-store-for-session";
 
 const publishCandidateArtifacts = async (
@@ -60,10 +59,10 @@ const publishCandidateArtifacts = async (
   }
   return await publishCompiledOperatorArtifactsForSession({
     adapterSessionId: ctx.session.id,
-    callbackExecution: hostedOperatorCallbackExecution(ctx.session),
     appId: candidate.appId,
     appSpecDigest: state.appSpec.digest,
     callId: ctx.callId,
+    callbackExecution: hostedOperatorCallbackExecution(ctx.session),
     root: candidate.root,
     sandbox,
     sessionAuth: ctx.session.auth,
@@ -145,7 +144,7 @@ const declaredMissingPackage = async (input: {
   ]) {
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Stop after a positive declaration in the actual repository or selected app manifest.
-      const text = await input.sandbox.readTextFile({ path, abortSignal: input.signal });
+      const text = await input.sandbox.readTextFile({ abortSignal: input.signal, path });
       if (text === null) {
         continue;
       }
@@ -185,13 +184,13 @@ const recoveryStep = async (input: {
     ].some((diagnostic) => input.output.includes(diagnostic))
   ) {
     return {
-      kind: "schema",
       command: appSchemaReleaseCommand(input.appId),
+      kind: "schema",
       recoveryFor: input.command,
     };
   }
   if (await declaredMissingPackage(input)) {
-    return { kind: "install", command: installCommand, recoveryFor: input.command };
+    return { command: installCommand, kind: "install", recoveryFor: input.command };
   }
   return undefined;
 };
@@ -227,7 +226,6 @@ const runCandidateCommandWithLogs = async <
     unique: randomUUID(),
   };
   let attemptDigest: string | undefined;
-  let store: ValidationLogStore | undefined;
   let writers:
     | {
         stderr: ValidationLogWriter;
@@ -242,7 +240,7 @@ const runCandidateCommandWithLogs = async <
   }
   try {
     if (attemptDigest !== undefined) {
-      store = await validationLogStoreForSession({
+      const store = await validationLogStoreForSession({
         sessionAuth: input.sessionAuth,
         sessionId: input.sessionId,
       });
@@ -272,8 +270,7 @@ const runCandidateCommandWithLogs = async <
       }
     }
   } catch {
-    store = undefined;
-    writers = undefined;
+    // Capture setup is best effort and cannot prevent the command from running.
   }
   const logs: CandidateValidationAttempt["logs"] = {};
   const finish = async (completion: "complete" | "interrupted", exitCode: number | null) => {
@@ -303,8 +300,8 @@ const runCandidateCommandWithLogs = async <
         return;
       }
       retainCandidateValidationAttempt({
-        attemptDigest,
         appId: binding.appId,
+        attemptDigest,
         baseSha: binding.baseSha,
         callId: binding.callId,
         category: binding.category,
@@ -363,7 +360,7 @@ const runAdditionalCandidateCheck = async (input: {
     command: input.command,
     workingDirectory: input.root,
   });
-  const output = { stdout: "", stderr: "" };
+  const output = { stderr: "", stdout: "" };
   const drain = async (channel: "stdout" | "stderr", stream: ReadableStream<Uint8Array>) => {
     const reader = stream.getReader();
     const decoder = new TextDecoder();
@@ -534,10 +531,10 @@ const runIncrementalValidation = async (
     };
   }
   const testShards = await readTargetValidationTestShards({
-    sandbox,
     root: candidate.root,
-    workspacePath: `apps/${candidate.appId}`,
+    sandbox,
     signal: ctx.abortSignal,
+    workspacePath: `apps/${candidate.appId}`,
   });
   let run = candidate.validationRun ?? null;
   const checkoutChanged = run !== null && run.resolvedTree !== before.resolvedTree;
@@ -572,7 +569,7 @@ const runIncrementalValidation = async (
   }
   const originalStep = run.steps[run.nextIndex];
   const originalStepCommand = originalStep?.command;
-  const schemaTaskCompleted = run.schemaTaskCompleted;
+  const { schemaTaskCompleted } = run;
   const dependenciesPrepared = run.commands.some(
     ({ command, exitCode }) =>
       exitCode === 0 &&
@@ -584,6 +581,7 @@ const runIncrementalValidation = async (
     const acknowledgedSchema = completed.filter((entry) => entry.kind === "schema");
     run = {
       ...run,
+      compilation: undefined,
       nextIndex: acknowledgedSchema.length,
       steps: [
         ...acknowledgedSchema,
@@ -591,7 +589,6 @@ const runIncrementalValidation = async (
         ...completed.filter((entry) => entry.kind !== "schema" && entry.kind !== "install"),
         ...run.steps.slice(run.nextIndex),
       ],
-      compilation: undefined,
     };
   }
   const nextIndexToRun = run.nextIndex;
@@ -600,7 +597,7 @@ const runIncrementalValidation = async (
     steps: currentValidationSteps(run, candidate.appId, testShards),
   };
   if (!run.steps.some((entry) => entry.kind === "capture")) {
-    run = { ...run, steps: [...run.steps, { kind: "capture", command: captureCommand }] };
+    run = { ...run, steps: [...run.steps, { command: captureCommand, kind: "capture" }] };
   }
   const step = run.steps[run.nextIndex];
   if (step === undefined) {
@@ -641,10 +638,10 @@ const runIncrementalValidation = async (
       },
     });
     return {
-      status: "plan_refreshed" as const,
       nextCommand: step.command,
       passedCommands: run.commands.length,
       remainingCommands: run.steps.length - run.nextIndex,
+      status: "plan_refreshed" as const,
     };
   }
   if (
@@ -678,18 +675,18 @@ const runIncrementalValidation = async (
   }
   let result: ValidationStepResult;
   let recovery: ValidationStep | undefined;
-  let compilation = run.compilation;
+  let { compilation } = run;
   try {
     if (step.kind === "install") {
       if (step.command !== installCommand) {
         throw new Error("The saved candidate installation command is not supported.");
       }
       await detachCheckoutDependencyView({
-        sandbox,
-        checkoutRoot: `${candidate.workspaceRoot}/repository`,
         candidateRoot: candidate.root,
-        workspaceRoot: candidate.workspaceRoot,
+        checkoutRoot: `${candidate.workspaceRoot}/repository`,
+        sandbox,
         signal: ctx.abortSignal,
+        workspaceRoot: candidate.workspaceRoot,
       });
       const installed = await sandbox.run({
         abortSignal: ctx.abortSignal,
@@ -704,8 +701,12 @@ const runIncrementalValidation = async (
       };
     } else if (step.kind === "capture") {
       try {
-        const captured = await publishCandidateArtifacts(ctx, candidate, sandbox);
-        compilation = captured.compilation;
+        const { compilation: capturedCompilation } = await publishCandidateArtifacts(
+          ctx,
+          candidate,
+          sandbox,
+        );
+        compilation = capturedCompilation;
       } catch {
         ctx.abortSignal?.throwIfAborted();
         return {
@@ -737,11 +738,11 @@ const runIncrementalValidation = async (
       } else {
         const required = await recoveryStep({
           appId: candidate.appId,
+          command: step.command,
+          output: `${schema.stderr}\n${schema.stdout}`,
           root: candidate.root,
           sandbox,
           signal: ctx.abortSignal,
-          command: step.command,
-          output: `${schema.stderr}\n${schema.stdout}`,
         });
         recovery = required?.kind === "install" ? required : undefined;
       }
@@ -754,20 +755,20 @@ const runIncrementalValidation = async (
       };
     } else if (step.kind === "local") {
       const local = await runCandidateCommandWithLogs({
+        callId: ctx.callId,
+        candidate,
         category: "local-preparation",
         command: step.command,
-        candidate,
-        callId: ctx.callId,
         resolvedTree: before.resolvedTree,
-        sessionAuth: ctx.session.auth,
-        sessionId: ctx.session.id,
-        run: () =>
+        run: async () =>
           prepareAppLocalPreview({
             appId: candidate.appId,
             root: candidate.root,
             sandbox,
             signal: ctx.abortSignal,
           }),
+        sessionAuth: ctx.session.auth,
+        sessionId: ctx.session.id,
       });
       result = {
         command: local.command,
@@ -818,27 +819,25 @@ const runIncrementalValidation = async (
               sessionAuth: ctx.session.auth,
               sessionId: ctx.session.id,
               // Preserve the executor's detached command lifecycle and capture its returned output.
-              run: () =>
+              run: async () =>
                 sandboxValidationCommandExecutor({
                   alreadyCompiled,
                   testShards,
                 })({
+                  abortSignal: ctx.abortSignal,
                   appId: candidate.appId,
                   command: planned.command,
                   sandbox,
                   validationRoot: candidate.root,
-                  abortSignal: ctx.abortSignal,
                 }),
             })
           : await runCandidateCommandWithLogs({
+              callId: ctx.callId,
+              candidate,
               category: "additional-check",
               command: step.command,
-              candidate,
-              callId: ctx.callId,
               resolvedTree: before.resolvedTree,
-              sessionAuth: ctx.session.auth,
-              sessionId: ctx.session.id,
-              run: (onChunk) =>
+              run: async (onChunk) =>
                 runAdditionalCandidateCheck({
                   sandbox,
                   command: step.command,
@@ -846,6 +845,8 @@ const runIncrementalValidation = async (
                   signal: ctx.abortSignal,
                   onChunk,
                 }),
+              sessionAuth: ctx.session.auth,
+              sessionId: ctx.session.id,
             });
       const checkedBuild =
         step.kind === "check" && planned?.name === "check-build" && execution.exitCode === 0;
@@ -858,7 +859,7 @@ const runIncrementalValidation = async (
           ...run,
           steps: [
             ...run.steps.slice(0, run.nextIndex + 1),
-            { kind: "local", command: localPreviewExecutionCommand(candidate.appId) },
+            { command: localPreviewExecutionCommand(candidate.appId), kind: "local" },
             ...run.steps.slice(run.nextIndex + 1),
           ],
         };
@@ -866,11 +867,11 @@ const runIncrementalValidation = async (
       if (step.kind === "check" && execution.exitCode !== 0) {
         recovery = await recoveryStep({
           appId: candidate.appId,
+          command: step.command,
+          output: `${execution.stderr}\n${execution.stdout}`,
           root: candidate.root,
           sandbox,
           signal: ctx.abortSignal,
-          command: step.command,
-          output: `${execution.stderr}\n${execution.stdout}`,
         });
       }
       result = {
@@ -902,10 +903,10 @@ const runIncrementalValidation = async (
         ...validationSteps({
           ...input,
           appId: candidate.appId,
+          dependenciesPrepared: true,
           root: candidate.root,
           sandbox,
           schemaTaskCompleted: recovery.kind === "schema" ? true : run.schemaTaskCompleted,
-          dependenciesPrepared: true,
           testShards,
         }),
       ];
@@ -919,11 +920,11 @@ const runIncrementalValidation = async (
       }
       const recoveryRun = {
         ...run,
-        resolvedTree: changed.resolvedTree,
-        steps,
-        nextIndex: completedRecovery.length,
         compilation: undefined,
+        nextIndex: completedRecovery.length,
+        resolvedTree: changed.resolvedTree,
         schemaTaskCompleted: recovery.kind === "schema" ? undefined : run.schemaTaskCompleted,
+        steps,
       };
       const latest = draftReconciliationState.get();
       if (latest === null) {
@@ -937,11 +938,11 @@ const runIncrementalValidation = async (
       return {
         command: result.command,
         exitCode: result.exitCode,
-        output: result.output,
         nextCommand: recovery.command,
+        output: result.output,
         passedCommands: run.commands.length,
-        remainingCommands: steps.length - completedRecovery.length,
         problem: `The repository command failed and reported a concrete setup repair. Run the returned fixed nextCommand, then rerun the repository checks.`,
+        remainingCommands: steps.length - completedRecovery.length,
         status: "in_progress" as const,
       };
     }
@@ -973,7 +974,7 @@ const runIncrementalValidation = async (
   }
   const nextIndex = run.nextIndex + 1;
   if (nextIndex < run.steps.length) {
-    const nextRun = { ...run, commands, nextIndex, resolvedTree: after.resolvedTree, compilation };
+    const nextRun = { ...run, commands, compilation, nextIndex, resolvedTree: after.resolvedTree };
     updateExactDraftReconciliation({
       expected: latest,
       operation: `recording ${step.command} validation progress`,
@@ -996,9 +997,9 @@ const runIncrementalValidation = async (
         ...latest,
         validation: {
           commands,
+          compilation,
           resolvedTree: after.resolvedTree,
           validatedByCallId: ctx.callId,
-          compilation,
         },
       };
       delete next.validationRun;
@@ -1040,8 +1041,6 @@ export const validateDraftReconciliation = async (
   const sandbox = withCandidateCommandEnvironment(await getSourceBoundSandbox(ctx));
   if (candidate.validationRun?.schemaTaskCompleted !== true) {
     await retireUnusedDraftWorktrees({
-      sandbox,
-      workspaceRoot: candidate.workspaceRoot,
       retainedRoots: [
         state.workspace.workspacePath,
         state.applyReceipt.applyRoot,
@@ -1050,17 +1049,19 @@ export const validateDraftReconciliation = async (
         ...(candidate.preservedWorkspaces ?? []).map((workspace) => workspace.root),
         ...draftReconciliationCompletions.get().map((completion) => completion.root),
       ],
+      sandbox,
       signal: ctx.abortSignal,
+      workspaceRoot: candidate.workspaceRoot,
     });
   }
   await attachCheckoutDependencyView({
-    sandbox,
-    checkoutRoot: `${candidate.workspaceRoot}/repository`,
     candidateRoot: candidate.root,
+    checkoutRoot: `${candidate.workspaceRoot}/repository`,
+    sandbox,
     workspaceRoot: candidate.workspaceRoot,
   });
   let current = candidate;
-  let expectedCommand = input.expectedCommand;
+  let { expectedCommand } = input;
   for (;;) {
     // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Single-call mode uses the same durable ordered steps as incremental mode.
     const result = await runIncrementalValidation(

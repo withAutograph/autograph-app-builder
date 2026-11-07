@@ -34,7 +34,7 @@ const text = [
   "",
   "You can use this connection string with any PostgreSQL client to connect to your Neon database.",
 ].join("\n");
-const response = (value: string) => ({ content: [{ type: "text", text: value }] });
+const response = (value: string) => ({ content: [{ text: value, type: "text" }] });
 
 describe("private Neon MCP connection response", () => {
   it("decodes the official labeled response that the previous JSON-only decoder rejects", () => {
@@ -113,15 +113,15 @@ describe("private Neon MCP connection response", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const error = Object.assign(new Error(credential.uri), {
       code: -32_601,
+      data: credential,
+      responseBody: text,
       statusCode: 403,
       url: credential.uri,
-      responseBody: text,
-      data: credential,
     });
     reportOperatorNeonMcpFailure("private-owner-session", "tool_request", error, sink);
     expect(sink).toHaveBeenCalledWith(
       expect.objectContaining({
-        neonMcpFailure: { phase: "tool_request", sdkCode: -32_601, httpStatus: 403 },
+        neonMcpFailure: { httpStatus: 403, phase: "tool_request", sdkCode: -32_601 },
       }),
     );
     const logged = JSON.stringify(sink.mock.calls);

@@ -122,11 +122,11 @@ export const readHostedRuntimeExecutionBinding = async (
   {
     const provider = createHostedRuntimeVercelProvider({
       credential,
-      target: runtime.target,
       environmentGitBranch:
         row.record.environmentGitBranch === undefined
           ? runtime.target.branch
           : row.record.environmentGitBranch,
+      target: runtime.target,
     });
     await provider.assertProject();
     const cluster = await provider.readClusterCredential();

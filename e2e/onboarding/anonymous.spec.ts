@@ -10,7 +10,9 @@ import {
 } from "../support/harness";
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-test.beforeEach(async () => resetApplicationState());
+test.beforeEach(async () => {
+  await resetApplicationState();
+});
 
 test("anonymous brief continues through passkey signup into the builder", async ({
   context,
@@ -100,10 +102,11 @@ test("missing passkey keeps the permanent Sign Up link without entering setup", 
 }) => {
   const authenticator = await registerPasskey(context, page);
   await page.goto("/auth/sign-out");
-  const [credential] = await authenticator.credentials();
-  if (!credential) {
+  const credentials = await authenticator.credentials();
+  if (credentials.length === 0) {
     throw new Error("Expected registered passkey credential");
   }
+  const [credential] = credentials;
   await authenticator.removeCredential(credential.credentialId);
   const signUpLink = page.getByRole("link", { name: "Sign Up" });
   await expect(signUpLink).toBeVisible();

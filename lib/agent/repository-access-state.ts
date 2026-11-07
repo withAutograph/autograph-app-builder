@@ -127,7 +127,11 @@ export function assertRepositoryAccessReceiptForSource(input: {
   if (
     receipt.digest !== input.expectedDigest ||
     receipt.sessionId !== input.sessionId ||
-    receipt.repository.repositoryId !== input.repositoryId ||
+    receipt.repository.repositoryId !== input.repositoryId
+  ) {
+    throw new Error("The repository access receipt does not match this session and source.");
+  }
+  if (
     `refs/heads/${receipt.repository.defaultBranch}` !== input.ref ||
     receipt.repository.headSha !== input.expectedSha ||
     receipt.repository.headTree !== input.expectedTree
@@ -144,20 +148,27 @@ export function assertResolvedSourceMatchesRepositoryAccess(input: {
 }): void {
   const access = repositoryAccessReceiptSchema.parse(input.access);
   const { repository } = input.source;
+  const mismatch = "The live GitHub source does not match the confirmed repository access receipt.";
   if (
     repository.repositoryId !== access.repository.repositoryId ||
     repository.owner !== access.repository.owner ||
-    repository.name !== access.repository.name ||
+    repository.name !== access.repository.name
+  ) {
+    throw new Error(mismatch);
+  }
+  if (
     repository.defaultBranch !== access.repository.defaultBranch ||
     repository.headSha !== access.repository.headSha ||
-    repository.headTree !== access.repository.headTree ||
+    repository.headTree !== access.repository.headTree
+  ) {
+    throw new Error(mismatch);
+  }
+  if (
     input.source.resolvedRef !== `refs/heads/${access.repository.defaultBranch}` ||
     input.source.resolvedSha !== access.repository.headSha ||
     input.source.resolvedTree !== access.repository.headTree
   ) {
-    throw new Error(
-      "The live GitHub source does not match the confirmed repository access receipt.",
-    );
+    throw new Error(mismatch);
   }
 }
 

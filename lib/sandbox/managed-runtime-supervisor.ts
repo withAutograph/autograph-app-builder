@@ -5,40 +5,48 @@ import { z } from "zod";
 import { managedRuntimeIdentitySchema } from "./managed-runtime-capabilities";
 import type { ManagedRuntimeIdentity } from "./managed-runtime-capabilities";
 
+const managedLifecycleOperations = [
+  "stop-and-wait",
+  "start-same-environment",
+  "observe-readiness",
+] as const;
+const reconciliationRequiredState = "reconciliation-required";
+const stoppedState = "stopped";
+
 export const managedLifecycleCommandSchema = z.discriminatedUnion("operation", [
   z.strictObject({ operation: z.literal("status") }),
   z.strictObject({
-    operation: z.enum(["stop-and-wait", "start-same-environment", "observe-readiness"]),
     commandId: z.uuid(),
+    operation: z.enum(managedLifecycleOperations),
   }),
 ]);
 export type ManagedLifecycleCommand = z.infer<typeof managedLifecycleCommandSchema>;
 const exitSchema = z.strictObject({
   code: z.number().int().nullable(),
-  signal: z.string().nullable(),
   observedAt: z.iso.datetime(),
+  signal: z.string().nullable(),
 });
 const processSchema = z.strictObject({
+  exit: exitSchema.optional(),
   generation: z.number().int().positive().refine(Number.isSafeInteger),
   pid: z.number().int().positive().refine(Number.isSafeInteger),
+  readiness: z.strictObject({ observedAt: z.iso.datetime(), ready: z.boolean() }).optional(),
   startedAt: z.iso.datetime(),
-  exit: exitSchema.optional(),
-  readiness: z.strictObject({ ready: z.boolean(), observedAt: z.iso.datetime() }).optional(),
 });
 export const managedLifecycleReceiptSchema = z.strictObject({
+  commandId: z.uuid().optional(),
   identity: managedRuntimeIdentitySchema,
+  operation: z.enum(["status", ...managedLifecycleOperations]),
+  process: processSchema.optional(),
   state: z.enum([
-    "stopped",
+    stoppedState,
     "starting",
     "ready",
     "stopping",
     "revoked",
     "expired",
-    "reconciliation-required",
+    reconciliationRequiredState,
   ]),
-  process: processSchema.optional(),
-  commandId: z.uuid().optional(),
-  operation: z.enum(["status", "stop-and-wait", "start-same-environment", "observe-readiness"]),
 });
 export type ManagedChildExit = z.infer<typeof exitSchema>;
 export interface ManagedOwnedChild {
@@ -54,6 +62,8 @@ interface OwnedManagedProcess {
 }
 const childHasExited = (owned: OwnedManagedProcess) => owned.observation.exit !== undefined;
 const unavailable = () => new Error("Managed lifecycle is unavailable.");
+const missingProcessGroupCode = "ESRCH";
+const deniedProcessGroupCode = "EPERM";
 const bounded = async <T>(promise: Promise<T>, milliseconds: number): Promise<T> => {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -84,13 +94,13 @@ export const createManagedOwnedChildLauncher = (input: {
   return async (): Promise<ManagedOwnedChild> => {
     const child: ChildProcess = spawn(launch.executable, [...launch.args], {
       cwd: launch.cwd,
+      detached: true,
       // Node accepts arbitrary string environment entries; Next adds a required
       // NODE_ENV to ProcessEnv for its own server, not this owned child.
       // SAFETY: Every supplied value is a string; no host environment is inherited.
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Adapt the Next-augmented Node declaration without adding an app environment variable.
       env: { ...launch.appEnvironment } as NodeJS.ProcessEnv,
       stdio: "ignore",
-      detached: true,
     });
     let failure = false;
     const closed = new Promise<ManagedChildExit>((resolve) => {
@@ -98,7 +108,7 @@ export const createManagedOwnedChildLauncher = (input: {
         failure = true;
       });
       child.once("close", (code, signal) => {
-        resolve({ code, signal, observedAt: new Date().toISOString() });
+        resolve({ code, observedAt: new Date().toISOString(), signal });
       });
     });
     // Only this launch creates and captures the group. No caller can supply a PID/PGID.
@@ -111,10 +121,10 @@ export const createManagedOwnedChildLauncher = (input: {
         process.kill(-ownedGroup, 0);
         return true;
       } catch (error) {
-        if (z.object({ code: z.literal("ESRCH") }).safeParse(error).success) {
+        if (z.object({ code: z.literal(missingProcessGroupCode) }).safeParse(error).success) {
           return false;
         }
-        if (z.object({ code: z.literal("EPERM") }).safeParse(error).success) {
+        if (z.object({ code: z.literal(deniedProcessGroupCode) }).safeParse(error).success) {
           // Permission denial proves neither disappearance nor successful cleanup.
           return true;
         }
@@ -128,7 +138,7 @@ export const createManagedOwnedChildLauncher = (input: {
       try {
         process.kill(-ownedGroup, signal);
       } catch (error) {
-        if (!z.object({ code: z.literal("ESRCH") }).safeParse(error).success) {
+        if (!z.object({ code: z.literal(missingProcessGroupCode) }).safeParse(error).success) {
           throw unavailable();
         }
       }
@@ -148,7 +158,7 @@ export const createManagedOwnedChildLauncher = (input: {
       return exit;
     };
     let termination: Promise<ManagedChildExit> | undefined;
-    const terminate = () => {
+    const terminate = async () => {
       termination ??= (async () => {
         signalGroup("SIGTERM");
         try {
@@ -158,7 +168,7 @@ export const createManagedOwnedChildLauncher = (input: {
           return await waitUntilGone();
         }
       })();
-      return termination;
+      return await termination;
     };
     // Start cleanup as soon as the owned wrapper exits, before its group could be reused.
     child.once("close", () => {
@@ -180,11 +190,11 @@ export const createManagedOwnedChildLauncher = (input: {
         }),
         stopTimeoutMs,
       );
-      const pid = child.pid;
+      const { pid } = child;
       if (pid === undefined || failure) {
         throw unavailable();
       }
-      return { pid, closed, terminate };
+      return { closed, pid, terminate };
     } catch {
       await terminate();
       throw unavailable();
@@ -208,7 +218,7 @@ export const createManagedRuntimeSupervisor = (input: {
 }) => {
   const identity = managedRuntimeIdentitySchema.parse(structuredClone(input.identity));
   const now = input.now ?? (() => new Date());
-  let state: ManagedLifecycleReceipt["state"] = "stopped";
+  let state: ManagedLifecycleReceipt["state"] = stoppedState;
   let generation = 0;
   const intentionalExit = () => new Set(["stopping", "revoked", "expired"]).has(state);
   let current: { child: ManagedOwnedChild; observation: ManagedProcessObservation } | undefined;
@@ -226,14 +236,16 @@ export const createManagedRuntimeSupervisor = (input: {
   const snapshot = (
     operation: ManagedLifecycleCommand["operation"],
     commandId?: string,
-  ): ManagedLifecycleReceipt =>
-    structuredClone({
-      identity,
-      state,
-      ...(current ? { process: current.observation } : {}),
-      operation,
-      ...(commandId === undefined ? {} : { commandId }),
-    });
+  ): ManagedLifecycleReceipt => {
+    const receipt: ManagedLifecycleReceipt = { identity, operation, state };
+    if (current !== undefined) {
+      receipt.process = current.observation;
+    }
+    if (commandId !== undefined) {
+      receipt.commandId = commandId;
+    }
+    return structuredClone(receipt);
+  };
   const assertCurrent = async () => {
     if (signal.aborted || now().getTime() >= input.expiresAt) {
       throw unavailable();
@@ -256,7 +268,7 @@ export const createManagedRuntimeSupervisor = (input: {
         try {
           await revoke();
         } catch {
-          state = "reconciliation-required";
+          state = reconciliationRequiredState;
         }
       })();
     },
@@ -270,7 +282,7 @@ export const createManagedRuntimeSupervisor = (input: {
         current.observation.exit = await current.child.terminate();
       }
       await assertCurrent();
-      state = "stopped";
+      state = stoppedState;
     } else if (command.operation === "start-same-environment") {
       if (current && !current.observation.exit) {
         throw unavailable();
@@ -291,7 +303,7 @@ export const createManagedRuntimeSupervisor = (input: {
         const exit = await child.closed;
         owned.observation.exit = exit;
         if (current === owned && !intentionalExit()) {
-          state = "reconciliation-required";
+          state = reconciliationRequiredState;
         }
       })();
       try {
@@ -316,12 +328,16 @@ export const createManagedRuntimeSupervisor = (input: {
       if (childHasExited(current)) {
         throw unavailable();
       }
-      current.observation.readiness = { ready, observedAt: now().toISOString() };
+      current.observation.readiness = { observedAt: now().toISOString(), ready };
       state = ready ? "ready" : "starting";
     }
     return snapshot(command.operation, command.commandId);
   };
   return {
+    async close() {
+      closedByOwner.abort();
+      await revoke();
+    },
     async execute(value: ManagedLifecycleCommand): Promise<ManagedLifecycleReceipt> {
       const command = managedLifecycleCommandSchema.parse(value);
       if (command.operation === "status") {
@@ -342,7 +358,7 @@ export const createManagedRuntimeSupervisor = (input: {
           return await perform(command);
         } catch {
           if (!signal.aborted) {
-            state = "reconciliation-required";
+            state = reconciliationRequiredState;
           }
           throw unavailable();
         }
@@ -356,10 +372,6 @@ export const createManagedRuntimeSupervisor = (input: {
         }
       })();
       return await result;
-    },
-    async close() {
-      closedByOwner.abort();
-      await revoke();
     },
   };
 };

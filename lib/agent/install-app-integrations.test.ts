@@ -9,13 +9,13 @@ import installTool, {
 
 const hooks = vi.hoisted(() => ({
   invalidate: vi.fn(),
-  update: vi.fn(),
   sandbox: { run: vi.fn() },
   state: {
-    phase: "applied",
     appSpec: { appId: "spend-review", digest: "accepted" },
     applyReceipt: { applyRoot: "/private/approved-checkout" },
+    phase: "applied",
   },
+  update: vi.fn(),
 }));
 vi.mock("eve/tools", () => ({ defineTool: <T>(tool: T) => tool }));
 vi.mock("./workflow-state", () => ({
@@ -26,14 +26,18 @@ vi.mock("./product-behavior-state", () => ({
   invalidateProductBehaviorEvidence: hooks.invalidate,
 }));
 vi.mock("./source-bound-sandbox", () => ({
-  getSourceBoundSandbox: () => Promise.resolve(hooks.sandbox),
+  getSourceBoundSandbox: async () => hooks.sandbox,
 }));
 
 const context: ToolContext = {
   abortSignal: new AbortController().signal,
   callId: "install-integrations",
-  getSandbox: () => Promise.reject(new Error("The source-bound sandbox fixture owns execution.")),
-  getToken: () => Promise.reject(new Error("Installation must not request a provider token.")),
+  getSandbox: async () => {
+    throw new Error("The source-bound sandbox fixture owns execution.");
+  },
+  getToken: async () => {
+    throw new Error("Installation must not request a provider token.");
+  },
   requireAuth: () => {
     throw new Error("Installation must use the existing private build approval.");
   },
@@ -48,18 +52,18 @@ const context: ToolContext = {
 describe("private app integrations installation", () => {
   it("preserves the repository installer's readiness endpoint as a capability contract, not executed proof", async () => {
     const readiness = {
-      protocol: "app-integration-readiness-v1",
       path: "/spend-review/api/integrations/readiness",
+      protocol: "app-integration-readiness-v1",
     };
     hooks.sandbox.run.mockResolvedValueOnce({
       exitCode: 0,
       stderr: "",
       stdout: JSON.stringify({
         appId: "spend-review",
-        status: "installed",
         files: [],
         providers: ["quickbooks"],
         readiness,
+        status: "installed",
       }),
     });
     const result = await installAppIntegrations({
@@ -68,10 +72,10 @@ describe("private app integrations installation", () => {
       sandbox: hooks.sandbox,
     });
     expect(result).toMatchObject({
-      status: "installed",
       capabilityState: "source-installed",
-      readiness,
       providerReadiness: "unverified",
+      readiness,
+      status: "installed",
     });
   });
   beforeEach(() => {
@@ -82,9 +86,9 @@ describe("private app integrations installation", () => {
       stderr: "",
       stdout: JSON.stringify({
         appId: "spend-review",
-        status: "installed",
         files: ["apps/spend-review/app/integrations/receive.ts"],
         providers: ["quickbooks"],
+        status: "installed",
       }),
     });
   });
@@ -98,9 +102,9 @@ describe("private app integrations installation", () => {
       }),
     );
     expect(result).toMatchObject({
-      status: "installed",
-      providers: ["quickbooks"],
       providerReadiness: "unverified",
+      providers: ["quickbooks"],
+      status: "installed",
     });
     expect(hooks.update).toHaveBeenCalled();
     expect(hooks.invalidate).toHaveBeenCalledWith("source-repair");
@@ -129,9 +133,9 @@ describe("private app integrations installation", () => {
       stderr: "",
       stdout: JSON.stringify({
         appId: "spend-review",
-        status: "omitted",
         files: [],
         providers: [],
+        status: "omitted",
       }),
     });
     const omitted = await installAppIntegrations({
@@ -140,10 +144,10 @@ describe("private app integrations installation", () => {
       sandbox: hooks.sandbox,
     });
     expect(omitted).toMatchObject({
-      status: "omitted",
       capabilityState: "source-omitted",
       files: [],
       providerReadiness: "unverified",
+      status: "omitted",
     });
     hooks.sandbox.run.mockResolvedValueOnce({
       exitCode: 2,
@@ -156,8 +160,8 @@ describe("private app integrations installation", () => {
       sandbox: hooks.sandbox,
     });
     expect(failed).toMatchObject({
-      status: "failed",
       exitCode: 2,
+      status: "failed",
       stderr: "provider recipe unavailable",
     });
   });
@@ -168,19 +172,19 @@ describe("private app integrations installation", () => {
       stderr: "",
       stdout: JSON.stringify({
         appId: "spend-review",
-        status: "omitted",
-        providers: [],
         files: ["apps/spend-review/app/integrations/.installed.json"],
+        providers: [],
+        status: "omitted",
       }),
     });
     const result = await installTool.execute({}, context);
     expect(result).toMatchObject({
-      status: "omitted",
       capabilityState: "source-omitted",
-      providers: [],
       providerReadiness: "unverified",
+      providers: [],
+      status: "omitted",
     });
-    const nextStep = z.object({ nextStep: z.string() }).parse(result).nextStep;
+    const { nextStep } = z.object({ nextStep: z.string() }).parse(result);
     expect(nextStep).toContain("normal app validation and delivery");
     expect(nextStep).toContain("preserve retained bindings and resources");
     expect(result).not.toHaveProperty("readiness");
@@ -193,16 +197,16 @@ describe("private app integrations installation", () => {
     );
   });
   it.each([
-    { status: "omitted", providers: ["quickbooks"] },
+    { providers: ["quickbooks"], status: "omitted" },
     {
-      status: "omitted",
       providers: [],
       readiness: {
-        protocol: "app-integration-readiness-v1",
         path: "/spend-review/api/integrations/readiness",
+        protocol: "app-integration-readiness-v1",
       },
+      status: "omitted",
     },
-    { status: "installed", providers: [] },
+    { providers: [], status: "installed" },
   ])(
     "refuses an inconsistent capability claim instead of turning it into omitted success",
     async (receipt) => {
@@ -228,11 +232,11 @@ describe("private app integrations installation", () => {
       stderr: "",
       stdout: JSON.stringify({
         appId: "spend-review",
-        status: "capability-gap",
         files: [],
-        providers: [],
-        problem: "Integration server host is unavailable; token=secret-access-token",
         internal: "private-source-payload",
+        problem: "Integration server host is unavailable; token=secret-access-token",
+        providers: [],
+        status: "capability-gap",
       }),
     });
     const failed = await installAppIntegrations({
@@ -240,7 +244,8 @@ describe("private app integrations installation", () => {
       root: "/private/approved-checkout",
       sandbox: hooks.sandbox,
     });
-    expect(failed).toMatchObject({ status: "failed", exitCode: 2, stderr: "" });
+    expect(failed).toMatchObject({ exitCode: 2, status: "failed", stderr: "" });
+    if (failed.status !== "failed") throw new Error("Expected integration installation to fail");
     expect(failed.problem).toContain("Integration server host is unavailable");
     expect(JSON.stringify(failed)).not.toContain("secret-access-token");
     expect(JSON.stringify(failed)).not.toContain("private-source-payload");
@@ -250,10 +255,10 @@ describe("private app integrations installation", () => {
     "not-json",
     JSON.stringify({
       appId: "another-app",
-      status: "capability-gap",
       problem: "foreign diagnosis",
+      status: "capability-gap",
     }),
-    JSON.stringify({ appId: "spend-review", status: "installed", problem: "false success" }),
+    JSON.stringify({ appId: "spend-review", problem: "false success", status: "installed" }),
   ])("keeps malformed or unrelated failure receipts generic: %s", async (stdout) => {
     hooks.sandbox.run.mockResolvedValueOnce({ exitCode: 2, stderr: "", stdout });
     const failed = await installAppIntegrations({
@@ -261,7 +266,8 @@ describe("private app integrations installation", () => {
       root: "/private/approved-checkout",
       sandbox: hooks.sandbox,
     });
-    expect(failed).toMatchObject({ status: "failed", exitCode: 2 });
+    expect(failed).toMatchObject({ exitCode: 2, status: "failed" });
+    if (failed.status !== "failed") throw new Error("Expected integration installation to fail");
     expect(failed.problem).toContain("The app integration installer failed");
     expect(failed.problem).not.toContain("foreign diagnosis");
     expect(failed.problem).not.toContain("false success");
@@ -273,9 +279,9 @@ describe("private app integrations installation", () => {
       stderr: "",
       stdout: JSON.stringify({
         appId: "another-app",
-        status: "installed",
         files: [],
         providers: [],
+        status: "installed",
       }),
     });
     expect(

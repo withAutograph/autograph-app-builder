@@ -116,7 +116,7 @@ const runReader = async <T>(
           parsedConfiguration.syntheticEnrollment,
         ),
       });
-      return { scope: parsedScope, configuration: frozenConfiguration };
+      return { configuration: frozenConfiguration, scope: parsedScope };
     });
     const ownerContext =
       context.ownerContext === undefined
@@ -254,10 +254,10 @@ const runReader = async <T>(
       const stages: Record<NativeReadTool, OperatorPlanStage> = {
         describe_project: "neon_project_metadata",
         get_branch: "neon_branch_metadata",
-        get_postgres_endpoint: "neon_endpoint_metadata",
-        get_postgres_database: "neon_database_metadata",
-        get_postgres_role: "neon_role_metadata",
         get_connection_string: "neon_connection_credential",
+        get_postgres_database: "neon_database_metadata",
+        get_postgres_endpoint: "neon_endpoint_metadata",
+        get_postgres_role: "neon_role_metadata",
       };
       const currentClient = client;
       const result = await observe(stages[name], async () => {

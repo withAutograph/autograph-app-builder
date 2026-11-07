@@ -10,7 +10,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { AnonymousBrief } from "./anonymous-brief";
 import { AnonymousBuilder } from "./anonymous-builder";
 
-const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+const navigation = vi.hoisted(() => ({ push: vi.fn<() => void>() }));
 vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
 
 const requireElement = (element: Element | null | undefined): HTMLElement => {
@@ -58,10 +58,14 @@ it("hydrates the brief island and persists the selected brief before sign-in nav
   expect(container.querySelector("textarea")).toBe(textarea);
   expect(textarea?.disabled).toBe(false);
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning React act callback
-  await act(async () => requireElement(container.querySelectorAll("button")[1]).click());
+  await act(async () => {
+    requireElement(container.querySelectorAll("button")[1]).click();
+  });
   expect(textarea?.value).toBe("Build a customer feedback portal");
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning React act callback
-  await act(async () => requireElement(container.querySelector("button")).click());
+  await act(async () => {
+    requireElement(container.querySelector("button")).click();
+  });
   expect(sessionStorage.getItem("autograph-app-brief")).toBe("Build a customer feedback portal");
   expect(navigation.push).toHaveBeenCalledWith("/auth/sign-in?callbackURL=%2F");
 });
@@ -76,9 +80,13 @@ it("supports the isolated story continuation without browser navigation", async 
     root = hydrateRoot(container, <AnonymousBrief onContinue={onContinue} />);
   });
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning React act callback
-  await act(async () => requireElement(container.querySelectorAll("button")[1]).click());
+  await act(async () => {
+    requireElement(container.querySelectorAll("button")[1]).click();
+  });
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning React act callback
-  await act(async () => requireElement(container.querySelector("button")).click());
+  await act(async () => {
+    requireElement(container.querySelector("button")).click();
+  });
   expect(onContinue).toHaveBeenCalledWith("Build a customer feedback portal");
   expect(navigation.push).not.toHaveBeenCalled();
   expect(sessionStorage.getItem("autograph-app-brief")).toBeNull();

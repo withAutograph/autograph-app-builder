@@ -9,60 +9,60 @@ import {
 import { hostedEveOperationScopes } from "./hosted-auth";
 
 const principal = {
-  issuer: "https://owner.example",
   audience: "builder",
-  workspaceId: "workspace",
+  issuer: "https://owner.example",
   ownerUserId: "owner",
   scopes: Object.values(hostedEveOperationScopes),
+  workspaceId: "workspace",
 };
 const source = durableHostedSessionRecordSchema.parse({
-  version: 2,
-  sessionId: "source",
-  adapterSessionId: "native",
   adapterGeneration: 1,
-  originAdapterSessionId: "native",
-  principal,
-  status: "input_required",
-  stage: "needs_attention",
-  resumability: "live",
-  title: "App",
-  createdAtEpochMs: 1,
-  updatedAtEpochMs: 1,
-  lastProgressAtEpochMs: 1,
-  checkpointRef: {
-    id: "123e4567-e89b-42d3-a456-426614174001",
-    digest: `sha256:${"a".repeat(64)}`,
-    eventCount: 0,
-  },
+  adapterSessionId: "native",
   checkpointDigest: `sha256:${"a".repeat(64)}`,
   checkpointProgressDigest: `sha256:${"d".repeat(64)}`,
+  checkpointRef: {
+    digest: `sha256:${"a".repeat(64)}`,
+    eventCount: 0,
+    id: "123e4567-e89b-42d3-a456-426614174001",
+  },
+  createdAtEpochMs: 1,
+  lastProgressAtEpochMs: 1,
+  originAdapterSessionId: "native",
+  principal,
+  resumability: "live",
+  sessionId: "source",
+  stage: "needs_attention",
+  status: "input_required",
+  title: "App",
+  updatedAtEpochMs: 1,
+  version: 2,
 });
 const descriptor = {
-  version: 1 as const,
-  operationId: "transfer",
-  sourcePublicSessionId: source.sessionId,
-  sourceOwnerRunId: source.adapterSessionId,
-  sourceAdapterGeneration: 1,
-  logicalSessionId: source.adapterSessionId,
-  originalAuthoritySessionId: source.sessionId,
-  parentCancellationRevision: 0,
   executionTransfer: {
     kind: "pending-approval" as const,
     sourceCheckpointDigest: `sha256:${"a".repeat(64)}`,
   },
+  logicalSessionId: source.adapterSessionId,
+  operationId: "transfer",
+  originalAuthoritySessionId: source.sessionId,
+  parentCancellationRevision: 0,
+  sourceAdapterGeneration: 1,
+  sourceOwnerRunId: source.adapterSessionId,
+  sourcePublicSessionId: source.sessionId,
+  version: 1 as const,
 };
 const transfer = hostedOperationRecordSchema.parse({
-  version: 1,
-  kind: "start",
   clientRequestId: "transfer",
-  operationId: "transfer",
-  resumeSessionId: source.sessionId,
-  nativeRecovery: descriptor,
-  principal,
-  state: "reserved",
-  requestDigest: `sha256:${"b".repeat(64)}`,
   createdAtEpochMs: 2,
+  kind: "start",
+  nativeRecovery: descriptor,
+  operationId: "transfer",
+  principal,
+  requestDigest: `sha256:${"b".repeat(64)}`,
+  resumeSessionId: source.sessionId,
+  state: "reserved",
   updatedAtEpochMs: 2,
+  version: 1,
 });
 const response = (state: "reserved" | "submission_unknown", operationId = "response") =>
   hostedOperationRecordSchema.parse({
@@ -81,19 +81,19 @@ const response = (state: "reserved" | "submission_unknown", operationId = "respo
 const seed = async (store: InMemoryHostedEveStore, session: typeof source) => {
   const operation = hostedOperationRecordSchema.parse({
     ...transfer,
-    nativeRecovery: undefined,
-    resumeSessionId: undefined,
-    operationId: `initial-${session.sessionId}`,
     clientRequestId: `initial-${session.sessionId}`,
+    nativeRecovery: undefined,
+    operationId: `initial-${session.sessionId}`,
+    resumeSessionId: undefined,
   });
   await store.reserveOperation(principal, operation);
   await store.settleSucceeded({
-    principal,
-    operationId: operation.operationId,
-    requestDigest: operation.requestDigest,
     nowEpochMs: 2,
+    operationId: operation.operationId,
+    principal,
+    requestDigest: operation.requestDigest,
+    result: { cursor: 0, events: [], sessionId: session.sessionId, status: session.status },
     session,
-    result: { sessionId: session.sessionId, status: session.status, cursor: 0, events: [] },
   });
 };
 const fixture = async () => {
@@ -126,9 +126,9 @@ describe("explicit live native takeover", () => {
     expect(await disposition(store, recovery)).toBe("existing");
     expect(await disposition(store, { ...response("reserved"), kind: "send" })).toBe("rejected");
     const cancelled = await store.recordCancellationIntent({
+      nowEpochMs: 3,
       principal,
       sessionId: source.sessionId,
-      nowEpochMs: 3,
     });
     expect(() => {
       assertNativeRecoverySourceBinding(recovery, cancelled, {
@@ -187,8 +187,8 @@ describe("explicit live native takeover", () => {
     expect(
       eveStartInputSchema.parse({
         clientRequestId: "x",
-        resumeSessionId: source.sessionId,
         resumeMode: "recover",
+        resumeSessionId: source.sessionId,
       }).resumeMode,
     ).toBe("recover");
   });
@@ -203,12 +203,12 @@ describe("explicit live native takeover", () => {
     const reserved = response("reserved");
     await store.reserveOperation(principal, reserved);
     await store.settleUnsuccessful({
-      principal,
-      operationId: reserved.operationId,
-      requestDigest: reserved.requestDigest,
-      state: "submission_unknown",
-      safeErrorCode: "submission_unknown",
       nowEpochMs: 2,
+      operationId: reserved.operationId,
+      principal,
+      requestDigest: reserved.requestDigest,
+      safeErrorCode: "submission_unknown",
+      state: "submission_unknown",
     });
     expect(await disposition(store, transfer)).toBe("reserved");
     expect(await disposition(store, response("reserved", "later"))).toBe("rejected");
@@ -220,9 +220,9 @@ describe("explicit live native takeover", () => {
     const store = await fixture();
     await store.reserveOperation(principal, transfer);
     const cancelled = await store.recordCancellationIntent({
+      nowEpochMs: 3,
       principal,
       sessionId: source.sessionId,
-      nowEpochMs: 3,
     });
     expect(() => {
       assertNativeRecoverySourceBinding(transfer, cancelled, descriptor);
@@ -233,9 +233,9 @@ describe("explicit live native takeover", () => {
     await store.reserveOperation(principal, transfer);
     await seed(store, {
       ...source,
-      sessionId: "child",
       adapterSessionId: "new-native",
       originAdapterSessionId: "new-native",
+      sessionId: "child",
     });
     expect(
       await disposition(store, {

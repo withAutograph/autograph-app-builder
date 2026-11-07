@@ -16,6 +16,9 @@ import { validateApplicationSourceArtifact } from "../handoff/application-source
 
 const remote = "https://github.com/withAutograph/arrusted-development.git";
 const roots: string[] = [];
+const unsupported = async (): Promise<never> => {
+  throw new Error("Unused Sandbox port");
+};
 const git = (root: string, args: readonly string[]) =>
   execFileSync(
     "/usr/bin/git",
@@ -24,7 +27,7 @@ const git = (root: string, args: readonly string[]) =>
   ).trim();
 afterEach(() => {
   for (const root of roots.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { force: true, recursive: true });
   }
 });
 const fixture = (existing?: "main" | "provider-default" | "historical-main") => {
@@ -80,33 +83,24 @@ const fixture = (existing?: "main" | "provider-default" | "historical-main") => 
     const result = spawnSync("/bin/sh", ["-c", mapped], {
       cwd: root,
       encoding: "utf-8",
-      env: { PATH: `${bin}:/usr/bin:/bin`, HOME: "/dev/null", NODE_ENV: "test" },
+      env: { HOME: "/dev/null", NODE_ENV: "test", PATH: `${bin}:/usr/bin:/bin` },
     });
     return {
       exitCode: result.status ?? 1,
-      stdout: result.stdout ?? "",
       stderr: result.stderr ?? "",
+      stdout: result.stdout ?? "",
     };
   });
   const file = (name: string) =>
     path.join(checkout, name.replace(/^\/workspace\/repository\//u, ""));
-  const unsupported = async (): Promise<never> => {
-    throw new Error("Unused Sandbox port");
-  };
   const sandbox: SandboxSession & {
     id: string;
     materializeGitSource: typeof materializeGitSource;
   } = {
-    spawn: unsupported,
-    readFile: unsupported,
-    readBinaryFile: unsupported,
-    writeFile: unsupported,
-    writeBinaryFile: unsupported,
-    removePath: unsupported,
-    resolvePath: (value) => value,
     id: "owned-workspace",
-    run,
     materializeGitSource,
+    readBinaryFile: unsupported,
+    readFile: unsupported,
     readTextFile: async ({ path: name }: { path: string }) => {
       try {
         return readFileSync(file(name), "utf-8");
@@ -114,6 +108,12 @@ const fixture = (existing?: "main" | "provider-default" | "historical-main") => 
         return null;
       }
     },
+    removePath: unsupported,
+    resolvePath: (value) => value,
+    run,
+    spawn: unsupported,
+    writeBinaryFile: unsupported,
+    writeFile: unsupported,
     writeTextFile: async ({ path: name, content }: { path: string; content: string }) => {
       const target = file(name);
       mkdirSync(path.dirname(target), { recursive: true });
@@ -121,33 +121,33 @@ const fixture = (existing?: "main" | "provider-default" | "historical-main") => 
       writes.push(name);
     },
   };
-  const acquire = () =>
-    acquireCanonicalArrustedTemplate({
-      sandbox,
+  const acquire = async () =>
+    await acquireCanonicalArrustedTemplate({
       callId: "fresh-source",
       reader: { acquire: async () => ({ token: "fixture-token-never-retained" }) },
+      sandbox,
     });
   return {
-    root,
-    origin,
+    acquire,
     checkout,
-    oldSha,
+    commands,
     mainSha,
     mainTree,
-    sandbox,
-    acquire,
-    writes,
-    commands,
     materializeGitSource,
+    oldSha,
+    origin,
+    root,
+    sandbox,
+    writes,
   };
 };
 it("selects current main even when the provider default branch differs", async () => {
   const f = fixture();
   const receipt = await f.acquire();
   expect(f.materializeGitSource).toHaveBeenCalledWith({
+    revision: "main",
     token: "fixture-token-never-retained",
     url: remote,
-    revision: "main",
   });
   expect(receipt.sourceSha).toBe(f.mainSha);
   expect(receipt.sourceTree).toBe(f.mainTree);
@@ -179,7 +179,7 @@ it("accepts a genuine preexisting main checkout and leaves its saved receipt fro
   git(f.checkout, ["update-ref", "refs/remotes/origin/main", f.oldSha]);
   const beforeCommands = f.commands.length;
   await expect(
-    inspectCanonicalArrustedSandboxWorkspace({ sandbox: f.sandbox, receipt }),
+    inspectCanonicalArrustedSandboxWorkspace({ receipt, sandbox: f.sandbox }),
   ).resolves.toMatchObject({ sourceSha: f.mainSha, sourceTree: f.mainTree });
   expect(f.commands).toHaveLength(beforeCommands);
   expect(JSON.stringify(receipt)).toBe(frozen);
@@ -190,43 +190,43 @@ it("imports old app-only bytes onto the selected new platform without replacing 
   const appBytes = Buffer.from("app source authored against an older local platform");
   const appPath = "apps/spend/app.ts";
   const validated = validateApplicationSourceArtifact({
+    files: [{ contentBase64: appBytes.toString("base64"), path: appPath }],
     manifest: {
-      version: 1,
-      kind: "application-source-v1",
       appId: "spend",
       displayName: "Spend",
-      sourceSessionId: "old-local-session",
       files: [
         {
-          path: appPath,
-          mode: "100644",
-          sha256: createHash("sha256").update(appBytes).digest("hex"),
           bytes: appBytes.length,
+          mode: "100644",
+          path: appPath,
+          sha256: createHash("sha256").update(appBytes).digest("hex"),
         },
       ],
+      kind: "application-source-v1",
       omissions: [],
+      sourceSessionId: "old-local-session",
+      version: 1,
     },
-    files: [{ path: appPath, contentBase64: appBytes.toString("base64") }],
   });
   const staging = path.join(f.root, "import");
   mkdirSync(staging);
   const receipt = {
-    version: 1 as const,
-    kind: "application-source-import-v1" as const,
-    reference: {
-      kind: "application-source-candidate-v1" as const,
-      uploadId: "f60af72a-c4b4-49c8-8b6a-348c111f7829",
-      appId: "spend",
-      manifestDigest: validated.manifestDigest,
-    },
-    sourceSessionId: "old-local-session",
-    importedSessionId: "fresh-hosted-session",
-    platformSourceReceiptDigest: platform.digest,
-    workspaceId: "owned-workspace",
     appRoot: "apps/spend",
     importedByCallId: "fresh-import",
+    importedSessionId: "fresh-hosted-session",
+    kind: "application-source-import-v1" as const,
+    platformSourceReceiptDigest: platform.digest,
+    reference: {
+      appId: "spend",
+      kind: "application-source-candidate-v1" as const,
+      manifestDigest: validated.manifestDigest,
+      uploadId: "f60af72a-c4b4-49c8-8b6a-348c111f7829",
+    },
+    sourceSessionId: "old-local-session",
+    version: 1 as const,
+    workspaceId: "owned-workspace",
   };
-  const plan = { receipt, files: validated.artifact.manifest.files, staging };
+  const plan = { files: validated.artifact.manifest.files, receipt, staging };
   writeFileSync(path.join(staging, "plan.json"), JSON.stringify(plan));
   writeFileSync(path.join(staging, "0.base64"), appBytes.toString("base64"));
   const script = path.join(staging, "import.cjs");

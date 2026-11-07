@@ -38,34 +38,34 @@ const providerRow = z.object({
 type ProviderRow = z.infer<typeof providerRow>;
 // Public Vercel project Trusted Sources schema; retain unrelated provider-owned fields on round-trip.
 const trustedEnvironmentSet = z.looseObject({
-  slugs: z.array(z.string()).optional(),
   preset: z.literal("all-custom").optional(),
+  slugs: z.array(z.string()).optional(),
 });
 const trustedProjectSource = z.looseObject({
-  label: z.string().optional(),
   customAllow: z
     .array(z.looseObject({ from: trustedEnvironmentSet, to: trustedEnvironmentSet }))
     .optional(),
+  label: z.string().optional(),
 });
 const trustedSourcesSchema = z.looseObject({
-  projects: z.record(z.string(), trustedProjectSource).optional(),
+  enableVercelCiSameRepository: z.boolean().optional(),
   oidcProviders: z
     .record(
       z.string(),
       z.array(
         z.looseObject({
-          label: z.string().optional(),
           claims: z.record(z.string(), z.array(z.string())),
+          label: z.string().optional(),
           to: trustedEnvironmentSet,
         }),
       ),
     )
     .optional(),
-  enableVercelCiSameRepository: z.boolean().optional(),
+  projects: z.record(z.string(), trustedProjectSource).optional(),
 });
 const trustedProjectSnapshot = z.object({
-  id: z.string(),
   accountId: z.string(),
+  id: z.string(),
   trustedSources: trustedSourcesSchema.nullish(),
 });
 type TrustedSourceRule = NonNullable<
@@ -345,8 +345,8 @@ const providerRejection = async (response: Response) => {
   }
   return {
     httpStatus,
-    reason: providerFailure.gitRelated ? "git_reference_rejection" : "provider_rejected",
     providerCode: providerFailure.providerCode,
+    reason: providerFailure.gitRelated ? "git_reference_rejection" : "provider_rejected",
   } as const;
 };
 const createFailureReporter = (
@@ -354,19 +354,12 @@ const createFailureReporter = (
   sink: HostedOperatorConsentDiagnosticSink | undefined,
 ) => {
   const failure: HostedEnvironmentBindingFailure = {
-    stage: "input_validation",
     reason: "input_rejected",
+    stage: "input_validation",
   };
   return {
-    stage: () => failure.stage,
-    trustedSources: (
-      visibility: NonNullable<HostedEnvironmentBindingFailure["trustedSourcesVisibility"]>,
-      approvedSourcePresent: boolean,
-      approvedPairCovered: boolean,
-    ) => {
-      failure.trustedSourcesVisibility = visibility;
-      failure.approvedSourcePresent = approvedSourcePresent;
-      failure.approvedPairCovered = approvedPairCovered;
+    report: () => {
+      reportHostedEnvironmentBindingFailure(sessionId, failure, sink);
     },
     requestTarget: (requestTarget: HostedEnvironmentBindingFailure["requestTarget"]) => {
       if (requestTarget === undefined) {
@@ -394,8 +387,15 @@ const createFailureReporter = (
         failure.httpStatus = httpStatus;
       }
     },
-    report: () => {
-      reportHostedEnvironmentBindingFailure(sessionId, failure, sink);
+    stage: () => failure.stage,
+    trustedSources: (
+      visibility: NonNullable<HostedEnvironmentBindingFailure["trustedSourcesVisibility"]>,
+      approvedSourcePresent: boolean,
+      approvedPairCovered: boolean,
+    ) => {
+      failure.trustedSourcesVisibility = visibility;
+      failure.approvedSourcePresent = approvedSourcePresent;
+      failure.approvedPairCovered = approvedPairCovered;
     },
   };
 };
@@ -543,7 +543,7 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       if (renewal !== undefined && project.trustedSources === undefined) {
         throw unavailable();
       }
-      return { sources, missing: !covered };
+      return { missing: !covered, sources };
     };
     const bindTrustedSources = async () => {
       const observed = await observeTrustedSources();
@@ -581,7 +581,7 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       }
     };
     let writeGitBranch: Promise<string | null> | undefined;
-    const previewGitBranch = (diagnosticStage?: HostedEnvironmentBindingFailure["stage"]) => {
+    const previewGitBranch = async (diagnosticStage?: HostedEnvironmentBindingFailure["stage"]) => {
       writeGitBranch ??= (async () => {
         const project = await request(
           `/v9/projects/${encodeURIComponent(target.projectId)}`,
@@ -589,7 +589,7 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
           undefined,
           diagnosticStage,
         );
-        const observed = z.object({ id: z.string(), accountId: z.string() }).parse(project);
+        const observed = z.object({ accountId: z.string(), id: z.string() }).parse(project);
         if (observed.id !== target.projectId || observed.accountId !== target.scopeId) {
           throw unavailable();
         }
@@ -597,7 +597,7 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
           allowUnlinkedProject: true,
         });
       })();
-      return writeGitBranch;
+      return await writeGitBranch;
     };
     const list = async (diagnosticStage?: HostedEnvironmentBindingFailure["stage"]) =>
       z
@@ -797,18 +797,18 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       await guard();
     };
     return {
+      bindTrustedSources,
       checkpoint,
       checkpointCleanup,
-      inspectCleanup,
       comment,
       expected,
       guard,
       inspect,
+      inspectCleanup,
       matchesExpectedValues,
-      reference,
       observeTrustedSources,
-      bindTrustedSources,
       previewGitBranch,
+      reference,
       request,
       target: deploymentTarget,
     };
@@ -849,17 +849,18 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
               throw unavailable();
             }
             const gitBranch = await io.previewGitBranch();
+            interface EnvironmentScope {
+              comment: string;
+              gitBranch?: string;
+            }
+            const scope: EnvironmentScope = { comment: io.comment };
+            if (gitBranch !== null) {
+              scope.gitBranch = gitBranch;
+            }
             await io.request(
               `/v10/projects/${encodeURIComponent(io.target.projectId)}/env`,
               "POST",
-              {
-                comment: io.comment,
-                ...(gitBranch === null ? {} : { gitBranch }),
-                key,
-                target: ["preview"],
-                type: "encrypted",
-                value,
-              },
+              { ...scope, key, target: ["preview"], type: "encrypted", value },
             );
           }
           rows = await io.inspect(false, "readback");
@@ -920,10 +921,10 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
         if (staleOwnedValue || protection?.missing === true) {
           await io.guard();
           return {
-            status: "retryable",
             resourceVersion: createHash("sha256")
               .update(JSON.stringify(protection?.sources ?? rows.map(io.reference)))
               .digest("hex"),
+            status: "retryable",
           };
         }
         if (rows.length === 0) {

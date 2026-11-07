@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import { TOOL_NAMES } from "../../scripts/portable-release";
 import {
@@ -23,11 +24,11 @@ describe("development Codex package", () => {
         codexHome,
         installPlugin: false,
         marketplaceRoot: "/private/another-instance/marketplace",
-        version: "0.0.0-development.3200",
         runner: async () => {
           commands += 1;
           throw new Error("An endpoint-only launch must not execute Codex commands.");
         },
+        version: "0.0.0-development.3200",
       });
       expect(result).toMatchObject({ installed: false });
       expect(commands).toBe(0);
@@ -47,13 +48,11 @@ describe("development Codex package", () => {
         codexHome,
         installPlugin: false,
         marketplaceRoot: "/private/another-instance/marketplace",
-        version: "0.0.0-development.3200",
-        runner: () => {
+        runner: async () => {
           commands += 1;
-          return Promise.reject(
-            new Error("An endpoint-only launch must not execute Codex commands."),
-          );
+          throw new Error("An endpoint-only launch must not execute Codex commands.");
         },
+        version: "0.0.0-development.3200",
       });
       expect(result).toMatchObject({ installed: false });
       expect(commands).toBe(0);
@@ -71,17 +70,19 @@ describe("development Codex package", () => {
         port: 3210,
         repositoryRoot: path.resolve("."),
       });
-      const marketplace = JSON.parse(
+      const marketplace: unknown = JSON.parse(
         await readFile(
           path.join(result.marketplaceRoot, ".agents/plugins/marketplace.json"),
           "utf-8",
         ),
       );
-      const manifest = JSON.parse(
+      const manifest: unknown = JSON.parse(
         await readFile(path.join(result.pluginRoot, ".codex-plugin/plugin.json"), "utf-8"),
       );
-      const mcp = JSON.parse(await readFile(path.join(result.pluginRoot, ".mcp.json"), "utf-8"));
-      const tools = JSON.parse(
+      const mcp: unknown = JSON.parse(
+        await readFile(path.join(result.pluginRoot, ".mcp.json"), "utf-8"),
+      );
+      const tools: unknown = JSON.parse(
         await readFile(path.join(result.pluginRoot, "tools-list.json"), "utf-8"),
       );
       expect(result.marketplaceRoot).toBe(path.join(root, "marketplace"));
@@ -97,11 +98,13 @@ describe("development Codex package", () => {
           },
         ],
       });
-      expect(manifest.name).toBe("app-builder");
-      expect(manifest.version).toBe("0.0.0-development.3210");
-      expect(manifest.interface).toMatchObject({
-        displayName: "Autograph App Builder (Development)",
-        shortDescription: "Build with local App Builder and Arrusted changes",
+      expect(manifest).toMatchObject({
+        interface: {
+          displayName: "Autograph App Builder (Development)",
+          shortDescription: "Build with local App Builder and Arrusted changes",
+        },
+        name: "app-builder",
+        version: "0.0.0-development.3210",
       });
       expect(manifest).not.toHaveProperty("apps");
       expect(mcp).toEqual({
@@ -130,26 +133,37 @@ describe("development Codex package", () => {
     const root = await realpath(await mkdtemp(path.join(tmpdir(), "autograph-native-package-")));
     try {
       const result = await createDevelopmentPackage({
-        repositoryRoot: path.resolve("."),
+        hostedSession: {
+          codexBin: "/tools/codex",
+          cwd: "/private/native-client",
+          nodeBin: "/tools/node",
+          resourceUrl: "https://builder.example.test/mcp",
+        },
         outputRoot: root,
         port: 3210,
-        hostedSession: {
-          resourceUrl: "https://builder.example.test/mcp",
-          codexBin: "/tools/codex",
-          nodeBin: "/tools/node",
-          cwd: "/private/native-client",
-        },
+        repositoryRoot: path.resolve("."),
       });
-      const mcp = JSON.parse(await readFile(path.join(result.pluginRoot, ".mcp.json"), "utf-8"));
-      const server = mcp.mcpServers["app-builder-dev-3210-hosted"];
+      const parsedMcp = z
+        .object({
+          mcpServers: z.object({
+            "app-builder-dev-3210-hosted": z.object({
+              args: z.array(z.string()),
+              command: z.string(),
+              type: z.string(),
+            }),
+          }),
+        })
+        .parse(JSON.parse(await readFile(path.join(result.pluginRoot, ".mcp.json"), "utf-8")));
+      const servers = parsedMcp.mcpServers;
+      const server = servers["app-builder-dev-3210-hosted"];
       expect(server.type).toBe("stdio");
       expect(server.command).toBe("/tools/node");
       expect(server.args).toContain("https://builder.example.test/mcp");
       expect(server.args).toContain("/tools/codex");
       expect(server).not.toHaveProperty("oauth_resource");
       expect(result.receipt).toMatchObject({
-        hostedSessionResource: "https://builder.example.test/mcp",
         execution: "hosted",
+        hostedSessionResource: "https://builder.example.test/mcp",
       });
     } finally {
       await rm(root, { force: true, recursive: true });

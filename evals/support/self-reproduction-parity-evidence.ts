@@ -12,19 +12,23 @@ import {
 import type { Observation, ParityEvidence } from "./self-reproduction-parity";
 
 const side = z.enum(sides);
-const requirementId = z.enum(requirements.map((row) => row.id));
-const runtimeRequirementIds = new Set<string>(
-  requirements.filter((row) => row.kind !== "capture").map((row) => row.id),
-);
+const requirementIds: string[] = [];
+const runtimeRequirementIds = new Set<string>();
+for (const row of requirements) {
+  requirementIds.push(row.id);
+  if (row.kind !== "capture") {
+    runtimeRequirementIds.add(row.id);
+  }
+}
+const requirementId = z.enum(requirementIds);
 
 export const runtimeReceiptSchema = z
-  .object({
+  .strictObject({
     observation: observationSchema,
     producer: z.literal("evaluator"),
     schemaVersion: z.literal("self-reproduction-runtime-receipt/v1"),
     side,
   })
-  .strict()
   .superRefine((value, ctx) => {
     if (!runtimeRequirementIds.has(value.observation.requirementId)) {
       ctx.addIssue({
@@ -33,9 +37,8 @@ export const runtimeReceiptSchema = z
       });
     }
   });
-
 export const captureReceiptSchema = z
-  .object({
+  .strictObject({
     artifacts: observationSchema.shape.artifacts,
     assertions: observationSchema.shape.assertions,
     disposition: z.enum([
@@ -51,11 +54,10 @@ export const captureReceiptSchema = z
     state: z.enum(captureStates),
     viewport: z.object({
       height: z.number().int().positive(),
-      name: z.enum(desktopViewports.map((item) => item.name)),
+      name: z.enum(["desktop", "desktop-wide", "desktop-window"]),
       width: z.number().int().positive(),
     }),
   })
-  .strict()
   .superRefine((value, ctx) => {
     const expected = `capture/${value.viewport.name}/${value.state}`;
     if (value.requirementId !== expected) {
@@ -68,7 +70,18 @@ export const captureReceiptSchema = z
         message: "Capture viewport does not match the parity matrix",
       });
     }
-  });
+  })
+  .transform((receipt) => ({
+    observation: {
+      artifacts: receipt.artifacts,
+      assertions: receipt.assertions,
+      disposition: receipt.disposition,
+      method: receipt.method,
+      reason: receipt.reason,
+      requirementId: receipt.requirementId,
+    },
+    side: receipt.side,
+  }));
 
 export interface EvidenceSideInput {
   output: "available" | "missing" | "infrastructure-unavailable";
@@ -97,8 +110,7 @@ export const parityEvidenceFromReceipts = (input: ParityReceiptInput): ParityEvi
   }
   for (const raw of input.captureReceipts ?? []) {
     const receipt = captureReceiptSchema.parse(raw);
-    const { side: receiptSide, viewport: _viewport, state: _state, ...observation } = receipt;
-    observations[receiptSide].push(observation);
+    observations[receipt.side].push(receipt.observation);
   }
   return parityEvidenceSchema.parse({
     candidate: { ...input.candidate, observations: observations.candidate },

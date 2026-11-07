@@ -89,11 +89,10 @@ export const startManagedRuntimeIpc = async (input: {
     await chmod(socketPath, 0o600);
   } catch {
     server.close();
-    await rm(directory, { recursive: true, force: true });
+    await rm(directory, { force: true, recursive: true });
     throw unavailable();
   }
   return {
-    socketPath,
     async close() {
       for (const socket of connections) {
         socket.destroy();
@@ -107,8 +106,9 @@ export const startManagedRuntimeIpc = async (input: {
           }
         });
       });
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { force: true, recursive: true });
     },
+    socketPath,
   };
 };
 

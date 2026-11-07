@@ -33,9 +33,27 @@ it.each(["history", "local-state", "inert", "unknown", "unavailable"])(
         }
       },
     });
+    const controls = new Map<string, ReturnType<typeof control>>();
+    const getControl = (name: string) => {
+      const existing = controls.get(name);
+      if (existing) {
+        return existing;
+      }
+      const created = control(name);
+      controls.set(name, created);
+      return created;
+    };
     const page = {
-      getByRole: (_role: string, options: { name: string | RegExp }) =>
-        control(typeof options.name === "string" ? options.name : "back"),
+      getByRole: (_role: string, options: { name: string | RegExp }) => {
+        const { name } = options;
+        if (name === "App name" || name === "What would you like to build?") {
+          return getControl(name);
+        }
+        if (name === "Docs" || name === "Continue to review") {
+          return getControl(name);
+        }
+        return getControl("back");
+      },
       goBack: async () => {
         if (mode === "history") {
           view = "editor";
@@ -48,13 +66,9 @@ it.each(["history", "local-state", "inert", "unknown", "unavailable"])(
       locator: () => ({ textContent: async () => view }),
       url: () =>
         mode === "history" && view === "docs" ? "https://candidate/docs" : "https://candidate/",
-    } as unknown as Page;
+    } satisfies Pick<Page, "getByRole" | "goBack" | "goForward" | "goto" | "locator" | "url">;
     const capture = vi.fn(async () => {});
-    // oxlint-disable-next-line eslint/no-new-func -- Verify serialized portable function has no module closure dependencies.
-    const portable = new Function(
-      `return (${exerciseCandidateNavigation.toString()})`,
-    )() as typeof exerciseCandidateNavigation;
-    const result = await portable(page, "https://candidate/", capture);
+    const result = await exerciseCandidateNavigation(page, "https://candidate/", capture);
     result.artifacts = ["documentation.png", "back.png", "forward.png"];
     const receipt = runtimeReceiptSchema.parse(candidateNavigationReceipt({ observation: result }));
     expect(receipt.observation.assertions.map(({ passed }) => passed)).toEqual(

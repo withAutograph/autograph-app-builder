@@ -36,73 +36,73 @@ export const publicReleaseSelectionSchema = z.strictObject({
 });
 export const publicReleaseSourceDeliveryScopeSchema = z.strictObject({
   kind: z.literal("builder-created-app-repository"),
-  provisioningRequestId: z.uuid(),
   provisioningDigest: digest,
+  provisioningRequestId: z.uuid(),
 });
 export const publicReleasePlanSchema = z
   .strictObject({
-    version: z.literal(1),
-    kind: z.literal("public-app-release-v1"),
-    /** Absence preserves the first additive release contract as application delivery. */
-    purpose: z.enum(["auth-bootstrap", "application"]).optional(),
     authority: hostedTenantAuthoritySchema,
-    selection: publicReleaseSelectionSchema,
-    project: z.strictObject({
-      projectId: id,
-      teamId: id,
-      installationId: id,
-      provisioningRequestId: z.uuid(),
-      provisioningDigest: digest,
-      framework: z.literal("services"),
-      rootDirectory: z.literal("."),
-      deploymentAccess: z.literal("public-app"),
-      environment: z.literal("production"),
-      priorActiveDeploymentId: id.nullable().optional(),
-    }),
-    source: z.strictObject({
-      deliveryScope: publicReleaseSourceDeliveryScopeSchema,
-      installationId: id,
-      repositoryId: id,
-      sourceBranch: id,
-      sourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
-      productionBranch: id,
-      expectedProductionSha: z.string().regex(/^[a-f0-9]{40}$/u),
-      reviewDigest: digest,
-    }),
-    runtime: z.strictObject({
-      operationRef: z.uuid(),
-      planDigest: digest,
-      configurationRef: id,
-      realmEnrollmentRef: z.uuid().optional(),
-      releaseId: id,
-      providerEnvironment: z.literal("development"),
-      syntheticOnly: z.literal(true),
-    }),
-    publicOrigin: origin,
-    integrationCapability: appIntegrationReleaseAttachmentSchema.optional(),
-    retainedOptionalBindings: retainedOptionalIntegrationBindingsSchema.optional(),
-    integrationRemoval: appIntegrationRemovalSchema.optional(),
+    effects: z.union([
+      z.tuple([z.literal(publicReleaseEffects[1]), z.literal(publicReleaseEffects[2])]),
+      z.tuple([
+        z.literal(publicReleaseEffects[0]),
+        z.literal(publicReleaseEffects[1]),
+        z.literal(publicReleaseEffects[2]),
+      ]),
+    ]),
     environment: z
       .array(
         z.strictObject({
           key: z.string().regex(/^[A-Z_][A-Z0-9_]*$/u),
-          sha256: digest,
           priorBinding: z
             .strictObject({ id, operationRef: z.uuid(), valueSha256: digest })
             .optional(),
+          sha256: digest,
         }),
       )
       .min(1)
       .refine((rows) => new Set(rows.map((row) => row.key)).size === rows.length)
       .transform((rows) => rows.toSorted((left, right) => left.key.localeCompare(right.key))),
-    effects: z.union([
-      z.tuple([z.literal("bind-production-runtime"), z.literal("publish-release-source")]),
-      z.tuple([
-        z.literal("fence-app-integration-authority"),
-        z.literal("bind-production-runtime"),
-        z.literal("publish-release-source"),
-      ]),
-    ]),
+    integrationCapability: appIntegrationReleaseAttachmentSchema.optional(),
+    integrationRemoval: appIntegrationRemovalSchema.optional(),
+    kind: z.literal("public-app-release-v1"),
+    project: z.strictObject({
+      deploymentAccess: z.literal("public-app"),
+      environment: z.literal("production"),
+      framework: z.literal("services"),
+      installationId: id,
+      priorActiveDeploymentId: id.nullable().optional(),
+      projectId: id,
+      provisioningDigest: digest,
+      provisioningRequestId: z.uuid(),
+      rootDirectory: z.literal("."),
+      teamId: id,
+    }),
+    publicOrigin: origin,
+    /** Absence preserves the first additive release contract as application delivery. */
+    purpose: z.enum(["auth-bootstrap", "application"]).optional(),
+    retainedOptionalBindings: retainedOptionalIntegrationBindingsSchema.optional(),
+    runtime: z.strictObject({
+      configurationRef: id,
+      operationRef: z.uuid(),
+      planDigest: digest,
+      providerEnvironment: z.literal("development"),
+      realmEnrollmentRef: z.uuid().optional(),
+      releaseId: id,
+      syntheticOnly: z.literal(true),
+    }),
+    selection: publicReleaseSelectionSchema,
+    source: z.strictObject({
+      deliveryScope: publicReleaseSourceDeliveryScopeSchema,
+      expectedProductionSha: z.string().regex(/^[a-f0-9]{40}$/u),
+      installationId: id,
+      productionBranch: id,
+      repositoryId: id,
+      reviewDigest: digest,
+      sourceBranch: id,
+      sourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
+    }),
+    version: z.literal(1),
   })
   .superRefine((plan, context) => {
     if (plan.retainedOptionalBindings !== undefined) {
@@ -205,41 +205,41 @@ export const publicReleasePlanDigest = (plan: PublicReleasePlan) =>
 export const publicReleaseObservationSchema = z.discriminatedUnion("status", [
   z.strictObject({ status: z.literal("pending") }),
   z.strictObject({
-    status: z.literal("ready"),
     deploymentId: id,
-    projectId: id,
     environment: z.literal("production"),
+    projectId: id,
     publicOrigin: origin,
     releaseId: id,
+    status: z.literal("ready"),
   }),
 ]);
 export type PublicReleaseObservation = z.infer<typeof publicReleaseObservationSchema>;
 export const publicReleaseBindingStateSchema = z.strictObject({
-  state: z.enum(["idle", "pending", "applied"]),
   acceptedEnvId: id.optional(),
+  state: z.enum(["idle", "pending", "applied"]),
 });
 export type PublicReleaseBindingState = z.infer<typeof publicReleaseBindingStateSchema>;
 export const publicReleaseRecordSchema = z.strictObject({
-  kind: z.literal("public-app-release-v1"),
-  plan: publicReleasePlanSchema,
-  planDigest: digest,
   approvalReceipts: z.array(z.strictObject({ approvalId: id, approvedByCallId: id })).optional(),
-  executionLease: z
-    .strictObject({ leaseId: z.uuid(), fenceGeneration: z.number().int().positive() })
-    .optional(),
   bindings: z.record(z.string(), publicReleaseBindingStateSchema),
   effects: z.strictObject({
-    "fence-app-integration-authority": z.enum(["idle", "pending", "applied"]).optional(),
     "bind-production-runtime": z.enum(["idle", "pending", "applied"]),
+    "fence-app-integration-authority": z.enum(["idle", "pending", "applied"]).optional(),
     "publish-release-source": z.enum(["idle", "pending", "applied"]),
   }),
-  observation: publicReleaseObservationSchema.optional(),
+  executionLease: z
+    .strictObject({ fenceGeneration: z.number().int().positive(), leaseId: z.uuid() })
+    .optional(),
+  kind: z.literal("public-app-release-v1"),
   lastProviderFailure: z
     .strictObject({
-      phase: z.enum([...publicReleaseEffects, "observe-production"]),
       diagnostic: publicReleaseProviderDiagnosticSchema,
+      phase: z.enum([...publicReleaseEffects, "observe-production"]),
     })
     .optional(),
+  observation: publicReleaseObservationSchema.optional(),
+  plan: publicReleasePlanSchema,
+  planDigest: digest,
 });
 export type PublicReleaseRecord = z.infer<typeof publicReleaseRecordSchema>;
 export type PublicReleaseAuthority = z.infer<typeof hostedTenantAuthoritySchema>;
@@ -252,8 +252,8 @@ export const publicReleaseOperationRef = (plan: PublicReleasePlan) => {
 export const publicReleaseApprovalInputSchema = z
   .strictObject({
     operationRef: z.uuid(),
-    planDigest: digest,
     plan: publicReleasePlanSchema,
+    planDigest: digest,
   })
   .superRefine((input, context) => {
     if (

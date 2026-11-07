@@ -13,8 +13,8 @@ describe("existing app planning changes", () => {
     "app/(finance)/it's $HOME/page.tsx",
   ])("accepts the literal application filename %s", (file) => {
     expect(
-      existingAppChangesSchema.parse([{ path: `apps/example/${file}`, content: "source" }]),
-    ).toEqual([{ path: `apps/example/${file}`, content: "source" }]);
+      existingAppChangesSchema.parse([{ content: "source", path: `apps/example/${file}` }]),
+    ).toEqual([{ content: "source", path: `apps/example/${file}` }]);
   });
   it.each([
     "/apps/example/page.tsx",
@@ -29,7 +29,7 @@ describe("existing app planning changes", () => {
     "apps/example/\tpage.tsx",
     "apps/example/\u007Fpage.tsx",
   ])("rejects a noncanonical application filename %j", (path) => {
-    expect(existingAppChangesSchema.safeParse([{ path, content: "source" }]).success).toBe(false);
+    expect(existingAppChangesSchema.safeParse([{ content: "source", path }]).success).toBe(false);
   });
   it("accepts more files and content than the former Builder schema ceilings", () => {
     const parsed = existingAppChangesSchema.parse(

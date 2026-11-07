@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 
 import { activeBuilderModelId } from "../integrations/active-model";
 import type { BuilderProvisionJournalStore } from "../provisioning/journal";
@@ -11,6 +12,7 @@ import {
 } from "./deployment";
 import type { BuilderHandoffRecord } from "./contracts";
 import { createBuilderHandoffService } from "./service";
+import type { BuilderHandoffStore } from "./service";
 
 const origin = "https://builder.example.test";
 const authority = {
@@ -21,6 +23,7 @@ const authority = {
 };
 const creationRequestId = "123e4567-e89b-42d3-a456-426614174000";
 const handoffId = "123e4567-e89b-42d3-a456-426614174001";
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function route(input: { authenticated?: boolean } = {}) {
@@ -40,19 +43,21 @@ function route(input: { authenticated?: boolean } = {}) {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async renewExpired(renewalInput) {
         const record = rows.get(renewalInput.handoffId);
+        let result: Awaited<ReturnType<NonNullable<BuilderHandoffStore["renewExpired"]>>>;
         if (
-          !record ||
-          JSON.stringify(record.authority) !== JSON.stringify(renewalInput.authority) ||
-          record.requestDigest !== renewalInput.requestDigest
+          record &&
+          JSON.stringify(record.authority) === JSON.stringify(renewalInput.authority) &&
+          record.requestDigest === renewalInput.requestDigest
         ) {
-          return;
+          if (record.sessionId !== undefined || record.expiresAt > renewalInput.now) {
+            result = { disposition: "existing", record };
+          } else {
+            const updated = { ...record, expiresAt: renewalInput.expiresAt };
+            rows.set(record.handoffId, updated);
+            result = { disposition: "renewed", record: updated };
+          }
         }
-        if (record.sessionId !== undefined || record.expiresAt > renewalInput.now) {
-          return { disposition: "existing", record };
-        }
-        const updated = { ...record, expiresAt: renewalInput.expiresAt };
-        rows.set(record.handoffId, updated);
-        return { disposition: "renewed", record: updated };
+        return result;
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async reserve(record) {
@@ -68,11 +73,11 @@ function route(input: { authenticated?: boolean } = {}) {
     },
   });
   const journal = {
-    compareAndSet: vi.fn(),
+    compareAndSet: vi.fn<BuilderProvisionJournalStore["compareAndSet"]>(),
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    read: vi.fn(async () => {}),
-    reserve: vi.fn(),
-  } as unknown as BuilderProvisionJournalStore;
+    read: vi.fn<BuilderProvisionJournalStore["read"]>(async () => {}),
+    reserve: vi.fn<BuilderProvisionJournalStore["reserve"]>(),
+  } satisfies BuilderProvisionJournalStore;
   return {
     clock,
     handler: createBuilderHandoffRouteHandler({
@@ -99,7 +104,7 @@ function route(input: { authenticated?: boolean } = {}) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function request(body: unknown, input: { origin?: string } = {}) {
+function request(body: JsonValue, input: { origin?: string } = {}) {
   return new Request(`${origin}/api/builder/handoffs`, {
     body: JSON.stringify(body),
     headers: {
@@ -200,7 +205,13 @@ describe("builder handoff deployment", () => {
     const retry = await renew(request({ creationRequestId: randomUUID() }), handoffId);
     expect(first.status).toBe(200);
     expect(first.headers.get("cache-control")).toBe("no-store");
-    const reference = await first.json();
+    const reference = z
+      .looseObject({
+        expiresAt: z.string(),
+        handoffId: z.string(),
+        version: z.unknown(),
+      })
+      .parse(await first.json());
     expect(reference).toEqual(await retry.json());
     expect(Object.keys(reference).toSorted()).toEqual(["expiresAt", "handoffId", "version"]);
     expect(reference.handoffId).toBe(handoffId);
@@ -275,7 +286,7 @@ describe("builder handoff deployment", () => {
     const pageData = vi.fn();
     const status = createBuilderHandoffStatusRouteHandler({ pageData });
     const get = new Request(`${origin}/api/builder/handoffs/${handoffId}`);
-    pageData.mockImplementation(() => Promise.resolve());
+    pageData.mockImplementation(async () => {});
     const unauthenticated = await status(get, handoffId);
     expect(unauthenticated.status).toBe(401);
     pageData.mockRejectedValue(new Error("database secret"));
@@ -354,13 +365,14 @@ describe("builder handoff deployment", () => {
         controller.close();
       },
     });
+    const oversizedRequestInit: RequestInit & { duplex: "half" } = {
+      body: oversized,
+      duplex: "half",
+      headers: { "content-type": "application/json", origin },
+      method: "POST",
+    };
     const oversizedResponse = await route().handler(
-      new Request(`${origin}/api/builder/handoffs`, {
-        body: oversized,
-        duplex: "half",
-        headers: { "content-type": "application/json", origin },
-        method: "POST",
-      } as RequestInit & { duplex: "half" }),
+      new Request(`${origin}/api/builder/handoffs`, oversizedRequestInit),
     );
     expect(oversizedResponse.status).toBe(400);
   });

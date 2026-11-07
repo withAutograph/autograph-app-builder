@@ -19,53 +19,54 @@ import type {
 const workflowKey = "autograph-app-builder.workflow.v17";
 const candidateKey = "autograph-app-builder.draft-reconciliation.v1";
 const completionsKey = "autograph-app-builder.draft-reconciliation-completions.v1";
+const inputRequestedEventType = "input.requested";
 const part = z.looseObject({
-  type: z.string(),
-  toolCallId: z.string().optional(),
-  toolName: z.string().optional(),
-  input: z.unknown().optional(),
-  providerExecuted: z.boolean().optional(),
   approvalId: z.string().optional(),
   approved: z.boolean().optional(),
+  input: z.unknown().optional(),
+  providerExecuted: z.boolean().optional(),
+  toolCallId: z.string().optional(),
+  toolName: z.string().optional(),
+  type: z.string(),
 });
-const event = z.looseObject({ type: z.string(), data: z.looseObject({}) });
+const event = z.looseObject({ data: z.looseObject({}), type: z.string() });
 const candidateSchema = z.object({
-  origin: z.object({ slot: z.number().int().nonnegative() }),
-  serializedContext: z.looseObject({ "eve.sessionId": z.string() }),
-  sessionState: z.object({
-    snapshot: z.object({
-      session: z.object({
-        sessionId: z.string(),
-        history: z.array(
-          z.object({ role: z.string(), content: z.union([z.string(), z.array(part)]) }),
-        ),
-      }),
-    }),
-  }),
   incoming: z
     .object({
       runtimeResults: z.object({ results: z.array(z.object({ callId: z.string() })) }).optional(),
     })
     .optional(),
+  origin: z.object({ slot: z.number().int().nonnegative() }),
+  serializedContext: z.looseObject({ "eve.sessionId": z.string() }),
+  sessionState: z.object({
+    snapshot: z.object({
+      session: z.object({
+        history: z.array(
+          z.object({ content: z.union([z.string(), z.array(part)]), role: z.string() }),
+        ),
+        sessionId: z.string(),
+      }),
+    }),
+  }),
 });
 const payloadSchema = z.object({
-  binding: z.object({ ownerRunId: z.string(), logicalSessionId: z.string() }),
-  nativeEvents: z.array(z.unknown()),
+  binding: z.object({ logicalSessionId: z.string(), ownerRunId: z.string() }),
   candidates: z.array(z.unknown()),
+  nativeEvents: z.array(z.unknown()),
 });
 const requestSchema = z.object({
+  action: z.object({ callId: z.string(), input: z.unknown(), toolName: z.string() }),
   kind: z.literal("tool-approval"),
   requestId: z.string().min(1),
-  action: z.object({ callId: z.string(), toolName: z.string(), input: z.unknown() }),
 });
 const settlementSchema = z.object({
-  requestId: z.string(),
   outcome: z.enum(["approved", "cancelled"]),
+  requestId: z.string(),
   responderPrincipalId: z.string(),
 });
 const proposalInputSchema = z.strictObject({
-  expectedProposalDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   approvalReceipt: z.unknown(),
+  expectedProposalDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   recordCurrentEquivalentRelease: z.literal(true),
 });
 interface DraftReconciliationRecoveryInput {
@@ -95,7 +96,7 @@ const readRecoveryHistory = (
       return undefined;
     }
     if (
-      parsed.type === "input.requested" ||
+      parsed.type === inputRequestedEventType ||
       parsed.type === "approval.settled" ||
       parsed.type === "action.result"
     ) {
@@ -130,14 +131,15 @@ const uniqueHistoryApproval = (parts: Part[], callId: string): boolean => {
   const requests = parts.filter(
     (value) => value.type === "tool-approval-request" && value.toolCallId === callId,
   );
+  const [request] = requests;
   if (
     requests.length !== 1 ||
-    requests[0].approvalId === undefined ||
-    requests[0].approvalId.length === 0
+    request?.approvalId === undefined ||
+    request.approvalId.length === 0
   ) {
     return false;
   }
-  const approvalId = requests[0].approvalId;
+  const { approvalId } = request;
   const responses = parts.filter(
     (value) => value.type === "tool-approval-response" && value.approvalId === approvalId,
   );
@@ -153,7 +155,7 @@ const uniqueHistoryApproval = (parts: Part[], callId: string): boolean => {
 /** Native server frames, not a model/history approval response, establish the human decision. */
 const nativeHumanApproval = (events: Event[], call: Part, expectedPrincipalId: string): boolean => {
   const requests = events.flatMap((value, index) => {
-    if (value.type !== "input.requested") {
+    if (value.type !== inputRequestedEventType) {
       return [];
     }
     const parsed = z.object({ requests: z.array(z.unknown()) }).safeParse(value.data).data;
@@ -164,15 +166,16 @@ const nativeHumanApproval = (events: Event[], call: Part, expectedPrincipalId: s
         return [];
       }
       const request = requestSchema.safeParse(entry).data;
-      return [{ request, index }];
+      return [{ index, request }];
     });
   });
-  if (requests.length !== 1 || requests[0].request === undefined) {
+  const [candidate] = requests;
+  if (requests.length !== 1 || candidate?.request === undefined) {
     return false;
   }
-  const { request, index } = requests[0];
+  const { request, index } = candidate;
   const requestIdMatches = events.flatMap((value) => {
-    if (value.type !== "input.requested") {
+    if (value.type !== inputRequestedEventType) {
       return [];
     }
     const parsed = z.object({ requests: z.array(z.unknown()) }).safeParse(value.data).data;
@@ -199,7 +202,7 @@ const nativeHumanApproval = (events: Event[], call: Part, expectedPrincipalId: s
       return [];
     }
     const settlement = settlementSchema.safeParse(value.data).data;
-    return [{ settlement, settledIndex }];
+    return [{ settledIndex, settlement }];
   });
   if (settlements.length !== 1 || settlements[0].settlement === undefined) {
     return false;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useBuilderControllerContext } from "./builder-form-context";
+import { memo } from "react";
 import { ModelControls } from "./builder-model-controls";
 import { StoreInSection, DeployToSection } from "./builder-provider-controls";
 import { ConnectionsSection } from "./builder-connections";
@@ -70,7 +71,7 @@ export function BuilderAppDetails() {
       briefRegistration={builderForm.register("brief")}
       onAppNameChange={(appName) => {
         appNameEditedByUser.current = true;
-        generatedAppName.current = undefined;
+        generatedAppName.current = null;
         setForm((current) => ({
           ...current,
           appName,
@@ -81,7 +82,9 @@ export function BuilderAppDetails() {
       }}
       onBriefChange={updateBrief}
       onCycleBrief={() => {
-        const currentIndex = briefExamples.indexOf(form.brief as (typeof briefExamples)[number]);
+        const currentExample = briefExamples.find((example) => example === form.brief);
+        const currentIndex =
+          currentExample === undefined ? -1 : briefExamples.indexOf(currentExample);
         const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % briefExamples.length;
         updateBrief(briefExamples[nextIndex]);
       }}
@@ -97,13 +100,15 @@ export function BuilderDestination() {
       bare
       comingSoonEnabled={comingSoonEnabled}
       selected={form.buildDestination}
-      onChange={(buildDestination) => setForm((current) => ({ ...current, buildDestination }))}
+      onChange={(buildDestination) => {
+        setForm((current) => ({ ...current, buildDestination }));
+      }}
     />
   );
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function BuilderModel() {
+function builderModel() {
   const { form, integrations, model, modelOptions, zdrOnly, setModel, setZdrOnly, router } =
     useBuilderControllerContext();
   return form.buildDestination === "web" ? (
@@ -124,10 +129,14 @@ export function BuilderModel() {
           setModel("");
         }
       }}
-      onRetry={() => router.refresh()}
+      onRetry={() => {
+        router.refresh();
+      }}
     />
   ) : null;
 }
+
+export const BuilderModel = memo(builderModel);
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function BuilderStorage() {
@@ -168,7 +177,9 @@ export function BuilderStorage() {
       onPrivacyChange={(privateRepository) => {
         setForm((current) => ({ ...current, privateRepository }));
       }}
-      onConnect={() => beginProviderConnection("github")}
+      onConnect={() => {
+        void beginProviderConnection("github");
+      }}
     />
   );
 }
@@ -200,7 +211,9 @@ export function BuilderDeployment() {
       onTeamChange={(value) => {
         setTeam(value);
       }}
-      onConnect={() => beginProviderConnection("vercel")}
+      onConnect={() => {
+        void beginProviderConnection("vercel");
+      }}
     />
   );
 }
@@ -230,13 +243,15 @@ export function BuilderConnections() {
       onAdd={addConnection}
       onRemove={removeConnection}
       onSearchChange={setSearch}
-      onShowMore={() => setShowMoreConnections(true)}
-      onCustomize={(name) =>
+      onShowMore={() => {
+        setShowMoreConnections(true);
+      }}
+      onCustomize={(name) => {
         setConnectionFlow({
           name,
           stage: connectedConnections.includes(name) ? "configure" : "connect",
-        })
-      }
+        });
+      }}
     />
   );
 }
@@ -250,11 +265,13 @@ export function BuilderSubmit() {
         className={styles.createButton}
         type="submit"
         disabled={!canSubmit}
-        aria-describedby={submitGuidance ? "create-app-guidance" : undefined}
+        aria-describedby={
+          submitGuidance !== undefined && submitGuidance !== "" ? "create-app-guidance" : undefined
+        }
       >
         Create App
       </button>
-      {submitGuidance ? (
+      {submitGuidance !== undefined && submitGuidance !== "" ? (
         <p className={styles.submitGuidance} id="create-app-guidance">
           {submitGuidance}
         </p>

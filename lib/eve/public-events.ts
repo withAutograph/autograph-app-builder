@@ -203,15 +203,15 @@ const publicFailureDetail = (value: string) =>
 const publicBuilderFailure = (failure: { code: string; message: string }, operation?: string) => {
   const operationLabels = {
     apply_app_creation: "the private build",
+    "cleanup-app-hosted-runtime": "Preview cleanup",
     "prepare-app-hosted-runtime": "Preview setup",
     "prepare-app-production": "app setup",
-    "cleanup-app-hosted-runtime": "Preview cleanup",
-    validate_app_creation: "app validation",
-    "validate-app-creation": "app validation",
-    start_app_preview: "the app preview",
-    publish_github_draft_pr: "draft pull request publication",
     "publish-github-draft-pr": "draft pull request publication",
+    publish_github_draft_pr: "draft pull request publication",
     reconcile_github_draft_pr: "draft pull request update",
+    start_app_preview: "the app preview",
+    "validate-app-creation": "app validation",
+    validate_app_creation: "app validation",
     validate_github_draft_pr_reconciliation: "draft pull request checks",
   } as const satisfies Record<string, string>;
   const name =
@@ -1181,16 +1181,16 @@ const inputRequest = (request: {
   const approvalTitles = {
     apply_app_creation: "Build this app?",
     "cleanup-app-hosted-runtime": "Remove this app's Preview resources?",
-    "prepare-app-hosted-runtime": "Do you approve creating a preview?",
-    "prepare-app-production": "Set up your app’s data and access?",
-    "prepare-app-native-target": "Create this app's Preview project?",
     "export-app-hosted-data": "Export this customer’s app data privately?",
-    "run-app-continuity-tests": "Run this app continuity suite?",
-    "publish-github-draft-pr": "Publish the reviewed changes?",
     "finish-github-pr-delivery": "Merge the reviewed changes when checks pass?",
+    "prepare-app-hosted-runtime": "Do you approve creating a preview?",
+    "prepare-app-native-target": "Create this app's Preview project?",
+    "prepare-app-production": "Set up your app’s data and access?",
+    "publish-github-draft-pr": "Publish the reviewed changes?",
     publish_github_draft_pr: "Publish the reviewed changes?",
-    update_github_draft_pr: "Update the draft pull request?",
     reconcile_github_draft_pr: "Update the draft pull request?",
+    "run-app-continuity-tests": "Run this app continuity suite?",
+    update_github_draft_pr: "Update the draft pull request?",
   } as const;
   const toolName = request.action?.toolName;
   if (
@@ -1347,8 +1347,8 @@ export const projectInstalledEveEvent = (
       }
       const invitation = publicIdentityInvitationSchema.safeParse({
         callId: result.callId,
-        url: recordStringField(result.output, "authIdentityLink"),
         expiresAt: recordStringField(result.output, "authIdentityLinkExpiresAt"),
+        url: recordStringField(result.output, "authIdentityLink"),
       });
       return [
         {
@@ -1359,7 +1359,7 @@ export const projectInstalledEveEvent = (
           type: "assistant.message",
         },
         ...(invitation.success
-          ? [{ index, type: "auth_identity_invitation", identityInvitation: invitation.data }]
+          ? [{ identityInvitation: invitation.data, index, type: "auth_identity_invitation" }]
           : []),
       ];
     }
@@ -1398,7 +1398,7 @@ export const projectInstalledEveEvent = (
       return event.data.result.toolName === "prepare-app-hosted-runtime"
         ? [
             ...progress,
-            { index, type: "auth_identity_invitation_resolved", callId: event.data.result.callId },
+            { callId: event.data.result.callId, index, type: "auth_identity_invitation_resolved" },
           ]
         : progress;
     }

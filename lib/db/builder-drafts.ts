@@ -200,17 +200,19 @@ export function createBuilderDraftStore(database: Database): BuilderDraftStore {
     run: (store: BuilderDraftStore) => Promise<T>,
   ) => {
     const authority = hostedTenantAuthoritySchema.parse(authorityInput);
-    return database.transaction(async (transaction) => {
+    return await database.transaction(async (transaction) => {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`builder-draft:${JSON.stringify(authority)}`}, 0))`,
       );
-      return run(createUnlockedBuilderDraftStore(transaction));
+      return await run(createUnlockedBuilderDraftStore(transaction));
     });
   };
   return {
     ...unlocked,
-    archive: (input) => serialize(input.authority, (store) => store.archive(input)),
-    saveActive: (input) => serialize(input.authority, (store) => store.saveActive(input)),
+    archive: async (input) =>
+      await serialize(input.authority, async (store) => await store.archive(input)),
+    saveActive: async (input) =>
+      await serialize(input.authority, async (store) => await store.saveActive(input)),
   };
 }
 

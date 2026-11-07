@@ -7,10 +7,11 @@ import { createLocalJWKSet, jwtVerify } from "jose";
 import { expect, test } from "playwright/test";
 import type { Page } from "playwright/test";
 import postgres from "postgres";
+import { z } from "zod";
 
 import { cursorClientId, cursorRedirectUri, setupCursorClient } from "../../lib/auth/cursor-client";
 import { previewOAuthScopes } from "../../lib/auth/preview-oauth-contract";
-import * as schema from "../../lib/db/schema";
+import { member, organization, session, user } from "../../lib/db/schema";
 import {
   appOrigin,
   applicationCounts,
@@ -25,15 +26,18 @@ import {
 
 // Authorization codes, browser cookies, and tokens must not enter artifacts.
 test.use({ screenshot: "off", trace: "off", video: "off" });
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-test.beforeEach(async () => resetApplicationState());
-let callbackServer: Server | undefined;
+test.beforeEach(async () => {
+  await resetApplicationState();
+});
+let callbackServer: Server | null = null;
 test.afterEach(async () => {
   const server = callbackServer;
-  callbackServer = undefined;
-  if (server?.listening) {
+  callbackServer = null;
+  if (server?.listening === true) {
     server.closeAllConnections();
-    await server.close();
+    const closed = once(server, "close");
+    server.close();
+    await closed;
   }
 });
 
@@ -46,8 +50,31 @@ interface Tokens {
   scope: string;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function exchange(page: Page, form: Record<string, string>): Promise<Tokens> {
+const tokenResponseSchema = z.object({
+  access_token: z.string(),
+  refresh_token: z.string(),
+  scope: z.string(),
+  token_type: z.literal("Bearer"),
+});
+
+type ParsedTokens = z.infer<typeof tokenResponseSchema>;
+const validateTokenScope = (tokens: ParsedTokens): Tokens => {
+  if (tokens.scope !== previewOAuthScopes.join(" "))
+    throw new Error("Token response did not include the expected fields.");
+  return tokens;
+};
+
+const sessionResponseSchema = z.object({
+  session: z
+    .object({ activeOrganizationId: z.string().nullable().optional() })
+    .nullable()
+    .optional(),
+  user: z.object({ id: z.string().nullable().optional() }).nullable().optional(),
+});
+
+const jwksResponseSchema = z.object({ keys: z.array(z.record(z.string(), z.unknown())) });
+
+const exchange = async (page: Page, form: Record<string, string>): Promise<Tokens> => {
   // Catch transport/JSON failures so Playwright cannot render token request
   // parameters or raw provider errors in a failed assertion/report.
   try {
@@ -57,22 +84,18 @@ async function exchange(page: Page, form: Record<string, string>): Promise<Token
       maxRedirects: 0,
     });
     if (response.status() !== 200) throw new Error("Token endpoint request failed.");
-    const value = await response.json();
-    if (
-      typeof value.access_token !== "string" ||
-      typeof value.refresh_token !== "string" ||
-      value.token_type !== "Bearer" ||
-      value.scope !== previewOAuthScopes.join(" ")
-    )
-      throw new Error("Token response did not include the expected fields.");
-    return value as Tokens;
+    return validateTokenScope(tokenResponseSchema.parse(await response.json()));
   } catch {
     throw new Error("Client OAuth token exchange failed; sensitive details omitted.");
   }
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function verifyOwner(page: Page, tokens: Tokens, ownerUserId: string, workspaceId: string) {
+const verifyOwner = async (
+  page: Page,
+  tokens: Tokens,
+  ownerUserId: string,
+  workspaceId: string,
+) => {
   let stage = "JWKS readback";
   try {
     const response = await page.request.get(`${issuer}/jwks`);
@@ -80,7 +103,7 @@ async function verifyOwner(page: Page, tokens: Tokens, ownerUserId: string, work
     stage = "signature, issuer, audience, and lifetime verification";
     const { payload } = await jwtVerify(
       tokens.access_token,
-      createLocalJWKSet(await response.json()),
+      createLocalJWKSet(jwksResponseSchema.parse(await response.json())),
       {
         algorithms: ["ES256"],
         audience: resource,
@@ -94,7 +117,7 @@ async function verifyOwner(page: Page, tokens: Tokens, ownerUserId: string, work
   } catch {
     throw new Error(`Client OAuth ${stage} failed; sensitive details omitted.`);
   }
-}
+};
 
 test("web login and both emulated connections survive Cursor consent, token refresh, and repeat grants", async ({
   page,
@@ -104,11 +127,19 @@ test("web login and both emulated connections survive Cursor consent, token refr
   test.setTimeout(180_000);
   await finishOAuth(page, "GitHub");
   await page.goto("/");
-  const browserSession = await currentSession(page);
+  const parsedBrowserSession = sessionResponseSchema.safeParse(await currentSession(page));
+  const browserSession = parsedBrowserSession.success ? parsedBrowserSession.data : null;
   const ownerUserId = browserSession?.user?.id;
   const organizationId = browserSession?.session?.activeOrganizationId;
-  expect(typeof ownerUserId).toBe("string");
-  expect(typeof organizationId).toBe("string");
+  expect(ownerUserId).toEqual(expect.any(String));
+  expect(organizationId).toEqual(expect.any(String));
+  if (
+    ownerUserId === null ||
+    ownerUserId === undefined ||
+    organizationId === null ||
+    organizationId === undefined
+  )
+    throw new Error("Signed-in session is incomplete.");
   await installProvider(page, "GitHub");
   await installProvider(page, "Vercel");
   // Compare the established owner/workspace after both callbacks. Polling uses
@@ -117,10 +148,11 @@ test("web login and both emulated connections survive Cursor consent, token refr
   await expect
     .poll(
       async () => {
-        const session = await currentSession(page);
+        const parsedCurrent = sessionResponseSchema.safeParse(await currentSession(page));
+        const current = parsedCurrent.success ? parsedCurrent.data : null;
         return (
-          session?.user?.id === ownerUserId &&
-          session?.session?.activeOrganizationId === organizationId
+          current?.user?.id === ownerUserId &&
+          current?.session?.activeOrganizationId === organizationId
         );
       },
       { timeout: 30_000 },
@@ -144,9 +176,14 @@ test("web login and both emulated connections survive Cursor consent, token refr
         AND o.issuer = ${issuer} AND o.audience = ${resource}
     `;
     expect(memberships.length).toBe(1);
-    workspaceId = memberships[0].workspace_id;
-    expect(typeof workspaceId).toBe("string");
-    await setupCursorClient(drizzle(sql, { schema }), resource);
+    const [membership] = memberships;
+    if (membership === undefined) throw new Error("Workspace membership was not found.");
+    workspaceId = membership.workspace_id;
+    expect(workspaceId).toEqual(expect.any(String));
+    await setupCursorClient(
+      drizzle(sql, { schema: { member, organization, session, user } }),
+      resource,
+    );
   } finally {
     await sql.end();
   }
@@ -159,7 +196,8 @@ test("web login and both emulated connections survive Cursor consent, token refr
   });
   const handoffPath = new URL(page.url()).pathname;
   const handoffId = handoffPath.split("/").at(-1);
-  if (!handoffId) throw new Error("OAuth handoff URL did not include an ID.");
+  if (handoffId === undefined || handoffId.length === 0)
+    throw new Error("OAuth handoff URL did not include an ID.");
   await page.getByText("Set up Autograph in Cursor", { exact: true }).click();
   await expect(page.getByRole("link", { name: "Add Autograph to Cursor" })).toBeVisible();
 
@@ -189,7 +227,13 @@ test("web login and both emulated connections survive Cursor consent, token refr
       consentSubmissions += 1;
   });
 
-  let callback: URL | undefined;
+  interface CallbackReceipt {
+    code: string | null;
+    hasError: boolean;
+    state: string | null;
+  }
+  let callbackReceipt: CallbackReceipt | null = null;
+  const readCallbackReceipt = (): CallbackReceipt | null => callbackReceipt;
   // A loopback test receiver handles both consent's browser navigation and
   // repeat consent's HTTP redirect. It stands in for the desktop callback
   // listener only; no authorization response or token is fabricated.
@@ -199,7 +243,11 @@ test("web login and both emulated connections survive Cursor consent, token refr
       response.writeHead(404).end();
       return;
     }
-    callback = target;
+    callbackReceipt = {
+      code: target.searchParams.get("code"),
+      hasError: target.searchParams.has("error"),
+      state: target.searchParams.get("state"),
+    };
     response.writeHead(200, {
       "cache-control": "no-store",
       "content-type": "text/html",
@@ -215,9 +263,8 @@ test("web login and both emulated connections survive Cursor consent, token refr
     throw new Error("Local OAuth callback port 8787 is unavailable.");
   }
 
-  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-  async function grant(first: boolean) {
-    callback = undefined;
+  const grant = async (first: boolean) => {
+    callbackReceipt = null;
     const verifier = randomBytes(48).toString("base64url");
     const state = randomBytes(24).toString("base64url");
     const url = new URL(`${issuer}/oauth2/authorize`);
@@ -243,15 +290,19 @@ test("web login and both emulated connections survive Cursor consent, token refr
       await expect(page.getByText("dev@autograph.local", { exact: true })).toBeVisible();
       await page.getByRole("button", { exact: true, name: "Allow" }).click();
     }
-    await expect.poll(() => Boolean(callback), { timeout: 30_000 }).toBe(true);
-    const received = callback as URL | undefined;
-    const code = received?.searchParams.get("code");
-    if (
-      !received ||
-      received.searchParams.get("state") !== state ||
-      !code ||
-      received.searchParams.has("error")
-    ) {
+    await expect.poll(() => callbackReceipt !== null, { timeout: 30_000 }).toBe(true);
+    // SAFETY: the preceding poll completed only after the callback handler stored a URL.
+    if (callbackReceipt === null) throw new Error("OAuth callback was not received.");
+    const {
+      code,
+      hasError,
+      state: receivedState,
+    } = readCallbackReceipt() ?? {
+      code: null,
+      hasError: false,
+      state: null,
+    };
+    if (receivedState !== state || code === null || code.length === 0 || hasError) {
       throw new Error(
         "Cursor OAuth callback did not contain a valid state-bound authorization code.",
       );
@@ -266,13 +317,13 @@ test("web login and both emulated connections survive Cursor consent, token refr
     } catch {
       throw new Error("OAuth callback navigation failed; URL omitted.");
     }
-    return exchange(page, {
+    return await exchange(page, {
       code,
       code_verifier: verifier,
       grant_type: "authorization_code",
       redirect_uri: cursorRedirectUri,
     });
-  }
+  };
 
   const first = await grant(true);
   await verifyOwner(page, first, ownerUserId, workspaceId);
@@ -292,12 +343,14 @@ test("web login and both emulated connections survive Cursor consent, token refr
   expect(after.githubInstallations).toBe(before.githubInstallations);
   expect(after.vercelInstallations).toBe(before.vercelInstallations);
   expect(after.sessions).toBe(before.sessions);
-  const finalSession = await currentSession(page);
+  const finalSession = sessionResponseSchema.safeParse(await currentSession(page)).data ?? null;
   expect(finalSession?.user?.id === ownerUserId).toBe(true);
   const handoff = await page.request.get(`/api/builder/handoffs/${handoffId}`);
   expect(handoff.ok()).toBe(true);
-  const handoffBody = await handoff.json();
-  expect(handoffBody.status).toBe("prepared");
+  const handoffBody: unknown = await handoff.json();
+  const handoffStatusSchema = z.object({ status: z.string() });
+  const handoffStatus = handoffStatusSchema.safeParse(handoffBody);
+  expect(handoffStatus.success && handoffStatus.data.status).toBe("prepared");
   await expect(page.getByText("Continued in your app", { exact: false })).toHaveCount(0);
 
   // dev-emulated configures browser OAuth but not MCP_OAUTH_* or the hosted

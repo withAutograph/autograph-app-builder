@@ -32,10 +32,10 @@ import { assertReconciliationCompletionOwnerForSession } from "@/lib/agent/compi
 import { inspectDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
 
 const missingCompletion = () => ({
-  status: "completion_context_missing" as const,
-  recoveryRequired: true,
   nextAction:
     "The original approved proposal, reviews and exact compiled release association are unavailable. No GitHub write was attempted. Preserve this published head and resolve its source-recording context; do not republish it.",
+  recoveryRequired: true,
+  status: "completion_context_missing" as const,
 });
 
 export default defineTool({
@@ -57,9 +57,9 @@ export default defineTool({
         );
       }
       return await updatePublishedDraftRepair({
+        approvalReceipt: input.approvalReceipt,
         ctx,
         expectedProposalDigest: input.expectedProposalDigest,
-        approvalReceipt: input.approvalReceipt,
       });
     }
 
@@ -89,25 +89,25 @@ export default defineTool({
         return missingCompletion();
       }
       completion = {
-        preparation: "legacy-recording-only",
-        proposal: candidate.proposal,
-        review: candidate.review,
         appId: state.appSpec.appId,
         appReview: {
           appSpecDigest: state.reviewReceipt.appSpecDigest,
           changeSetDigest: state.reviewReceipt.changeSetDigest,
           digest: state.reviewReceipt.digest,
         },
-        root: candidate.root,
-        githubSourceDigest: candidate.githubSourceDigest,
         compilation: candidate.validation.compilation,
-        ...(candidate.publishedOrigin === undefined
-          ? {}
-          : { publishedOrigin: candidate.publishedOrigin }),
-        ...(candidate.publicationScope === undefined
-          ? {}
-          : { publicationScope: candidate.publicationScope }),
+        githubSourceDigest: candidate.githubSourceDigest,
+        preparation: "legacy-recording-only",
+        proposal: candidate.proposal,
+        review: candidate.review,
+        root: candidate.root,
       };
+      if (candidate.publishedOrigin !== undefined) {
+        completion.publishedOrigin = candidate.publishedOrigin;
+      }
+      if (candidate.publicationScope !== undefined) {
+        completion.publicationScope = candidate.publicationScope;
+      }
     }
     const { proposal, review } = completion;
     assertApprovalReceipt({
@@ -121,9 +121,9 @@ export default defineTool({
       retainDraftReconciliationCompletion(completion);
     }
     const session = {
-      completion,
       adapterSessionId: ctx.session.id,
       callbackExecution: hostedOperatorCallbackExecution(ctx.session),
+      completion,
       sessionAuth: ctx.session.auth,
     };
     await assertReconciliationCompletionOwnerForSession(session);
@@ -132,37 +132,39 @@ export default defineTool({
       draftCompletionInstallation(completion),
     );
     const recovery = draftInspectionRecoveryForSession({
-      ctx,
       appId: completion.appId,
       appSpecDigest: completion.appReview.appSpecDigest,
-      root: completion.root,
-      pullRequestNumber: proposal.pullRequestNumber,
+      ctx,
       priorPublishedProposalDigest: completion.publishedOrigin?.publicationProposalDigest,
+      pullRequestNumber: proposal.pullRequestNumber,
+      root: completion.root,
     });
     const inspected = await runtime.inspectAppliedExistingDraftReconciliation({
       proposal,
-      review,
       recovery,
+      review,
     });
     const finish = async (
       publication: Parameters<typeof recordPublishedReconciliationForSession>[0]["publication"],
     ) => {
       try {
-        const recording = await recordPublishedReconciliationForSession({
+        const recordingBase = {
           ...session,
           publication,
-          ...(input.recordCurrentEquivalentRelease === true
-            ? { recordCurrentEquivalentRelease: true as const }
-            : {}),
-        });
+        };
+        const recordingInput =
+          input.recordCurrentEquivalentRelease === true
+            ? { ...recordingBase, recordCurrentEquivalentRelease: true as const }
+            : recordingBase;
+        const recording = await recordPublishedReconciliationForSession(recordingInput);
         if (recording.status === "selection-changed") {
           return {
             ...publication,
             appSourceRecording: {
-              status: "selection-changed" as const,
-              recoveryRequired: true,
               nextAction:
                 "The verified historical publication is unchanged, but its association was not recorded for the current selected release. Continue ordinary planning with the current accepted specification and selected capture; no GitHub write was attempted.",
+              recoveryRequired: true,
+              status: "selection-changed" as const,
             },
           };
         }
@@ -171,10 +173,10 @@ export default defineTool({
         return {
           ...publication,
           appSourceRecording: {
-            status: "unavailable" as const,
-            recoveryRequired: true,
             nextAction:
               "Resume this approved draft reconciliation to record its original release for Preview; the GitHub update already succeeded. No further GitHub write is needed.",
+            recoveryRequired: true,
+            status: "unavailable" as const,
           },
         };
       }
@@ -184,10 +186,10 @@ export default defineTool({
     }
     if (input.recordCurrentEquivalentRelease === true) {
       return {
-        status: "publication_not_verified" as const,
-        recoveryRequired: true,
         nextAction:
           "This approved publication was not verified as already applied. No GitHub write or current-release association was attempted. Preserve its existing reconciliation context.",
+        recoveryRequired: true,
+        status: "publication_not_verified" as const,
       };
     }
     if (!sealedBeforeApproval) {
@@ -255,8 +257,8 @@ export default defineTool({
     const publication = await runtime.reconcileExistingDraft({
       contentSource,
       proposal,
-      review,
       recovery,
+      review,
     });
     updateExactDraftReconciliation({
       expected: candidate,

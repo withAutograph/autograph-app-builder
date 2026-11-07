@@ -13,19 +13,21 @@ import { currentLocalSourcePrerequisite } from "./local-source-prerequisite-stat
 import { localSourcePrerequisiteResponse } from "./local-source-prerequisite-response";
 
 const mocks = vi.hoisted(() => ({
-  reconcile: vi.fn(),
   captureDigest: vi.fn(() => "9".repeat(64)),
-  history: vi.fn(() => Promise.resolve()),
   dispose: vi.fn(),
-  project: vi.fn(() => Promise.resolve()),
+  history: vi.fn(async () => {}),
+  project: vi.fn(async () => {}),
+  reconcile: vi.fn(),
 }));
 vi.mock("./local-source-transport-history", () => ({
   readCompletedLocalSourceTransport: mocks.history,
 }));
 vi.mock("../repository/development-source", () => ({
   canAutoSelectDevelopmentSource: () => true,
-  developmentSourceReceipt: () =>
-    Promise.resolve({ sourceSha: "9".repeat(40), sourcePath: "/owned-current-source" }),
+  developmentSourceReceipt: async () => ({
+    sourcePath: "/owned-current-source",
+    sourceSha: "9".repeat(40),
+  }),
 }));
 vi.mock("./local-planning-source-base", () => ({
   localPlanningSourceBase: () => ({
@@ -35,15 +37,14 @@ vi.mock("./local-planning-source-base", () => ({
   }),
 }));
 vi.mock("../repository/local-planning-source", () => ({
-  captureLocalPlanningSource: () =>
-    Promise.resolve({
-      generation: { workspaceDigest: mocks.captureDigest() },
-      dispose: mocks.dispose,
-    }),
+  captureLocalPlanningSource: async () => ({
+    dispose: mocks.dispose,
+    generation: { workspaceDigest: mocks.captureDigest() },
+  }),
   reconcileLocalPlanningSource: mocks.reconcile,
 }));
 vi.mock("./source-bound-sandbox", () => ({
-  getSourceBoundSandbox: () => Promise.resolve({ id: "owned-workspace" }),
+  getSourceBoundSandbox: async () => ({ id: "owned-workspace" }),
 }));
 vi.mock("./approved-build-continuation-runtime", () => ({
   emitCurrentBuildWorkflowProjection: mocks.project,
@@ -52,27 +53,27 @@ vi.mock("./approved-build-continuation-runtime", () => ({
 // SAFETY: The fixture models only fields read before the injected typed baseline failure; no source/provision/approval effect can run.
 // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- Bounded source-boundary fixture.
 const state = {
-  phase: "validation_failed",
   appSpec: { appId: "supplier-spend", digest: "a".repeat(64) },
+  phase: "validation_failed",
+  proposal: { digest: "e".repeat(64), workspaceDigest: "d".repeat(64) },
   sourceReceipt: {
-    sourceKind: "existing-repository",
     digest: "b".repeat(64),
+    sourceKind: "existing-repository",
     sourceSha: "c".repeat(40),
   },
   workspace: {
+    workspaceDigest: "d".repeat(64),
     workspaceId: "owned-workspace",
     workspacePath: "/workspace/repository",
-    workspaceDigest: "d".repeat(64),
   },
-  proposal: { digest: "e".repeat(64), workspaceDigest: "d".repeat(64) },
 } as unknown as AppBuilderWorkflowState;
 // SAFETY: Projection persistence is a no-effect spy; the actual source guard consumes only this tool identity and cancellation.
 // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- Bounded ToolContext fixture.
 const ctx = {
-  callId: "actual-plan-failure",
-  session: { id: "same-session", auth: {} },
   abortSignal: new AbortController().signal,
+  callId: "actual-plan-failure",
   getSandbox: vi.fn(),
+  session: { auth: {}, id: "same-session" },
 } as unknown as ToolContext;
 beforeEach(() => {
   vi.clearAllMocks();

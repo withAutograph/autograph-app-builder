@@ -260,21 +260,21 @@ it("preserves mixed text, selected product choices and legacy effect approvals",
     kind: "tool-approval",
     outcome: "approved",
     requestId: "choice",
-    response: { requestId: "choice", optionId: "auth" },
+    response: { optionId: "auth", requestId: "choice" },
   });
   await requestInput("question", "question", "prepare-app-hosted-runtime");
   await resolveInput({
     kind: "question",
     outcome: "answered",
     requestId: "question",
-    response: { requestId: "question", optionId: "public" },
+    response: { optionId: "public", requestId: "question" },
   });
   await requestInput("tool-approval", "unknown-choice", "publish_github_draft_pr");
   await resolveInput({
     kind: "tool-approval",
     outcome: "approved",
     requestId: "unknown-choice",
-    response: { requestId: "unknown-choice", optionId: "unrecognized-product-choice" },
+    response: { optionId: "unrecognized-product-choice", requestId: "unknown-choice" },
   });
   state.pendingInputs = [
     {

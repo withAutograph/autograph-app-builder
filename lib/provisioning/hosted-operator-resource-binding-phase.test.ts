@@ -111,138 +111,138 @@ const operationRef = "00000000-0000-4000-8000-000000000001";
 const observedAt = "2026-10-14T12:00:00Z";
 const sourceWorkload = {
   audience: "https://vercel.com/team",
+  environment: "preview" as const,
   issuer: "https://oidc.vercel.com/team",
   ownerId: "team",
   projectId: "builder",
-  environment: "preview" as const,
   subject: "builder-workload",
 };
 const desiredPlan = () =>
   hostedOperatorPlanSchema.parse({
     ...bootstrapPlan(),
-    normalActorProgram: normalActorProgramSchema.parse({
-      version: 1,
-      appId: context.target.appId,
-      origin: "https://apps.example",
-      actors: [
-        {
-          actorKey: "owner",
-          email: "owner@example.test",
-          name: "Owner",
-          account: "create-email-password",
-        },
-      ],
-      organizations: [],
-      memberships: [],
-      appAccess: [],
-    }),
-    publicGateway: {
-      projectId: "gateway",
-      branch: context.target.branch,
-      origin: "https://apps.example",
-    },
     deploymentBoundary: {
-      authority,
-      teamId: "team",
       app: {
-        projectId: context.target.projectId,
+        branch: context.target.branch,
         deploymentId: "app-deployment",
-        branch: context.target.branch,
         environment: "preview",
+        projectId: context.target.projectId,
       },
+      authority,
       gateway: {
-        projectId: "gateway",
-        deploymentId: "gateway-deployment",
         branch: context.target.branch,
+        deploymentId: "gateway-deployment",
         environment: "preview",
+        projectId: "gateway",
       },
       operator: {
-        projectId: "operator",
         deploymentId: "operator-deployment",
         environment: "preview",
+        projectId: "operator",
       },
+      teamId: "team",
       verification: {
         gatewayOrigin: "https://gateway.example",
         jwksUrl: "https://gateway.example/_platform/jwks.json",
         publicOrigin: "https://apps.example",
       },
     },
+    effects: [
+      ...bootstrapPlan().effects,
+      { description: "Gateway configuration", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
+    ],
     gatewayBindings: {
       authBrowserOrigin: "https://apps.example",
       builderCallbackOrigin: "https://builder.example",
-      operatorOrigin: "https://operator.example",
       catalogAppIds: [context.target.appId],
+      operatorOrigin: "https://operator.example",
       sourceWorkload,
     },
     gatewayDelivery: {
-      projectId: "gateway",
       branch: context.target.branch,
-      repoId: "gateway-repo",
       gitSha: "c".repeat(40),
+      projectId: "gateway",
+      repoId: "gateway-repo",
     },
-    effects: [
-      ...bootstrapPlan().effects,
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway configuration" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
-    ],
+    normalActorProgram: normalActorProgramSchema.parse({
+      actors: [
+        {
+          account: "create-email-password",
+          actorKey: "owner",
+          email: "owner@example.test",
+          name: "Owner",
+        },
+      ],
+      appAccess: [],
+      appId: context.target.appId,
+      memberships: [],
+      organizations: [],
+      origin: "https://apps.example",
+      version: 1,
+    }),
+    publicGateway: {
+      branch: context.target.branch,
+      origin: "https://apps.example",
+      projectId: "gateway",
+    },
   });
 const completedRecord = (plan: HostedOperatorPlan = desiredPlan()) =>
   hostedRuntimeJournalRecordSchema.parse({
-    version: 1,
-    kind: "app-runtime",
     approvedByCallId: "ordinary-public-approval",
-    request: context.target,
-    status: "pending",
-    step: "reserved",
+    kind: "app-runtime",
+    operator: {
+      approvalId: "actual-approval",
+      authPreparation: {
+        assetSha256: "d".repeat(64),
+        catalogFingerprint: "e".repeat(64),
+        database: plan.authDatabase.database,
+        observedAt,
+        runtimeRole: plan.authDatabase.runtimeRole,
+        targetDigest: plan.authSchema?.targetDigest,
+      },
+      deliveredGatewayDeploymentId: "gateway-delivery",
+      gatewayDeliveryCandidates: [
+        {
+          branch: context.target.branch,
+          deploymentId: "gateway-delivery",
+          operationRef,
+          origin: "https://gateway.example",
+          projectId: "gateway",
+          readyState: "READY",
+          repoId: "gateway-repo",
+        },
+      ],
+      gatewayEnvironment: [
+        {
+          branch: context.target.branch,
+          comment: `App Builder protected operator ${operationRef}`,
+          id: "owned-environment-row",
+          key: "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
+          operationRef,
+          projectId: "gateway",
+          valueSha256: hostedOperatorRealmLinkConfigSha256(plan),
+        },
+      ],
+      mode: "protected-operator-v1",
+      operationRef,
+      plan,
+      planDigest: operatorPlanDigest(plan),
+      receipts: plan.effects.map((effect) => ({
+        effectId: effect.id,
+        observedAt,
+        resourceVersion: "actual-readback",
+      })),
+    },
     privateState: {
       encryptedToken: "private-ciphertext",
       keyVersion: "key-version",
       tokenIv: "iv",
       tokenTag: "tag",
     },
-    operator: {
-      mode: "protected-operator-v1",
-      approvalId: "actual-approval",
-      operationRef,
-      plan,
-      planDigest: operatorPlanDigest(plan),
-      authPreparation: {
-        assetSha256: "d".repeat(64),
-        catalogFingerprint: "e".repeat(64),
-        database: plan.authDatabase.database,
-        runtimeRole: plan.authDatabase.runtimeRole,
-        targetDigest: plan.authSchema?.targetDigest,
-        observedAt,
-      },
-      receipts: plan.effects.map((effect) => ({
-        effectId: effect.id,
-        observedAt,
-        resourceVersion: "actual-readback",
-      })),
-      gatewayEnvironment: [
-        {
-          key: "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
-          id: "owned-environment-row",
-          projectId: "gateway",
-          branch: context.target.branch,
-          operationRef,
-          comment: `App Builder protected operator ${operationRef}`,
-          valueSha256: hostedOperatorRealmLinkConfigSha256(plan),
-        },
-      ],
-      gatewayDeliveryCandidates: [
-        {
-          projectId: "gateway",
-          branch: context.target.branch,
-          repoId: "gateway-repo",
-          operationRef,
-          origin: "https://gateway.example",
-          deploymentId: "gateway-delivery",
-          readyState: "READY",
-        },
-      ],
-      deliveredGatewayDeploymentId: "gateway-delivery",
-    },
+    request: context.target,
+    status: "pending",
+    step: "reserved",
+    version: 1,
   });
 
 const phaseFixture = (participants = false) => {
@@ -255,8 +255,8 @@ const phaseFixture = (participants = false) => {
   if (participants) {
     operator.plan = hostedOperatorPlanSchema.parse({
       ...operator.plan,
+      effects: [{ description: "Normal accounts", id: "normal-accounts", kind: "normal-accounts" }],
       stage: "auth-participants",
-      effects: [{ id: "normal-accounts", kind: "normal-accounts", description: "Normal accounts" }],
     });
     operator.planDigest = operatorPlanDigest(operator.plan);
     operator.receipts = [
@@ -265,7 +265,7 @@ const phaseFixture = (participants = false) => {
     record.status = "participants-prepared";
   }
   const row = { record: hostedRuntimeJournalRecordSchema.parse(record), revision: 2 };
-  return { row, input: { plan: operator.plan, privateState: record.privateState } };
+  return { input: { plan: operator.plan, privateState: record.privateState }, row };
 };
 
 describe("read-only completed resource binding phase", () => {
@@ -273,9 +273,9 @@ describe("read-only completed resource binding phase", () => {
     const f = phaseFixture(participants);
     const raw = encryptHostedRuntimeFiles({
       authority,
-      target: context.target,
-      files: { "synthetic.json": "synthetic-only" },
       config: { tokenKey: Buffer.alloc(32, 9), tokenKeyVersion: "synthetic_v1" },
+      files: { "synthetic.json": "synthetic-only" },
+      target: context.target,
     });
     f.row.record = hostedRuntimeJournalRecordSchema.parse({ ...f.row.record, privateState: raw });
     f.input.privateState = raw;
@@ -440,30 +440,37 @@ describe("retained installation metadata resource authority", () => {
     let metadataReads = 0;
     const desired = hostedOperatorPlanSchema.parse({
       ...f.input.plan,
-      stage: "app",
+      effects: [
+        ...f.input.plan.effects.filter((effect) => ["resources", "install"].includes(effect.kind)),
+        { description: "Access", id: "access", kind: "access" },
+        { description: "Bindings", id: "bindings", kind: "bindings" },
+        ...f.input.plan.effects.filter((effect) =>
+          ["gateway-bindings", "gateway-delivery"].includes(effect.kind),
+        ),
+      ],
       normalActorPreparation: {
+        accountApprovalId: "actual-approval",
+        accountApprovedByCallId: "ordinary-public-approval",
         accountOperationRef: operationRef,
         accountPlanDigest: operatorPlanDigest(accounts.input.plan),
         programDigest: normalActorProgramDigest(
           normalActorProgramSchema.parse(f.input.plan.normalActorProgram),
         ),
-        accountApprovalId: "actual-approval",
-        accountApprovedByCallId: "ordinary-public-approval",
       },
-      effects: [
-        ...f.input.plan.effects.filter((effect) => ["resources", "install"].includes(effect.kind)),
-        { id: "access", kind: "access", description: "Access" },
-        { id: "bindings", kind: "bindings", description: "Bindings" },
-        ...f.input.plan.effects.filter((effect) =>
-          ["gateway-bindings", "gateway-delivery"].includes(effect.kind),
-        ),
-      ],
+      stage: "app",
     });
     const reader = createAppInstallationPlanningResourceReader({
       assertPlanningAuthorized: async () => {
         await Promise.resolve();
       },
-      store: { read: async () => await Promise.resolve(structuredClone(f.row)) },
+      readActiveCustomers: async (input) => {
+        await input.assertCurrent();
+        expect(input.plan).toEqual(desired);
+        expect(input.runtimeUrl).toBe("private-app-runtime");
+        metadataReads += 1;
+        await input.assertCurrent();
+        return ["retained-customer"];
+      },
       readResourceBindings: async (input) => {
         await Promise.resolve();
         const selected = requireFinalResourceBindingPhase(
@@ -475,32 +482,21 @@ describe("retained installation metadata resource authority", () => {
           throw new HostedOperatorError("authorization_required");
         }
         return {
-          appDatabase: { runtimeUrl: "private-app-runtime", migrationUrl: "private-app-migration" },
+          appDatabase: { migrationUrl: "private-app-migration", runtimeUrl: "private-app-runtime" },
           authDatabase: {
-            runtimeUrl: "private-auth-runtime",
             migrationUrl: "private-auth-migration",
+            runtimeUrl: "private-auth-runtime",
           },
         };
       },
-      readActiveCustomers: async (input) => {
-        await input.assertCurrent();
-        expect(input.plan).toEqual(desired);
-        expect(input.runtimeUrl).toBe("private-app-runtime");
-        metadataReads += 1;
-        await input.assertCurrent();
-        return ["retained-customer"];
-      },
+      store: { read: async () => await Promise.resolve(structuredClone(f.row)) },
     });
     return {
       ...f,
       desired,
-      reader,
       metadataReads: () => metadataReads,
-      revoke: () => {
-        approvalAvailable = false;
-      },
       pendingApp: () => {
-        const operator = f.row.record.operator;
+        const { operator } = f.row.record;
         if (operator === undefined) {
           throw new Error("Fixture operator missing");
         }
@@ -512,12 +508,16 @@ describe("retained installation metadata resource authority", () => {
         f.row.record.status = "pending";
         f.row.revision += 1;
       },
+      reader,
+      revoke: () => {
+        approvalAvailable = false;
+      },
     };
   };
   const scopes = [
     {
-      appId: context.target.appId,
       actorId: "retained-actor",
+      appId: context.target.appId,
       organizationId: "retained-customer",
       role: "member",
     },

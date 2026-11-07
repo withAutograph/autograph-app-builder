@@ -336,12 +336,12 @@ it.each([false, true])(
       sandbox: {
         run: vi.fn().mockResolvedValue({
           exitCode: 1,
-          stdout: `${label} compiler starting`,
           stderr: `${label} ${detail}\n${label}     field: expected string\n${label}     ^`,
+          stdout: `${label} compiler starting`,
         }),
       },
     });
-    expect(result).toMatchObject({ status: "failed", exitCode: 1 });
+    expect(result).toMatchObject({ exitCode: 1, status: "failed" });
     expect(result.stderr).toContain(detail);
     expect(result.stderr).toContain("    field: expected string");
     expect(validationOutputExcerpt(result.stdout, result.stderr).stderr).toContain(detail);
@@ -364,7 +364,7 @@ it("keeps decorated structured compiler payloads and credentials private", async
   const result = await compileAppSchemaRelease({
     appId: "example",
     root: "/workspace/repository",
-    sandbox: { run: vi.fn().mockResolvedValue({ exitCode: 1, stdout: "", stderr }) },
+    sandbox: { run: vi.fn().mockResolvedValue({ exitCode: 1, stderr, stdout: "" }) },
   });
   expect(result.stderr).toContain("conflicting values");
   expect(result.stderr).toContain("invalid field");
@@ -384,9 +384,9 @@ it("retains the compiler error category before a redacted structured diagnostic"
     sandbox: {
       run: vi.fn().mockResolvedValue({
         exitCode: 1,
-        stdout: "",
         stderr:
           '[app:compile] schema-compiler: manifest compilation failed: invalid role grants: ["private-grant-canary"]\n[app:compile] Retry: compile the selected schema',
+        stdout: "",
       }),
     },
   });

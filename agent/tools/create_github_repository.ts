@@ -21,7 +21,7 @@ export default defineTool({
       state,
     });
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
-    return runtime.createFreshRepository({
+    return await runtime.createFreshRepository({
       ...input,
       approvedByCallId: ctx.callId,
       contentSource,

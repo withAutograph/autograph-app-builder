@@ -127,7 +127,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
     ) {
       throw unavailable();
     }
-    return { row, plan };
+    return { plan, row };
   };
   const observeDelivery = async (
     invocation: PublicReleaseInvocation,
@@ -160,6 +160,18 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
     };
   };
   return {
+    async observe(invocation: PublicReleaseInvocation, operationRef: string, planDigest: string) {
+      const { row, plan } = await loadOperation(invocation, operationRef, planDigest);
+      await authorize(invocation, plan, false);
+      const unfinished = plan.effects.find((effect) => row.record.effects[effect] !== "applied");
+      if (unfinished !== undefined) {
+        if (row.record.effects[unfinished] === "pending") {
+          return { effect: unfinished, operationRef, status: "reconciliation-required" as const };
+        }
+        throw unavailable();
+      }
+      return await observeDelivery(invocation, plan, row, false);
+    },
     async plan(invocation: PublicReleaseInvocation, appId: string) {
       const selection = publicReleaseSelectionSchema.parse({
         appId,
@@ -175,19 +187,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
       if (row.record.planDigest !== publicReleasePlanDigest(plan)) {
         throw unavailable();
       }
-      return { operationRef: row.operationRef, planDigest: row.record.planDigest, plan };
-    },
-    async observe(invocation: PublicReleaseInvocation, operationRef: string, planDigest: string) {
-      const { row, plan } = await loadOperation(invocation, operationRef, planDigest);
-      await authorize(invocation, plan, false);
-      const unfinished = plan.effects.find((effect) => row.record.effects[effect] !== "applied");
-      if (unfinished !== undefined) {
-        if (row.record.effects[unfinished] === "pending") {
-          return { status: "reconciliation-required" as const, operationRef, effect: unfinished };
-        }
-        throw unavailable();
-      }
-      return await observeDelivery(invocation, plan, row, false);
+      return { operationRef: row.operationRef, plan, planDigest: row.record.planDigest };
     },
     async release(invocation: PublicReleaseInvocation, operationRef: string, planDigest: string) {
       const { plan } = await loadOperation(invocation, operationRef, planDigest);
@@ -234,17 +234,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
               });
             };
             const context: PublicReleaseEffectContext = {
-              invocation,
-              plan,
-              operationRef,
-              effect,
-              priorPhase: row.record.effects[effect] ?? "idle",
               bindings: {
-                read: async () => {
-                  await authorize(invocation, plan, true);
-                  const current = await refresh();
-                  return structuredClone(current.record.bindings);
-                },
                 claim: async (key) => {
                   const { state, expected } = await binding(key);
                   if (state.state !== "idle") {
@@ -258,6 +248,11 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
                   };
                   await saveBinding(key, next);
                   return next;
+                },
+                read: async () => {
+                  await authorize(invocation, plan, true);
+                  const current = await refresh();
+                  return structuredClone(current.record.bindings);
                 },
                 recordAccepted: async (key, id) => {
                   const { state } = await binding(key);
@@ -278,11 +273,16 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
                   await saveBinding(key, { ...state, state: "applied" });
                 },
               },
+              effect,
+              invocation,
+              operationRef,
+              plan,
+              priorPhase: row.record.effects[effect] ?? "idle",
             };
             const reconciled = await ports.reconcileEffect(context);
             row = await refresh();
             if (reconciled === "unknown") {
-              return { status: "reconciliation-required" as const, operationRef, effect };
+              return { effect, operationRef, status: "reconciliation-required" as const };
             }
             await authorize(invocation, plan, true);
             if (reconciled === "applied") {
@@ -307,7 +307,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
             row = await refresh();
             await authorize(invocation, plan, true);
             if ((await ports.reconcileEffect(context)) !== "applied") {
-              return { status: "reconciliation-required" as const, operationRef, effect };
+              return { effect, operationRef, status: "reconciliation-required" as const };
             }
             row = await refresh();
             if (
@@ -333,7 +333,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
             }
             await checkpoint(latest, {
               ...latest.record,
-              lastProviderFailure: { phase, diagnostic: error.diagnostic },
+              lastProviderFailure: { diagnostic: error.diagnostic, phase },
             });
           }
           throw error;

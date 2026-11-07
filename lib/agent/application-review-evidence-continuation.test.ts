@@ -7,54 +7,52 @@ import type { ProductSourceReviewInput } from "./product-source-review";
 const digest = (text: string) => createHash("sha256").update(text).digest("hex");
 const sourcePath = "apps/example/source.ts";
 const reviewInput: ProductSourceReviewInput = {
-  originalRequest: "Keep the requested source behavior.",
-  clarifications: [],
   appSpec: "Keep the requested source behavior.",
   appSpecDigest: "spec",
-  sourceDigest: "source",
+  clarifications: [],
   files: [],
   omissions: [],
+  originalRequest: "Keep the requested source behavior.",
+  sourceDigest: "source",
 };
 const sourceReference = (result: Awaited<ReturnType<ApplicationReviewEvidence["readSource"]>>) => ({
-  kind: "source",
-  path: result.path,
-  digest: result.digest,
-  startLine: result.startLine,
-  endLine: result.endLine,
-  startColumn: result.startColumn,
-  endColumn: result.endColumn,
   contentDigest: digest(result.content),
+  digest: result.digest,
+  endColumn: result.endColumn,
+  endLine: result.endLine,
+  kind: "source",
   nextCursor: result.nextCursor,
+  path: result.path,
+  startColumn: result.startColumn,
+  startLine: result.startLine,
 });
 const fixture = (
   source: string,
   restoredSourceReads: readonly unknown[] = [],
   options: { abortSignal?: AbortSignal; actualSource?: string } = {},
 ) => {
-  const readFile = vi.fn(({ path }: { path: string }) =>
-    Promise.resolve(
-      path === `repository/${sourcePath}`
-        ? new ReadableStream<Uint8Array>({
-            start(controller) {
-              controller.enqueue(new TextEncoder().encode(options.actualSource ?? source));
-              controller.close();
-            },
-          })
-        : null,
-    ),
+  const readFile = vi.fn(async ({ path }: { path: string }) =>
+    path === `repository/${sourcePath}`
+      ? new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(options.actualSource ?? source));
+            controller.close();
+          },
+        })
+      : null,
   );
   const evidence = createApplicationReviewEvidence({
-    reviewInput,
-    observed: {
-      treeDigest: "observed",
-      files: [{ path: sourcePath, mode: "644", digest: digest(source) }],
-    },
-    changedPaths: [sourcePath],
-    visiblePaths: [sourcePath],
-    applyRoot: "/workspace/repository",
-    sandbox: { readFile },
     abortSignal: options.abortSignal,
+    applyRoot: "/workspace/repository",
+    changedPaths: [sourcePath],
+    observed: {
+      files: [{ digest: digest(source), mode: "644", path: sourcePath }],
+      treeDigest: "observed",
+    },
     restoredSourceReads,
+    reviewInput,
+    sandbox: { readFile },
+    visiblePaths: [sourcePath],
   });
   return { evidence, readFile };
 };
@@ -64,14 +62,14 @@ describe("durable review source citation windows", () => {
   it("restores partial long-line citations from exact private references after a new round", async () => {
     const first = fixture(longSource);
     const page = await first.evidence.readSource({
+      cursor: { column: longSource.indexOf("value_100_") + 1, endLine: 1, line: 1 },
       path: sourcePath,
-      cursor: { line: 1, column: longSource.indexOf("value_100_") + 1, endLine: 1 },
     });
     const citation = {
-      path: sourcePath,
-      startLine: 1,
       endLine: 1,
       excerpt: page.content.slice(0, 80),
+      path: sourcePath,
+      startLine: 1,
     };
     expect(await fixture(longSource).evidence.verifySourceCitation(citation)).toBe(false);
     const restored = fixture(longSource, structuredClone([sourceReference(page)]));
@@ -92,30 +90,30 @@ describe("durable review source citation windows", () => {
     const restored = fixture(source, [sourceReference(page)]);
     expect(
       await restored.evidence.verifySourceCitation({
-        path: sourcePath,
-        startLine: lastLine,
         endLine: lastLine,
         excerpt: `${lastLine}_tail`,
+        path: sourcePath,
+        startLine: lastLine,
       }),
     ).toBe(true);
     expect(
       await restored.evidence.verifySourceCitation({
-        path: sourcePath,
-        startLine: lastLine + 1,
         endLine: lastLine + 1,
         excerpt: `${lastLine + 1}_tail`,
+        path: sourcePath,
+        startLine: lastLine + 1,
       }),
     ).toBe(false);
   });
 
   it("ignores mismatched or malformed references while keeping fresh source reads available", async () => {
-    const page = await fixture(longSource).evidence.readSource({ path: sourcePath, endLine: 1 });
+    const page = await fixture(longSource).evidence.readSource({ endLine: 1, path: sourcePath });
     const reference = sourceReference(page);
     const citation = {
-      path: sourcePath,
-      startLine: 1,
       endLine: 1,
       excerpt: page.content.slice(0, 80),
+      path: sourcePath,
+      startLine: 1,
     };
     const invalid = [
       { ...reference, digest: "different-source" },
@@ -134,24 +132,24 @@ describe("durable review source citation windows", () => {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Each independent malformed reference must preserve the same citation behavior.
       expect(await restored.evidence.verifySourceCitation(citation)).toBe(false);
       // oxlint-disable-next-line eslint/no-await-in-loop -- A bad restored reference must not prevent an ordinary correcting read.
-      await restored.evidence.readSource({ path: sourcePath, endLine: 1 });
+      await restored.evidence.readSource({ endLine: 1, path: sourcePath });
       // oxlint-disable-next-line eslint/no-await-in-loop -- Verify the concrete correcting read, not a source-shape assertion.
       expect(await restored.evidence.verifySourceCitation(citation)).toBe(true);
     }
   });
 
   it("does not load source for references until an actual read or citation needs that path", async () => {
-    const page = await fixture(longSource).evidence.readSource({ path: sourcePath, endLine: 1 });
+    const page = await fixture(longSource).evidence.readSource({ endLine: 1, path: sourcePath });
     const restored = fixture(longSource, [sourceReference(page)]);
     expect(
       await restored.evidence.verifyRequirementQuote({ documentId: "original", quote: "Keep" }),
     ).toBe(true);
     expect(restored.readFile).not.toHaveBeenCalled();
     const citation = {
-      path: sourcePath,
-      startLine: 1,
       endLine: 1,
       excerpt: page.content.slice(0, 80),
+      path: sourcePath,
+      startLine: 1,
     };
     expect(
       await Promise.all([
@@ -163,12 +161,12 @@ describe("durable review source citation windows", () => {
   });
 
   it("retains current byte verification and Stop even when an exact old reference is supplied", async () => {
-    const page = await fixture(longSource).evidence.readSource({ path: sourcePath, endLine: 1 });
+    const page = await fixture(longSource).evidence.readSource({ endLine: 1, path: sourcePath });
     const citation = {
-      path: sourcePath,
-      startLine: 1,
       endLine: 1,
       excerpt: page.content.slice(0, 80),
+      path: sourcePath,
+      startLine: 1,
     };
     await expect(
       fixture(longSource, [sourceReference(page)], {

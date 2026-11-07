@@ -43,11 +43,16 @@ const needsBrowserDependencies = async (
   }
 
   // The private reporter suppresses browser launch errors. Probe without app authority.
-  const probe = await input.sandbox.run({
+  const { sandbox } = input;
+  const run = sandbox.run.bind(sandbox);
+  const options: Parameters<typeof run>[0] = {
     command: browserDependencyProbe,
     workingDirectory: input.root,
-    ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
-  });
+  };
+  if (input.signal !== undefined) {
+    options.abortSignal = input.signal;
+  }
+  const probe = await run(options);
   return probe.exitCode === 42;
 };
 
@@ -94,9 +99,9 @@ export const runAppBrowserTests = async (input: {
       return {
         command,
         exitCode: null,
-        status: "failed" as const,
         problem:
           "Browser verification needs an app-owned catalog entry. Declare autograph.browserEntryPath for ambiguous routes, then refresh the runtime binding. App creation, runtime preparation and release remain available.",
+        status: "failed" as const,
         stderr: "",
         stdout: "",
       };
@@ -105,23 +110,27 @@ export const runAppBrowserTests = async (input: {
       runtime?.browserTestEntryPath === undefined
         ? undefined
         : browserEntryPathSchema.parse(runtime.browserTestEntryPath);
-    const browserEnvironment = {
-      ...(runtime?.browserTestBaseUrl === undefined
-        ? {}
-        : { APP_TEST_BASE_URL: runtime.browserTestBaseUrl }),
-      ...(entryPath === undefined ? {} : { APP_TEST_ENTRY_PATH: entryPath }),
-    };
+    const browserEnvironment: Record<string, string> = {};
+    if (runtime?.browserTestBaseUrl !== undefined) {
+      browserEnvironment.APP_TEST_BASE_URL = runtime.browserTestBaseUrl;
+    }
+    if (entryPath !== undefined) {
+      browserEnvironment.APP_TEST_ENTRY_PATH = entryPath;
+    }
     const runTask = async () => {
       if (runtime) {
-        return await runtime.runTask({
+        const taskOptions: Parameters<typeof runtime.runTask>[0] = {
           signal: input.signal,
           task: "test-e2e",
-          ...(selection === undefined ? {} : { browserSelection: selection }),
-          ...input.continuation,
-          ...(Object.keys(browserEnvironment).length === 0
-            ? {}
-            : { environment: browserEnvironment }),
-        });
+        };
+        if (selection !== undefined) {
+          taskOptions.browserSelection = selection;
+        }
+        const continuedOptions = { ...taskOptions, ...input.continuation };
+        if (Object.keys(browserEnvironment).length > 0) {
+          continuedOptions.environment = browserEnvironment;
+        }
+        return await runtime.runTask(continuedOptions);
       }
       const privateCommand =
         selection === undefined
@@ -174,12 +183,12 @@ export const runAppBrowserTests = async (input: {
         return {
           command,
           exitCode: result.exitCode,
-          status: "failed" as const,
-          reason: "private-preview-refresh-required",
           problem:
             "Refresh the selected app's owner-bound private preview at its current Auth origin before browser verification. Private tests require trace off and the supported bounded reporter.",
-          stdout,
+          reason: "private-preview-refresh-required",
+          status: "failed" as const,
           stderr,
+          stdout,
         };
       }
       return {

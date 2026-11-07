@@ -26,10 +26,10 @@ export interface ChangeSetAcceptanceRuntime {
   finalizeSourceReview?: typeof finalizeAppliedProductSourceReview;
 }
 const changeSetAcceptanceRuntime: ChangeSetAcceptanceRuntime = {
-  observeChangeSet: observeNormalizedChangeSet,
-  reviewSource: reviewAppliedProductSource,
-  prepareSourceReview: prepareAppliedProductSourceReview,
   finalizeSourceReview: finalizeAppliedProductSourceReview,
+  observeChangeSet: observeNormalizedChangeSet,
+  prepareSourceReview: prepareAppliedProductSourceReview,
+  reviewSource: reviewAppliedProductSource,
 };
 /** Internal ports preserve optional independent source review without public injection. */
 export const createChangeSetAcceptanceTool = (
@@ -51,11 +51,11 @@ export const createChangeSetAcceptanceTool = (
         abortSignal: ctx.abortSignal,
         appSpec: state.appSpec,
         applyReceipt: state.applyReceipt,
-        normalizedChanges: changeSet.changes,
-        observed,
         artifacts: state.artifacts,
         callId: ctx.callId,
         getSandbox: async () => await ctx.getSandbox(),
+        normalizedChanges: changeSet.changes,
+        observed,
         sessionAuth: ctx.session.auth,
         sessionId: ctx.session.id,
       };
@@ -68,9 +68,9 @@ export const createChangeSetAcceptanceTool = (
       if (prepared !== undefined && "reference" in prepared) {
         return checkedNativeToolResult(
           {
-            status: "source_review_pending",
+            nextAction: { input: prepared.reference, tool: "review-current-product-source" },
             sourceReview: prepared.reference,
-            nextAction: { tool: "review-current-product-source", input: prepared.reference },
+            status: "source_review_pending",
           },
           { callId: ctx.callId, toolName: "accept_change_set", turnId: ctx.session.turn.id },
         );
@@ -132,32 +132,50 @@ export const createChangeSetAcceptanceTool = (
       updateExactWorkflow({
         expected: state,
         operation: "destination change-set acceptance",
-        transition: () => ({
-          appSpec: state.appSpec,
-          ...(state.appBackendKind === undefined ? {} : { appBackendKind: state.appBackendKind }),
-          applyReceipt: state.applyReceipt,
-          artifacts: state.artifacts,
-          ...(state.publishedGitHubDraftProposalDigest === undefined
-            ? {}
-            : { publishedGitHubDraftProposalDigest: state.publishedGitHubDraftProposalDigest }),
-          dependencyReceipt: state.dependencyReceipt,
-          ...(state.githubSource === undefined ? {} : { githubSource: state.githubSource }),
-          ...(state.githubDestinationReview === undefined
-            ? {}
-            : { githubDestinationReview: state.githubDestinationReview }),
-          ...(state.githubDestinationReviewRead === undefined
-            ? {}
-            : { githubDestinationReviewRead: state.githubDestinationReviewRead }),
-          identityReceipt: state.identityReceipt,
-          phase: "reviewed",
-          preparedByCallId: state.preparedByCallId,
-          proposal: state.proposal,
-          reviewReceipt: receipt,
-          sourceReceipt: state.sourceReceipt,
-          validationReceipt: state.validationReceipt,
-          version: APP_BUILDER_WORKFLOW_VERSION,
-          workspace: state.workspace,
-        }),
+        transition: () => {
+          const app = { appSpec: state.appSpec };
+          const backend =
+            state.appBackendKind === undefined
+              ? app
+              : { ...app, appBackendKind: state.appBackendKind };
+          const applied = {
+            ...backend,
+            applyReceipt: state.applyReceipt,
+            artifacts: state.artifacts,
+          };
+          const published =
+            state.publishedGitHubDraftProposalDigest === undefined
+              ? applied
+              : {
+                  ...applied,
+                  publishedGitHubDraftProposalDigest: state.publishedGitHubDraftProposalDigest,
+                };
+          const dependencies = { ...published, dependencyReceipt: state.dependencyReceipt };
+          const source =
+            state.githubSource === undefined
+              ? dependencies
+              : { ...dependencies, githubSource: state.githubSource };
+          const destination =
+            state.githubDestinationReview === undefined
+              ? source
+              : { ...source, githubDestinationReview: state.githubDestinationReview };
+          const destinationRead =
+            state.githubDestinationReviewRead === undefined
+              ? destination
+              : { ...destination, githubDestinationReviewRead: state.githubDestinationReviewRead };
+          return {
+            ...destinationRead,
+            identityReceipt: state.identityReceipt,
+            phase: "reviewed",
+            preparedByCallId: state.preparedByCallId,
+            proposal: state.proposal,
+            reviewReceipt: receipt,
+            sourceReceipt: state.sourceReceipt,
+            validationReceipt: state.validationReceipt,
+            version: APP_BUILDER_WORKFLOW_VERSION,
+            workspace: state.workspace,
+          };
+        },
       });
       return checkedNativeToolResult(
         reviewedChangeSetSummary({

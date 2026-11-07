@@ -114,7 +114,7 @@ describe("development Sandbox workspace refresh", () => {
     execFileSync("git", ["commit", "--quiet", "-m", "fixture"], { cwd: source });
 
     const files = new Map<string, string | Buffer>();
-    const removePath = vi.fn(({ path: target, recursive = false }) => {
+    const removePath = vi.fn(async ({ path: target, recursive = false }) => {
       if (recursive) {
         for (const key of files.keys()) {
           if (key === target || key.startsWith(`${target}/`)) {
@@ -124,26 +124,25 @@ describe("development Sandbox workspace refresh", () => {
       } else {
         files.delete(target);
       }
-      return Promise.resolve();
     });
     const sandbox = {
       id: "sandbox",
-      readBinaryFile: vi.fn(({ path: target }: { path: string }) => {
+      readBinaryFile: vi.fn(async ({ path: target }: { path: string }) => {
         const value = files.get(target);
         if (value === undefined) {
-          return Promise.resolve(null);
+          return null;
         }
-        return Promise.resolve(Buffer.isBuffer(value) ? value : Buffer.from(value));
+        return Buffer.isBuffer(value) ? value : Buffer.from(value);
       }),
-      readTextFile: vi.fn(({ path: target }) => {
+      readTextFile: vi.fn(async ({ path: target }) => {
         const value = files.get(target);
         if (value === undefined) {
-          return Promise.resolve(null);
+          return null;
         }
-        return Promise.resolve(Buffer.isBuffer(value) ? value.toString("utf-8") : value);
+        return Buffer.isBuffer(value) ? value.toString("utf-8") : value;
       }),
       removePath,
-      run: vi.fn(({ command }) => {
+      run: vi.fn(async ({ command }) => {
         if (command.includes("tar --extract")) {
           for (const name of ["changed.txt", "deleted.txt"]) {
             try {
@@ -153,11 +152,10 @@ describe("development Sandbox workspace refresh", () => {
             }
           }
         }
-        return Promise.resolve({ exitCode: 0, stderr: "", stdout: "" });
+        return { exitCode: 0, stderr: "", stdout: "" };
       }),
-      writeBinaryFile: vi.fn(({ content, path: target }) => {
+      writeBinaryFile: vi.fn(async ({ content, path: target }) => {
         files.set(target, content);
-        return Promise.resolve();
       }),
       writeFile: vi.fn<SandboxSession["writeFile"]>(async ({ content, path: target }) => {
         const reader = content.getReader();
@@ -172,9 +170,8 @@ describe("development Sandbox workspace refresh", () => {
         }
         files.set(target, Buffer.concat(chunks));
       }),
-      writeTextFile: vi.fn(({ content, path: target }) => {
+      writeTextFile: vi.fn(async ({ content, path: target }) => {
         files.set(target, content);
-        return Promise.resolve();
       }),
     };
 
@@ -190,19 +187,19 @@ describe("development Sandbox workspace refresh", () => {
     expect(files.has("repository/deleted.txt")).toBe(false);
     expect(files.get("repository/apps/generated/page.tsx")).toBe("generated");
     expect(removePath).not.toHaveBeenCalledWith(expect.objectContaining({ path: "repository" }));
-    const readActual = ({ path: target }: { path: string }) => {
+    const readActual = async ({ path: target }: { path: string }) => {
       const value = files.get(target);
       if (value === undefined) {
-        return Promise.resolve(null);
+        return null;
       }
-      return Promise.resolve(Buffer.isBuffer(value) ? value : Buffer.from(value));
+      return Buffer.isBuffer(value) ? value : Buffer.from(value);
     };
     writeFileSync(path.join(source, "changed.txt"), "new source transfer before corrupt readback");
-    sandbox.readBinaryFile.mockImplementation((input) => {
+    sandbox.readBinaryFile.mockImplementation(async (input) => {
       if (input.path === "repository/changed.txt") {
-        return Promise.resolve(Buffer.from("corrupt transferred bytes"));
+        return Buffer.from("corrupt transferred bytes");
       }
-      return readActual(input);
+      return await readActual(input);
     });
     sandbox.writeTextFile.mockClear();
     await expect(
@@ -247,32 +244,29 @@ const legacyWorkspaceFixture = () => {
   const files = new Map<string, Buffer>();
   const sandbox = {
     id: "sandbox",
-    readTextFile: vi.fn(({ path: target }: { path: string }) =>
-      Promise.resolve(files.get(target)?.toString("utf-8") ?? null),
+    readBinaryFile: vi.fn(async ({ path: target }: { path: string }) => files.get(target) ?? null),
+    readTextFile: vi.fn(
+      async ({ path: target }: { path: string }) => files.get(target)?.toString("utf-8") ?? null,
     ),
-    readBinaryFile: vi.fn(({ path: target }: { path: string }) =>
-      Promise.resolve(files.get(target) ?? null),
-    ),
-    removePath: vi.fn(({ path: target, recursive }: { path: string; recursive?: boolean }) => {
-      for (const name of files.keys()) {
-        if (name === target || (recursive === true && name.startsWith(`${target}/`))) {
-          files.delete(name);
+    removePath: vi.fn(
+      async ({ path: target, recursive }: { path: string; recursive?: boolean }) => {
+        for (const name of files.keys()) {
+          if (name === target || (recursive === true && name.startsWith(`${target}/`))) {
+            files.delete(name);
+          }
         }
-      }
-      return Promise.resolve();
-    }),
-    run: vi.fn(() =>
-      Promise.resolve({
-        exitCode: 0,
-        stderr: "",
-        stdout: JSON.stringify({
-          repositoryInput: "/workspace/repository",
-          realRepository: "/workspace/repository",
-          realWorkspace: "/workspace",
-          workspaceRoot: "/workspace",
-        }),
-      }),
+      },
     ),
+    run: vi.fn(async () => ({
+      exitCode: 0,
+      stderr: "",
+      stdout: JSON.stringify({
+        realRepository: "/workspace/repository",
+        realWorkspace: "/workspace",
+        repositoryInput: "/workspace/repository",
+        workspaceRoot: "/workspace",
+      }),
+    })),
     writeFile: vi.fn<SandboxSession["writeFile"]>(async ({ content, path: target }) => {
       const reader = content.getReader();
       const chunks: Uint8Array[] = [];
@@ -286,9 +280,8 @@ const legacyWorkspaceFixture = () => {
       }
       files.set(target, Buffer.concat(chunks));
     }),
-    writeTextFile: vi.fn(({ content, path: target }: { content: string; path: string }) => {
+    writeTextFile: vi.fn(async ({ content, path: target }: { content: string; path: string }) => {
       files.set(target, Buffer.from(content));
-      return Promise.resolve();
     }),
   };
   return { files, sandbox, sha, source };
@@ -344,12 +337,10 @@ describe("legacy writable Sandbox workspace", () => {
 
   it("does not seal a failed initial transfer", async () => {
     const { files, sandbox, sha, source } = legacyWorkspaceFixture();
-    sandbox.readBinaryFile.mockImplementation(({ path: target }) =>
-      Promise.resolve(
-        target === "repository/app.txt"
-          ? Buffer.from("corrupt transfer")
-          : (files.get(target) ?? null),
-      ),
+    sandbox.readBinaryFile.mockImplementation(async ({ path: target }) =>
+      target === "repository/app.txt"
+        ? Buffer.from("corrupt transfer")
+        : (files.get(target) ?? null),
     );
     await expect(
       prepareSupportedSandboxWorkspace(source, sha, "e".repeat(64), sandbox as never, "first"),
@@ -395,9 +386,9 @@ describe("legacy writable Sandbox workspace", () => {
       exitCode: 0,
       stderr: "",
       stdout: JSON.stringify({
-        repositoryInput: "/workspace/repository",
         realRepository: "/other",
         realWorkspace: "/workspace",
+        repositoryInput: "/workspace/repository",
         workspaceRoot: "/workspace",
       }),
     });

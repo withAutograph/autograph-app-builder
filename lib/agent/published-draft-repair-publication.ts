@@ -31,10 +31,11 @@ const retainAndReturn = (
   return completion;
 };
 const completionSession = (ctx: ToolContext) => ({
-  sessionAuth: ctx.session.auth,
   adapterSessionId: ctx.session.id,
   callbackExecution: hostedOperatorCallbackExecution(ctx.session),
+  sessionAuth: ctx.session.auth,
 });
+const PUBLISHED_DRAFT_REPAIR_KIND = "published-draft-repair" as const;
 
 export const sealPublishedDraftRepair = async (input: {
   ctx: ToolContext;
@@ -45,7 +46,7 @@ export const sealPublishedDraftRepair = async (input: {
   const { ctx } = input;
   const state = appBuilderWorkflowState.get();
   const candidate = draftReconciliationState.get();
-  if (state.phase !== "reviewed" || candidate?.kind !== "published-draft-repair") {
+  if (state.phase !== "reviewed" || candidate?.kind !== PUBLISHED_DRAFT_REPAIR_KIND) {
     throw new Error("Prepare the current owned draft repair before sealing its update.");
   }
   if (
@@ -58,7 +59,7 @@ export const sealPublishedDraftRepair = async (input: {
     );
   }
   const { repair, repairReview: review, validation } = candidate;
-  const compilation = candidate.validation.compilation;
+  const { compilation } = candidate.validation;
   assertPublishedDraftRepairReview(review);
   const matches = [
     input.expectedGitHubSourceDigest === undefined ||
@@ -88,25 +89,25 @@ export const sealPublishedDraftRepair = async (input: {
   });
   const proposal = await runtime.sealExistingDraftUpdate({
     githubSource: repair.source,
-    review,
-    pullRequestNumber: candidate.pullRequestNumber,
     priorPublishedProposalDigest: repair.publicationProposalDigest,
+    pullRequestNumber: candidate.pullRequestNumber,
+    review,
     selectedCheckoutHeadSha: candidate.headSha,
     selectedCheckoutHeadTree: candidate.headTree,
   });
   const completion = {
-    kind: "published-draft-repair" as const,
-    proposal,
-    review,
+    appId: candidate.appId,
     appReview: {
       appSpecDigest: state.appSpec.digest,
       changeSetDigest: review.changeSetDigest,
       digest: review.digest,
     },
-    appId: candidate.appId,
-    root: candidate.root,
-    repair,
     compilation,
+    kind: PUBLISHED_DRAFT_REPAIR_KIND,
+    proposal,
+    repair,
+    review,
+    root: candidate.root,
   };
   await assertReconciliationCompletionOwnerForSession({
     ...completionSession(ctx),
@@ -115,8 +116,8 @@ export const sealPublishedDraftRepair = async (input: {
   return {
     ...proposal,
     approvalReceipt: approvalReceiptForExistingDraftUpdate(proposal),
-    nextTool: "update_github_draft_pr" as const,
     baseline: "draft-head" as const,
+    nextTool: "update_github_draft_pr" as const,
   };
 };
 
@@ -159,10 +160,10 @@ export const updatePublishedDraftRepair = async (input: {
       return {
         ...publication,
         appSourceRecording: {
-          status: "unavailable" as const,
-          recoveryRequired: true,
           nextAction:
             "Resume this same approved draft update to record its retained actual repair release. The GitHub update already succeeded; do not publish another PR or repeat Git writes.",
+          recoveryRequired: true,
+          status: "unavailable" as const,
         },
       };
     }
@@ -173,7 +174,7 @@ export const updatePublishedDraftRepair = async (input: {
   const state = appBuilderWorkflowState.get();
   const candidate = draftReconciliationState.get();
   if (
-    candidate?.kind !== "published-draft-repair" ||
+    candidate?.kind !== PUBLISHED_DRAFT_REPAIR_KIND ||
     state.phase !== "reviewed" ||
     candidate.validation === undefined
   ) {
@@ -216,5 +217,5 @@ export const updatePublishedDraftRepair = async (input: {
     },
   };
   await assertReconciliationCompletionOwnerForSession(session);
-  return await finish(await runtime.updateExistingDraft({ proposal, review, contentSource }));
+  return await finish(await runtime.updateExistingDraft({ contentSource, proposal, review }));
 };

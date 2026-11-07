@@ -27,27 +27,29 @@ export const resolvePublishedAppDelivery = (
             ...(sourceDescription.deployment ?? application.projectSettings),
             rootDirectory: sourceDescription.app.workspacePath,
           };
-    return {
+    const delivery = {
       branch: source.branch,
       gitSha: source.gitSha,
       projectId: application.projectId,
-      ...(projectSettings === undefined ? {} : { projectSettings }),
-      repoId: source.repositoryId,
     };
+    if (projectSettings === undefined) {
+      return { ...delivery, repoId: source.repositoryId };
+    }
+    return { ...delivery, projectSettings, repoId: source.repositoryId };
   }
   // Retain the pre-existing explicitly configured caller contract outside hosted release planning.
   if (application.repoId === undefined || application.gitSha === undefined) {
     throw new HostedOperatorError("operator_unavailable");
   }
-  return {
+  const delivery = {
     branch: application.branch,
     gitSha: application.gitSha,
     projectId: application.projectId,
-    ...(application.projectSettings === undefined
-      ? {}
-      : { projectSettings: application.projectSettings }),
-    repoId: application.repoId,
   };
+  if (application.projectSettings === undefined) {
+    return { ...delivery, repoId: application.repoId };
+  }
+  return { ...delivery, projectSettings: application.projectSettings, repoId: application.repoId };
 };
 
 /** Continue normal publication when a selected generated release has no published source yet. */

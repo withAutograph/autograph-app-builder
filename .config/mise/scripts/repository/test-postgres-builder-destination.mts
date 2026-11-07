@@ -30,9 +30,9 @@ import type { BuilderDestinationEpoch } from "../../../../lib/provisioning/build
 
 // An owned loopback cluster only. Never consumes DATABASE_URL or provider credentials.
 const repositoryRoot = path.resolve(import.meta.dirname, "../../../..");
-const postgresBin = process.argv[2];
+const postgresBin = process.argv.at(2);
 assert.ok(
-  postgresBin && path.isAbsolute(postgresBin),
+  postgresBin !== undefined && postgresBin.length > 0 && path.isAbsolute(postgresBin),
   "Supply an absolute installed PostgreSQL bin directory",
 );
 const scratch = await mkdtemp(path.join(tmpdir(), "builder-destination-pg-"));
@@ -56,21 +56,21 @@ const port = await new Promise<number>((resolve, reject) => {
 const command = (name: string, args: string[]) => {
   const result = spawnSync(path.join(postgresBin, name), args, {
     encoding: "utf-8",
-    env: { PATH: process.env.PATH, LANG: "C", LC_ALL: "C" },
+    env: { LANG: "C", LC_ALL: "C", PATH: process.env.PATH },
   });
   assert.equal(result.status, 0, `Owned PostgreSQL ${name} failed`);
 };
 const principal = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
-  workspaceId: "workspace",
   scopes: ["autograph:send"],
+  workspaceId: "workspace",
 };
-const destination = { appId: "saved-app", requestId: randomUUID(), requestDigest: "d".repeat(64) };
+const destination = { appId: "saved-app", requestDigest: "d".repeat(64), requestId: randomUUID() };
 const expected: BuilderDestinationEpoch = {
-  adapterSessionId: "",
   adapterGeneration: 1,
+  adapterSessionId: "",
   cancellationRevision: 0,
 };
 const cases: string[] = [];
@@ -98,15 +98,15 @@ try {
   ]);
   started = true;
   client = postgres({
-    host: "127.0.0.1",
-    port,
     database: "postgres",
-    username: "fixture_admin",
-    password,
+    host: "127.0.0.1",
     max: 5,
     onnotice: (notice) => {
       assert.ok(notice.message !== undefined);
     },
+    password,
+    port,
+    username: "fixture_admin",
   });
   const database = drizzle(client, { schema });
   await migrate(database, { migrationsFolder: path.join(repositoryRoot, "drizzle") });
@@ -115,15 +115,15 @@ try {
   assert.ok(attach, "The real PostgreSQL attach implementation must be present");
   const operation = (label: string, extra = {}) =>
     hostedOperationRecordSchema.parse({
-      version: 1,
-      principal,
-      operationId: randomUUID(),
       clientRequestId: label,
-      kind: "start",
-      state: "reserved",
-      requestDigest: `sha256:${"a".repeat(64)}`,
       createdAtEpochMs: 1000,
+      kind: "start",
+      operationId: randomUUID(),
+      principal,
+      requestDigest: `sha256:${"a".repeat(64)}`,
+      state: "reserved",
       updatedAtEpochMs: 1000,
+      version: 1,
       ...extra,
     });
   const seed = async (label: string) => {
@@ -132,30 +132,30 @@ try {
     assert.equal((await store.reserveOperation(principal, start)).disposition, "reserved");
     const session = {
       ...toDurableHostedSessionRecord({
-        version: 1,
+        adapterSessionId: `adapter-${label}`,
+        createdAtEpochMs: 1000,
         principal,
         sessionId,
-        adapterSessionId: `adapter-${label}`,
         status: "waiting",
-        createdAtEpochMs: 1000,
         updatedAtEpochMs: 1000,
+        version: 1,
       }),
       appId: destination.appId,
     };
     await store.settleSucceeded({
-      principal,
-      operationId: start.operationId,
-      requestDigest: start.requestDigest,
       nowEpochMs: 1000,
+      operationId: start.operationId,
+      principal,
+      requestDigest: start.requestDigest,
+      result: { cursor: 0, events: [], sessionId, status: "waiting" },
       session,
-      result: { sessionId, status: "waiting", events: [], cursor: 0 },
     });
     return {
-      principal,
-      sessionId,
       destination,
       expected: { ...expected, adapterSessionId: session.adapterSessionId },
       nowEpochMs: 2000,
+      principal,
+      sessionId,
     };
   };
   const selected = await seed("selected");
@@ -201,12 +201,12 @@ try {
     await store.reserveOperation(principal, response);
     if (state === "submission_unknown") {
       await store.settleUnsuccessful({
-        principal,
-        operationId: response.operationId,
-        requestDigest: response.requestDigest,
-        state,
-        safeErrorCode: "submission_unknown",
         nowEpochMs: 1500,
+        operationId: response.operationId,
+        principal,
+        requestDigest: response.requestDigest,
+        safeErrorCode: "submission_unknown",
+        state,
       });
     }
     const before = await store.getPrivateOperation?.(principal, response.operationId);
@@ -228,12 +228,12 @@ try {
     assert.equal((await store.reserveOperation(principal, resume)).disposition, "reserved");
     if (state === "submission_unknown") {
       await store.settleUnsuccessful({
-        principal,
-        operationId: resume.operationId,
-        requestDigest: resume.requestDigest,
-        state,
-        safeErrorCode: "submission_unknown",
         nowEpochMs: 1500,
+        operationId: resume.operationId,
+        principal,
+        requestDigest: resume.requestDigest,
+        safeErrorCode: "submission_unknown",
+        state,
       });
     }
     const before = await store.getPrivateOperation?.(principal, resume.operationId);
@@ -243,51 +243,28 @@ try {
   }
   const legacySource = await seed("native-legacy");
   const legacyAuthority = {
-    issuer: principal.issuer,
     audience: principal.audience,
-    workspaceId: principal.workspaceId,
+    issuer: principal.issuer,
     ownerUserId: principal.ownerUserId,
+    workspaceId: principal.workspaceId,
   };
   const legacyOwner = {
+    adapterGeneration: 1,
+    adapterSessionId: legacySource.expected.adapterSessionId,
     authority: legacyAuthority,
     publicSessionId: legacySource.sessionId,
-    adapterSessionId: legacySource.expected.adapterSessionId,
-    adapterGeneration: 1,
   };
   const legacyPlan = nativeTargetOnboardingPlanSchema.parse({
-    version: 1,
-    appId: destination.appId,
-    origin: {
-      publicSessionId: legacySource.sessionId,
-      adapterSessionId: legacySource.expected.adapterSessionId,
-      adapterGeneration: 1,
-      appSpecDigest: "a".repeat(64),
-      release: {
-        id: "release-original",
-        artifactRef: "artifact-original",
-        manifestSha256: "b".repeat(64),
-        schemaSha256: "c".repeat(64),
-      },
-    },
-    project: {
-      name: destination.appId,
-      teamId: "team_fixture",
-      installationId: "install_fixture",
-      projectSettings: {
-        framework: "nextjs",
-        rootDirectory: "apps/requests",
-        sourceFilesOutsideRootDirectory: true,
-      },
-      protection: nativeTargetRequiredProjectProtection,
-    },
-    branch: "main",
     appDatabase: {
-      resourceId: "requests-resource",
       database: "requests_data",
       migratorRole: "requests_migrator",
+      resourceId: "requests-resource",
       runtimeRole: "requests_runtime",
     },
-    productRoles: [],
+    appId: destination.appId,
+    branch: "main",
+    conflictPolicy: "stop-on-conflict",
+    cost: { description: "Separate app target", ownership: "current-owner" },
     nativeNeon: {
       approvalReference: "native-scope-approval",
       nativeStore: {
@@ -296,58 +273,79 @@ try {
         sourceProjectId: "source-project",
       },
       scope: {
-        projectId: "neon-project",
         branchId: "neon-branch",
         endpointId: "neon-endpoint",
         hostname: "ep-fixture.neon.tech",
         maintenanceDatabase: "maintenance",
         maintenanceRole: "installer",
+        projectId: "neon-project",
       },
     },
+    origin: {
+      adapterGeneration: 1,
+      adapterSessionId: legacySource.expected.adapterSessionId,
+      appSpecDigest: "a".repeat(64),
+      publicSessionId: legacySource.sessionId,
+      release: {
+        artifactRef: "artifact-original",
+        id: "release-original",
+        manifestSha256: "b".repeat(64),
+        schemaSha256: "c".repeat(64),
+      },
+    },
+    productRoles: [],
+    project: {
+      installationId: "install_fixture",
+      name: destination.appId,
+      projectSettings: {
+        framework: "nextjs",
+        rootDirectory: "apps/requests",
+        sourceFilesOutsideRootDirectory: true,
+      },
+      protection: nativeTargetRequiredProjectProtection,
+      teamId: "team_fixture",
+    },
+    retention: { policy: "Until approved cleanup" },
+    version: 1,
     worker: {
-      id: "generic-installer",
       executablePath: "/trusted/generic-worker",
-      sha256: "d".repeat(64),
+      id: "generic-installer",
       operationScope: "generated-app-release-install-v1",
+      sha256: "d".repeat(64),
       subcommand: "protected-generated-app-install",
     },
-    cost: { ownership: "current-owner", description: "Separate app target" },
-    retention: { policy: "Until approved cleanup" },
-    conflictPolicy: "stop-on-conflict",
   });
   const nativeStore = createPostgresNativeTargetOnboardingStore(drizzle(client, { schema }));
   const legacyNow = new Date("2026-10-21T15:00:00.000Z");
   const nativeRegistry = createNativeTargetOnboardingRegistry({
-    store: nativeStore,
-    authorize: () => Promise.resolve(legacyOwner),
-    now: () => legacyNow,
-    assertPlanOrigin: (owner, plan) => {
+    assertPlanOrigin: async (owner, plan) => {
       assert.deepEqual(owner, legacyOwner);
       assert.deepEqual(plan, legacyPlan);
-      return Promise.resolve();
     },
-    readApproval: () =>
-      Promise.resolve({
-        requestId: "legacy-approval",
-        callId: "legacy-call",
-        planDigest: nativeTargetOnboardingPlanDigest(legacyPlan),
-        responderPrincipalId: principal.ownerUserId,
-        publicSessionId: legacySource.sessionId,
-        outcome: "approved",
-        observedAt: legacyNow.toISOString(),
-      }),
+    authorize: async () => legacyOwner,
+    now: () => legacyNow,
+    readApproval: async () => ({
+      callId: "legacy-call",
+      observedAt: legacyNow.toISOString(),
+      outcome: "approved",
+      planDigest: nativeTargetOnboardingPlanDigest(legacyPlan),
+      publicSessionId: legacySource.sessionId,
+      requestId: "legacy-approval",
+      responderPrincipalId: principal.ownerUserId,
+    }),
+    store: nativeStore,
   });
   await nativeRegistry.reservePlan({}, legacyPlan);
   await nativeRegistry.recordApproval({}, destination.appId);
   const legacyAttempt = {
     attemptId: randomUUID(),
     candidateName: destination.appId,
+    leaseExpiresAt: "2026-10-21T15:10:00.000Z",
     leaseId: randomUUID(),
     startedAt: legacyNow.toISOString(),
-    leaseExpiresAt: "2026-10-21T15:10:00.000Z",
   };
   await nativeRegistry.claimAttempt({}, destination.appId, legacyAttempt);
-  const key = { authority: legacyAuthority, appId: destination.appId };
+  const key = { appId: destination.appId, authority: legacyAuthority };
   const creating = await nativeStore.read(key);
   await assert.rejects(attach(legacySource), /Reconcile/u);
   assert.deepEqual(await nativeStore.read(key), creating);
@@ -364,9 +362,9 @@ try {
   assert.deepEqual(await nativeStore.read(key), uncertain);
   cases.push("unknown native project creation prevents attachment and stays unknown");
   await nativeRegistry.acceptProjectId({}, destination.appId, legacyAttempt.leaseId, {
+    acceptedAt: legacyNow.toISOString(),
     attemptId: legacyAttempt.attemptId,
     projectId: "project-accepted",
-    acceptedAt: legacyNow.toISOString(),
   });
   const accepted = await nativeStore.read(key);
   await assert.rejects(attach(legacySource), /Reconcile/u);
@@ -374,10 +372,10 @@ try {
   cases.push("accepted native project identity prevents attachment and remains preserved");
   console.log(
     JSON.stringify({
-      result: "passed",
-      evidence: "owned loopback PostgreSQL; real createPostgresHostedEveStore",
       checks: cases,
+      evidence: "owned loopback PostgreSQL; real createPostgresHostedEveStore",
       hostedAcceptance: "unassessed",
+      result: "passed",
     }),
   );
 } finally {
@@ -385,5 +383,5 @@ try {
   if (started) {
     command("pg_ctl", ["-D", data, "-m", "immediate", "-w", "stop"]);
   }
-  await rm(scratch, { recursive: true, force: true });
+  await rm(scratch, { force: true, recursive: true });
 }

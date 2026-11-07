@@ -11,13 +11,13 @@ const reference = { appId: "example_app", contextRef: "private-context" };
 const outcome = { ...reference, outcomeRef: "private-outcome" };
 const assessment = unavailableSourceAssessment(
   {
-    originalRequest: "Keep the requested behavior.",
-    clarifications: [],
     appSpec: "Keep the requested behavior.",
     appSpecDigest: "spec",
-    sourceDigest: "source",
+    clarifications: [],
     files: [],
     omissions: [],
+    originalRequest: "Keep the requested behavior.",
+    sourceDigest: "source",
   },
   "Runtime behavior remains unassessed.",
   "blocked",
@@ -25,53 +25,53 @@ const assessment = unavailableSourceAssessment(
 const context = (signal = new AbortController().signal): WorkflowStepToolContext => ({
   abortSignal: signal,
   callId: "review-call",
-  toolName: "review_current_product_source",
-  session: {
-    id: "same-session",
-    auth: { current: null, initiator: null },
-    turn: { id: "same-turn", sequence: 0 },
-  },
   getToken() {
     throw new Error("No provider authorization is requested by workflow orchestration.");
   },
   requireAuth() {
     throw new Error("No provider authorization is requested by workflow orchestration.");
   },
+  session: {
+    auth: { current: null, initiator: null },
+    id: "same-session",
+    turn: { id: "same-turn", sequence: 0 },
+  },
+  toolName: "review_current_product_source",
 });
 const checkpoint = (stepNumber: number): ApplicationReviewContinuation => ({
-  version: 1,
-  messages: [{ role: "assistant", content: `Retained private round ${stepNumber}` }],
-  findings: [],
-  runtimeChecks: ["Runtime behavior still requires execution."],
-  references: [],
-  reusableReads: [],
   completionRequested: false,
-  invalidEvidence: false,
   evidenceFailed: false,
-  outputRejected: false,
+  findings: [],
+  invalidEvidence: false,
   invocation: { ...emptySourceReviewInvocation(), requestAttempts: stepNumber },
+  messages: [{ content: `Retained private round ${stepNumber}`, role: "assistant" }],
+  outputRejected: false,
+  references: [],
   requestOrdinal: stepNumber,
+  reusableReads: [],
+  runtimeChecks: ["Runtime behavior still requires execution."],
   stepNumber,
+  version: 1,
 });
 
 const prepared: PreparedApplicationReviewContext = {
-  version: 1,
   appId: reference.appId,
-  parentSessionId: "same-session",
-  sandboxName: "owned-existing-sandbox",
   applyRoot: "/workspace/repository",
-  observed: { treeDigest: "source", files: [] },
   normalizedChanges: [],
-  visiblePaths: [],
-  reviewKey: "a".repeat(64),
+  observed: { files: [], treeDigest: "source" },
+  parentSessionId: "same-session",
   reviewInput: {
-    originalRequest: "Keep the requested behavior.",
     appSpec: "Keep the requested behavior.",
-    clarifications: [],
     appSpecDigest: "spec",
-    sourceDigest: "source",
+    clarifications: [],
     omissions: [],
+    originalRequest: "Keep the requested behavior.",
+    sourceDigest: "source",
   },
+  reviewKey: "a".repeat(64),
+  sandboxName: "owned-existing-sandbox",
+  version: 1,
+  visiblePaths: [],
 };
 
 describe("durable application review workflow orchestration", () => {
@@ -85,7 +85,7 @@ describe("durable application review workflow orchestration", () => {
       .fn<Steps["round"]>()
       .mockResolvedValueOnce({ continuation: first })
       .mockResolvedValueOnce({ continuation: second })
-      .mockResolvedValueOnce({ continuation: second, assessment });
+      .mockResolvedValueOnce({ assessment, continuation: second });
     const save = vi.fn<Steps["save"]>().mockResolvedValue(outcome);
     expect(await continueApplicationReviewWorkflow(reference, ctx, { load, round, save })).toEqual(
       outcome,
@@ -138,9 +138,9 @@ describe("durable application review workflow orchestration", () => {
   it("observes Stop during descriptor loading before dispatching a model round", async () => {
     const controller = new AbortController();
     const stopped = new Error("Stopped during descriptor load.");
-    const load = vi.fn<NonNullable<Steps["load"]>>(() => {
+    const load = vi.fn<NonNullable<Steps["load"]>>(async () => {
       controller.abort(stopped);
-      return Promise.resolve(structuredClone(prepared));
+      return structuredClone(prepared);
     });
     const round = vi.fn<Steps["round"]>();
     const save = vi.fn<Steps["save"]>();
@@ -164,7 +164,7 @@ describe("durable application review workflow orchestration", () => {
       .fn<Steps["round"]>()
       .mockResolvedValueOnce({ continuation: first })
       .mockResolvedValueOnce({ continuation: second })
-      .mockResolvedValueOnce({ continuation: second, assessment });
+      .mockResolvedValueOnce({ assessment, continuation: second });
     const save = vi.fn<Steps["save"]>().mockResolvedValue(outcome);
     expect(await continueApplicationReviewWorkflow(reference, ctx, { round, save })).toEqual(
       outcome,
@@ -182,7 +182,7 @@ describe("durable application review workflow orchestration", () => {
   it.each(["blocked", "failed", "unassessed"] as const)(
     "saves a terminal %s outcome without trying another model round",
     async (status) => {
-      const terminal = { ...assessment, status, reviewCompleted: false };
+      const terminal = { ...assessment, reviewCompleted: false, status };
       const round = vi.fn<Steps["round"]>().mockResolvedValue({ assessment: terminal });
       const save = vi.fn<Steps["save"]>().mockResolvedValue(outcome);
       const ctx = context();
@@ -213,9 +213,9 @@ describe("durable application review workflow orchestration", () => {
   it("observes cancellation after a completed round before saving its outcome", async () => {
     const controller = new AbortController();
     const stopped = new Error("Stopped during the round.");
-    const round = vi.fn<Steps["round"]>(() => {
+    const round = vi.fn<Steps["round"]>(async () => {
       controller.abort(stopped);
-      return Promise.resolve({ continuation: checkpoint(1), assessment });
+      return { assessment, continuation: checkpoint(1) };
     });
     const save = vi.fn<Steps["save"]>();
     await expect(

@@ -33,6 +33,12 @@ interface CapturedValidationLog {
 
 const mocks = vi.hoisted(() => ({
   attempt: vi.fn(),
+  browser: vi.fn(),
+  canReadHostSource: vi.fn(() => false),
+  clear: vi.fn(),
+  describe: vi.fn(),
+  execute: vi.fn(),
+  hostSource: vi.fn(),
   logStore: {
     getChunk: vi.fn(),
     getReference: vi.fn(),
@@ -40,17 +46,11 @@ const mocks = vi.hoisted(() => ({
     putChunk: vi.fn(),
     removeStaged: vi.fn(),
   },
-  browser: vi.fn(),
-  clear: vi.fn(),
-  describe: vi.fn(),
-  execute: vi.fn(),
-  canReadHostSource: vi.fn(() => false),
-  hostSource: vi.fn(),
   prepare: vi.fn(),
   publish: vi.fn(),
   review: vi.fn(),
   runtime: vi.fn(),
-  state: { current: {} as Record<string, unknown>, update: vi.fn() },
+  state: { current: {}, update: vi.fn() },
 }));
 
 vi.mock(import("../repository/development-source"), async (importOriginal) => ({
@@ -74,14 +74,14 @@ vi.mock("./prepared-runtime-execution", () => ({ resolvePreparedRuntimeExecution
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 vi.mock("./workflow-state", () => ({
   APP_BUILDER_WORKFLOW_VERSION: 1,
+  appBuilderWorkflowState: {
+    get: () => mocks.state.current,
+    update: mocks.state.update,
+  },
   assertExactWorkflowState: (latest: unknown, expected: unknown) => {
     if (JSON.stringify(latest) !== JSON.stringify(expected)) {
       throw new Error("Workflow changed concurrently");
     }
-  },
-  appBuilderWorkflowState: {
-    get: () => mocks.state.current,
-    update: mocks.state.update,
   },
 }));
 vi.mock("./product-behavior-state", () => ({
@@ -90,9 +90,9 @@ vi.mock("./product-behavior-state", () => ({
 }));
 vi.mock("../repository/target-validation", () => ({
   createTargetValidationAttempt: mocks.attempt,
-  readTargetValidationTestShards: () => Promise.resolve([]),
   executeProposalBoundValidation: mocks.execute,
   fixtureValidationCommandExecutor: vi.fn(),
+  readTargetValidationTestShards: async () => [],
   sandboxValidationCommandExecutor: vi.fn(),
 }));
 vi.mock("../testing/test-capability", () => ({ hasTestCapability: () => false }));
@@ -158,7 +158,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     );
     await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate-retained-application",
-      getSandbox: () => Promise.resolve({ id: "owned-applied-sandbox" }),
+      getSandbox: async () => ({ id: "owned-applied-sandbox" }),
       session: { id: "session" },
     } as never);
     expect(mocks.execute).toHaveBeenCalledOnce();
@@ -224,9 +224,9 @@ describe("behavior evidence invalidation during validation repair", () => {
       } as never,
     );
     expect(result).toMatchObject({
-      status: "needs_repair",
-      reason: "validation-tooling-prerequisite",
       failureClass: "private-compute-check-policy",
+      reason: "validation-tooling-prerequisite",
+      status: "needs_repair",
     });
     expect(getSandbox).not.toHaveBeenCalled();
     expect(mocks.state.update).not.toHaveBeenCalled();
@@ -243,7 +243,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     try {
       await validateAppCreation.execute({ implementationFiles: [], runBrowserTests: true }, {
         callId: "validate_phases",
-        getSandbox: () => Promise.resolve({ id: "private-sandbox" }),
+        getSandbox: async () => ({ id: "private-sandbox" }),
         session: { auth: { credential: "private-credential" }, id: "private-session" },
       } as never);
       const records = log.mock.calls.map(([record]) => JSON.parse(String(record)) as unknown);
@@ -314,7 +314,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate_static",
-      getSandbox: () => Promise.resolve({ id: "private-sandbox" }),
+      getSandbox: async () => ({ id: "private-sandbox" }),
       session: { auth: {}, id: "private-session" },
     } as never);
     const records = log.mock.calls.map(([record]) => JSON.parse(String(record)) as unknown);
@@ -356,7 +356,7 @@ describe("behavior evidence invalidation during validation repair", () => {
         await expect(
           validateAppCreation.execute({ implementationFiles: [], runBrowserTests: true }, {
             callId: "validate_failure",
-            getSandbox: () => Promise.resolve({ id: "private-sandbox" }),
+            getSandbox: async () => ({ id: "private-sandbox" }),
             session: { auth: {}, id: "private-session" },
           } as never),
         ).rejects.toBe(failure);
@@ -437,7 +437,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       );
       const context = {
         callId: "validate_local",
-        getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
+        getSandbox: async () => ({ id: "validation-sandbox" }),
         session: { auth: null, id: "actual-local-session" },
       };
       await contextStorage.run(new ContextContainer(), async () => {
@@ -492,7 +492,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     const sandbox = {};
     const context = {
       callId: "validate_capture",
-      getSandbox: () => Promise.resolve(sandbox),
+      getSandbox: async () => sandbox,
       session: { auth: { owned: "auth" }, id: "adapter" },
     };
     const result = await validateAppCreation.execute({ implementationFiles: [] }, context as never);
@@ -532,7 +532,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     });
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate_build",
-      getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
+      getSandbox: async () => ({ id: "validation-sandbox" }),
       session: { auth: {}, id: "session" },
     } as never);
     expect(mocks.execute).toHaveBeenCalledOnce();
@@ -551,20 +551,17 @@ describe("behavior evidence invalidation during validation repair", () => {
       backend: { kind: "generated-postgres" },
       validation: { browser: { task: "test-e2e" } },
     });
-    mocks.prepare.mockImplementation((input: { execution?: unknown }) =>
+    mocks.prepare.mockImplementation(async (input: { execution?: unknown }) =>
       input.execution === undefined
-        ? Promise.resolve(null)
-        : Promise.reject(new Error("auth_identity_required")),
+        ? await Promise.resolve(null)
+        : await Promise.reject(new Error("auth_identity_required")),
     );
     mocks.runtime.mockRejectedValue(new Error("auth_identity_required"));
-    const result = await validateAppCreation.execute(
-      { implementationFiles: [], runBrowserTests: true },
-      {
-        callId: "validate_before_auth",
-        getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
-        session: { auth: {}, id: "session" },
-      } as never,
-    );
+    const result = await validateAppCreation.execute({ implementationFiles: [], runBrowserTests: true }, {
+      callId: "validate_before_auth",
+      getSandbox: async () => ({ id: "validation-sandbox" }),
+      session: { auth: {}, id: "session" },
+    } as never);
     expect(mocks.execute).toHaveBeenCalledOnce();
     expect(mocks.prepare.mock.calls[0]?.[0]).not.toHaveProperty("execution");
     expect(mocks.publish).toHaveBeenCalledOnce();
@@ -597,7 +594,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     mocks.publish.mockRejectedValueOnce(new Error("private storage failure"));
     const context = {
       callId: "validate_retry",
-      getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
+      getSandbox: async () => ({ id: "validation-sandbox" }),
       session: { auth: {}, id: "adapter" },
     };
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
@@ -626,7 +623,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     mocks.state.current = { ...workflow("validated"), phase: "applied" };
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
-      getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
+      getSandbox: async () => ({ id: "validation-sandbox" }),
       session: { auth: {}, id: "session" },
     } as never);
     expect(mocks.review).not.toHaveBeenCalled();
@@ -645,7 +642,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     });
     await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
-      getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
+      getSandbox: async () => ({ id: "validation-sandbox" }),
       session: { auth: {}, id: "session" },
     } as never);
     expect(mocks.review).not.toHaveBeenCalled();
@@ -655,7 +652,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     mocks.review.mockResolvedValue({ findings: [], reviewCompleted: true, status: "passed" });
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
-      getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
+      getSandbox: async () => ({ id: "validation-sandbox" }),
       session: { auth: {}, id: "session" },
     } as never);
     expect(mocks.execute).toHaveBeenCalledOnce();
@@ -679,7 +676,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       mocks.execute.mockResolvedValue({ ok: false, receipt });
       const result = await validateAppCreation.execute({ implementationFiles: [] }, {
         callId: "validate_current",
-        getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
+        getSandbox: async () => ({ id: "validation-sandbox" }),
         session: { auth: {}, id: "session" },
       } as never);
       expect(mocks.execute).toHaveBeenCalledOnce();
@@ -703,14 +700,11 @@ describe("behavior evidence invalidation during validation repair", () => {
         validation: { browser: { task: "test-e2e" } },
       });
       mocks.browser.mockResolvedValue({ problem: "Assignment revoked", status });
-      const result = await validateAppCreation.execute(
-        { implementationFiles: [], runBrowserTests: true },
-        {
-          callId: "validate",
-          getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
-          session: { auth: {}, id: "session" },
-        } as never,
-      );
+      const result = await validateAppCreation.execute({ implementationFiles: [], runBrowserTests: true }, {
+        callId: "validate",
+        getSandbox: async () => ({ id: "validation-sandbox" }),
+        session: { auth: {}, id: "session" },
+      } as never);
       expect(mocks.prepare).toHaveBeenCalledOnce();
       expect(mocks.prepare.mock.calls[0]?.[0]).not.toHaveProperty("execution");
       expect(mocks.runtime).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "session" }));
@@ -730,7 +724,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     mocks.prepare.mockRejectedValueOnce(new Error("Checked release differs from CUE"));
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
-      getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
+      getSandbox: async () => ({ id: "validation-sandbox" }),
       session: { auth: {}, id: "session" },
     } as never);
     expect(mocks.state.current.phase).toBe("applied");
@@ -748,7 +742,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       const writeTextFile = vi.fn();
       const result = await validateAppCreation.execute({ implementationFiles }, {
         callId: "repair",
-        getSandbox: () => Promise.resolve({ id: "validation-sandbox", writeTextFile }),
+        getSandbox: async () => ({ id: "validation-sandbox", writeTextFile }),
         session: { auth: {}, id: "session" },
       } as never);
       expect(mocks.clear).toHaveBeenCalledBefore(writeTextFile);
@@ -764,7 +758,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     await expect(
       validateAppCreation.execute({ implementationFiles }, {
         callId: "repair",
-        getSandbox: () => Promise.resolve({ id: "validation-sandbox", writeTextFile }),
+        getSandbox: async () => ({ id: "validation-sandbox", writeTextFile }),
         session: { auth: {}, id: "session" },
       } as never),
     ).rejects.toThrow("write failed");
@@ -783,7 +777,7 @@ describe("behavior evidence invalidation during validation repair", () => {
         },
         {
           callId: "repair",
-          getSandbox: () => Promise.resolve({ id: "validation-sandbox", writeTextFile }),
+          getSandbox: async () => ({ id: "validation-sandbox", writeTextFile }),
           session: { auth: {}, id: "session" },
         } as never,
       ),
@@ -802,7 +796,7 @@ describe("behavior evidence invalidation during validation repair", () => {
         .mockRejectedValueOnce(new Error("second write failed"));
       const context = {
         callId: "repair",
-        getSandbox: () => Promise.resolve({ id: "validation-sandbox", writeTextFile }),
+        getSandbox: async () => ({ id: "validation-sandbox", writeTextFile }),
         session: { auth: {}, id: "session" },
       } as never;
       await expect(
@@ -834,27 +828,27 @@ describe("behavior evidence invalidation during validation repair", () => {
         ...workflow("validated"),
         phase: "validation_failed",
         validationFailure: {
-          reason: "tooling-prerequisite",
           attemptDigest: "saved-attempt",
           commandFailure: {
-            name: "check-build",
             exitCode: 1,
             failureClass,
             hint: "Restore the retained task prerequisite.",
+            name: "check-build",
           },
+          reason: "tooling-prerequisite",
         },
       };
       mocks.state.current = saved;
-      const getSandbox = vi.fn(() => Promise.resolve({ id: "validation-sandbox" }));
+      const getSandbox = vi.fn(async () => ({ id: "validation-sandbox" }));
       // SAFETY: The existing faithful validation ports own all effects in this product-tool regression.
       const result = await validateAppCreation.execute({ implementationFiles: [] }, {
         callId: "retry-after-tooling-repair",
         getSandbox,
-        session: { id: "session", auth: {} },
+        session: { auth: {}, id: "session" },
       } as never);
       expect(getSandbox).toHaveBeenCalledOnce();
       expect(mocks.execute).toHaveBeenCalledOnce();
-      expect(result).toMatchObject({ status: "validated", reused: false });
+      expect(result).toMatchObject({ reused: false, status: "validated" });
       expect(mocks.state.current).not.toHaveProperty("validationFailure");
     },
   );
@@ -863,21 +857,21 @@ describe("behavior evidence invalidation during validation repair", () => {
       ...workflow("validated"),
       phase: "validation_failed",
       validationFailure: {
-        reason: "tooling-prerequisite",
         attemptDigest: "saved-attempt",
-        commandFailure: { name: "check-build", exitCode: 1, failureClass: "missing-app-task" },
+        commandFailure: { exitCode: 1, failureClass: "missing-app-task", name: "check-build" },
+        reason: "tooling-prerequisite",
       },
     };
     const writeTextFile = vi.fn();
     // SAFETY: The existing faithful validation ports own all effects in this product-tool regression.
     const result = await validateAppCreation.execute({ implementationFiles }, {
       callId: "explicit-repair",
-      getSandbox: () => Promise.resolve({ id: "validation-sandbox", writeTextFile }),
-      session: { id: "session", auth: {} },
+      getSandbox: async () => ({ id: "validation-sandbox", writeTextFile }),
+      session: { auth: {}, id: "session" },
     } as never);
     expect(writeTextFile).toHaveBeenCalledOnce();
     expect(mocks.execute).toHaveBeenCalledOnce();
-    expect(result).toMatchObject({ status: "validated", reused: false });
+    expect(result).toMatchObject({ reused: false, status: "validated" });
   });
   it("returns exact reviewed task guidance only to the bound approved repair without source effects", async () => {
     await contextStorage.run(new ContextContainer(), async () => {
@@ -886,36 +880,36 @@ describe("behavior evidence invalidation during validation repair", () => {
         appId: "app",
         appSpecDigest: "a",
         proposalDigest: "proposal",
-        workspaceId: "workspace",
         sessionId: "session",
+        workspaceId: "workspace",
       };
       const current = {
         ...workflow("validated"),
-        workspace: {
-          workspaceId: scope.workspaceId,
+        applyReceipt: {
+          ...workflow("validated").applyReceipt,
+          appSpecDigest: "a",
+          proposalDigest: scope.proposalDigest,
+          sourceReceiptDigest: "source-digest",
           workspaceDigest: "workspace-digest",
-          workspacePath: "/workspace/repository",
         },
-        sourceReceipt: { digest: "source-digest" },
         proposal: {
           digest: scope.proposalDigest,
           target: {
             contract: { appId: "app", appSpec: { sha256: "a" } },
             privateCompute: {
               checkPolicy: {
-                path: taskPath,
-                beforeSha256: "old-hash",
                 afterSha256: createHash("sha256").update(PRIVATE_COMPUTE_CHECK_TASK).digest("hex"),
+                beforeSha256: "old-hash",
+                path: taskPath,
               },
             },
           },
         },
-        applyReceipt: {
-          ...workflow("validated").applyReceipt,
-          appSpecDigest: "a",
-          proposalDigest: scope.proposalDigest,
+        sourceReceipt: { digest: "source-digest" },
+        workspace: {
           workspaceDigest: "workspace-digest",
-          sourceReceiptDigest: "source-digest",
+          workspaceId: scope.workspaceId,
+          workspacePath: "/workspace/repository",
         },
       };
       mocks.state.current = current;
@@ -925,18 +919,18 @@ describe("behavior evidence invalidation during validation repair", () => {
       const context = {
         callId: "reviewed-recipe",
         getSandbox,
-        session: { id: scope.sessionId, auth: {} },
+        session: { auth: {}, id: scope.sessionId },
       } as never;
-      const input = { implementationFiles: [{ path: taskPath, content: "guessed recipe" }] };
+      const input = { implementationFiles: [{ content: "guessed recipe", path: taskPath }] };
       await expect(validateAppCreation.execute(input, context)).rejects.toThrow();
       requestPrivateApplyApproval(scope, "approve");
       recordApprovedPrivateApply(scope, "approve");
       expect(await validateAppCreation.execute(input, context)).toMatchObject({
-        status: "needs_repair",
-        reason: "reviewed-check-recipe-required",
         implementationFiles: [
-          { path: taskPath, operation: "upsert", content: PRIVATE_COMPUTE_CHECK_TASK },
+          { content: PRIVATE_COMPUTE_CHECK_TASK, operation: "upsert", path: taskPath },
         ],
+        reason: "reviewed-check-recipe-required",
+        status: "needs_repair",
       });
       expect(getSandbox).not.toHaveBeenCalled();
       expect(writeTextFile).not.toHaveBeenCalled();
@@ -991,8 +985,8 @@ describe("behavior evidence invalidation during validation repair", () => {
           ok: false,
           receipt: {
             ...missingDependencyFailure,
-            digest: "new-failure",
             attemptDigest: "new-attempt",
+            digest: "new-failure",
           },
         });
       }
@@ -1001,7 +995,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       }
       const result = await validateAppCreation.execute({ implementationFiles: [] }, {
         callId: "repair_dependencies",
-        getSandbox: () => Promise.resolve(sandbox),
+        getSandbox: async () => sandbox,
         session: { auth: {}, id: "session" },
       } as never);
       expect(sandbox.setNetworkPolicy).toHaveBeenCalledExactlyOnceWith("allow-all");
@@ -1036,7 +1030,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     const context = (sandbox: ReturnType<typeof dependencySandbox>) =>
       ({
         callId: "retry_dependencies",
-        getSandbox: () => Promise.resolve(sandbox),
+        getSandbox: async () => sandbox,
         session: { auth: {}, id: "session" },
       }) as never;
     const result = await validateAppCreation.execute({ implementationFiles: [] }, context(failed));

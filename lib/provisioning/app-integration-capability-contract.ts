@@ -10,6 +10,11 @@ import { z } from "zod";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { builderAppIdSchema } from "./names";
 
+const prepareControlDatabaseEffect = "prepare-control-database";
+const installControlSchemaEffect = "install-control-schema";
+const bindServiceMembershipsEffect = "bind-service-memberships";
+const registerCentralAppEffect = "register-central-app";
+const prepareProviderDestinationEffect = "prepare-provider-destination";
 const id = z.string().min(1).max(256);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const sqlName = z.string().regex(/^[a-z][a-z0-9_]{0,62}$/u);
@@ -19,151 +24,151 @@ const origin = z.url().refine((value) => {
   return url.protocol === "https:" && value === url.origin && !url.username && !url.password;
 });
 export const integrationCapabilityResourceSchema = z.strictObject({
-  resourceId: id,
+  database: sqlName,
   environment: z.literal("preview"),
   hostname: z.string().regex(/^[a-z0-9.-]+\.neon\.tech$/u),
-  port: z.literal(5432),
-  database: sqlName,
-  schema: z.literal("public"),
-  runtimeRole: role,
   migratorRole: role,
+  port: z.literal(5432),
+  resourceId: id,
+  runtimeRole: role,
+  schema: z.literal("public"),
 });
 export const integrationCapabilityMembershipSchema = z.strictObject({
-  organizationId: id,
   actorId: id,
+  organizationId: id,
   role: sqlName,
 });
 export const integrationCapabilityEffectSchema = z.enum([
-  "prepare-control-database",
-  "install-control-schema",
-  "bind-service-memberships",
-  "register-central-app",
-  "prepare-provider-destination",
+  prepareControlDatabaseEffect,
+  installControlSchemaEffect,
+  bindServiceMembershipsEffect,
+  registerCentralAppEffect,
+  prepareProviderDestinationEffect,
 ]);
 export type IntegrationCapabilityEffect = z.infer<typeof integrationCapabilityEffectSchema>;
 export const appIntegrationCapabilityPlanSchema = z
   .strictObject({
-    version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+    authority: hostedTenantAuthoritySchema,
+    control: z.strictObject({
+      activationKeyId: id,
+      activationPublicKeySha256: digest,
+      centralHostSetup: z
+        .strictObject({
+          callerOperationRef: z.uuid(),
+          callerPlanDigest: digest,
+          operationRef: z.uuid(),
+          planDigest: digest,
+          projectId: id,
+          providerDeploymentId: id,
+          teamId: id,
+          trustedSourcesGrantSha256: digest,
+        })
+        .optional(),
+      database: integrationCapabilityResourceSchema,
+      existingPlatform: existingPlatformIntegrationPlanReferenceSchema.optional(),
+      neon: z.strictObject({
+        branchId: id,
+        endpointId: id,
+        projectId: id,
+        source: z.literal("synthetic-only"),
+      }),
+      origin,
+      registrationIdentitySha256: digest,
+      resourceProfileId: id,
+      schema: z.strictObject({ artifactRef: id, sha256: digest }),
+    }),
+    effects: z.union([
+      z.tuple([
+        z.literal(prepareControlDatabaseEffect),
+        z.literal(installControlSchemaEffect),
+        z.literal(bindServiceMembershipsEffect),
+        z.literal(registerCentralAppEffect),
+      ]),
+      z.tuple([
+        z.literal(prepareControlDatabaseEffect),
+        z.literal(installControlSchemaEffect),
+        z.literal(bindServiceMembershipsEffect),
+        z.literal(prepareProviderDestinationEffect),
+        z.literal(registerCentralAppEffect),
+      ]),
+    ]),
     kind: z.enum([
       "app-integrations-capability-plan-v1",
       "app-integrations-capability-plan-v2",
       "app-integrations-capability-plan-v3",
     ]),
-    authority: hostedTenantAuthoritySchema,
-    selection: z.strictObject({ appId: builderAppIdSchema, sessionId: id }),
-    project: z.strictObject({
-      projectId: id,
-      teamId: id,
-      installationId: id,
-      provisioningRequestId: z.uuid(),
-      provisioningDigest: digest,
-    }),
-    release: z.strictObject({
-      id,
-      artifactRef: id,
-      manifestSha256: digest,
-      artifactSha256: digest,
-      appSpecDigest: id,
-    }),
-    runtime: z.strictObject({
-      operationRef: z.uuid(),
-      planDigest: digest,
-      appDatabase: integrationCapabilityResourceSchema,
-      neon: z.strictObject({
-        projectId: id,
-        branchId: id,
-        endpointId: id,
-        source: z.literal("synthetic-only"),
-      }),
-    }),
-    profileId: id,
+    machineIngress: appIntegrationMachineIngressSchema.optional(),
+    privateConfigurationSeed: z.strictObject({ reference: z.uuid(), sha256: digest }),
     profileDigest: digest,
-    publicOrigin: origin,
-    workload: z.strictObject({
-      issuer: z.url(),
-      audience: z.url(),
-      subject: id,
-      environment: z.literal("production"),
+    profileId: id,
+    project: z.strictObject({
+      installationId: id,
       projectId: id,
-      ownerId: id,
-    }),
-    readinessPath: z
-      .string()
-      .startsWith("/")
-      .refine((value) => !value.includes("?") && !value.includes("#") && !value.startsWith("//")),
-    control: z.strictObject({
-      origin,
-      resourceProfileId: id,
-      registrationIdentitySha256: digest,
-      database: integrationCapabilityResourceSchema,
-      neon: z.strictObject({
-        projectId: id,
-        branchId: id,
-        endpointId: id,
-        source: z.literal("synthetic-only"),
-      }),
-      centralHostSetup: z
-        .strictObject({
-          operationRef: z.uuid(),
-          planDigest: digest,
-          callerOperationRef: z.uuid(),
-          callerPlanDigest: digest,
-          projectId: id,
-          teamId: id,
-          providerDeploymentId: id,
-          trustedSourcesGrantSha256: digest,
-        })
-        .optional(),
-      existingPlatform: existingPlatformIntegrationPlanReferenceSchema.optional(),
-      schema: z.strictObject({ artifactRef: id, sha256: digest }),
-      activationKeyId: id,
-      activationPublicKeySha256: digest,
+      provisioningDigest: digest,
+      provisioningRequestId: z.uuid(),
+      teamId: id,
     }),
     provider: z.strictObject({
-      kind: z.literal("quickbooksSandbox"),
-      projectId: id,
+      authorizationOrigins: z.array(origin).min(1),
       integrationId: id,
+      kind: z.literal("quickbooksSandbox"),
+      payloadHosts: z.array(z.string().regex(/^[a-z0-9.-]+$/u)).min(1),
+      projectId: id,
+      readObjectsSha256: digest,
       recipeId: id,
       recipeVersion: id,
-      readObjectsSha256: digest,
-      authorizationOrigins: z.array(origin).min(1),
-      payloadHosts: z.array(z.string().regex(/^[a-z0-9.-]+$/u)).min(1),
     }),
     providerConfiguration: appIntegrationProviderConfigurationSchema.safeExtend({
       artifactRef: id,
     }),
-    serviceMemberships: z.array(integrationCapabilityMembershipSchema).min(1),
-    machineIngress: appIntegrationMachineIngressSchema.optional(),
-    worker: z.strictObject({ reference: id, sha256: digest }),
-    resourceWorker: z
-      .strictObject({ id: z.literal("neon-resource-bootstrap-v1"), sha256: digest })
-      .optional(),
     providerDestination: z
       .strictObject({
-        name: z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,127}$/u),
-        origin,
-        path: z.string().startsWith("/"),
         existing: z
           .strictObject({ destinationId: id, secretRef: z.uuid(), secretSha256: digest })
           .optional(),
+        name: z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,127}$/u),
+        origin,
+        path: z.string().startsWith("/"),
       })
       .optional(),
-    privateConfigurationSeed: z.strictObject({ reference: z.uuid(), sha256: digest }),
-    effects: z.union([
-      z.tuple([
-        z.literal("prepare-control-database"),
-        z.literal("install-control-schema"),
-        z.literal("bind-service-memberships"),
-        z.literal("register-central-app"),
-      ]),
-      z.tuple([
-        z.literal("prepare-control-database"),
-        z.literal("install-control-schema"),
-        z.literal("bind-service-memberships"),
-        z.literal("prepare-provider-destination"),
-        z.literal("register-central-app"),
-      ]),
-    ]),
+    publicOrigin: origin,
+    readinessPath: z
+      .string()
+      .startsWith("/")
+      .refine((value) => !value.includes("?") && !value.includes("#") && !value.startsWith("//")),
+    release: z.strictObject({
+      appSpecDigest: id,
+      artifactRef: id,
+      artifactSha256: digest,
+      id,
+      manifestSha256: digest,
+    }),
+    resourceWorker: z
+      .strictObject({ id: z.literal("neon-resource-bootstrap-v1"), sha256: digest })
+      .optional(),
+    runtime: z.strictObject({
+      appDatabase: integrationCapabilityResourceSchema,
+      neon: z.strictObject({
+        branchId: id,
+        endpointId: id,
+        projectId: id,
+        source: z.literal("synthetic-only"),
+      }),
+      operationRef: z.uuid(),
+      planDigest: digest,
+    }),
+    selection: z.strictObject({ appId: builderAppIdSchema, sessionId: id }),
+    serviceMemberships: z.array(integrationCapabilityMembershipSchema).min(1),
+    version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+    worker: z.strictObject({ reference: id, sha256: digest }),
+    workload: z.strictObject({
+      audience: z.url(),
+      environment: z.literal("production"),
+      issuer: z.url(),
+      ownerId: id,
+      projectId: id,
+      subject: id,
+    }),
   })
   // oxlint-disable-next-line eslint/complexity -- One refinement compares immutable version, physical resource, captured source and installed ingress authority without rewriting legacy plans.
   .superRefine((plan, context) => {
@@ -284,33 +289,32 @@ export const appIntegrationCapabilityOperationRef = (plan: AppIntegrationCapabil
   return `${value.slice(0, 8)}-${value.slice(8, 12)}-5${value.slice(13, 16)}-a${value.slice(17, 20)}-${value.slice(20, 32)}`;
 };
 export const integrationProviderDestinationReceiptSchema = z.strictObject({
-  effect: z.literal("prepare-provider-destination"),
   destinationId: id,
+  effect: z.literal(prepareProviderDestinationEffect),
   name: id,
-  url: z.url(),
   secretRef: z.uuid(),
   secretSha256: digest,
+  url: z.url(),
 });
 export const preparedIntegrationProviderDestinationSchema =
   integrationProviderDestinationReceiptSchema.omit({ effect: true, secretRef: true });
 export const integrationCapabilityReceiptSchema = z.discriminatedUnion("effect", [
   integrationProviderDestinationReceiptSchema,
   z.strictObject({
-    effect: z.literal("prepare-control-database"),
-    resourceVersion: id,
-    resourceId: id,
     database: sqlName,
-    runtimeRole: role,
+    effect: z.literal(prepareControlDatabaseEffect),
     migratorRole: role,
+    resourceId: id,
+    resourceVersion: id,
+    runtimeRole: role,
   }),
   z.strictObject({
-    effect: z.literal("install-control-schema"),
+    effect: z.literal(installControlSchemaEffect),
     resourceVersion: id,
     schemaSha256: digest,
   }),
   z.strictObject({
-    effect: z.literal("bind-service-memberships"),
-    resourceVersion: id,
+    effect: z.literal(bindServiceMembershipsEffect),
     memberships: z
       .array(
         integrationCapabilityMembershipSchema.extend({
@@ -318,23 +322,24 @@ export const integrationCapabilityReceiptSchema = z.discriminatedUnion("effect",
         }),
       )
       .min(1),
+    resourceVersion: id,
   }),
   z.strictObject({
-    effect: z.literal("register-central-app"),
-    resourceVersion: id,
     appId: builderAppIdSchema,
-    resourceProfileId: id,
-    registrationRef: z.uuid(),
-    registrationDigest: digest,
+    effect: z.literal(registerCentralAppEffect),
     principalGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    registrationDigest: digest,
+    registrationRef: z.uuid(),
+    resourceProfileId: id,
+    resourceVersion: id,
   }),
 ]);
 export type IntegrationCapabilityReceipt = z.infer<typeof integrationCapabilityReceiptSchema>;
 
 export const appIntegrationCapabilityApprovalInputSchema = z
   .strictObject({
-    plan: appIntegrationCapabilityPlanSchema,
     operationRef: z.uuid(),
+    plan: appIntegrationCapabilityPlanSchema,
     planDigest: digest,
   })
   .superRefine((input, context) => {
@@ -356,22 +361,24 @@ const loadedResource = integrationCapabilityResourceSchema.omit({
   migratorRole: true,
 });
 export const preparedAppIntegrationCapabilitySchema = z.strictObject({
-  kind: z.literal("app-integrations-development-v1"),
-  appId: builderAppIdSchema,
-  environment: z.literal("development"),
-  resourceProfile: z.literal("isolated-development"),
-  release: z.strictObject({ id, manifestSha256: digest, artifactSha256: digest }),
   appDatabase: loadedResource,
+  appId: builderAppIdSchema,
   control: z.strictObject({
-    origin,
-    resourceProfileId: id,
-    principalGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-    database: loadedResource,
     activationKeyId: id,
     activationPublicKeySha256: digest,
+    database: loadedResource,
+    origin,
+    principalGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    resourceProfileId: id,
   }),
+  environment: z.literal("development"),
+  kind: z.literal("app-integrations-development-v1"),
+  machineIngress: appIntegrationMachineIngressSchema.optional(),
+  privateConfiguration: z.strictObject({ reference: z.uuid(), sha256: digest }),
   provider: appIntegrationCapabilityPlanSchema.shape.provider,
   providerDestination: preparedIntegrationProviderDestinationSchema.optional(),
+  release: z.strictObject({ artifactSha256: digest, id, manifestSha256: digest }),
+  resourceProfile: z.literal("isolated-development"),
   serviceMemberships: z
     .array(
       integrationCapabilityMembershipSchema.extend({
@@ -379,8 +386,6 @@ export const preparedAppIntegrationCapabilitySchema = z.strictObject({
       }),
     )
     .min(1),
-  machineIngress: appIntegrationMachineIngressSchema.optional(),
-  privateConfiguration: z.strictObject({ reference: z.uuid(), sha256: digest }),
 });
 export type PreparedAppIntegrationCapability = z.infer<
   typeof preparedAppIntegrationCapabilitySchema
@@ -394,47 +399,47 @@ const retiredAttempts = z
   )
   .default([]);
 const effectState = z.discriminatedUnion("state", [
-  z.strictObject({ state: z.literal("idle"), retiredAttempts }),
+  z.strictObject({ retiredAttempts, state: z.literal("idle") }),
   z.strictObject({
-    state: z.literal("pending"),
-    retiredAttempts,
     attemptGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
     receipt: integrationCapabilityReceiptSchema.optional(),
+    retiredAttempts,
+    state: z.literal("pending"),
   }),
   z.strictObject({
-    state: z.literal("applied"),
-    retiredAttempts,
     attemptGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
     receipt: integrationCapabilityReceiptSchema,
+    retiredAttempts,
+    state: z.literal("applied"),
   }),
 ]);
 export type AppIntegrationCapabilityEffectState = z.infer<typeof effectState>;
 export const appIntegrationCapabilityRecordSchema = z
   .strictObject({
+    approvalReceipts: z.array(z.strictObject({ approvalId: id, approvedByCallId: id })).default([]),
+    effects: z.strictObject({
+      [bindServiceMembershipsEffect]: effectState,
+      [installControlSchemaEffect]: effectState,
+      [prepareControlDatabaseEffect]: effectState,
+      [prepareProviderDestinationEffect]: effectState.optional(),
+      [registerCentralAppEffect]: effectState,
+    }),
+    executionLease: z
+      .strictObject({
+        fenceGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+        leaseId: z.uuid(),
+      })
+      .optional(),
     kind: z.literal("app-integrations-capability-v1"),
     plan: appIntegrationCapabilityPlanSchema,
     planDigest: digest,
-    effects: z.strictObject({
-      "prepare-control-database": effectState,
-      "install-control-schema": effectState,
-      "bind-service-memberships": effectState,
-      "register-central-app": effectState,
-      "prepare-provider-destination": effectState.optional(),
-    }),
-    approvalReceipts: z.array(z.strictObject({ approvalId: id, approvedByCallId: id })).default([]),
-    executionLease: z
-      .strictObject({
-        leaseId: z.uuid(),
-        fenceGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-      })
-      .optional(),
     prepared: preparedAppIntegrationCapabilitySchema.optional(),
     providerDiagnostic: integrationProviderDiagnosticSchema.optional(),
   })
   .superRefine((record, context) => {
     const invalid = [
       record.planDigest !== appIntegrationCapabilityPlanDigest(record.plan),
-      record.plan.version === 1 && record.effects["prepare-provider-destination"] !== undefined,
+      record.plan.version === 1 && record.effects[prepareProviderDestinationEffect] !== undefined,
       record.plan.effects.some((effect) => {
         const state = record.effects[effect];
         return (

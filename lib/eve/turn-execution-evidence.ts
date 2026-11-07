@@ -117,10 +117,10 @@ export interface NativeTurnExecutionEvidence {
 
 type NativeEvent<K extends MessageStreamEvent["type"]> = Extract<MessageStreamEvent, { type: K }>;
 const reference = (event: MessageStreamEvent, nativeIndex: number): NativeEvidenceReference => ({
-  nativeIndex,
-  eventId: identifier(event.meta.id),
   at: event.meta.at,
   deliveryIds: (event.meta.deliveryIds ?? []).map(identifier),
+  eventId: identifier(event.meta.id),
+  nativeIndex,
 });
 const recordStart = (
   turns: Map<string, Turn>,
@@ -132,11 +132,11 @@ const recordStart = (
     throw invalid();
   }
   turns.set(turnId, {
-    turnId,
+    attempts: new Map(),
+    messages: [],
     sequence: event.data.sequence,
     started: reference(event, index),
-    messages: [],
-    attempts: new Map(),
+    turnId,
   });
 };
 const recordRequests = (
@@ -157,12 +157,12 @@ const recordRequests = (
       throw invalid();
     }
     turn.attempts.set(callId, {
-      turnId: turn.turnId,
       callId,
-      toolName: identifier(action.toolName),
       category: category(action.toolName),
-      requested: reference(event, index),
       commandReferences: [],
+      requested: reference(event, index),
+      toolName: identifier(action.toolName),
+      turnId: turn.turnId,
     });
   }
 };
@@ -171,7 +171,7 @@ const recordResult = (
   event: NativeEvent<"action.result">,
   index: number,
 ) => {
-  const result = event.data.result;
+  const { result } = event.data;
   if (result.kind !== "tool-result") {
     return;
   }
@@ -181,11 +181,11 @@ const recordResult = (
   }
   const callId = identifier(result.callId);
   const attempt = turn.attempts.get(callId) ?? {
-    turnId: turn.turnId,
     callId,
-    toolName: identifier(result.toolName),
     category: category(result.toolName),
     commandReferences: [],
+    toolName: identifier(result.toolName),
+    turnId: turn.turnId,
   };
   if (attempt.toolName !== result.toolName || attempt.result !== undefined) {
     throw invalid();
@@ -345,10 +345,10 @@ export const summarizeNativeTurnExecution = (input: {
       !turns.has(event.data.turnId)
     ) {
       unassociatedEvents.push({
-        event: reference(event, index),
-        type: event.type,
-        turnId: event.data.turnId.length === 0 ? null : identifier(event.data.turnId),
         assessment: "unassessed",
+        event: reference(event, index),
+        turnId: event.data.turnId.length === 0 ? null : identifier(event.data.turnId),
+        type: event.type,
       });
       continue;
     }
@@ -360,23 +360,29 @@ export const summarizeNativeTurnExecution = (input: {
   }
   const attempts = [...selected.attempts.values()];
   const historical = historicalFailure(turns, selected);
-  return {
-    version: 1,
-    kind: "native-turn-execution-evidence-v1",
-    sessionId: input.sessionId,
-    ownerLineage: [...input.ownerLineage],
-    nativeCursor: input.nativeCursor,
-    selectedBy: selectionKind(input.selector),
-    unassociatedEvents,
-    selectedTurn: {
-      turnId: selected.turnId,
-      sequence: selected.sequence,
-      started: selected.started,
-      acceptedMessages: selected.messages,
-      ...(selected.boundary === undefined ? {} : { boundary: selected.boundary }),
-      attempts,
-      execution: disposition(attempts),
-    },
-    ...(historical === undefined ? {} : { lastHistoricalFailedExecution: historical }),
+  const selectedTurn: NativeTurnExecutionEvidence["selectedTurn"] = {
+    acceptedMessages: selected.messages,
+    attempts,
+    execution: disposition(attempts),
+    sequence: selected.sequence,
+    started: selected.started,
+    turnId: selected.turnId,
   };
+  if (selected.boundary !== undefined) {
+    selectedTurn.boundary = selected.boundary;
+  }
+  const evidence: NativeTurnExecutionEvidence = {
+    kind: "native-turn-execution-evidence-v1",
+    nativeCursor: input.nativeCursor,
+    ownerLineage: [...input.ownerLineage],
+    selectedBy: selectionKind(input.selector),
+    selectedTurn,
+    sessionId: input.sessionId,
+    unassociatedEvents,
+    version: 1,
+  };
+  if (historical !== undefined) {
+    evidence.lastHistoricalFailedExecution = historical;
+  }
+  return evidence;
 };

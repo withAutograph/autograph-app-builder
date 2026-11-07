@@ -35,10 +35,10 @@ import { runAppBrowserTests } from "../agent/app-browser-test-runner";
 import { createContinuityCapabilityCustody } from "./hosted-operator-continuity-custody";
 
 export const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 export const context: HostedOperatorContext = {
   authority,
@@ -46,36 +46,35 @@ export const context: HostedOperatorContext = {
     appId: "orchard",
     branch: "preview",
     environment: "preview",
-    projectId: "app-project",
-    sessionId: "saved-session",
     installationId: "installation",
+    projectId: "app-project",
     scopeId: "team",
     scopeType: "team",
+    sessionId: "saved-session",
   },
 };
 export const preparedPlan = hostedOperatorPlanSchema.parse({
-  version: 1,
-  action: "prepare",
   access: [{ actorId: "actor-one", organizationId: "organization-one", roles: ["custom_role"] }],
+  action: "prepare",
   appDatabase: {
     database: "app_db",
     migratorRole: "app_migrator",
-    runtimeRole: "app_runtime",
     resourceId: "app-resource",
+    runtimeRole: "app_runtime",
   },
   authDatabase: {
     database: "auth_db",
     migratorRole: "auth_migrator",
-    runtimeRole: "auth_runtime",
     resourceId: "auth-resource",
+    runtimeRole: "auth_runtime",
   },
   contextId: "ordinary-planning-context",
   cost: { class: "shared-recovery-group", description: "Controlled fixture", owner: "Fixture" },
   effects: [
-    { id: "resources", kind: "resources", description: "Prepare resources" },
-    { id: "install", kind: "install", description: "Install app" },
-    { id: "access", kind: "access", description: "Authorize app" },
-    { id: "bindings", kind: "bindings", description: "Bind runtime" },
+    { description: "Prepare resources", id: "resources", kind: "resources" },
+    { description: "Install app", id: "install", kind: "install" },
+    { description: "Authorize app", id: "access", kind: "access" },
+    { description: "Bind runtime", id: "bindings", kind: "bindings" },
   ],
   installer: { reference: "shared-installer", sha256: "a".repeat(64) },
   neon: {
@@ -94,34 +93,35 @@ export const preparedPlan = hostedOperatorPlanSchema.parse({
     projectId: context.target.projectId,
     sessionId: context.target.sessionId,
   },
+  version: 1,
 });
 export const selection = {
-  version: 1 as const,
-  kind: "app-continuity-plan" as const,
+  actors: [{ actorId: "actor-one", organizationId: "organization-one" }],
   authority,
-  target: context.target,
+  gateway: {
+    environment: "preview" as const,
+    ownerId: "team",
+    projectId: "gateway-project",
+    publicOrigin: "https://gateway.example",
+  },
+  kind: "app-continuity-plan" as const,
   originalSetup: {
-    operationRef: "10000000-0000-4000-8000-000000000001",
-    planDigest: "c".repeat(64),
     approvalId: "setup-human",
     approvedByCallId: "setup-call",
+    operationRef: "10000000-0000-4000-8000-000000000001",
+    planDigest: "c".repeat(64),
   },
   preparedPlan,
   runtime: {
-    sandboxId: "owned-sandbox",
-    root: "/controlled/source",
-    projectId: "builder-project",
-    ownerId: "team",
     appPort: 3000,
     bridgePort: 3100,
-  },
-  gateway: {
-    projectId: "gateway-project",
     ownerId: "team",
-    environment: "preview" as const,
-    publicOrigin: "https://gateway.example",
+    projectId: "builder-project",
+    root: "/controlled/source",
+    sandboxId: "owned-sandbox",
   },
-  actors: [{ actorId: "actor-one", organizationId: "organization-one" }],
+  target: context.target,
+  version: 1 as const,
 };
 const makePlan = () =>
   hostedContinuityPlanSchema.parse({
@@ -151,7 +151,121 @@ export const setup = () => {
     tokenKeyVersion: "fixture-key",
   });
   const deps: HostedContinuityDependencies = {
+    assertOwner: vi.fn<HostedContinuityDependencies["assertOwner"]>(async () => {
+      if (!owner) {
+        throw new HostedOperatorError("authorization_required");
+      }
+    }),
+    assertSetup: vi.fn<HostedContinuityDependencies["assertSetup"]>(async () => {
+      if (!owner || !setupCurrent) {
+        throw new HostedOperatorError("authorization_required");
+      }
+    }),
+    now: () => new Date("2026-10-20T14:00:00.000Z"),
+    projection: {
+      publish: vi.fn<HostedContinuityDependencies["projection"]["publish"]>(
+        async (_context, _record, _capabilities, assertCurrent) => {
+          await assertCurrent();
+          events.push("publish");
+        },
+      ),
+      revoke: vi.fn<HostedContinuityDependencies["projection"]["revoke"]>(
+        async (_context, _record, assertCurrent, checkpoint) => {
+          await assertCurrent();
+          events.push("revoke-owned-rows");
+          await checkpoint([]);
+        },
+      ),
+    },
+    readApproval: vi.fn<HostedContinuityDependencies["readApproval"]>(
+      async (_context, request, callId) =>
+        approved
+          ? {
+              ...request,
+              approvalId: "continuity-human",
+              approvedByCallId: callId ?? "continuity-call",
+            }
+          : null,
+    ),
+    resolvePlan: vi.fn<HostedContinuityDependencies["resolvePlan"]>(async (_context, runtime) => ({
+      ...makePlan(),
+      runtime: { ...selection.runtime, ...runtime },
+    })),
+    runtime: {
+      close: vi.fn<HostedContinuityDependencies["runtime"]["close"]>(async () => {
+        events.push("close");
+      }),
+      renew: vi.fn<HostedContinuityDependencies["runtime"]["renew"]>(async () => {
+        events.push("renew");
+      }),
+      runSuite: vi.fn<HostedContinuityDependencies["runtime"]["runSuite"]>(
+        async (_context, _record, _capabilities, assertCurrent, checkpoint, allowDispatch) => {
+          await assertCurrent();
+          events.push(allowDispatch ? "dispatch-suite" : "read-suite");
+          if (allowDispatch) {
+            await checkpoint("suite-command");
+          }
+          return { exitCode: 0 };
+        },
+      ),
+      start: vi.fn<HostedContinuityDependencies["runtime"]["start"]>(
+        async (_context, record, _capabilities, assertCurrent, checkpoint) => {
+          await assertCurrent();
+          events.push("start");
+          const { attemptId, approval } = record;
+          if (approval === undefined) {
+            throw new Error("Missing fresh approval");
+          }
+          if (attemptId === undefined) {
+            throw new Error("Missing retained attempt");
+          }
+          await checkpoint({
+            current: {
+              appId: context.target.appId,
+              approvalRef: approval.approvalId,
+              fence: record.fence,
+              intentId: record.requestId,
+              leaseExpiresAt: "2027-01-01T00:00:00.000Z",
+              owner: { ...authority, sessionId: context.target.sessionId },
+              providerSessionId: "provider-session",
+              runtimeAttemptId: attemptId,
+              sandboxId: record.plan.runtime.sandboxId,
+              state: "ready",
+            },
+            locator: {
+              attemptId,
+              commandId: "runtime-command",
+              providerSessionId: "provider-session",
+              root: record.plan.runtime.root,
+              rootDirectory: "/controlled/runtime",
+              sandboxId: record.plan.runtime.sandboxId,
+              worker: {
+                executablePath: "/private/worker",
+                id: "managed-worker",
+                operationScope: "managed-app-runtime-v1",
+                sha256: "d".repeat(64),
+                subcommand: "protected-managed-app-runtime",
+              },
+            },
+          });
+        },
+      ),
+    },
+    seal: (record, caps) => custody.seal(record, caps),
     store: {
+      async compareAndSet(input) {
+        row = rows.get(input.record.requestId);
+        if (rejectCas || row?.revision !== input.expectedRevision) {
+          rejectCas = false;
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional CAS absence is the supported conflict result.
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing workspace is the resolver contract.
+          return undefined;
+        }
+        row = continuityRecordSchema.parse(structuredClone(input.record));
+        rows.set(row.requestId, row);
+        records.push(read());
+        return read();
+      },
       async read(input) {
         const saved = rows.get(input.intentId);
         return saved && isDeepStrictEqual(input.authority, saved.plan.authority)
@@ -166,45 +280,7 @@ export const setup = () => {
         records.push(read());
         return read();
       },
-      async compareAndSet(input) {
-        row = rows.get(input.record.requestId);
-        if (rejectCas || row?.revision !== input.expectedRevision) {
-          rejectCas = false;
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional CAS absence is the supported conflict result.
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing workspace is the resolver contract.
-          return undefined;
-        }
-        row = continuityRecordSchema.parse(structuredClone(input.record));
-        rows.set(row.requestId, row);
-        records.push(read());
-        return read();
-      },
     },
-    assertOwner: vi.fn<HostedContinuityDependencies["assertOwner"]>(async () => {
-      if (!owner) {
-        throw new HostedOperatorError("authorization_required");
-      }
-    }),
-    assertSetup: vi.fn<HostedContinuityDependencies["assertSetup"]>(async () => {
-      if (!owner || !setupCurrent) {
-        throw new HostedOperatorError("authorization_required");
-      }
-    }),
-    resolvePlan: vi.fn<HostedContinuityDependencies["resolvePlan"]>(async (_context, runtime) => ({
-      ...makePlan(),
-      runtime: { ...selection.runtime, ...runtime },
-    })),
-    readApproval: vi.fn<HostedContinuityDependencies["readApproval"]>(
-      async (_context, request, callId) =>
-        approved
-          ? {
-              ...request,
-              approvalId: "continuity-human",
-              approvedByCallId: callId ?? "continuity-call",
-            }
-          : null,
-    ),
-    seal: (record, caps) => custody.seal(record, caps),
     unseal: (record) => custody.unseal(record),
     withResourceLease: async (input, run) => {
       if (held) {
@@ -224,102 +300,26 @@ export const setup = () => {
         held = false;
       }
     },
-    runtime: {
-      start: vi.fn<HostedContinuityDependencies["runtime"]["start"]>(
-        async (_context, record, _capabilities, assertCurrent, checkpoint) => {
-          await assertCurrent();
-          events.push("start");
-          const { attemptId, approval } = record;
-          if (approval === undefined) {
-            throw new Error("Missing fresh approval");
-          }
-          if (attemptId === undefined) {
-            throw new Error("Missing retained attempt");
-          }
-          await checkpoint({
-            locator: {
-              sandboxId: record.plan.runtime.sandboxId,
-              root: record.plan.runtime.root,
-              providerSessionId: "provider-session",
-              commandId: "runtime-command",
-              worker: {
-                id: "managed-worker",
-                executablePath: "/private/worker",
-                sha256: "d".repeat(64),
-                operationScope: "managed-app-runtime-v1",
-                subcommand: "protected-managed-app-runtime",
-              },
-              attemptId,
-              rootDirectory: "/controlled/runtime",
-            },
-            current: {
-              intentId: record.requestId,
-              approvalRef: approval.approvalId,
-              owner: { ...authority, sessionId: context.target.sessionId },
-              appId: context.target.appId,
-              runtimeAttemptId: attemptId,
-              fence: record.fence,
-              sandboxId: record.plan.runtime.sandboxId,
-              providerSessionId: "provider-session",
-              state: "ready",
-              leaseExpiresAt: "2027-01-01T00:00:00.000Z",
-            },
-          });
-        },
-      ),
-      runSuite: vi.fn<HostedContinuityDependencies["runtime"]["runSuite"]>(
-        async (_context, _record, _capabilities, assertCurrent, checkpoint, allowDispatch) => {
-          await assertCurrent();
-          events.push(allowDispatch ? "dispatch-suite" : "read-suite");
-          if (allowDispatch) {
-            await checkpoint("suite-command");
-          }
-          return { exitCode: 0 };
-        },
-      ),
-      close: vi.fn<HostedContinuityDependencies["runtime"]["close"]>(async () => {
-        events.push("close");
-      }),
-      renew: vi.fn<HostedContinuityDependencies["runtime"]["renew"]>(async () => {
-        events.push("renew");
-      }),
-    },
-    projection: {
-      publish: vi.fn<HostedContinuityDependencies["projection"]["publish"]>(
-        async (_context, _record, _capabilities, assertCurrent) => {
-          await assertCurrent();
-          events.push("publish");
-        },
-      ),
-      revoke: vi.fn<HostedContinuityDependencies["projection"]["revoke"]>(
-        async (_context, _record, assertCurrent, checkpoint) => {
-          await assertCurrent();
-          events.push("revoke-owned-rows");
-          await checkpoint([]);
-        },
-      ),
-    },
-    now: () => new Date("2026-10-20T14:00:00.000Z"),
   };
   return {
-    operations: createHostedContinuityOperations(deps),
-    deps,
-    events,
-    records,
-    read,
-    rows,
     approve: () => {
       approved = true;
+    },
+    deps,
+    events,
+    invalidateSetup: () => {
+      setupCurrent = false;
+    },
+    operations: createHostedContinuityOperations(deps),
+    read,
+    records,
+    rejectNextCas: () => {
+      rejectCas = true;
     },
     revokeOwner: () => {
       owner = false;
     },
-    invalidateSetup: () => {
-      setupCurrent = false;
-    },
-    rejectNextCas: () => {
-      rejectCas = true;
-    },
+    rows,
   };
 };
 
@@ -348,26 +348,19 @@ export const installManagedAcceptanceSuite = (
     const result = await runAppBrowserTests({
       appId: context.target.appId,
       root,
-      sandbox: {
-        run: async () => {
-          throw new Error("managed task must use protected runtime");
-        },
-      },
-      selection: record.plan.runtime.browserSelection,
       runtime: {
         environmentPath: "/controlled/private/environment.json",
-        stateDirectory: "/controlled/private",
         installationProof: {
+          actors: 1,
           appId: context.target.appId,
+          artifactHash: preparedPlan.release.sha256,
+          authenticatedBehavior: "unassessed",
           branch: "preview",
           environment: "preview",
-          releaseId: preparedPlan.release.id,
-          artifactHash: preparedPlan.release.sha256,
-          actors: 1,
-          tenants: 1,
-          observedAt: "2026-10-20T14:00:00.000Z",
           observation: "database-verification",
-          authenticatedBehavior: "unassessed",
+          observedAt: "2026-10-20T14:00:00.000Z",
+          releaseId: preparedPlan.release.id,
+          tenants: 1,
         },
         prepareAuthenticatedOrigin: async () => {
           await Promise.resolve();
@@ -377,19 +370,19 @@ export const installManagedAcceptanceSuite = (
           // The browser terminal and principal verifier are controlled ports; child,
           // loopback forwarding, capability IPC and process replacement are real.
           await assertCurrent();
-          const current = record.current;
+          const { current } = record;
           if (!current) {
             throw new Error("Managed runtime identity is missing");
           }
           const identity = {
-            intentId: current.intentId,
-            approvalRef: current.approvalRef,
-            owner: current.owner,
             appId: current.appId,
-            runtimeAttemptId: current.runtimeAttemptId,
+            approvalRef: current.approvalRef,
             fence: current.fence,
-            sandboxId: current.sandboxId,
+            intentId: current.intentId,
+            owner: current.owner,
             providerSessionId: current.providerSessionId,
+            runtimeAttemptId: current.runtimeAttemptId,
+            sandboxId: current.sandboxId,
           };
           const listen = async (server: Server) => {
             // oxlint-disable-next-line promise/avoid-new -- Adapt the owned loopback listener event.
@@ -421,15 +414,14 @@ export const installManagedAcceptanceSuite = (
           );
           const owner = new AbortController();
           const supervisor = createManagedRuntimeSupervisor({
-            identity,
-            expiresAt: Date.now() + 60_000,
-            ownershipSignal: owner.signal,
             assertCurrent,
+            expiresAt: Date.now() + 60_000,
+            identity,
             launchSameEnvironment: createManagedOwnedChildLauncher({
-              executable: process.execPath,
+              appEnvironment: { APP_PORT: String(appPort), DURABLE_FILE: durableFile },
               args: [childScript],
               cwd: fixture,
-              appEnvironment: { APP_PORT: String(appPort), DURABLE_FILE: durableFile },
+              executable: process.execPath,
             }),
             observeReadiness: async () => {
               await vi.waitFor(
@@ -440,47 +432,48 @@ export const installManagedAcceptanceSuite = (
                   expect(response.status).toBe(200);
                   await response.text();
                 },
-                { timeout: 3000, interval: 25 },
+                { interval: 25, timeout: 3000 },
               );
               return true;
             },
+            ownershipSignal: owner.signal,
           });
           const ipc = await startManagedRuntimeIpc({
-            supervisor,
             lifecycleSha256: managedCapabilitySha256(capabilities.lifecycle),
+            supervisor,
           });
           const client = createManagedRuntimeIpcClient({
-            socketPath: ipc.socketPath,
             lifecycleCapability: capabilities.lifecycle,
+            socketPath: ipc.socketPath,
           });
           const bridge = createManagedRuntimeBridge({
-            identity,
-            profile: managedRuntimePublicProfileSchema.parse({
-              version: 1,
-              appId: identity.appId,
-              publicOrigin: "https://gateway.example",
-              jwksUrl: "https://gateway.example/_platform/jwks.json",
-              keys: [
-                {
-                  ...generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }),
-                  kid: "fixture",
-                  alg: "EdDSA",
-                  use: "sig",
-                },
-              ],
-            }),
-            transportSha256: managedCapabilitySha256(capabilities.transport),
             actors: preparedPlan.access.map(({ actorId, organizationId }) => ({
               actorId,
               organizationId,
             })),
             appPort,
             expiresAt: Date.now() + 60_000,
+            identity,
             ownershipSignal: owner.signal,
+            profile: managedRuntimePublicProfileSchema.parse({
+              appId: identity.appId,
+              jwksUrl: "https://gateway.example/_platform/jwks.json",
+              keys: [
+                {
+                  ...generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }),
+                  alg: "EdDSA",
+                  kid: "fixture",
+                  use: "sig",
+                },
+              ],
+              publicOrigin: "https://gateway.example",
+              version: 1,
+            }),
             readCurrent: async () => {
               await assertCurrent();
               return current;
             },
+            transportSha256: managedCapabilitySha256(capabilities.transport),
             verification: {
               createVerification: () => ({}),
               verifyRequest: async ({ headers }) => {
@@ -494,14 +487,14 @@ export const installManagedAcceptanceSuite = (
           try {
             const bridgePort = await listen(bridge.server);
             const invalid = createManagedRuntimeIpcClient({
-              socketPath: ipc.socketPath,
               lifecycleCapability: "invalid",
+              socketPath: ipc.socketPath,
             });
             await expect(invalid.execute({ operation: "status" })).rejects.toThrow();
-            await client.execute({ operation: "start-same-environment", commandId: randomUUID() });
+            await client.execute({ commandId: randomUUID(), operation: "start-same-environment" });
             const before = await client.execute({
-              operation: "observe-readiness",
               commandId: randomUUID(),
+              operation: "observe-readiness",
             });
             expect(before.state).toBe("ready");
             const denied = await fetch(`http://127.0.0.1:${bridgePort}`, {
@@ -513,9 +506,9 @@ export const installManagedAcceptanceSuite = (
               const response = await fetch(`http://127.0.0.1:${bridgePort}`, {
                 headers: {
                   authorization: `Bearer ${capabilities.transport}`,
-                  "x-platform-principal": "controlled-valid-principal",
-                  "x-platform-managed-suite": capabilities.suiteSelector,
                   connection: "close",
+                  "x-platform-managed-suite": capabilities.suiteSelector,
+                  "x-platform-principal": "controlled-valid-principal",
                 },
               });
               expect(response.status).toBe(200);
@@ -523,8 +516,8 @@ export const installManagedAcceptanceSuite = (
             };
             expect(await readThroughBridge()).toContain('"value":"preserved-value"');
             const stopped = await client.execute({
-              operation: "stop-and-wait",
               commandId: randomUUID(),
+              operation: "stop-and-wait",
             });
             expect(stopped.state).toBe("stopped");
             if (!before.process) {
@@ -533,10 +526,10 @@ export const installManagedAcceptanceSuite = (
             const oldPid = before.process.pid;
             expect(() => process.kill(oldPid, 0)).toThrow();
             await expect(fetch(`http://127.0.0.1:${appPort}`)).rejects.toThrow();
-            await client.execute({ operation: "start-same-environment", commandId: randomUUID() });
+            await client.execute({ commandId: randomUUID(), operation: "start-same-environment" });
             const after = await client.execute({
-              operation: "observe-readiness",
               commandId: randomUUID(),
+              operation: "observe-readiness",
             });
             expect(after.state).toBe("ready");
             expect(after.process?.generation).toBe(2);
@@ -547,9 +540,16 @@ export const installManagedAcceptanceSuite = (
             await ipc.close();
             await supervisor.close();
           }
-          return { exitCode: 0, stdout: "focused managed scenario completed", stderr: "" };
+          return { exitCode: 0, stderr: "", stdout: "focused managed scenario completed" };
+        },
+        stateDirectory: "/controlled/private",
+      },
+      sandbox: {
+        run: async () => {
+          throw new Error("managed task must use protected runtime");
         },
       },
+      selection: record.plan.runtime.browserSelection,
     });
     expect(result).toMatchObject({ status: "passed" });
     return { exitCode: result.exitCode ?? 1 };

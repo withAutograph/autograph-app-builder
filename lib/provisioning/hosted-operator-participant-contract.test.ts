@@ -16,41 +16,39 @@ import {
 } from "./hosted-operator-normal-actor-program";
 
 const program = normalActorProgramSchema.parse({
-  version: 1,
-  appId: "spend-review",
-  origin: "https://public.example.com",
   actors: [
     {
+      account: "create-email-password",
       actorKey: "requester",
       email: "requester@example.com",
       name: "Requester",
-      account: "create-email-password",
     },
     {
+      account: "capture-existing",
       actorKey: "reviewer",
       email: "reviewer@example.com",
       name: "Reviewer",
-      account: "capture-existing",
     },
-  ],
-  organizations: [
-    { organizationId: "org-one", ownerActorKey: "requester", name: "One", slug: "one" },
-    { organizationId: "org-two", ownerActorKey: "reviewer", name: "Two", slug: "two" },
-  ],
-  memberships: [
-    { actorKey: "requester", organizationId: "org-one", role: "owner" },
-    { actorKey: "reviewer", organizationId: "org-two", role: "owner" },
   ],
   appAccess: [
     { actorKey: "requester", organizationId: "org-one", roles: ["requester"] },
     { actorKey: "reviewer", organizationId: "org-two", roles: ["reviewer"] },
   ],
+  appId: "spend-review",
+  memberships: [
+    { actorKey: "requester", organizationId: "org-one", role: "owner" },
+    { actorKey: "reviewer", organizationId: "org-two", role: "owner" },
+  ],
+  organizations: [
+    { name: "One", organizationId: "org-one", ownerActorKey: "requester", slug: "one" },
+    { name: "Two", organizationId: "org-two", ownerActorKey: "reviewer", slug: "two" },
+  ],
+  origin: "https://public.example.com",
+  version: 1,
 });
 const base = hostedOperatorPlanSchema.parse({
-  version: 1,
-  action: "prepare",
-  stage: "app",
   access: [],
+  action: "prepare",
   appDatabase: {
     database: "app_db",
     migratorRole: "app_migrator",
@@ -69,40 +67,32 @@ const base = hostedOperatorPlanSchema.parse({
     description: "Existing approved Preview",
     owner: "owner",
   },
-  selection: {
-    appId: "spend-review",
-    branch: "feature",
-    environment: "preview",
-    projectId: "app-project",
-    sessionId: "public-session",
-  },
-  publicGateway: { branch: "feature", origin: program.origin, projectId: "gateway-project" },
   deploymentBoundary: {
     app: { branch: "feature", environment: "preview", projectId: "app-project" },
+    authority: {
+      audience: "https://builder.example.com/mcp",
+      issuer: "https://builder.example.com/api/auth",
+      ownerUserId: "owner",
+      workspaceId: "workspace",
+    },
     gateway: { branch: "feature", environment: "preview", projectId: "gateway-project" },
     operator: {
       deploymentId: "operator-deployment",
       environment: "preview",
       projectId: "operator-project",
     },
-    authority: {
-      issuer: "https://builder.example.com/api/auth",
-      audience: "https://builder.example.com/mcp",
-      ownerUserId: "owner",
-      workspaceId: "workspace",
-    },
     teamId: "team",
     verification: {
-      publicOrigin: program.origin,
       gatewayOrigin: "https://gateway.example.com",
       jwksUrl: "https://gateway.example.com/_platform/jwks.json",
+      publicOrigin: program.origin,
     },
   },
   effects: [
-    { id: "resources", kind: "resources", description: "Read existing resources" },
-    { id: "install", kind: "install", description: "Install app" },
-    { id: "access", kind: "access", description: "Apply approved roles" },
-    { id: "bindings", kind: "bindings", description: "Bind app" },
+    { description: "Read existing resources", id: "resources", kind: "resources" },
+    { description: "Install app", id: "install", kind: "install" },
+    { description: "Apply approved roles", id: "access", kind: "access" },
+    { description: "Bind app", id: "bindings", kind: "bindings" },
   ],
   installer: { reference: "installer", sha256: "a".repeat(64) },
   neon: {
@@ -112,23 +102,33 @@ const base = hostedOperatorPlanSchema.parse({
     projectId: "neon-project",
     source: "synthetic-only",
   },
+  publicGateway: { branch: "feature", origin: program.origin, projectId: "gateway-project" },
   release: { artifactRef: "private-release", id: "release", sha256: "b".repeat(64) },
   retention: { expiresAt: "2030-01-01T00:00:00Z", policy: "approved" },
+  selection: {
+    appId: "spend-review",
+    branch: "feature",
+    environment: "preview",
+    projectId: "app-project",
+    sessionId: "public-session",
+  },
+  stage: "app",
+  version: 1,
 });
 const participantPlan = () =>
   hostedOperatorPlanSchema.parse({
     ...base,
-    normalActorProgram: program,
-    stage: "auth-participants",
     bootstrap: { endpointId: "endpoint", maintenanceDatabase: "neondb", role: "bootstrap_role" },
-    resourcesInstaller: { reference: "existing-installer", sha256: "c".repeat(64) },
     effects: [
       {
+        description: "Prepare the approved normal accounts",
         id: "normal-accounts",
         kind: "normal-accounts",
-        description: "Prepare the approved normal accounts",
       },
     ],
+    normalActorProgram: program,
+    resourcesInstaller: { reference: "existing-installer", sha256: "c".repeat(64) },
+    stage: "auth-participants",
   });
 
 describe("public Gateway origin projection", () => {
@@ -148,14 +148,14 @@ describe("public Gateway origin projection", () => {
     const observed = structuredClone(inventory);
     const result = hostedOperatorPlanSchema.parse({
       ...plan,
-      publicGateway: createHostedOperatorPublicGateway(inventory, "configured-branch"),
-      normalActorProgram: { ...program, origin: publicOrigin },
       deploymentBoundary: { ...plan.deploymentBoundary, verification: inventory.verification },
+      normalActorProgram: { ...program, origin: publicOrigin },
+      publicGateway: createHostedOperatorPublicGateway(inventory, "configured-branch"),
     });
     expect(result.publicGateway).toEqual({
       branch: "feature",
-      projectId: "gateway-project",
       origin: publicOrigin,
+      projectId: "gateway-project",
     });
     expect(result.deploymentBoundary?.verification.gatewayOrigin).toBe(generatedOrigin);
     expect(result.deploymentBoundary?.verification.jwksUrl).toBe(inventory.verification.jwksUrl);
@@ -167,9 +167,9 @@ describe("public Gateway origin projection", () => {
     expect(
       hostedOperatorPlanSchema.safeParse({
         ...plan,
-        publicGateway: createHostedOperatorPublicGateway(inventory, "configured-branch"),
-        normalActorProgram: { ...program, origin: generatedOrigin },
         deploymentBoundary: { ...plan.deploymentBoundary, verification: inventory.verification },
+        normalActorProgram: { ...program, origin: generatedOrigin },
+        publicGateway: createHostedOperatorPublicGateway(inventory, "configured-branch"),
       }).success,
     ).toBe(false);
   });
@@ -185,18 +185,18 @@ describe("public Gateway origin projection", () => {
     };
     const result = hostedOperatorPlanSchema.parse({
       ...plan,
-      publicGateway: createHostedOperatorPublicGateway(observed, "configured-branch"),
-      normalActorProgram: { ...program, origin: publicOrigin },
       deploymentBoundary: {
         ...plan.deploymentBoundary,
         gateway: { ...plan.deploymentBoundary?.gateway, branch: "configured-branch" },
         verification: observed.verification,
       },
+      normalActorProgram: { ...program, origin: publicOrigin },
+      publicGateway: createHostedOperatorPublicGateway(observed, "configured-branch"),
     });
     expect(result.publicGateway).toEqual({
       branch: "configured-branch",
-      projectId: "gateway-project",
       origin: publicOrigin,
+      projectId: "gateway-project",
     });
     expect(result.deploymentBoundary?.verification.gatewayOrigin).toBe(generatedOrigin);
     expect(observed.gateway.branch).toBeNull();
@@ -209,10 +209,6 @@ const organization = (
   slug: string,
 ): HostedOperatorOwnedOrganizationSpec => ({
   actorId,
-  organizationId,
-  name,
-  slug,
-  kind: "create-owned-organization",
   bootstrapPlanDigest: "d".repeat(64),
   identityCapture: { capturedAt: "2026-10-14T10:00:00Z", realmSessionId: `session-${actorId}` },
   identityNonceSha256: "e".repeat(64),
@@ -223,24 +219,20 @@ const organization = (
     jwksUrl: "https://gateway.example.com/_platform/jwks.json",
     transportSource: {
       audience: "https://vercel.com/team",
+      environment: "preview",
       issuer: "https://oidc.vercel.com/team",
       ownerId: "team",
       projectId: "operator-project",
-      environment: "preview",
     },
   },
+  kind: "create-owned-organization",
+  name,
+  organizationId,
+  slug,
 });
 const resolvedPlan = () =>
   hostedOperatorPlanSchema.parse({
     ...base,
-    normalActorProgram: program,
-    normalActorPreparation: {
-      accountOperationRef: "3c16d12a-c9bc-40ea-8c7a-63836c1a3f96",
-      programDigest: normalActorProgramDigest(program),
-      accountPlanDigest: operatorPlanDigest(participantPlan()),
-      accountApprovalId: "first-public-approval",
-      accountApprovedByCallId: "first-approved-call",
-    },
     access: [{ actorId: "actual-requester", organizationId: "org-one", roles: ["requester"] }],
     authMembership: {
       kind: "create-owned-organizations",
@@ -252,21 +244,29 @@ const resolvedPlan = () =>
     effects: [
       ...base.effects.slice(0, 2),
       {
+        description: "Create approved organizations",
         id: "auth-membership",
         kind: "auth-membership",
-        description: "Create approved organizations",
       },
       ...base.effects.slice(2),
     ],
+    normalActorPreparation: {
+      accountApprovalId: "first-public-approval",
+      accountApprovedByCallId: "first-approved-call",
+      accountOperationRef: "3c16d12a-c9bc-40ea-8c7a-63836c1a3f96",
+      accountPlanDigest: operatorPlanDigest(participantPlan()),
+      programDigest: normalActorProgramDigest(program),
+    },
+    normalActorProgram: program,
   });
 
 describe("participant plan and approval contract", () => {
   it("carries the accepted program through the same internal planning request", () => {
     const request = operatorRequestSchema.parse({
       action: "plan",
+      normalActorProgram: program,
       operation: "prepare",
       selection: base.selection,
-      normalActorProgram: program,
     });
     expect(request.action).toBe("plan");
     expect("normalActorProgram" in request && request.normalActorProgram).toEqual(program);
@@ -280,46 +280,46 @@ describe("participant plan and approval contract", () => {
       operatorPublicResultSchema.parse({
         appId: program.appId,
         authenticatedBehavior: "unassessed",
-        status: "participants-prepared",
         plan,
+        status: "participants-prepared",
       }).status,
     ).toBe("participants-prepared");
   });
   it("retains participant requirements during Auth bootstrap without opening account effects", () => {
     const bootstrap = hostedOperatorPlanSchema.parse({
       ...base,
-      stage: "auth-bootstrap",
-      normalActorProgram: program,
-      bootstrap: { endpointId: "endpoint", maintenanceDatabase: "neondb", role: "bootstrap_role" },
-      resourcesInstaller: { reference: "bootstrap-installer", sha256: "c".repeat(64) },
       authSchema: {
         artifactRef: "auth-plan",
         installer: base.installer,
         planDigest: "d".repeat(64),
         targetDigest: "e".repeat(64),
       },
+      bootstrap: { endpointId: "endpoint", maintenanceDatabase: "neondb", role: "bootstrap_role" },
       effects: [
         {
+          description: "Auth resource",
           id: "auth-resource",
           kind: "resources",
           resourceId: base.authDatabase.resourceId,
-          description: "Auth resource",
         },
         {
+          description: "App resource",
           id: "app-resource",
           kind: "resources",
           resourceId: base.appDatabase.resourceId,
-          description: "App resource",
         },
-        { id: "auth-install", kind: "install", description: "Auth schema" },
+        { description: "Auth schema", id: "auth-install", kind: "install" },
       ],
+      normalActorProgram: program,
+      resourcesInstaller: { reference: "bootstrap-installer", sha256: "c".repeat(64) },
+      stage: "auth-bootstrap",
     });
     expect(bootstrap.normalActorProgram).toEqual(program);
     expect(bootstrap.effects.some((effect) => effect.kind === "normal-accounts")).toBe(false);
     expect(
       hostedOperatorPlanSchema.safeParse({
         ...bootstrap,
-        effects: [{ id: "accounts", kind: "normal-accounts", description: "premature accounts" }],
+        effects: [{ description: "premature accounts", id: "accounts", kind: "normal-accounts" }],
       }).success,
     ).toBe(false);
   });
@@ -329,7 +329,7 @@ describe("participant plan and approval contract", () => {
       expect(
         hostedOperatorPlanSchema.safeParse({
           ...plan,
-          effects: [...plan.effects, { id: kind, kind, description: "unapproved" }],
+          effects: [...plan.effects, { description: "unapproved", id: kind, kind }],
         }).success,
       ).toBe(false);
     }
@@ -407,7 +407,7 @@ describe("participant plan and approval contract", () => {
       authMembership: organization("legacy-org", "legacy-actor", "Legacy", "legacy"),
       effects: [
         ...base.effects.slice(0, 2),
-        { id: "auth-membership", kind: "auth-membership", description: "Legacy organization" },
+        { description: "Legacy organization", id: "auth-membership", kind: "auth-membership" },
         ...base.effects.slice(2),
       ],
     });
@@ -428,11 +428,11 @@ describe("independently approved App and Gateway Preview branches", () => {
     }
     return {
       ...base,
-      publicGateway: { ...base.publicGateway, branch: "shared-auth-preview" },
       deploymentBoundary: {
         ...boundary,
         gateway: { ...boundary.gateway, branch: "shared-auth-preview" },
       },
+      publicGateway: { ...base.publicGateway, branch: "shared-auth-preview" },
     };
   };
   it("accepts distinct branches bound to their own exact deployment identities", () => {

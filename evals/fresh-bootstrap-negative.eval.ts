@@ -22,20 +22,24 @@ export default defineEval({
     ]);
     try {
       const destination = path.join(fixture.allowedRoot, "canceled");
-      await withFreshBootstrapTestCapability(fixture.capability, () =>
-        session.send(`Publish fresh repository bootstrap at ${destination}.`),
+      await withFreshBootstrapTestCapability(
+        fixture.capability,
+        async () => await session.send(`Publish fresh repository bootstrap at ${destination}.`),
       );
       session.requireInputRequest({ toolName: "publish_fresh_repository" });
-      const turn1 = await withFreshBootstrapTestCapability(fixture.capability, () =>
-        session.respondAll("cancel"),
+      const turn1 = await withFreshBootstrapTestCapability(
+        fixture.capability,
+        async () => await session.respondAll("cancel"),
       );
       t.succeeded();
       t.check(turn1.message, includes("canceled, stale, or recovery-required"));
 
-      const turn2 = await withFreshBootstrapTestCapability(fixture.capability, () =>
-        session.send(
-          `Inspect fresh repository bootstrap at ${path.join(fixture.allowedRoot, "stale")} with stale review.`,
-        ),
+      const turn2 = await withFreshBootstrapTestCapability(
+        fixture.capability,
+        async () =>
+          await session.send(
+            `Inspect fresh repository bootstrap at ${path.join(fixture.allowedRoot, "stale")} with stale review.`,
+          ),
       );
       t.succeeded();
       t.check(turn2.message, includes("rejected without target mutation"));

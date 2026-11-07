@@ -43,12 +43,12 @@ describe("Preview OAuth runtime configuration", () => {
 
   // Keep token construction scoped to the runtime fixture.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
-  const idToken = (claims: Record<string, unknown>) =>
+  const idToken = (claims: { email: string; sub: string }) =>
     `${Buffer.from(JSON.stringify({ alg: "ES256", typ: "JWT" })).toString("base64url")}.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.signature`;
 
   it("binds Vercel's verified UserInfo email to the verified ID-token identity", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const fetchImplementation = vi.fn(async () =>
+    const fetchImplementation = vi.fn<typeof fetch>(async () =>
       Response.json({
         email: "USER@EXAMPLE.COM",
         email_verified: true,
@@ -86,8 +86,8 @@ describe("Preview OAuth runtime configuration", () => {
 
   it("uses GitHub's verified primary email when the public profile omits email", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const fetchImplementation = vi.fn(async (url: string | URL) => {
-      if (String(url) === "https://api.github.com/user") {
+    const fetchImplementation = vi.fn<typeof fetch>(async (url) => {
+      if ((url instanceof Request ? url.url : url.toString()) === "https://api.github.com/user") {
         return Response.json({
           avatar_url: "https://avatars.example.test/user.png",
           email: null,
@@ -104,7 +104,7 @@ describe("Preview OAuth runtime configuration", () => {
     await expect(
       fetchVerifiedGitHubUserInfo(
         { accessToken: "sensitive-access-token" },
-        fetchImplementation as typeof fetch,
+        fetchImplementation,
       ),
     ).resolves.toMatchObject({
       data: { email: "user@example.com", id: 123 },
@@ -114,12 +114,13 @@ describe("Preview OAuth runtime configuration", () => {
         name: "autograph-user",
       },
     });
+    const expectedHeaders: unknown = expect.objectContaining({
+      Authorization: "Bearer sensitive-access-token",
+    });
     expect(fetchImplementation).toHaveBeenCalledWith(
       "https://api.github.com/user/emails",
       expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: "Bearer sensitive-access-token",
-        }),
+        headers: expectedHeaders,
         redirect: "error",
       }),
     );
@@ -136,7 +137,7 @@ describe("Preview OAuth runtime configuration", () => {
     await expect(
       fetchVerifiedGitHubUserInfo(
         { accessToken: "sensitive-access-token" },
-        fetchImplementation as typeof fetch,
+        fetchImplementation,
       ),
     ).resolves.toBeNull();
   });

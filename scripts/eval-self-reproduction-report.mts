@@ -11,7 +11,17 @@ const { values } = parseArgs({
     "source-review-dir": { type: "string" },
   },
 });
-if (!values["run-dir"] || !values["source-review-dir"] || !values["output-dir"]) {
+if (
+  values["run-dir"] === undefined ||
+  values["run-dir"] === "" ||
+  values["source-review-dir"] === undefined ||
+  values["source-review-dir"] === ""
+) {
+  throw new Error(
+    "Required: --run-dir PATH --source-review-dir PATH --output-dir NEW_EXTERNAL_PATH",
+  );
+}
+if (values["output-dir"] === undefined || values["output-dir"] === "") {
   throw new Error(
     "Required: --run-dir PATH --source-review-dir PATH --output-dir NEW_EXTERNAL_PATH",
   );

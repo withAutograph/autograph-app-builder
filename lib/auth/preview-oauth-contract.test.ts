@@ -87,13 +87,17 @@ describe("Preview OAuth activation contract", () => {
           "rotate",
           "configure-client-credentials-scopes",
         ] as const
-      ).map((action) =>
-        expect(options.clientPrivileges?.({ action, headers: new Headers() })).resolves.toBe(false),
-      ),
-      ...(["create", "read", "update", "delete", "list", "link", "unlink"] as const).map((action) =>
-        expect(options.resourcePrivileges?.({ action, headers: new Headers() })).resolves.toBe(
+      ).map(async (action) => {
+        await expect(options.clientPrivileges?.({ action, headers: new Headers() })).resolves.toBe(
           false,
-        ),
+        );
+      }),
+      ...(["create", "read", "update", "delete", "list", "link", "unlink"] as const).map(
+        async (action) => {
+          await expect(
+            options.resourcePrivileges?.({ action, headers: new Headers() }),
+          ).resolves.toBe(false);
+        },
       ),
     ]);
   });

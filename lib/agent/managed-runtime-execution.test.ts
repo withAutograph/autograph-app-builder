@@ -43,10 +43,10 @@ vi.mock("ai", () => {
 });
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 const context: HostedOperatorContext = {
   authority,
@@ -54,36 +54,51 @@ const context: HostedOperatorContext = {
     appId: "orchard",
     branch: "preview",
     environment: "preview",
-    projectId: "app-project",
-    sessionId: "saved-session",
     installationId: "installation",
+    projectId: "app-project",
     scopeId: "team",
     scopeType: "team",
+    sessionId: "saved-session",
   },
 };
 const preparedPlan = hostedOperatorPlanSchema.parse({
-  version: 1,
-  action: "prepare",
   access: [{ actorId: "actor-one", organizationId: "organization-one", roles: ["custom_role"] }],
+  action: "prepare",
   appDatabase: {
     database: "app_db",
     migratorRole: "app_migrator",
-    runtimeRole: "app_runtime",
     resourceId: "app-resource",
+    runtimeRole: "app_runtime",
   },
   authDatabase: {
     database: "auth_db",
     migratorRole: "auth_migrator",
-    runtimeRole: "auth_runtime",
     resourceId: "auth-resource",
+    runtimeRole: "auth_runtime",
   },
   contextId: "ordinary-planning-context",
   cost: { class: "shared-recovery-group", description: "Controlled fixture", owner: "Fixture" },
+  deploymentBoundary: {
+    app: { branch: "preview", environment: "preview", projectId: "app-project" },
+    authority,
+    gateway: { branch: "preview", environment: "preview", projectId: "gateway-project" },
+    operator: {
+      deploymentId: "operator-deployment",
+      environment: "preview",
+      projectId: "builder-project",
+    },
+    teamId: "team",
+    verification: {
+      gatewayOrigin: "https://gateway.example",
+      jwksUrl: "https://gateway.example/_platform/jwks.json",
+      publicOrigin: "https://gateway.example",
+    },
+  },
   effects: [
-    { id: "resources", kind: "resources", description: "Prepare resources" },
-    { id: "install", kind: "install", description: "Install app" },
-    { id: "access", kind: "access", description: "Authorize app" },
-    { id: "bindings", kind: "bindings", description: "Bind runtime" },
+    { description: "Prepare resources", id: "resources", kind: "resources" },
+    { description: "Install app", id: "install", kind: "install" },
+    { description: "Authorize app", id: "access", kind: "access" },
+    { description: "Bind runtime", id: "bindings", kind: "bindings" },
   ],
   installer: { reference: "shared-installer", sha256: "a".repeat(64) },
   neon: {
@@ -93,29 +108,13 @@ const preparedPlan = hostedOperatorPlanSchema.parse({
     projectId: "database-project",
     source: "synthetic-only",
   },
-  release: { artifactRef: "retained-app-release", id: "app-release", sha256: "b".repeat(64) },
-  retention: { expiresAt: "2027-01-01T00:00:00.000Z", policy: "Original retention" },
   publicGateway: {
     branch: "preview",
     origin: "https://gateway.example",
     projectId: "gateway-project",
   },
-  deploymentBoundary: {
-    authority,
-    teamId: "team",
-    app: { projectId: "app-project", branch: "preview", environment: "preview" },
-    gateway: { projectId: "gateway-project", branch: "preview", environment: "preview" },
-    operator: {
-      projectId: "builder-project",
-      deploymentId: "operator-deployment",
-      environment: "preview",
-    },
-    verification: {
-      gatewayOrigin: "https://gateway.example",
-      publicOrigin: "https://gateway.example",
-      jwksUrl: "https://gateway.example/_platform/jwks.json",
-    },
-  },
+  release: { artifactRef: "retained-app-release", id: "app-release", sha256: "b".repeat(64) },
+  retention: { expiresAt: "2027-01-01T00:00:00.000Z", policy: "Original retention" },
   selection: {
     appId: context.target.appId,
     branch: context.target.branch,
@@ -123,34 +122,35 @@ const preparedPlan = hostedOperatorPlanSchema.parse({
     projectId: context.target.projectId,
     sessionId: context.target.sessionId,
   },
+  version: 1,
 });
 const selection = {
-  version: 1 as const,
-  kind: "app-continuity-plan" as const,
+  actors: [{ actorId: "actor-one", organizationId: "organization-one" }],
   authority,
-  target: context.target,
+  gateway: {
+    environment: "preview" as const,
+    ownerId: "team",
+    projectId: "gateway-project",
+    publicOrigin: "https://gateway.example",
+  },
+  kind: "app-continuity-plan" as const,
   originalSetup: {
-    operationRef: "10000000-0000-4000-8000-000000000001",
-    planDigest: "c".repeat(64),
     approvalId: "setup-human",
     approvedByCallId: "setup-call",
+    operationRef: "10000000-0000-4000-8000-000000000001",
+    planDigest: "c".repeat(64),
   },
   preparedPlan,
   runtime: {
-    sandboxId: "owned-sandbox",
-    root: "/controlled/source",
-    projectId: "builder-project",
-    ownerId: "team",
     appPort: 3000,
     bridgePort: 3100,
-  },
-  gateway: {
-    projectId: "gateway-project",
     ownerId: "team",
-    environment: "preview" as const,
-    publicOrigin: "https://gateway.example",
+    projectId: "builder-project",
+    root: "/controlled/source",
+    sandboxId: "owned-sandbox",
   },
-  actors: [{ actorId: "actor-one", organizationId: "organization-one" }],
+  target: context.target,
+  version: 1 as const,
 };
 const makePlan = () =>
   hostedContinuityPlanSchema.parse({
@@ -161,10 +161,10 @@ const makePlan = () =>
 
 const workerBytes = Buffer.from("controlled compiled worker bytes");
 const worker = {
-  id: "managed-worker",
   executablePath: "/private/managed-worker",
-  sha256: createHash("sha256").update(workerBytes).digest("hex"),
+  id: "managed-worker",
   operationScope: "managed-app-runtime-v1" as const,
+  sha256: createHash("sha256").update(workerBytes).digest("hex"),
   subcommand: "protected-managed-app-runtime" as const,
 };
 const makeCommand = (commandId: string, output = "", initialExit: number | null = 0) => {
@@ -174,55 +174,55 @@ const makeCommand = (commandId: string, output = "", initialExit: number | null 
     get exitCode() {
       return exit;
     },
-    stdout: async () => output,
-    logs: () =>
-      Object.assign(
-        (async function* controlledLogs() {
-          yield { stream: "stdout" as const, data: output };
-        })(),
-        { close: vi.fn() },
-      ),
-    wait: vi.fn(async () => ({ exitCode: exit ?? 0 })),
     kill: vi.fn(async () => {
       exit = 0;
     }),
+    logs: () =>
+      Object.assign(
+        (async function* controlledLogs() {
+          yield { data: output, stream: "stdout" as const };
+        })(),
+        { close: vi.fn() },
+      ),
+    stdout: async () => output,
+    wait: vi.fn(async () => ({ exitCode: exit ?? 0 })),
   };
   return command;
 };
 const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
   const plan = makePlan();
   let record = continuityRecordSchema.parse({
-    kind: "app-continuity",
-    requestId: plan.intentId,
-    revision: 1,
-    idempotencyKey: "request",
-    plan,
-    planDigest: continuityPlanDigest(plan),
-    state: "starting",
-    fence: 1,
-    attemptId: "30000000-0000-4000-8000-000000000003",
     approval: {
       action: "continuity",
-      planRef: plan.planRef,
-      planDigest: continuityPlanDigest(plan),
-      idempotencyKey: "request",
       approvalId: "human-approval",
       approvedByCallId: "continuity-call",
+      idempotencyKey: "request",
+      planDigest: continuityPlanDigest(plan),
+      planRef: plan.planRef,
     },
+    attemptId: "30000000-0000-4000-8000-000000000003",
+    deliveryCandidates: [],
     environmentRows: [],
     environmentWrites: [],
-    deliveryCandidates: [],
+    fence: 1,
+    idempotencyKey: "request",
+    kind: "app-continuity",
+    plan,
+    planDigest: continuityPlanDigest(plan),
+    requestId: plan.intentId,
+    revision: 1,
+    state: "starting",
   });
   const capabilities = createPrivateManagedRuntimeCapabilities().private;
   const { publicKey } = generateKeyPairSync("ed25519");
   const profile = managedRuntimePublicProfileSchema.parse({
-    version: 1,
     appId: context.target.appId,
-    publicOrigin: plan.gateway.publicOrigin,
     jwksUrl: `${plan.gateway.publicOrigin}/_platform/jwks.json`,
     keys: [
-      { ...publicKey.export({ format: "jwk" }), kid: "controlled-key", alg: "EdDSA", use: "sig" },
+      { ...publicKey.export({ format: "jwk" }), alg: "EdDSA", kid: "controlled-key", use: "sig" },
     ],
+    publicOrigin: plan.gateway.publicOrigin,
+    version: 1,
   });
   const files = new Map<string, Buffer>();
   const commands = new Map<string, RuntimeCommand>();
@@ -235,15 +235,14 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
   let environment = {
     ORCHARD_DATABASE_URL:
       "postgresql://app_runtime:controlled-secret@ep-controlled.us-east-1.aws.neon.tech/app_db?sslmode=verify-full",
+    PLATFORM_JWKS_URL: `${plan.gateway.publicOrigin}/_platform/jwks.json`,
     PLATFORM_ORIGIN: plan.gateway.publicOrigin,
     PLATFORM_PUBLIC_ORIGIN: plan.gateway.publicOrigin,
-    PLATFORM_JWKS_URL: `${plan.gateway.publicOrigin}/_platform/jwks.json`,
   };
   const description = {
-    version: 1,
     app: {
-      id: "orchard",
       browserEntryPath: "/orchard",
+      id: "orchard",
       routes: ["/orchard"],
       workspacePath: "apps/orchard",
     },
@@ -251,9 +250,9 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
       authorization: "declared-policy",
       kind: "generated-postgres",
       release: {
-        id: preparedPlan.release.id,
         artifactHash: `sha256:${preparedPlan.release.sha256}`,
         directory: "release",
+        id: preparedPlan.release.id,
       },
       roles: ["custom_role"],
       runtime: { databaseEnvironment: "ORCHARD_DATABASE_URL" },
@@ -264,19 +263,14 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
       check: { task: "check" },
       test: { shards: 1, task: "test" },
     },
+    version: 1,
   };
   const provider: ManagedRuntimeSandboxPort = {
-    get name() {
-      return providerName;
-    },
+    domain: () => "https://controlled-sandbox.vercel.run",
     expiresAt,
-    routes: [{ port: 3000 }],
     fs: {
-      mkdir: vi.fn<ManagedRuntimeSandboxPort["fs"]["mkdir"]>(async () => {}),
-      chmod: vi.fn<ManagedRuntimeSandboxPort["fs"]["chmod"]>(async () => {}),
-      rm: vi.fn<ManagedRuntimeSandboxPort["fs"]["rm"]>(async (file) => {
-        files.delete(file);
-      }),
+      chmod: vi.fn<ManagedRuntimeSandboxPort["fs"]["chmod"]>().mockResolvedValue(),
+      mkdir: vi.fn<ManagedRuntimeSandboxPort["fs"]["mkdir"]>().mockResolvedValue(),
       rename: vi.fn<ManagedRuntimeSandboxPort["fs"]["rename"]>(async (from, to) => {
         const bytes = files.get(from);
         if (bytes === undefined) {
@@ -285,20 +279,10 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
         files.set(to, bytes);
         files.delete(from);
       }),
+      rm: vi.fn<ManagedRuntimeSandboxPort["fs"]["rm"]>(async (file) => {
+        files.delete(file);
+      }),
     },
-    writeFiles: vi.fn<ManagedRuntimeSandboxPort["writeFiles"]>(async (writes) => {
-      for (const file of writes) {
-        files.set(file.path, Buffer.from(file.content));
-      }
-    }),
-    readFileToBuffer: vi.fn<ManagedRuntimeSandboxPort["readFileToBuffer"]>(
-      async ({ path }) => files.get(path) ?? null,
-    ),
-    listSessions: vi.fn<ManagedRuntimeSandboxPort["listSessions"]>(async () =>
-      (async function* controlledSessions() {
-        yield { id: providerSessionId, status: "running" };
-      })(),
-    ),
     getCommand: vi.fn<ManagedRuntimeSandboxPort["getCommand"]>(async (id) => {
       const command = commands.get(id);
       if (command === undefined) {
@@ -306,14 +290,24 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
       }
       return command;
     }),
-    update: vi.fn<ManagedRuntimeSandboxPort["update"]>(async () => {}),
-    domain: () => "https://controlled-sandbox.vercel.run",
+    listSessions: vi.fn<ManagedRuntimeSandboxPort["listSessions"]>(async () =>
+      (async function* controlledSessions() {
+        yield { id: providerSessionId, status: "running" };
+      })(),
+    ),
+    get name() {
+      return providerName;
+    },
+    readFileToBuffer: vi.fn<ManagedRuntimeSandboxPort["readFileToBuffer"]>(
+      async ({ path }) => files.get(path) ?? null,
+    ),
+    routes: [{ port: 3000 }],
     runCommand: vi.fn<ManagedRuntimeSandboxPort["runCommand"]>(async (input) => {
       if (input.cmd === "sha256sum") {
         return makeCommand("hash-command", "");
       }
       if (input.cmd === worker.executablePath) {
-        const inputPath = input.args[2];
+        const inputPath = input.args.at(2);
         const bytes = inputPath === undefined ? undefined : files.get(inputPath);
         if (bytes === undefined) {
           throw new Error("Missing controlled entry input");
@@ -323,10 +317,10 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
           `${parsed.rootDirectory}/ready.json`,
           Buffer.from(
             JSON.stringify({
-              current: { ...parsed.current, state: "ready" },
-              socketPath: `${parsed.rootDirectory}/private.sock`,
               appPort: parsed.appPort,
               bridgePort: parsed.bridgePort,
+              current: { ...parsed.current, state: "ready" },
+              socketPath: `${parsed.rootDirectory}/private.sock`,
             }),
           ),
         );
@@ -349,46 +343,52 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
       }
       throw new Error("Unsupported controlled SDK command");
     }),
+    update: vi.fn<ManagedRuntimeSandboxPort["update"]>().mockResolvedValue(),
+    writeFiles: vi.fn<ManagedRuntimeSandboxPort["writeFiles"]>(async (writes) => {
+      for (const file of writes) {
+        files.set(file.path, Buffer.from(file.content));
+      }
+    }),
   };
   const actors = {
-    origin: plan.gateway.publicOrigin,
-    identities: {
-      version: 1 as const,
-      actors: [
-        {
-          actorKey: "fixture",
-          actorId: "actor-one",
-          organizationId: "organization-one",
-          roles: ["custom_role"],
-          storageState: "fixture.storage.json",
-        },
-      ],
-    },
     files: {
       "fixture.storage.json": JSON.stringify({
         cookies: [
           {
-            name: "session",
             domain: "gateway.example",
-            value: "controlled-private-session",
+            name: "session",
             path: "/",
             secure: true,
+            value: "controlled-private-session",
           },
         ],
         origins: [],
       }),
     },
+    identities: {
+      actors: [
+        {
+          actorId: "actor-one",
+          actorKey: "fixture",
+          organizationId: "organization-one",
+          roles: ["custom_role"],
+          storageState: "fixture.storage.json",
+        },
+      ],
+      version: 1 as const,
+    },
+    origin: plan.gateway.publicOrigin,
   };
   let sourceName = "";
   let sourceBytes: Buffer = workerBytes;
   let sourceCreates = 0;
   const source = {
+    delete: vi.fn<() => Promise<void>>().mockResolvedValue(),
     get name() {
       return sourceName;
     },
     readFileToBuffer: vi.fn(async () => sourceBytes),
-    stop: vi.fn(async () => {}),
-    delete: vi.fn(async () => {}),
+    stop: vi.fn<() => Promise<void>>().mockResolvedValue(),
   };
   const installer = {
     ...worker,
@@ -397,59 +397,64 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
   } as const;
   const asset = createManagedRuntimeWorkerAsset({
     configuration: {
-      projectId: "operator-project",
-      teamId: "operator-team",
-      source: { type: "snapshot", snapshotId: "controlled-worker-source" },
       accessWorker: installer,
-      authWorker: installer,
-      resourcesWorker: installer,
-      workers: {},
       authProposal: installer,
+      authWorker: installer,
+      projectId: "operator-project",
+      resourcesWorker: installer,
+      source: { snapshotId: "controlled-worker-source", type: "snapshot" },
+      teamId: "operator-team",
+      workers: {},
     },
-    token: async () => "controlled-operator-host-oidc",
     create: async (options) => {
       sourceCreates += 1;
       sourceName = options?.name ?? "";
       return source;
     },
+    token: async () => "controlled-operator-host-oidc",
   });
   const deps: ManagedRuntimeExecutionDependencies = {
-    worker,
-    installWorkerAsset: vi.fn<ManagedRuntimeExecutionDependencies["installWorkerAsset"]>(
-      async (input) => {
-        await asset.install(input);
-      },
-    ),
+    assertSelectedSandbox: vi
+      .fn<ManagedRuntimeExecutionDependencies["assertSelectedSandbox"]>()
+      .mockResolvedValue(),
     disposeWorkerAsset: vi.fn<ManagedRuntimeExecutionDependencies["disposeWorkerAsset"]>(
       async (input) => {
         await input.checkpoint({ ...input.state, disposed: true });
       },
     ),
     getSandbox: vi.fn<ManagedRuntimeExecutionDependencies["getSandbox"]>(async () => provider),
-    assertSelectedSandbox: vi.fn<ManagedRuntimeExecutionDependencies["assertSelectedSandbox"]>(
-      async () => {},
+    installWorkerAsset: vi.fn<ManagedRuntimeExecutionDependencies["installWorkerAsset"]>(
+      async (input) => {
+        await asset.install(input);
+      },
     ),
     readExecution: vi.fn<ManagedRuntimeExecutionDependencies["readExecution"]>(
-      async (_context, _plan, includeActors) => ({
-        environment,
-        proof: {
-          actors: 1,
-          tenants: 1,
-          artifactHash: preparedPlan.release.sha256,
-          releaseId: preparedPlan.release.id,
-          authenticatedBehavior: "unassessed",
-        },
-        ...(includeActors === true ? { normalActors: actors } : {}),
-      }),
+      async (_context, _plan, includeActors) => {
+        const result: Awaited<ReturnType<ManagedRuntimeExecutionDependencies["readExecution"]>> = {
+          environment,
+          proof: {
+            actors: 1,
+            artifactHash: preparedPlan.release.sha256,
+            authenticatedBehavior: "unassessed" as const,
+            releaseId: preparedPlan.release.id,
+            tenants: 1,
+          },
+        };
+        if (includeActors === true) {
+          result.normalActors = actors;
+        }
+        return result;
+      },
     ),
     readPublicJwks: vi.fn<ManagedRuntimeExecutionDependencies["readPublicJwks"]>(async () => ({
       keys: profile.keys,
     })),
     // oxlint-disable-next-line unicorn/no-useless-undefined -- An absent AbortSignal is a supported SDK adapter input.
     signal: () => undefined,
+    worker,
   };
   const runtime = createManagedRuntimeExecution(deps);
-  const guard = vi.fn(async () => {});
+  const guard = vi.fn<() => Promise<void>>().mockResolvedValue();
   const checkpoint: Parameters<typeof runtime.start>[4] = async (patch) => {
     record = continuityRecordSchema.parse({ ...record, ...patch });
   };
@@ -457,36 +462,36 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
     await runtime.start(context, record, capabilities, guard, checkpoint);
   };
   return {
-    runtime,
-    deps,
-    provider,
-    files,
-    commands,
-    profile,
-    capabilities,
-    guard,
-    checkpoint,
-    start,
-    workerCommand,
-    suiteCommand,
-    source,
-    readSourceCreates: () => sourceCreates,
-    setSourceBytes: (bytes: Buffer) => {
-      sourceBytes = bytes;
+    addEnvironment: (key: string, value: string) => {
+      environment = { ...environment, [key]: value };
     },
+    capabilities,
+    checkpoint,
+    commands,
+    deps,
+    files,
+    guard,
+    profile,
+    provider,
     read: () => structuredClone(record),
+    readSourceCreates: () => sourceCreates,
     replace: (next: ContinuityRecord) => {
       record = continuityRecordSchema.parse(next);
     },
+    runtime,
     setName: (name: string) => {
       providerName = name;
     },
     setSession: (id: string) => {
       providerSessionId = id;
     },
-    addEnvironment: (key: string, value: string) => {
-      environment = { ...environment, [key]: value };
+    setSourceBytes: (bytes: Buffer) => {
+      sourceBytes = bytes;
     },
+    source,
+    start,
+    suiteCommand,
+    workerCommand,
   };
 };
 
@@ -508,18 +513,18 @@ describe("managed runtime execution through supported SDK ports", () => {
     const failed = f.read();
     expect(failed.locator?.dispatchAttempted).not.toBe(true);
     expect(failed.locator?.commandId).toBeUndefined();
-    expect(failed.workerAsset).toMatchObject({ installed: false, disposed: true });
+    expect(failed.workerAsset).toMatchObject({ disposed: true, installed: false });
     expect(f.source.delete).toHaveBeenCalledWith({ deleteOrphanSnapshots: false });
     expect(f.provider.runCommand).not.toHaveBeenCalled();
     await f.runtime.close(context, failed, async () => {});
     f.setSourceBytes(workerBytes);
     await f.start();
     expect(f.read()).toMatchObject({
-      requestId: failed.requestId,
       attemptId: failed.attemptId,
-      fence: failed.fence,
       current: { state: "ready" },
+      fence: failed.fence,
       locator: { commandId: "runtime-command" },
+      requestId: failed.requestId,
     });
     await f.start();
     expect(f.provider.runCommand).toHaveBeenCalledTimes(1);
@@ -532,7 +537,7 @@ describe("managed runtime execution through supported SDK ports", () => {
     vi.mocked(f.deps.readExecution).mockRejectedValueOnce(new Error("Interrupted after setup"));
     await expect(f.start()).rejects.toThrow("Interrupted after setup");
     const interrupted = f.read();
-    expect(interrupted.workerAsset).toMatchObject({ installed: true, disposed: true });
+    expect(interrupted.workerAsset).toMatchObject({ disposed: true, installed: true });
     expect(interrupted.locator?.dispatchAttempted).not.toBe(true);
     expect(interrupted.locator?.commandId).toBeUndefined();
     expect(f.provider.runCommand).not.toHaveBeenCalled();
@@ -540,11 +545,11 @@ describe("managed runtime execution through supported SDK ports", () => {
     await f.runtime.close(context, interrupted, async () => {});
     await f.start();
     expect(f.read()).toMatchObject({
-      requestId: interrupted.requestId,
       attemptId: interrupted.attemptId,
+      current: { state: "ready" },
       fence: interrupted.fence,
       locator: { ...interrupted.locator, commandId: "runtime-command" },
-      current: { state: "ready" },
+      requestId: interrupted.requestId,
     });
     expect(f.readSourceCreates()).toBe(1);
     expect(f.source.delete).toHaveBeenCalledTimes(1);
@@ -556,23 +561,23 @@ describe("managed runtime execution through supported SDK ports", () => {
     vi.mocked(f.deps.readExecution).mockRejectedValueOnce(new Error("Interrupted after install"));
     await expect(f.start()).rejects.toThrow("Interrupted after install");
     const original = f.read();
-    f.replace({ ...original, state: "reconciliation-required", pendingStage: "runtime" });
+    f.replace({ ...original, pendingStage: "runtime", state: "reconciliation-required" });
     f.setSession("resumed-physical-session");
     await f.start();
     const recovered = f.read();
     expect(recovered).toMatchObject({
-      requestId: original.requestId,
-      attemptId: original.attemptId,
-      fence: original.fence,
       approval: original.approval,
-      workerAsset: { installed: true, disposed: true },
+      attemptId: original.attemptId,
+      current: { providerSessionId: "resumed-physical-session", state: "ready" },
+      fence: original.fence,
       locator: {
         ...original.locator,
-        providerSessionId: "resumed-physical-session",
-        dispatchAttempted: true,
         commandId: "runtime-command",
+        dispatchAttempted: true,
+        providerSessionId: "resumed-physical-session",
       },
-      current: { state: "ready", providerSessionId: "resumed-physical-session" },
+      requestId: original.requestId,
+      workerAsset: { disposed: true, installed: true },
     });
     expect(f.deps.installWorkerAsset).toHaveBeenCalledTimes(2);
     expect(f.readSourceCreates()).toBe(1);
@@ -607,9 +612,9 @@ describe("managed runtime execution through supported SDK ports", () => {
     });
     f.replace({
       ...retained,
-      state: "reconciliation-required",
       pendingStage: "runtime",
       privateState: custody.seal(retained, f.capabilities),
+      state: "reconciliation-required",
     });
     f.setSession("resumed-physical-session");
     const records: ContinuityRecord[] = [];
@@ -631,7 +636,24 @@ describe("managed runtime execution through supported SDK ports", () => {
       },
     );
     const operations = createHostedContinuityOperations({
+      assertOwner: async (owner) => {
+        expect(owner).toEqual(context);
+      },
+      assertSetup: async (_context, plan) => {
+        expect(plan).toEqual(retained.plan);
+      },
+      projection: { publish, revoke },
+      readApproval,
+      resolvePlan,
+      runtime: f.runtime,
+      seal: (record, caps) => custody.seal(record, caps),
       store: {
+        compareAndSet: async (input) => {
+          expect(input.expectedRevision).toBe(f.read().revision);
+          f.replace(input.record);
+          records.push(f.read());
+          return f.read();
+        },
         read: async (input) => {
           const row = f.read();
           if (
@@ -645,22 +667,7 @@ describe("managed runtime execution through supported SDK ports", () => {
         reserve: async () => {
           throw new Error("Replacement operation is forbidden");
         },
-        compareAndSet: async (input) => {
-          expect(input.expectedRevision).toBe(f.read().revision);
-          f.replace(input.record);
-          records.push(f.read());
-          return f.read();
-        },
       },
-      assertOwner: async (owner) => {
-        expect(owner).toEqual(context);
-      },
-      assertSetup: async (_context, plan) => {
-        expect(plan).toEqual(retained.plan);
-      },
-      resolvePlan,
-      readApproval,
-      seal: (record, caps) => custody.seal(record, caps),
       unseal: (record) => custody.unseal(record),
       withResourceLease: async (input, run) => {
         await input.initializeUnderLock?.();
@@ -669,23 +676,21 @@ describe("managed runtime execution through supported SDK ports", () => {
           expect(await input.readCurrentFence()).toEqual(fence);
         });
       },
-      runtime: f.runtime,
-      projection: { publish, revoke },
     });
     const request = {
       action: "continuity" as const,
-      planRef: retained.plan.planRef,
-      planDigest: retained.planDigest,
       idempotencyKey: retained.idempotencyKey,
+      planDigest: retained.planDigest,
+      planRef: retained.plan.planRef,
     };
     const result = await operations.execute(context, request, "continuity-call");
     expect(result.state).toBe("settled");
     expect(result.outcome?.exitCode).toBe(0);
     expect(f.read()).toMatchObject({
-      attemptId: retained.attemptId,
-      fence: retained.fence,
       approval: retained.approval,
-      current: { state: "revoked", providerSessionId: "resumed-physical-session" },
+      attemptId: retained.attemptId,
+      current: { providerSessionId: "resumed-physical-session", state: "revoked" },
+      fence: retained.fence,
     });
     expect(f.read().pendingStage).toBeUndefined();
     expect(
@@ -742,8 +747,8 @@ describe("managed runtime execution through supported SDK ports", () => {
     }
     const next = {
       ...saved,
-      state: "reconciliation-required" as const,
       pendingStage: "runtime" as const,
+      state: "reconciliation-required" as const,
     };
     if (reason === "command") {
       next.locator = { ...saved.locator, commandId: "runtime-command" };
@@ -796,7 +801,7 @@ describe("managed runtime execution through supported SDK ports", () => {
     f.setSession("resumed-physical-session");
     const guard = vi
       .fn<() => Promise<void>>()
-      .mockImplementationOnce(async () => {})
+      .mockResolvedValueOnce()
       .mockRejectedValueOnce(new Error("Owner fence changed"));
     const checkpoint = vi.fn(f.checkpoint);
     await expect(
@@ -898,7 +903,7 @@ describe("managed runtime execution through supported SDK ports", () => {
     expect(input.appEnvironment.BETTER_AUTH_SECRET).toBeUndefined();
     expect(input.appEnvironment.VERCEL_OIDC_TOKEN).toBeUndefined();
     expect(input.appEnvironment.PLATFORM_AUTH_DATABASE_URL).toBeUndefined();
-    expect(record.workerAsset).toMatchObject({ installed: true, disposed: true });
+    expect(record.workerAsset).toMatchObject({ disposed: true, installed: true });
     expect(
       vi
         .mocked(f.provider.runCommand)
@@ -946,10 +951,10 @@ describe("managed runtime execution through supported SDK ports", () => {
     const previousReads = vi.mocked(f.deps.readPublicJwks).mock.calls.length;
     await f.start();
     expect(f.read().locator).toMatchObject({
-      worker: retained?.worker,
+      attemptId: retained?.attemptId,
       commandId: retained?.commandId,
       providerSessionId: retained?.providerSessionId,
-      attemptId: retained?.attemptId,
+      worker: retained?.worker,
     });
     expect(vi.mocked(f.provider.runCommand).mock.calls).toEqual([]);
     expect(vi.mocked(f.deps.readPublicJwks).mock.calls.length).toBe(previousReads);
@@ -1001,7 +1006,7 @@ describe("managed runtime execution through supported SDK ports", () => {
       throw new Error("Prepared actor identities were not written");
     }
     expect(JSON.parse(identities.toString("utf-8"))).toMatchObject({
-      actors: [{ actorKey: "fixture", actorId: "actor-one", organizationId: "organization-one" }],
+      actors: [{ actorId: "actor-one", actorKey: "fixture", organizationId: "organization-one" }],
     });
     expect(suite.env?.APP_TEST_MANAGED_SUITE_SELECTOR).toBe(f.capabilities.suiteSelector);
     expect(suite.env?.APP_TEST_MANAGED_LIFECYCLE_CAPABILITY).toBe(f.capabilities.lifecycle);
@@ -1068,8 +1073,8 @@ describe("managed runtime execution through supported SDK ports", () => {
   });
 });
 
-// oxlint-disable-next-line typescript/strict-void-return -- Node execFile also returns its child handle alongside the documented completion callback.
-const executePortCommand = promisify(execFile);
+const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+const executePortCommand = promisifyExecFile(execFile);
 /* oxlint-disable promise/avoid-new -- Owned local listeners expose Node event-to-Promise interfaces. */
 const listenLocally = async (server: ReturnType<typeof createServer>, port: number) => {
   await new Promise<void>((resolve, reject) => {
@@ -1145,10 +1150,10 @@ it("runs only the frozen focused continuity selection and resumes without anothe
   await f.start();
   const selected = f.read();
   selected.plan.runtime.browserSelection = {
+    maxFailures: 1,
+    retries: 0,
     testName: "@acceptance",
     workers: 1,
-    retries: 0,
-    maxFailures: 1,
   };
   selected.planDigest = continuityPlanDigest(selected.plan);
   f.replace(selected);

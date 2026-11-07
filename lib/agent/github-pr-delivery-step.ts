@@ -6,6 +6,9 @@ import type { GitHubPrDeliveryApproval } from "./github-pr-delivery-approval";
 import type { GitHubPrDeliveryObservation } from "../repository/github-pr-delivery";
 import type { GitHubPrEffectReceipt } from "../repository/github-pr-effect-journal";
 
+const WAITING_FOR_CHECKS_STATUS = "waiting-for-checks" as const;
+const READY_CYCLE_CHANGED_STATUS = "ready-cycle-changed" as const;
+
 const startReadyCycle = async (input: {
   approvedReadyAt: string | undefined;
   observed: GitHubPrDeliveryObservation;
@@ -14,30 +17,30 @@ const startReadyCycle = async (input: {
   const { approvedReadyAt, observed } = input;
   if (approvedReadyAt !== undefined) {
     return !observed.draft && observed.readyAt === approvedReadyAt
-      ? { status: "waiting-for-checks" as const, readyAt: approvedReadyAt }
-      : { status: "ready-cycle-changed" as const };
+      ? { readyAt: approvedReadyAt, status: WAITING_FOR_CHECKS_STATUS }
+      : { status: READY_CYCLE_CHANGED_STATUS };
   }
   const result = await input.runReady(!observed.draft);
   if (result === undefined) {
-    return { status: "ready-cycle-changed" as const };
+    return { status: READY_CYCLE_CHANGED_STATUS };
   }
   if (result.status === "failed") {
-    return { status: "ready-rejected" as const, reason: result.code };
+    return { reason: result.code, status: "ready-rejected" as const };
   }
   if (result.status !== "succeeded" || result.evidence.kind !== "pr-ready") {
     return { status: "ready-unconfirmed" as const };
   }
-  return { status: "waiting-for-checks" as const, readyAt: result.evidence.readyAt };
+  return { readyAt: result.evidence.readyAt, status: WAITING_FOR_CHECKS_STATUS };
 };
 
 const mergeResult = (result: GitHubPrEffectReceipt | undefined) => {
   if (result?.status === "failed") {
-    return { status: "merge-rejected" as const, reason: result.code };
+    return { reason: result.code, status: "merge-rejected" as const };
   }
   if (result?.status !== "succeeded" || result.evidence.kind !== "pr-merge") {
     return { status: "merge-unconfirmed" as const };
   }
-  return { status: "merged" as const, mergeCommitSha: result.evidence.mergeCommitSha };
+  return { mergeCommitSha: result.evidence.mergeCommitSha, status: "merged" as const };
 };
 
 // eslint-disable-next-line eslint/func-style -- Workflow requires a top-level step declaration.
@@ -77,18 +80,21 @@ export async function continueGitHubPrDelivery(
     return { status: "revision-changed" as const };
   }
   const approvedByCallId = ctx.callId;
-  const effect = {
+  const effectBase = {
     approvedByCallId,
     proposalDigest,
     reviewedTarget,
-    ...(reconciliationDigest === undefined ? {} : { reconciledHeadSha: reviewedTarget.headSha }),
   };
+  const effect =
+    reconciliationDigest === undefined
+      ? effectBase
+      : { ...effectBase, reconciledHeadSha: reviewedTarget.headSha };
   const activeEffect = { ...effect, abortSignal: ctx.abortSignal };
   if (observed.state === "merged" && observed.mergeCommitSha !== undefined) {
     if (readyAt !== undefined && observed.readyAt === readyAt) {
       await run({ ...effect, kind: "pr-merge", readyAt, reconcileOnly: true });
     }
-    return { status: "merged" as const, mergeCommitSha: observed.mergeCommitSha };
+    return { mergeCommitSha: observed.mergeCommitSha, status: "merged" as const };
   }
   if (observed.state !== "open") {
     return { status: "closed" as const };
@@ -100,22 +106,23 @@ export async function continueGitHubPrDelivery(
       observed,
       runReady: async (reconcileOnly) => {
         ctx.abortSignal.throwIfAborted();
-        return await run({
+        const readyEffect: Parameters<typeof run>[0] = {
           ...activeEffect,
           kind: "pr-ready",
-          ...(reconcileOnly ? { reconcileOnly } : {}),
-        });
+        };
+        if (reconcileOnly) readyEffect.reconcileOnly = reconcileOnly;
+        return await run(readyEffect);
       },
     });
   }
   if (observed.draft || observed.readyAt !== readyAt) {
-    return { status: "ready-cycle-changed" as const };
+    return { status: READY_CYCLE_CHANGED_STATUS };
   }
   if (observed.checks === "failed") {
     return { status: "checks-failed" as const };
   }
   if (observed.checks !== "passed") {
-    return { status: "waiting-for-checks" as const, readyAt };
+    return { readyAt, status: WAITING_FOR_CHECKS_STATUS };
   }
 
   ctx.abortSignal.throwIfAborted();

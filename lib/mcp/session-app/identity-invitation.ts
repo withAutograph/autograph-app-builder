@@ -14,7 +14,7 @@ export const reduceIdentityInvitations = (
   const state =
     previous?.sessionId === result.sessionId
       ? previous
-      : { sessionId: result.sessionId, lastIndex: -1, invitations: [] };
+      : { invitations: [], lastIndex: -1, sessionId: result.sessionId };
   const invitations = new Map(
     state.invitations.map((invitation) => [invitation.callId, invitation]),
   );
@@ -26,7 +26,7 @@ export const reduceIdentityInvitations = (
     lastIndex = Math.max(lastIndex, event.index);
     if (event.type === "auth_identity_invitation") {
       const { callId, url, expiresAt } = event;
-      invitations.set(callId, { callId, url, expiresAt });
+      invitations.set(callId, { callId, expiresAt, url });
     } else if (event.type === "auth_identity_invitation_resolved") {
       invitations.delete(event.callId);
     }
@@ -34,5 +34,5 @@ export const reduceIdentityInvitations = (
   if (["completed", "failed", "cancelled"].includes(result.status)) {
     invitations.clear();
   }
-  return { sessionId: result.sessionId, lastIndex, invitations: [...invitations.values()] };
+  return { invitations: [...invitations.values()], lastIndex, sessionId: result.sessionId };
 };

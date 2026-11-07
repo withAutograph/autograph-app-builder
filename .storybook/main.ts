@@ -1,6 +1,8 @@
 import path from "node:path";
 
 import type { StorybookConfig } from "@storybook/nextjs-vite";
+import type { Alias } from "vite";
+import { z } from "zod";
 
 import {
   builderComingSoonFlag,
@@ -9,28 +11,38 @@ import {
 } from "../lib/feature-flags.ts";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function resolveFlagForStorybook(flag: {
+export interface StorybookFlag {
   run: (context: { identify: Record<string, never>; request: Request }) => Promise<boolean>;
-}) {
-  if (!process.env.FLAGS) return false;
+}
+
+const resolveFlagForStorybook = async (flag: StorybookFlag, configured: boolean) => {
+  if (!configured) return false;
   try {
-    return (
-      (await flag.run({
-        identify: {},
-        request: new Request("https://storybook.local"),
-      })) === true
-    );
+    return await flag.run({
+      identify: {},
+      request: new Request("https://storybook.local"),
+    });
   } catch {
     return false;
   }
-}
+};
+
+const defaultStorybookFlags = {
+  comingSoon: builderComingSoonFlag,
+  connections: builderConnectionsFlag,
+  provisioning: builderResourceProvisioningFlag,
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function resolveBuilderFlagsForStorybook() {
+export async function resolveBuilderFlagsForStorybook(
+  flags?: typeof defaultStorybookFlags,
+  configured = process.env.FLAGS !== undefined && process.env.FLAGS !== "",
+) {
+  const resolvedFlags = flags ?? defaultStorybookFlags;
   const [connectionsEnabled, comingSoonEnabled, provisioningEnabled] = await Promise.all([
-    resolveFlagForStorybook(builderConnectionsFlag),
-    resolveFlagForStorybook(builderComingSoonFlag),
-    resolveFlagForStorybook(builderResourceProvisioningFlag),
+    resolveFlagForStorybook(resolvedFlags.connections, configured),
+    resolveFlagForStorybook(resolvedFlags.comingSoon, configured),
+    resolveFlagForStorybook(resolvedFlags.provisioning, configured),
   ]);
 
   return { comingSoonEnabled, connectionsEnabled, provisioningEnabled };
@@ -46,20 +58,31 @@ const config: StorybookConfig = {
     "../lib/mcp/session-app/**/*.stories.@(ts|tsx)",
   ],
   async viteFinal(viteConfig) {
-    const existingAliases = viteConfig.resolve?.alias ?? [];
-    const aliases = Array.isArray(existingAliases)
-      ? existingAliases
+    const existingAliases: unknown = viteConfig.resolve?.alias ?? [];
+    const aliases: Alias[] = Array.isArray(existingAliases)
+      ? existingAliases.map((alias: Alias) => alias)
       : Object.entries(existingAliases).map(([find, replacement]) => ({
           find,
-          replacement,
+          replacement: String(replacement),
         }));
     const storybookBuilderActions = path.join(import.meta.dirname, "builder-actions.ts");
     const storybookSourceActions = path.join(import.meta.dirname, "source-handoff-actions.ts");
     const storybookBuilderDraftActions = path.join(import.meta.dirname, "builder-draft-actions.ts");
     const { connectionsEnabled, comingSoonEnabled, provisioningEnabled } =
       await resolveBuilderFlagsForStorybook();
+    const existingDefine: Record<string, string | number | boolean> = {};
+    for (const [key, value] of Object.entries(viteConfig.define ?? {})) {
+      try {
+        const parsedValue = z
+          .union([z.string(), z.number(), z.boolean()])
+          .safeParse(JSON.parse(String(value)));
+        if (parsedValue.success) existingDefine[key] = parsedValue.data;
+      } catch {
+        // Vite define entries that are not JSON primitives are omitted.
+      }
+    }
     viteConfig.define = {
-      ...viteConfig.define,
+      ...existingDefine,
       // This resolved Boolean is the only flag data included in the browser
       // bundle. The SDK key and discovery secret remain server-only.
       "process.env.STORYBOOK_BUILDER_COMING_SOON_ENABLED": JSON.stringify(

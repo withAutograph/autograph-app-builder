@@ -6,13 +6,20 @@ import { includes } from "eve/evals/expect";
 import { prepareReviewedWorkflow } from "./support/reviewed-workflow";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
 
+const branchPublicationStale = "branch-publication-stale";
+const staleApprovalMessage = "A stale approval";
+const staleApprovalHeadFailure = `${staleApprovalMessage} changed the source HEAD.`;
+const staleApprovalBranchFailure = `${staleApprovalMessage} created a branch.`;
+const gitExecutable = "/opt/homebrew/bin/git";
+const gitHeadCommand = ["rev-parse", "HEAD"];
+
 export default defineEval({
   description:
     "A stale branch-worktree proposal is rejected after approval without creating its branch or worktree.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    const session = await prepareReviewedWorkflow(t, repository, "branch-publication-stale");
-    const head = execFileSync("git", ["rev-parse", "HEAD"], {
+    const session = await prepareReviewedWorkflow(t, repository, branchPublicationStale);
+    const head = execFileSync(gitExecutable, gitHeadCommand, {
       cwd: repository,
       encoding: "utf-8",
     });
@@ -24,20 +31,20 @@ export default defineEval({
     t.succeeded();
     t.check(turn1.message, includes("rejected without creating a branch or worktree"));
     if (
-      execFileSync("git", ["rev-parse", "HEAD"], {
+      execFileSync(gitExecutable, gitHeadCommand, {
         cwd: repository,
         encoding: "utf-8",
       }) !== head
     ) {
-      throw new Error("A stale approval changed the source HEAD.");
+      throw new Error(staleApprovalHeadFailure);
     }
     if (
-      execFileSync("git", ["branch", "--list", "app-builder/*"], {
+      execFileSync(gitExecutable, ["branch", "--list", "app-builder/*"], {
         cwd: repository,
         encoding: "utf-8",
       }) !== ""
     ) {
-      throw new Error("A stale approval created a branch.");
+      throw new Error(staleApprovalBranchFailure);
     }
     t.notCalledTool("recover_branch_worktree_publication");
     t.notCalledTool("bash");

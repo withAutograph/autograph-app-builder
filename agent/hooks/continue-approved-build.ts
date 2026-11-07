@@ -34,8 +34,6 @@ const record = async (ctx: HookContext, forced?: "working" | "blocked") => {
   const state = appBuilderWorkflowState.get();
   const decision = decideApprovedBuildContinuation({
     adapterSessionId: ctx.session.id,
-    repositoryAccess: repositoryAccessReceiptState.get(),
-
     approvalMatches: (scope) => {
       try {
         assertApprovedPrivateApplySession(scope);
@@ -46,8 +44,9 @@ const record = async (ctx: HookContext, forced?: "working" | "blocked") => {
     },
     blocked: current.blocked,
     pendingInput: current.pendingInputs.length > 0,
-    state,
+    repositoryAccess: repositoryAccessReceiptState.get(),
     sourcePrerequisite: currentLocalSourcePrerequisite(state, ctx.session.id),
+    state,
     turnId: ctx.session.turn.id,
     turnSequence: ctx.session.turn.sequence,
   });

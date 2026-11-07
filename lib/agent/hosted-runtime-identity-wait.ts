@@ -83,8 +83,8 @@ export async function* continueHostedRuntimeOwnerPreparation(
       // oxlint-disable-next-line eslint/no-await-in-loop -- Bind this hook to the exact canonical pending identity request.
       const { identityInput } = prepared;
       const request = {
-        token: hook.token,
         identityInput,
+        token: hook.token,
       };
       // oxlint-disable-next-line eslint/no-await-in-loop -- Register only after this hook commits.
       const registration = await register(input, ctx, request);
@@ -133,12 +133,12 @@ export async function* continueHostedRuntimeOwnerPreparation(
         return {
           ...prepared.result,
           appId: input.appId,
-          operationRef: input.operationRef,
-          planDigest: input.planDigest,
-          status: "blocked" as const,
           code: "auth_identity_required" as const,
           nextStep:
             "The connection expired before sign-in. Reconnect to continue this preparation.",
+          operationRef: input.operationRef,
+          planDigest: input.planDigest,
+          status: "blocked" as const,
         };
       }
     } finally {
@@ -172,11 +172,11 @@ export async function registerHostedRuntimeIdentityWaitStep(
   const continuation = await import("../provisioning/hosted-operator-realm-continuation");
   return await continuation.registerHostedRuntimeIdentityWait({
     ...registration,
+    adapterSessionId: ctx.session.id,
+    callId: ctx.callId,
+    callbackExecution: hostedOperatorCallbackExecution(ctx.session),
     input,
     sessionAuth: ctx.session.auth,
-    adapterSessionId: ctx.session.id,
-    callbackExecution: hostedOperatorCallbackExecution(ctx.session),
-    callId: ctx.callId,
   });
 }
 
@@ -190,10 +190,10 @@ export async function acknowledgeHostedRuntimeIdentityWaitStep(
   const continuation = await import("../provisioning/hosted-operator-realm-continuation");
   return await continuation.acknowledgeHostedRuntimeIdentityWait({
     ...event,
+    adapterSessionId: ctx.session.id,
+    callId: ctx.callId,
+    callbackExecution: hostedOperatorCallbackExecution(ctx.session),
     input,
     sessionAuth: ctx.session.auth,
-    adapterSessionId: ctx.session.id,
-    callbackExecution: hostedOperatorCallbackExecution(ctx.session),
-    callId: ctx.callId,
   });
 }

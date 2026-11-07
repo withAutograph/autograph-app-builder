@@ -128,31 +128,31 @@ const seal = async (adapter: ExistingDraftReconciliationAdapter) =>
 describe("existing draft reconciliation", () => {
   it("binds exact catalog metadata into source review without admitting unrelated shared changes", () => {
     const source = {
-      version: review.version,
       appId: review.appId,
+      baseChanges: review.baseChanges,
       baseSha: review.baseSha,
       baseTree: review.baseTree,
+      headChanges: review.headChanges,
       headSha: review.headSha,
       headTree: review.headTree,
       resolvedTree: review.resolvedTree,
-      baseChanges: review.baseChanges,
-      headChanges: review.headChanges,
+      version: review.version,
     };
     const file = {
-      path: "package.json",
       digest: digest(new TextEncoder().encode("catalog metadata")),
+      path: "package.json",
     };
     const change = {
-      path: file.path,
-      kind: "modified" as const,
-      before: { digest: digest(bytes), mode: "644" },
       after: { digest: file.digest, mode: "644" },
+      before: { digest: digest(bytes), mode: "644" },
+      kind: "modified" as const,
+      path: file.path,
     };
     const dependencyCatalog = { files: [file], nonAppIndexDigest: "a".repeat(64) };
     const accepted = createReconciliationReviewReceipt({
       ...source,
-      dependencyCatalog,
       baseChanges: [...source.baseChanges, change],
+      dependencyCatalog,
       headChanges: [...source.headChanges, change],
     });
     expect(accepted.approvedPaths).toContain("package.json");
@@ -160,18 +160,18 @@ describe("existing draft reconciliation", () => {
     expect(() =>
       createReconciliationReviewReceipt({
         ...source,
-        dependencyCatalog,
         baseChanges: [
           ...source.baseChanges,
           { ...change, after: { ...change.after, digest: "b".repeat(64) } },
         ],
+        dependencyCatalog,
       }),
     ).toThrow("review is incomplete");
     expect(() =>
       createReconciliationReviewReceipt({
         ...source,
-        dependencyCatalog,
         baseChanges: [...source.baseChanges, { ...change, path: "docs/unrelated.md" }],
+        dependencyCatalog,
       }),
     ).toThrow("review is incomplete");
     expect(() =>
@@ -285,9 +285,9 @@ describe("existing draft reconciliation", () => {
     await expect(
       inspectAppliedExistingDraftReconciliation({
         adapter: {
+          inspectAppliedDraftReconciliation: mock.adapter.inspectAppliedDraftReconciliation,
           inspectExistingDraft: mock.adapter.inspectExistingDraft,
           inspectInstallation: mock.adapter.inspectInstallation,
-          inspectAppliedDraftReconciliation: mock.adapter.inspectAppliedDraftReconciliation,
         },
         proposal,
         review,

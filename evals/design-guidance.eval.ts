@@ -1,9 +1,41 @@
 import { defineEval } from "eve/evals";
 import { includes, satisfies } from "eve/evals/expect";
+import { z } from "zod";
 
 import { renewalReviewDesignPrompt } from "../lib/testing/prompt-driven-design";
 import { isProductFacing } from "./support/public-conversation";
 import { observeRecordedRenewalReview } from "./support/ui-preview-browser";
+
+const previewFileSchema = z.object({ content: z.string() });
+const previewManifestSchema = z.object({
+  assumptions: z.array(z.unknown()).optional(),
+  decisions: z.array(z.unknown()).optional(),
+  openQuestions: z.array(z.unknown()).optional(),
+  productionComponents: z.array(z.unknown()).optional(),
+  productionCompositions: z.array(z.object({ name: z.unknown() })).optional(),
+});
+const previewInputSchema = z.unknown();
+
+const hasEnoughComponents = (manifest: z.infer<typeof previewManifestSchema>): boolean =>
+  (manifest.productionComponents?.length ?? 0) >= 4;
+
+const hasTableComposition = (manifest: z.infer<typeof previewManifestSchema>): boolean =>
+  manifest.productionCompositions?.some(({ name }) => name === "DataTableComposition") ?? false;
+
+const hasOneAssumption = (manifest: z.infer<typeof previewManifestSchema>): boolean =>
+  manifest.assumptions?.length === 1;
+
+const hasNoDecisions = (manifest: z.infer<typeof previewManifestSchema>): boolean =>
+  manifest.decisions?.length === 0;
+
+const hasOneOpenQuestion = (manifest: z.infer<typeof previewManifestSchema>): boolean =>
+  manifest.openQuestions?.length === 1;
+
+const hasExpectedPreviewContent = (content: string): boolean => {
+  const includesTableComposition = content.includes("DataTableComposition");
+  const avoidsFetchCalls = !content.includes("fetch(");
+  return includesTableComposition && avoidsFetchCalls;
+};
 
 export default defineEval({
   description:
@@ -29,36 +61,33 @@ ${renewalReviewDesignPrompt}`);
       count: 1,
       input: {
         catalogGaps: [],
-        files: (value) =>
-          Array.isArray(value) &&
-          value.some(
-            (file) =>
-              typeof file === "object" &&
-              file !== null &&
-              "content" in file &&
-              typeof file.content === "string" &&
-              file.content.includes("DataTableComposition") &&
-              !file.content.includes("fetch("),
-          ),
-        manifest: (value) => {
-          if (typeof value !== "object" || value === null) {
+        files: (value) => {
+          const parsedInput = previewInputSchema.safeParse(value);
+          if (!parsedInput.success) {
             return false;
           }
-          const manifest = value as {
-            productionComponents?: unknown[];
-            productionCompositions?: { name?: unknown }[];
-            assumptions?: unknown[];
-            decisions?: unknown[];
-            openQuestions?: unknown[];
-          };
-          return (
-            (manifest.productionComponents?.length ?? 0) >= 4 &&
-            manifest.productionCompositions?.some(({ name }) => name === "DataTableComposition") ===
-              true &&
-            (manifest.assumptions?.length ?? 0) === 1 &&
-            (manifest.decisions?.length ?? 0) === 0 &&
-            (manifest.openQuestions?.length ?? 0) === 1
-          );
+          const files = z.array(previewFileSchema).safeParse(parsedInput.data);
+          if (!files.success) {
+            return false;
+          }
+          return files.data.some(({ content }) => hasExpectedPreviewContent(content));
+        },
+        manifest: (value) => {
+          const parsedInput = previewInputSchema.safeParse(value);
+          if (!parsedInput.success) {
+            return false;
+          }
+          const parsed = previewManifestSchema.safeParse(parsedInput.data);
+          if (!parsed.success) {
+            return false;
+          }
+          const { data: manifest } = parsed;
+          return [
+            hasEnoughComponents(manifest) && hasTableComposition(manifest),
+            hasOneAssumption(manifest),
+            hasNoDecisions(manifest),
+            hasOneOpenQuestion(manifest),
+          ].every(Boolean);
         },
         routes: ["/"],
       },
@@ -84,7 +113,7 @@ ${renewalReviewDesignPrompt}`);
       turn.message,
       satisfies(
         (reply) =>
-          isProductFacing(reply) &&
+          isProductFacing(String(reply)) &&
           !/implementation plan|Context|Draft spec|manifest|receipt/iu.test(String(reply)),
         "the review remains product-facing and exposes no internal workbench material",
       ),

@@ -770,24 +770,24 @@ describe("same-origin canonical Eve transport", () => {
   it("accepts a typed native recovery receipt and routes later mutation to the retained logical inbox", async () => {
     const timeout = vi.spyOn(AbortSignal, "timeout");
     const recovery = {
-      version: 1 as const,
-      operationId: "op_recovery",
-      sourcePublicSessionId: "ses_parent",
-      sourceOwnerRunId: "run_parent",
-      sourceAdapterGeneration: 1,
       logicalSessionId: "run_parent",
+      operationId: "op_recovery",
       originalAuthoritySessionId: "ses_parent",
       parentCancellationRevision: 0,
+      sourceAdapterGeneration: 1,
+      sourceOwnerRunId: "run_parent",
+      sourcePublicSessionId: "ses_parent",
+      version: 1 as const,
     };
     const recoveryBinding = {
       ...recovery,
       ownerRunId: "run_child",
       provenance: {
+        checkpointVersion: 1 as const,
         kind: "completed-terminal-turn-input" as const,
-        sourceStepId: "step_1",
         sourceEventId: "event_1",
         sourceSlot: 1,
-        checkpointVersion: 1 as const,
+        sourceStepId: "step_1",
       },
     };
     // oxlint-disable-next-line eslint/require-await -- The transport test double follows fetch's async contract.
@@ -798,7 +798,7 @@ describe("same-origin canonical Eve transport", () => {
           recovery,
         });
         return Response.json(
-          { ok: true, status: "accepted", sessionId: "run_child", recoveryBinding },
+          { ok: true, recoveryBinding, sessionId: "run_child", status: "accepted" },
           { status: 202 },
         );
       }
@@ -819,8 +819,8 @@ describe("same-origin canonical Eve transport", () => {
       transport.activateRecovery?.({ operationId: recovery.operationId, principal, recovery }),
     ).resolves.toEqual(recoveryBinding);
     expect(JSON.parse(String(fetchImplementation.mock.calls[1]?.[1]?.body))).toMatchObject({
-      recoveryPhase: "activate",
       recovery,
+      recoveryPhase: "activate",
     });
     await expect(
       transport.sendAccepted?.({
@@ -2620,122 +2620,116 @@ it.each(["preguard", "accepted-settlement"] as const)(
 
 describe("activation transport diagnostics", () => {
   const recovery = {
-    version: 1 as const,
-    operationId: "private-recovery-operation",
-    sourcePublicSessionId: "private-source",
-    sourceOwnerRunId: "private-owner",
-    sourceAdapterGeneration: 1,
     logicalSessionId: "private-logical",
+    operationId: "private-recovery-operation",
     originalAuthoritySessionId: "private-authority",
     parentCancellationRevision: 0,
+    sourceAdapterGeneration: 1,
+    sourceOwnerRunId: "private-owner",
+    sourcePublicSessionId: "private-source",
+    version: 1 as const,
   };
   const binding = {
     ...recovery,
     ownerRunId: "private-child",
     provenance: {
+      checkpointVersion: 1 as const,
       kind: "committed-turn-output" as const,
-      sourceStepId: "private-step",
       sourceEventId: "private-event",
       sourceSlot: 1,
-      checkpointVersion: 1 as const,
+      sourceStepId: "private-step",
     },
   };
   const secret = "never-log-private-activation-body";
   it.each([
     {
+      category: "unclassified_failure",
+      malformed: false,
       name: "dispatch failure",
-      response: () => Promise.reject(new Error(secret)),
       phase: "transport_dispatch",
-      category: "unclassified_failure",
       rejected: false,
-      malformed: false,
+      response: async () => {
+        throw new Error(secret);
+      },
     },
     {
-      name: "HTTP403",
-      response: () =>
-        Promise.resolve(
-          Response.json(
-            { ok: false, code: "session_access_denied", private: secret },
-            { status: 403 },
-          ),
-        ),
-      phase: "transport_acceptance",
       category: "rejected_before_dispatch",
+      malformed: false,
+      name: "HTTP403",
+      phase: "transport_acceptance",
       rejected: true,
-      malformed: false,
+      response: async () =>
+        Response.json(
+          { code: "session_access_denied", ok: false, private: secret },
+          { status: 403 },
+        ),
     },
     {
+      category: "unclassified_failure",
+      malformed: false,
       name: "HTTP503",
-      response: () =>
-        Promise.resolve(
-          Response.json(
-            { ok: false, code: "terminal_recovery_submission_unknown", private: secret },
-            { status: 503 },
-          ),
-        ),
       phase: "transport_acceptance",
-      category: "unclassified_failure",
       rejected: false,
-      malformed: false,
+      response: async () =>
+        Response.json(
+          { code: "terminal_recovery_submission_unknown", ok: false, private: secret },
+          { status: 503 },
+        ),
     },
     {
-      name: "accepted missing receipt",
-      response: () =>
-        Promise.resolve(
-          Response.json(
-            {
-              ok: true,
-              status: "accepted",
-              sessionId: binding.ownerRunId,
-            },
-            { status: 202 },
-          ),
-        ),
-      phase: "transport_acceptance",
       category: "unclassified_failure",
-      rejected: false,
       malformed: true,
+      name: "accepted missing receipt",
+      phase: "transport_acceptance",
+      rejected: false,
+      response: async () =>
+        Response.json(
+          {
+            ok: true,
+            sessionId: binding.ownerRunId,
+            status: "accepted",
+          },
+          { status: 202 },
+        ),
     },
     {
-      name: "accepted owner mismatch",
-      response: () =>
-        Promise.resolve(
-          Response.json(
-            {
-              ok: true,
-              status: "accepted",
-              sessionId: "different-private-child",
-              recoveryBinding: binding,
-            },
-            { status: 202 },
-          ),
-        ),
-      phase: "transport_acceptance",
       category: "unclassified_failure",
-      rejected: false,
       malformed: false,
+      name: "accepted owner mismatch",
+      phase: "transport_acceptance",
+      rejected: false,
+      response: async () =>
+        Response.json(
+          {
+            ok: true,
+            recoveryBinding: binding,
+            sessionId: "different-private-child",
+            status: "accepted",
+          },
+          { status: 202 },
+        ),
     },
   ])(
     "reports $name without changing transport errors or retrying",
     async ({ response, phase, category, rejected, malformed }) => {
       const sink = vi.fn<HostedSubmissionDiagnosticSink>();
-      const fetchImplementation = vi.fn<typeof fetch>(() => response());
+      const fetchImplementation = vi.fn<typeof fetch>(async () => await response());
       const transport = createSameOriginEveTransport({
         config,
         fetchImplementation,
-        workloadIdentity: identity(),
         onSubmissionDiagnostic: sink,
+        workloadIdentity: identity(),
       });
       const unknownError = malformed ? z.ZodError : SubmissionOutcomeUnknownError;
       await expect(
-        transport.activateRecovery?.({ operationId: recovery.operationId, recovery, principal }),
+        transport.activateRecovery?.({ operationId: recovery.operationId, principal, recovery }),
       ).rejects.toBeInstanceOf(rejected ? SubmissionRejectedBeforeDispatchError : unknownError);
       expect(sink).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({
-          phase,
           category,
-          operationKind: "start",
           operationIdHash: `sha256:${createHash("sha256").update(recovery.operationId).digest("hex")}`,
+          operationKind: "start",
+          phase,
         }),
       );
       expect(fetchImplementation).toHaveBeenCalledOnce();
@@ -2757,37 +2751,37 @@ describe("activation transport diagnostics", () => {
 describe("retained confirmation presentation recovery", () => {
   const observerConfig = { ...config, timeoutMs: 10_000 };
   const requestEvent = (requestId: string, digest = "a".repeat(64)) => ({
-    type: "input.requested",
     data: {
+      requests: [
+        {
+          action: {
+            callId: `call-${requestId}`,
+            input: {
+              action: "continuity",
+              idempotencyKey: "retained-exercise",
+              planDigest: digest,
+              planRef: "_protected-operator/continuity-plans/00000000-0000-4000-8000-000000000001",
+            },
+            kind: "tool-call",
+            toolName: "run-app-continuity-tests",
+          },
+          kind: "tool-approval",
+          requestId,
+        },
+      ],
       sequence: 0,
       stepIndex: 0,
       turnId: "confirmation-turn",
-      requests: [
-        {
-          requestId,
-          kind: "tool-approval",
-          action: {
-            kind: "tool-call",
-            callId: `call-${requestId}`,
-            toolName: "run-app-continuity-tests",
-            input: {
-              action: "continuity",
-              planRef: "_protected-operator/continuity-plans/00000000-0000-4000-8000-000000000001",
-              planDigest: digest,
-              idempotencyKey: "retained-exercise",
-            },
-          },
-        },
-      ],
     },
+    type: "input.requested",
   });
   const seedFailure = async (events: unknown[]) => {
     const observed = await observeSameOriginEveStream({
       config: observerConfig,
-      sessionId: "wrun_1",
-      workloadIdentity: identity(),
       fetchImplementation: vi.fn(async () => await Promise.resolve(stream(events))),
       onEvent: () => {},
+      sessionId: "wrun_1",
+      workloadIdentity: identity(),
     });
     // This is the persisted observer shape from the previous unsupported renderer:
     // its public error/history remain at cursor 5, while native input remains parked.
@@ -2799,7 +2793,7 @@ describe("retained confirmation presentation recovery", () => {
     });
   };
   it("restores the same parked approval with an appended public row and no private replay or repeated scan", async () => {
-    const events = [requestEvent("retained-approval"), { type: "session.waiting", data: {} }];
+    const events = [requestEvent("retained-approval"), { data: {}, type: "session.waiting" }];
     const state = await seedFailure(events);
     const http = await liveHttpSnapshot(events);
     try {
@@ -2807,8 +2801,6 @@ describe("retained confirmation presentation recovery", () => {
       const privateEvents: string[] = [];
       const input = {
         config: observerConfig,
-        sessionId: "wrun_1",
-        workloadIdentity: identity(),
         fetchImplementation: http.fetchImplementation,
         onEvent: (event: InternalEveEvent) => {
           projected.push(event);
@@ -2816,6 +2808,8 @@ describe("retained confirmation presentation recovery", () => {
         onPrivateEvent: (event: { type: string }) => {
           privateEvents.push(event.type);
         },
+        sessionId: "wrun_1",
+        workloadIdentity: identity(),
       };
       const restored = await observeSameOriginEveStream({
         ...input,
@@ -2853,35 +2847,35 @@ describe("retained confirmation presentation recovery", () => {
     const events = [
       requestEvent("settled"),
       {
-        type: "approval.settled",
         data: {
-          requestId: "settled",
           outcome: "cancelled",
+          requestId: "settled",
           responderPrincipalId: "user_1",
           sequence: 0,
           stepIndex: 0,
           turnId: "confirmation-turn",
         },
+        type: "approval.settled",
       },
       requestEvent("unsupported", "invalid-digest"),
-      { type: "session.waiting", data: {} },
+      { data: {}, type: "session.waiting" },
     ];
     const state = await seedFailure(events);
     const projected: InternalEveEvent[] = [];
     const observed = await observeSameOriginEveStream({
       config: observerConfig,
-      sessionId: "wrun_1",
-      workloadIdentity: identity(),
-      nativeObservationState: state,
       fetchImplementation: vi.fn(
         async (url) =>
           await Promise.resolve(
             streamFromIndex(events, Number(new URL(String(url)).searchParams.get("startIndex"))),
           ),
       ),
+      nativeObservationState: state,
       onEvent: (event) => {
         projected.push(event);
       },
+      sessionId: "wrun_1",
+      workloadIdentity: identity(),
     });
     expect(observed.status).toBe("failed");
     expect(observed.pendingRequests).toEqual([]);
@@ -2891,7 +2885,7 @@ describe("retained confirmation presentation recovery", () => {
   it("retains genuine native terminal state instead of restoring an approval", async () => {
     const events = [
       requestEvent("retained-approval"),
-      { type: "session.failed", data: { message: "native failure" } },
+      { data: { message: "native failure" }, type: "session.failed" },
     ];
     const state = await seedFailure(events);
     const fetchImplementation = vi.fn(
@@ -2902,11 +2896,11 @@ describe("retained confirmation presentation recovery", () => {
     );
     const observed = await observeSameOriginEveStream({
       config: observerConfig,
+      fetchImplementation,
+      nativeObservationState: state,
+      onEvent: () => {},
       sessionId: "wrun_1",
       workloadIdentity: identity(),
-      nativeObservationState: state,
-      fetchImplementation,
-      onEvent: () => {},
     });
     expect(observed.status).toBe("failed");
     expect(observed.pendingRequests).toEqual([]);

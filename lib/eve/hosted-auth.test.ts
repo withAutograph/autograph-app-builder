@@ -11,7 +11,9 @@ const claims = {
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function authorize(verifiedClaims: unknown = claims) {
+function authorize(
+  verifiedClaims: typeof claims | (Omit<typeof claims, "audience"> & { audience: string[] }) = claims,
+) {
   return authorizeHostedPrincipal({
     expectedAudience: claims.audience,
     expectedIssuer: claims.issuer,
@@ -43,7 +45,10 @@ describe("hosted Eve authorization", () => {
       throw new Error("Expected authorization to fail.");
     } catch (error) {
       expect(error).toBeInstanceOf(HostedAuthorizationError);
-      expect((error as HostedAuthorizationError).code).toBe(code);
+      if (!(error instanceof HostedAuthorizationError)) {
+        throw error;
+      }
+      expect(error.code).toBe(code);
     }
   });
 });

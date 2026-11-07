@@ -11,12 +11,12 @@ import type { PrivateComputeActivation } from "./private-compute-profile";
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const entrySchema = z.strictObject({
-  revision: z.number().int().nonnegative(),
   previous: z
     .string()
     .regex(/^[a-f0-9]{64}$/u)
     .nullable(),
   record: privateComputeActivationSchema,
+  revision: z.number().int().nonnegative(),
 });
 const syncDirectory = async (directory: string) => {
   const handle = await open(directory, constants.O_RDONLY);
@@ -70,14 +70,13 @@ export const createLocalPrivateComputeJournal = async (input: {
         );
       }
       previous = hash(content);
-      record = entry.record;
+      ({ record } = entry);
       revision += 1;
     }
     await input.assertCurrent();
-    return { revision, previous, record };
+    return { previous, record, revision };
   };
   return {
-    read,
     append: async (
       record: PrivateComputeActivation,
       expected: { revision: number; previous: string | null },
@@ -111,5 +110,6 @@ export const createLocalPrivateComputeJournal = async (input: {
       }
       return observed;
     },
+    read,
   };
 };

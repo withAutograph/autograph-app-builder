@@ -42,24 +42,24 @@ const fixture = () => {
     },
     bootstrap: { endpointId: "ep-fixture", maintenanceDatabase: "neondb", role: "neondb_owner" },
     contextId: "fixture",
+    cost: { class: "shared-recovery-group", description: "synthetic fixture", owner: "owner" },
     deploymentBoundary: {
-      composition: "single-project-services",
-      authority,
-      teamId: basePlan.project.teamId,
       app: { branch: "preview", environment: "preview", projectId: basePlan.project.projectId },
+      authority,
+      composition: "single-project-services",
       gateway: { branch: "preview", environment: "preview", projectId: basePlan.project.projectId },
       operator: {
         deploymentId: "operator-deployment",
         environment: "preview",
         projectId: "operator-infrastructure",
       },
+      teamId: basePlan.project.teamId,
       verification: {
         gatewayOrigin: basePlan.publicOrigin,
-        publicOrigin: basePlan.publicOrigin,
         jwksUrl: `${basePlan.publicOrigin}/_platform/jwks.json`,
+        publicOrigin: basePlan.publicOrigin,
       },
     },
-    cost: { class: "shared-recovery-group", description: "synthetic fixture", owner: "owner" },
     effects: [
       { description: "Auth", id: "auth-resources", kind: "resources", resourceId: "auth-resource" },
       { description: "App", id: "app-resources", kind: "resources", resourceId: "first-resource" },
@@ -83,10 +83,10 @@ const fixture = () => {
     retention: { expiresAt: "2027-01-01T00:00:00Z", policy: "Retain shared Auth" },
     selection: {
       appId: basePlan.selection.appId,
-      sessionId: basePlan.selection.sessionId,
-      projectId: basePlan.project.projectId,
       branch: "preview",
       environment: "preview",
+      projectId: basePlan.project.projectId,
+      sessionId: basePlan.selection.sessionId,
     },
     stage: "auth-bootstrap",
     version: 1,
@@ -94,70 +94,70 @@ const fixture = () => {
   const retained = retainedOperatorAuthSchema.parse({
     approvalId: "source-approval",
     approvedByCallId: "source-call",
-    operationRef: basePlan.runtime.operationRef,
-    plan: sourcePlan,
-    planDigest: operatorPlanDigest(sourcePlan),
     authPreparation: {
       assetSha256: "9".repeat(64),
       catalogFingerprint: "b".repeat(64),
       database: "auth",
+      observedAt: "2026-11-03T00:00:00Z",
       runtimeRole: "auth_runtime",
       targetDigest: sourcePlan.authSchema?.targetDigest,
-      observedAt: "2026-11-03T00:00:00Z",
     },
+    operationRef: basePlan.runtime.operationRef,
+    plan: sourcePlan,
+    planDigest: operatorPlanDigest(sourcePlan),
     receipts: sourcePlan.effects.map((effect) => ({
       effectId: effect.id,
-      resourceVersion: "observed",
       observedAt: "2026-11-03T00:00:00Z",
+      resourceVersion: "observed",
     })),
   });
   const enrollmentRef = "88888888-8888-4888-a888-888888888888";
   const physical = {
-    version: 1,
+    database: "auth",
     environment: "preview",
     hostname: sourcePlan.neon.endpoint,
-    port: 5432,
-    database: "auth",
-    schema: "public",
-    runtimeRole: "auth_runtime",
     migratorRole: "auth_owner",
-    neon: { projectId: sourcePlan.neon.projectId, branchId: sourcePlan.neon.branchId },
+    neon: { branchId: sourcePlan.neon.branchId, projectId: sourcePlan.neon.projectId },
+    port: 5432,
+    runtimeRole: "auth_runtime",
+    schema: "public",
+    version: 1,
   };
   const sender = {
-    issuer: "https://oidc.vercel.com/team",
     audience: "https://vercel.com/team",
-    subject: "native-production",
     environment: "production",
-    projectId: basePlan.project.projectId,
+    issuer: "https://oidc.vercel.com/team",
     ownerId: basePlan.project.teamId,
+    projectId: basePlan.project.projectId,
+    subject: "native-production",
   };
   const link = publicRealmLinkConfigurationSchema.parse({
-    publicEnrollment: {
-      version: 1,
-      kind: "public-isolated-realm-v1",
-      enrollmentRef,
-      appId: basePlan.selection.appId,
-      ownerSessionId: basePlan.selection.sessionId,
-      authority,
-      publicOrigin: basePlan.publicOrigin,
-      project: {
-        projectId: basePlan.project.projectId,
-        ownerId: basePlan.project.teamId,
-        environment: "production",
-      },
-      sourceBootstrap: {
-        operationRef: retained.operationRef,
-        planDigest: retained.planDigest,
-        authResourceId: "auth-resource",
-      },
-      resource: physical,
-    },
     browserOrigin: basePlan.publicOrigin,
+    browserSessionCapture: { path: "/api/hosted-operator/realm-browser-session", sender },
     builderCallbackOrigin: "https://builder.example",
     builderCallbackPath: "/api/hosted-operator/realm-identity",
-    operatorOrigin: "https://operator.example",
     identityHandoff: { sender },
-    browserSessionCapture: { sender, path: "/api/hosted-operator/realm-browser-session" },
+    operatorOrigin: "https://operator.example",
+    publicEnrollment: {
+      appId: basePlan.selection.appId,
+      authority,
+      enrollmentRef,
+      kind: "public-isolated-realm-v1",
+      ownerSessionId: basePlan.selection.sessionId,
+      project: {
+        environment: "production",
+        ownerId: basePlan.project.teamId,
+        projectId: basePlan.project.projectId,
+      },
+      publicOrigin: basePlan.publicOrigin,
+      resource: physical,
+      sourceBootstrap: {
+        authResourceId: "auth-resource",
+        operationRef: retained.operationRef,
+        planDigest: retained.planDigest,
+      },
+      version: 1,
+    },
     readonlyAttesters: {
       builderProduction: { ...sender },
       operatorPreview: { ...sender, environment: "preview" },
@@ -177,13 +177,13 @@ const fixture = () => {
   });
   const plan = publicReleasePlanSchema.parse({
     ...basePlan,
+    environment: ownedAppPublicEnvironmentManifest(basePlan.selection.appId, values),
     purpose: "auth-bootstrap",
     runtime: {
       ...basePlan.runtime,
       planDigest: retained.planDigest,
       realmEnrollmentRef: enrollmentRef,
     },
-    environment: ownedAppPublicEnvironmentManifest(basePlan.selection.appId, values),
   });
   const context = {
     authority,
@@ -195,13 +195,13 @@ const fixture = () => {
     },
   };
   const runtime = hostedRuntimeJournalRecordSchema.parse({
-    version: 1,
-    kind: "app-runtime",
     approvedByCallId: "source-call",
+    kind: "app-runtime",
     request: context.target,
+    retainedAuth: retained,
     status: "pending",
     step: "reserved",
-    retainedAuth: retained,
+    version: 1,
   });
   const record = initialPublicReleaseRecord(plan);
   record.approvalReceipts = [{ approvalId: "public-approval", approvedByCallId: "public-call" }];
@@ -209,56 +209,56 @@ const fixture = () => {
   record.bindings = Object.fromEntries(
     plan.environment.map(({ key }) => [
       key,
-      { state: "applied" as const, acceptedEnvId: `owned-${key}` },
+      { acceptedEnvId: `owned-${key}`, state: "applied" as const },
     ]),
   );
   record.observation = {
-    status: "ready",
-    projectId: plan.project.projectId,
     deploymentId: "native-deployment",
     environment: "production",
+    projectId: plan.project.projectId,
     publicOrigin: plan.publicOrigin,
     releaseId: plan.runtime.releaseId,
+    status: "ready",
   };
   const candidate = {
-    requestId: publicReleaseOperationRef(plan),
-    requestDigest: publicReleasePlanDigest(plan),
     record,
+    requestDigest: publicReleasePlanDigest(plan),
+    requestId: publicReleaseOperationRef(plan),
   };
   let rows: PublicRealmCallbackCandidate[] = [candidate];
   const deps = {
+    assertCurrentOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    assertPublicApproval: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    assertSourceApproval: vi.fn<() => Promise<void>>().mockResolvedValue(),
     configuration: {
       standardRuntime: {
-        profileId: "isolated",
-        authOwnership: { kind: "dedicated-app-development" as const, resource: resource("auth") },
-        publicRealmWorkload: link.identityHandoff.sender,
-        productionDatabaseIdentity: "ep-customer.neon.tech/auth",
-        provisioningRequestId: plan.project.provisioningRequestId,
-        provisioningDigest: plan.project.provisioningDigest,
         appSpecDigest: "e".repeat(64),
+        authOwnership: { kind: "dedicated-app-development" as const, resource: resource("auth") },
         capturedReleaseId: plan.runtime.releaseId,
+        productionDatabaseIdentity: "ep-customer.neon.tech/auth",
+        profileId: "isolated",
+        provisioningDigest: plan.project.provisioningDigest,
+        provisioningRequestId: plan.project.provisioningRequestId,
+        publicRealmWorkload: link.identityHandoff.sender,
       },
     },
+    readEnrollment: vi.fn(async () => link),
     readReleases: vi.fn(async () => structuredClone(rows)),
     readRuntime: vi.fn(async () => runtime),
-    readEnrollment: vi.fn(async () => link),
     readValues: vi.fn(async () => values),
-    assertCurrentOwner: vi.fn(async () => {}),
-    assertSourceApproval: vi.fn(async () => {}),
-    assertPublicApproval: vi.fn(async () => {}),
   };
   return {
+    candidate,
     context,
+    deps,
+    link,
     plan,
     record,
-    candidate,
-    values,
-    link,
-    deps,
     resolve: createPublicRealmCallbackResolver(deps),
     setRows: (v: PublicRealmCallbackCandidate[]) => {
       rows = v;
     },
+    values,
   };
 };
 it("requires unique READY approved public release, exact original Auth and sealed key evidence", async () => {
@@ -270,9 +270,9 @@ it("requires unique READY approved public release, exact original Auth and seale
     planDigest: f.candidate.requestDigest,
   });
   expect(result.publicJwk).toMatchObject({
-    kty: "OKP",
     crv: "Ed25519",
     kid: f.values.PLATFORM_GATEWAY_IDENTITY_KEY_ID,
+    kty: "OKP",
   });
   expect(f.deps.assertSourceApproval).toHaveBeenCalledOnce();
   expect(f.deps.assertPublicApproval).toHaveBeenCalledOnce();

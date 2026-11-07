@@ -21,9 +21,9 @@ it("cold-starts the actual native operator and returns its configured failure re
   const { default: entrypoint } = await import("./hosted-operator-function");
   const response = await entrypoint.fetch(
     new Request("https://operator.example/v1/runtime", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
       body: "{}",
+      headers: { "content-type": "application/json" },
+      method: "POST",
     }),
   );
   expect(response.status).toBe(503);

@@ -84,7 +84,7 @@ export const freshBootstrapProposalSchema = z.strictObject({
     authorEmail: z.string().min(3).max(320),
     authorName: z.string().min(1),
     commitMessage: z.string().min(1),
-    commitTimestamp: z.string().datetime({ offset: true }),
+    commitTimestamp: z.iso.datetime({ offset: true }),
     initialBranch: z.string().min(1),
   }),
   reviewDigest: freshBootstrapDigest,
@@ -101,6 +101,6 @@ export const freshBootstrapIdentitySchema = z.strictObject({
   authorEmail: z.string().min(3).max(320),
   authorName: z.string().min(1),
   commitMessage: z.string().min(1),
-  commitTimestamp: z.string().datetime({ offset: true }),
+  commitTimestamp: z.iso.datetime({ offset: true }),
   initialBranch: z.string().min(1),
 });

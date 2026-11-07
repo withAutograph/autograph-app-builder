@@ -21,10 +21,10 @@ import type { HostedContinuityDependencies } from "./hosted-operator-continuity"
 import { createContinuityCapabilityCustody } from "./hosted-operator-continuity-custody";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 const context: HostedOperatorContext = {
   authority,
@@ -32,36 +32,35 @@ const context: HostedOperatorContext = {
     appId: "orchard",
     branch: "preview",
     environment: "preview",
-    projectId: "app-project",
-    sessionId: "saved-session",
     installationId: "installation",
+    projectId: "app-project",
     scopeId: "team",
     scopeType: "team",
+    sessionId: "saved-session",
   },
 };
 const preparedPlan = hostedOperatorPlanSchema.parse({
-  version: 1,
-  action: "prepare",
   access: [{ actorId: "actor-one", organizationId: "organization-one", roles: ["custom_role"] }],
+  action: "prepare",
   appDatabase: {
     database: "app_db",
     migratorRole: "app_migrator",
-    runtimeRole: "app_runtime",
     resourceId: "app-resource",
+    runtimeRole: "app_runtime",
   },
   authDatabase: {
     database: "auth_db",
     migratorRole: "auth_migrator",
-    runtimeRole: "auth_runtime",
     resourceId: "auth-resource",
+    runtimeRole: "auth_runtime",
   },
   contextId: "ordinary-planning-context",
   cost: { class: "shared-recovery-group", description: "Controlled fixture", owner: "Fixture" },
   effects: [
-    { id: "resources", kind: "resources", description: "Prepare resources" },
-    { id: "install", kind: "install", description: "Install app" },
-    { id: "access", kind: "access", description: "Authorize app" },
-    { id: "bindings", kind: "bindings", description: "Bind runtime" },
+    { description: "Prepare resources", id: "resources", kind: "resources" },
+    { description: "Install app", id: "install", kind: "install" },
+    { description: "Authorize app", id: "access", kind: "access" },
+    { description: "Bind runtime", id: "bindings", kind: "bindings" },
   ],
   installer: { reference: "shared-installer", sha256: "a".repeat(64) },
   neon: {
@@ -80,34 +79,35 @@ const preparedPlan = hostedOperatorPlanSchema.parse({
     projectId: context.target.projectId,
     sessionId: context.target.sessionId,
   },
+  version: 1,
 });
 const selection = {
-  version: 1 as const,
-  kind: "app-continuity-plan" as const,
+  actors: [{ actorId: "actor-one", organizationId: "organization-one" }],
   authority,
-  target: context.target,
+  gateway: {
+    environment: "preview" as const,
+    ownerId: "team",
+    projectId: "gateway-project",
+    publicOrigin: "https://gateway.example",
+  },
+  kind: "app-continuity-plan" as const,
   originalSetup: {
-    operationRef: "10000000-0000-4000-8000-000000000001",
-    planDigest: "c".repeat(64),
     approvalId: "setup-human",
     approvedByCallId: "setup-call",
+    operationRef: "10000000-0000-4000-8000-000000000001",
+    planDigest: "c".repeat(64),
   },
   preparedPlan,
   runtime: {
-    sandboxId: "owned-sandbox",
-    root: "/controlled/source",
-    projectId: "builder-project",
-    ownerId: "team",
     appPort: 3000,
     bridgePort: 3100,
-  },
-  gateway: {
-    projectId: "gateway-project",
     ownerId: "team",
-    environment: "preview" as const,
-    publicOrigin: "https://gateway.example",
+    projectId: "builder-project",
+    root: "/controlled/source",
+    sandboxId: "owned-sandbox",
   },
-  actors: [{ actorId: "actor-one", organizationId: "organization-one" }],
+  target: context.target,
+  version: 1 as const,
 };
 const makePlan = () =>
   hostedContinuityPlanSchema.parse({
@@ -136,7 +136,115 @@ const setup = () => {
     tokenKeyVersion: "fixture-key",
   });
   const deps: HostedContinuityDependencies = {
+    assertOwner: vi.fn<HostedContinuityDependencies["assertOwner"]>(async () => {
+      if (!owner) {
+        throw new HostedOperatorError("authorization_required");
+      }
+    }),
+    assertSetup: vi.fn<HostedContinuityDependencies["assertSetup"]>(async () => {
+      if (!owner || !setupCurrent) {
+        throw new HostedOperatorError("authorization_required");
+      }
+    }),
+    now: () => new Date("2026-10-20T14:00:00.000Z"),
+    projection: {
+      publish: vi.fn<HostedContinuityDependencies["projection"]["publish"]>(
+        async (_context, _record, _capabilities, assertCurrent) => {
+          await assertCurrent();
+          events.push("publish");
+        },
+      ),
+      revoke: vi.fn<HostedContinuityDependencies["projection"]["revoke"]>(
+        async (_context, _record, assertCurrent, checkpoint) => {
+          await assertCurrent();
+          events.push("revoke-owned-rows");
+          await checkpoint([]);
+        },
+      ),
+    },
+    readApproval: vi.fn<HostedContinuityDependencies["readApproval"]>(
+      async (_context, request, callId) =>
+        approved
+          ? {
+              ...request,
+              approvalId: "continuity-human",
+              approvedByCallId: callId ?? "continuity-call",
+            }
+          : null,
+    ),
+    resolvePlan: vi.fn<HostedContinuityDependencies["resolvePlan"]>(async (_context, runtime) => ({
+      ...makePlan(),
+      runtime: { ...selection.runtime, ...runtime },
+    })),
+    runtime: {
+      close: vi.fn<HostedContinuityDependencies["runtime"]["close"]>(async () => {
+        events.push("close");
+      }),
+      renew: vi.fn<HostedContinuityDependencies["runtime"]["renew"]>(async () => {
+        events.push("renew");
+      }),
+      runSuite: vi.fn<HostedContinuityDependencies["runtime"]["runSuite"]>(
+        async (_context, _record, _capabilities, assertCurrent, checkpoint, allowDispatch) => {
+          await assertCurrent();
+          events.push(allowDispatch ? "dispatch-suite" : "read-suite");
+          if (allowDispatch) {
+            await checkpoint("suite-command");
+          }
+          return { exitCode: 0 };
+        },
+      ),
+      start: vi.fn<HostedContinuityDependencies["runtime"]["start"]>(
+        async (_context, record, _capabilities, assertCurrent, checkpoint) => {
+          await assertCurrent();
+          events.push("start");
+          const { attemptId } = record;
+          if (attemptId === undefined) {
+            throw new Error("Missing retained attempt");
+          }
+          await checkpoint({
+            current: {
+              appId: context.target.appId,
+              approvalRef: "continuity-human",
+              fence: record.fence,
+              intentId: record.requestId,
+              leaseExpiresAt: "2027-01-01T00:00:00.000Z",
+              owner: { ...authority, sessionId: context.target.sessionId },
+              providerSessionId: "provider-session",
+              runtimeAttemptId: attemptId,
+              sandboxId: record.plan.runtime.sandboxId,
+              state: "ready",
+            },
+            locator: {
+              attemptId,
+              commandId: "runtime-command",
+              providerSessionId: "provider-session",
+              root: record.plan.runtime.root,
+              rootDirectory: "/controlled/runtime",
+              sandboxId: record.plan.runtime.sandboxId,
+              worker: {
+                executablePath: "/private/worker",
+                id: "managed-worker",
+                operationScope: "managed-app-runtime-v1",
+                sha256: "d".repeat(64),
+                subcommand: "protected-managed-app-runtime",
+              },
+            },
+          });
+        },
+      ),
+    },
+    seal: (record, caps) => custody.seal(record, caps),
     store: {
+      async compareAndSet(input) {
+        if (rejectCas || row?.revision !== input.expectedRevision) {
+          rejectCas = false;
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional CAS absence is the supported conflict result.
+          return undefined;
+        }
+        row = continuityRecordSchema.parse(structuredClone(input.record));
+        records.push(read());
+        return read();
+      },
       async read(input) {
         return row !== undefined &&
           input.intentId === row.requestId &&
@@ -149,42 +257,7 @@ const setup = () => {
         records.push(read());
         return read();
       },
-      async compareAndSet(input) {
-        if (rejectCas || row?.revision !== input.expectedRevision) {
-          rejectCas = false;
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional CAS absence is the supported conflict result.
-          return undefined;
-        }
-        row = continuityRecordSchema.parse(structuredClone(input.record));
-        records.push(read());
-        return read();
-      },
     },
-    assertOwner: vi.fn<HostedContinuityDependencies["assertOwner"]>(async () => {
-      if (!owner) {
-        throw new HostedOperatorError("authorization_required");
-      }
-    }),
-    assertSetup: vi.fn<HostedContinuityDependencies["assertSetup"]>(async () => {
-      if (!owner || !setupCurrent) {
-        throw new HostedOperatorError("authorization_required");
-      }
-    }),
-    resolvePlan: vi.fn<HostedContinuityDependencies["resolvePlan"]>(async (_context, runtime) => ({
-      ...makePlan(),
-      runtime: { ...selection.runtime, ...runtime },
-    })),
-    readApproval: vi.fn<HostedContinuityDependencies["readApproval"]>(
-      async (_context, request, callId) =>
-        approved
-          ? {
-              ...request,
-              approvalId: "continuity-human",
-              approvedByCallId: callId ?? "continuity-call",
-            }
-          : null,
-    ),
-    seal: (record, caps) => custody.seal(record, caps),
     unseal: (record) => custody.unseal(record),
     withResourceLease: async (input, run) => {
       if (held) {
@@ -204,97 +277,24 @@ const setup = () => {
         held = false;
       }
     },
-    runtime: {
-      start: vi.fn<HostedContinuityDependencies["runtime"]["start"]>(
-        async (_context, record, _capabilities, assertCurrent, checkpoint) => {
-          await assertCurrent();
-          events.push("start");
-          const { attemptId } = record;
-          if (attemptId === undefined) {
-            throw new Error("Missing retained attempt");
-          }
-          await checkpoint({
-            locator: {
-              sandboxId: record.plan.runtime.sandboxId,
-              root: record.plan.runtime.root,
-              providerSessionId: "provider-session",
-              commandId: "runtime-command",
-              worker: {
-                id: "managed-worker",
-                executablePath: "/private/worker",
-                sha256: "d".repeat(64),
-                operationScope: "managed-app-runtime-v1",
-                subcommand: "protected-managed-app-runtime",
-              },
-              attemptId,
-              rootDirectory: "/controlled/runtime",
-            },
-            current: {
-              intentId: record.requestId,
-              approvalRef: "continuity-human",
-              owner: { ...authority, sessionId: context.target.sessionId },
-              appId: context.target.appId,
-              runtimeAttemptId: attemptId,
-              fence: record.fence,
-              sandboxId: record.plan.runtime.sandboxId,
-              providerSessionId: "provider-session",
-              state: "ready",
-              leaseExpiresAt: "2027-01-01T00:00:00.000Z",
-            },
-          });
-        },
-      ),
-      runSuite: vi.fn<HostedContinuityDependencies["runtime"]["runSuite"]>(
-        async (_context, _record, _capabilities, assertCurrent, checkpoint, allowDispatch) => {
-          await assertCurrent();
-          events.push(allowDispatch ? "dispatch-suite" : "read-suite");
-          if (allowDispatch) {
-            await checkpoint("suite-command");
-          }
-          return { exitCode: 0 };
-        },
-      ),
-      close: vi.fn<HostedContinuityDependencies["runtime"]["close"]>(async () => {
-        events.push("close");
-      }),
-      renew: vi.fn<HostedContinuityDependencies["runtime"]["renew"]>(async () => {
-        events.push("renew");
-      }),
-    },
-    projection: {
-      publish: vi.fn<HostedContinuityDependencies["projection"]["publish"]>(
-        async (_context, _record, _capabilities, assertCurrent) => {
-          await assertCurrent();
-          events.push("publish");
-        },
-      ),
-      revoke: vi.fn<HostedContinuityDependencies["projection"]["revoke"]>(
-        async (_context, _record, assertCurrent, checkpoint) => {
-          await assertCurrent();
-          events.push("revoke-owned-rows");
-          await checkpoint([]);
-        },
-      ),
-    },
-    now: () => new Date("2026-10-20T14:00:00.000Z"),
   };
   return {
-    operations: createHostedContinuityOperations(deps),
-    deps,
-    events,
-    records,
-    read,
     approve: () => {
       approved = true;
     },
-    revokeOwner: () => {
-      owner = false;
-    },
+    deps,
+    events,
     invalidateSetup: () => {
       setupCurrent = false;
     },
+    operations: createHostedContinuityOperations(deps),
+    read,
+    records,
     rejectNextCas: () => {
       rejectCas = true;
+    },
+    revokeOwner: () => {
+      owner = false;
     },
   };
 };
@@ -315,8 +315,8 @@ const retainPreDispatchAttempt = async (f: ReturnType<typeof setup>) => {
         const locator = { ...patch.locator };
         delete locator.commandId;
         await checkpoint({
-          locator,
           current: { ...patch.current, state: "starting" },
+          locator,
         });
         throw new Error("Interrupted before runtime dispatch");
       });
@@ -386,13 +386,13 @@ const sessionRebindPatch = (record: ContinuityRecord) => {
     throw new Error("Missing retained runtime identity");
   }
   return {
-    locator: { ...record.locator, providerSessionId: "resumed-provider-session" },
     current: {
       ...record.current,
+      leaseExpiresAt: "2027-01-01T01:00:00.000Z",
       owner: { ...record.current.owner },
       providerSessionId: "resumed-provider-session",
-      leaseExpiresAt: "2027-01-01T01:00:00.000Z",
     },
+    locator: { ...record.locator, providerSessionId: "resumed-provider-session" },
   };
 };
 
@@ -405,8 +405,8 @@ const resumeControlledSession = (f: ReturnType<typeof setup>, beforeCheckpoint?:
       await checkpoint(patch);
       f.events.push("launch-after-session-checkpoint");
       await checkpoint({
-        locator: { ...patch.locator, dispatchAttempted: true, commandId: "runtime-command" },
         current: { ...patch.current, state: "ready" },
+        locator: { ...patch.locator, commandId: "runtime-command", dispatchAttempted: true },
       });
     },
   );
@@ -423,8 +423,8 @@ describe("approved managed app continuity service", () => {
       approval: retained.approval,
       attemptId: retained.attemptId,
       fence: retained.fence,
-      privateState: retained.privateState,
       locator: { ...retained.locator, providerSessionId: "resumed-provider-session" },
+      privateState: retained.privateState,
     });
     expect(
       f.records.every(
@@ -477,8 +477,8 @@ describe("approved managed app continuity service", () => {
           expect(renewed?.locator?.providerSessionId).toBe("resumed-provider-session");
           expect(renewed?.current?.providerSessionId).toBe("resumed-provider-session");
           await checkpoint({
-            locator: { ...patch.locator, dispatchAttempted: true, commandId: "runtime-command" },
             current: { ...patch.current, state: "ready" },
+            locator: { ...patch.locator, commandId: "runtime-command", dispatchAttempted: true },
           });
         },
       );
@@ -492,7 +492,7 @@ describe("approved managed app continuity service", () => {
   it("reads back a committed session pair after response loss without changing the attempt or duplicating dispatch", async () => {
     const f = setup();
     const { planned, retained } = await retainPreDispatchAttempt(f);
-    const compareAndSet = f.deps.store.compareAndSet;
+    const { compareAndSet } = f.deps.store;
     let responseLost = false;
     f.deps.store.compareAndSet = async (input) => {
       const saved = await compareAndSet(input);
@@ -705,7 +705,7 @@ describe("approved managed app continuity service", () => {
     expect(result.state).toBe("settled");
     expect(result.outcome?.exitCode).toBe(0);
     expect(f.events.indexOf("close")).toBeLessThan(f.events.indexOf("revoke-owned-rows"));
-    const started = vi.mocked(f.deps.runtime.start).mock.calls[0];
+    const [started] = vi.mocked(f.deps.runtime.start).mock.calls;
     if (started === undefined) {
       throw new Error("Runtime did not start");
     }
@@ -747,9 +747,9 @@ describe("approved managed app continuity service", () => {
       async (_context, record, caps, guard, checkpoint, allowDispatch) => {
         await guard();
         observed.push({
+          allowDispatch,
           attemptId: record.attemptId,
           caps,
-          allowDispatch,
           commandId: record.suiteCommandId,
         });
         if (allowDispatch) {
@@ -984,6 +984,14 @@ describe("continuity recovery preserves frozen plans", () => {
     const f = setup();
     const rows = new Map<string, ContinuityRecord>();
     f.deps.store = {
+      compareAndSet: async ({ record, expectedRevision }) => {
+        if (rows.get(record.requestId)?.revision !== expectedRevision) {
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS conflicts explicitly return no row.
+          return undefined;
+        }
+        rows.set(record.requestId, structuredClone(record));
+        return structuredClone(record);
+      },
       read: async ({ intentId }) => structuredClone(rows.get(intentId)),
       reserve: async ({ record }) => {
         if (!rows.has(record.requestId)) {
@@ -995,24 +1003,16 @@ describe("continuity recovery preserves frozen plans", () => {
         }
         return structuredClone(saved);
       },
-      compareAndSet: async ({ record, expectedRevision }) => {
-        if (rows.get(record.requestId)?.revision !== expectedRevision) {
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS conflicts explicitly return no row.
-          return undefined;
-        }
-        rows.set(record.requestId, structuredClone(record));
-        return structuredClone(record);
-      },
     };
-    return { ...f, rows, operations: createHostedContinuityOperations(f.deps) };
+    return { ...f, operations: createHostedContinuityOperations(f.deps), rows };
   };
   it("creates a new exact approval for a corrected runtime and keeps the old plan", async () => {
     const f = recovered();
     const old = await f.operations.plan(context, selection.runtime, "old");
     const runtime = {
       ...selection.runtime,
+      browserSelection: { maxFailures: 1, retries: 0, testName: "@acceptance", workers: 1 },
       root: "/workspace/recovered",
-      browserSelection: { testName: "@acceptance", workers: 1, retries: 0, maxFailures: 1 },
     };
     const next = await f.operations.plan(context, runtime, "recovery", {
       predecessorIntentId: old.plan.intentId,

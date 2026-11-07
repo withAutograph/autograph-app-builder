@@ -13,10 +13,10 @@ export const nativeDeliveryStateSchema = z.strictObject({
   currentTurnId: z.string().min(1).optional(),
   turns: z.array(
     z.strictObject({
-      startedDeliveryIds: z.array(z.string().min(1)).optional(),
       boundary: boundarySchema.optional(),
       boundaryDeliveryIds: z.array(z.string().min(1)).optional(),
       deliveryIds: z.array(z.string().min(1)),
+      startedDeliveryIds: z.array(z.string().min(1)).optional(),
       turnId: z.string().min(1),
     }),
   ),
@@ -24,11 +24,11 @@ export const nativeDeliveryStateSchema = z.strictObject({
 });
 export type NativeDeliveryState = z.infer<typeof nativeDeliveryStateSchema>;
 export const sendDeliverySchema = z.strictObject({
-  resumeCancellationRevision: z.number().int().nonnegative().optional(),
   adapterGeneration: z.number().int().positive(),
   adapterSessionId: z.string().min(1),
   deliveryId: z.string().min(1),
   requestDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  resumeCancellationRevision: z.number().int().nonnegative().optional(),
   sessionId: z.string().min(1),
 });
 export type SendDelivery = z.infer<typeof sendDeliverySchema>;

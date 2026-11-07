@@ -19,12 +19,15 @@ const listen = async (server: Server): Promise<number> => {
   return (server.address() as AddressInfo).port;
 };
 
-const close = (server: Server): Promise<void> =>
+const close = async (server: Server): Promise<void> => {
   // oxlint-disable-next-line promise/avoid-new -- Adapt the Node server close callback.
-  new Promise((resolve, reject) => {
+  await new Promise((resolve, reject) => {
     // oxlint-disable-next-line promise/prefer-await-to-callbacks -- Node close has a callback API.
-    server.close((error) => (error ? reject(error) : resolve()));
+    server.close((error) => {
+      error ? reject(error) : resolve();
+    });
   });
+};
 
 const unusedPort = async (): Promise<number> => {
   const reservation = createServer();
@@ -33,31 +36,38 @@ const unusedPort = async (): Promise<number> => {
   return port;
 };
 
-const call = (port: number, path: string, headers: IncomingHttpHeaders = {}, method = "GET") =>
+const call = async (
+  port: number,
+  path: string,
+  headers: IncomingHttpHeaders = {},
+  method = "GET",
+) =>
   // oxlint-disable-next-line promise/avoid-new -- Collect an actual Node HTTP response.
-  new Promise<{ status: number; headers: IncomingHttpHeaders; body: string }>((resolve, reject) => {
-    const outgoing = request(
-      {
-        headers: { host: "preview.example", ...headers },
-        hostname: "127.0.0.1",
-        method,
-        path,
-        port,
-      },
-      (response) => {
-        let body = "";
-        response.setEncoding("utf-8");
-        response.on("data", (chunk: string) => {
-          body += chunk;
-        });
-        response.on("end", () =>
-          resolve({ body, headers: response.headers, status: response.statusCode ?? 0 }),
-        );
-      },
-    );
-    outgoing.on("error", reject);
-    outgoing.end(method === "POST" ? "action-payload" : undefined);
-  });
+  await new Promise<{ status: number; headers: IncomingHttpHeaders; body: string }>(
+    (resolve, reject) => {
+      const outgoing = request(
+        {
+          headers: { host: "preview.example", ...headers },
+          hostname: "127.0.0.1",
+          method,
+          path,
+          port,
+        },
+        (response) => {
+          let body = "";
+          response.setEncoding("utf-8");
+          response.on("data", (chunk: string) => {
+            body += chunk;
+          });
+          response.on("end", () => {
+            resolve({ body, headers: response.headers, status: response.statusCode ?? 0 });
+          });
+        },
+      );
+      outgoing.on("error", reject);
+      outgoing.end(method === "POST" ? "action-payload" : undefined);
+    },
+  );
 
 const withGateway = async (
   run: (fixture: {
@@ -394,7 +404,9 @@ describe("working preview WebSocket upgrade", () => {
           const peerClosed = Promise.withResolvers<null>();
           app.on("upgrade", (incoming, socket, head) => {
             observed = incoming.headers;
-            socket.on("close", () => peerClosed.resolve(null));
+            socket.on("close", () => {
+              peerClosed.resolve(null);
+            });
             socket.on("end", () => socket.destroy());
             socket.on("error", () => {});
             socket.write(

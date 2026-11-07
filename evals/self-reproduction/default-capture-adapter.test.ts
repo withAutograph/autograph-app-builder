@@ -1,15 +1,21 @@
-import type { Page } from "playwright";
 import { describe, expect, it, vi } from "vitest";
 
 import { createCaptureAdapters } from "./default-capture-adapter";
 
 const absentLocator = {
-  count: () => Promise.resolve(0),
+  count: vi.fn().mockResolvedValue(0),
+};
+
+const unavailablePage = {
+  getByRole: vi.fn(() => absentLocator),
+  getByText: vi.fn(() => absentLocator),
+  goto: vi.fn().mockResolvedValue(null),
+  locator: vi.fn(() => absentLocator),
 };
 
 describe("default self-reproduction capture adapter", () => {
-  it("creates independent reference and candidate adapters", async () => {
-    const adapters = await createCaptureAdapters({
+  it("creates independent reference and candidate adapters", () => {
+    const adapters = createCaptureAdapters({
       candidateURL: "http://127.0.0.1:3001",
       referenceURL: "http://127.0.0.1:3000",
     });
@@ -17,16 +23,11 @@ describe("default self-reproduction capture adapter", () => {
   });
 
   it("classifies an absent required candidate control as missing functionality", async () => {
-    const { candidate } = await createCaptureAdapters({
+    const { candidate } = createCaptureAdapters({
       candidateURL: "http://127.0.0.1:3001",
       referenceURL: "http://127.0.0.1:3000",
     });
-    const page = {
-      getByRole: vi.fn(() => absentLocator),
-      getByText: vi.fn(() => absentLocator),
-      goto: vi.fn(() => Promise.resolve()),
-      locator: vi.fn(() => absentLocator),
-    } as unknown as Page;
+    const page = vi.mockObject(unavailablePage);
     await expect(candidate.prepare(page, "panel-resize")).resolves.toMatchObject({
       disposition: "missing-functionality",
       ready: false,
@@ -34,16 +35,11 @@ describe("default self-reproduction capture adapter", () => {
   });
 
   it("does not mistake an unseeded transient state for missing product functionality", async () => {
-    const { reference, candidate } = await createCaptureAdapters({
+    const { reference, candidate } = createCaptureAdapters({
       candidateURL: "http://127.0.0.1:3001",
       referenceURL: "http://127.0.0.1:3000",
     });
-    const page = {
-      getByRole: vi.fn(() => absentLocator),
-      getByText: vi.fn(() => absentLocator),
-      goto: vi.fn(() => Promise.resolve()),
-      locator: vi.fn(() => absentLocator),
-    } as unknown as Page;
+    const page = vi.mockObject(unavailablePage);
     await expect(reference.prepare(page, "loading")).resolves.toMatchObject({
       disposition: "not-run",
       ready: false,
@@ -55,13 +51,13 @@ describe("default self-reproduction capture adapter", () => {
   });
 
   it("reserves blockers for an unavailable browser target", async () => {
-    const { candidate } = await createCaptureAdapters({
+    const { candidate } = createCaptureAdapters({
       candidateURL: "http://127.0.0.1:3001",
       referenceURL: "http://127.0.0.1:3000",
     });
-    const page = {
-      goto: vi.fn(() => Promise.reject(new Error("connection refused"))),
-    } as unknown as Page;
+    const page = vi.mockObject({
+      goto: vi.fn().mockRejectedValue(new Error("connection refused")),
+    });
     await expect(candidate.prepare(page, "empty")).resolves.toMatchObject({
       disposition: "infrastructure-unavailable",
       ready: false,

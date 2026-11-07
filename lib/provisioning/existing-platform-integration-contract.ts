@@ -12,25 +12,29 @@ const origin = z.url().refine((value) => {
   return url.protocol === "https:" && url.origin === value && !url.username && !url.password;
 });
 const neon = z.strictObject({
-  projectId: id,
   branchId: id,
   endpointId: id,
+  projectId: id,
   source: z.literal("synthetic-only"),
 });
 /** Central readiness family v2; this existing-platform reference protocol retains its v1 kind. */
 export const existingPlatformIntegrationReadySchema = z.strictObject({
-  version: z.literal(2),
-  kind: z.literal("existing-platform-integrations-ready-v1"),
+  activation: z.strictObject({
+    keyId: id,
+    publicKeyPem: z.string().startsWith("-----BEGIN PUBLIC KEY-----"),
+    publicKeySha256: digest,
+  }),
   authority: hostedTenantAuthoritySchema,
-  referenceId: id,
+  caller: z.strictObject({
+    environment: z.literal("production"),
+    ownerId: id,
+    projectId: id,
+    trustedSourcesGrantSha256: digest,
+  }),
   composition: z.literal("single-project-services"),
-  providerEnvironment: z.literal("development"),
-  dataEnvironment: z.literal("dedicated-development"),
-  repositoryId: id,
-  profile: z.strictObject({ id, digest }),
-  resourceProfileId: id,
-  resourceCustody: z.strictObject({ receiptRef: id, receiptDigest: digest }),
   control: z.strictObject({
+    centralRuntimeRole: role,
+    neon,
     resource: z.strictObject({
       resourceId: id,
       // Historical restricted-resource isolation marker; hosting is deployment.environment below.
@@ -41,53 +45,49 @@ export const existingPlatformIntegrationReadySchema = z.strictObject({
       schema: z.literal("public"),
       migratorRole: role,
     }),
-    centralRuntimeRole: role,
-    neon,
     schemaSha256: digest,
   }),
-  activation: z.strictObject({
-    keyId: id,
-    publicKeyPem: z.string().startsWith("-----BEGIN PUBLIC KEY-----"),
-    publicKeySha256: digest,
-  }),
-  provider: z.strictObject({
-    kind: z.literal("quickbooksSandbox"),
-    projectId: id,
-    integrationId: id,
-    authorizationOrigins: z.array(origin).min(1),
-    payloadHosts: z.array(id).min(1),
-  }),
+  dataEnvironment: z.literal("dedicated-development"),
   deployment: z.strictObject({
-    projectId: id,
-    teamId: id,
-    installationId: id,
-    environment: z.enum(["preview", "production"]),
-    serviceId: z.literal("integrations"),
-    providerDeploymentId: id,
-    immutableOrigin: origin,
     configurationRef: id,
     configurationSha256: digest,
-  }),
-  caller: z.strictObject({
+    environment: z.enum(["preview", "production"]),
+    immutableOrigin: origin,
+    installationId: id,
     projectId: id,
-    ownerId: id,
-    environment: z.literal("production"),
-    trustedSourcesGrantSha256: digest,
+    providerDeploymentId: id,
+    serviceId: z.literal("integrations"),
+    teamId: id,
   }),
+  kind: z.literal("existing-platform-integrations-ready-v1"),
+  profile: z.strictObject({ digest, id }),
+  provider: z.strictObject({
+    authorizationOrigins: z.array(origin).min(1),
+    integrationId: id,
+    kind: z.literal("quickbooksSandbox"),
+    payloadHosts: z.array(id).min(1),
+    projectId: id,
+  }),
+  providerEnvironment: z.literal("development"),
+  referenceId: id,
+  repositoryId: id,
+  resourceCustody: z.strictObject({ receiptDigest: digest, receiptRef: id }),
+  resourceProfileId: id,
+  version: z.literal(2),
 });
 /** Supplied only by the real owner-scoped custody reader plus independent resource readback. */
 export const existingPlatformControlResourceProofSchema = z.strictObject({
   authority: hostedTenantAuthoritySchema,
-  custody: z.strictObject({ receiptRef: id, receiptDigest: digest }),
-  resourceProfileId: id,
-  resourceId: id,
-  neon,
-  hostname: z.string().regex(/^[a-z0-9.-]+\.neon\.tech$/u),
-  database: sqlName,
-  migratorRole: role,
   centralRuntimeRole: role,
-  schemaSha256: digest,
+  custody: z.strictObject({ receiptDigest: digest, receiptRef: id }),
   dataEnvironment: z.literal("dedicated-development"),
+  database: sqlName,
+  hostname: z.string().regex(/^[a-z0-9.-]+\.neon\.tech$/u),
+  migratorRole: role,
+  neon,
+  resourceId: id,
+  resourceProfileId: id,
+  schemaSha256: digest,
 });
 export type ExistingPlatformControlResourceProof = z.infer<
   typeof existingPlatformControlResourceProofSchema
@@ -114,27 +114,27 @@ export const existingPlatformIntegrationReferenceDigest = (
     .update(JSON.stringify(existingPlatformIntegrationReadySchema.parse(value)))
     .digest("hex");
 export const existingPlatformIntegrationPlanReferenceSchema = z.strictObject({
+  dataEnvironment: z.literal("dedicated-development"),
+  hostingEnvironment: z.enum(["preview", "production"]),
   kind: z.literal("existing-platform-integrations-reference-v1"),
+  projectId: z.string().min(1),
+  providerDeploymentId: z.string().min(1),
+  providerEnvironment: z.literal("development"),
   referenceId: z.string().min(1),
   sha256: digest,
-  projectId: z.string().min(1),
   teamId: z.string().min(1),
-  providerDeploymentId: z.string().min(1),
-  hostingEnvironment: z.enum(["preview", "production"]),
-  providerEnvironment: z.literal("development"),
-  dataEnvironment: z.literal("dedicated-development"),
   trustedSourcesGrantSha256: digest,
 });
 export const existingPlatformIntegrationPlanReference = (ready: ExistingPlatformIntegrationReady) =>
   existingPlatformIntegrationPlanReferenceSchema.parse({
+    dataEnvironment: ready.dataEnvironment,
+    hostingEnvironment: ready.deployment.environment,
     kind: "existing-platform-integrations-reference-v1",
+    projectId: ready.deployment.projectId,
+    providerDeploymentId: ready.deployment.providerDeploymentId,
+    providerEnvironment: ready.providerEnvironment,
     referenceId: ready.referenceId,
     sha256: existingPlatformIntegrationReferenceDigest(ready),
-    projectId: ready.deployment.projectId,
     teamId: ready.deployment.teamId,
-    providerDeploymentId: ready.deployment.providerDeploymentId,
-    hostingEnvironment: ready.deployment.environment,
-    providerEnvironment: ready.providerEnvironment,
-    dataEnvironment: ready.dataEnvironment,
     trustedSourcesGrantSha256: ready.caller.trustedSourcesGrantSha256,
   });

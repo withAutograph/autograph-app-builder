@@ -26,8 +26,10 @@ const authoritySchema = z.object({
   pending: z.array(z.object({ callId: z.string(), scope: scopeSchema })).optional(),
 });
 const workflowSchema = z.looseObject({
-  phase: z.string().optional(),
   appSpec: z.object({ digest: z.string().optional() }).optional(),
+  applyFailure: z.object({}).optional(),
+  applyReceipt: z.object({}).optional(),
+  phase: z.string().optional(),
   proposal: z
     .object({
       digest: z.string().optional(),
@@ -37,14 +39,12 @@ const workflowSchema = z.looseObject({
     })
     .optional(),
   workspace: z.object({ workspaceId: z.string().optional() }).optional(),
-  applyReceipt: z.object({}).optional(),
-  applyFailure: z.object({}).optional(),
 });
 const partSchema = z.looseObject({
-  type: z.string().optional(),
+  providerExecuted: z.boolean().optional(),
   toolCallId: z.string().optional(),
   toolName: z.string().optional(),
-  providerExecuted: z.boolean().optional(),
+  type: z.string().optional(),
 });
 const contextSchema = z.looseObject({
   "eve.sessionId": z.string().optional(),
@@ -52,12 +52,13 @@ const contextSchema = z.looseObject({
   [workflowKey]: z.unknown().optional(),
 });
 const sessionSchema = z.looseObject({
-  sessionId: z.string(),
   history: z.array(
-    z.looseObject({ role: z.string(), content: z.union([z.string(), z.array(partSchema)]) }),
+    z.looseObject({ content: z.union([z.string(), z.array(partSchema)]), role: z.string() }),
   ),
+  sessionId: z.string(),
 });
 const candidateSchema = z.object({
+  incoming: z.object({ delivery: z.unknown().optional() }).optional(),
   kind: z.string(),
   origin: z.object({ slot: z.number().int().nonnegative() }),
   serializedContext: contextSchema,
@@ -65,14 +66,13 @@ const candidateSchema = z.object({
     emissionState: z.object({ sequence: z.number().int().nonnegative() }).optional(),
     snapshot: z.looseObject({ session: sessionSchema }),
   }),
-  incoming: z.object({ delivery: z.unknown().optional() }).optional(),
 });
 const payloadSchema = z.object({
   candidates: z.array(candidateSchema),
-  nativeEvents: z.array(
-    z.object({ type: z.string(), data: z.object({ sequence: z.number().optional() }).optional() }),
-  ),
   issues: z.array(z.object({ reason: z.string() })),
+  nativeEvents: z.array(
+    z.object({ data: z.object({ sequence: z.number().optional() }).optional(), type: z.string() }),
+  ),
 });
 const hash = (value: string | undefined): string | null =>
   value === undefined
@@ -102,13 +102,13 @@ const pendingCall = (
 export const observePrivateApplyRecoveryCandidate = (input: ObservationInput): CandidateFacts => {
   const parsed = payloadSchema.safeParse(input.payload);
   if (!parsed.success) {
-    return { flags: { payloadParsed: false }, counts: {}, hashes: {} };
+    return { counts: {}, flags: { payloadParsed: false }, hashes: {} };
   }
   const payload = parsed.data;
   const candidates = payload.candidates.toSorted(
     (left, right) => right.origin.slot - left.origin.slot,
   );
-  const latest = candidates[0];
+  const [latest] = candidates;
   const latestContext = latest?.serializedContext;
   const latestSession = latest?.sessionState.snapshot.session;
   const latestWorkflow = workflowSchema.safeParse(latestContext?.[workflowKey]).data;
@@ -155,7 +155,7 @@ export const observePrivateApplyRecoveryCandidate = (input: ObservationInput): C
       : payload.nativeEvents.filter(
           (event) => event.data?.sequence === undefined || event.data.sequence >= sequence,
         );
-  const issues = payload.issues;
+  const { issues } = payload;
   const failedStepCount = issues.filter(
     (issue) => issue.reason === "failed-turn-effects-unreconciled",
   ).length;
@@ -166,87 +166,87 @@ export const observePrivateApplyRecoveryCandidate = (input: ObservationInput): C
   const pendingScopeAvailable =
     callId !== undefined && expectedScope !== undefined && latestAuthority !== undefined;
   const result: CandidateFacts = {
+    counts: {
+      applyOrphanCount: calls.length,
+      failedNativeTurnIssueCount: failedStepCount,
+      matchingPendingCallCount: latestPending.length,
+      matchingPreapprovalPendingCallCount: beforePending.length,
+    },
     flags: {
-      payloadParsed: true,
-      privateAuthorityKeyPresent:
-        latestContext === undefined ? null : Object.hasOwn(latestContext, authorityKey),
-      workflowKeyPresent:
-        latestContext === undefined ? null : Object.hasOwn(latestContext, workflowKey),
+      appWorkflowUnchangedSinceInput:
+        beforeWorkflow === undefined || latestWorkflow === undefined
+          ? null
+          : isDeepStrictEqual(beforeContext?.[workflowKey], latestContext?.[workflowKey]),
+      applyFailurePresent:
+        latestWorkflow === undefined ? null : latestWorkflow.applyFailure !== undefined,
+      applyReceiptPresent:
+        latestWorkflow === undefined ? null : latestWorkflow.applyReceipt !== undefined,
+      committedOutputAfterSourceInput:
+        committed === undefined || before === undefined
+          ? null
+          : committed.origin.slot > before.origin.slot,
       exactApplyOrphanIdentified: calls.length === 1,
+      grantExplicitNull:
+        latestAuthority === undefined || !Object.hasOwn(latestAuthority, "grant")
+          ? null
+          : latestAuthority.grant === null,
+      latestContextMatchesCommittedOutput:
+        committed === undefined || latestContext === undefined
+          ? null
+          : isDeepStrictEqual(latestContext, committed.serializedContext),
+      latestPendingScopeMatchesCurrent: pendingScopeAvailable
+        ? latestPending.length === 1 && isDeepStrictEqual(latestPendingScope, expectedScope)
+        : null,
+      latestSnapshotMatchesCommittedOutput:
+        committed === undefined || latestSession === undefined
+          ? null
+          : isDeepStrictEqual(latestSession, committed.sessionState.snapshot.session),
       logicalIdentityMatches:
         latestContext === undefined || latestSession === undefined
           ? null
           : latestContext["eve.sessionId"] === input.descriptor.logicalSessionId &&
             logicalSessionMatches,
-      grantExplicitNull:
-        latestAuthority === undefined || !Object.hasOwn(latestAuthority, "grant")
-          ? null
-          : latestAuthority.grant === null,
       matchingGrantPresent:
         latestAuthority === undefined || expectedScope === undefined
           ? null
           : isDeepStrictEqual(latestAuthority.grant, expectedScope),
-      phasePlanned: latestWorkflow === undefined ? null : latestWorkflow.phase === "planned",
+      nativeStreamComplete: !issues.some((issue) => issue.reason === "native-stream-incomplete"),
+      noRecordedContextResetAfterInput: resetCount === undefined ? null : resetCount === 0,
+      noUncommittedFailedNativeTurn: failedStepCount === 0,
+      payloadParsed: true,
       phaseApplied: latestWorkflow === undefined ? null : latestWorkflow.phase === "applied",
       phaseApplyFailed:
         latestWorkflow === undefined ? null : latestWorkflow.phase === "apply_failed",
-      latestPendingScopeMatchesCurrent: pendingScopeAvailable
-        ? latestPending.length === 1 && isDeepStrictEqual(latestPendingScope, expectedScope)
-        : null,
-      latestContextMatchesCommittedOutput:
-        committed === undefined || latestContext === undefined
-          ? null
-          : isDeepStrictEqual(latestContext, committed.serializedContext),
-      latestSnapshotMatchesCommittedOutput:
-        committed === undefined || latestSession === undefined
-          ? null
-          : isDeepStrictEqual(latestSession, committed.sessionState.snapshot.session),
-      committedOutputAfterSourceInput:
-        committed === undefined || before === undefined
-          ? null
-          : committed.origin.slot > before.origin.slot,
-      preapprovalInputPresent: before !== undefined,
+      phasePlanned: latestWorkflow === undefined ? null : latestWorkflow.phase === "planned",
       preapprovalGrantExplicitNull:
         beforeAuthority === undefined || !Object.hasOwn(beforeAuthority, "grant")
           ? null
           : beforeAuthority.grant === null,
+      preapprovalInputPresent: before !== undefined,
       preapprovalPhasePlanned:
         beforeWorkflow === undefined ? null : beforeWorkflow.phase === "planned",
       preapprovalScopeMatchesCurrent:
         beforePendingScope === undefined || expectedScope === undefined
           ? null
           : isDeepStrictEqual(beforePendingScope, expectedScope),
+      privateAuthorityKeyPresent:
+        latestContext === undefined ? null : Object.hasOwn(latestContext, authorityKey),
       privateAuthorityUnchangedSinceInput:
         beforeAuthority === undefined || latestAuthority === undefined
           ? null
           : isDeepStrictEqual(beforeContext?.[authorityKey], latestContext?.[authorityKey]),
-      appWorkflowUnchangedSinceInput:
-        beforeWorkflow === undefined || latestWorkflow === undefined
-          ? null
-          : isDeepStrictEqual(beforeContext?.[workflowKey], latestContext?.[workflowKey]),
-      noRecordedContextResetAfterInput: resetCount === undefined ? null : resetCount === 0,
-      nativeStreamComplete: !issues.some((issue) => issue.reason === "native-stream-incomplete"),
-      noUncommittedFailedNativeTurn: failedStepCount === 0,
-      applyReceiptPresent:
-        latestWorkflow === undefined ? null : latestWorkflow.applyReceipt !== undefined,
-      applyFailurePresent:
-        latestWorkflow === undefined ? null : latestWorkflow.applyFailure !== undefined,
-    },
-    counts: {
-      applyOrphanCount: calls.length,
-      matchingPendingCallCount: latestPending.length,
-      matchingPreapprovalPendingCallCount: beforePending.length,
-      failedNativeTurnIssueCount: failedStepCount,
+      workflowKeyPresent:
+        latestContext === undefined ? null : Object.hasOwn(latestContext, workflowKey),
     },
     hashes: {
-      applyToolName: hash("apply_app_creation"),
-      callId: hash(callId),
       appId: hash(expectedScope?.appId),
       appSpecDigest: hash(expectedScope?.appSpecDigest),
+      applyToolName: hash("apply_app_creation"),
+      callId: hash(callId),
+      latestPhase: hash(latestWorkflow?.phase),
+      logicalSessionId: hash(expectedScope?.sessionId),
       proposalDigest: hash(expectedScope?.proposalDigest),
       workspaceId: hash(expectedScope?.workspaceId),
-      logicalSessionId: hash(expectedScope?.sessionId),
-      latestPhase: hash(latestWorkflow?.phase),
     },
   };
   return result;

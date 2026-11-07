@@ -2,26 +2,26 @@ import { createHash } from "node:crypto";
 import { operatorWorkerCatalogReceiptSchema } from "./operator-worker-source-capture";
 
 export const sources = {
-  builder: { sha: "a".repeat(40), tree: "b".repeat(40) },
   arrusted: { sha: "c".repeat(40), tree: "d".repeat(40) },
+  builder: { sha: "a".repeat(40), tree: "b".repeat(40) },
 };
 const entry = {
-  path: "bin/worker",
-  sha256: "e".repeat(64),
   bytes: 12,
-  mode: "100755",
   entries: [
     {
-      repository: "arrusted",
       path: "packages/generated-app-runtime/protected-installer-worker.ts",
+      repository: "arrusted",
     },
   ],
+  mode: "100755",
+  path: "bin/worker",
+  sha256: "e".repeat(64),
 };
 export const receipt = operatorWorkerCatalogReceiptSchema.parse({
-  version: 1,
+  compiler: { name: "bun", target: "bun-linux-x64", version: "1.3.14" },
   kind: "operator-worker-catalog-v1",
   sources,
-  compiler: { name: "bun", version: "1.3.14", target: "bun-linux-x64" },
+  version: 1,
   workers: Object.fromEntries(
     ["genericInstaller", "authProposal", "auth", "resources", "managedRuntime"].map((family) => [
       family,
@@ -31,10 +31,10 @@ export const receipt = operatorWorkerCatalogReceiptSchema.parse({
 });
 export const bytes = Buffer.from(JSON.stringify(receipt));
 export const capture = {
-  kind: "operator-worker-catalog-v1" as const,
   catalogPath: "/trusted/current/catalog.json",
   catalogSha256: createHash("sha256").update(bytes).digest("hex"),
   family: "genericInstaller" as const,
+  kind: "operator-worker-catalog-v1" as const,
   sources,
 };
 export const worker = {
@@ -43,10 +43,10 @@ export const worker = {
   sourceCapture: capture,
 };
 export const capturedGenericWorkerFixture = {
-  id: "current-generic-installer",
   executablePath: worker.executablePath,
+  id: "current-generic-installer",
+  operationScope: "generated-app-release-install-v1" as const,
   sha256: worker.sha256,
   sourceCapture: capture,
-  operationScope: "generated-app-release-install-v1" as const,
   subcommand: "protected-generated-app-install" as const,
 };

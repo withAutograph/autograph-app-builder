@@ -171,7 +171,7 @@ const fixture = (configurationId?: string | null) => {
   let failedPatchCode: string | undefined;
   let failedPatchTarget: "environment_row" | "project_settings" | undefined;
   let failedDeleteId: string | undefined;
-  const assertCurrent = vi.fn(async () => {});
+  const assertCurrent = vi.fn<() => Promise<void>>().mockResolvedValue();
   const checkpointManagedEnvironment = vi.fn(
     async (next: readonly ManagedOperatorEnvironmentRow[]) => {
       journal = structuredClone([...next]);
@@ -181,7 +181,7 @@ const fixture = (configurationId?: string | null) => {
   const input: HostedOperatorManagedEnvironmentContext = {
     assertCurrent,
     authority,
-    checkpoint: vi.fn(async () => {}),
+    checkpoint: vi.fn<() => Promise<void>>().mockResolvedValue(),
     checkpointManagedEnvironment,
     effect: plan.effects.find((item) => item.kind === "bindings")!,
     fenceGeneration: 1,
@@ -192,8 +192,8 @@ const fixture = (configurationId?: string | null) => {
     workerCheckpoints: [],
   };
   const project: FixtureAppProject = {
-    id: target.projectId,
     accountId: target.scopeId,
+    id: target.projectId,
     link: { productionBranch: "main", repoId: "repository_fixture", type: "github" },
   };
   // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- One fixture covers the provider's fixed read/write endpoint behaviors.
@@ -284,7 +284,7 @@ const fixture = (configurationId?: string | null) => {
     },
     token: "private-oauth",
   }));
-  const assertAuthorized = vi.fn(async () => {});
+  const assertAuthorized = vi.fn<() => Promise<void>>().mockResolvedValue();
   const diagnosticSink: HostedOperatorConsentDiagnosticSink = (diagnostic) => {
     diagnostics.push(diagnostic);
   };
@@ -297,13 +297,13 @@ const fixture = (configurationId?: string | null) => {
   return {
     assertAuthorized,
     assertCurrent,
-    diagnostics,
     checkpointManagedEnvironment,
+    diagnostics,
     fetcher,
     input,
+    project,
     readCredential,
     requests,
-    project,
     rows,
     setFailedDelete: (id: string) => {
       failedDeleteId = id;
@@ -393,8 +393,8 @@ it.each(["main", target.branch])(
           ? JSON.stringify({
               ...protectedAppBoundarySchema.parse(JSON.parse(values.PLATFORM_APP_BOUNDARY)),
               verification: {
-                publicOrigin: "https://stale.example.test",
                 jwksUrl: "https://stale.example.test/_platform/jwks.json",
+                publicOrigin: "https://stale.example.test",
               },
             })
           : "https://stale.example.test";
@@ -411,9 +411,9 @@ it.each(["main", target.branch])(
     for (const key of staleKeys) {
       const row = f.rows.find((item) => item.key === key)!;
       expect(writes).toContainEqual({
+        body: { type: "encrypted", value: values[key] },
         method: "PATCH",
         path: `/v9/projects/${target.projectId}/env/${z.string().parse(row.id)}`,
-        body: { type: "encrypted", value: values[key] },
       });
     }
     expect(f.rows.filter((row) => !staleKeys.includes(String(row.key)))).toEqual(untouched);
@@ -477,10 +477,10 @@ it("reports a bounded Git-reference rejection without exposing provider details"
   await Promise.resolve();
   const failure = f.diagnostics[0]?.hostedEnvironmentBindingFailure;
   expect(failure).toEqual({
-    stage: "create_post",
-    reason: "git_reference_rejection",
-    providerCode: "other",
     httpStatus: 400,
+    providerCode: "other",
+    reason: "git_reference_rejection",
+    stage: "create_post",
   });
   expect(JSON.stringify(f.diagnostics)).not.toContain("private repository details");
   expect(JSON.stringify(f.diagnostics)).not.toContain("private-oauth");
@@ -491,10 +491,10 @@ it("bounds a stalled provider error body and still reports the HTTP rejection", 
   f.setSlowProviderErrorPost();
   await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
   expect(f.diagnostics[0]?.hostedEnvironmentBindingFailure).toEqual({
-    stage: "create_post",
-    reason: "provider_rejected",
-    providerCode: "other",
     httpStatus: 400,
+    providerCode: "other",
+    reason: "provider_rejected",
+    stage: "create_post",
   });
 }, 2000);
 it.each(["integration", "foreign", "duplicate"])(
@@ -551,13 +551,13 @@ it("binds and cleans the approved publication branch without changing the resour
   const publicationBranch = "codex/generated-spend-review";
   f.input.plan = hostedOperatorPlanSchema.parse({
     ...f.input.plan,
-    deploymentBoundary: { ...boundary, app: { ...boundary.app, branch: publicationBranch } },
     delivery: {
       branch: publicationBranch,
       gitSha: "c".repeat(40),
       projectId: target.projectId,
       repoId: "12345",
     },
+    deploymentBoundary: { ...boundary, app: { ...boundary.app, branch: publicationBranch } },
     effects: [
       ...f.input.plan.effects,
       { description: "Deliver published source", id: "delivery", kind: "delivery" },
@@ -641,7 +641,7 @@ it("cannot delete unjournaled current-operation rows", async () => {
 
 it("does not depend on checkpoint mutating the copied effect context", async () => {
   const f = fixture();
-  f.input.checkpointManagedEnvironment = vi.fn(async () => {});
+  f.input.checkpointManagedEnvironment = vi.fn<() => Promise<void>>().mockResolvedValue();
   const result = await f.writer.bind(f.input, values);
   expect(result.rows).toHaveLength(5);
   expect(f.input.managedEnvironment).toBeUndefined();
@@ -698,18 +698,18 @@ const historicalCleanupFixture = () => {
   }));
   f.rows.push(
     ...saved.map((row) => ({
+      comment: row.comment,
+      gitBranch: row.branch,
       id: row.id,
       key: row.key,
-      gitBranch: row.branch,
-      comment: row.comment,
       target: ["preview"],
       type: "encrypted",
     })),
     {
+      comment: "another owner",
+      gitBranch: "codex/unrelated",
       id: "other-branch",
       key: saved[0].key,
-      gitBranch: "codex/unrelated",
-      comment: "another owner",
       target: ["preview"],
       type: "encrypted",
     },
@@ -719,12 +719,12 @@ const historicalCleanupFixture = () => {
     action: "cleanup",
     appEnvironmentCleanup: saved,
     effects: [
-      { id: "revoke", kind: "revoke", description: "Revoke access" },
-      { id: "remove", kind: "remove-bindings", description: "Remove exact saved rows" },
+      { description: "Revoke access", id: "revoke", kind: "revoke" },
+      { description: "Remove exact saved rows", id: "remove", kind: "remove-bindings" },
       {
+        description: "Retire owned resources",
         id: "retire",
         kind: "retire",
-        description: "Retire owned resources",
       },
     ],
   });
@@ -760,12 +760,12 @@ it("refuses a changed provider ownership tag before historical deletion", async 
 it("accepts semantically identical approved row references with reordered fields", async () => {
   const f = historicalCleanupFixture();
   f.input.managedEnvironment = f.saved.map((row) => ({
-    projectId: row.projectId,
-    operationRef: row.operationRef,
-    key: row.key,
-    id: row.id,
-    comment: row.comment,
     branch: row.branch,
+    comment: row.comment,
+    id: row.id,
+    key: row.key,
+    operationRef: row.operationRef,
+    projectId: row.projectId,
   }));
   expect(await f.writer.remove(f.input, values)).toEqual({ rows: [] });
 });
@@ -894,7 +894,9 @@ it("does not adopt unjournaled generic rows when the current mapping is branch-s
 const approveAppTrustedSource = (f: ReturnType<typeof fixture>) => {
   f.input.plan = hostedOperatorPlanSchema.parse({
     ...f.input.plan,
-    stage: "app",
+    appTrustedSources: {
+      gatewayPreview: { from: "preview", projectId: "prj_gateway", to: "preview" },
+    },
     delivery: {
       branch: target.branch,
       gitSha: "a".repeat(40),
@@ -903,8 +905,8 @@ const approveAppTrustedSource = (f: ReturnType<typeof fixture>) => {
     },
     effects: [
       ...f.input.plan.effects,
-      { id: "app-delivery", kind: "delivery", description: "Deliver approved app" },
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind Gateway" },
+      { description: "Deliver approved app", id: "app-delivery", kind: "delivery" },
+      { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
     ],
     gatewayBindings: {
       authBrowserOrigin: "https://auth-preview.example.test",
@@ -920,9 +922,7 @@ const approveAppTrustedSource = (f: ReturnType<typeof fixture>) => {
         subject: "fixture-gateway",
       },
     },
-    appTrustedSources: {
-      gatewayPreview: { projectId: "prj_gateway", from: "preview", to: "preview" },
-    },
+    stage: "app",
   });
 };
 const appPolicyWrites = (f: ReturnType<typeof fixture>) =>
@@ -933,14 +933,14 @@ const appPolicyWrites = (f: ReturnType<typeof fixture>) =>
 const renewExistingAppBinding = (f: ReturnType<typeof fixture>) => {
   const prior = f.input.plan;
   const previous = {
+    approvalId: "previous-approval",
+    managedEnvironment: structuredClone(f.input.managedEnvironment ?? []),
     mode: "protected-operator-v1" as const,
     operationRef: f.input.operationRef,
+    pendingEffectAttempt: { id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799" },
+    pendingEffectId: f.input.effect.id,
     plan: prior,
     planDigest: operatorPlanDigest(prior),
-    approvalId: "previous-approval",
-    pendingEffectId: f.input.effect.id,
-    pendingEffectAttempt: { id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799" },
-    managedEnvironment: structuredClone(f.input.managedEnvironment ?? []),
     receipts: prior.effects
       .slice(
         0,
@@ -1014,9 +1014,9 @@ it("retries a renewed app value mismatch using only the exact owned row PATCH", 
   await f.writer.bind(f.input, values);
   expect(f.requests.filter((request) => request.method !== "GET")).toEqual([
     {
+      body: { type: "encrypted", value: values.PLATFORM_ORIGIN },
       method: "PATCH",
       path: `/v9/projects/${target.projectId}/env/${z.string().parse(owned.id)}`,
-      body: { type: "encrypted", value: values.PLATFORM_ORIGIN },
     },
   ]);
   expect(await f.writer.reconcile(f.input, values)).toMatchObject({ status: "applied" });
@@ -1075,8 +1075,6 @@ it("can reconcile an explicitly null app policy and PATCH only its approved pair
   await f.writer.bind(f.input, values);
   expect(f.requests.filter((request) => request.method !== "GET")).toEqual([
     {
-      method: "PATCH",
-      path: `/v9/projects/${target.projectId}`,
       body: {
         trustedSources: {
           projects: {
@@ -1086,6 +1084,8 @@ it("can reconcile an explicitly null app policy and PATCH only its approved pair
           },
         },
       },
+      method: "PATCH",
+      path: `/v9/projects/${target.projectId}`,
     },
   ]);
 });
@@ -1131,14 +1131,14 @@ it.each([
     f.setFailedPatch("project_settings", "not_found");
     await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
     expect(f.diagnostics.at(-1)?.hostedEnvironmentBindingFailure).toEqual({
-      stage: "update_patch",
-      requestTarget: "project_settings",
-      reason: "provider_rejected",
-      providerCode: "not_found",
-      httpStatus: 404,
-      trustedSourcesVisibility,
-      approvedSourcePresent,
       approvedPairCovered: false,
+      approvedSourcePresent,
+      httpStatus: 404,
+      providerCode: "not_found",
+      reason: "provider_rejected",
+      requestTarget: "project_settings",
+      stage: "update_patch",
+      trustedSourcesVisibility,
     });
     expect(JSON.stringify(f.diagnostics)).not.toContain("private PATCH rejection");
     expect(JSON.stringify(f.diagnostics)).not.toContain("prj_gateway");
@@ -1161,11 +1161,11 @@ it("retains current app policy coverage when a later checkpoint fails without a 
   f.checkpointManagedEnvironment.mockRejectedValue(new Error("private checkpoint failure"));
   expect(await f.writer.reconcile(f.input, values)).toEqual({ status: "unknown" });
   expect(f.diagnostics.at(-1)?.hostedEnvironmentBindingFailure).toMatchObject({
-    stage: "checkpoint",
-    reason: "checkpoint_failed",
-    trustedSourcesVisibility: "present",
-    approvedSourcePresent: true,
     approvedPairCovered: true,
+    approvedSourcePresent: true,
+    reason: "checkpoint_failed",
+    stage: "checkpoint",
+    trustedSourcesVisibility: "present",
   });
   expect(appPolicyWrites(f)).toEqual([]);
 });
@@ -1191,23 +1191,23 @@ it.each(["absent", "null", "configured"] as const)(
       f.project.trustedSources = null;
     } else if (visibility === "configured") {
       f.project.trustedSources = {
-        projects: {
-          [target.projectId]: { label: "implicit self" },
-          prj_unrelated: {
-            label: "existing explicit",
-            customAllow: [{ from: { slugs: ["development"] }, to: { slugs: ["preview"] } }],
-          },
-        },
+        enableVercelCiSameRepository: true,
         oidcProviders: {
           "https://issuer.example.test": [
             {
-              label: "existing OIDC",
               claims: { sub: ["existing-subject"] },
+              label: "existing OIDC",
               to: { slugs: ["preview"] },
             },
           ],
         },
-        enableVercelCiSameRepository: true,
+        projects: {
+          [target.projectId]: { label: "implicit self" },
+          prj_unrelated: {
+            customAllow: [{ from: { slugs: ["development"] }, to: { slugs: ["preview"] } }],
+            label: "existing explicit",
+          },
+        },
         providerOwnedField: "retained",
       };
     }
@@ -1236,9 +1236,9 @@ it.each(["absent", "null", "configured"] as const)(
     await f.writer.bind(f.input, values);
     expect(appPolicyWrites(f)).toEqual([]);
     f.input.effect = {
+      description: "Verify accepted app delivery",
       id: "delivery",
       kind: "delivery",
-      description: "Verify accepted app delivery",
     };
     f.input.plan = {
       ...f.input.plan,
@@ -1329,8 +1329,8 @@ it("preserves a broader existing Gateway source rule without adding or removing 
   const prior = {
     projects: {
       prj_gateway: {
-        label: "provider-owned existing scope",
         customAllow: [{ from: { slugs: ["preview", "production"] }, to: { slugs: ["preview"] } }],
+        label: "provider-owned existing scope",
       },
     },
   };
@@ -1347,7 +1347,7 @@ it("adds the missing Preview pair alongside the Gateway's existing explicit rule
   await f.writer.bind(f.input, values);
   const prior = { from: { slugs: ["development"] }, to: { slugs: ["preview"] } };
   f.project.trustedSources = {
-    projects: { prj_gateway: { label: "existing explicit scope", customAllow: [prior] } },
+    projects: { prj_gateway: { customAllow: [prior], label: "existing explicit scope" } },
   };
   approveAppTrustedSource(f);
   await f.writer.bind(f.input, values);
@@ -1355,8 +1355,8 @@ it("adds the missing Preview pair alongside the Gateway's existing explicit rule
     trustedSources: {
       projects: {
         prj_gateway: {
-          label: "existing explicit scope",
           customAllow: [prior, { from: { slugs: ["preview"] }, to: { slugs: ["preview"] } }],
+          label: "existing explicit scope",
         },
       },
     },
@@ -1429,17 +1429,17 @@ it.each([
     const protection =
       requestTarget === "project_settings"
         ? {
-            trustedSourcesVisibility: "absent",
-            approvedSourcePresent: false,
             approvedPairCovered: false,
+            approvedSourcePresent: false,
+            trustedSourcesVisibility: "absent",
           }
         : {};
     expect(f.diagnostics[0]?.hostedEnvironmentBindingFailure).toEqual({
-      stage: "update_patch",
-      reason: "provider_rejected",
       httpStatus: 404,
-      requestTarget,
       providerCode,
+      reason: "provider_rejected",
+      requestTarget,
+      stage: "update_patch",
       ...protection,
     });
     const serialized = JSON.stringify(f.diagnostics);
@@ -1475,9 +1475,9 @@ it("clears the PATCH target when the subsequent readback request fails", async (
   });
   await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
   expect(f.diagnostics[0]?.hostedEnvironmentBindingFailure).toEqual({
-    stage: "readback",
-    reason: "provider_rejected",
-    providerCode: "other",
     httpStatus: 500,
+    providerCode: "other",
+    reason: "provider_rejected",
+    stage: "readback",
   });
 });

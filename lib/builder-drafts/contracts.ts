@@ -8,7 +8,6 @@ const connectionSchema = z.string().trim().min(1).max(120);
 export const builderDraftFormSchema = z
   .object({
     appName: boundedText(120),
-    sourceCandidate: sourceCandidateReferenceSchema.optional(),
     brief: boundedText(16_000),
     buildDestination: z.enum(["web", "codex", "cursor"]),
     connections: z.array(connectionSchema).max(100),
@@ -16,6 +15,7 @@ export const builderDraftFormSchema = z
     modelId: boundedText(256),
     privateRepository: z.boolean(),
     repository: boundedText(160),
+    sourceCandidate: sourceCandidateReferenceSchema.optional(),
     vercelInstallationId: boundedText(256).optional(),
   })
   .strict();

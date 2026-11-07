@@ -25,34 +25,6 @@ export const createPostgresGitHubPrEffectStore = <
     eq(journals.ownerUserId, authority.ownerUserId),
   );
   return {
-    async read(intentDigest) {
-      if (!digestPattern.test(intentDigest)) {
-        throw new Error("Invalid GitHub effect intent digest.");
-      }
-      const [row] = await database
-        .select({
-          kind: journals.kind,
-          receiptDigest: journals.receiptDigest,
-          record: journals.record,
-          status: journals.status,
-        })
-        .from(journals)
-        .where(and(tenantPredicate, eq(journals.intentDigest, intentDigest)))
-        .limit(1);
-      if (row === undefined) {
-        return row;
-      }
-      const receipt = parseGitHubPrEffectReceipt(row.record);
-      if (
-        receipt.intentDigest !== intentDigest ||
-        row.kind !== receipt.intent.kind ||
-        row.receiptDigest !== receipt.digest ||
-        row.status !== receipt.status
-      ) {
-        throw new Error("Stored GitHub effect receipt does not match its journal row.");
-      }
-      return receipt;
-    },
     async compareAndSet(intentDigest, expectedDigest, input) {
       const receipt = parseGitHubPrEffectReceipt(input);
       if (
@@ -101,6 +73,34 @@ export const createPostgresGitHubPrEffectStore = <
         )
         .returning({ intentDigest: journals.intentDigest });
       return updated.length === 1;
+    },
+    async read(intentDigest) {
+      if (!digestPattern.test(intentDigest)) {
+        throw new Error("Invalid GitHub effect intent digest.");
+      }
+      const [row] = await database
+        .select({
+          kind: journals.kind,
+          receiptDigest: journals.receiptDigest,
+          record: journals.record,
+          status: journals.status,
+        })
+        .from(journals)
+        .where(and(tenantPredicate, eq(journals.intentDigest, intentDigest)))
+        .limit(1);
+      if (row === undefined) {
+        return row;
+      }
+      const receipt = parseGitHubPrEffectReceipt(row.record);
+      if (
+        receipt.intentDigest !== intentDigest ||
+        row.kind !== receipt.intent.kind ||
+        row.receiptDigest !== receipt.digest ||
+        row.status !== receipt.status
+      ) {
+        throw new Error("Stored GitHub effect receipt does not match its journal row.");
+      }
+      return receipt;
     },
   };
 };

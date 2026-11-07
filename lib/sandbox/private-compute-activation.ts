@@ -71,16 +71,19 @@ export const activatePrivateComputeProfile = async <T extends PrivateComputeNati
   let previous = await ports.readActivation();
   const write = async (phase: PrivateComputeActivation["phase"]) => {
     await ports.assertCurrent();
-    await ports.writeActivation({
-      sandboxId: profile.target.sandboxId,
-      workspaceDrive: profile.target.workspaceDrive,
-      proposalDigest: input.proposalDigest,
+    const activation: PrivateComputeActivation = {
       appId: input.appId,
-      sessionId: input.sessionId,
-      profileId: profile.id,
       phase,
-      ...(phase === "ready" ? { completedByCallId: input.callId } : {}),
-    });
+      profileId: profile.id,
+      proposalDigest: input.proposalDigest,
+      sandboxId: profile.target.sandboxId,
+      sessionId: input.sessionId,
+      workspaceDrive: profile.target.workspaceDrive,
+    };
+    if (phase === "ready") {
+      activation.completedByCallId = input.callId;
+    }
+    await ports.writeActivation(activation);
     previous = await ports.readActivation();
   };
   if (configured(native, profile) && running(native, profile)) {
@@ -180,10 +183,10 @@ export const applyApprovedPrivateComputeProfile = async (input: {
     );
   }
   const journal = await createLocalPrivateComputeJournal({
+    assertCurrent,
     authority,
     sandboxId: input.profile.target.sandboxId,
     workspaceDrive: input.profile.target.workspaceDrive,
-    assertCurrent,
   });
   let checkpoint = await journal.read();
   const original = peekVercelPreviewProvider(input.profile.target.sandboxId);
@@ -192,11 +195,11 @@ export const applyApprovedPrivateComputeProfile = async (input: {
     replacement = await activatePrivateComputeProfile(input, {
       assertCurrent,
       read: async () => await Sandbox.get({ name: input.profile.target.sandboxId, resume: false }),
-      resume: async () => await Sandbox.get({ name: input.profile.target.sandboxId, resume: true }),
       readActivation: async () => {
         checkpoint = await journal.read();
         return checkpoint.record;
       },
+      resume: async () => await Sandbox.get({ name: input.profile.target.sandboxId, resume: true }),
       writeActivation: async (record) => {
         checkpoint = await journal.append(record, checkpoint);
       },
@@ -211,10 +214,10 @@ export const applyApprovedPrivateComputeProfile = async (input: {
     replaceVercelPreviewProvider(input.profile.target.sandboxId, original, replacement);
   }
   return {
-    profileId: input.profile.id,
-    vcpus: replacement.currentSession().vcpus,
     memoryMiB: replacement.currentSession().memory,
+    profileId: input.profile.id,
     sandboxId: replacement.name,
+    vcpus: replacement.currentSession().vcpus,
     workspaceDrive: input.profile.target.workspaceDrive,
   };
 };

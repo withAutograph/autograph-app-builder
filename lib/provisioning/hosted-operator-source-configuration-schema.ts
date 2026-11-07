@@ -14,6 +14,11 @@ import {
 
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const centralIntegrationBootstrap = "central-integration-bootstrap-v1";
+const singleProjectServices = "single-project-services";
+const generatedAppReleaseInstall = "generated-app-release-install-v1";
+const protectedGeneratedAppInstall = "protected-generated-app-install";
+const neonResourceBootstrap = "neon-resource-bootstrap-v1";
 const httpsOrigin = z.url().refine((value) => {
   const url = new URL(value);
   return [
@@ -26,19 +31,19 @@ const httpsOrigin = z.url().refine((value) => {
   ].every(Boolean);
 });
 export const hostedOperatorWorkerDescriptorSchema = z.strictObject({
-  sourceCapture: operatorWorkerSourceCaptureSchema.optional(),
   executablePath: id,
   id,
   operationScope: z.enum([
-    "generated-app-release-install-v1",
+    generatedAppReleaseInstall,
     "generated-app-access-v1",
     "auth-protected-schema-v1",
     "auth-protected-membership-v1",
-    "neon-resource-bootstrap-v1",
+    neonResourceBootstrap,
   ]),
   sha256: digest,
+  sourceCapture: operatorWorkerSourceCaptureSchema.optional(),
   subcommand: z.enum([
-    "protected-generated-app-install",
+    protectedGeneratedAppInstall,
     "protected-generated-app-access",
     "auth-protected-schema",
     "auth-protected-membership",
@@ -61,28 +66,33 @@ const workload = z.strictObject({
   subject: id,
 });
 const sandboxConfigurationFields = {
-  exportWorker: tenantExportWorkerDescriptorSchema.optional(),
-  managedRuntimeWorker: managedRuntimeWorkerDescriptorSchema.optional(),
-  genericInstallerWorker: worker
-    .extend({
-      operationScope: z.literal("generated-app-release-install-v1"),
-      subcommand: z.literal("protected-generated-app-install"),
-      sourceCapture: operatorWorkerSourceCaptureSchema.extend({
-        family: z.literal("genericInstaller"),
-      }),
-    })
-    .optional(),
   accessWorker: worker,
   authProposal: z.strictObject({ executablePath: id, id, sha256: digest }),
   authWorker: worker,
-  membershipWorker: worker.optional(),
-  projectId: id,
-  resourcesWorker: worker,
+  centralIntegrationWorker: z
+    .strictObject({
+      executablePath: id,
+      id: z.literal(centralIntegrationBootstrap),
+      operationScope: z.literal(centralIntegrationBootstrap),
+      sha256: digest,
+      subcommand: z.literal("central-integration-schema"),
+    })
+    .optional(),
+  exportWorker: tenantExportWorkerDescriptorSchema.optional(),
+  genericInstallerWorker: worker
+    .extend({
+      operationScope: z.literal(generatedAppReleaseInstall),
+      sourceCapture: operatorWorkerSourceCaptureSchema.extend({
+        family: z.literal("genericInstaller"),
+      }),
+      subcommand: z.literal(protectedGeneratedAppInstall),
+    })
+    .optional(),
   integrationResourcesWorker: z
     .strictObject({
       executablePath: id,
-      id: z.literal("neon-resource-bootstrap-v1"),
-      operationScope: z.literal("neon-resource-bootstrap-v1"),
+      id: z.literal(neonResourceBootstrap),
+      operationScope: z.literal(neonResourceBootstrap),
       sha256: digest,
       subcommand: z.literal("neon-resource-bootstrap"),
     })
@@ -96,15 +106,10 @@ const sandboxConfigurationFields = {
       subcommand: z.literal("integration-control-schema"),
     })
     .optional(),
-  centralIntegrationWorker: z
-    .strictObject({
-      executablePath: id,
-      id: z.literal("central-integration-bootstrap-v1"),
-      operationScope: z.literal("central-integration-bootstrap-v1"),
-      sha256: digest,
-      subcommand: z.literal("central-integration-schema"),
-    })
-    .optional(),
+  managedRuntimeWorker: managedRuntimeWorkerDescriptorSchema.optional(),
+  membershipWorker: worker.optional(),
+  projectId: id,
+  resourcesWorker: worker,
   teamId: id,
   workers: z.record(id, worker),
 };
@@ -123,11 +128,11 @@ const nativeNeonConfigurationSchema = z.strictObject({
 /** Generic administrator-selected development custody, never an app or model supplied profile. */
 export const standardDevelopmentRuntimePolicySchema = z
   .strictObject({
-    version: z.literal(1),
     kind: z.literal("standard-development-runtime-policy-v1"),
-    policyId: id,
     nativeNeon: nativeNeonConfigurationSchema,
+    policyId: id,
     productionDatabaseIdentity: z.string().regex(/^[a-z0-9.-]+\.neon\.tech\/[a-z][a-z0-9_]*$/u),
+    version: z.literal(1),
     workloadIdentity: z.literal("vercel-team-oidc-v1"),
   })
   .superRefine((policy, context) => {
@@ -154,48 +159,35 @@ export const standardDevelopmentRuntimePolicySchema = z
 
 export const hostedOperatorSourceConfigurationSchema = z.strictObject({
   /** Explicit deployment-owned topology; omitted configurations retain legacy behavior. */
-  composition: z.literal("single-project-services").optional(),
-  standardDevelopmentRuntime: standardDevelopmentRuntimePolicySchema.optional(),
-  standardRuntime: z
-    .strictObject({
-      profileId: id,
-      authOwnership: z.strictObject({ kind: z.literal("dedicated-app-development"), resource }),
-      publicRealmWorkload: workload.extend({ environment: z.literal("production") }),
-      productionDatabaseIdentity: z.string().regex(/^[a-z0-9.-]+\.neon\.tech\/[a-z][a-z0-9_]*$/u),
-      provisioningRequestId: z.uuid(),
-      provisioningDigest: digest,
-      appSpecDigest: digest,
-      capturedReleaseId: id,
-    })
-    .optional(),
-  /** Explicit deployment-owned topology; omitted configurations retain legacy behavior. */
 
   applications: z.record(
     id,
     z.strictObject({
       accessRoles: z.array(generatedAppRoleSchema),
-      /** Registry provenance: new access plans must read roles from the current captured release. */
-      nativeTargetRegistration: z.literal(true).optional(),
       appDatabase: resource,
-      hostProtection: externallyManagedTrustedSourcesSchema.optional(),
       authAdoptionSource: hostedOperatorAuthAdoptionSourceSchema.optional(),
       branch: id,
       deploymentId: id.optional(),
-      projectSettings: hostedOperatorAppProjectSettingsSchema.optional(),
       gitSha: z
         .string()
         .regex(/^[a-f0-9]{40}$/u)
         .optional(),
-      organizationProposal: z.strictObject({ name: id, organizationId: id, slug: id }).optional(),
+      hostProtection: externallyManagedTrustedSourcesSchema.optional(),
+      /** Registry provenance: new access plans must read roles from the current captured release. */
+      nativeTargetRegistration: z.literal(true).optional(),
       /** Existing organization selected for the ordinary owner-bound Realm capture. */
       organizationId: id.optional(),
+      organizationProposal: z.strictObject({ name: id, organizationId: id, slug: id }).optional(),
       projectId: id,
+      projectSettings: hostedOperatorAppProjectSettingsSchema.optional(),
       repoId: id.optional(),
     }),
   ),
   authDatabase: resource,
   builderCallbackOrigin: httpsOrigin,
   catalogAppIds: z.array(id).min(1),
+  /** Explicit deployment-owned topology; omitted configurations retain legacy behavior. */
+  composition: z.literal(singleProjectServices).optional(),
   gateway: z.strictObject({
     authBrowserOrigin: httpsOrigin,
     branch: id,
@@ -217,6 +209,19 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
     projectId: id,
   }),
   sandbox: hostedOperatorSandboxConfigurationSchema,
+  standardDevelopmentRuntime: standardDevelopmentRuntimePolicySchema.optional(),
+  standardRuntime: z
+    .strictObject({
+      appSpecDigest: digest,
+      authOwnership: z.strictObject({ kind: z.literal("dedicated-app-development"), resource }),
+      capturedReleaseId: id,
+      productionDatabaseIdentity: z.string().regex(/^[a-z0-9.-]+\.neon\.tech\/[a-z][a-z0-9_]*$/u),
+      profileId: id,
+      provisioningDigest: digest,
+      provisioningRequestId: z.uuid(),
+      publicRealmWorkload: workload.extend({ environment: z.literal("production") }),
+    })
+    .optional(),
   teamId: id,
   workloadPolicy: workload,
 });
@@ -259,7 +264,7 @@ export const validateHostedOperatorSourceConfiguration = (
     Object.values(config.applications).every(
       (app) =>
         app.projectId !== config.operator.projectId &&
-        (config.composition === "single-project-services" ||
+        (config.composition === singleProjectServices ||
           app.projectId !== config.gateway.projectId),
     ),
     config.sandbox.projectId === config.operator.projectId,
@@ -277,24 +282,24 @@ export const validateHostedOperatorSourceConfiguration = (
     new Set([config.operator.projectId, config.gateway.projectId]).size === 2,
     config.standardRuntime === undefined ||
       [
-        config.composition === "single-project-services",
+        config.composition === singleProjectServices,
         config.standardRuntime.publicRealmWorkload.projectId === config.gateway.projectId,
         config.standardRuntime.publicRealmWorkload.ownerId === config.teamId,
       ].every(Boolean),
-    config.composition !== "single-project-services" || hasSingleProjectServicesTopology(config),
+    config.composition !== singleProjectServices || hasSingleProjectServicesTopology(config),
     config.standardRuntime === undefined ||
       [
-        config.composition === "single-project-services",
+        config.composition === singleProjectServices,
         config.standardRuntime.publicRealmWorkload.projectId === config.gateway.projectId,
         config.standardRuntime.publicRealmWorkload.ownerId === config.teamId,
       ].every(Boolean),
     config.standardRuntime === undefined ||
       [
-        config.composition === "single-project-services",
+        config.composition === singleProjectServices,
         config.standardRuntime.publicRealmWorkload.projectId === config.gateway.projectId,
         config.standardRuntime.publicRealmWorkload.ownerId === config.teamId,
       ].every(Boolean),
-    config.composition !== "single-project-services" || hasSingleProjectServicesTopology(config),
+    config.composition !== singleProjectServices || hasSingleProjectServicesTopology(config),
   ].every(Boolean);
   if (!ownedConfiguration) {
     throw new Error("Protected operator deployment configuration is unavailable.");

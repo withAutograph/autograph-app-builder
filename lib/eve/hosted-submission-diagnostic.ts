@@ -113,26 +113,26 @@ const nonStorageCategorySchema = z.enum([
 ]);
 
 const nativeSendReadObservationSchema = z.object({
-  nativeStartIndex: z.number().int().nonnegative(),
+  currentTurnPresent: z.boolean(),
   nativeNextIndex: z.number().int().nonnegative().optional(),
+  nativeStartIndex: z.number().int().nonnegative(),
   nativeTailIndex: z.number().int().min(-1).optional(),
   observationComplete: z.boolean().optional(),
-  currentTurnPresent: z.boolean(),
 });
 export type NativeSendReadObservation = z.infer<typeof nativeSendReadObservationSchema>;
 const sendDeliveryObservationSchema = z.object({
   ackObserved: z.boolean(),
-  sameAdapterSession: z.boolean(),
-  sameAdapterGeneration: z.boolean(),
-  nativeDeliveryStatePresent: z.boolean(),
-  nativeTurnCount: z.number().int().nonnegative(),
-  deliveryTurnMatchCount: z.number().int().nonnegative(),
-  startedStampMatchCount: z.number().int().nonnegative(),
   boundaryStampMatchCount: z.number().int().nonnegative(),
-  startedOrBoundaryMatch: z.boolean(),
   currentTurnPresent: z.boolean(),
-  nativeReadObserved: z.boolean(),
+  deliveryTurnMatchCount: z.number().int().nonnegative(),
+  nativeDeliveryStatePresent: z.boolean(),
   nativeRead: nativeSendReadObservationSchema.optional(),
+  nativeReadObserved: z.boolean(),
+  nativeTurnCount: z.number().int().nonnegative(),
+  sameAdapterGeneration: z.boolean(),
+  sameAdapterSession: z.boolean(),
+  startedOrBoundaryMatch: z.boolean(),
+  startedStampMatchCount: z.number().int().nonnegative(),
 });
 export type SendDeliveryObservationDiagnostic = z.infer<typeof sendDeliveryObservationSchema>;
 
@@ -144,31 +144,37 @@ export const sendDeliveryObservationDiagnostic = (input: {
   nativeRead?: NativeSendReadObservation;
 }): SendDeliveryObservationDiagnostic => {
   const turns = input.proof?.turns ?? [];
-  const deliveryId = input.delivery.deliveryId;
+  const { deliveryId } = input.delivery;
   const matches = turns.filter((turn) => turn.deliveryIds.includes(deliveryId));
-  return {
+  const diagnostic = {
     ackObserved: true,
-    sameAdapterSession: input.binding.adapterSessionId === input.delivery.adapterSessionId,
-    sameAdapterGeneration: input.binding.adapterGeneration === input.delivery.adapterGeneration,
-    nativeDeliveryStatePresent: input.proof !== undefined,
-    nativeTurnCount: turns.length,
-    deliveryTurnMatchCount: matches.length,
-    startedStampMatchCount: turns.filter(
-      (turn) => turn.startedDeliveryIds?.includes(deliveryId) === true,
-    ).length,
     boundaryStampMatchCount: turns.filter(
       (turn) => turn.boundaryDeliveryIds?.includes(deliveryId) === true,
     ).length,
+    currentTurnPresent:
+      input.nativeRead?.currentTurnPresent ?? input.proof?.currentTurnId !== undefined,
+    deliveryTurnMatchCount: matches.length,
+    nativeDeliveryStatePresent: input.proof !== undefined,
+    nativeReadObserved: input.nativeRead !== undefined,
+    nativeTurnCount: turns.length,
+    sameAdapterGeneration: input.binding.adapterGeneration === input.delivery.adapterGeneration,
+    sameAdapterSession: input.binding.adapterSessionId === input.delivery.adapterSessionId,
     startedOrBoundaryMatch: matches.some(
       (turn) =>
         turn.startedDeliveryIds?.includes(deliveryId) === true ||
         (turn.boundary !== undefined && turn.boundaryDeliveryIds?.includes(deliveryId) === true),
     ),
-    currentTurnPresent:
-      input.nativeRead?.currentTurnPresent ?? input.proof?.currentTurnId !== undefined,
-    nativeReadObserved: input.nativeRead !== undefined,
-    ...(input.nativeRead === undefined ? {} : { nativeRead: input.nativeRead }),
+    startedStampMatchCount: turns.filter(
+      (turn) => turn.startedDeliveryIds?.includes(deliveryId) === true,
+    ).length,
   };
+  if (input.nativeRead !== undefined) {
+    return {
+      ...diagnostic,
+      nativeRead: input.nativeRead,
+    } satisfies SendDeliveryObservationDiagnostic;
+  }
+  return diagnostic satisfies SendDeliveryObservationDiagnostic;
 };
 
 export interface HostedSubmissionDiagnostic {

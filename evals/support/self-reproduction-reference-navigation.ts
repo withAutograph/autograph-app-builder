@@ -3,9 +3,11 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { z } from "zod";
 import type { Observation } from "./self-reproduction-parity";
 
-const execute = promisify(execFile);
+const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+const execute = promisifyExecFile(execFile);
 const directTitle =
   "/auth/sign-in?callbackURL=%2F streams its meaningful production shell and resolves";
 const clientTitle = "real Sign In Link uses a prefetched production destination";
@@ -18,6 +20,51 @@ interface Suite {
   suites?: Suite[];
   specs?: { title: string; tests?: { results?: TestResult[] }[] }[];
 }
+interface SuiteReport {
+  suites?: Suite[];
+}
+interface RunReceipt {
+  stdout: string;
+  stderr: string;
+  error?: string;
+}
+
+interface ExecFailure extends Error {
+  stderr?: string;
+  stdout?: string;
+}
+
+const processOutput = (failure: ExecFailure) => ({
+  stderr: failure.stderr ?? "",
+  stdout: failure.stdout ?? "",
+});
+
+const isExecFailure = (error: Error): error is ExecFailure =>
+  "stdout" in error && "stderr" in error;
+
+const suiteSchema: z.ZodType<Suite> = z.lazy(() =>
+  z.looseObject({
+    file: z.string().optional(),
+    specs: z
+      .array(
+        z.looseObject({
+          tests: z
+            .array(
+              z.looseObject({
+                results: z.array(z.looseObject({ status: z.string().optional() })).optional(),
+              }),
+            )
+            .optional(),
+          title: z.string(),
+        }),
+      )
+      .optional(),
+    suites: z.array(suiteSchema).optional(),
+  }),
+);
+const suiteReportSchema: z.ZodType<SuiteReport> = z.object({
+  suites: z.array(suiteSchema).optional(),
+});
 
 /** Only the two exact production tests covering all three navigation assertions earn credit. */
 export const referenceNavigationObservation = (input: {
@@ -100,7 +147,7 @@ export const runReferenceNavigationEvidence = async (input: {
   const changes = await execute("git", ["status", "--porcelain"], { cwd: input.repositoryRoot });
   await writeFile(path.join(directory, "navigation.spec.ts"), source);
   const startedAt = new Date().toISOString();
-  let run: { stdout: string; stderr: string; error?: string };
+  let run: RunReceipt;
   try {
     run = await execute(
       input.miseExecutable,
@@ -112,11 +159,14 @@ export const runReferenceNavigationEvidence = async (input: {
       },
     );
   } catch (error) {
-    const failure = error as { stdout?: string; stderr?: string; message?: string };
+    const failure = error instanceof Error ? error : new Error(String(error));
+    const { stdout, stderr } = isExecFailure(failure)
+      ? processOutput(failure)
+      : { stderr: "", stdout: "" };
     run = {
       error: failure.message ?? String(error),
-      stderr: failure.stderr ?? "",
-      stdout: failure.stdout ?? "",
+      stderr,
+      stdout,
     };
   }
   await writeFile(
@@ -135,9 +185,9 @@ export const runReferenceNavigationEvidence = async (input: {
       2,
     ),
   );
-  let report = {};
+  let report: SuiteReport = {};
   try {
-    report = JSON.parse(await readFile(reportPath, "utf-8"));
+    report = suiteReportSchema.parse(JSON.parse(await readFile(reportPath, "utf-8")));
   } catch {
     /* Missing reporter evidence remains unassessed. */
   }

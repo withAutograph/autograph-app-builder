@@ -59,7 +59,7 @@ const fixture = async () => {
     send: async () => await Promise.resolve(snapshot),
     start: async () => await Promise.resolve({ adapterSessionId: "owned-adapter", snapshot }),
   };
-  const service = createHostedEveSessionService({ principal, store, transport, now: () => 10 });
+  const service = createHostedEveSessionService({ now: () => 10, principal, store, transport });
   const started = await service.start({ clientRequestId: randomUUID(), prompt: "Build an app" });
   const saved = await store.getSession(principal, started.sessionId);
   if (saved?.version !== 2) {
@@ -73,10 +73,8 @@ const fixture = async () => {
     sessionId: saved.sessionId,
   };
   const plan = hostedOperatorPlanSchema.parse({
-    action: "prepare",
     access: [],
-    contextId: "context",
-    version: 1,
+    action: "prepare",
     appDatabase: {
       database: "app_db",
       migratorRole: "app_owner",
@@ -89,12 +87,13 @@ const fixture = async () => {
       resourceId: "auth-resource",
       runtimeRole: "auth_runtime",
     },
+    contextId: "context",
     cost: { class: "shared-recovery-group", description: "fixture", owner: "owner" },
     effects: [
-      { id: "resources", kind: "resources", description: "Verify resources" },
-      { id: "install", kind: "install", description: "Install release" },
-      { id: "access", kind: "access", description: "Grant access" },
-      { id: "bindings", kind: "bindings", description: "Bind runtime" },
+      { description: "Verify resources", id: "resources", kind: "resources" },
+      { description: "Install release", id: "install", kind: "install" },
+      { description: "Grant access", id: "access", kind: "access" },
+      { description: "Bind runtime", id: "bindings", kind: "bindings" },
     ],
     installer: { reference: "installer", sha256: "a".repeat(64) },
     neon: {
@@ -112,6 +111,7 @@ const fixture = async () => {
     release: { artifactRef: "artifact", id: "release", sha256: "b".repeat(64) },
     retention: { expiresAt: "2027-01-01T00:00:00.000Z", policy: "retain" },
     selection,
+    version: 1,
   });
   const input = {
     appId: selection.appId,
@@ -155,8 +155,8 @@ const fixture = async () => {
           return Response.json({
             appId: input.appId,
             authenticatedBehavior: "unassessed",
-            status: "blocked",
             code: "resource_mismatch",
+            status: "blocked",
           });
         }
       }
@@ -165,17 +165,17 @@ const fixture = async () => {
           return Response.json({
             appId: input.appId,
             authenticatedBehavior: "unassessed",
-            status: "blocked",
             code: "authorization_required",
+            status: "blocked",
           });
         }
         return Response.json({
           appId: input.appId,
           authenticatedBehavior: "unassessed",
-          status: "planned",
           operationRef: recovery === "operation" ? randomUUID() : input.operationRef,
-          planDigest: recovery === "digest" ? "d".repeat(64) : input.planDigest,
           plan: input.plan,
+          planDigest: recovery === "digest" ? "d".repeat(64) : input.planDigest,
+          status: "planned",
         });
       }
     }
@@ -191,25 +191,25 @@ const fixture = async () => {
     endpoint: "https://operator.example",
     fetch: http,
     ownerContext,
-    token: async () => await Promise.resolve("fixture-only"),
     sessionId: saved.sessionId,
+    token: async () => await Promise.resolve("fixture-only"),
   });
   const context: ApprovalContext<HostedRuntimeApprovalEnvelope> = {
-    callId: "retry-call",
     abortSignal: new AbortController().signal,
     approvedTools: new Set(),
-    toolInput: input,
-    toolName: "prepare-app-hosted-runtime",
+    callId: "retry-call",
+    getSandbox: async () => await Promise.reject(new Error("No Sandbox in approval fixture")),
     session: {
-      id: saved.adapterSessionId,
       auth: { current: null, initiator: null },
+      id: saved.adapterSessionId,
       turn: { id: "retry-turn", sequence: 1 },
     },
-    getSandbox: async () => await Promise.reject(new Error("No Sandbox in approval fixture")),
+    toolInput: input,
+    toolName: "prepare-app-hosted-runtime",
   };
   const reader = createHostedRuntimePriorApprovalReader({
-    store,
     now: () => Date.parse("2026-10-14T12:00:00Z"),
+    store,
   });
   const read = async (
     requested: HostedRuntimeApprovalEnvelope,
@@ -233,12 +233,7 @@ const fixture = async () => {
     const requestId = options.requestId ?? "original-request";
     const sequence = options.sequence ?? 4;
     const requested: MessageStreamEvent = {
-      type: "input.requested",
-      meta: { at: "2026-10-14T12:00:00Z", id: `requested-${requestId}` },
       data: {
-        sequence,
-        turnId: "original-turn",
-        stepIndex: 0,
         requests: [
           {
             action: {
@@ -252,11 +247,14 @@ const fixture = async () => {
             requestId,
           },
         ],
+        sequence,
+        stepIndex: 0,
+        turnId: "original-turn",
       },
+      meta: { at: "2026-10-14T12:00:00Z", id: `requested-${requestId}` },
+      type: "input.requested",
     };
     const settled: MessageStreamEvent = {
-      type: "approval.settled",
-      meta: { at: "2026-10-14T12:00:01Z", id: `settled-${requestId}` },
       data: {
         outcome: options.outcome ?? "approved",
         requestId,
@@ -265,6 +263,8 @@ const fixture = async () => {
         stepIndex: 0,
         turnId: "original-turn",
       },
+      meta: { at: "2026-10-14T12:00:01Z", id: `settled-${requestId}` },
+      type: "approval.settled",
     };
     if (options.persist !== false) {
       await recorder.observe(requested);
@@ -273,23 +273,23 @@ const fixture = async () => {
     return [requested, settled];
   };
   return {
-    store,
-    saved,
-    input,
-    context,
-    operator,
-    requests,
-    reader,
-    read,
     approve,
+    changedCurrentPlan: (digest = "c".repeat(64)) => {
+      currentDigest = digest;
+    },
+    context,
+    input,
+    operator,
+    read,
+    reader,
     recover: (mode = "same") => {
       recovery = mode;
     },
+    requests,
+    saved,
+    store,
     unavailable: () => {
       statusAvailable = false;
-    },
-    changedCurrentPlan: (digest = "c".repeat(64)) => {
-      currentDigest = digest;
     },
   };
 };
@@ -336,9 +336,9 @@ describe("owned hosted runtime prior approval", () => {
       {
         createResourceMismatch: () => new HostedOperatorError("resource_mismatch"),
         digest: operatorPlanDigest,
-        sameSelection: sameOperatorSelection,
         isOperatorError: (error): error is HostedOperatorError =>
           error instanceof HostedOperatorError,
+        sameSelection: sameOperatorSelection,
       },
     );
     expect(result.result.status).toBe("pending");
@@ -438,9 +438,9 @@ describe("owned hosted runtime prior approval", () => {
     const f = await fixture();
     await f.approve();
     await f.approve({
+      callId: "cancelled-call",
       outcome: "cancelled",
       requestId: "cancelled-request",
-      callId: "cancelled-call",
       sequence: 10,
     });
     f.recover();
@@ -523,24 +523,24 @@ const nativeApprovalCapture = (
           "content-type": "application/x-ndjson",
           "x-eve-session-id": f.saved.adapterSessionId,
           "x-eve-stream-format": "ndjson",
-          "x-eve-stream-version": "25",
           "x-eve-stream-tail-index": String(events.length - 1),
+          "x-eve-stream-version": "25",
         },
       },
     );
   });
   const capture = vi.fn(async (ctx: Parameters<typeof f.reader>[1]) => {
     await captureHostedRuntimeApproval({
-      ownerContext: operatorOwnerContextSchema.parse(f.operator.ownerContext),
-      store: f.store,
       baseUrl: "https://builder.example",
-      signal: ctx.abortSignal,
-      workloadIdentity: { token: async () => await Promise.resolve("builder-workload-fixture") },
       fetchImplementation,
+      ownerContext: operatorOwnerContextSchema.parse(f.operator.ownerContext),
+      signal: ctx.abortSignal,
+      store: f.store,
+      workloadIdentity: { token: async () => await Promise.resolve("builder-workload-fixture") },
     });
   });
-  const read = createHostedRuntimeExecutionApprovalReader({ readPrior: f.reader, capture });
-  return { read, capture, fetchImplementation };
+  const read = createHostedRuntimeExecutionApprovalReader({ capture, readPrior: f.reader });
+  return { capture, fetchImplementation, read };
 };
 const retainedApprovalCapture = async (
   f: Awaited<ReturnType<typeof fixture>>,
@@ -571,13 +571,13 @@ const retainedApprovalCapture = async (
     publicEventCount: 1,
     version: 1,
   });
-  const ref = { id: randomUUID(), digest: `sha256:${"a".repeat(64)}`, eventCount: 1 };
+  const ref = { digest: `sha256:${"a".repeat(64)}`, eventCount: 1, id: randomUUID() };
   const metadata = {
     capturedAtEpochMs: 10,
-    status: "input_required" as const,
-    version: 1 as const,
     nativeObservationState: native,
     privateApprovalCaptureState: recorder.snapshot(),
+    status: "input_required" as const,
+    version: 1 as const,
   };
   const getSession = f.store.getSession.bind(f.store);
   const read = vi
@@ -589,15 +589,14 @@ const retainedApprovalCapture = async (
       }
       const { checkpoint, ...paged } = toDurableHostedSessionRecord(stored);
       void checkpoint;
-      return { ...paged, checkpointRef: ref, checkpointDigest: ref.digest };
+      return { ...paged, checkpointDigest: ref.digest, checkpointRef: ref };
     });
   const checkpointDigest = ref.digest;
   mirrorObservedCurrentSession(f);
-  f.store.readCheckpointPage = vi.fn<NonNullable<HostedEveStore["readCheckpointPage"]>>(() =>
-    Promise.resolve({
+  f.store.readCheckpointPage = vi.fn<NonNullable<HostedEveStore["readCheckpointPage"]>>(
+    async () => ({
       checkpointDigest,
       cursor: 1,
-      totalEvents: 1,
       events: [
         {
           index: 0,
@@ -607,9 +606,10 @@ const retainedApprovalCapture = async (
         },
       ],
       metadata,
+      totalEvents: 1,
     }),
   );
-  return { native, metadata, ref, read, getSession };
+  return { getSession, metadata, native, read, ref };
 };
 
 describe("Builder-local approval capture before execution", () => {
@@ -636,8 +636,8 @@ describe("Builder-local approval capture before execution", () => {
     });
     const stored = await f.store.getSession(principal, f.saved.sessionId);
     expect(stored?.version === 2 && stored.privateApprovalReceipts?.[0]).toMatchObject({
-      requestId: "original-request",
       outcome: "approved",
+      requestId: "original-request",
     });
     expect(stored?.version === 2 && stored.checkpointRef).toEqual(seed.ref);
     expect(seed.metadata.nativeObservationState.nextNativeIndex).toBe(1);
@@ -660,8 +660,8 @@ describe("Builder-local approval capture before execution", () => {
       reads += 1;
       return {
         ...paged,
-        checkpointRef: reads > 1 ? { ...seed.ref, id: advancedCheckpointId } : seed.ref,
         checkpointDigest: seed.ref.digest,
+        checkpointRef: reads > 1 ? { ...seed.ref, id: advancedCheckpointId } : seed.ref,
       };
     });
     const local = nativeApprovalCapture(f, events, 1);
@@ -703,8 +703,8 @@ describe("Builder-local approval capture before execution", () => {
       vi.spyOn(f.store, "readCurrentBuildSession").mockResolvedValueOnce({
         ...toDurableHostedSessionRecord(f.saved),
         adapterGeneration: f.saved.adapterGeneration + 1,
-        checkpointRef: seed.ref,
         checkpointDigest: seed.ref.digest,
+        checkpointRef: seed.ref,
       });
     }
     const local = nativeApprovalCapture(f, events);
@@ -751,7 +751,7 @@ describe("Builder-local approval capture before execution", () => {
       await f.approve();
       throw new Error("private capture response lost");
     });
-    const read = createHostedRuntimeExecutionApprovalReader({ readPrior: f.reader, capture });
+    const read = createHostedRuntimeExecutionApprovalReader({ capture, readPrior: f.reader });
     expect(await read(f.input, f.context, f.operator)).toEqual({
       approvalId: "original-request",
       callId: "original-call",
@@ -786,7 +786,7 @@ describe("Builder-local approval capture before execution", () => {
       await f.approve();
       controller.abort();
     });
-    const read = createHostedRuntimeExecutionApprovalReader({ readPrior: f.reader, capture });
+    const read = createHostedRuntimeExecutionApprovalReader({ capture, readPrior: f.reader });
     await expect(read(f.input, context, f.operator)).rejects.toThrow();
     expect(f.requests).toEqual([]);
   });
@@ -794,12 +794,12 @@ describe("Builder-local approval capture before execution", () => {
 
 const referenceReader = (f: Awaited<ReturnType<typeof fixture>>) =>
   createHostedRuntimeApprovedReferenceReader({
-    store: f.store,
     readPrior: createHostedRuntimePriorApprovalReader({
-      store: f.store,
       now: () => Date.parse("2026-10-14T12:00:00Z"),
       recoverOriginalPlan: false,
+      store: f.store,
     }),
+    store: f.store,
   });
 
 describe("owned approved operation reference", () => {
@@ -814,10 +814,10 @@ describe("owned approved operation reference", () => {
     );
     expect(loaded.input).toEqual(f.input);
     expect(loaded.snapshot).toEqual({
-      sessionId: f.saved.sessionId,
-      adapterSessionId: f.saved.adapterSessionId,
       adapterGeneration: f.saved.adapterGeneration,
+      adapterSessionId: f.saved.adapterSessionId,
       cancellationRevision: 0,
+      sessionId: f.saved.sessionId,
     });
     await reader.assertCurrent(loaded.snapshot, f.context, f.operator);
     const prior = await f.read(loaded.input, f.context);
@@ -829,9 +829,9 @@ describe("owned approved operation reference", () => {
       {
         createResourceMismatch: () => new HostedOperatorError("resource_mismatch"),
         digest: operatorPlanDigest,
-        sameSelection: sameOperatorSelection,
         isOperatorError: (error): error is HostedOperatorError =>
           error instanceof HostedOperatorError,
+        sameSelection: sameOperatorSelection,
       },
     );
     expect(result.result.status).toBe("pending");
@@ -897,16 +897,16 @@ describe("owned approved operation reference", () => {
     const f = await fixture();
     await f.approve();
     const readPrior = createHostedRuntimePriorApprovalReader({
-      store: f.store,
       now: () => Date.parse("2026-10-14T12:00:00Z"),
       recoverOriginalPlan: false,
+      store: f.store,
     });
     const reader = createHostedRuntimeApprovedReferenceReader({
-      store: f.store,
       readPrior: async (input, context, operator) => {
         f.changedCurrentPlan();
         return await readPrior(input, context, operator);
       },
+      store: f.store,
     });
     await expect(reader.load(f.input, f.context, f.operator)).rejects.toMatchObject({
       code: "resource_mismatch",
@@ -932,14 +932,14 @@ describe("owned approved operation reference", () => {
     const reader = referenceReader(f);
     const loaded = await reader.load(f.input, f.context, f.operator);
     await f.store.recordCancellationIntent({
+      nowEpochMs: 10,
       principal,
       sessionId: f.saved.sessionId,
-      nowEpochMs: 10,
     });
     await f.store.recordCancellationIntent({
+      nowEpochMs: 10,
       principal,
       sessionId: f.saved.sessionId,
-      nowEpochMs: 10,
     });
     const current = await f.store.getSession(principal, f.saved.sessionId);
     expect(current?.status).toBe(f.saved.status);
@@ -956,16 +956,16 @@ describe("owned approved operation reference", () => {
     const f = await fixture();
     await f.approve();
     const reader = createHostedRuntimeApprovedReferenceReader({
-      store: f.store,
       readPrior: async (input, context, operator) => {
         const prior = await f.reader(input, context, operator);
         await f.store.recordCancellationIntent({
+          nowEpochMs: 10,
           principal,
           sessionId: f.saved.sessionId,
-          nowEpochMs: 10,
         });
         return prior;
       },
+      store: f.store,
     });
     await expect(reader.load(f.input, f.context, f.operator)).rejects.toMatchObject({
       code: "authorization_required",
@@ -988,11 +988,11 @@ describe("owned approved operation reference", () => {
         throw new Error("Missing owned checkpoint");
       }
       await f.store.observeSession({
-        principal,
-        sessionId: f.saved.sessionId,
         checkpoint: { ...checkpoint, status },
         nowEpochMs: current.updatedAtEpochMs,
+        principal,
         resumability: "terminal",
+        sessionId: f.saved.sessionId,
         stage: status === "completed" ? "complete" : "needs_attention",
       });
       await expect(referenceReader(f).load(f.input, f.context, f.operator)).rejects.toMatchObject({
@@ -1049,10 +1049,10 @@ describe("owned approved operation reference", () => {
       .fn<Parameters<typeof createHostedRuntimeExecutionApprovalReader>[0]["readPrior"]>()
       .mockResolvedValue(null);
     const read = createHostedRuntimeExecutionApprovalReader({
-      readPrior,
       capture: async () => {
         await Promise.resolve();
       },
+      readPrior,
     });
     const options = { recoverOriginalPlan: false } as const;
     await read(f.input, f.context, f.operator, options);
@@ -1072,8 +1072,8 @@ describe("owned approved operation reference", () => {
 
 const receiptReader = (f: Awaited<ReturnType<typeof fixture>>) =>
   createHostedRuntimeApprovalReceiptReader({
-    store: f.store,
     now: () => Date.parse("2026-10-14T12:00:00Z"),
+    store: f.store,
   });
 
 describe("canonical resource approval durability wait", () => {
@@ -1149,9 +1149,9 @@ describe("canonical resource approval durability wait", () => {
           await read(input, ctx, f.operator, snapshot, delayMs),
         sleepUntil: async () => {
           await f.store.recordCancellationIntent({
+            nowEpochMs: 11,
             principal,
             sessionId: f.saved.sessionId,
-            nowEpochMs: 11,
           });
         },
       }),
@@ -1179,8 +1179,8 @@ describe("canonical resource approval durability wait", () => {
       }),
     ).rejects.toMatchObject({ code: "authorization_required" });
     const expired = createHostedRuntimeApprovalReceiptReader({
-      store: f.store,
       now: () => Date.parse("2027-01-01T00:00:00Z"),
+      store: f.store,
     });
     await expect(expired(f.input, f.context, f.operator)).rejects.toMatchObject({
       code: "resource_mismatch",
@@ -1200,11 +1200,11 @@ describe("canonical resource approval durability wait", () => {
       throw new Error("Missing fixture checkpoint");
     }
     await f.store.observeSession({
-      principal,
-      sessionId: f.saved.sessionId,
       checkpoint: { ...checkpoint, status: "completed" },
       nowEpochMs: 11,
+      principal,
       resumability: "terminal",
+      sessionId: f.saved.sessionId,
       stage: "complete",
     });
     expect(await receiptReader(f)(f.input, f.context, f.operator)).toMatchObject({
@@ -1234,8 +1234,8 @@ describe("canonical resource approval durability wait", () => {
   it("surfaces malformed state and missing owner instead of waiting indefinitely", async () => {
     const f = await fixture();
     const missing = createHostedRuntimeApprovalReceiptReader({
-      store: { getSession: async () => await Promise.resolve(null) },
       now: () => Date.parse("2026-10-14T12:00:00Z"),
+      store: { getSession: async () => await Promise.resolve(null) },
     });
     await expect(missing(f.input, f.context, f.operator)).rejects.toMatchObject({
       code: "authorization_required",

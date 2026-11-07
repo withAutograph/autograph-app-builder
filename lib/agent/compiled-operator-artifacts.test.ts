@@ -58,12 +58,10 @@ const mocks = vi.hoisted(() => ({
   associationAvailable: true,
   candidate: null as Record<string, unknown> | null,
   completion: null as DraftReconciliationCompletion | null,
-  readExact: vi.fn(),
   onRead: vi.fn<(index: number) => void | Promise<void>>(),
   owner: null as Record<string, unknown> | null,
-  record: vi.fn(),
-  readSelection: vi.fn(),
   publishedSourceLookupAvailable: true,
+  readExact: vi.fn(),
   readPublishedSource:
     vi.fn<
       (
@@ -71,18 +69,20 @@ const mocks = vi.hoisted(() => ({
         lookup: PublishedAppSourceLookup,
       ) => Promise<PublishedAppSource | undefined>
     >(),
+  readSelection: vi.fn(),
+  record: vi.fn(),
   resolve: vi.fn(),
   rows: new Map<string, string>(),
   state: null as Record<string, unknown> | null,
 }));
 vi.mock("./workflow-state", () => ({ appBuilderWorkflowState: { get: () => mocks.state } }));
 vi.mock("./draft-reconciliation-state", () => ({
-  draftReconciliationState: { get: () => mocks.candidate },
   assertRetainedDraftReconciliationCompletion: (completion: DraftReconciliationCompletion) => {
     if (completion !== mocks.completion) {
       throw new Error("completion_context_missing");
     }
   },
+  draftReconciliationState: { get: () => mocks.candidate },
 }));
 vi.mock("../provisioning/hosted-operator-owner-context", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -115,15 +115,20 @@ vi.mock("../provisioning/hosted-operator-artifact-store", async (importOriginal)
 }));
 vi.mock("../provisioning/hosted-operator-artifact-selection", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  createPostgresOperatorArtifactSelections: () => ({
-    read: mocks.readSelection,
-    readExact: mocks.readExact,
-    ...(mocks.publishedSourceLookupAvailable
-      ? { readPublishedSource: mocks.readPublishedSource }
-      : {}),
-    record: mocks.record,
-    ...(mocks.associationAvailable ? { associatePublishedSource: mocks.associate } : {}),
-  }),
+  createPostgresOperatorArtifactSelections: () => {
+    const reads: Pick<OperatorArtifactSelections, "read" | "readExact" | "readPublishedSource"> = {
+      read: mocks.readSelection,
+      readExact: mocks.readExact,
+    };
+    if (mocks.publishedSourceLookupAvailable) {
+      reads.readPublishedSource = mocks.readPublishedSource;
+    }
+    const selections: OperatorArtifactSelections = { ...reads, record: mocks.record };
+    if (mocks.associationAvailable) {
+      selections.associatePublishedSource = mocks.associate;
+    }
+    return selections;
+  },
 }));
 
 const digest = "a".repeat(64);
@@ -195,8 +200,8 @@ describe("owned compiled artifact workflow hook", () => {
     mocks.readSelection.mockReset();
     mocks.associationAvailable = true;
     mocks.associate.mockReset().mockImplementation(async (_context, input) => ({
-      status: "recorded",
       selection: { ...input.approvedSelection, publishedSource: input.publishedSource },
+      status: "recorded",
     }));
     mocks.readExact.mockReset();
     mocks.completion = null;
@@ -226,18 +231,18 @@ describe("owned compiled artifact workflow hook", () => {
     );
   });
   const historicalSource = {
-    repositoryId: "4242",
     branch: "app-builder/review-existing",
+    changeSetDigest: "d".repeat(64),
     gitSha: "b".repeat(40),
     gitTree: "c".repeat(40),
-    changeSetDigest: "d".repeat(64),
+    repositoryId: "4242",
     reviewDigest: "e".repeat(64),
   };
   const historicalLookup = {
-    repositoryId: historicalSource.repositoryId,
     branch: historicalSource.branch,
     gitSha: historicalSource.gitSha,
     gitTree: historicalSource.gitTree,
+    repositoryId: historicalSource.repositoryId,
   };
 
   it("reads historical publication under the current approved app and original owner session", async () => {
@@ -283,9 +288,9 @@ describe("owned compiled artifact workflow hook", () => {
   });
 
   it("does not return a historical marker after the current owner changes during its read", async () => {
-    mocks.readPublishedSource.mockImplementation(() => {
+    mocks.readPublishedSource.mockImplementation(async () => {
       mocks.owner = { ...mocks.owner, adapterGeneration: 2 };
-      return Promise.resolve(historicalSource);
+      return historicalSource;
     });
     await expect(
       readPublishedOperatorSourceForSession({ ...frame(), lookup: historicalLookup }),
@@ -315,7 +320,7 @@ describe("owned compiled artifact workflow hook", () => {
     const input = frame();
     await expect(
       recordPublishedOperatorSourceForSession({ ...input, publishedSource }),
-    ).resolves.toMatchObject({ status: "recorded", selection: { ...selected, publishedSource } });
+    ).resolves.toMatchObject({ selection: { ...selected, publishedSource }, status: "recorded" });
     const context = { authority, target: { appId: input.appId, sessionId: "durable-original" } };
     expect(mocks.readSelection).toHaveBeenCalledWith(context, digest);
     expect(mocks.record).toHaveBeenCalledWith(context, input.callId, {
@@ -332,14 +337,14 @@ describe("owned compiled artifact workflow hook", () => {
     }
     // SAFETY: This closed compiled-storage test consumes only digest/app binding from the proposal; repository tests validate its full seal.
     const completion = {
+      appId: "spend-review",
+      appReview: { appSpecDigest: digest, changeSetDigest: digest, digest },
+      compilation: captured.compilation,
+      githubSourceDigest: digest,
       preparation: "sealed-before-approval",
       proposal: { digest },
       review: { digest },
-      appReview: { appSpecDigest: digest, changeSetDigest: digest, digest },
-      appId: "spend-review",
       root: "/workspace/repository",
-      githubSourceDigest: digest,
-      compilation: captured.compilation,
     } as DraftReconciliationCompletion;
     mocks.completion = completion;
     mocks.readExact.mockResolvedValue(captured.selection);
@@ -355,15 +360,15 @@ describe("owned compiled artifact workflow hook", () => {
     input.sandbox.readBinaryFile.mockClear();
     await expect(
       recordPublishedReconciliationSourceForSession({
-        completion,
         adapterSessionId: "adapter",
-        sessionAuth: input.sessionAuth,
+        completion,
         publishedSource: historicalSource,
         recordCurrentEquivalentRelease: true,
+        sessionAuth: input.sessionAuth,
       }),
     ).resolves.toMatchObject({
-      status: "recorded",
       selection: { publishedSource: historicalSource },
+      status: "recorded",
     });
     expect(mocks.associate).toHaveBeenCalledWith(
       completion.compilation.context,
@@ -384,11 +389,11 @@ describe("owned compiled artifact workflow hook", () => {
     mocks.associationAvailable = false;
     await expect(
       recordPublishedReconciliationSourceForSession({
-        completion,
         adapterSessionId: "adapter",
-        sessionAuth: frame().sessionAuth,
+        completion,
         publishedSource: historicalSource,
         recordCurrentEquivalentRelease: true,
+        sessionAuth: frame().sessionAuth,
       }),
     ).rejects.toThrow();
     expect(mocks.record).not.toHaveBeenCalled();
@@ -398,11 +403,11 @@ describe("owned compiled artifact workflow hook", () => {
     mocks.owner = { ...mocks.owner, sessionId: "foreign-session" };
     await expect(
       recordPublishedReconciliationSourceForSession({
-        completion,
         adapterSessionId: "adapter",
-        sessionAuth: frame().sessionAuth,
+        completion,
         publishedSource: historicalSource,
         recordCurrentEquivalentRelease: true,
+        sessionAuth: frame().sessionAuth,
       }),
     ).rejects.toThrow();
     expect(mocks.associate).not.toHaveBeenCalled();
@@ -419,11 +424,11 @@ describe("owned compiled artifact workflow hook", () => {
       mocks.state = { ...mocks.state, appSpec };
       await expect(
         recordPublishedReconciliationSourceForSession({
-          completion,
           adapterSessionId: "adapter",
-          sessionAuth: frame().sessionAuth,
+          completion,
           publishedSource: historicalSource,
           recordCurrentEquivalentRelease: true,
+          sessionAuth: frame().sessionAuth,
         }),
       ).resolves.toMatchObject({ status: "selection-changed" });
       expect(mocks.associate).not.toHaveBeenCalled();
@@ -432,21 +437,19 @@ describe("owned compiled artifact workflow hook", () => {
   );
   it("stops equivalent association when the accepted specification changes during exact release readback", async () => {
     const completion = await captureCompletion();
-    mocks.readExact.mockImplementation(() => {
+    mocks.readExact.mockImplementation(async () => {
       mocks.state = { ...mocks.state, appSpec: { appId: "spend-review", digest: "f".repeat(64) } };
-      return Promise.resolve(
-        completion.compilation.release.status === "published"
-          ? completion.compilation.release.selection
-          : undefined,
-      );
+      return completion.compilation.release.status === "published"
+        ? completion.compilation.release.selection
+        : undefined;
     });
     await expect(
       recordPublishedReconciliationSourceForSession({
-        completion,
         adapterSessionId: "adapter",
-        sessionAuth: frame().sessionAuth,
+        completion,
         publishedSource: historicalSource,
         recordCurrentEquivalentRelease: true,
+        sessionAuth: frame().sessionAuth,
       }),
     ).resolves.toMatchObject({ status: "selection-changed" });
     expect(mocks.associate).not.toHaveBeenCalled();
@@ -459,10 +462,10 @@ describe("owned compiled artifact workflow hook", () => {
     mocks.candidate = null;
     mocks.readSelection.mockRejectedValue(new Error("latest must never be consulted"));
     const result = await recordPublishedReconciliationSourceForSession({
-      completion,
       adapterSessionId: "adapter",
-      sessionAuth: frame().sessionAuth,
+      completion,
       publishedSource: historicalSource,
+      sessionAuth: frame().sessionAuth,
     });
     expect(result).toMatchObject({ status: "recorded" });
     expect(mocks.readSelection).not.toHaveBeenCalled();
@@ -476,12 +479,9 @@ describe("owned compiled artifact workflow hook", () => {
     expect(mocks.record).toHaveBeenCalledWith(
       completion.compilation.context,
       `draft-reconciliation:${digest}`,
-      {
-        ...(completion.compilation.release.status === "published"
-          ? completion.compilation.release.selection
-          : {}),
-        publishedSource: historicalSource,
-      },
+      completion.compilation.release.status === "published"
+        ? { ...completion.compilation.release.selection, publishedSource: historicalSource }
+        : { publishedSource: historicalSource },
     );
   });
 
@@ -498,10 +498,10 @@ describe("owned compiled artifact workflow hook", () => {
       });
       await expect(
         recordPublishedReconciliationSourceForSession({
-          completion,
           adapterSessionId: "adapter",
-          sessionAuth: frame().sessionAuth,
+          completion,
           publishedSource: historicalSource,
+          sessionAuth: frame().sessionAuth,
         }),
       ).rejects.toThrow();
       expect(mocks.record).not.toHaveBeenCalled();
@@ -510,20 +510,18 @@ describe("owned compiled artifact workflow hook", () => {
 
   it("refuses original release recording after owner changes during historical read", async () => {
     const completion = await captureCompletion();
-    mocks.readExact.mockImplementation(() => {
+    mocks.readExact.mockImplementation(async () => {
       mocks.owner = { ...mocks.owner, adapterGeneration: 2 };
-      return Promise.resolve(
-        completion.compilation.release.status === "published"
-          ? completion.compilation.release.selection
-          : undefined,
-      );
+      return completion.compilation.release.status === "published"
+        ? completion.compilation.release.selection
+        : undefined;
     });
     await expect(
       recordPublishedReconciliationSourceForSession({
-        completion,
         adapterSessionId: "adapter",
-        sessionAuth: frame().sessionAuth,
+        completion,
         publishedSource: historicalSource,
+        sessionAuth: frame().sessionAuth,
       }),
     ).rejects.toThrow();
     expect(mocks.record).not.toHaveBeenCalled();
@@ -534,10 +532,10 @@ describe("owned compiled artifact workflow hook", () => {
     mocks.owner = { ...mocks.owner, sessionId: "another-owner-session" };
     await expect(
       recordPublishedReconciliationSourceForSession({
-        completion,
         adapterSessionId: "adapter",
-        sessionAuth: frame().sessionAuth,
+        completion,
         publishedSource: historicalSource,
+        sessionAuth: frame().sessionAuth,
       }),
     ).rejects.toThrow();
     expect(mocks.readExact).not.toHaveBeenCalled();
@@ -549,9 +547,8 @@ describe("owned compiled artifact workflow hook", () => {
     mocks.state = null;
     const result = await recordPublishedOperatorSourceForSession({
       ...input,
-      backendKind: "static",
-      root: "/private/static-preview",
       appSpecDigest: "f".repeat(64),
+      backendKind: "static",
       publishedSource: {
         branch: "reviewed-static",
         changeSetDigest: digest,
@@ -560,6 +557,7 @@ describe("owned compiled artifact workflow hook", () => {
         repositoryId: "4242",
         reviewDigest: digest,
       },
+      root: "/private/static-preview",
     });
     expect(result.status).toBe("not-required");
     expect(mocks.resolve).not.toHaveBeenCalled();
@@ -671,20 +669,18 @@ describe("owned compiled artifact workflow hook", () => {
   });
   const lostReviewCandidate = () => {
     const apply: TargetApplyReceipt = {
-      version: 2,
-      status: "applied",
       appSpecDigest: digest,
       appSpecPath: ".config/app-specs/spend-review.cue",
-      applyRoot: "/workspace/repository",
       appliedByCallId: "original-apply",
+      applyRoot: "/workspace/repository",
       artifactRevision: "reviewed-revision",
       changedContentDigest: digest,
       changes: [],
       command: {
-        name: "iterate-existing-app",
         exitCode: 0,
-        stdoutDigest: digest,
+        name: "iterate-existing-app",
         stderrDigest: digest,
+        stdoutDigest: digest,
       },
       dependencyCacheContentDigest: digest,
       dependencyCacheDigest: digest,
@@ -694,57 +690,59 @@ describe("owned compiled artifact workflow hook", () => {
       identityDigest: digest,
       imageDigest: digest,
       planningTreeDigest: digest,
-      preparedTreeDigest: digest,
       postTree: [],
       postTreeDigest: digest,
       preTree: [],
       preTreeDigest: digest,
+      preparedTreeDigest: digest,
       proposalDigest: digest,
       sourceReceiptDigest: digest,
       sourceSha: "a".repeat(40),
       sourceTree: "b".repeat(40),
+      status: "applied",
       targetReceipt: {
         appId: "spend-review",
         mutations: ["apps/spend-review", "microfrontends.json"],
         omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
         recovered: false,
-        topology: { path: "microfrontends.json", oldDigest: digest, newDigest: digest },
+        topology: { newDigest: digest, oldDigest: digest, path: "microfrontends.json" },
         version: 1,
         workspacePath: "apps/spend-review",
       },
+      version: 2,
       workspaceDigest: digest,
     };
     const validation: TargetValidationReceipt = {
       ...apply,
-      version: 3,
-      status: "passed",
       appId: "spend-review",
-      attemptDigest: digest,
-      testShards: ["1/1"],
       appValidationSha256: digest,
-      applyDigest: apply.digest,
       appliedTreeDigest: apply.postTreeDigest,
-      validatedByCallId: "original-validation",
+      applyDigest: apply.digest,
+      attemptDigest: digest,
       commands: [
         {
-          name: "check-build",
           command: "mise run --no-deps --skip-tools app:check spend-review",
-          validationRoot: apply.applyRoot,
-          inputTreeDigest: digest,
           exitCode: 0,
-          stdoutDigest: digest,
+          inputTreeDigest: digest,
+          name: "check-build",
           stderrDigest: digest,
+          stdoutDigest: digest,
+          validationRoot: apply.applyRoot,
         },
         {
-          name: "test",
           command: "mise run --no-deps --skip-tools app:test spend-review 1/1",
-          validationRoot: apply.applyRoot,
-          inputTreeDigest: digest,
           exitCode: 0,
-          stdoutDigest: digest,
+          inputTreeDigest: digest,
+          name: "test",
           stderrDigest: digest,
+          stdoutDigest: digest,
+          validationRoot: apply.applyRoot,
         },
       ],
+      status: "passed",
+      testShards: ["1/1"],
+      validatedByCallId: "original-validation",
+      version: 3,
     };
     const review = createReviewedChangeSetReceipt(
       deriveNormalizedChangeSet(apply, validation, digest, digest),
@@ -753,14 +751,14 @@ describe("owned compiled artifact workflow hook", () => {
     const reviewed = {
       appSpec: { appId: "spend-review", digest },
       applyReceipt: apply,
-      validationReceipt: validation,
       githubSource: { digest, repository: { repositoryId: "4242" } },
       identityReceipt: { digest },
       phase: "reviewed",
       proposal: { digest },
       reviewReceipt: review,
       sourceReceipt: { digest, sourceKind: "existing-repository" },
-      workspace: { workspaceId: "workspace", workspaceDigest: digest },
+      validationReceipt: validation,
+      workspace: { workspaceDigest: digest, workspaceId: "workspace" },
     };
     mocks.state = { ...reviewed, phase: "validated" };
     Reflect.deleteProperty(mocks.state, "reviewReceipt");
@@ -769,8 +767,8 @@ describe("owned compiled artifact workflow hook", () => {
       githubSourceDigest: digest,
       originalReviewDigest: review.digest,
       repositoryId: "4242",
-      root: "/workspace/.app-builder/candidate",
       reviewedLineage: structuredClone(reviewed),
+      root: "/workspace/.app-builder/candidate",
     };
     return { ...frame(), root: "/workspace/.app-builder/candidate" };
   };
@@ -881,32 +879,27 @@ describe("owned compiled artifact workflow hook", () => {
         ...input.recovery,
         ownerRunId: "adapter-child",
         provenance: {
+          checkpointVersion: 1 as const,
           kind: "failed-turn-input" as const,
-          sourceStepId: "retained-step",
           sourceEventId: "retained-event",
           sourceSlot: 1,
-          checkpointVersion: 1 as const,
+          sourceStepId: "retained-step",
         },
       };
       await store.commitNativeRecoveryReceipt({
-        principal,
         descriptor: input.recovery,
-        recoveryBinding,
         nowEpochMs: Date.now(),
+        principal,
+        recoveryBinding,
       });
       return { adapterSessionId: "adapter-child", recoveryBinding, snapshot: snapshot() };
     });
     const service = createHostedEveSessionService({
-      principal,
-      store,
       assertNativeRecoveryOwner: async () => {},
       assertSendDeliveryOwner: async () => {},
+      principal,
+      store,
       transport: {
-        start,
-        send,
-        get: async () => snapshot(),
-        cancel: async () => snapshot(),
-        respond: async () => snapshot(),
         activateRecovery: async ({ operationId }) => {
           const operation = await store.getPrivateOperation(principal, operationId);
           const child = await store.getSession(principal, operation?.sessionId ?? "missing");
@@ -915,6 +908,11 @@ describe("owned compiled artifact workflow hook", () => {
           }
           return child.nativeRecoveryBinding;
         },
+        cancel: async () => snapshot(),
+        get: async () => snapshot(),
+        respond: async () => snapshot(),
+        send,
+        start,
       },
     });
     const source = await service.start({
@@ -928,24 +926,26 @@ describe("owned compiled artifact workflow hook", () => {
     const original = await store.getSession(principal, source.sessionId);
     const resolver = createHostedOperatorOwnerContextResolver({
       audience: authority.audience,
-      issuer: authority.issuer,
-      sessions: store,
       handoffs: {
         read: async () => {
           new Map<string, never>().get("missing");
         },
       },
       isActiveMember: async () => true,
+      issuer: authority.issuer,
+      sessions: store,
     });
     const execution = {
       logicalSessionId: "adapter",
-      ownerRunId: "callback-step-owner",
       ownerAnchorRunId: "adapter-child",
+      ownerRunId: "callback-step-owner",
     };
-    const resolve = () =>
-      resolver({ adapterSessionId: "adapter", authority, principal, sessionAuth, execution });
-    mocks.resolve.mockImplementation((input: Parameters<typeof resolver>[0]) => resolver(input));
-    const input = { ...frame(), sessionAuth, callbackExecution: execution };
+    const resolve = async () =>
+      await resolver({ adapterSessionId: "adapter", authority, execution, principal, sessionAuth });
+    mocks.resolve.mockImplementation(
+      async (input: Parameters<typeof resolver>[0]) => await resolver(input),
+    );
+    const input = { ...frame(), callbackExecution: execution, sessionAuth };
     await service.cancel({ sessionId: recovered.sessionId });
     await expect(resolve()).rejects.toMatchObject({ code: "authorization_required" });
     await expect(publishCompiledOperatorArtifactsForSession(input)).rejects.toMatchObject({
@@ -963,16 +963,16 @@ describe("owned compiled artifact workflow hook", () => {
     expect(queued?.version === 2 ? queued.resumedCancellationRevision : undefined).not.toBe(1);
     events = [
       {
-        type: "turn.started",
         data: { sequence: 1, turnId: "resumed-native-turn" },
         meta: {
           at: "2026-10-29T00:00:00Z",
-          id: "native-resume-event",
           deliveryIds: ["explicit-resume-delivery"],
+          id: "native-resume-event",
         },
+        type: "turn.started",
       },
     ];
-    await service.get({ sessionId: recovered.sessionId, cursor: 0, limit: 100 });
+    await service.get({ cursor: 0, limit: 100, sessionId: recovered.sessionId });
     await expect(resolve()).rejects.toMatchObject({ code: "authorization_required" });
     await service.send(request);
     expect(send).toHaveBeenCalledOnce();
@@ -980,24 +980,24 @@ describe("owned compiled artifact workflow hook", () => {
     expect(resumed).toMatchObject({ cancellationRevision: 1, resumedCancellationRevision: 1 });
     const owner = await resolve();
     expect(owner).toMatchObject({
-      sessionId: source.sessionId,
-      adapterSessionId: "adapter-child",
       adapterGeneration: 1,
+      adapterSessionId: "adapter-child",
+      sessionId: source.sessionId,
     });
     await expect(
       resolver({
         adapterSessionId: "adapter",
         authority,
+        execution: { ...execution, ownerAnchorRunId: "wrong-anchor" },
         principal,
         sessionAuth,
-        execution: { ...execution, ownerAnchorRunId: "wrong-anchor" },
       }),
     ).rejects.toMatchObject({ code: "authorization_required" });
     await expect(
       readHostedOperatorCallbackOwner({
-        store,
-        owner: { ...owner, adapterGeneration: 2 },
         execution,
+        owner: { ...owner, adapterGeneration: 2 },
+        store,
       }),
     ).rejects.toMatchObject({ code: "authorization_required" });
     const captured = await publishCompiledOperatorArtifactsForSession(input);
@@ -1006,7 +1006,7 @@ describe("owned compiled artifact workflow hook", () => {
     expect(mocks.record).toHaveBeenCalledWith(
       { authority, target: { appId: input.appId, sessionId: source.sessionId } },
       input.callId,
-      expect.objectContaining({ releaseId: "fixture-v1", appSpecDigest: digest }),
+      expect.objectContaining({ appSpecDigest: digest, releaseId: "fixture-v1" }),
     );
     const selection = {
       appId: input.appId,
@@ -1017,157 +1017,157 @@ describe("owned compiled artifact workflow hook", () => {
     };
     const release = mocks.record.mock.calls[0]?.[2] as CompiledOperatorReleaseSelection;
     const plan = hostedOperatorPlanSchema.parse({
-      version: 1,
-      action: "prepare",
-      selection,
       access: [],
-      contextId: "owned-context",
-      effects: ["resources", "install", "access", "bindings"].map((kind) => ({
-        id: kind,
-        kind,
-        description: `Approved ${kind}`,
-      })),
-      publicGateway: {
-        projectId: "gateway-owned",
-        branch: "gateway",
-        origin: "https://app.example",
-      },
+      action: "prepare",
       appDatabase: {
-        resourceId: "owned-app",
         database: "app",
         migratorRole: "app_owner",
+        resourceId: "owned-app",
         runtimeRole: "app_runtime",
       },
       authDatabase: {
-        resourceId: "owned-auth",
         database: "auth",
         migratorRole: "auth_owner",
+        resourceId: "owned-auth",
         runtimeRole: "auth_runtime",
       },
-      neon: {
-        projectId: "neon-owned",
-        branchId: "branch-owned",
-        endpoint: "ep-owned.neon.tech",
-        connectionRef: "owner-connection",
-        source: "synthetic-only",
-      },
-      installer: { reference: "fixed-installer", sha256: "b".repeat(64) },
-      release: {
-        id: release.releaseId,
-        sha256: release.manifestSha256,
-        artifactRef: release.artifactRef,
-      },
-      retention: { expiresAt: "2030-01-01T00:00:00Z", policy: "Retain approved Preview" },
+      contextId: "owned-context",
       cost: {
         class: "independent-service",
-        owner: authority.ownerUserId,
         description: "Owned fixture only",
+        owner: authority.ownerUserId,
       },
       deploymentBoundary: {
+        app: { branch: selection.branch, environment: "preview", projectId: selection.projectId },
         authority,
+        gateway: { branch: "gateway", environment: "preview", projectId: "gateway-owned" },
+        operator: { deploymentId: "operator", environment: "production", projectId: "builder" },
         teamId: "team-owned",
-        app: { projectId: selection.projectId, branch: selection.branch, environment: "preview" },
-        gateway: { projectId: "gateway-owned", branch: "gateway", environment: "preview" },
-        operator: { projectId: "builder", deploymentId: "operator", environment: "production" },
         verification: {
           gatewayOrigin: "https://gateway.example",
-          publicOrigin: "https://app.example",
           jwksUrl: "https://gateway.example/_platform/jwks.json",
+          publicOrigin: "https://app.example",
         },
       },
+      effects: ["resources", "install", "access", "bindings"].map((kind) => ({
+        description: `Approved ${kind}`,
+        id: kind,
+        kind,
+      })),
+      installer: { reference: "fixed-installer", sha256: "b".repeat(64) },
+      neon: {
+        branchId: "branch-owned",
+        connectionRef: "owner-connection",
+        endpoint: "ep-owned.neon.tech",
+        projectId: "neon-owned",
+        source: "synthetic-only",
+      },
+      publicGateway: {
+        branch: "gateway",
+        origin: "https://app.example",
+        projectId: "gateway-owned",
+      },
+      release: {
+        artifactRef: release.artifactRef,
+        id: release.releaseId,
+        sha256: release.manifestSha256,
+      },
+      retention: { expiresAt: "2030-01-01T00:00:00Z", policy: "Retain approved Preview" },
+      selection,
+      version: 1,
     });
     const operationRef = "11111111-1111-4111-8111-111111111111";
     const receipt = privateHostedApprovalReceiptSchema.parse({
-      format: "autograph-hosted-approval-v1",
-      requestId: "runtime-approval",
       callId: "runtime-call",
-      sequence: 1,
-      turnId: "",
+      format: "autograph-hosted-approval-v1",
       outcome: "approved",
+      requestId: "runtime-approval",
       responderPrincipalId: principal.ownerUserId,
-      toolName: "prepare-app-hosted-runtime",
+      sequence: 1,
       toolInput: {
         appId: selection.appId,
         branch: selection.branch,
         environment: selection.environment,
-        projectId: selection.projectId,
+        operationRef,
         plan,
         planDigest: operatorPlanDigest(plan),
-        operationRef,
+        projectId: selection.projectId,
       },
+      toolName: "prepare-app-hosted-runtime",
+      turnId: "",
     });
     await store.recordPrivateApprovalReceipts({
       principal,
-      sessionId: source.sessionId,
       receipts: [receipt],
+      sessionId: source.sessionId,
     });
     let approvalCallId = receipt.callId;
     const fetcher = vi.fn<typeof fetch>(async (_url, init) => {
-      await readHostedOperatorCallbackOwner({ store, owner, execution });
+      await readHostedOperatorCallbackOwner({ execution, owner, store });
       const body = z
         .object({ ownerContext: z.unknown() })
         .parse(JSON.parse(z.string().parse(init?.body)));
       expect(body.ownerContext).toEqual(owner);
       const approved = await readPrivateHostedApproval({
-        store,
-        principal,
-        sessionId: source.sessionId,
-        callId: approvalCallId,
         action: "prepare",
+        callId: approvalCallId,
         planDigest: operatorPlanDigest(plan),
+        principal,
         selection,
+        sessionId: source.sessionId,
+        store,
       });
       if (approved?.outcome !== "approved") {
         return Response.json({
           appId: input.appId,
           authenticatedBehavior: "unassessed",
-          status: "blocked",
           code: "authorization_required",
+          status: "blocked",
         });
       }
       return Response.json({
+        environment: {
+          PLATFORM_JWKS_URL: "https://gateway.example/_platform/jwks.json",
+          PLATFORM_ORIGIN: "https://gateway.example",
+          PLATFORM_PUBLIC_ORIGIN: "https://app.example",
+          SPEND_REVIEW_DATABASE_URL:
+            "postgresql://app_runtime:private@ep-owned.neon.tech/app?sslmode=verify-full",
+        },
         operationRef,
         plan,
         proof: {
           actors: 0,
-          tenants: 1,
           artifactHash: release.schemaSha256,
+          authenticatedBehavior: "unassessed",
           manifestSha256: release.manifestSha256,
           releaseId: release.releaseId,
-          authenticatedBehavior: "unassessed",
-        },
-        environment: {
-          SPEND_REVIEW_DATABASE_URL:
-            "postgresql://app_runtime:private@ep-owned.neon.tech/app?sslmode=verify-full",
-          PLATFORM_ORIGIN: "https://gateway.example",
-          PLATFORM_PUBLIC_ORIGIN: "https://app.example",
-          PLATFORM_JWKS_URL: "https://gateway.example/_platform/jwks.json",
+          tenants: 1,
         },
       });
     });
     const client = createHostedOperatorClient({
       endpoint: "https://operator.example",
+      fetch: fetcher,
       ownerContext: owner,
       token: async () => "synthetic-workload",
-      fetch: fetcher,
     });
     const bindingRequest = { action: "bindings" as const, operationRef, selection };
     await expect(client.bindings(bindingRequest)).resolves.toMatchObject({
       operationRef,
-      proof: { releaseId: release.releaseId, artifactHash: release.schemaSha256 },
+      proof: { artifactHash: release.schemaSha256, releaseId: release.releaseId },
     });
     await store.recordPrivateApprovalReceipts({
       principal,
-      sessionId: source.sessionId,
       receipts: [
         {
           ...receipt,
-          requestId: "cancelled-runtime-approval",
           callId: "cancelled-runtime-call",
-          sequence: 2,
           outcome: "cancelled",
+          requestId: "cancelled-runtime-approval",
+          sequence: 2,
         },
       ],
+      sessionId: source.sessionId,
     });
     approvalCallId = "cancelled-runtime-call";
     await expect(client.bindings(bindingRequest)).rejects.toMatchObject({
@@ -1190,13 +1190,13 @@ describe("owned compiled artifact workflow hook", () => {
     expect(mocks.rows).toEqual(capturedRows);
     expect(send).toHaveBeenCalledOnce();
     const originalApproval = await readPrivateHostedApproval({
-      store,
-      principal,
-      sessionId: source.sessionId,
-      callId: receipt.callId,
       action: "prepare",
+      callId: receipt.callId,
       planDigest: operatorPlanDigest(plan),
+      principal,
       selection,
+      sessionId: source.sessionId,
+      store,
     });
     expect(originalApproval).toEqual(receipt);
     expect(original).toMatchObject({ sessionId: source.sessionId, status: "failed" });

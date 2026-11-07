@@ -64,8 +64,8 @@ const databaseResource = z
 /** Non-secret provider snapshot approved for read-only cross-journal ownership lookup. */
 export const canonicalGatewayEnvironmentRowSchema = z.strictObject({
   branch: id,
-  gitBranch: id.nullable().optional(),
   comment: id,
+  gitBranch: id.nullable().optional(),
   id,
   key: z.enum([
     "AUTH_DATABASE_RESOURCE",
@@ -111,10 +111,10 @@ const previewDeploymentSchema = z.strictObject({
   projectId: id,
 });
 const deploymentBoundarySchema = z.strictObject({
-  /** Omitted plans retain their original three-project Preview semantics. */
-  composition: z.literal("single-project-services").optional(),
   app: previewDeploymentSchema,
   authority: hostedTenantAuthoritySchema,
+  /** Omitted plans retain their original three-project Preview semantics. */
+  composition: z.literal("single-project-services").optional(),
   gateway: previewDeploymentSchema,
   operator: z.strictObject({
     deploymentId: id,
@@ -207,50 +207,50 @@ export const selectHostedOperatorOwnedOrganizationSpec = (
 };
 /** Public references to the durable first approval; authority is independently read from that journal. */
 export const normalActorPreparationSchema = z.strictObject({
-  accountOperationRef: z.uuid(),
-  programDigest: digest,
-  accountPlanDigest: digest,
   accountApprovalId: id,
   accountApprovedByCallId: id,
+  accountOperationRef: z.uuid(),
+  accountPlanDigest: digest,
+  programDigest: digest,
 });
 export type NormalActorPreparation = z.infer<typeof normalActorPreparationSchema>;
 /** Exact immutable predecessor of an additive participant preparation; never successor approval. */
 export const normalActorPredecessorSchema = z.strictObject({
-  preparation: normalActorPreparationSchema,
-  operationRef: z.uuid(),
-  planDigest: digest,
   approvalId: id,
   approvedByCallId: id,
+  operationRef: z.uuid(),
+  planDigest: digest,
+  preparation: normalActorPreparationSchema,
 });
 /** Exact account and Auth prerequisites for adding participants before the app is delivered.
  * This reference is provenance only: callers must independently re-read both approvals. */
 export const normalActorCapturePredecessorSchema = z.strictObject({
-  preparation: normalActorPreparationSchema,
-  bootstrapOperationRef: z.uuid(),
-  bootstrapPlanDigest: digest,
   bootstrapApprovalId: id,
   bootstrapApprovedByCallId: id,
+  bootstrapOperationRef: z.uuid(),
+  bootstrapPlanDigest: digest,
   gateway: z
     .strictObject({
-      operationRef: z.uuid(),
-      planDigest: digest,
       approvalId: id,
       approvedByCallId: id,
+      operationRef: z.uuid(),
+      planDigest: digest,
     })
     .optional(),
+  preparation: normalActorPreparationSchema,
 });
 const hostedOperatorAuthSignupPolicyFieldsSchema = z.strictObject({
-  version: z.literal(1),
-  policyId: id,
-  authResourceId: id,
-  appId: operatorSelectionSchema.shape.appId,
-  origin: httpsPublicOrigin,
-  appPath: z.string().regex(/^\/(?!\/)[^?#\\]*$/u),
-  organizationId: id,
-  eligibility: z.enum(["public", "approved-email"]),
   allowedEmails: z.array(z.email()).optional(),
-  membershipRole: z.literal("member"),
+  appId: operatorSelectionSchema.shape.appId,
+  appPath: z.string().regex(/^\/(?!\/)[^?#\\]*$/u),
   appRoles: z.array(sqlName).min(1),
+  authResourceId: id,
+  eligibility: z.enum(["public", "approved-email"]),
+  membershipRole: z.literal("member"),
+  organizationId: id,
+  origin: httpsPublicOrigin,
+  policyId: id,
+  version: z.literal(1),
 });
 export const hostedOperatorAuthSignupPolicySchema =
   hostedOperatorAuthSignupPolicyFieldsSchema.superRefine((policy, ctx) => {
@@ -271,10 +271,10 @@ export const hostedOperatorAuthSignupPolicySchema =
 export type HostedOperatorAuthSignupPolicy = z.infer<typeof hostedOperatorAuthSignupPolicySchema>;
 export const hostedOperatorAuthSignupPolicyInputSchema =
   hostedOperatorAuthSignupPolicyFieldsSchema.omit({
-    policyId: true,
-    authResourceId: true,
     appId: true,
+    authResourceId: true,
     origin: true,
+    policyId: true,
   });
 export type HostedOperatorAuthSignupPolicyInput = z.infer<
   typeof hostedOperatorAuthSignupPolicyInputSchema
@@ -282,8 +282,8 @@ export type HostedOperatorAuthSignupPolicyInput = z.infer<
 export const managedOperatorEnvironmentRowSchema = z
   .strictObject({
     branch: id,
-    gitBranch: id.nullable().optional(),
     comment: id,
+    gitBranch: id.nullable().optional(),
     id,
     key: z.string().regex(/^[A-Z][A-Z0-9_]{0,199}$/u),
     operationRef: z.uuid(),
@@ -301,8 +301,8 @@ export const managedOperatorEnvironmentRowsSchema = z.array(managedOperatorEnvir
 
 const REMOVE_APP_BINDINGS = "remove-bindings";
 const appPreviewTrustedSource = z.strictObject({
-  projectId: id,
   from: z.literal("preview"),
+  projectId: id,
   to: z.literal("preview"),
 });
 const hostedOperatorPlanDataSchema = z.strictObject({
@@ -413,24 +413,6 @@ const hostedOperatorPlanDataSchema = z.strictObject({
           }),
         })
         .optional(),
-      trustedSources: z
-        .union([
-          z.strictObject({
-            builderProduction: z.strictObject({
-              projectId: id,
-              from: z.literal("production"),
-              to: z.literal("preview"),
-            }),
-            operatorPreview: z.strictObject({
-              projectId: id,
-              from: z.literal("preview"),
-              to: z.literal("preview"),
-            }),
-            appPreview: appPreviewTrustedSource.optional(),
-          }),
-          z.strictObject({ appPreview: appPreviewTrustedSource }),
-        ])
-        .optional(),
       sourceWorkload: z.strictObject({
         audience: z.url(),
         environment: z.literal("preview"),
@@ -439,6 +421,24 @@ const hostedOperatorPlanDataSchema = z.strictObject({
         projectId: id,
         subject: id,
       }),
+      trustedSources: z
+        .union([
+          z.strictObject({
+            appPreview: appPreviewTrustedSource.optional(),
+            builderProduction: z.strictObject({
+              from: z.literal("production"),
+              projectId: id,
+              to: z.literal("preview"),
+            }),
+            operatorPreview: z.strictObject({
+              from: z.literal("preview"),
+              projectId: id,
+              to: z.literal("preview"),
+            }),
+          }),
+          z.strictObject({ appPreview: appPreviewTrustedSource }),
+        ])
+        .optional(),
     })
     .optional(),
   gatewayDelivery: z
@@ -715,7 +715,7 @@ const validateResourcePreparation = (
   ctx: z.RefinementCtx,
 ) => {
   if (plan.existingResources !== undefined) {
-    const target = plan.existingResources.source.target;
+    const { target } = plan.existingResources.source;
     if (
       ![
         plan.runtimePreparation === "single-project-resources-v1",
@@ -728,14 +728,14 @@ const validateResourcePreparation = (
     ) {
       ctx.addIssue({
         code: "custom",
-        path: ["existingResources"],
         message: "Existing credential reuse must remain in the same owned normal app and project.",
+        path: ["existingResources"],
       });
     }
   }
 
   if (plan.existingResources !== undefined) {
-    const target = plan.existingResources.source.target;
+    const { target } = plan.existingResources.source;
     if (
       ![
         plan.runtimePreparation === "single-project-resources-v1",
@@ -748,8 +748,8 @@ const validateResourcePreparation = (
     ) {
       ctx.addIssue({
         code: "custom",
-        path: ["existingResources"],
         message: "Existing credential reuse must remain in the same owned normal app and project.",
+        path: ["existingResources"],
       });
     }
   }
@@ -769,8 +769,8 @@ const validateResourcePreparation = (
   ) {
     ctx.addIssue({
       code: "custom",
-      path: ["runtimePreparation"],
       message: "Resource preparation cannot authorize deployment or environment binding effects.",
+      path: ["runtimePreparation"],
     });
   }
 };
@@ -873,19 +873,19 @@ const validateAppTrustedSources = (
   const sourceWorkload = plan.gatewayBindings?.sourceWorkload;
   const checks = {
     action: plan.action === "prepare",
-    stage: plan.stage === "app",
-    bindingEffect: plan.effects.some((effect) => effect.kind === "bindings"),
-    deliveryEffect: plan.effects.some((effect) => effect.kind === "delivery"),
-    boundary: boundary !== undefined,
-    workload: sourceWorkload !== undefined,
-    workloadEnvironment: sourceWorkload?.environment === "preview",
-    sourceProject: sourceWorkload?.projectId === gatewayPreview.projectId,
-    gatewayProject: sourceWorkload?.projectId === boundary?.gateway.projectId,
-    team: sourceWorkload?.ownerId === boundary?.teamId,
-    gatewayEnvironment: boundary?.gateway.environment === "preview",
     appEnvironment: boundary?.app.environment === "preview",
     appProject: boundary?.app.projectId === plan.selection.projectId,
+    bindingEffect: plan.effects.some((effect) => effect.kind === "bindings"),
+    boundary: boundary !== undefined,
+    deliveryEffect: plan.effects.some((effect) => effect.kind === "delivery"),
     deliveryProject: plan.delivery?.projectId === boundary?.app.projectId,
+    gatewayEnvironment: boundary?.gateway.environment === "preview",
+    gatewayProject: sourceWorkload?.projectId === boundary?.gateway.projectId,
+    sourceProject: sourceWorkload?.projectId === gatewayPreview.projectId,
+    stage: plan.stage === "app",
+    team: sourceWorkload?.ownerId === boundary?.teamId,
+    workload: sourceWorkload !== undefined,
+    workloadEnvironment: sourceWorkload?.environment === "preview",
   };
   const valid = Object.values(checks).every(Boolean);
   if (!valid) {
@@ -935,8 +935,8 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
     if (plan.access.some((grant) => !customers.has(grant.organizationId))) {
       ctx.addIssue({
         code: "custom",
-        path: ["appInstallation", "customerIds"],
         message: "Schema installation targets must include every approved app access tenant.",
+        path: ["appInstallation", "customerIds"],
       });
     }
   }
@@ -955,9 +955,9 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
   ) {
     ctx.addIssue({
       code: "custom",
-      path: ["hostProtection"],
       message:
         "External host policy must name the exact owned team and both Preview project pairs without authorizing policy writes.",
+      path: ["hostProtection"],
     });
   }
   if (
@@ -966,8 +966,8 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
   ) {
     ctx.addIssue({
       code: "custom",
-      path: ["appDeliveryReplacement"],
       message: "READY replacement requires an explicit full App Preview delivery plan.",
+      path: ["appDeliveryReplacement"],
     });
   }
   validateAuthAdoption(plan, ctx);
@@ -1078,8 +1078,8 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
   ) {
     ctx.addIssue({
       code: "custom",
-      path: ["runtimePreparation"],
       message: "Resource preparation cannot authorize deployment or environment binding effects.",
+      path: ["runtimePreparation"],
     });
   }
   const phases = authorizationPhases(plan);
@@ -1173,17 +1173,16 @@ export const workerEffectCheckpointFrameSchema = z.strictObject({
 export type WorkerEffectCheckpointFrame = z.infer<typeof workerEffectCheckpointFrameSchema>;
 export const operatorRealmIdentityLinkSchema = z
   .strictObject({
-    publicRelease: publicRealmReleaseBindingSchema.optional(),
     audience: httpsPublicOrigin,
+    authResourceId: id,
+    bootstrapPlanDigest: digest,
+    browserOrigin: httpsPublicOrigin,
     browserSession: z
       .strictObject({
         operationRef: z.uuid(),
         participantProgramDigest: digest,
       })
       .optional(),
-    authResourceId: id,
-    bootstrapPlanDigest: digest,
-    browserOrigin: httpsPublicOrigin,
     consumedAt: z.iso.datetime({ offset: true }).optional(),
     endpointOrigin: httpsPublicOrigin,
     expiresAt: z.iso.datetime({ offset: true }),
@@ -1193,6 +1192,7 @@ export const operatorRealmIdentityLinkSchema = z
     ownerSessionId: id,
     proofRef: id.optional(),
     proofSha256: digest.optional(),
+    publicRelease: publicRealmReleaseBindingSchema.optional(),
     sealedNonce: z
       .strictObject({ encryptedToken: id, keyVersion: id, tokenIv: id, tokenTag: id })
       .optional(),
@@ -1215,10 +1215,10 @@ export const projectPendingRealmIdentityLink = (input: OperatorRealmIdentityLink
   return publicLink;
 };
 export const operatorDeploymentCandidateSchema = z.strictObject({
-  /** Durable alias intent: true is uncertain, false is a confirmed rejection; never alias authority. */
-  gatewayAliasAttempted: z.boolean().optional(),
   branch: id,
   deploymentId: id,
+  /** Durable alias intent: true is uncertain, false is a confirmed rejection; never alias authority. */
+  gatewayAliasAttempted: z.boolean().optional(),
   operationRef: z.uuid(),
   origin: httpsPublicOrigin,
   projectId: id,
@@ -1261,9 +1261,9 @@ export const retainedAppDeliverySchema = z.object({
 export type RetainedAppDelivery = z.infer<typeof retainedAppDeliverySchema>;
 
 export const operatorDeliveryCorrectionSchema = z.strictObject({
+  createAttempted: z.boolean(),
   effectId: id,
   rejectedDeploymentIds: z.array(id),
-  createAttempted: z.boolean(),
 });
 export type OperatorDeliveryCorrection = z.infer<typeof operatorDeliveryCorrectionSchema>;
 
@@ -1294,9 +1294,14 @@ const hostedOperatorRecordBaseSchema = z.strictObject({
 });
 export type HostedOperatorRecordBase = z.infer<typeof hostedOperatorRecordBaseSchema>;
 const hostedOperatorRecordHistorySchema = hostedOperatorRecordBaseSchema.extend({
-  /** Prior build settings and unresolved binding attempts are provenance, never new approval. */
-  retainedProjectSettingsOperations: z
-    .array(z.strictObject({ approvedByCallId: id, operator: hostedOperatorRecordBaseSchema }))
+  /** Private provenance for source repair; prior approval never approves the successor. */
+  retainedGatewayDeliveries: z
+    .array(
+      z.strictObject({
+        approvedByCallId: id,
+        operator: hostedOperatorRecordBaseSchema,
+      }),
+    )
     .optional(),
   /** Original installer intent and unresolved frames remain evidence, never successor approval. */
   retainedInstallerOperations: z
@@ -1307,14 +1312,9 @@ const hostedOperatorRecordHistorySchema = hostedOperatorRecordBaseSchema.extend(
       }),
     )
     .optional(),
-  /** Private provenance for source repair; prior approval never approves the successor. */
-  retainedGatewayDeliveries: z
-    .array(
-      z.strictObject({
-        approvedByCallId: id,
-        operator: hostedOperatorRecordBaseSchema,
-      }),
-    )
+  /** Prior build settings and unresolved binding attempts are provenance, never new approval. */
+  retainedProjectSettingsOperations: z
+    .array(z.strictObject({ approvedByCallId: id, operator: hostedOperatorRecordBaseSchema }))
     .optional(),
   /** The expired approved plan remains evidence; a renewed plan requires a new approval. */
   retainedRenewalOperations: z
@@ -1705,11 +1705,11 @@ export const retainedOperatorAuthSchema = z
 export type RetainedOperatorAuth = z.infer<typeof retainedOperatorAuthSchema>;
 /** Private server-derived claims; the operator re-reads their durable authority. */
 const ownerContextBaseSchema = z.strictObject({
-  realmContinuation: z.strictObject({ sealedAuthority: z.string().min(1) }).optional(),
   adapterGeneration: z.number().int().positive(),
   adapterSessionId: z.string().min(1).max(200),
   authority: hostedTenantAuthoritySchema,
   principal: hostedPrincipalSchema,
+  realmContinuation: z.strictObject({ sealedAuthority: z.string().min(1) }).optional(),
   sessionId: z.string().min(1).max(200),
 });
 const handoffOwnerContextSchema = ownerContextBaseSchema.extend({
@@ -1737,8 +1737,8 @@ export const operatorRequestSchema = z.discriminatedUnion("action", [
   z.strictObject({
     action: z.literal("resolve-preview-target"),
     appId: operatorSelectionSchema.shape.appId,
-    sessionId: id,
     ownerContext: operatorOwnerContextSchema.optional(),
+    sessionId: id,
   }),
   z.strictObject({
     action: z.literal("neon-authorization"),
@@ -1749,11 +1749,11 @@ export const operatorRequestSchema = z.discriminatedUnion("action", [
   }),
   z.strictObject({
     action: z.literal("plan"),
-    releaseIntent: z.literal("prepared-preview").optional(),
     authSignupPolicy: hostedOperatorAuthSignupPolicyInputSchema.optional(),
     normalActorProgram: normalActorProgramSchema.optional(),
     operation: z.enum(["prepare", "cleanup"]),
     ownerContext: operatorOwnerContextSchema.optional(),
+    releaseIntent: z.literal("prepared-preview").optional(),
     selection: operatorSelectionSchema,
   }),
   z.strictObject({
@@ -1831,44 +1831,44 @@ export const operatorRecoveryStageSchema = z.enum([
   "journal",
 ]);
 export const operatorExecutionOutcomeSchema = z.strictObject({
-  status: operatorPublicStatusSchema,
   code: operatorPublicCodeSchema.optional(),
-  recoveryStage: operatorRecoveryStageSchema.optional(),
   recoveryProgressAdvanced: z.boolean().optional(),
+  recoveryStage: operatorRecoveryStageSchema.optional(),
+  status: operatorPublicStatusSchema,
 });
 export const operatorExecutionObservationSchema = z.discriminatedUnion("state", [
   z.strictObject({ state: z.literal("running") }),
   z.strictObject({ state: z.literal("unknown") }),
-  z.strictObject({ state: z.literal("settled"), outcome: operatorExecutionOutcomeSchema }),
+  z.strictObject({ outcome: operatorExecutionOutcomeSchema, state: z.literal("settled") }),
 ]);
 /** Recorded preparation facts only; no provider proof or execution authority. */
 export const operatorPreparationProgressSchema = z.strictObject({
-  planStage: hostedOperatorPlanDataSchema.shape.stage,
-  lease: z.enum(["absent", "active", "expired", "unclassified"]),
-  hasPendingEffect: z.boolean(),
-  pendingEffectKind: hostedOperatorPlanDataSchema.shape.effects.element.shape.kind.optional(),
-  hasPendingAttempt: z.boolean(),
-  allPlanEffectsReceipted: z.boolean(),
-  missingEffectKinds: z.array(hostedOperatorPlanDataSchema.shape.effects.element.shape.kind),
-  hasAccountPreparation: z.boolean(),
-  accountsCompleted: z.boolean(),
   accountProgramMatchesPlan: z.boolean().optional(),
+  accountsCompleted: z.boolean(),
+  allPlanEffectsReceipted: z.boolean(),
+  hasAccountPreparation: z.boolean(),
+  hasPendingAttempt: z.boolean(),
+  hasPendingEffect: z.boolean(),
+  lease: z.enum(["absent", "active", "expired", "unclassified"]),
+  missingEffectKinds: z.array(hostedOperatorPlanDataSchema.shape.effects.element.shape.kind),
+  pendingEffectKind: hostedOperatorPlanDataSchema.shape.effects.element.shape.kind.optional(),
+  planStage: hostedOperatorPlanDataSchema.shape.stage,
 });
 export type OperatorPreparationProgress = z.infer<typeof operatorPreparationProgressSchema>;
 export const operatorPublicResultSchema = z.strictObject({
   appId: id,
+  appUrl: z.url().optional(),
   authenticatedBehavior: z.literal("unassessed"),
   code: operatorPublicCodeSchema.optional(),
-  recoveryStage: operatorRecoveryStageSchema.optional(),
-  recoveryProgressAdvanced: z.boolean().optional(),
+  execution: operatorExecutionObservationSchema.optional(),
   operationRef: z.uuid().optional(),
   plan: hostedOperatorPlanSchema.optional(),
   planDigest: digest.optional(),
-  status: operatorPublicStatusSchema,
-  execution: operatorExecutionObservationSchema.optional(),
   preparationProgress: operatorPreparationProgressSchema.optional(),
-  appUrl: z.url().optional(),
+  recoveryProgressAdvanced: z.boolean().optional(),
+  recoveryStage: operatorRecoveryStageSchema.optional(),
   signupUrl: z.url().optional(),
+  status: operatorPublicStatusSchema,
 });
 export type OperatorPublicResult = z.infer<typeof operatorPublicResultSchema>;
 export const continuityReadDiagnosticStageSchema = z.enum([

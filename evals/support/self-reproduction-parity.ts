@@ -1,6 +1,29 @@
 /* oxlint-disable eslint/no-await-in-loop -- assessment rows retain deterministic requirement order while checking artifacts. */
 import { z } from "zod";
 
+const SERVER_FIRST = "server-first";
+const PALETTE_UNCHANGED = "palette-unchanged";
+const DUPLICATE_ASSERTIONS = "Duplicate assertions";
+const DUPLICATE_REQUIREMENT_OBSERVATIONS = "Duplicate requirement observations";
+const NO_EVALUATOR_OBSERVATION = "No evaluator observation supplied.";
+const MISSING_FUNCTIONALITY = "missing-functionality";
+const INFRASTRUCTURE_UNAVAILABLE = "infrastructure-unavailable";
+const OBSERVED = "observed";
+const NEXT_INSTANT_METHOD = "@next/playwright/instant";
+const EVIDENCE_INCOMPLETE = "evidence-incomplete";
+const INSTANT_NAVIGATION = "instant-navigation";
+const CAPTURE = "capture";
+const FRAMEWORK = "framework";
+const WORKFLOW = "workflow";
+const ANONYMOUS_ENTRY = "anonymous-entry";
+const NOT_RUN = "not-run";
+const OUTPUT_MISSING = "output-missing";
+const OUTPUT_INFRASTRUCTURE_UNAVAILABLE = "output-infrastructure-unavailable";
+const OBSERVATION_INFRASTRUCTURE_UNAVAILABLE = "observation-infrastructure-unavailable";
+const ASSERTION_FAILED = "assertion-failed";
+const OBSERVATION_MISSING = "observation-missing";
+const OBSERVATION_NOT_RUN = "observation-not-run";
+
 export const parityVersion = "self-reproduction-parity/v1" as const;
 export const sides = ["reference", "candidate"] as const;
 export const desktopViewports = [
@@ -16,7 +39,7 @@ export const workflowMatrix = [
   {
     action: "Enter the fixed brief and continue",
     assertions: ["brief-editable", "continuation-changes-state"],
-    id: "anonymous-entry",
+    id: ANONYMOUS_ENTRY,
     seed: "anonymous-empty",
   },
   {
@@ -100,7 +123,7 @@ export const workflowMatrix = [
 ] as const;
 
 export const frameworkMatrix = [
-  { assertions: ["request-data-on-server", "useful-server-shell"], id: "server-first" },
+  { assertions: ["request-data-on-server", "useful-server-shell"], id: SERVER_FIRST },
   { assertions: ["client-import-graph-reviewed", "interactive-leaves-only"], id: "narrow-client" },
   {
     assertions: ["server-authorizes-write", "durable-readback", "failure-not-success"],
@@ -139,7 +162,7 @@ export const frameworkMatrix = [
     ],
     id: "pending-optimistic",
   },
-  { assertions: ["arrusted-token-provenance", "palette-unchanged"], id: "semantic-tokens" },
+  { assertions: ["arrusted-token-provenance", PALETTE_UNCHANGED], id: "semantic-tokens" },
 ] as const;
 
 const captureAssertions: Record<(typeof captureStates)[number], string[]> = {
@@ -168,66 +191,56 @@ const artifactPath = z
     /^(?!\/)(?!.*\\)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*\/\/)[^\s]+(?<!\/)$/u,
     "Use a relative evidence artifact path without traversal",
   );
-const assertionSchema = z
-  .object({
-    artifacts: z.array(artifactPath).min(1),
-    detail: z.string().min(1),
-    id: z.string().min(1),
-    passed: z.boolean(),
-  })
-  .strict();
+const assertionSchema = z.strictObject({
+  artifacts: z.array(artifactPath).min(1),
+  detail: z.string().min(1),
+  id: z.string().min(1),
+  passed: z.boolean(),
+});
 export const observationSchema = z
-  .object({
+  .strictObject({
     artifacts: z.array(artifactPath),
     assertions: z.array(assertionSchema),
-    disposition: z.enum([
-      "observed",
-      "missing-functionality",
-      "infrastructure-unavailable",
-      "not-run",
-    ]),
-    method: z.enum([
-      "browser",
-      "source-review",
-      "source-and-browser",
-      "@next/playwright/instant",
-      "none",
-    ]),
+    disposition: z.enum([OBSERVED, MISSING_FUNCTIONALITY, INFRASTRUCTURE_UNAVAILABLE, "not-run"]),
+    method: z.enum(["browser", "source-review", "source-and-browser", NEXT_INSTANT_METHOD, "none"]),
     reason: z.string().min(1),
     requirementId: z.enum(requirements.map((row) => row.id)),
   })
-  .strict()
-  .superRefine((value, ctx) => {
-    if (new Set(value.assertions.map((item) => item.id)).size !== value.assertions.length) {
-      ctx.addIssue({ code: "custom", message: "Duplicate assertions" });
+  .check((context) => {
+    if (
+      new Set(context.value.assertions.map((item) => item.id)).size !==
+      context.value.assertions.length
+    ) {
+      context.issues.push({ code: "custom", input: context.value, message: DUPLICATE_ASSERTIONS });
     }
   });
 export const sideEvidenceSchema = z
-  .object({
+  .strictObject({
     observations: z.array(observationSchema),
-    output: z.enum(["available", "missing", "infrastructure-unavailable"]),
+    output: z.enum(["available", "missing", INFRASTRUCTURE_UNAVAILABLE]),
     reason: z.string().min(1),
     sourceRevision: z.string().min(1),
   })
-  .strict()
-  .superRefine((value, ctx) => {
+  .check((context) => {
     if (
-      new Set(value.observations.map((item) => item.requirementId)).size !==
-      value.observations.length
+      new Set(context.value.observations.map((item) => item.requirementId)).size !==
+      context.value.observations.length
     ) {
-      ctx.addIssue({ code: "custom", message: "Duplicate requirement observations" });
+      context.issues.push({
+        code: "custom",
+        input: context.value,
+        message: DUPLICATE_REQUIREMENT_OBSERVATIONS,
+      });
     }
   });
-export const parityEvidenceSchema = z
-  .object({
-    candidate: sideEvidenceSchema,
-    fixtureVersion: z.literal(1),
-    producer: z.literal("evaluator"),
-    reference: sideEvidenceSchema,
-    runId: z.string().min(1),
-    schemaVersion: z.literal(parityVersion),
-  })
-  .strict();
+export const parityEvidenceSchema = z.strictObject({
+  candidate: sideEvidenceSchema,
+  fixtureVersion: z.literal(1),
+  producer: z.literal("evaluator"),
+  reference: sideEvidenceSchema,
+  runId: z.string().min(1),
+  schemaVersion: z.literal(parityVersion),
+});
 export type ParityEvidence = z.infer<typeof parityEvidenceSchema>;
 export type Observation = z.infer<typeof observationSchema>;
 export type Status = "passed" | "failed" | "blocked" | "unassessed";
@@ -241,109 +254,171 @@ export const parityReasonCodes = [
   "observation-infrastructure-unavailable",
   "observation-not-run",
   "observation-missing",
-  "evidence-incomplete",
+  EVIDENCE_INCOMPLETE,
 ] as const;
 export type ParityReasonCode = (typeof parityReasonCodes)[number];
 
-export const parityAssessmentSchema = z
-  .object({
-    rows: z.array(
-      z
-        .object({
-          artifacts: z.array(artifactPath),
-          kind: z.enum(["workflow", "framework", "capture"]),
-          reason: z.string(),
-          reasonCode: z.enum(parityReasonCodes),
-          requirementId: z.enum(requirements.map((row) => row.id)),
-          side: z.enum(sides),
-          status: z.enum(["passed", "failed", "blocked", "unassessed"]),
-        })
-        .strict(),
-    ),
-    runId: z.string(),
-    schemaVersion: z.literal(parityVersion),
-    visualScoresAdvisory: z.literal(true),
-  })
-  .strict();
+export const parityAssessmentSchema = z.strictObject({
+  rows: z.array(
+    z.strictObject({
+      artifacts: z.array(artifactPath),
+      kind: z.enum([WORKFLOW, FRAMEWORK, CAPTURE]),
+      reason: z.string(),
+      reasonCode: z.enum(parityReasonCodes),
+      requirementId: z.enum(requirements.map((row) => row.id)),
+      side: z.enum(sides),
+      status: z.enum(["passed", "failed", "blocked", "unassessed"]),
+    }),
+  ),
+  runId: z.string(),
+  schemaVersion: z.literal(parityVersion),
+  visualScoresAdvisory: z.literal(true),
+});
 export type Assessment = z.infer<typeof parityAssessmentSchema>;
 
 /** artifactExists must verify a nonempty file within the evaluator evidence root. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function assessParity(
-  input: unknown,
-  artifactExists: (path: string) => Promise<boolean>,
-): Promise<Assessment> {
-  const evidence = parityEvidenceSchema.parse(input);
-  const rows: Assessment["rows"] = [];
-  for (const side of sides) {
-    const bundle = evidence[side];
-    for (const requirement of requirements) {
-      const observation = bundle.observations.find((item) => item.requirementId === requirement.id);
-      let status: Status = "unassessed";
-      let reasonCode: ParityReasonCode = "observation-missing";
-      let reason = observation?.reason ?? "No evaluator observation supplied.";
-      const artifacts = [
-        ...new Set([
-          ...(observation?.artifacts ?? []),
-          ...(observation?.assertions.flatMap((item) => item.artifacts) ?? []),
-        ]),
-      ];
-      if (requirement.id === "anonymous-entry") {
-        reasonCode = "excluded-from-scope";
-        reason =
-          "Anonymous entry and anonymous draft carryover are explicitly excluded by the current self-reproduction brief.";
-      } else if (bundle.output !== "available") {
-        status = bundle.output === "missing" ? "failed" : "blocked";
-        reasonCode =
-          bundle.output === "missing" ? "output-missing" : "output-infrastructure-unavailable";
-        ({ reason } = bundle);
-      } else if (observation?.disposition === "missing-functionality") {
-        status = "failed";
-        reasonCode = "missing-functionality";
-      } else if (observation?.assertions.some((assertion) => !assertion.passed)) {
-        status = "failed";
-        reasonCode = "assertion-failed";
-      } else if (observation?.disposition === "infrastructure-unavailable") {
-        status = "blocked";
-        reasonCode = "observation-infrastructure-unavailable";
-      } else if (observation?.disposition === "not-run") {
-        reasonCode = "observation-not-run";
-      } else if (observation?.disposition === "observed") {
-        const complete = requirement.assertions.every((id) =>
-          observation.assertions.some((item) => item.id === id && item.passed),
-        );
-        const artifactResults = await Promise.all(artifacts.map(artifactExists));
-        const retained = artifacts.length > 0 && artifactResults.every(Boolean);
-        const screenshot =
-          requirement.kind !== "capture" ||
-          observation.artifacts.some((path) => path.endsWith(".png"));
-        const behavioral =
-          requirement.kind === "framework"
-            ? observation.method === "source-and-browser" ||
-              (requirement.id === "instant-navigation" &&
-                observation.method === "@next/playwright/instant")
-            : observation.method === "browser";
-        const instant =
-          requirement.id !== "instant-navigation" ||
-          observation.method === "@next/playwright/instant";
-        if (complete && retained && screenshot && behavioral && instant) {
-          status = "passed";
-          reasonCode = "observed-complete";
-        } else {
-          reasonCode = "evidence-incomplete";
-          reason = `Incomplete evidence: assertions=${complete}, retained=${retained}, capture=${screenshot}, behavioral=${behavioral}, instant=${instant}. ${reason}`;
-        }
-      }
-      rows.push({
-        artifacts,
-        kind: requirement.kind,
-        reason,
-        reasonCode,
-        requirementId: requirement.id,
-        side,
-        status,
-      });
-    }
+const getObservation = (bundle: ParityEvidence[(typeof sides)[number]], requirementId: string) =>
+  bundle.observations.find((item) => item.requirementId === requirementId);
+
+const isComplete = (requirement: (typeof requirements)[number], observation: Observation) =>
+  requirement.assertions.every((id) =>
+    observation.assertions.some((item) => item.id === id && item.passed),
+  );
+
+const hasScreenshot = (requirement: (typeof requirements)[number], observation: Observation) =>
+  requirement.kind !== CAPTURE || observation.artifacts.some((path) => path.endsWith(".png"));
+
+const hasBehavioralEvidence = (
+  requirement: (typeof requirements)[number],
+  observation: Observation,
+) => {
+  if (requirement.kind === FRAMEWORK) {
+    return (
+      observation.method === "source-and-browser" ||
+      (requirement.id === INSTANT_NAVIGATION && observation.method === NEXT_INSTANT_METHOD)
+    );
   }
+  return observation.method === "browser";
+};
+
+const assessObserved = (
+  requirement: (typeof requirements)[number],
+  observation: Observation,
+  retained: boolean,
+): Pick<Assessment["rows"][number], "reasonCode" | "status" | "reason"> => {
+  const screenshot = hasScreenshot(requirement, observation);
+  const behavioral = hasBehavioralEvidence(requirement, observation);
+  const instant =
+    requirement.id !== INSTANT_NAVIGATION || observation.method === NEXT_INSTANT_METHOD;
+  const evidenceComplete = isComplete(requirement, observation);
+  const requirementsSatisfied = [evidenceComplete, retained, screenshot, behavioral, instant].every(
+    Boolean,
+  );
+  if (requirementsSatisfied) {
+    return { reason: observation.reason, reasonCode: "observed-complete", status: "passed" };
+  }
+  return {
+    reason: `Incomplete evidence: assertions=${isComplete(requirement, observation)}, retained=${retained}, capture=${screenshot}, behavioral=${behavioral}, instant=${instant}. ${observation.reason}`,
+    reasonCode: EVIDENCE_INCOMPLETE,
+    status: "unassessed",
+  };
+};
+
+const assessObservation = (
+  requirement: (typeof requirements)[number],
+  bundle: ParityEvidence[(typeof sides)[number]],
+  observation: Observation | undefined,
+): Pick<Assessment["rows"][number], "reasonCode" | "status" | "reason"> => {
+  if (requirement.id === ANONYMOUS_ENTRY) {
+    return {
+      reason:
+        "Anonymous entry and anonymous draft carryover are explicitly excluded by the current self-reproduction brief.",
+      reasonCode: "excluded-from-scope",
+      status: "unassessed",
+    };
+  }
+  if (bundle.output !== "available") {
+    const outputMissing = bundle.output === "missing";
+    return {
+      reason: bundle.reason,
+      reasonCode: outputMissing ? OUTPUT_MISSING : OUTPUT_INFRASTRUCTURE_UNAVAILABLE,
+      status: outputMissing ? "failed" : "blocked",
+    };
+  }
+  if (observation === undefined) {
+    return {
+      reason: NO_EVALUATOR_OBSERVATION,
+      reasonCode: OBSERVATION_MISSING,
+      status: "unassessed",
+    };
+  }
+  if (observation.disposition === MISSING_FUNCTIONALITY) {
+    return { reason: observation.reason, reasonCode: MISSING_FUNCTIONALITY, status: "failed" };
+  }
+  if (observation.assertions.some((assertion) => !assertion.passed)) {
+    return { reason: observation.reason, reasonCode: ASSERTION_FAILED, status: "failed" };
+  }
+  if (observation.disposition === INFRASTRUCTURE_UNAVAILABLE) {
+    return {
+      reason: observation.reason,
+      reasonCode: OBSERVATION_INFRASTRUCTURE_UNAVAILABLE,
+      status: "blocked",
+    };
+  }
+  if (observation.disposition === NOT_RUN) {
+    return { reason: observation.reason, reasonCode: OBSERVATION_NOT_RUN, status: "unassessed" };
+  }
+  return { reason: observation.reason, reasonCode: EVIDENCE_INCOMPLETE, status: "unassessed" };
+};
+
+const assessSide = async (
+  side: (typeof sides)[number],
+  evidence: ParityEvidence,
+  artifactExists: (path: string) => boolean | Promise<boolean>,
+): Promise<Assessment["rows"]> => {
+  const bundle = evidence[side];
+  const rows: Assessment["rows"] = [];
+  for (const requirement of requirements) {
+    const observation = getObservation(bundle, requirement.id);
+    const artifacts = [
+      ...new Set([
+        ...(observation?.artifacts ?? []),
+        ...(observation?.assertions.flatMap((item) => item.artifacts) ?? []),
+      ]),
+    ];
+    let assessed = assessObservation(requirement, bundle, observation);
+    if (
+      observation !== undefined &&
+      observation.disposition === OBSERVED &&
+      bundle.output === "available"
+    ) {
+      const artifactResults = await Promise.all(artifacts.map(artifactExists));
+      assessed = assessObserved(
+        requirement,
+        observation,
+        artifacts.length > 0 && artifactResults.every(Boolean),
+      );
+    }
+    rows.push({
+      artifacts,
+      kind: requirement.kind,
+      reason: assessed.reason,
+      reasonCode: assessed.reasonCode,
+      requirementId: requirement.id,
+      side,
+      status: assessed.status,
+    });
+  }
+  return rows;
+};
+
+export const assessParity = async (
+  evidence: ParityEvidence,
+  artifactExists: (path: string) => boolean | Promise<boolean>,
+): Promise<Assessment> => {
+  const sideRows = await Promise.all(
+    sides.map(async (side) => await assessSide(side, evidence, artifactExists)),
+  );
+  const rows = sideRows.flat();
   return { rows, runId: evidence.runId, schemaVersion: parityVersion, visualScoresAdvisory: true };
-}
+};

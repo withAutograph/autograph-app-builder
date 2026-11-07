@@ -6,10 +6,6 @@ const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const appIntegrationCapabilityProfileSchema = z
   .strictObject({
-    version: z.literal(1),
-    id,
-    controlSchema: z.strictObject({ artifactRef: id, sha256: digest }),
-    worker: z.strictObject({ reference: id, sha256: digest }),
     applications: z.record(
       id,
       z.strictObject({
@@ -17,6 +13,10 @@ export const appIntegrationCapabilityProfileSchema = z
         serviceMemberships: z.array(integrationCapabilityMembershipSchema).min(1),
       }),
     ),
+    controlSchema: z.strictObject({ artifactRef: id, sha256: digest }),
+    id,
+    version: z.literal(1),
+    worker: z.strictObject({ reference: id, sha256: digest }),
   })
   .superRefine((profile, context) => {
     const roles = Object.values(profile.applications).map((app) => app.controlRuntimeRole);
@@ -42,9 +42,9 @@ export const selectedAppIntegrationCapabilityProfile = (
   profile: z.infer<typeof appIntegrationCapabilityProfileSchema>,
   appId: string,
 ) => ({
-  version: profile.version,
-  id: profile.id,
-  controlSchema: profile.controlSchema,
-  worker: profile.worker,
   application: profile.applications[appId],
+  controlSchema: profile.controlSchema,
+  id: profile.id,
+  version: profile.version,
+  worker: profile.worker,
 });

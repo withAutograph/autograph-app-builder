@@ -104,17 +104,17 @@ export const createHostedOperatorAuthProposal =
       const inputPath = "/tmp/protected-auth-proposal-input.json";
       // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Private 0600 credential file in the task-owned VM.
       const credentialPath = "/tmp/protected-auth-proposal-migration-url";
+      const baseProposalInput = {
+        catalogAppIds: configuration.catalogAppIds,
+        resource,
+      };
+      const proposalInput =
+        input.directMigrationUrl === undefined
+          ? baseProposalInput
+          : { ...baseProposalInput, directMigrationUrlFile: credentialPath };
       await sandbox.writeFiles([
         {
-          content: Buffer.from(
-            JSON.stringify({
-              catalogAppIds: configuration.catalogAppIds,
-              resource,
-              ...(input.directMigrationUrl === undefined
-                ? {}
-                : { directMigrationUrlFile: credentialPath }),
-            }),
-          ),
+          content: Buffer.from(JSON.stringify(proposalInput)),
           mode: 0o600,
           path: inputPath,
         },

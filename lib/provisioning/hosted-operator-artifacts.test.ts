@@ -151,7 +151,7 @@ const seedGeneratedEnvelope = (
     .digest("hex");
   const content = JSON.stringify({
     appId: "spend-review",
-    ...(capturedDescription === undefined ? {} : { description: capturedDescription }),
+    description: capturedDescription,
     files: Object.fromEntries(
       Object.entries(f.files).map(([name, bytes]) => [name, bytes.toString("base64")]),
     ),
@@ -268,11 +268,11 @@ describe("immutable private operator artifacts", () => {
       source: f.source,
     });
     const source = {
-      repositoryId: "owned-repository",
       branch: "reviewed-draft",
+      changeSetDigest: "3".repeat(64),
       gitSha: "1".repeat(40),
       gitTree: "2".repeat(40),
-      changeSetDigest: "3".repeat(64),
+      repositoryId: "owned-repository",
       reviewDigest: "4".repeat(64),
     };
     const identity = {
@@ -295,12 +295,12 @@ describe("immutable private operator artifacts", () => {
       record: async (_context, _callId, value) => await Promise.resolve(value),
     };
     const lookup = {
-      artifactRef: old.artifactRef,
       appSpecDigest: identity.appSpecDigest,
+      artifactRef: old.artifactRef,
       publishedSource: {
-        repositoryId: source.repositoryId,
         branch: source.branch,
         gitSha: source.gitSha,
+        repositoryId: source.repositoryId,
       },
     };
     const result = await readExactCompiledOperatorRelease({
@@ -430,7 +430,7 @@ describe("immutable private operator artifacts", () => {
     });
     const read = await f.publication.readGeneratedRelease(ownerOnly, published);
     expect(read.description).toEqual(actual);
-    expect(read.description?.backend).toMatchObject({ roles: [] });
+    expect(read.description).toMatchObject({ backend: { roles: [] } });
     expect(read.description).not.toHaveProperty("buildCommand");
     expect(read.description).not.toHaveProperty("framework");
     expect(read.files).toEqual(f.files);

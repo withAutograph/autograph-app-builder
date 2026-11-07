@@ -58,16 +58,16 @@ export const verifyPrivateComputeCheckIntegrity = async (input: {
     return false;
   }
   const request = {
-    root: input.root,
     appId: input.appId,
     path: input.profile.checkPolicy.path,
+    root: input.root,
     sha256: input.profile.checkPolicy.afterSha256,
   };
   try {
     const result = await input.sandbox.run({
+      abortSignal: input.signal,
       command: `node -e ${quote(program)} ${quote(JSON.stringify(request))}`,
       workingDirectory: input.root,
-      abortSignal: input.signal,
     });
     input.signal?.throwIfAborted();
     return result.exitCode === 0 && result.stdout === "verified";

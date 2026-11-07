@@ -21,15 +21,6 @@ import { plan as base } from "./public-release-test-fixture";
 const fixture = () => {
   const sourcePlan = publicReleasePlanSchema.parse({
     ...base,
-    purpose: "application",
-    publicOrigin: capPlan.publicOrigin,
-    runtime: {
-      ...base.runtime,
-      releaseId: capPlan.release.id,
-      operationRef: capPlan.runtime.operationRef,
-      planDigest: capPlan.runtime.planDigest,
-    },
-    integrationCapability: attachment,
     environment: [
       ...base.environment,
       {
@@ -41,6 +32,15 @@ const fixture = () => {
         sha256: attachment.capability.privateConfiguration.sha256,
       },
     ],
+    integrationCapability: attachment,
+    publicOrigin: capPlan.publicOrigin,
+    purpose: "application",
+    runtime: {
+      ...base.runtime,
+      operationRef: capPlan.runtime.operationRef,
+      planDigest: capPlan.runtime.planDigest,
+      releaseId: capPlan.release.id,
+    },
   });
   const sourceRef = publicReleaseOperationRef(sourcePlan);
   const publicReceipt = {
@@ -50,166 +50,166 @@ const fixture = () => {
   const capReceipt = { approvalId: "source-cap-approval", approvedByCallId: "source-cap-call" };
   const provider: [RetentionProviderBinding, RetentionProviderBinding] = [
     {
-      key: "APP_INTEGRATIONS_CAPABILITY",
       id: "env-cap",
+      key: "APP_INTEGRATIONS_CAPABILITY",
       operationRef: sourceRef,
       sha256:
         sourcePlan.environment.find((entry) => entry.key === "APP_INTEGRATIONS_CAPABILITY")
           ?.sha256 ?? "missing",
     },
     {
-      key: "APP_INTEGRATIONS_RUNTIME_CONFIGURATION",
       id: "env-config",
+      key: "APP_INTEGRATIONS_RUNTIME_CONFIGURATION",
       operationRef: sourceRef,
       sha256: attachment.capability.privateConfiguration.sha256,
     },
   ];
   const source = {
     operationRef: sourceRef,
-    revision: 1,
     record: publicReleaseRecordSchema.parse({
-      kind: "public-app-release-v1",
-      plan: sourcePlan,
-      planDigest: publicReleasePlanDigest(sourcePlan),
       approvalReceipts: [publicReceipt],
       bindings: Object.fromEntries(
-        provider.map((binding) => [binding.key, { state: "applied", acceptedEnvId: binding.id }]),
+        provider.map((binding) => [binding.key, { acceptedEnvId: binding.id, state: "applied" }]),
       ),
       effects: { "bind-production-runtime": "applied", "publish-release-source": "applied" },
+      kind: "public-app-release-v1",
       observation: {
-        status: "ready",
         deploymentId: "source-native-deployment",
-        projectId: sourcePlan.project.projectId,
         environment: "production",
+        projectId: sourcePlan.project.projectId,
         publicOrigin: sourcePlan.publicOrigin,
         releaseId: sourcePlan.runtime.releaseId,
+        status: "ready",
       },
+      plan: sourcePlan,
+      planDigest: publicReleasePlanDigest(sourcePlan),
     }),
+    revision: 1,
   };
   const resource = capPlan.control.database;
   const cap = {
     operationRef: attachment.operationRef,
-    revision: 1,
     record: appIntegrationCapabilityRecordSchema.parse({
-      kind: "app-integrations-capability-v1",
-      plan: capPlan,
-      planDigest: attachment.planDigest,
       approvalReceipts: [capReceipt],
-      prepared: attachment.capability,
       effects: {
-        "prepare-control-database": {
-          state: "applied",
+        "bind-service-memberships": {
           receipt: {
-            effect: "prepare-control-database",
-            resourceVersion: "control-v1",
-            resourceId: resource.resourceId,
-            database: resource.database,
-            runtimeRole: resource.runtimeRole,
-            migratorRole: resource.migratorRole,
+            effect: "bind-service-memberships",
+            memberships: attachment.capability.serviceMemberships,
+            resourceVersion: "members-v1",
           },
+          state: "applied",
         },
         "install-control-schema": {
-          state: "applied",
           receipt: {
             effect: "install-control-schema",
             resourceVersion: "schema-v1",
             schemaSha256: capPlan.control.schema.sha256,
           },
-        },
-        "bind-service-memberships": {
           state: "applied",
+        },
+        "prepare-control-database": {
           receipt: {
-            effect: "bind-service-memberships",
-            resourceVersion: "members-v1",
-            memberships: attachment.capability.serviceMemberships,
+            database: resource.database,
+            effect: "prepare-control-database",
+            migratorRole: resource.migratorRole,
+            resourceId: resource.resourceId,
+            resourceVersion: "control-v1",
+            runtimeRole: resource.runtimeRole,
           },
+          state: "applied",
         },
         "register-central-app": {
-          state: "applied",
           receipt: {
-            effect: "register-central-app",
-            resourceVersion: "registry-v1",
             appId: capPlan.selection.appId,
-            resourceProfileId: capPlan.control.resourceProfileId,
-            registrationRef: attachment.operationRef,
-            registrationDigest: "3".repeat(64),
+            effect: "register-central-app",
             principalGeneration: attachment.capability.control.principalGeneration,
+            registrationDigest: "3".repeat(64),
+            registrationRef: attachment.operationRef,
+            resourceProfileId: capPlan.control.resourceProfileId,
+            resourceVersion: "registry-v1",
           },
+          state: "applied",
         },
       },
+      kind: "app-integrations-capability-v1",
+      plan: capPlan,
+      planDigest: attachment.planDigest,
+      prepared: attachment.capability,
     }),
+    revision: 1,
   };
   const publicStore = {
+    compareAndSet: vi.fn(),
     read: vi.fn(async () => structuredClone(source)),
     reserve: vi.fn(),
-    compareAndSet: vi.fn(),
   };
   const capStore = {
+    claimLease: vi.fn(),
+    compareAndSet: vi.fn(),
     read: vi.fn(async () => structuredClone(cap)),
     reserve: vi.fn(),
-    compareAndSet: vi.fn(),
-    claimLease: vi.fn(),
   };
   const publicApproval = vi.fn(async (_plan: typeof sourcePlan, _callId: string) => publicReceipt);
   const capApproval = vi.fn(async (_plan: typeof capPlan, _callId: string) => capReceipt);
   const sourceOwner = operatorOwnerContextSchema.parse({
-    kind: "direct",
+    adapterGeneration: 1,
+    adapterSessionId: "source-native",
     authority: capPlan.authority,
+    kind: "direct",
     principal: { ...capPlan.authority, scopes: ["autograph:send"] },
     sessionId: capPlan.selection.sessionId,
-    adapterSessionId: "source-native",
-    adapterGeneration: 1,
   });
   const input: RetainedIntegrationReadScope = {
-    owner: { ...sourceOwner, sessionId: "revision-session", adapterSessionId: "revision-native" },
+    assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
     authority: {
-      verifyWorkload: vi.fn(async () => {}),
-      assertCanonicalAppOwner: vi.fn(async () => {}),
+      assertCanonicalAppOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      verifyWorkload: vi.fn<() => Promise<void>>().mockResolvedValue(),
     },
     owned: {
-      purpose: "auth-bootstrap",
-      selection: { appId: capPlan.selection.appId },
       destination: capPlan.project,
       operator: {
         plan: {
           appDatabase: capPlan.runtime.appDatabase,
           neon: {
-            projectId: capPlan.runtime.neon.projectId,
             branchId: capPlan.runtime.neon.branchId,
-            endpoint: capPlan.runtime.appDatabase.hostname,
-            source: "synthetic-only",
             connectionRef: "normal-source-connection",
+            endpoint: capPlan.runtime.appDatabase.hostname,
+            projectId: capPlan.runtime.neon.projectId,
+            source: "synthetic-only",
           },
         },
       },
+      purpose: "auth-bootstrap",
+      selection: { appId: capPlan.selection.appId },
     },
+    owner: { ...sourceOwner, adapterSessionId: "revision-native", sessionId: "revision-session" },
     publicOrigin: capPlan.publicOrigin,
-    assertCurrent: vi.fn(async () => {}),
-    readSourceOwner: vi.fn(async () => sourceOwner),
     readProviderBindings: vi.fn(async () => structuredClone(provider)),
+    readSourceOwner: vi.fn(async () => sourceOwner),
   };
   const reader = createRetainedOptionalIntegrationReader({
-    publicReleases: publicStore,
     capabilities: capStore,
-    readPublicApproval: async ({ plan, owner, callId }) => {
-      expect(owner.sessionId).toBe(capPlan.selection.sessionId);
-      return await publicApproval(plan, callId);
-    },
+    publicReleases: publicStore,
     readCapabilityApproval: async ({ plan, owner, callId }) => {
       expect(owner.sessionId).toBe(capPlan.selection.sessionId);
       return await capApproval(plan, callId);
     },
+    readPublicApproval: async ({ plan, owner, callId }) => {
+      expect(owner.sessionId).toBe(capPlan.selection.sessionId);
+      return await publicApproval(plan, callId);
+    },
   });
   return {
+    cap,
+    capApproval,
+    capStore,
     input,
     provider,
-    source,
-    cap,
-    publicStore,
-    capStore,
     publicApproval,
-    capApproval,
+    publicStore,
     reader,
+    source,
   };
 };
 test("new-session Auth bootstrap retains only exact prior owned approved bindings without mutation", async () => {

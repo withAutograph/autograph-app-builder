@@ -536,8 +536,8 @@ const unselectedInstallationScopes = (
     }
     for (const role of grant.roles) {
       const scope = {
-        appId,
         actorId: grant.actorId,
+        appId,
         organizationId: grant.organizationId,
         role,
       };
@@ -661,7 +661,7 @@ const createRetainedAppScopeObservationReader =
 export const createRetainedAppInstallationScopeReader = (deps: RetainedAppScopeDependencies) =>
   createRetainedAppScopeObservationReader({
     ...deps,
-    observeScopes: (_context, _plan, scopes) => Promise.resolve([...scopes]),
+    observeScopes: async (_context, _plan, scopes) => [...scopes],
   });
 
 /** Prior approvals identify retained scope; only live actor-bound metadata makes it a schema target. */
@@ -753,9 +753,9 @@ export const createHostedOperatorControlPlane = async (input: {
         original.nativeRecoveryBinding?.logicalSessionId ?? original.adapterSessionId;
       const current =
         (await eve.readCurrentBuildSession?.({
-          principal: original.principal,
           authoritySessionId,
           logicalSessionId,
+          principal: original.principal,
         })) ?? original;
       if (
         !samePrincipal(current.principal, original.principal) ||
@@ -778,18 +778,12 @@ export const createHostedOperatorControlPlane = async (input: {
         installationId,
       });
     const owner = createHostedOperatorOwnerAuthority({
-      readProvisioning: createPostgresBuilderProvisionJournalStore(database).read,
+      eve,
+      fetch: input.fetch,
       findProvisioningForAppRepository:
         createPostgresBuilderProvisionJournalStore(database).findSettledAppRepository,
-
-      eve,
-      journal: store,
-      realmContinuation: {
-        config: tokenKeyring,
-        service: realmContinuationServiceIdentityForWorkload(input.workloadPolicy),
-      },
-      fetch: input.fetch,
       handoffs,
+      journal: store,
       listVercelInstallations: async (authority) => await installations.list(authority),
       membership: {
         isMember: async ({ principal, workspaceId }) =>
@@ -800,14 +794,19 @@ export const createHostedOperatorControlPlane = async (input: {
             workspaceId,
           }),
       },
-      readVercelCredential: async ({ authority, installationId }) =>
-        await readCredential(authority, installationId),
+      readProvisioning: createPostgresBuilderProvisionJournalStore(database).read,
       readReadyNativeTarget: async (authority, appId) => {
         const row = await createPostgresNativeTargetOnboardingStore(database).read({
-          authority,
           appId,
+          authority,
         });
         return row?.record.stage === "ready" ? row.record : undefined;
+      },
+      readVercelCredential: async ({ authority, installationId }) =>
+        await readCredential(authority, installationId),
+      realmContinuation: {
+        config: tokenKeyring,
+        service: realmContinuationServiceIdentityForWorkload(input.workloadPolicy),
       },
       workloadPolicy: input.workloadPolicy,
     });
@@ -878,17 +877,17 @@ export const createHostedOperatorControlPlane = async (input: {
       },
       workloadIdentity: operatorIdentity,
     });
-    const readApproval = (
+    const readApproval = async (
       context: Parameters<ReturnType<typeof createHostedOperatorReadApproval>>[0],
     ) =>
-      createHostedOperatorReadApproval({
+      await createHostedOperatorReadApproval({
         eve,
         journal: store,
         observe: approvalObserver.forContext(context),
       })(context);
     const readApprovedPlan = createHostedOperatorReadApprovedPlan({
-      eve,
       assertCanonicalOwner: owner.assertArtifactAuthorized,
+      eve,
     });
     const withResourceLease = createPostgresHostedOperatorResourceLease({
       openLockClient: (onConnectionClosed) =>
@@ -903,12 +902,12 @@ export const createHostedOperatorControlPlane = async (input: {
     });
 
     const normalActorJournalPorts = createNormalActorJournalAuthority({
-      store,
+      assertApprovedOwner: owner.assertAuthorized,
+      assertCanonicalOwner: owner.assertArtifactAuthorized,
       keyring: tokenKeyring,
       now: Date.now,
-      assertCanonicalOwner: owner.assertArtifactAuthorized,
-      assertApprovedOwner: owner.assertAuthorized,
       readApproval,
+      store,
     });
     const normalActorJournal = createNormalActorJournal(normalActorJournalPorts);
     // oxlint-disable-next-line eslint/complexity -- Bootstrap and exact pending-capture recovery share the same retained Auth verification.
@@ -1047,40 +1046,18 @@ export const createHostedOperatorControlPlane = async (input: {
       binding?: PublicRealmReleaseBinding,
     ) =>
       await createPostgresPublicRealmCallbackResolver({
-        database,
-        keyring: tokenKeyring,
-        configuration: input.sourceConfiguration,
         assertCurrentOwner: owner.assertPlanningAuthorized,
-        readRuntime: async (selected) => {
-          await owner.assertPlanningAuthorized(selected);
-          const current = await store.read(selected);
-          if (current === undefined) {
-            throw new HostedOperatorError("auth_schema_not_ready");
-          }
-          return current.record;
-        },
-        assertSourceApproval: async (selected, source) => {
-          const receipt = await readApproval({
-            ...selected,
-            action: "prepare",
-            callId: source.approvedByCallId,
-            planDigest: source.planDigest,
-          });
-          if (!receipt?.approved || receipt.approvalId !== source.approvalId) {
-            throw new HostedOperatorError("authorization_required");
-          }
-        },
         assertPublicApproval: async (selected, plan, receipt) => {
           const canonical = operatorOwnerContextSchema.parse(selected.ownerContext);
           const token = await operatorIdentity.token();
           const read = createPublicReleaseApprovalAuthority({
-            database,
-            builderOrigin: input.sourceConfiguration.builderCallbackOrigin,
-            owner: canonical,
-            authority: owner,
             assertCurrentOwner: async () => {
               await owner.assertPlanningAuthorized(selected);
             },
+            authority: owner,
+            builderOrigin: input.sourceConfiguration.builderCallbackOrigin,
+            database,
+            owner: canonical,
             request: new Request(
               `${input.sourceConfiguration.builderCallbackOrigin}/api/hosted-operator/realm-identity`,
               { headers: { authorization: `Bearer ${token}` } },
@@ -1094,6 +1071,28 @@ export const createHostedOperatorControlPlane = async (input: {
           ) {
             throw new HostedOperatorError("authorization_required");
           }
+        },
+        assertSourceApproval: async (selected, source) => {
+          const receipt = await readApproval({
+            ...selected,
+            action: "prepare",
+            callId: source.approvedByCallId,
+            planDigest: source.planDigest,
+          });
+          if (!receipt?.approved || receipt.approvalId !== source.approvalId) {
+            throw new HostedOperatorError("authorization_required");
+          }
+        },
+        configuration: input.sourceConfiguration,
+        database,
+        keyring: tokenKeyring,
+        readRuntime: async (selected) => {
+          await owner.assertPlanningAuthorized(selected);
+          const current = await store.read(selected);
+          if (current === undefined) {
+            throw new HostedOperatorError("auth_schema_not_ready");
+          }
+          return current.record;
         },
       })(context, binding);
 
@@ -1163,8 +1162,8 @@ export const createHostedOperatorControlPlane = async (input: {
         audience: linkInput.audience,
         authResourceId: linkInput.authResourceId,
         bootstrapPlanDigest: linkInput.bootstrapPlanDigest,
-        browserSession: linkInput.browserSession,
         browserOrigin: linkInput.browserOrigin,
+        browserSession: linkInput.browserSession,
         endpointOrigin: linkInput.endpointOrigin,
         expiresAt: linkInput.expiresAt,
         issuer: linkInput.issuer,
@@ -1182,9 +1181,9 @@ export const createHostedOperatorControlPlane = async (input: {
         store,
         update: (record) => {
           const currentLinkScope = canReserveIdentityLink(record, {
-            planDigest: known.operator.planDigest,
             operationRef: known.operator.operationRef,
             participantCapture: linkInput.browserSession !== undefined,
+            planDigest: known.operator.planDigest,
           });
           if (!currentLinkScope || record.operator === undefined) {
             throw new HostedOperatorError("operation_in_progress");
@@ -1219,7 +1218,7 @@ export const createHostedOperatorControlPlane = async (input: {
       const expectedOrganizationRefresh =
         existing !== undefined &&
         canRefreshSelectedOrganization(known.operator, existing, linkInput)
-          ? { operationRef: known.operator.operationRef, link: existing }
+          ? { link: existing, operationRef: known.operator.operationRef }
           : undefined;
       const aad = JSON.stringify({
         authority: linkInput.context.authority,
@@ -1293,11 +1292,11 @@ export const createHostedOperatorControlPlane = async (input: {
         .parse(pendingInput.nonceSha256);
       const records = await database
         .select({
-          record: builderProvisioningJournals.record,
-          issuer: builderProvisioningJournals.issuer,
           audience: builderProvisioningJournals.audience,
-          workspaceId: builderProvisioningJournals.workspaceId,
+          issuer: builderProvisioningJournals.issuer,
           ownerUserId: builderProvisioningJournals.ownerUserId,
+          record: builderProvisioningJournals.record,
+          workspaceId: builderProvisioningJournals.workspaceId,
         })
         .from(builderProvisioningJournals)
         .where(
@@ -1313,10 +1312,10 @@ export const createHostedOperatorControlPlane = async (input: {
         throw new HostedOperatorError("authorization_required");
       }
       const authority = hostedTenantAuthoritySchema.parse({
-        issuer: saved.issuer,
         audience: saved.audience,
-        workspaceId: saved.workspaceId,
+        issuer: saved.issuer,
         ownerUserId: saved.ownerUserId,
+        workspaceId: saved.workspaceId,
       });
       if (
         authority.issuer !== config.issuer ||
@@ -1371,7 +1370,7 @@ export const createHostedOperatorControlPlane = async (input: {
       }
       /* oxlint-enable sonarjs/expression-complexity */
       /* oxlint-enable sonarjs/expression-complexity */
-      return { context, record, sessionId, nonceSha256, durable, ownerContext };
+      return { context, durable, nonceSha256, ownerContext, record, sessionId };
     };
     const readCanonicalPendingIdentity = async (pendingInput: {
       ownerSessionId: string;
@@ -1406,16 +1405,15 @@ export const createHostedOperatorControlPlane = async (input: {
       return { context, known, link, publicRealm };
     };
     const ownedAppResources = createOwnedAppResourceCustody({
-      database,
-      configuration: input.sourceConfiguration,
-      keyring: tokenKeyring,
-      store,
       assertCurrentOwner: owner.assertPlanningAuthorized,
-      readApproval,
+      configuration: input.sourceConfiguration,
+      database,
       isExistingRevision: async (context) => {
         const current = await owner.readCurrentPlanningOwner(context);
         return current.session.privateBuildDecision?.existingRepositorySource !== undefined;
       },
+      keyring: tokenKeyring,
+      readApproval,
       sourceContext: async (context, target) => {
         await owner.assertPlanningAuthorized(context);
         if (isDeepStrictEqual(context.target, target)) {
@@ -1447,6 +1445,7 @@ export const createHostedOperatorControlPlane = async (input: {
         await owner.assertPlanningAuthorized(context);
         return source;
       },
+      store,
     });
 
     const sharedAuth = createHostedOperatorSharedAuthAdoption({
@@ -1530,9 +1529,9 @@ export const createHostedOperatorControlPlane = async (input: {
       Object.assign(initiator.attributes, { "eve:forwarded-by": forwardedBy });
       const observed = observeRealmContinuationRecord({
         context,
-        record: current.record,
         initiator,
         now: Date.now(),
+        record: current.record,
       });
       if (observed?.reason.kind === "consumed-proof") {
         const artifacts = ownedArtifacts(context);
@@ -1559,17 +1558,17 @@ export const createHostedOperatorControlPlane = async (input: {
           new URL(config.resource).origin,
         ),
         {
+          body: JSON.stringify(request),
+          cache: "no-store",
+          headers: {
+            accept: "application/json",
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+            "x-vercel-trusted-oidc-idp-token": token,
+          },
           method: "POST",
           redirect: "error",
-          cache: "no-store",
           signal: AbortSignal.timeout(10_000),
-          headers: {
-            "content-type": "application/json",
-            authorization: `Bearer ${token}`,
-            "x-vercel-trusted-oidc-idp-token": token,
-            accept: "application/json",
-          },
-          body: JSON.stringify(request),
         },
       );
       if (!response.ok) {
@@ -1578,16 +1577,16 @@ export const createHostedOperatorControlPlane = async (input: {
       return realmContinuationReceiptSchema.parse(await response.json());
     };
     const reconcileOwnerRealmContinuation = createHostedOperatorRealmContinuation({
-      store,
+      dispatch: async (request) => await deliverRealmContinuation(request, false),
       observe: observeOwnerRealmContinuation,
+      reconcile: async (request) => await deliverRealmContinuation(request, true),
       seal: (observed) =>
         mintRealmContinuationAuthority({
           config: tokenKeyring,
           observed,
           service: realmContinuationServiceIdentityForWorkload(input.workloadPolicy),
         }),
-      dispatch: async (request) => await deliverRealmContinuation(request, false),
-      reconcile: async (request) => await deliverRealmContinuation(request, true),
+      store,
     });
     const continuationContext = async (claim: RealmContinuationAuthority) => {
       const rows = await database
@@ -1627,10 +1626,10 @@ export const createHostedOperatorControlPlane = async (input: {
       return context;
     };
     const realmIdentityWait = createHostedOperatorRealmIdentityWait({
-      config: tokenKeyring,
-      store,
       assertAuthorized: owner.assertArtifactAuthorized,
+      config: tokenKeyring,
       observe: observeOwnerRealmContinuation,
+      store,
     });
 
     const readResourceBindings = async (
@@ -1646,9 +1645,9 @@ export const createHostedOperatorControlPlane = async (input: {
       if ("effect" in effectInput) {
         return await readHostedOperatorEffectResourceBindings({
           assertAuthorized: owner.assertAuthorized,
+          config: tokenKeyring,
           effect: effectInput,
           store,
-          config: tokenKeyring,
         });
       }
       await owner.assertAuthorized(effectInput);
@@ -1697,40 +1696,41 @@ export const createHostedOperatorControlPlane = async (input: {
     };
 
     const retainedAppScopeAuthority: RetainedAppScopeDependencies = {
-      readOwner: owner.readCurrentPlanningOwner,
       readApproval: async (context, receipt) =>
         await readPrivateHostedApproval({
-          store: eve,
-          principal: operatorOwnerContextSchema.parse(context.ownerContext).principal,
-          sessionId: context.target.sessionId,
-          callId: receipt.callId,
           action: "prepare",
+          callId: receipt.callId,
           planDigest: receipt.toolInput.planDigest,
-          selection: receipt.toolInput.plan.selection,
+          principal: operatorOwnerContextSchema.parse(context.ownerContext).principal,
           requestId: receipt.requestId,
+          selection: receipt.toolInput.plan.selection,
+          sessionId: context.target.sessionId,
+          store: eve,
         }),
+      readOwner: owner.readCurrentPlanningOwner,
     };
     const installationPlanning: AppInstallationPlanningPort = {
-      readAppInstallationMetadataScopes:
-        createRetainedAppInstallationScopeReader(retainedAppScopeAuthority),
       readAppInstallationCustomerIds: createRetainedAppInstallationCustomerReader({
         ...retainedAppScopeAuthority,
         readActiveCustomers: createAppInstallationPlanningResourceReader({
           assertPlanningAuthorized: owner.assertPlanningAuthorized,
-          store,
-          readResourceBindings,
           readActiveCustomers: readActiveAppInstallationCustomerIds,
+          readResourceBindings,
+          store,
         }),
       }),
+      readAppInstallationMetadataScopes:
+        createRetainedAppInstallationScopeReader(retainedAppScopeAuthority),
     };
     const controlPlane = {
       ...installationPlanning,
       readApprovedPlan,
-      registerOwnerRealmIdentityWait: (...args: Parameters<typeof realmIdentityWait.register>) =>
-        realmIdentityWait.register(...args),
-      acknowledgeOwnerRealmIdentityWait: (
+      registerOwnerRealmIdentityWait: async (
+        ...args: Parameters<typeof realmIdentityWait.register>
+      ) => await realmIdentityWait.register(...args),
+      acknowledgeOwnerRealmIdentityWait: async (
         ...args: Parameters<typeof realmIdentityWait.acknowledge>
-      ) => realmIdentityWait.acknowledge(...args),
+      ) => await realmIdentityWait.acknowledge(...args),
       async readRealmIdentityWaitDelivery(claim: RealmContinuationAuthority) {
         return await realmIdentityWait.delivery(await continuationContext(claim));
       },
@@ -1752,26 +1752,26 @@ export const createHostedOperatorControlPlane = async (input: {
           parsed.data.sourceHandoffId !== request.sourceHandoffId ||
           !isDeepStrictEqual(
             hostedTenantAuthoritySchema.parse({
-              issuer: durable.principal.issuer,
               audience: durable.principal.audience,
-              workspaceId: durable.principal.workspaceId,
+              issuer: durable.principal.issuer,
               ownerUserId: durable.principal.ownerUserId,
+              workspaceId: durable.principal.workspaceId,
             }),
             hostedTenantAuthoritySchema.parse({
-              issuer: request.principal.issuer,
               audience: request.principal.audience,
-              workspaceId: request.principal.workspaceId,
+              issuer: request.principal.issuer,
               ownerUserId: request.principal.ownerUserId,
+              workspaceId: request.principal.workspaceId,
             }),
           )
         ) {
           throw new HostedOperatorError("authorization_required");
         }
         const authority = hostedTenantAuthoritySchema.parse({
-          issuer: durable.principal.issuer,
           audience: durable.principal.audience,
-          workspaceId: durable.principal.workspaceId,
+          issuer: durable.principal.issuer,
           ownerUserId: durable.principal.ownerUserId,
+          workspaceId: durable.principal.workspaceId,
         });
         const rows = await database
           .select({ record: builderProvisioningJournals.record })
@@ -1826,11 +1826,11 @@ export const createHostedOperatorControlPlane = async (input: {
           throw new HostedOperatorError("authorization_required");
         }
         const page = await eve.readCheckpointPage({
-          principal,
-          sessionId: durable.sessionId,
           checkpointRef: durable.checkpointRef,
           cursor: 0,
           limit: 1,
+          principal,
+          sessionId: durable.sessionId,
         });
         await owner.assertArtifactAuthorized(context);
         const state = nativeObservationStateSchema.parse(page.metadata.nativeObservationState);
@@ -1891,8 +1891,8 @@ export const createHostedOperatorControlPlane = async (input: {
               ...record,
               realmContinuation: {
                 ...state,
-                status: "accepted",
                 acceptedAt: state.acceptedAt ?? new Date().toISOString(),
+                status: "accepted",
               },
             };
           },
@@ -1957,8 +1957,8 @@ export const createHostedOperatorControlPlane = async (input: {
             realmContinuation: {
               ...state,
               receiverClaimedAt: new Date().toISOString(),
-              receiverStreamStartIndex,
               receiverRequestId,
+              receiverStreamStartIndex,
             },
           },
         });
@@ -2077,13 +2077,13 @@ export const createHostedOperatorControlPlane = async (input: {
               }
               return confirmNormalActorCapture({
                 context: linkInput.context,
-                record,
+                keyring: tokenKeyring,
                 nonceSha256: linkInput.nonceSha256,
+                now: Date.now(),
+                payload: capturePayload,
                 proofRef: linkInput.proofRef,
                 proofSha256: linkInput.proofSha256,
-                payload: capturePayload,
-                keyring: tokenKeyring,
-                now: Date.now(),
+                record,
               });
             }
             const currentLink = [
@@ -2199,21 +2199,21 @@ export const createHostedOperatorControlPlane = async (input: {
                     },
                   },
                   context: captureInput,
+                  fetch: input.fetch,
                   phase: "bootstrap-planning",
                   readVercelCredential: async ({ authority, installationId }) =>
                     await readCredential(authority, installationId),
-                  fetch: input.fetch,
                 });
                 return await prepareRealmIdentityLink({
-                  context: captureInput,
                   audience: gatewayBindings.operatorOrigin,
                   authResourceId: operator.plan.authDatabase.resourceId,
                   bootstrapPlanDigest: preparation.accountPlanDigest,
+                  browserOrigin: preparation.program.origin,
                   browserSession: {
                     operationRef: preparation.accountOperationRef,
                     participantProgramDigest: preparation.programDigest,
                   },
-                  browserOrigin: preparation.program.origin,
+                  context: captureInput,
                   endpointOrigin: candidate.origin,
                   expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
                   issuer: boundary.verification.publicOrigin,
@@ -2221,15 +2221,15 @@ export const createHostedOperatorControlPlane = async (input: {
                 });
               })()
             : await prepareRealmIdentityLink({
-                context: captureInput,
                 audience: input.sourceConfiguration.operator.origin,
                 authResourceId: operator.plan.authDatabase.resourceId,
                 bootstrapPlanDigest: preparation.accountPlanDigest,
+                browserOrigin: preparation.program.origin,
                 browserSession: {
                   operationRef: preparation.accountOperationRef,
                   participantProgramDigest: preparation.programDigest,
                 },
-                browserOrigin: preparation.program.origin,
+                context: captureInput,
                 endpointOrigin: publicRealm.plan.publicOrigin,
                 expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
                 issuer: publicRealm.plan.publicOrigin,
@@ -2237,9 +2237,9 @@ export const createHostedOperatorControlPlane = async (input: {
               });
         await normalActorJournal.registerPendingCapture(captureInput, {
           actorKey: captureInput.actorKey,
-          organizationId: captureInput.organizationId,
-          nonceSha256: pending.link.nonceSha256,
           expiresAt: pending.link.expiresAt,
+          nonceSha256: pending.link.nonceSha256,
+          organizationId: captureInput.organizationId,
         });
         await owner.assertArtifactAuthorized(captureInput);
         return {
@@ -2269,11 +2269,11 @@ export const createHostedOperatorControlPlane = async (input: {
           throw new HostedOperatorError("authorization_required");
         }
         return {
-          context,
-          preparation: prepared.preparation,
           actorKey: mapping.actorKey,
-          organizationId: mapping.organizationId,
+          context,
           link,
+          organizationId: mapping.organizationId,
+          preparation: prepared.preparation,
         };
       },
       async prepareResourceCredentials(
@@ -2628,8 +2628,8 @@ export const createHostedOperatorControlPlane = async (input: {
         }
         return { active: false, rows };
       },
-      reserveRealmIdentityLink: (linkInput: RealmIdentityLinkInput) =>
-        reserveRealmIdentityLink(linkInput),
+      reserveRealmIdentityLink: async (linkInput: RealmIdentityLinkInput) =>
+        await reserveRealmIdentityLink(linkInput),
       async resolveRealmIdentityCallbackOwnerContext(selector: {
         ownerSessionId: string;
         nonceSha256: string;
@@ -2737,17 +2737,17 @@ export const createHostedOperatorControlPlane = async (input: {
     }) =>
       await createHostedOperatorNormalAuthTransport(
         {
+          assertCurrentOwner: owner.assertArtifactAuthorized,
+          assertPlanningAuthorized: owner.assertPlanningAuthorized,
           configuration,
           context,
           origin,
-          assertPlanningAuthorized: owner.assertPlanningAuthorized,
-          assertCurrentOwner: owner.assertArtifactAuthorized,
         },
         { fetch: input.fetch },
       );
     const sharedNormalActorDependencies = {
-      journalPorts: normalActorJournalPorts,
       assertCurrentPlan,
+      journalPorts: normalActorJournalPorts,
       normalRealmFetch,
     };
     // Only planning owner-proof collection can reuse settled Auth beneath an unfinished app plan.
@@ -2856,11 +2856,8 @@ export const createHostedOperatorControlPlane = async (input: {
             audience: configuration.operator.origin,
             authResourceId: released.enrollment.sourceBootstrap.authResourceId,
             bootstrapPlanDigest: preparation.accountPlanDigest,
-            publicRelease: released.binding,
             builderCallbackOrigin: configuration.builderCallbackOrigin,
             endpointOrigin: released.plan.publicOrigin,
-            issuer: preparation.program.origin,
-            resource: released.enrollment.resource,
             getKey: createRemoteJWKSet(
               new URL(`${released.plan.publicOrigin}/_platform/jwks.json`),
               {
@@ -2889,10 +2886,13 @@ export const createHostedOperatorControlPlane = async (input: {
                 },
               },
             ),
+            issuer: preparation.program.origin,
+            publicRelease: released.binding,
             readback: async (request: Request) => {
               await resolvePublicRealm(context, released.binding);
               return await transport(request);
             },
+            resource: released.enrollment.resource,
             transportSource: configuration.nativeNeon.configuration.operator,
           };
         }
@@ -2922,11 +2922,8 @@ export const createHostedOperatorControlPlane = async (input: {
             audience: configuration.operator.origin,
             authResourceId: released.enrollment.sourceBootstrap.authResourceId,
             bootstrapPlanDigest: preparation.accountPlanDigest,
-            publicRelease: released.binding,
             builderCallbackOrigin: configuration.builderCallbackOrigin,
             endpointOrigin: released.plan.publicOrigin,
-            issuer: preparation.program.origin,
-            resource: released.enrollment.resource,
             getKey: createRemoteJWKSet(
               new URL(`${released.plan.publicOrigin}/_platform/jwks.json`),
               {
@@ -2955,10 +2952,13 @@ export const createHostedOperatorControlPlane = async (input: {
                 },
               },
             ),
+            issuer: preparation.program.origin,
+            publicRelease: released.binding,
             readback: async (request: Request) => {
               await resolvePublicRealm(context, released.binding);
               return await transport(request);
             },
+            resource: released.enrollment.resource,
             transportSource: configuration.nativeNeon.configuration.operator,
           };
         }
@@ -3023,51 +3023,63 @@ export const createHostedOperatorControlPlane = async (input: {
         return {
           ...(bootstrap === undefined || assertBootstrapCurrent === undefined
             ? {}
-            : { bootstrap, assertBootstrapCurrent }),
+            : { assertBootstrapCurrent, bootstrap }),
           audience: bindings.operatorOrigin,
           authResourceId: resource.resourceId,
           bootstrapPlanDigest: preparation.accountPlanDigest,
           builderCallbackOrigin: configuration.builderCallbackOrigin,
           endpointOrigin: candidate.origin,
+          getKey: createRemoteJWKSet(new URL(`${candidate.origin}/_platform/jwks.json`), {
+            [customFetch]: transport,
+          }),
           issuer: preparation.program.origin,
+          readback: async (request) => await transport(request),
           resource: {
-            version: 1,
             database: resource.database,
             environment: "preview",
             hostname: preparation.accountPlan.neon.endpoint,
             migratorRole: resource.migratorRole,
-            runtimeRole: resource.runtimeRole,
-            port: 5432,
-            schema: "public",
             neon: {
               branchId: preparation.accountPlan.neon.branchId,
               projectId: preparation.accountPlan.neon.projectId,
             },
+            port: 5432,
+            runtimeRole: resource.runtimeRole,
+            schema: "public",
+            version: 1,
           },
-          getKey: createRemoteJWKSet(new URL(`${candidate.origin}/_platform/jwks.json`), {
-            [customFetch]: transport,
-          }),
-          readback: async (request) => await transport(request),
           transportSource: configuration.nativeNeon.configuration.operator,
         };
       },
     });
     const organizationWorkers = createNormalActorOrganizationWorkers({
-      configuration,
       assertAuthorized: owner.assertAuthorized,
-      readResourceBindings: async (effect) => await controlPlane.readResourceBindings(effect),
-      readMembershipInspections: async (effect, selected) =>
-        await readApprovedRetainedMembershipInspections({
-          effect,
-          organizationId: selected.organizationId,
-          readApproval,
-          readCurrentRecord: async () =>
-            await readCurrentResourceCredentialRecord({
-              assertAuthorized: owner.assertAuthorized,
-              effect,
-              store,
-            }),
-        }),
+      configuration,
+      readGeneratedRelease: async (context, release) => {
+        await owner.assertArtifactAuthorized(context);
+        const current = await store.read(context);
+        const plan = current?.record.operator?.plan;
+        if (plan === undefined || !isDeepStrictEqual(plan.release, release)) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        const selection = await controlPlane.readGeneratedSelection(
+          context,
+          plan.contextId,
+          plan.release.artifactRef === undefined
+            ? undefined
+            : { artifactRef: plan.release.artifactRef },
+        );
+        const sameRelease = [
+          selection !== undefined,
+          selection?.releaseId === release.id,
+          selection?.manifestSha256 === release.sha256,
+          selection?.artifactRef === release.artifactRef,
+        ].every(Boolean);
+        if (!sameRelease || selection === undefined) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        return await controlPlane.readGeneratedRelease(context, selection);
+      },
       readMembershipInspectionProof: async (effect, historical, selected) => {
         if (historical.plan.authMembership === undefined) {
           throw new HostedOperatorError("reconciliation_required");
@@ -3100,33 +3112,20 @@ export const createHostedOperatorControlPlane = async (input: {
         }
         await owner.assertArtifactAuthorized(effect);
         await effect.assertCurrent();
-        return { proof, preparation: retained.preparation };
+        return { preparation: retained.preparation, proof };
       },
-      readGeneratedRelease: async (context, release) => {
-        await owner.assertArtifactAuthorized(context);
-        const current = await store.read(context);
-        const plan = current?.record.operator?.plan;
-        if (plan === undefined || !isDeepStrictEqual(plan.release, release)) {
-          throw new HostedOperatorError("resource_mismatch");
-        }
-        const selection = await controlPlane.readGeneratedSelection(
-          context,
-          plan.contextId,
-          plan.release.artifactRef === undefined
-            ? undefined
-            : { artifactRef: plan.release.artifactRef },
-        );
-        const sameRelease = [
-          selection !== undefined,
-          selection?.releaseId === release.id,
-          selection?.manifestSha256 === release.sha256,
-          selection?.artifactRef === release.artifactRef,
-        ].every(Boolean);
-        if (!sameRelease || selection === undefined) {
-          throw new HostedOperatorError("resource_mismatch");
-        }
-        return await controlPlane.readGeneratedRelease(context, selection);
-      },
+      readMembershipInspections: async (effect, selected) =>
+        await readApprovedRetainedMembershipInspections({
+          effect,
+          organizationId: selected.organizationId,
+          readApproval,
+          readCurrentRecord: async () =>
+            await readCurrentResourceCredentialRecord({
+              assertAuthorized: owner.assertAuthorized,
+              effect,
+              store,
+            }),
+        }),
       readOrganizationProof: async (context, selected) => {
         const retained = await normalActorJournal.read(context);
         const declaredOrganization = retained?.preparation.program.organizations.find(
@@ -3143,10 +3142,6 @@ export const createHostedOperatorControlPlane = async (input: {
           throw new HostedOperatorError("auth_identity_required");
         }
         const spec = hostedOperatorOwnedOrganizationSpecSchema.parse({
-          kind: "create-owned-organization",
-          organizationId: declaredOrganization.organizationId,
-          name: declaredOrganization.name,
-          slug: declaredOrganization.slug,
           actorId: captured.owner.actorId,
           bootstrapPlanDigest: captured.link.bootstrapPlanDigest,
           identityCapture: {
@@ -3161,6 +3156,10 @@ export const createHostedOperatorControlPlane = async (input: {
             jwksUrl: `${captured.link.endpointOrigin}/_platform/jwks.json`,
             transportSource: captured.transportSource,
           },
+          kind: "create-owned-organization",
+          name: declaredOrganization.name,
+          organizationId: declaredOrganization.organizationId,
+          slug: declaredOrganization.slug,
         });
         const artifacts = ownedArtifacts(context);
         const content = await artifacts.store.read(
@@ -3186,14 +3185,15 @@ export const createHostedOperatorControlPlane = async (input: {
           throw new HostedOperatorError("resource_mismatch");
         }
         await owner.assertArtifactAuthorized(context);
-        return { preparation: retained.preparation, spec, proof };
+        return { preparation: retained.preparation, proof, spec };
       },
+      readResourceBindings: async (effect) => await controlPlane.readResourceBindings(effect),
     });
     const normalActors = createHostedOperatorNormalActorOperations({
       ...sharedNormalActorDependencies,
       assertPlanningAuthorized: owner.assertPlanningAuthorized,
-      prepareActorCapture: async (capture) => await controlPlane.prepareNormalActorCapture(capture),
       collectOrganizationOwnerProof,
+      prepareActorCapture: async (capture) => await controlPlane.prepareNormalActorCapture(capture),
       ...organizationWorkers,
     });
     const exportStore = createPostgresTenantExportJournalStore(database);
@@ -3215,16 +3215,16 @@ export const createHostedOperatorControlPlane = async (input: {
       const stages =
         diagnostic?.setup === true
           ? ({
-              owner: "setup_owner_authorization",
-              journal: "setup_journal_read",
-              phase: "setup_phase_validation",
               approval: "setup_approval_authorization",
+              journal: "setup_journal_read",
+              owner: "setup_owner_authorization",
+              phase: "setup_phase_validation",
             } as const)
           : ({
-              owner: "prepared_owner_authorization",
-              journal: "prepared_journal_read",
-              phase: "prepared_phase_validation",
               approval: "prepared_approval_authorization",
+              journal: "prepared_journal_read",
+              owner: "prepared_owner_authorization",
+              phase: "prepared_phase_validation",
             } as const);
       return (key: keyof typeof stages) => {
         advanceExportPlanningStage(diagnostic?.onPlanStage, stages[key]);
@@ -3265,10 +3265,10 @@ export const createHostedOperatorControlPlane = async (input: {
       if (
         retainedApproval !== undefined &&
         isDeepStrictEqual(retainedApproval, {
-          operationRef: operator.operationRef,
-          planDigest: operator.planDigest,
           approvalId: operator.approvalId,
           approvedByCallId: current.record.approvedByCallId,
+          operationRef: operator.operationRef,
+          planDigest: operator.planDigest,
         })
       ) {
         return { current, operator };
@@ -3287,14 +3287,14 @@ export const createHostedOperatorControlPlane = async (input: {
         }
       } else {
         const receipt = await readPrivateHostedApproval({
-          store: eve,
-          principal: ownerContext.principal,
-          sessionId: ownerContext.sessionId,
           action: "prepare",
           callId: current.record.approvedByCallId,
           planDigest: operator.planDigest,
-          selection: operator.plan.selection,
+          principal: ownerContext.principal,
           requestId: operator.approvalId,
+          selection: operator.plan.selection,
+          sessionId: ownerContext.sessionId,
+          store: eve,
         });
         if (
           receipt?.outcome === "approved" &&
@@ -3325,7 +3325,7 @@ export const createHostedOperatorControlPlane = async (input: {
         undefined,
         onPlanStage === undefined ? undefined : { onPlanStage, setup: false },
       );
-      const plan = operator.plan;
+      const { plan } = operator;
       advanceExportPlanningStage(onPlanStage, "customer_authorization");
       assertTenantExportCustomer(plan, customerId);
       advanceExportPlanningStage(onPlanStage, "release_selection");
@@ -3355,42 +3355,42 @@ export const createHostedOperatorControlPlane = async (input: {
         throw new HostedOperatorError("authorization_required");
       }
       return {
-        version: 1 as const,
-        kind: "tenant-export-plan" as const,
         authority: context.authority,
-        target: {
-          sessionId: context.target.sessionId,
-          appId: context.target.appId,
-          projectId: context.target.projectId,
-          branch: context.target.branch,
-        },
+        format: "ndjson" as const,
+        kind: "tenant-export-plan" as const,
         originalSetup: {
-          operationRef: operator.operationRef,
-          planDigest: operator.planDigest,
           approvalId: operator.approvalId,
           approvedByCallId: current.record.approvedByCallId,
-        },
-        scope: { appId: plan.selection.appId, customerId },
-        resource: {
-          projectId: plan.neon.projectId,
-          branchId: plan.neon.branchId,
-          resourceId: plan.appDatabase.resourceId,
-          environment: plan.selection.environment,
-          hostname: plan.neon.endpoint,
-          port: 5432,
-          database: plan.appDatabase.database,
-          schema: "public" as const,
-          migratorRole: plan.appDatabase.migratorRole,
-          runtimeRole: plan.appDatabase.runtimeRole,
+          operationRef: operator.operationRef,
+          planDigest: operator.planDigest,
         },
         release: {
-          id: selected.releaseId,
           artifactHash: selected.schemaSha256,
+          id: selected.releaseId,
           manifestRef: selected.artifactRef,
           manifestSha256: selected.manifestSha256,
         },
+        resource: {
+          branchId: plan.neon.branchId,
+          database: plan.appDatabase.database,
+          environment: plan.selection.environment,
+          hostname: plan.neon.endpoint,
+          migratorRole: plan.appDatabase.migratorRole,
+          port: 5432,
+          projectId: plan.neon.projectId,
+          resourceId: plan.appDatabase.resourceId,
+          runtimeRole: plan.appDatabase.runtimeRole,
+          schema: "public" as const,
+        },
+        scope: { appId: plan.selection.appId, customerId },
         selection: "public-app-customer-tables-v1" as const,
-        format: "ndjson" as const,
+        target: {
+          appId: context.target.appId,
+          branch: context.target.branch,
+          projectId: context.target.projectId,
+          sessionId: context.target.sessionId,
+        },
+        version: 1 as const,
       };
     };
     const assertExportSetup = async (
@@ -3408,22 +3408,22 @@ export const createHostedOperatorControlPlane = async (input: {
       advanceExportPlanningStage(onPlanStage, "setup_customer_authorization");
       assertTenantExportCustomer(prepared, plan.scope.customerId);
       const observedSetup = {
-        operationRef: operator.operationRef,
-        planDigest: operator.planDigest,
         approvalId: operator.approvalId,
         approvedByCallId: current.record.approvedByCallId,
+        operationRef: operator.operationRef,
+        planDigest: operator.planDigest,
       };
       const observedResource = {
-        projectId: prepared.neon.projectId,
         branchId: prepared.neon.branchId,
-        resourceId: prepared.appDatabase.resourceId,
+        database: prepared.appDatabase.database,
         environment: prepared.selection.environment,
         hostname: prepared.neon.endpoint,
-        port: 5432,
-        database: prepared.appDatabase.database,
-        schema: "public",
         migratorRole: prepared.appDatabase.migratorRole,
+        port: 5432,
+        projectId: prepared.neon.projectId,
+        resourceId: prepared.appDatabase.resourceId,
         runtimeRole: prepared.appDatabase.runtimeRole,
+        schema: "public",
       };
       advanceExportPlanningStage(onPlanStage, "setup_match");
       const comparisons = [
@@ -3453,59 +3453,21 @@ export const createHostedOperatorControlPlane = async (input: {
     const exportArtifacts = (context: HostedOperatorContext) => {
       const owned = ownedArtifacts(context);
       return {
-        context: owned.context,
         artifacts: createTenantExportArtifacts({
-          store: owned.store,
           assertCurrentOwner: async (requested) => {
             if (!isDeepStrictEqual(requested, owned.context)) {
               throw new HostedOperatorError("authorization_required");
             }
             await owner.assertArtifactAuthorized(context);
           },
+          store: owned.store,
         }),
+        context: owned.context,
       };
     };
     const exports = createHostedTenantExportOperations({
-      store: exportStore,
       assertOwner: owner.assertArtifactAuthorized,
-      resolvePlan: async (context, customerId, onPlanStage) =>
-        await resolveExportPlan(context, customerId, true, onPlanStage),
       assertSetup: assertExportSetup,
-      async readApproval(context, request, callId, observation) {
-        await owner.assertArtifactAuthorized(context);
-        const recorded = await exportStore.read({
-          authority: context.authority,
-          exportId: z.uuid().parse(request.planRef.split("/").at(-1)),
-        });
-        if (recorded === undefined) {
-          throw new HostedOperatorError("resource_mismatch");
-        }
-        const ownerContext = operatorOwnerContextSchema.parse(context.ownerContext);
-        return await readPrivateOperatorApproval({
-          owner: ownerContext,
-          ...(observation === undefined ? {} : { observation }),
-          capture: (state) =>
-            createPrivateTenantExportApprovalCapture({
-              plan: recorded.journal.plan,
-              request,
-              principal: ownerContext.principal,
-              ...(callId === undefined ? {} : { callId }),
-              ...(state === undefined ? {} : { state }),
-            }),
-          readHistory: async (startIndex, onEvent) =>
-            await approvalObserver.privateHistoryForContext(context)({
-              adapterSessionId: ownerContext.adapterSessionId,
-              sessionId: ownerContext.sessionId,
-              principal: ownerContext.principal,
-              startIndex,
-              onEvent,
-            }),
-          assertOwner: async () => {
-            await owner.assertArtifactAuthorized(context);
-          },
-        });
-      },
-      withResourceLease: exportLease,
       disposeWorker: async (locator) => {
         await exportSandbox.dispose(locator);
       },
@@ -3524,12 +3486,12 @@ export const createHostedOperatorControlPlane = async (input: {
         }
         try {
           const completion = await owned.artifacts.publish({
-            context: owned.context,
-            worker,
-            source: observed.source,
             assertCurrent,
+            context: owned.context,
+            source: observed.source,
+            worker,
           });
-          return { status: "complete", completion };
+          return { completion, status: "complete" };
         } catch {
           return { status: "unknown" };
         }
@@ -3537,6 +3499,51 @@ export const createHostedOperatorControlPlane = async (input: {
       async prepareWorker(_context, worker, assertCurrent) {
         return await exportSandbox.prepare(worker, assertCurrent);
       },
+      async publish(context, worker, source, assertCurrent) {
+        const owned = exportArtifacts(context);
+        return await owned.artifacts.publish({
+          assertCurrent,
+          context: owned.context,
+          source,
+          worker,
+        });
+      },
+      async readApproval(context, request, callId, observation) {
+        await owner.assertArtifactAuthorized(context);
+        const recorded = await exportStore.read({
+          authority: context.authority,
+          exportId: z.uuid().parse(request.planRef.split("/").at(-1)),
+        });
+        if (recorded === undefined) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        const ownerContext = operatorOwnerContextSchema.parse(context.ownerContext);
+        return await readPrivateOperatorApproval({
+          owner: ownerContext,
+          ...(observation === undefined ? {} : { observation }),
+          capture: (state) =>
+            createPrivateTenantExportApprovalCapture({
+              plan: recorded.journal.plan,
+              principal: ownerContext.principal,
+              request,
+              ...(callId === undefined ? {} : { callId }),
+              ...(state === undefined ? {} : { state }),
+            }),
+          readHistory: async (startIndex, onEvent) =>
+            await approvalObserver.privateHistoryForContext(context)({
+              adapterSessionId: ownerContext.adapterSessionId,
+              onEvent,
+              principal: ownerContext.principal,
+              sessionId: ownerContext.sessionId,
+              startIndex,
+            }),
+          assertOwner: async () => {
+            await owner.assertArtifactAuthorized(context);
+          },
+        });
+      },
+      resolvePlan: async (context, customerId, onPlanStage) =>
+        await resolveExportPlan(context, customerId, true, onPlanStage),
       async runWorker(context, worker, locator, assertCurrent, checkpoint) {
         await assertCurrent();
         const { current, operator } = await preparedForExport(context);
@@ -3554,23 +3561,14 @@ export const createHostedOperatorControlPlane = async (input: {
           checkpoint,
         );
       },
-      async publish(context, worker, source, assertCurrent) {
-        const owned = exportArtifacts(context);
-        return await owned.artifacts.publish({
-          context: owned.context,
-          worker,
-          source,
-          assertCurrent,
-        });
-      },
+      store: exportStore,
+      withResourceLease: exportLease,
     });
     const exportRequest = createTenantExportDispatcher({
-      store: exportStore,
-      operations: exports,
-      bindWorkload: approvalObserver.bindWorkload,
-      verifyWorkload: owner.verifyWorkload,
       authorize: owner.authorize,
       authorizeRead: owner.authorizeArtifactRead,
+      bindWorkload: approvalObserver.bindWorkload,
+      operations: exports,
       async resolveOwnerOrganization(context) {
         const { current, operator } = await preparedForExport(context, true);
         const { plan } = operator;
@@ -3616,7 +3614,10 @@ export const createHostedOperatorControlPlane = async (input: {
         // canonical accessor only within this planning call; live owner checks do not use it.
         let approvalSession: ReturnType<typeof eve.getSession> | undefined;
         const approvalStore = {
-          getSession: (principal: Parameters<typeof eve.getSession>[0], sessionId: string) => {
+          getSession: async (
+            principal: Parameters<typeof eve.getSession>[0],
+            sessionId: string,
+          ) => {
             if (
               !samePrincipal(principal, preparedOwner.principal) ||
               sessionId !== context.target.sessionId
@@ -3624,32 +3625,25 @@ export const createHostedOperatorControlPlane = async (input: {
               throw new HostedOperatorError("authorization_required");
             }
             approvalSession ??= eve.getSession(principal, sessionId);
-            return approvalSession;
+            return await approvalSession;
           },
         };
         const proofCache = new Map<string, Promise<string>>();
         const artifacts = ownedArtifacts(context);
         return await resolveExportOwnerOrganization({
+          assertCurrent,
           context,
           prepared: plan,
-          assertCurrent,
-          readCurrentRecord: async () => {
-            const fresh = await store.read(context);
-            if (fresh === undefined) {
-              throw new HostedOperatorError("resource_mismatch");
-            }
-            return fresh.record;
-          },
           readApproval: async (witness) => {
             const receipt = await readPrivateHostedApproval({
-              store: approvalStore,
-              principal: preparedOwner.principal,
-              sessionId: context.target.sessionId,
-              callId: witness.approvedByCallId,
               action: "prepare",
+              callId: witness.approvedByCallId,
               planDigest: witness.operator.planDigest,
-              selection: witness.operator.plan.selection,
+              principal: preparedOwner.principal,
               requestId: witness.operator.approvalId,
+              selection: witness.operator.plan.selection,
+              sessionId: context.target.sessionId,
+              store: approvalStore,
             });
             return [
               receipt?.outcome === "approved",
@@ -3658,6 +3652,13 @@ export const createHostedOperatorControlPlane = async (input: {
               receipt?.toolInput.operationRef === witness.operator.operationRef,
               receipt !== null && isDeepStrictEqual(receipt.toolInput.plan, witness.operator.plan),
             ].every(Boolean);
+          },
+          readCurrentRecord: async () => {
+            const fresh = await store.read(context);
+            if (fresh === undefined) {
+              throw new HostedOperatorError("resource_mismatch");
+            }
+            return fresh.record;
           },
           verifyProof: async (witness) => {
             const { reference, sha256 } = witness.membership.identityProof;
@@ -3687,24 +3688,26 @@ export const createHostedOperatorControlPlane = async (input: {
               proofCache.set(reference, proof);
             }
             return await verifyCapturedRealmIdentityProof({
-              proof: await proof,
-              pending: witness.link,
               getKey,
+              pending: witness.link,
+              proof: await proof,
               resource: {
-                version: 1,
                 database: plan.authDatabase.database,
                 environment: "preview",
                 hostname: plan.neon.endpoint,
                 migratorRole: plan.authDatabase.migratorRole,
-                runtimeRole: plan.authDatabase.runtimeRole,
-                port: 5432,
-                schema: "public",
                 neon: { branchId: plan.neon.branchId, projectId: plan.neon.projectId },
+                port: 5432,
+                runtimeRole: plan.authDatabase.runtimeRole,
+                schema: "public",
+                version: 1,
               },
             });
           },
         });
       },
+      store: exportStore,
+      verifyWorkload: owner.verifyWorkload,
     });
     // This request-private association contains only the exact carrier already verified by
     // the dispatcher. No token enters the journal, model, worker files or app environment.
@@ -3727,10 +3730,10 @@ export const createHostedOperatorControlPlane = async (input: {
         throw new HostedOperatorError("authorization_required");
       }
       continuitySetupApprovals.set(context, {
-        operationRef: prepared.operator.operationRef,
-        planDigest: prepared.operator.planDigest,
         approvalId: prepared.operator.approvalId,
         approvedByCallId: prepared.current.record.approvedByCallId,
+        operationRef: prepared.operator.operationRef,
+        planDigest: prepared.operator.planDigest,
       });
       return prepared;
     };
@@ -3746,10 +3749,10 @@ export const createHostedOperatorControlPlane = async (input: {
       if (
         !isDeepStrictEqual(
           {
-            operationRef: operator.operationRef,
-            planDigest: operator.planDigest,
             approvalId: operator.approvalId,
             approvedByCallId: current.record.approvedByCallId,
+            operationRef: operator.operationRef,
+            planDigest: operator.planDigest,
           },
           plan.originalSetup,
         ) ||
@@ -3772,34 +3775,32 @@ export const createHostedOperatorControlPlane = async (input: {
         throw new HostedOperatorError("authorization_required");
       }
       return await Sandbox.get({
-        name: selected.sandboxId,
-        resume: true,
-        token: workload.token(),
         fetch: createHostedOperatorSandboxFetch(workload.token),
+        name: selected.sandboxId,
         projectId: configuration.workloadPolicy.projectId,
-        teamId: configuration.workloadPolicy.ownerId,
+        resume: true,
         signal: workload.signal,
+        teamId: configuration.workloadPolicy.ownerId,
+        token: workload.token(),
       });
     };
     const continuityWorkerAsset = createManagedRuntimeWorkerAsset({
       configuration: configuration.sandbox,
     });
     const continuityRuntime = createManagedRuntimeExecution({
-      installWorkerAsset: async (assetInput) => {
-        await continuityWorkerAsset.install(assetInput);
-      },
+      assertSelectedSandbox,
       disposeWorkerAsset: async (assetInput) => {
         await continuityWorkerAsset.dispose(assetInput);
       },
-      worker: configuration.sandbox.managedRuntimeWorker,
-      assertSelectedSandbox,
       getSandbox: getContinuitySandbox,
-      signal: (context) => continuityWorkloads.get(context)?.signal,
+      installWorkerAsset: async (assetInput) => {
+        await continuityWorkerAsset.install(assetInput);
+      },
       async readExecution(context, plan, includeActors) {
         await continuitySetup(context, plan);
         const { current, operator } = await preparedForContinuity(context);
         const boundary = operator.plan.deploymentBoundary;
-        const proof = current.record.proof;
+        const { proof } = current.record;
         if (boundary === undefined || proof === undefined) {
           throw new HostedOperatorError("resource_mismatch");
         }
@@ -3826,8 +3827,8 @@ export const createHostedOperatorControlPlane = async (input: {
             ? {
                 normalActors: await normalRuntime({
                   ...context,
-                  plan: operator.plan,
                   operationRef: operator.operationRef,
+                  plan: operator.plan,
                 }),
               }
             : {}),
@@ -3835,12 +3836,14 @@ export const createHostedOperatorControlPlane = async (input: {
       },
       readPublicJwks: createHostedOperatorPublicJwksReader(
         {
-          configuration,
-          assertPlanningAuthorized: owner.assertPlanningAuthorized,
           assertCurrentOwner: owner.assertArtifactAuthorized,
+          assertPlanningAuthorized: owner.assertPlanningAuthorized,
+          configuration,
         },
         { fetch: input.fetch },
       ),
+      signal: (context) => continuityWorkloads.get(context)?.signal,
+      worker: configuration.sandbox.managedRuntimeWorker,
     });
     const continuities = createHostedContinuityOperations({
       store: continuityStore,
@@ -3851,64 +3854,70 @@ export const createHostedOperatorControlPlane = async (input: {
           throw new HostedOperatorError("protected_operator_required");
         }
         const [{ current, operator }] = await Promise.all([
-          observeContinuityPlanningStage(context.target.sessionId, "prepared_runtime", () =>
-            preparedForContinuity(context, true),
+          observeContinuityPlanningStage(
+            context.target.sessionId,
+            "prepared_runtime",
+            async () => await preparedForContinuity(context, true),
           ),
-          observeContinuityPlanningStage(context.target.sessionId, "sandbox_authorization", () =>
-            assertSelectedSandbox(context, runtime),
+          observeContinuityPlanningStage(
+            context.target.sessionId,
+            "sandbox_authorization",
+            async () => {
+              await assertSelectedSandbox(context, runtime);
+            },
           ),
         ]);
         // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Verify canonical VM ownership and completed setup before resuming it for planning.
         const selectedSandbox = await observeContinuityPlanningStage(
           context.target.sessionId,
           "sandbox_resume",
-          () => getContinuitySandbox(context, runtime),
+          async () => await getContinuitySandbox(context, runtime),
           undefined,
           continuityWorkloads.get(context)?.signal,
         );
         const observedPorts = await observeContinuityPlanningStage(
           context.target.sessionId,
           "port_observation",
-          () => observeManagedRuntimePorts(selectedSandbox),
+          async () => await observeManagedRuntimePorts(selectedSandbox),
         );
         if (operator.approvalId === undefined) {
           throw new HostedOperatorError("authorization_required");
         }
         const preparedPlan = structuredClone(operator.plan);
         preparedPlan.gatewayDelivery = {
-          projectId: configuration.gateway.projectId,
           branch: configuration.gateway.branch,
           gitSha: configuration.gateway.gitSha,
+          projectId: configuration.gateway.projectId,
           repoId: configuration.gateway.repoId,
         };
         return {
-          version: 1,
-          kind: "app-continuity-plan",
-          authority: context.authority,
-          target: context.target,
-          originalSetup: {
-            operationRef: operator.operationRef,
-            planDigest: operator.planDigest,
-            approvalId: operator.approvalId,
-            approvedByCallId: current.record.approvedByCallId,
-          },
-          preparedPlan,
-          runtime: {
-            ...runtime,
-            projectId: configuration.workloadPolicy.projectId,
-            ownerId: configuration.workloadPolicy.ownerId,
-            ...observedPorts,
-          },
-          gateway: {
-            projectId: configuration.gateway.projectId,
-            ownerId: configuration.teamId,
-            environment: "preview",
-            publicOrigin: configuration.gateway.publicOrigin,
-          },
           actors: operator.plan.access.map(({ actorId, organizationId }) => ({
             actorId,
             organizationId,
           })),
+          authority: context.authority,
+          gateway: {
+            environment: "preview",
+            ownerId: configuration.teamId,
+            projectId: configuration.gateway.projectId,
+            publicOrigin: configuration.gateway.publicOrigin,
+          },
+          kind: "app-continuity-plan",
+          originalSetup: {
+            approvalId: operator.approvalId,
+            approvedByCallId: current.record.approvedByCallId,
+            operationRef: operator.operationRef,
+            planDigest: operator.planDigest,
+          },
+          preparedPlan,
+          runtime: {
+            ...runtime,
+            ownerId: configuration.workloadPolicy.ownerId,
+            projectId: configuration.workloadPolicy.projectId,
+            ...observedPorts,
+          },
+          target: context.target,
+          version: 1,
         };
       },
       async readApproval(context, request, callId, observation) {
@@ -3927,18 +3936,18 @@ export const createHostedOperatorControlPlane = async (input: {
           capture: (state) =>
             createPrivateContinuityApprovalCapture({
               plan: saved.plan,
-              request,
               principal: canonical.principal,
+              request,
               ...(callId === undefined ? {} : { callId }),
               ...(state === undefined ? {} : { state }),
             }),
           readHistory: async (startIndex, onEvent) =>
             await approvalObserver.privateHistoryForContext(context)({
               adapterSessionId: canonical.adapterSessionId,
-              sessionId: canonical.sessionId,
-              principal: canonical.principal,
-              startIndex,
               onEvent,
+              principal: canonical.principal,
+              sessionId: canonical.sessionId,
+              startIndex,
             }),
           assertOwner: async () => {
             await owner.assertArtifactAuthorized(context);
@@ -3950,13 +3959,11 @@ export const createHostedOperatorControlPlane = async (input: {
       runtime: continuityRuntime,
       projection: createHostedManagedRuntimeProjection({
         assertOwner: owner.assertArtifactAuthorized,
-        readCredential: controlPlane.readCredential,
         fetch: input.fetch,
+        readCredential: controlPlane.readCredential,
       }),
     });
     const continuityRequest = createContinuityDispatcher({
-      store: continuityStore,
-      operations: continuities,
       async readVerifiedActors(context, intentId) {
         const saved = await continuities.readPlan(context, intentId);
         await continuitySetup(context, saved.plan);
@@ -3997,38 +4004,40 @@ export const createHostedOperatorControlPlane = async (input: {
         });
         return await reader({ ...context, plan: saved.plan.preparedPlan, assertCurrent });
       },
-      verifyWorkload: owner.verifyWorkload,
       authorize: owner.authorize,
       authorizeRead: owner.authorizeArtifactRead,
       bindWorkload: (context, token, signal) => {
-        continuityWorkloads.set(context, { token, signal });
+        continuityWorkloads.set(context, { signal, token });
         approvalObserver.bindWorkload(context, token, signal);
       },
+      operations: continuities,
+      store: continuityStore,
+      verifyWorkload: owner.verifyWorkload,
     });
     const nativeTargetRequest = createNativeTargetOnboardingDeployment({
-      database,
+      builderOrigin: new URL(config.resource).origin,
       configuration: input.sourceConfiguration,
+      database,
       environment,
       owner,
-      builderOrigin: new URL(config.resource).origin,
       ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
     });
     const nativeTargetPort: Pick<ProtectedHostedOperatorDependencies, "nativeTargetRequest"> = {
       nativeTargetRequest,
     };
     const publicReleaseRequest = createPublicReleaseDeployment({
-      database,
-      owner,
-      configuration: input.sourceConfiguration,
-      environment,
-      keyring: tokenKeyring,
-      databaseUrl: config.databaseUrl,
-      readResourceBindings,
       assertRuntimeAuthorized: owner.assertAuthorized,
-      readInstallationScopes: controlPlane.readAppInstallationMetadataScopes,
       bindRuntimeWorkload: (context, token, signal) => {
         approvalObserver.bindWorkload(context, token, signal);
       },
+      configuration: input.sourceConfiguration,
+      database,
+      databaseUrl: config.databaseUrl,
+      environment,
+      keyring: tokenKeyring,
+      owner,
+      readInstallationScopes: controlPlane.readAppInstallationMetadataScopes,
+      readResourceBindings,
       ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
     });
     const publicReleasePort: Pick<ProtectedHostedOperatorDependencies, "publicReleaseRequest"> = {
@@ -4036,7 +4045,7 @@ export const createHostedOperatorControlPlane = async (input: {
     };
     const publicRuntimePort: HostedOperatorPublicRuntimePort = {
       readPublicRuntimeBinding: async ({ request, plan, operationRef, ...context }) =>
-        await publicReleaseRequest.readRuntimeBinding({ request, context, plan, operationRef }),
+        await publicReleaseRequest.readRuntimeBinding({ context, operationRef, plan, request }),
     };
 
     // Deferred capabilities retain their ordinary unavailable ingress contract,
@@ -4054,8 +4063,8 @@ export const createHostedOperatorControlPlane = async (input: {
       ...nativeTargetPort,
       ...publicReleasePort,
       ...publicRuntimePort,
-      exportRequest,
       continuityRequest,
+      exportRequest,
       readNormalActorRuntimeBindings: createNormalActorRuntimeBindings(
         sharedNormalActorDependencies,
       ),

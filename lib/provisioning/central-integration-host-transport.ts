@@ -23,8 +23,8 @@ export const centralHostPlanSchema = z.union([
 export type CentralHostPlan = z.infer<typeof centralHostPlanSchema>;
 export const centralHostApprovalInputSchema = z
   .strictObject({
-    plan: centralHostPlanSchema,
     operationRef: z.uuid(),
+    plan: centralHostPlanSchema,
     planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   })
   .superRefine((input, context) => {
@@ -40,14 +40,14 @@ export const centralHostApprovalInputSchema = z
   });
 export type CentralHostApprovalInput = z.infer<typeof centralHostApprovalInputSchema>;
 const common = {
-  ownerContext: operatorOwnerContextSchema,
   adapterSessionId: z.string().min(1),
   callId: z.string().min(1),
   execution: z.strictObject({
     logicalSessionId: z.string().min(1),
-    ownerRunId: z.string().min(1).optional(),
     ownerAnchorRunId: z.string().min(1).optional(),
+    ownerRunId: z.string().min(1).optional(),
   }),
+  ownerContext: operatorOwnerContextSchema,
 };
 export const centralHostReadInputSchema = centralHostSelectionSchema.extend({
   appId: centralHostPlanRequestSchema.shape.appId,

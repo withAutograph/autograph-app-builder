@@ -6,7 +6,10 @@ import type { Browser } from "playwright";
 import { describe, expect, it, vi } from "vitest";
 
 import { assessParity, requirements } from "./self-reproduction-parity";
-import { parityEvidenceFromReceipts } from "./self-reproduction-parity-evidence";
+import {
+  parityEvidenceFromReceipts,
+  runtimeReceiptSchema,
+} from "./self-reproduction-parity-evidence";
 import { runTrustedBrowserWorkflows } from "./self-reproduction-workflow-adapters";
 import type {
   TrustedBrowserWorkflowAdapter,
@@ -21,6 +24,13 @@ const assertionIds = (id: WorkflowId) => {
   return requirement.assertions;
 };
 
+interface BrowserFixtureCandidate {
+  newContext: unknown;
+}
+
+const asBrowser = (candidate: BrowserFixtureCandidate): candidate is Browser =>
+  typeof candidate.newContext === "function";
+
 const adapter = (input?: {
   missing?: WorkflowId;
   unavailable?: WorkflowId;
@@ -30,7 +40,7 @@ const adapter = (input?: {
     if (id === "authentication" || id === "durable-draft" || id === "session-recovery") {
       await freshPage();
     }
-    return {
+    return await Promise.resolve({
       assertions: assertionIds(id)
         .filter((_, index) => index % 2 === 0)
         .map((assertion) => ({
@@ -39,27 +49,27 @@ const adapter = (input?: {
           passed: id !== input?.fail,
         })),
       reason: "Browser transition observed.",
-    };
+    });
   },
-  prepare: (_page, id) => {
+  prepare: async (_page, id) => {
     if (id === input?.missing) {
-      return Promise.resolve({
+      return await Promise.resolve({
         disposition: "missing-functionality" as const,
         ready: false as const,
         reason: "Control absent.",
       });
     }
     if (id === input?.unavailable) {
-      return Promise.resolve({
+      return await Promise.resolve({
         disposition: "infrastructure-unavailable" as const,
         ready: false as const,
         reason: "Fixture database unavailable.",
       });
     }
-    return Promise.resolve({ ready: true as const });
+    return await Promise.resolve({ ready: true as const });
   },
-  verify: (id) =>
-    Promise.resolve({
+  verify: async (id) =>
+    await Promise.resolve({
       assertions: assertionIds(id)
         .filter((_, index) => index % 2 === 1)
         .map((assertion) => ({
@@ -72,10 +82,17 @@ const adapter = (input?: {
 });
 
 const browser = () => {
-  const close = vi.fn(() => Promise.resolve());
-  const newPage = vi.fn(() => Promise.resolve({}));
-  const newContext = vi.fn(() => Promise.resolve({ close, newPage }));
-  return { close, newContext, newPage, value: { newContext } as unknown as Browser };
+  const close = vi.fn(async () => {
+    await Promise.resolve();
+  });
+  const newPage = vi.fn(async () => await Promise.resolve({}));
+  const context = { close, newPage };
+  const newContext = vi.fn(async () => await Promise.resolve(context));
+  const value = { newContext };
+  if (!asBrowser(value)) {
+    throw new TypeError("Browser fixture is invalid.");
+  }
+  return { close, newContext, newPage, value };
 };
 
 describe("trusted browser workflow adapters", () => {
@@ -99,7 +116,7 @@ describe("trusted browser workflow adapters", () => {
         runId: "trusted",
         runtimeReceipts: run.receipts,
       });
-      const assessed = await assessParity(evidence, () => Promise.resolve(true));
+      const assessed = await assessParity(evidence, async () => await Promise.resolve(true));
       expect(
         assessed.rows
           .filter(
@@ -112,10 +129,12 @@ describe("trusted browser workflow adapters", () => {
           .every((row) => row.status === "passed"),
       ).toBe(true);
       expect(fixtureBrowser.newContext.mock.calls.length).toBeGreaterThan(22);
-      const receipt = JSON.parse(
-        await readFile(
-          path.join(outputRoot, "parity/workflows/durable-draft/candidate.json"),
-          "utf-8",
+      const receipt = runtimeReceiptSchema.parse(
+        JSON.parse(
+          await readFile(
+            path.join(outputRoot, "parity/workflows/durable-draft/candidate.json"),
+            "utf-8",
+          ),
         ),
       );
       expect(receipt.producer).toBe("evaluator");
@@ -144,7 +163,7 @@ describe("trusted browser workflow adapters", () => {
         runId: "status",
         runtimeReceipts: run.receipts,
       });
-      const { rows } = await assessParity(evidence, () => Promise.resolve(true));
+      const { rows } = await assessParity(evidence, async () => await Promise.resolve(true));
       const candidate = (id: string) =>
         rows.find((row) => row.side === "candidate" && row.requirementId === id);
       expect(candidate("provider-return-success")).toMatchObject({
@@ -171,7 +190,10 @@ describe("trusted browser workflow adapters", () => {
     const outputRoot = await mkdtemp(path.join(tmpdir(), "trusted-workflows-error-"));
     const fixtureBrowser = browser();
     const broken = adapter();
-    broken.verify = () => Promise.reject(new Error("secret database error"));
+    broken.verify = async () => {
+      await Promise.reject(new Error("secret database error"));
+      throw new Error("unreachable");
+    };
     try {
       const run = await runTrustedBrowserWorkflows({
         adapters: { candidate: broken },

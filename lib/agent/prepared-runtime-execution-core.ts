@@ -366,11 +366,13 @@ export const restorePreparedRuntimeExecution = async (input: {
         );
       }
     };
+  const browserTestBaseUrl = input.browserTestBaseUrl ?? input.normalActors?.origin;
+  interface BrowserDestination { browserTestBaseUrl?: string }
+  const browserDestination: BrowserDestination = {};
+  if (browserTestBaseUrl !== undefined) browserDestination.browserTestBaseUrl = browserTestBaseUrl;
   return {
     browserTestEntryPath,
-    ...((input.browserTestBaseUrl ?? input.normalActors?.origin) === undefined
-      ? {}
-      : { browserTestBaseUrl: input.browserTestBaseUrl ?? input.normalActors?.origin }),
+    ...browserDestination,
     environmentPath,
     installationProof: {
       ...proof,
@@ -416,7 +418,7 @@ export const restorePreparedRuntimeExecution = async (input: {
           throw new Error("A saved browser command cannot be resumed with a new test selection.");
         }
         const command = await resolveTaskCommand(
-          { commandId, commandCheckpoint, allowDispatch },
+          { allowDispatch, commandCheckpoint, commandId },
           {
             args: [
               "mise",
@@ -433,22 +435,26 @@ export const restorePreparedRuntimeExecution = async (input: {
             cmd: "/usr/bin/env",
             cwd: input.root,
             detached: true,
-            env: {
-              ...Object.fromEntries(
-                Object.entries(environment ?? {}).filter(
-                  (entry): entry is [string, string] =>
-                    entry[1] !== undefined && entry[0] !== "APP_RUNTIME_ALREADY_COMPILED",
+            env: (() => {
+              const taskEnvironment = {
+                ...Object.fromEntries(
+                  Object.entries(environment ?? {}).filter(
+                    (entry): entry is [string, string] =>
+                      entry[1] !== undefined && entry[0] !== "APP_RUNTIME_ALREADY_COMPILED",
+                  ),
                 ),
-              ),
-              APP_RUNTIME_STATE_DIR: input.binding.stateDirectory,
-              ...completedCompilationEnvironment(task, alreadyCompiled),
-              ...(task === "test-e2e" && normalActors
-                ? {
-                    APP_TEST_BASE_URL: normalActors.origin,
-                    APP_TEST_IDENTITIES_FILE: normalActors.identitiesPath,
-                  }
-                : {}),
-            },
+                APP_RUNTIME_STATE_DIR: input.binding.stateDirectory,
+                ...completedCompilationEnvironment(task, alreadyCompiled),
+              };
+              if (task === "test-e2e" && normalActors) {
+                return {
+                  ...taskEnvironment,
+                  APP_TEST_BASE_URL: normalActors.origin,
+                  APP_TEST_IDENTITIES_FILE: normalActors.identitiesPath,
+                };
+              }
+              return taskEnvironment;
+            })(),
             signal: signal ?? input.signal,
           },
         );

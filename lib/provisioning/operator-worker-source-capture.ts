@@ -19,8 +19,8 @@ const absolute = z
   .startsWith("/")
   .refine((value) => path.posix.normalize(value) === value);
 export const operatorWorkerSourcesSchema = z.strictObject({
-  builder: z.strictObject({ sha, tree: sha }),
   arrusted: z.strictObject({ sha, tree: sha }),
+  builder: z.strictObject({ sha, tree: sha }),
 });
 export const operatorWorkerFamilySchema = z.enum([
   "genericInstaller",
@@ -30,32 +30,32 @@ export const operatorWorkerFamilySchema = z.enum([
   "managedRuntime",
 ]);
 export const operatorWorkerSourceCaptureSchema = z.strictObject({
-  kind: z.literal("operator-worker-catalog-v1"),
   catalogPath: absolute,
   catalogSha256: digest,
   family: operatorWorkerFamilySchema,
+  kind: z.literal("operator-worker-catalog-v1"),
   sources: operatorWorkerSourcesSchema,
 });
 export type OperatorWorkerSourceCapture = z.infer<typeof operatorWorkerSourceCaptureSchema>;
 export const operatorWorkerCatalogReceiptSchema = z.strictObject({
-  version: z.literal(1),
-  kind: z.literal("operator-worker-catalog-v1"),
-  sources: operatorWorkerSourcesSchema,
   compiler: z.strictObject({
     name: z.literal("bun"),
-    version: z.literal("1.3.14"),
     target: z.literal("bun-linux-x64"),
+    version: z.literal("1.3.14"),
   }),
+  kind: z.literal("operator-worker-catalog-v1"),
+  sources: operatorWorkerSourcesSchema,
+  version: z.literal(1),
   workers: z.record(
     operatorWorkerFamilySchema,
     z.strictObject({
+      bytes: z.number().int().positive(),
+      entries: z
+        .array(z.strictObject({ path: relative, repository: z.enum(["builder", "arrusted"]) }))
+        .min(1),
+      mode: z.literal("100755"),
       path: relative,
       sha256: digest,
-      bytes: z.number().int().positive(),
-      mode: z.literal("100755"),
-      entries: z
-        .array(z.strictObject({ repository: z.enum(["builder", "arrusted"]), path: relative }))
-        .min(1),
     }),
   ),
 });

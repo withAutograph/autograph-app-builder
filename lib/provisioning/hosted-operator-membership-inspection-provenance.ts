@@ -14,6 +14,11 @@ import type {
 } from "./hosted-operator-contract";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 
+const AUTH_MEMBERSHIP_EFFECT_KIND = "auth-membership";
+const OWNED_ORGANIZATION_MEMBERSHIP_KIND = "create-owned-organization";
+const authMembershipEffectId = (organizationId: string) =>
+  [AUTH_MEMBERSHIP_EFFECT_KIND, organizationId].join(":");
+
 export interface RetainedMembershipInspectionProvenance {
   approvedByCallId: string;
   operator: HostedOperatorRecordBase;
@@ -40,11 +45,11 @@ const membershipEffect = (
     plan.action !== "prepare" ||
     plan.stage !== "app" ||
     plan.normalActorProgram !== undefined ||
-    plan.authMembership?.kind !== "create-owned-organization"
+    plan.authMembership?.kind !== OWNED_ORGANIZATION_MEMBERSHIP_KIND
   ) {
     return null;
   }
-  const effects = plan.effects.filter((effect) => effect.kind === "auth-membership");
+  const effects = plan.effects.filter((effect) => effect.kind === AUTH_MEMBERSHIP_EFFECT_KIND);
   return effects.length === 1 ? (effects[0] ?? null) : null;
 };
 
@@ -53,21 +58,21 @@ const selectedMembership = (plan: HostedOperatorPlan, organizationId: string) =>
     return null;
   }
   const organizations =
-    plan.authMembership.kind === "create-owned-organization"
+    plan.authMembership.kind === OWNED_ORGANIZATION_MEMBERSHIP_KIND
       ? [plan.authMembership]
       : plan.authMembership.organizations;
   const spec = organizations.find((entry) => entry.organizationId === organizationId);
   const effects = plan.effects.filter(
     (effect) =>
-      effect.kind === "auth-membership" &&
+      effect.kind === AUTH_MEMBERSHIP_EFFECT_KIND &&
       (plan.normalActorProgram !== undefined || organizations.length > 1
-        ? effect.id === `auth-membership:${organizationId}`
+        ? effect.id === authMembershipEffectId(organizationId)
         : true),
   );
   if (spec === undefined || effects.length !== 1 || effects[0] === undefined) {
     return null;
   }
-  return { spec, effect: effects[0] };
+  return { effect: effects[0], spec };
 };
 
 // A later approval may use a fresh signed owner capture. Its original capture
@@ -77,31 +82,31 @@ const selectedMembershipAuthority = (
   plan: HostedOperatorPlan,
   spec: HostedOperatorOwnedOrganizationSpec,
 ) => ({
-  selection: plan.selection,
   authDatabase: plan.authDatabase,
+  authority: plan.deploymentBoundary?.authority,
   neon: {
-    projectId: plan.neon.projectId,
     branchId: plan.neon.branchId,
     endpoint: plan.neon.endpoint,
+    projectId: plan.neon.projectId,
   },
-  authority: plan.deploymentBoundary?.authority,
-  teamId: plan.deploymentBoundary?.teamId,
   organization: {
-    organizationId: spec.organizationId,
-    name: spec.name,
-    slug: spec.slug,
     actorId: spec.actorId,
+    name: spec.name,
+    organizationId: spec.organizationId,
+    slug: spec.slug,
   },
+  selection: plan.selection,
+  teamId: plan.deploymentBoundary?.teamId,
   verification: {
-    issuer: spec.identityVerification.issuer,
     audience: spec.identityVerification.audience,
+    issuer: spec.identityVerification.issuer,
     transportSource: spec.identityVerification.transportSource,
   },
 });
 
 const originalOwnershipReadback = (operator: HostedOperatorRecordBase): string | null => {
   const membership = operator.plan.authMembership;
-  if (membership?.kind !== "create-owned-organization") {
+  if (membership?.kind !== OWNED_ORGANIZATION_MEMBERSHIP_KIND) {
     return null;
   }
   // These fixed keys are in the worker's canonical alphabetical order. The
@@ -131,34 +136,34 @@ const originalOwnershipReadback = (operator: HostedOperatorRecordBase): string |
 const membershipAuthority = (plan: HostedOperatorPlan) => {
   const boundary = plan.deploymentBoundary;
   return {
-    selection: plan.selection,
-    contextId: plan.contextId,
-    neon: plan.neon,
     authDatabase: plan.authDatabase,
     authMembership: plan.authMembership,
-    publicGateway: plan.publicGateway,
+    contextId: plan.contextId,
     deploymentBoundary:
       boundary === undefined
         ? undefined
         : {
-            authority: boundary.authority,
-            teamId: boundary.teamId,
-            operator: {
-              projectId: boundary.operator.projectId,
-              environment: boundary.operator.environment,
-            },
             app: {
-              projectId: boundary.app.projectId,
               branch: boundary.app.branch,
               environment: boundary.app.environment,
+              projectId: boundary.app.projectId,
             },
+            authority: boundary.authority,
             gateway: {
-              projectId: boundary.gateway.projectId,
               branch: boundary.gateway.branch,
               environment: boundary.gateway.environment,
+              projectId: boundary.gateway.projectId,
             },
+            operator: {
+              environment: boundary.operator.environment,
+              projectId: boundary.operator.projectId,
+            },
+            teamId: boundary.teamId,
             verification: boundary.verification,
           },
+    neon: plan.neon,
+    publicGateway: plan.publicGateway,
+    selection: plan.selection,
   };
 };
 
@@ -185,7 +190,7 @@ const retainedOperations = (operator: OperatorHistory): RetainedOperation[] => [
 export const retainedHostedOperatorOperations = (
   record: HostedRuntimeJournalRecord,
 ): RetainedOperation[] => {
-  const operator = record.operator;
+  const { operator } = record;
   return operator === undefined
     ? []
     : [
@@ -275,7 +280,7 @@ const inspectionOrganizationIds = (plan: HostedOperatorPlan): readonly (string |
   if (membership === undefined) {
     return [];
   }
-  if (membership.kind === "create-owned-organization") {
+  if (membership.kind === OWNED_ORGANIZATION_MEMBERSHIP_KIND) {
     return [membership.organizationId];
   }
   return membership.organizations.map((entry) => entry.organizationId);
@@ -314,28 +319,26 @@ export const retainedMembershipInspectionProvenance = (
   for (const entry of retained) {
     const prior = entry.operator;
     const priorEffect = inspectionEffect(prior.plan, organizationId);
-    if (priorEffect === null || prior.approvalId === undefined) {
-      continue;
+    if (priorEffect !== null && prior.approvalId !== undefined) {
+      const identity = retainedMembershipIdentity(entry, organizationId);
+      const hasAuthority = [
+        entry.approvedByCallId.trim().length > 0,
+        entry.approvedByCallId !== "operator:unapproved-plan",
+        prior.approvalId.trim().length > 0,
+        prior.planDigest !== digest,
+        canonicalDigest(prior.plan) === prior.planDigest,
+        matchesMembershipAuthority(current, currentPlan, prior, organizationId),
+        !seen.has(identity),
+      ].every(Boolean);
+      if (hasAuthority) {
+        seen.add(identity);
+        candidates.push({
+          approvedByCallId: entry.approvedByCallId,
+          effect: priorEffect,
+          operator: prior,
+        });
+      }
     }
-    const identity = retainedMembershipIdentity(entry, organizationId);
-    const hasAuthority = [
-      entry.approvedByCallId.trim().length > 0,
-      entry.approvedByCallId !== "operator:unapproved-plan",
-      prior.approvalId.trim().length > 0,
-      prior.planDigest !== digest,
-      canonicalDigest(prior.plan) === prior.planDigest,
-      matchesMembershipAuthority(current, currentPlan, prior, organizationId),
-      !seen.has(identity),
-    ].every(Boolean);
-    if (!hasAuthority) {
-      continue;
-    }
-    seen.add(identity);
-    candidates.push({
-      approvedByCallId: entry.approvedByCallId,
-      operator: prior,
-      effect: priorEffect,
-    });
   }
   return candidates;
 };

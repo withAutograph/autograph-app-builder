@@ -19,15 +19,17 @@ import {
 } from "./hosted-operator-unapproved-app-successor.test-support";
 import type { HostedRuntimeJournalRow } from "./hosted-runtime-journal";
 
+const now = () => Date.parse("2026-10-20T12:00:00Z");
+
 describe("unapproved app capture continuity", () => {
   it("carries the original actor and checks both approved prerequisites", async () => {
     const { record, added: baseAdded } = captureFixture();
     const added = normalActorProgramSchema.parse({
       ...baseAdded,
-      organizations: [
-        { organizationId: "qa-org", ownerActorKey: "reviewer", name: "QA", slug: "qa" },
-      ],
       memberships: [{ actorKey: "reviewer", organizationId: "qa-org", role: "owner" }],
+      organizations: [
+        { name: "QA", organizationId: "qa-org", ownerActorKey: "reviewer", slug: "qa" },
+      ],
     });
     const previous = requiredFixture(record.operator);
     const gateway = structuredClone(requiredFixture(record.retainedAuth));
@@ -37,50 +39,51 @@ describe("unapproved app capture continuity", () => {
     gateway.plan = previous.plan;
     gateway.planDigest = operatorPlanDigest(gateway.plan);
     gateway.fenceGeneration = 1;
-    gateway.receipts = gateway.plan.effects.map((effect) => ({
-      effectId: effect.id,
-      observedAt,
-      resourceVersion: "actual-readback",
-      ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
-    }));
+    gateway.receipts = gateway.plan.effects.map((effect) => {
+      const receipt = {
+        effectId: effect.id,
+        observedAt,
+        resourceVersion: "actual-readback",
+      };
+      return effect.kind === "access" ? { ...receipt, fenceGeneration: 1 } : receipt;
+    });
     const gatewayCandidate = {
       ...requiredFixture(previous.gatewayDeliveryCandidates?.[0]),
-      operationRef: gateway.operationRef,
       deploymentId: "separate-gateway",
+      operationRef: gateway.operationRef,
     };
     previous.gatewayDeliveryCandidates?.push(gatewayCandidate);
     previous.deliveredGatewayDeploymentId = gatewayCandidate.deploymentId;
-    record.retainedParticipantGateway = { completion: gateway, candidate: gatewayCandidate };
+    record.retainedParticipantGateway = { candidate: gatewayCandidate, completion: gateway };
     const account = requiredFixture(record.accountPreparation);
     const original = initialNormalActorState(account.program, account.accountOperationRef);
     original.actors[0] = {
       actorKey: "owner",
-      signup: "complete",
       session: {
-        reference: "22222222-2222-4222-8222-222222222222",
         actorId: "original",
-        realmSessionId: "real-session",
-        origin: account.program.origin,
         expiresAt: "2026-10-19T12:00:00Z",
+        origin: account.program.origin,
+        realmSessionId: "real-session",
+        reference: "22222222-2222-4222-8222-222222222222",
       },
+      signup: "complete",
       storageState: { cookies: [], origins: [] },
     };
     const keyring = { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" };
     account.sealedState = encryptNormalActorState({
       authority: context.authority,
-      ownerSessionId: context.target.sessionId,
-      operationRef: account.accountOperationRef,
-      program: account.program,
       config: keyring,
+      operationRef: account.accountOperationRef,
+      ownerSessionId: context.target.sessionId,
+      program: account.program,
       state: original,
     });
-    const now = () => Date.parse("2026-10-20T12:00:00Z");
     const candidate = requiredFixture(
       inspectUnapprovedAppSuccessor(record, context.target, added, now()),
     );
     const nextPlan = createUnapprovedParticipantPlan(candidate, added);
     const pointer = requiredFixture(nextPlan.normalActorCapturePredecessor);
-    const auth = candidate.bootstrap.auth;
+    const { auth } = candidate.bootstrap;
     const old = structuredClone(requiredFixture(record.operator));
     record.unapprovedAppProposalHistory = [
       {
@@ -89,37 +92,36 @@ describe("unapproved app capture continuity", () => {
         preparation: structuredClone(account),
         retainedAuth: auth,
         retainedParticipantGateway: {
-          completion: candidate.bootstrap.gateway ?? auth,
           candidate: candidate.bootstrap.candidate,
+          completion: candidate.bootstrap.gateway ?? auth,
         },
       },
     ];
     const nextOperation = "00000000-0000-4000-8000-000000000005";
     record.operator = {
+      approvalId: "new-approval",
       mode: "protected-operator-v1",
       operationRef: nextOperation,
       plan: nextPlan,
       planDigest: operatorPlanDigest(nextPlan),
-      approvalId: "new-approval",
       receipts: [],
     };
     record.approvedByCallId = "new-call";
-    let row: HostedRuntimeJournalRow = { revision: 1, record };
+    let row: HostedRuntimeJournalRow = { record, revision: 1 };
     const checks: string[] = [];
     let revoked = "";
     const journal = createNormalActorJournal({
-      keyring,
-      now,
-      assertAuthorized: async () => {},
-      assertMutationAuthority: async () => {},
       assertAccountApproval: async (_context, preparation) => {
         checks.push(preparation.accountApprovalId);
         if (preparation.accountApprovalId === revoked) {
           throw new Error("approval_revoked");
         }
       },
+      assertAuthorized: async () => {},
+      assertMutationAuthority: async () => {},
+      keyring,
+      now,
       store: {
-        read: async () => structuredClone(row),
         compareAndSet: async (input) => {
           if (input.expectedRevision !== row.revision) {
             return undefined;
@@ -127,17 +129,18 @@ describe("unapproved app capture continuity", () => {
           row = { record: input.record, revision: row.revision + 1 };
           return structuredClone(row);
         },
+        read: async () => structuredClone(row),
       },
     });
     const input = {
-      program: added,
-      programDigest: normalActorProgramDigest(added),
+      accountApprovalId: "new-approval",
+      accountApprovedByCallId: "new-call",
       accountOperationRef: nextOperation,
       accountPlan: nextPlan,
       accountPlanDigest: operatorPlanDigest(nextPlan),
-      accountApprovalId: "new-approval",
-      accountApprovedByCallId: "new-call",
       capturePredecessor: pointer,
+      program: added,
+      programDigest: normalActorProgramDigest(added),
     };
     revoked = account.accountApprovalId;
     await expect(
@@ -187,41 +190,41 @@ describe("unapproved app capture continuity", () => {
     expect(row.record.unapprovedAppProposalHistory?.[0]?.operator.approvalId).toBeUndefined();
 
     const cookie = {
-      name: "session",
-      value: "fresh-cookie",
       domain: "apps.example",
-      path: "/",
       expires: -1 as const,
-      httpOnly: true as const,
-      secure: true as const,
-      sameSite: "Lax" as const,
       hostOnly: true,
+      httpOnly: true as const,
+      name: "session",
+      path: "/",
+      sameSite: "Lax" as const,
+      secure: true as const,
+      value: "fresh-cookie",
     };
     const proof = "independently-confirmed-capture";
     const proofSha256 = createHash("sha256").update(proof).digest("hex");
     const capture = async (nonce: string, actorId: string) => {
       const reference = await journal.authorizeCapture(context, {
         actorKey: "owner",
+        expiresAt: "2027-01-01T00:00:00Z",
         nonceSha256: nonce,
         proofSha256,
-        expiresAt: "2027-01-01T00:00:00Z",
       });
       const session = {
-        reference,
-        actorId,
-        realmSessionId: "fresh-session",
-        origin: account.program.origin,
-        expiresAt: "2027-01-01T00:00:00Z",
         activeOrganizationId: "existing-organization",
+        actorId,
+        expiresAt: "2027-01-01T00:00:00Z",
+        origin: account.program.origin,
+        realmSessionId: "fresh-session",
+        reference,
       };
       await journal.capture(context, {
-        version: 1,
         actorKey: "owner",
         nonceSha256: nonce,
-        proofSha256,
-        proof,
-        session,
         normalCookie: cookie,
+        proof,
+        proofSha256,
+        session,
+        version: 1,
       });
       const { hostOnly, ...storageCookie } = cookie;
       void hostOnly;
@@ -229,8 +232,8 @@ describe("unapproved app capture continuity", () => {
       const refreshed = structuredClone(requiredFixture(currentState?.state));
       refreshed.actors[0] = {
         actorKey: "owner",
-        signup: "complete",
         session,
+        signup: "complete",
         storageState: { cookies: [storageCookie], origins: [] },
       };
       return refreshed;
@@ -254,11 +257,11 @@ describe("unapproved app capture continuity", () => {
       account.sealedState,
     );
     const qaSession = {
-      reference: "88888888-8888-4888-8888-888888888888",
       actorId: "qa-actor",
-      realmSessionId: "qa-session",
-      origin: added.origin,
       expiresAt: "2027-01-01T00:00:00Z",
+      origin: added.origin,
+      realmSessionId: "qa-session",
+      reference: "88888888-8888-4888-8888-888888888888",
     };
     const currentState = await journal.read(context);
     const organizationState = structuredClone(requiredFixture(currentState?.state));
@@ -288,19 +291,19 @@ describe("unapproved app capture continuity", () => {
       issuer: added.origin,
       transportSource: {
         audience: "https://vercel.com/team",
+        environment: "preview" as const,
         issuer: "https://oidc.vercel.com/team",
         ownerId: "team",
         projectId: "builder",
-        environment: "preview" as const,
       },
     };
     const proofResult = await journal.prepareOrganizationProof(context, {
-      organizationId: "qa-org",
-      ownerActorKey: "reviewer",
-      owner: qaSession,
+      assertBootstrapCurrent: async () => {},
       binding,
       bootstrap: candidate.bootstrap,
-      assertBootstrapCurrent: async () => {},
+      organizationId: "qa-org",
+      owner: qaSession,
+      ownerActorKey: "reviewer",
     });
     expect(proofResult.record.organizationId).toBe("qa-org");
   });

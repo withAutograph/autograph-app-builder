@@ -30,10 +30,11 @@ export function BuilderSourceUpload() {
       try {
         const uploaded = await uploadApplicationSource({
           file,
+          onProgress: setProgress,
           ports: {
             begin: beginBuilderSourceUpload,
-            put: putBuilderSourceUploadChunk,
             complete: completeBuilderSourceUpload,
+            put: putBuilderSourceUploadChunk,
             status: readBuilderSourceUploadStatus,
           },
           uploadIdForDigest: (digest) => {
@@ -58,17 +59,16 @@ export function BuilderSourceUpload() {
             }
             return id;
           },
-          onProgress: setProgress,
         });
         appNameEditedByUser.current = true;
         generatedAppName.current = undefined;
         setForm((current) => ({
           ...current,
-          sourceCandidate: uploaded.reference,
           appName: uploaded.displayName,
           repository: repositoryEditedByUser.current
             ? current.repository
             : repositoryNameFromAppName(uploaded.reference.appId),
+          sourceCandidate: uploaded.reference,
         }));
         setProgress(
           `Source verified for ${uploaded.displayName}. ${uploaded.omissions} excluded files reported in the source artifact.`,

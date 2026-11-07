@@ -12,33 +12,33 @@ import type {
 const runId = "11111111-1111-4111-a111-111111111111";
 const sha = "a".repeat(64);
 const worker = {
-  id: "central-integration-bootstrap-v1",
-  sha256: sha,
-  operationScope: "central-integration-bootstrap-v1",
   executablePath: "/worker/integration",
+  id: "central-integration-bootstrap-v1",
+  operationScope: "central-integration-bootstrap-v1",
+  sha256: sha,
   subcommand: "central-integration-schema-readback",
 } as const;
 const context: CentralIntegrationContextWire = {
-  version: 1,
-  operation: { operation_id: runId, approval_digest: "b".repeat(64), fence_generation: 7 },
-  kind: "central_integration_schema",
   app_id: "integrations",
+  installer: { id: worker.id, sha256: sha },
+  kind: "central_integration_schema",
+  operation: { approval_digest: "b".repeat(64), fence_generation: 7, operation_id: runId },
+  release: { id: "checked-release", sha256: "c".repeat(64) },
   resource: {
-    resource_id: "isolated-control",
+    database: "integrations",
     environment: "preview",
     hostname: "ep-control.neon.tech",
-    port: 5432,
-    database: "integrations",
-    schema: "public",
     migrator_role: "control_owner",
-    runtime_role: "app_lease",
-    provider_project_id: "isolated-project",
+    port: 5432,
     provider_branch_id: "isolated-branch",
     provider_endpoint_id: "isolated-endpoint",
+    provider_project_id: "isolated-project",
+    resource_id: "isolated-control",
+    runtime_role: "app_lease",
+    schema: "public",
   },
-  release: { id: "checked-release", sha256: "c".repeat(64) },
-  installer: { id: worker.id, sha256: sha },
   tenant_targets: [],
+  version: 1,
 };
 const fixture = (mutation = false, write = false, capture = false) => {
   const wire: CentralIntegrationContextWire | CentralSourceCaptureContextWire = capture
@@ -47,11 +47,11 @@ const fixture = (mutation = false, write = false, capture = false) => {
         kind: "central_source_capture",
         operation: { ...context.operation, fence_generation: 1 },
         source: {
+          build_receipt_sha256: "c".repeat(64),
+          deployment_profile: "isolated-central-integrations-v1",
           repository_id: "source-repository",
           reviewed_source_sha: "a".repeat(40),
-          deployment_profile: "isolated-central-integrations-v1",
           services_manifest_sha256: "b".repeat(64),
-          build_receipt_sha256: "c".repeat(64),
         },
       }
     : context;
@@ -63,77 +63,71 @@ const fixture = (mutation = false, write = false, capture = false) => {
   const frame = (path: string, data: z.infer<ReturnType<typeof z.json>>) =>
     files.set(path, Buffer.from(JSON.stringify(data)));
   const sandbox = {
+    delete: stop,
+    extendTimeout: vi.fn(async () => {}),
     fs: {
-      mkdir: vi.fn(async () => {}),
-      rm: vi.fn(async () => {}),
       lstat: vi.fn(async (path: string) => ({
         isFile: () => true,
         size: files.get(path)?.length ?? 0,
       })),
+      mkdir: vi.fn(async () => {}),
+      rm: vi.fn(async () => {}),
     },
-    writeFiles: vi.fn(async (rows: { path: string; content: Buffer }[]) => {
-      for (const row of rows) {
-        files.set(row.path, row.content);
-      }
-    }),
     readFileToBuffer: vi.fn(async ({ path }: { path: string }) => files.get(path) ?? null),
-    delete: stop,
-    extendTimeout: vi.fn(async () => {}),
     runCommand: vi.fn(async (options: { detached?: boolean; args: string[] }) => {
       if (options.detached !== true) {
         return { exitCode: 0, stdout: async () => `${sha}  /worker/integration\n` };
       }
       const spool = options.args[2];
       frame(`${spool}/requests/1.json`, {
-        kind: mutation ? "authorize_effect" : "check_fence",
-        version: 1,
-        operation_id: runId,
+        app_id: wire.app_id,
         approval_digest: wire.operation.approval_digest,
         context_digest: digest,
         fence_generation: wire.operation.fence_generation,
-        app_id: wire.app_id,
-        resource_id: wire.resource.resource_id,
-        release_id: wire.release.id,
         installer_id: worker.id,
         installer_sha256: sha,
+        kind: mutation ? "authorize_effect" : "check_fence",
+        operation_id: runId,
+        release_id: wire.release.id,
+        resource_id: wire.resource.resource_id,
         tenant_id: null,
+        version: 1,
         ...(mutation ? { effect_id: "install-central-schema", sequence: 1 } : {}),
       });
-      frame(`${spool}/requests/1.ready`, { version: 1, run_id: runId, frame_id: 1 });
+      frame(`${spool}/requests/1.ready`, { frame_id: 1, run_id: runId, version: 1 });
       if (write) {
         frame(`${spool}/requests/2.json`, {
-          kind: "checkpoint_effect",
-          version: 1,
-          operation_id: runId,
           context_digest: digest,
-          fence_generation: wire.operation.fence_generation,
-          sequence: 1,
           effect_id: "install-central-schema",
+          fence_generation: wire.operation.fence_generation,
+          kind: "checkpoint_effect",
+          operation_id: runId,
+          receipt: { readback_sha256: "d".repeat(64), state: "applied" },
           resource_id: wire.resource.resource_id,
+          sequence: 1,
           tenant_id: null,
-          receipt: { state: "applied", readback_sha256: "d".repeat(64) },
+          version: 1,
         });
-        frame(`${spool}/requests/2.ready`, { version: 1, run_id: runId, frame_id: 2 });
+        frame(`${spool}/requests/2.ready`, { frame_id: 2, run_id: runId, version: 1 });
       }
       for (const [index, kind] of [
         [1, "worker_started"],
         [2, "worker_succeeded"],
       ] as const) {
-        frame(`${spool}/lifecycle/${index}.json`, { version: 1, run_id: runId, kind });
-        frame(`${spool}/lifecycle/${index}.ready`, { version: 1, run_id: runId, frame_id: index });
+        frame(`${spool}/lifecycle/${index}.json`, { kind, run_id: runId, version: 1 });
+        frame(`${spool}/lifecycle/${index}.ready`, { frame_id: index, run_id: runId, version: 1 });
       }
       frame(`${spool}/readback.json`, {
-        version: 1,
-        operation_id: runId,
         context_digest: digest,
         fence_generation: wire.operation.fence_generation,
-        status: "applied",
+        operation_id: runId,
         readback_sha256: "d".repeat(64),
         receipt: { resourceId: wire.resource.resource_id, schemaSha256: "e".repeat(64) },
+        status: "applied",
+        version: 1,
       });
       return {
         kill: vi.fn(async () => {}),
-        wait: async () => ({ exitCode: 0 }),
         async *logs() {
           for (const [kind, frameId] of [
             ["protected_installer_lifecycle_ready", 1],
@@ -142,12 +136,18 @@ const fixture = (mutation = false, write = false, capture = false) => {
             ["protected_installer_lifecycle_ready", 2],
           ] as const) {
             yield {
+              data: `${JSON.stringify({ frame_id: frameId, kind, run_id: runId, version: 1 })}\n`,
               stream: "stdout",
-              data: `${JSON.stringify({ kind, version: 1, run_id: runId, frame_id: frameId })}\n`,
             };
           }
         },
+        wait: async () => ({ exitCode: 0 }),
       };
+    }),
+    writeFiles: vi.fn(async (rows: { path: string; content: Buffer }[]) => {
+      for (const row of rows) {
+        files.set(row.path, row.content);
+      }
     }),
   };
   const createSandbox: unknown = vi.fn(async () => sandbox);
@@ -168,7 +168,7 @@ const fixture = (mutation = false, write = false, capture = false) => {
     signal: new AbortController().signal,
     assertCurrent: vi.fn(async () => {}),
   };
-  return { input, createSandbox, stop, files };
+  return { createSandbox, files, input, stop };
 };
 const config = {
   image: "pinned-control",
@@ -185,8 +185,8 @@ it("reuses the fenced framed transport for fixed integration readback and privat
     >["createSandbox"],
   });
   expect(result).toMatchObject({
-    status: "applied",
     receipt: { resourceId: context.resource.resource_id },
+    status: "applied",
   });
   expect(f.input.assertCurrent).toHaveBeenCalled();
   expect(f.stop).toHaveBeenCalledOnce();
@@ -232,8 +232,8 @@ it("records the fixed global schema checkpoint before acknowledging its write", 
     {
       ...f.input,
       readOnly: false,
-      worker: { ...worker, subcommand: "central-integration-schema" },
       recordCheckpoint,
+      worker: { ...worker, subcommand: "central-integration-schema" },
     },
     {
       createSandbox: f.createSandbox as NonNullable<

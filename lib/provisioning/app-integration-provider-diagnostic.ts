@@ -1,8 +1,6 @@
 import { z } from "zod";
 
 export const integrationProviderDiagnosticSchema = z.strictObject({
-  provider: z.literal("ampersand"),
-  statusCode: z.number().int().min(400).max(599),
   code: z.enum([
     "unauthenticated",
     "forbidden",
@@ -13,12 +11,14 @@ export const integrationProviderDiagnosticSchema = z.strictObject({
     "provider_unavailable",
     "request_rejected",
   ]),
+  provider: z.literal("ampersand"),
   requestRef: z
     .string()
     .min(1)
     .max(160)
     .regex(/^[A-Za-z0-9][A-Za-z0-9:_-]*$/u)
     .optional(),
+  statusCode: z.number().int().min(400).max(599),
 });
 export type IntegrationProviderDiagnostic = z.infer<typeof integrationProviderDiagnosticSchema>;
 /** Only closed HTTP facts and a validated provider request header cross this boundary. */
@@ -56,14 +56,17 @@ const httpCode = (status: number): IntegrationProviderDiagnostic["code"] => {
   }
 };
 export const integrationProviderHttpError = (response: Response) => {
-  const status = response.status;
+  const { status } = response;
   const requestRef = integrationProviderDiagnosticSchema.shape.requestRef.safeParse(
     response.headers.get("x-request-id") ?? response.headers.get("x-amzn-requestid") ?? undefined,
   );
-  return new IntegrationProviderError({
-    provider: "ampersand",
-    statusCode: status,
+  const details = {
     code: httpCode(status),
-    ...(requestRef.success && requestRef.data !== undefined ? { requestRef: requestRef.data } : {}),
-  });
+    provider: "ampersand" as const,
+    statusCode: status,
+  };
+  if (requestRef.success && requestRef.data !== undefined) {
+    return new IntegrationProviderError({ ...details, requestRef: requestRef.data });
+  }
+  return new IntegrationProviderError(details);
 };

@@ -64,26 +64,26 @@ type Request = (input: {
 }) => Promise<unknown>;
 
 const pullSchema = z.object({
+  base: z.object({ ref: branch, repo: z.object({ id }) }),
+  draft: z.boolean(),
+  head: z.object({ ref: branch, repo: z.object({ id }).nullable(), sha }),
+  merge_commit_sha: sha.nullable(),
+  merged: z.boolean(),
   node_id: z.string().min(1),
   number: id,
   state: z.enum(["open", "closed"]),
-  draft: z.boolean(),
-  merged: z.boolean(),
-  merge_commit_sha: sha.nullable(),
-  head: z.object({ sha, ref: branch, repo: z.object({ id }).nullable() }),
-  base: z.object({ ref: branch, repo: z.object({ id }) }),
 });
 
 const readySchema = z.object({
   data: z.object({
     node: z.object({
-      headRefOid: sha,
-      baseRefName: branch,
-      isDraft: z.boolean(),
-      timelineItems: z.object({
+      baseChanges: z.object({
         nodes: z.array(z.object({ createdAt: timestamp })),
       }),
-      baseChanges: z.object({
+      baseRefName: branch,
+      headRefOid: sha,
+      isDraft: z.boolean(),
+      timelineItems: z.object({
         nodes: z.array(z.object({ createdAt: timestamp })),
       }),
     }),
@@ -91,32 +91,32 @@ const readySchema = z.object({
 });
 
 const runSchema = z.object({
-  id,
+  conclusion: z.string().nullable(),
+  created_at: timestamp,
   event: z.string(),
-  head_sha: sha,
-  run_attempt: id,
   head_branch: branch,
   head_repository: z.object({ id }).nullable(),
+  head_sha: sha,
+  id,
   path: z.string(),
-  created_at: timestamp,
-  status: z.string(),
-  conclusion: z.string().nullable(),
   pull_requests: z.array(
     z.object({
-      number: id,
       base: z.object({ ref: branch, repo: z.object({ id }) }),
       head: z.object({ repo: z.object({ id }) }),
+      number: id,
     }),
   ),
+  run_attempt: id,
+  status: z.string(),
 });
 
 const jobSchema = z.object({
-  run_id: id,
-  run_attempt: id,
+  conclusion: z.string().nullable(),
   head_sha: sha,
   name: z.string(),
+  run_attempt: id,
+  run_id: id,
   status: z.string(),
-  conclusion: z.string().nullable(),
 });
 
 const readyQuery = `query ReadReadyCycle($id: ID!) {
@@ -150,10 +150,10 @@ const assertExpectedHead = (ref: GitHubPrDeliveryRef, result: GitHubPrDeliveryOb
 };
 
 const pullWindowSchema = z.object({
-  number: id,
-  created_at: timestamp,
   closed_at: timestamp.nullable(),
+  created_at: timestamp,
   head: z.object({ ref: branch, repo: z.object({ id }).nullable() }),
+  number: id,
 });
 
 const pullWindows = async (request: Request, prefix: string, owner: string, headBranch: string) => {
@@ -204,9 +204,9 @@ const runMatchesPull = (
 
 const readReadyHistory = async (request: Request, pull: z.infer<typeof pullSchema>) => {
   const response = await request({
+    body: { query: readyQuery, variables: { id: pull.node_id } },
     method: "POST",
     path: "/graphql",
-    body: { query: readyQuery, variables: { id: pull.node_id } },
   });
   return readySchema.parse(response).data.node;
 };
@@ -223,7 +223,7 @@ const readReadyCycle = async (request: Request, pull: z.infer<typeof pullSchema>
     return null;
   }
   const baseChangedAt = cycle.baseChanges.nodes[0]?.createdAt ?? readyAt;
-  return { readyAt, earliestRunAt: Math.max(Date.parse(readyAt), Date.parse(baseChangedAt)) };
+  return { earliestRunAt: Math.max(Date.parse(readyAt), Date.parse(baseChangedAt)), readyAt };
 };
 
 const checkJobs = async (request: Request, prefix: string, runId: number) => {
@@ -270,7 +270,7 @@ const checkReadyRun = async (
     : [];
   // GitHub lists newest runs first. An unresolved association for the newest
   // plausible run is pending instead of qualifying an older successful run.
-  const run = candidates[0];
+  const [run] = candidates;
   if (run === undefined || !runMatchesPull(run, pull, windows)) {
     return { checks: "pending", readyAt };
   }
@@ -283,19 +283,19 @@ const checkReadyRun = async (
         job.head_sha !== run.head_sha,
     )
   ) {
-    return { checks: "pending", readyAt, checkRunId: run.id };
+    return { checkRunId: run.id, checks: "pending", readyAt };
   }
   if (jobs.length !== 1 || jobs[0]?.status !== "completed") {
     return {
+      checkRunId: run.id,
       checks: run.status === "completed" ? "failed" : "pending",
       readyAt,
-      checkRunId: run.id,
     };
   }
   return {
+    checkRunId: run.id,
     checks: jobs[0].conclusion === "success" ? "passed" : "failed",
     readyAt,
-    checkRunId: run.id,
   };
 };
 
@@ -318,15 +318,15 @@ export const createGitHubPrDeliveryProvider = (
     }
     const state = pull.merged ? "merged" : pull.state;
     const result: GitHubPrDeliveryObservation = {
-      state,
-      draft: pull.draft,
-      headSha: pull.head.sha,
       baseBranch: pull.base.ref,
       checks: "pending",
-      ...(pull.merged && pull.merge_commit_sha !== null
-        ? { mergeCommitSha: pull.merge_commit_sha }
-        : {}),
+      draft: pull.draft,
+      headSha: pull.head.sha,
+      state,
     };
+    if (pull.merged && pull.merge_commit_sha !== null) {
+      result.mergeCommitSha = pull.merge_commit_sha;
+    }
     if (
       state !== "closed" &&
       !pull.draft &&
@@ -372,10 +372,10 @@ export const createGitHubPrDeliveryProvider = (
       }
       assertMutationActive(signal);
       const payload = await request({
+        body: { query: readyMutation, variables: { id: before.pull.node_id } },
+        effect: "ready",
         method: "POST",
         path: "/graphql",
-        effect: "ready",
-        body: { query: readyMutation, variables: { id: before.pull.node_id } },
       });
       const rejection = z
         .object({
@@ -427,10 +427,10 @@ export const createGitHubPrDeliveryProvider = (
       assertMutationActive(signal);
       const merged = z.object({ merged: z.literal(true), sha }).parse(
         await request({
+          body: { merge_method: "squash", sha: ref.headSha },
+          effect: "merge",
           method: "PUT",
           path: `${before.pullPath}/merge`,
-          effect: "merge",
-          body: { sha: ref.headSha, merge_method: "squash" },
         }),
       );
       const { result: after } = await observe(ref, request);

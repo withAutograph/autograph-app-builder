@@ -49,9 +49,9 @@ function storage() {
     })),
     select: vi.fn(() => ({
       from: (table: unknown) => ({
-        where: () => {
+        where: async () => {
           const result = Promise.resolve(rowsFor(table));
-          return Object.assign(result, { limit: () => result });
+          return await Object.assign(result, { limit: async () => await result });
         },
       }),
     })),

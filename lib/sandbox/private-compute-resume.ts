@@ -15,10 +15,10 @@ export const readPrivateComputeProviderState = async (
   }
   const mount = native.mounts?.["/workspace"];
   const journal = await createLocalPrivateComputeJournal({
+    assertCurrent,
     authority,
     sandboxId: native.name,
     workspaceDrive: mount?.drive,
-    assertCurrent,
   });
   const checkpoint = await journal.read();
   if (
@@ -30,12 +30,12 @@ export const readPrivateComputeProviderState = async (
     );
   }
   return {
-    sandboxId: native.name,
-    status: native.status,
-    configuredVcpus: native.vcpus,
     configuredMemoryMiB: native.memory,
+    configuredVcpus: native.vcpus,
     phase: checkpoint.record?.phase ?? "not-requested",
     revision: checkpoint.revision,
+    sandboxId: native.name,
+    status: native.status,
   };
 };
 /** Only the separately approved activation port may resume an unresolved resource transition. */

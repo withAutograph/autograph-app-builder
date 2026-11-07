@@ -24,25 +24,25 @@ describe("expired pre-delivery captured account", () => {
     const originalState = initialNormalActorState(original.program, original.accountOperationRef);
     originalState.actors[0] = {
       actorKey: "owner",
-      signup: "complete",
       session: {
-        reference: "00000000-0000-4000-8000-000000000010",
         actorId: "original-actor",
-        realmSessionId: "expired-session",
-        origin: original.program.origin,
         expiresAt: "2026-10-13T00:00:00Z",
+        origin: original.program.origin,
+        realmSessionId: "expired-session",
+        reference: "00000000-0000-4000-8000-000000000010",
       },
+      signup: "complete",
       storageState: {
         cookies: [
           {
-            name: "fixture-session",
-            value: "expired",
             domain: "apps.example",
-            path: "/",
             expires: -1,
             httpOnly: true,
-            secure: true,
+            name: "fixture-session",
+            path: "/",
             sameSite: "Lax",
+            secure: true,
+            value: "expired",
           },
         ],
         origins: [],
@@ -51,11 +51,11 @@ describe("expired pre-delivery captured account", () => {
     const keyring = { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" };
     original.sealedState = encryptNormalActorState({
       authority: context.authority,
-      ownerSessionId: context.target.sessionId,
+      config: keyring,
       operationRef: original.accountOperationRef,
+      ownerSessionId: context.target.sessionId,
       program: original.program,
       state: originalState,
-      config: keyring,
     });
     const candidate = inspectUnapprovedAppSuccessor(
       record,
@@ -78,17 +78,16 @@ describe("expired pre-delivery captured account", () => {
       },
     ];
     record.operator = {
+      approvalId: "new-approval",
       mode: "protected-operator-v1",
       operationRef: newRef,
       plan,
       planDigest: operatorPlanDigest(plan),
-      approvalId: "new-approval",
       receipts: [],
     };
     record.approvedByCallId = "new-call";
     let row = { record: hostedRuntimeJournalRecordSchema.parse(record), revision: 1 };
     const store: NormalActorJournalPorts["store"] = {
-      read: async () => structuredClone(row),
       compareAndSet: async (input) => {
         if (input.expectedRevision !== row.revision) {
           // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS explicitly returns no row.
@@ -100,39 +99,40 @@ describe("expired pre-delivery captured account", () => {
         };
         return structuredClone(row);
       },
+      read: async () => structuredClone(row),
     };
     const journalPorts: NormalActorJournalPorts = {
-      store,
+      assertAccountApproval: async () => {},
+      assertAuthorized: async () => {},
+      assertMutationAuthority: async () => {},
       keyring,
       now: () => Date.parse(observedAt),
-      assertAuthorized: async () => {},
-      assertAccountApproval: async () => {},
-      assertMutationAuthority: async () => {},
+      store,
     };
     const network = vi.fn<typeof fetch>(async () => {
       throw new Error("expired cookie used");
     });
-    const invitation = vi.fn(async () => {
+    const invitation = vi.fn<NormalActorOperationsDependencies["prepareActorCapture"]>(async () => {
       throw new Error("ordinary invitation");
     });
     const deps: NormalActorOperationsDependencies = {
-      journalPorts,
-      assertPlanningAuthorized: async () => {},
       assertCurrentPlan: async () => {},
-      normalRealmFetch: async () => network,
-      prepareActorCapture: invitation,
+      assertPlanningAuthorized: async () => {},
       collectOrganizationOwnerProof: vi.fn(),
       executeOrganization: vi.fn(),
       inspectOrganization: vi.fn(),
+      journalPorts,
+      normalRealmFetch: async () => network,
+      prepareActorCapture: invitation,
     };
     const operations = createHostedOperatorNormalActorOperations(deps);
     const input = {
       ...context,
-      operationRef: newRef,
-      callId: "new-call",
       approvalId: "new-approval",
-      planDigest: operatorPlanDigest(plan),
+      callId: "new-call",
+      operationRef: newRef,
       plan,
+      planDigest: operatorPlanDigest(plan),
     };
     await expect(operations.ensureNormalActorCapture(input)).rejects.toThrow("ordinary invitation");
     expect(invitation).toHaveBeenCalledWith(

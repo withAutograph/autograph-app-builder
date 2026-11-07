@@ -30,12 +30,12 @@ try {
   await writeFile(
     entry,
     `import {runManagedRuntimeEntryCli} from ${JSON.stringify(builder)};\nimport {createManagedGatewayVerification,verifyManagedGatewayRequest} from ${JSON.stringify(verifier)};\nawait runManagedRuntimeEntryCli({createVerification:createManagedGatewayVerification,verifyRequest:verifyManagedGatewayRequest});\n`,
-    { mode: 0o600, flag: "wx" },
+    { flag: "wx", mode: 0o600 },
   );
   const result = await Bun.build({
+    compile: { outfile: path.resolve(outputFile), target },
     entrypoints: [entry],
     target: "bun",
-    compile: { target, outfile: path.resolve(outputFile) },
   });
   if (!result.success) {
     throw new Error("Managed runtime executable build failed");
@@ -43,8 +43,8 @@ try {
   const bytes = await readFile(outputFile);
   const compiler = `bun@${Bun.version}`;
   process.stdout.write(
-    `${JSON.stringify({ compiler, target, sha256: createHash("sha256").update(bytes).digest("hex"), bytes: bytes.length })}\n`,
+    `${JSON.stringify({ bytes: bytes.length, compiler, sha256: createHash("sha256").update(bytes).digest("hex"), target })}\n`,
   );
 } finally {
-  await rm(directory, { recursive: true, force: true });
+  await rm(directory, { force: true, recursive: true });
 }

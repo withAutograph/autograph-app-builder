@@ -133,8 +133,8 @@ const fixture = (
     execute,
     failure,
     policies,
-    sandbox,
     proposal,
+    sandbox,
   };
 };
 
@@ -296,14 +296,14 @@ it("applies the exact imported application catalog plan only within the approved
     ...f.proposal,
     applicationSourceImport: {
       appId: "vendor",
-      manifestDigest: "a".repeat(64),
       importedSessionId: "new-hosted-session",
+      manifestDigest: "a".repeat(64),
       registration: {
-        oldDigest: digest(topology),
-        newDigest: digest(proposed),
-        proposedBytes: proposed,
-        projectName: "vendor",
         assetRoute: "/asset/:path*",
+        newDigest: digest(proposed),
+        oldDigest: digest(topology),
+        projectName: "vendor",
+        proposedBytes: proposed,
       },
     },
   });
@@ -316,8 +316,8 @@ it("applies the exact imported application catalog plan only within the approved
   expect(result.exitCode).toBe(0);
   expect(f.events.indexOf("registration")).toBeLessThan(f.events.indexOf("install"));
   expect(targetApplyCommandReceiptSchema.parse(JSON.parse(result.stdout)).topology).toEqual({
-    oldDigest: digest(topology),
     newDigest: digest(proposed),
+    oldDigest: digest(topology),
     path: "microfrontends.json",
   });
   sandbox.readTextFile.mockResolvedValue("changed-by-other-writer");

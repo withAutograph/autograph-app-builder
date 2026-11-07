@@ -62,8 +62,7 @@ describe("planning from the current checkout", () => {
             readFileSync(nodePath.join(root, path.replace(/^repository\//u, ""))),
           ),
         readTextFile: async () => await Promise.resolve(null),
-        removePath: () => Promise.resolve(),
-        writeTextFile: () => Promise.resolve(),
+        removePath: async () => {},
         run: async ({ command }: { command: string }) => {
           const stdout = command.startsWith("stat ")
             ? execFileSync(
@@ -79,6 +78,7 @@ describe("planning from the current checkout", () => {
             : planningCommandOutput(command, "644");
           return await Promise.resolve({ exitCode: 0, stderr: "", stdout });
         },
+        writeTextFile: async () => {},
       } as unknown as SandboxSession;
       const result = await executeTargetIdentityAndPlanning({
         appId: "inventory-queue",
@@ -86,20 +86,20 @@ describe("planning from the current checkout", () => {
         appSpecDigest: "b".repeat(64),
         artifactRevision: "a".repeat(64),
         executor: fixtureTargetCommandExecutor(),
-        existingAppChanges: files.map((path) => ({ path, content: `changed ${path}` })),
+        existingAppChanges: files.map((path) => ({ content: `changed ${path}`, path })),
         sandbox,
       });
       if (!("operation" in result.proposal)) throw new Error("Expected an existing-app plan");
       expect(
         result.proposal.iteration.changes.map((change) => ({
-          path: change.path,
-          before: change.before?.mode,
           after: change.after?.mode,
+          before: change.before?.mode,
+          path: change.path,
         })),
-      ).toEqual(files.map((path) => ({ path, before: "755", after: "755" })));
+      ).toEqual(files.map((path) => ({ after: "755", before: "755", path })));
       expect(readFileSync(nodePath.join(root, collider), "utf-8")).toBe(`original ${collider}`);
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      rmSync(root, { force: true, recursive: true });
     }
   });
   it("plans with checkout execution despite an irrelevant hosted image setting", () => {
@@ -484,48 +484,46 @@ describe("planning from the current checkout", () => {
       planningRoot: scratchRoot,
     });
     const identity = targetIdentitySchema.parse(JSON.parse(identityResult.stdout));
-    const run = vi.fn<SandboxSession["run"]>((input) => {
+    const run = vi.fn<SandboxSession["run"]>(async (input) => {
       const result = { exitCode: 0, stderr: "", stdout: "" };
       if (input.command.startsWith("mkdir ")) {
-        return Promise.resolve(result);
+        return result;
       }
       if (input.command.includes("app-identity.ts")) {
         const title = files.get(`${input.workingDirectory}/repository-identity.txt`);
         if (title === undefined) {
           throw new Error("Identity did not read the live source");
         }
-        return Promise.resolve({ ...result, stdout: JSON.stringify({ ...identity, title }) });
+        return { ...result, stdout: JSON.stringify({ ...identity, title }) };
       }
       if (input.command.startsWith("test -d ")) {
-        return Promise.resolve({ ...result, exitCode: 1 });
+        return { ...result, exitCode: 1 };
       }
       if (input.command.startsWith("test -f ")) {
         const path = `${input.workingDirectory}/${input.command.slice("test -f ".length)}`;
-        return Promise.resolve({ ...result, exitCode: files.has(path) ? 0 : 1 });
+        return { ...result, exitCode: files.has(path) ? 0 : 1 };
       }
       throw new Error("Unexpected planning filesystem mutation or command");
     });
     const sandbox = {
-      run,
-      removePath: ({ path }: { path: string }) => {
+      readBinaryFile: async ({ path }: { path: string }) => {
+        const content = files.get(`/workspace/${path}`);
+        return content === undefined ? null : Buffer.from(content);
+      },
+      removePath: async ({ path }: { path: string }) => {
         for (const file of files.keys()) {
           if (file.startsWith(`/workspace/${path}/`)) {
             files.delete(file);
           }
         }
-        return Promise.resolve();
       },
-      writeTextFile: ({ path, content }: { path: string; content: string }) => {
+      run,
+      writeTextFile: async ({ path, content }: { path: string; content: string }) => {
         files.set(`/workspace/${path}`, content);
-        return Promise.resolve();
-      },
-      readBinaryFile: ({ path }: { path: string }) => {
-        const content = files.get(`/workspace/${path}`);
-        return Promise.resolve(content === undefined ? null : Buffer.from(content));
       },
     } as unknown as SandboxSession;
-    const plan = () =>
-      executeTargetIdentityAndPlanning({
+    const plan = async () =>
+      await executeTargetIdentityAndPlanning({
         appId: "example",
         appSpecContent: spec,
         appSpecDigest: specDigest,
@@ -548,10 +546,10 @@ describe("planning from the current checkout", () => {
     expect(files.has(`${sourceRoot}/${updated.proposal.contract.appSpec.path}`)).toBe(false);
     expect(files.get(identityFile)).toBe("Updated title");
     const apply = await materializeFreshApplyOverlay({
-      sandbox,
       artifactRevision: revision,
-      proposalDigest: "c".repeat(64),
       proposal: updated.proposal,
+      proposalDigest: "c".repeat(64),
+      sandbox,
     });
     expect(Buffer.from(apply.acceptedAppSpec).toString("utf-8")).toBe(spec);
     expect(apply.applyRoot).toBe(sourceRoot);
@@ -591,7 +589,7 @@ describe("planning from the current checkout", () => {
       .mockResolvedValueOnce({ exitCode: 1, stderr: "Cannot find module dependency", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "installed" })
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "identity" });
-    const setNetworkPolicy = vi.fn(() => Promise.resolve());
+    const setNetworkPolicy = vi.fn(async () => {});
     const sandbox = { run, setNetworkPolicy } as unknown as SandboxSession;
     const result = await sandboxTargetCommandExecutor(sandbox)({
       appId: "stock-exceptions",

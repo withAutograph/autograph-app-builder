@@ -137,8 +137,8 @@ export function createBuilderProvisioningDependencies(
     database,
   });
   const dependencies: Parameters<typeof executeBuilderProvisioning>[0]["dependencies"] = {
-    deactivateVercelInstallation: (installationId, now) =>
-      vercelInstallations.deactivate(installationId, now),
+    deactivateVercelInstallation: async (installationId, now) =>
+      await vercelInstallations.deactivate(installationId, now),
     githubConfig: readGitHubProvisioningEnvironment(environment),
     githubCredentials: createPostgresGitHubUserCredentialStore({
       config: readGitHubUserCredentialEnvironment(environment),
@@ -146,8 +146,8 @@ export function createBuilderProvisioningDependencies(
     }),
     githubInstallations: createPostgresHostedGitHubInstallationStore(database),
     journal: createPostgresBuilderProvisionJournalStore(database),
-    readVercelCredential: ({ authority, installationId }) =>
-      readActiveVercelInstallationToken({
+    readVercelCredential: async ({ authority, installationId }) =>
+      await readActiveVercelInstallationToken({
         authority,
         config: vercelConfig,
         database,

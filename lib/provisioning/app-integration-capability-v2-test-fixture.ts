@@ -2,21 +2,6 @@ import { integrationCapabilityPlan as legacy } from "./app-integration-capabilit
 
 export const integrationCapabilityV2PlanInput = () => ({
   ...legacy,
-  version: 2,
-  kind: "app-integrations-capability-plan-v2",
-  resourceWorker: { id: "neon-resource-bootstrap-v1", sha256: "a".repeat(64) },
-  providerDestination: {
-    name: "isolated-reads",
-    origin: legacy.publicOrigin,
-    path: `/${legacy.selection.appId}/api/integrations/quickbooks`,
-  },
-  machineIngress: [
-    {
-      kind: "quickbooks-ingress",
-      method: "POST",
-      path: `/${legacy.selection.appId}/api/integrations/quickbooks`,
-    },
-  ],
   effects: [
     "prepare-control-database",
     "install-control-schema",
@@ -24,4 +9,19 @@ export const integrationCapabilityV2PlanInput = () => ({
     "prepare-provider-destination",
     "register-central-app",
   ],
+  kind: "app-integrations-capability-plan-v2",
+  machineIngress: [
+    {
+      kind: "quickbooks-ingress",
+      method: "POST",
+      path: `/${legacy.selection.appId}/api/integrations/quickbooks`,
+    },
+  ],
+  providerDestination: {
+    name: "isolated-reads",
+    origin: legacy.publicOrigin,
+    path: `/${legacy.selection.appId}/api/integrations/quickbooks`,
+  },
+  resourceWorker: { id: "neon-resource-bootstrap-v1", sha256: "a".repeat(64) },
+  version: 2,
 });

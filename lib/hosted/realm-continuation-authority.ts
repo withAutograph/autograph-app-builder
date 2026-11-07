@@ -51,8 +51,8 @@ const claimSchema = z.strictObject({
       proofSha256: digest,
     }),
     z.strictObject({
-      kind: z.literal("expired-technical-wait"),
       expiresAt: z.iso.datetime({ offset: true }),
+      kind: z.literal("expired-technical-wait"),
     }),
   ]),
   service: serviceSchema,
@@ -229,10 +229,10 @@ export const readVerifiedRealmContinuationAuthority = (
     .object({
       current: z
         .object({
-          principalType: z.string().optional(),
           attributes: z
             .object({ [realmContinuationAuthorityAttribute]: z.unknown().optional() })
             .optional(),
+          principalType: z.string().optional(),
         })
         .optional(),
     })

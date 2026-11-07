@@ -98,8 +98,8 @@ export default defineTool({
   },
   inputSchema: z
     .strictObject({
-      expectedGitHubSourceDigest: digest.optional(),
       expectedDestinationReviewDigest: digest.optional(),
+      expectedGitHubSourceDigest: digest.optional(),
       expectedReviewDigest: digest,
       title: z.string().trim().min(1).max(120),
     })

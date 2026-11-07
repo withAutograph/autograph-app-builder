@@ -136,15 +136,14 @@ describe("analyzeSource", () => {
       reference,
       tokenCss,
     });
-    expect(report.observations).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          classification: "token-reference",
-          summary: expect.stringContaining("color treatment override"),
-          verdict: "nonconforming",
-        }),
-      ]),
-    );
+    expect(
+      report.observations.some(
+        (observation) =>
+          observation.classification === "token-reference" &&
+          observation.verdict === "nonconforming" &&
+          observation.summary.includes("color treatment override"),
+      ),
+    ).toBe(true);
     expect(report.observations.some((o) => o.summary.includes("320px"))).toBe(false);
   });
 

@@ -28,12 +28,14 @@ const branchWorkflow = () => {
   return workflow;
 };
 
-export const exactBranchWorktreePublicationProposal = (input: { expectedReviewDigest: string }) => {
+export const exactBranchWorktreePublicationProposal = async (input: {
+  expectedReviewDigest: string;
+}) => {
   const workflow = branchWorkflow();
   if (workflow.reviewReceipt.digest !== input.expectedReviewDigest) {
     throw new Error("The reviewed change-set receipt changed before publication.");
   }
-  return deriveBranchWorktreePublicationProposal({
+  return await deriveBranchWorktreePublicationProposal({
     review: workflow.reviewReceipt,
     sourceReceipt: workflow.sourceReceipt,
   });
@@ -47,15 +49,17 @@ export default defineTool({
     if (workflow.reviewReceipt.digest !== input.expectedReviewDigest) {
       throw new Error("The reviewed receipt changed before publication status.");
     }
-    const proposal = await (() => {
-      if (workflow.phase === "reviewed") {
-        return exactBranchWorktreePublicationProposal(input);
-      }
-      if (workflow.phase === "branch_publication_pending") {
-        return workflow.branchPublicationProposal;
-      }
-      return proposalFromBranchJournal(workflow.branchPublicationReceipt);
-    })();
+    let proposalCandidate:
+      | ReturnType<typeof exactBranchWorktreePublicationProposal>
+      | ReturnType<typeof proposalFromBranchJournal>;
+    if (workflow.phase === "reviewed") {
+      proposalCandidate = exactBranchWorktreePublicationProposal(input);
+    } else if (workflow.phase === "branch_publication_pending") {
+      proposalCandidate = workflow.branchPublicationProposal;
+    } else {
+      proposalCandidate = proposalFromBranchJournal(workflow.branchPublicationReceipt);
+    }
+    const proposal = await proposalCandidate;
     const journal = await readBranchWorktreePublicationJournal(proposal);
     if (journal === undefined) {
       if (workflow.phase === "branch_publication_pending") {

@@ -16,32 +16,32 @@ import type { HostedEveTransport } from "./hosted-service";
 const principal = {
   audience: "https://builder.test/mcp",
   issuer: "https://builder.test/auth",
-  workspaceId: "workspace",
   ownerUserId: "owner",
   scopes: Object.values(hostedEveOperationScopes),
+  workspaceId: "workspace",
 };
 const result = { cursor: 1, events: [], sessionId: "public", status: "waiting" as const };
 const scope = {
-  authoritySessionId: "logical",
+  acceptedByCallId: "accept",
   appId: "app",
   appSpecDigest: "a".repeat(64),
-  acceptedByCallId: "accept",
   artifactPath: "app.md",
   artifactRevision: "rev",
-  sourceReceiptDigest: "b".repeat(64),
-  workspaceId: "sandbox",
-  workspaceDigest: "c".repeat(64),
+  authoritySessionId: "logical",
   planningStateDigest: "d".repeat(64),
+  sourceReceiptDigest: "b".repeat(64),
+  workspaceDigest: "c".repeat(64),
+  workspaceId: "sandbox",
 };
 const decision = {
-  version: 1 as const,
-  kind: "preapproval-authoring-decision-v1" as const,
   adapterSessionId: "logical",
-  turnId: "turn1",
-  turnSequence: 1,
   decision: "runnable" as const,
+  kind: "preapproval-authoring-decision-v1" as const,
   scope,
   scopeDigest: authoringScopeDigest(scope),
+  turnId: "turn1",
+  turnSequence: 1,
+  version: 1 as const,
 };
 const fixture = async () => {
   const store = new InMemoryHostedEveStore();
@@ -64,28 +64,28 @@ const fixture = async () => {
     requestDigest: start.requestDigest,
     result,
     session: {
-      version: 1,
       adapterSessionId: "logical",
+      createdAtEpochMs: 1,
       principal,
       sessionId: "public",
       status: "waiting",
-      createdAtEpochMs: 1,
       updatedAtEpochMs: 1,
+      version: 1,
     },
   });
-  await store.recordPreapprovalAuthoringDecision({ principal, sessionId: "public", decision });
-  const sendAccepted = vi.fn<NonNullable<HostedEveTransport["sendAccepted"]>>(async () => {});
-  const observe = vi.fn(async () => ({ status: "waiting", pendingRequests: [] }));
+  await store.recordPreapprovalAuthoringDecision({ decision, principal, sessionId: "public" });
+  const sendAccepted = vi.fn<NonNullable<HostedEveTransport["sendAccepted"]>>().mockResolvedValue();
+  const observe = vi.fn(async () => ({ pendingRequests: [], status: "waiting" }));
   return {
-    store,
+    assertCurrentOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    now: () => 2,
+    observe,
     principal,
     result,
-    sessionId: "public",
-    now: () => 2,
-    assertCurrentOwner: vi.fn(async () => {}),
     sendAccepted,
-    observe,
-    transport: { sendAccepted, observe } as unknown as HostedEveTransport,
+    sessionId: "public",
+    store,
+    transport: { observe, sendAccepted } as unknown as HostedEveTransport,
   };
 };
 describe("canonical preapproval authoring", () => {
@@ -106,8 +106,8 @@ describe("canonical preapproval authoring", () => {
     let operationId = "";
     let message = "";
     f.sendAccepted.mockImplementation(async (request) => {
-      operationId = request.operationId;
-      message = request.message;
+      ({ operationId } = request);
+      ({ message } = request);
       throw new Error("lost ack");
     });
     expect((await continueHostedPreapprovalAuthoring(f)).error?.code).toBe(
@@ -117,15 +117,15 @@ describe("canonical preapproval authoring", () => {
     expect(f.sendAccepted).toHaveBeenCalledOnce();
     const marker = readInternalAuthoringMarker(message)!;
     const input = {
-      principal,
-      sessionId: "public",
       logicalSessionId: "logical",
-      operationId,
+      messageSequence: 0,
       nonce: marker.nonce,
+      operationId,
+      principal,
+      scopeDigest: decision.scopeDigest,
+      sessionId: "public",
       turnId: "turn2",
       turnSequence: 2,
-      messageSequence: 0,
-      scopeDigest: decision.scopeDigest,
     };
     expect(
       await f.store.claimInternalAuthoringMessage({ ...input, scopeDigest: "e".repeat(64) }),
@@ -139,11 +139,11 @@ describe("canonical preapproval authoring", () => {
     const f = await fixture();
     f.observe.mockImplementation(async () => {
       await f.store.recordPreapprovalAuthoringDecision({
+        decision: { ...decision, decision: "planned" },
         principal,
         sessionId: "public",
-        decision: { ...decision, decision: "planned" },
       });
-      return { status: "waiting", pendingRequests: [] };
+      return { pendingRequests: [], status: "waiting" };
     });
     const observed = await continueHostedPreapprovalAuthoring(f);
     expect(observed.status).toBe("waiting");
@@ -152,8 +152,8 @@ describe("canonical preapproval authoring", () => {
   it("halts at actual pending input or a new plan", async () => {
     const f = await fixture();
     f.observe.mockResolvedValue({
-      status: "waiting",
       pendingRequests: [{ requestId: "fresh-build" }] as never[],
+      status: "waiting",
     });
     expect((await continueHostedPreapprovalAuthoring(f)).status).toBe("waiting");
     expect(f.sendAccepted).not.toHaveBeenCalled();
@@ -161,9 +161,9 @@ describe("canonical preapproval authoring", () => {
   it("reports unchanged authenticated drafting as blocked, not completed or endlessly runnable", async () => {
     const f = await fixture();
     await f.store.recordPreapprovalAuthoringDecision({
+      decision: { ...decision, decision: "blocked", reason: "authoring_no_progress" },
       principal,
       sessionId: "public",
-      decision: { ...decision, decision: "blocked", reason: "authoring_no_progress" },
     });
     const response = await continueHostedPreapprovalAuthoring(f);
     expect(response.status).toBe("waiting");
@@ -177,31 +177,31 @@ describe("canonical preapproval authoring", () => {
   it("cannot confuse authoring marker with another purpose or settle rejected/succeeded as unknown", async () => {
     const common = {
       clientRequestId: "draft",
-      operationId: "draft",
       createdAtEpochMs: 1,
-      updatedAtEpochMs: 1,
-      version: 1,
+      internalAuthoringContinuation: {
+        decision,
+        deliveredMessageSequence: 0,
+        deliveredTurnId: "turn2",
+        nonce: "a".repeat(64),
+      },
       kind: "send",
+      operationId: "draft",
       principal,
       requestDigest: `sha256:${"f".repeat(64)}`,
       sessionId: "public",
-      internalAuthoringContinuation: {
-        decision,
-        nonce: "a".repeat(64),
-        deliveredTurnId: "turn2",
-        deliveredMessageSequence: 0,
-      },
+      updatedAtEpochMs: 1,
+      version: 1,
     };
     expect(
       hostedOperationRecordSchema.safeParse({
         ...common,
-        state: "reserved",
         internalBuildContinuation: {},
+        state: "reserved",
       }).success,
     ).toBe(false);
     for (const terminal of [
-      { state: "rejected", safeErrorCode: "denied" },
-      { state: "succeeded", result },
+      { safeErrorCode: "denied", state: "rejected" },
+      { result, state: "succeeded" },
     ]) {
       expect(
         isDeliveredInternalContinuation(
@@ -213,8 +213,8 @@ describe("canonical preapproval authoring", () => {
       isDeliveredInternalContinuation(
         hostedOperationRecordSchema.parse({
           ...common,
-          state: "submission_unknown",
           safeErrorCode: "lost_ack",
+          state: "submission_unknown",
         }),
       ),
     ).toBe(true);

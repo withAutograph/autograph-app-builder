@@ -86,7 +86,7 @@ function createStore(sql: Sql): PreviewActivationStore {
         await configureLoginRole(sql, "create", input.roleName, input.password);
       } else if (
         existing.length !== 1 ||
-        existing[0]?.rolcanlogin !== true ||
+        !existing[0]?.rolcanlogin ||
         existing[0]?.membership_count !== 0
       ) {
         throw new Error("Runtime database role exists with incompatible authority or membership.");
@@ -227,8 +227,8 @@ function createStore(sql: Sql): PreviewActivationStore {
         }),
         membership: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-          activeWorkspaceForUser() {
-            return Promise.resolve(undefined as undefined);
+          async activeWorkspaceForUser() {
+            return;
           },
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
           async isActiveMember() {
@@ -260,7 +260,7 @@ function createStore(sql: Sql): PreviewActivationStore {
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async provisionInvitedUser(input) {
-      return sql.begin(async (transaction) => {
+      return await sql.begin(async (transaction) => {
         const users = await transaction<
           {
             id: string;
@@ -297,7 +297,7 @@ function createStore(sql: Sql): PreviewActivationStore {
           users[0]?.id !== input.userId ||
           users[0]?.email !== input.email ||
           users[0]?.name !== input.githubLogin ||
-          users[0]?.email_verified !== true
+          !users[0]?.email_verified
         ) {
           throw new Error("Invited user identity conflicts with an existing row.");
         }
@@ -323,7 +323,7 @@ function createStore(sql: Sql): PreviewActivationStore {
           const now = new Date(input.requestedAt);
           await transaction`insert into hosted_workspace_membership (issuer, audience, workspace_id, owner_user_id, active, updated_at) values (${input.issuer}, ${input.resource}, ${input.workspaceId}, ${input.userId}, true, ${now})`;
           membershipRowsAffected = 1;
-        } else if (memberships.length !== 1 || memberships[0]?.active !== true) {
+        } else if (memberships.length !== 1 || !memberships[0]?.active) {
           throw new Error("Invited user membership conflicts with an existing row.");
         }
         return {

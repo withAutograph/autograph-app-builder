@@ -108,16 +108,16 @@ const legacyTransportRecoveryResult = (
 ) => {
   if (status === "restored" || (status === "already-restored" && reviewed)) {
     return {
-      status: "review_refresh_required",
       recovery:
         "Builder preserved the accepted AppSpec in its private planning input and restored only its proven legacy transport file to the selected source preimage. App files, validation results, and the old merge candidate remain intact. Continue automatically in this same session with change_set_status and accept_change_set to review the current app-only diff, then prepare this existing draft again. No user Continue reply or new dependency setup is needed; the later exact GitHub update still requires publication approval.",
+      status: "review_refresh_required",
     };
   }
   if (status === "preserved" && reviewed) {
     return {
-      status: "needs_repair",
       recovery:
         "Builder preserved the source file and accepted AppSpec because its exact legacy transport preimage could not be proven. The app and old merge candidate remain intact. Inspect the current selected source and retained AppSpec through normal Builder tools, resolve its provenance, then refresh the normal change-set review before preparing this same draft. Do not delete or publish an unknown platform file; technical recovery needs no new user Continue reply.",
+      status: "needs_repair",
     };
   }
   return null;
@@ -146,11 +146,20 @@ const reconciliationLineageRequest = (
     original?.appId === state.appSpec.appId ? original.proposal : undefined;
   const publishedReconciliation =
     original?.appId === state.appSpec.appId ? original.publishedReconciliation : undefined;
-  return {
-    ...(previousReconciliation === undefined ? {} : { previousReconciliation }),
-    ...(publishedReconciliation === undefined ? {} : { publishedReconciliation }),
-    ...(priorPublishedProposalDigest === undefined ? {} : { priorPublishedProposalDigest }),
-  };
+  const lineage: Pick<
+    ReconciliationSourceRequest,
+    "previousReconciliation" | "publishedReconciliation" | "priorPublishedProposalDigest"
+  > = {};
+  if (previousReconciliation !== undefined) {
+    lineage.previousReconciliation = previousReconciliation;
+  }
+  if (publishedReconciliation !== undefined) {
+    lineage.publishedReconciliation = publishedReconciliation;
+  }
+  if (priorPublishedProposalDigest !== undefined) {
+    lineage.priorPublishedProposalDigest = priorPublishedProposalDigest;
+  }
+  return lineage;
 };
 
 const retainedPublishedReconciliation = (
@@ -209,7 +218,7 @@ export default defineTool({
     const workflow = appBuilderWorkflowState.get();
     const state =
       resolveDraftReviewedWorkflow(workflow, draftReconciliationState.get()) ?? workflow;
-    const ownedRecovery = await prepareOwnedDraftRecovery({ ...input, state, ctx });
+    const ownedRecovery = await prepareOwnedDraftRecovery({ ...input, ctx, state });
     if (ownedRecovery !== null) {
       return ownedRecovery;
     }
@@ -242,7 +251,7 @@ export default defineTool({
       );
     }
     let acceptedContent: Promise<string> | undefined;
-    const readAcceptedContent = () =>
+    const readAcceptedContent = async () =>
       (acceptedContent ??= resolveAcceptedAppSpecContent({
         accepted: state.appSpec,
         artifacts: state.artifacts,
@@ -259,30 +268,30 @@ export default defineTool({
       ...draftReconciliationCompletions.get().map((completion) => completion.root),
     ];
     const workspaceMaintenance = await retireUnusedDraftWorktrees({
-      sandbox,
       retainedRoots,
+      sandbox,
       signal: ctx.abortSignal,
     });
     try {
       await compactAcceptedPlanningInput({
-        sandbox,
         appId: state.appSpec.appId,
-        artifactRevision: state.appSpec.artifactRevision,
         appSpecDigest: state.appSpec.digest,
+        artifactRevision: state.appSpec.artifactRevision,
         proposalAppSpec: state.proposal.target.contract.appSpec,
-        retainedRoots,
         readAcceptedContent,
+        retainedRoots,
+        sandbox,
       });
       const transport = await recoverLegacyAppSpecTransport({
-        sandbox,
-        sessionId: ctx.session.id,
-        repository: state.githubSource.repository,
         appId: state.appSpec.appId,
-        artifactRevision: state.appSpec.artifactRevision,
         appSpecDigest: state.appSpec.digest,
         apply: state.applyReceipt,
+        artifactRevision: state.appSpec.artifactRevision,
         baseline: appBaselineState.get(),
         readAcceptedContent,
+        repository: state.githubSource.repository,
+        sandbox,
+        sessionId: ctx.session.id,
       });
       const legacyTransportPath = `.config/app-specs/${state.appSpec.appId}.md`;
       const reviewedTransport = state.reviewReceipt.changes.some(
@@ -298,14 +307,9 @@ export default defineTool({
       const lineage = reconciliationLineageRequest(state, original, ctx.session.id);
       const source = await runtime.inspectExistingDraftReconciliationSource({
         ...lineage,
-        recovery: draftInspectionRecoveryForSession({
-          ctx,
-          appId: state.appSpec.appId,
-          appSpecDigest: state.appSpec.digest,
-          root: state.applyReceipt.applyRoot,
-          pullRequestNumber: input.pullRequestNumber,
-          priorPublishedProposalDigest: lineage.priorPublishedProposalDigest,
-        }),
+        name: state.githubSource.repository.name,
+        owner: state.githubSource.repository.owner,
+        pullRequestNumber: input.pullRequestNumber,
         readPublishedSource: async (draft) =>
           await readPublishedOperatorSourceForSession({
             appId: state.appSpec.appId,
@@ -323,9 +327,14 @@ export default defineTool({
               gitTree: draft.headTree,
             },
           }),
-        name: state.githubSource.repository.name,
-        owner: state.githubSource.repository.owner,
-        pullRequestNumber: input.pullRequestNumber,
+        recovery: draftInspectionRecoveryForSession({
+          ctx,
+          appId: state.appSpec.appId,
+          appSpecDigest: state.appSpec.digest,
+          root: state.applyReceipt.applyRoot,
+          pullRequestNumber: input.pullRequestNumber,
+          priorPublishedProposalDigest: lineage.priorPublishedProposalDigest,
+        }),
         repositoryId: state.githubSource.repository.repositoryId,
       });
       assertReconciliationDraftLineage({
@@ -336,14 +345,18 @@ export default defineTool({
       const unpublished =
         state.reviewReceipt.changes.length === 0
           ? undefined
-          : {
-              changes: state.reviewReceipt.changes,
-              ...(source.publishedHeadSha === undefined
-                ? {}
-                : { priorPublishedHeadSha: source.publishedHeadSha }),
-              contentSource: publicationContentSourceForReviewedWorkflow({ sandbox, state }),
-              reviewDigest: state.reviewReceipt.digest,
-            };
+          : (() => {
+              const changes = { changes: state.reviewReceipt.changes };
+              const prior =
+                source.publishedHeadSha === undefined
+                  ? changes
+                  : { ...changes, priorPublishedHeadSha: source.publishedHeadSha };
+              return {
+                ...prior,
+                contentSource: publicationContentSourceForReviewedWorkflow({ sandbox, state }),
+                reviewDigest: state.reviewReceipt.digest,
+              };
+            })();
       const request: DraftReconciliationInput = {
         appId: state.appSpec.appId,
         baseBranch: source.draft.baseBranch,
@@ -363,12 +376,12 @@ export default defineTool({
         request,
         previousCandidateRequest(original, {
           appId: state.appSpec.appId,
-          repositoryId: state.githubSource.repository.repositoryId,
-          pullRequestNumber: input.pullRequestNumber,
-          githubSourceDigest: state.githubSource.digest,
-          originalReviewDigest: state.reviewReceipt.digest,
-          headSha: source.draft.headSha,
           baseSha: source.base.headSha,
+          githubSourceDigest: state.githubSource.digest,
+          headSha: source.draft.headSha,
+          originalReviewDigest: state.reviewReceipt.digest,
+          pullRequestNumber: input.pullRequestNumber,
+          repositoryId: state.githubSource.repository.repositoryId,
         }),
       );
       const accessRuntime = await repositoryAccessRuntimeForSession(ctx.session.auth);
@@ -407,9 +420,9 @@ export default defineTool({
         ),
         githubSourceDigest: state.githubSource.digest,
         originalReviewDigest: state.reviewReceipt.digest,
-        reviewedLineage: structuredClone(state),
         pullRequestNumber: input.pullRequestNumber,
         repositoryId: state.githubSource.repository.repositoryId,
+        reviewedLineage: structuredClone(state),
         version: 1 as const,
       };
       updateExactDraftReconciliation({

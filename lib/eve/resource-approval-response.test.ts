@@ -44,61 +44,61 @@ const principal = {
   workspaceId: "workspace_1",
 };
 const nativePlan = nativeTargetOnboardingPlanSchema.parse({
-  version: 1,
+  appDatabase: {
+    database: "requests_data",
+    migratorRole: "requests_owner",
+    resourceId: "resource",
+    runtimeRole: "requests_runtime",
+  },
   appId: "requests-app",
+  branch: "preview",
+  conflictPolicy: "stop-on-conflict",
+  cost: { description: "Preview usage", ownership: "current-owner" },
+  nativeNeon: {
+    approvalReference: "scope",
+    nativeStore: { configurationId: "config", resourceId: "store", sourceProjectId: "source" },
+    scope: {
+      branchId: "branch",
+      endpointId: "endpoint",
+      hostname: "ep-fixture.neon.tech",
+      maintenanceDatabase: "maintenance",
+      maintenanceRole: "installer",
+      projectId: "project",
+    },
+  },
   origin: {
-    publicSessionId: "session_fixture",
-    adapterSessionId: "adapter_1",
     adapterGeneration: 1,
+    adapterSessionId: "adapter_1",
     appSpecDigest: "a".repeat(64),
+    publicSessionId: "session_fixture",
     release: {
-      id: "release",
       artifactRef: "artifact",
+      id: "release",
       manifestSha256: "b".repeat(64),
       schemaSha256: "c".repeat(64),
     },
   },
+  productRoles: [],
   project: {
-    name: "requests-app",
-    teamId: "team",
     installationId: "installation",
+    name: "requests-app",
     projectSettings: {
       framework: "nextjs",
       rootDirectory: "apps/requests",
       sourceFilesOutsideRootDirectory: true,
     },
     protection: nativeTargetRequiredProjectProtection,
+    teamId: "team",
   },
-  branch: "preview",
-  appDatabase: {
-    resourceId: "resource",
-    database: "requests_data",
-    migratorRole: "requests_owner",
-    runtimeRole: "requests_runtime",
-  },
-  productRoles: [],
-  nativeNeon: {
-    approvalReference: "scope",
-    nativeStore: { configurationId: "config", resourceId: "store", sourceProjectId: "source" },
-    scope: {
-      projectId: "project",
-      branchId: "branch",
-      endpointId: "endpoint",
-      hostname: "ep-fixture.neon.tech",
-      maintenanceDatabase: "maintenance",
-      maintenanceRole: "installer",
-    },
-  },
+  retention: { policy: "Until approved cleanup" },
+  version: 1,
   worker: {
-    id: "worker",
     executablePath: "/trusted/worker",
-    sha256: "d".repeat(64),
+    id: "worker",
     operationScope: "generated-app-release-install-v1",
+    sha256: "d".repeat(64),
     subcommand: "protected-generated-app-install",
   },
-  cost: { ownership: "current-owner", description: "Preview usage" },
-  retention: { policy: "Until approved cleanup" },
-  conflictPolicy: "stop-on-conflict",
 });
 
 describe("native target response reconciliation", () => {
@@ -128,11 +128,11 @@ describe("native target response reconciliation", () => {
     };
     const nativeRequest = {
       clientRequestId: "native-response",
-      sessionId: "session_fixture",
       responses: approvals.map(({ requestId }) => ({
         requestId,
         response: { kind: "approve" as const },
       })),
+      sessionId: "session_fixture",
     };
     const nativeReceipts = approvals.map((approval, sequence) => ({
       ...approval,
@@ -143,14 +143,14 @@ describe("native target response reconciliation", () => {
       turnId: "",
     }));
     const proof = {
-      adapterSessionId: "adapter_1",
       adapterGeneration: 1,
+      adapterSessionId: "adapter_1",
       checkpointDigest: `sha256:${"f".repeat(64)}`,
       request: nativeRequest,
     };
     const marker = {
-      adapterSessionId: "adapter_1",
       adapterGeneration: 1,
+      adapterSessionId: "adapter_1",
       approvals,
       batches: [nativeBatch],
     };
@@ -169,25 +169,25 @@ describe("native target response reconciliation", () => {
       version: 1 as const,
     };
     const capture = {
-      sessionId: nativeRequest.sessionId,
-      version: 1 as const,
       pendingRequests: [],
       receipts: nativeReceipts,
+      sessionId: nativeRequest.sessionId,
+      version: 1 as const,
     };
     const args = {
+      capture,
       clientRequestId: nativeRequest.clientRequestId,
+      marker,
+      ownerUserId: principal.ownerUserId,
+      proof,
+      receipts: nativeReceipts,
       requestDigest: digest({
         kind: "respond",
         request: nativeRequest,
         sessionId: nativeRequest.sessionId,
       }),
       sessionId: nativeRequest.sessionId,
-      ownerUserId: principal.ownerUserId,
-      marker,
-      proof,
       state: complete,
-      capture,
-      receipts: nativeReceipts,
     };
     expect(provesResourceApprovalResponse(args)).toBe(true);
     expect(provesResourceApprovalResponse({ ...args, receipts: nativeReceipts.slice(0, 1) })).toBe(
@@ -260,8 +260,8 @@ const toolInput = {
 
 const request = {
   clientRequestId: "original-response",
-  sessionId,
   responses: [{ requestId: "request_fixture", response: { kind: "approve" as const } }],
+  sessionId,
 };
 const receipt = privateHostedApprovalReceiptSchema.parse({
   callId: "call_fixture",
@@ -299,9 +299,6 @@ const state: PrivateInputState = {
 };
 const metadata: HostedPagedCheckpointMetadata = {
   capturedAtEpochMs: 4000,
-  status: "waiting",
-  version: 1,
-  privateApprovalCaptureState: { pendingRequests: [], receipts: [receipt], sessionId, version: 1 },
   nativeObservationState: {
     adapterSessionId: "adapter_1",
     artifactReadback: {
@@ -322,34 +319,36 @@ const metadata: HostedPagedCheckpointMetadata = {
     publicEventCount: 0,
     version: 1,
   },
+  privateApprovalCaptureState: { pendingRequests: [], receipts: [receipt], sessionId, version: 1 },
+  status: "waiting",
+  version: 1,
 };
 const session = durableHostedSessionRecordSchema.parse({
-  adapterSessionId: "adapter_1",
   adapterGeneration: 1,
-  originAdapterSessionId: "adapter_1",
-  createdAtEpochMs: 1000,
-  updatedAtEpochMs: 4000,
-  lastProgressAtEpochMs: 4000,
-  principal,
-  sessionId,
-  status: "waiting",
-  resumability: "live",
-  stage: "ready",
-  title: "App",
-  version: 2,
+  adapterSessionId: "adapter_1",
   checkpointDigest: `sha256:${"c".repeat(64)}`,
   checkpointProgressDigest: `sha256:${"d".repeat(64)}`,
   checkpointRef: {
-    id: "123e4567-e89b-42d3-a456-426614174001",
     digest: `sha256:${"c".repeat(64)}`,
     eventCount: 0,
+    id: "123e4567-e89b-42d3-a456-426614174001",
   },
+  createdAtEpochMs: 1000,
+  lastProgressAtEpochMs: 4000,
+  originAdapterSessionId: "adapter_1",
+  principal,
   privateApprovalReceipts: [receipt],
+  resumability: "live",
+  sessionId,
+  stage: "ready",
+  status: "waiting",
+  title: "App",
+  updatedAtEpochMs: 4000,
+  version: 2,
 });
 const operation = hostedOperationRecordSchema.parse({
   clientRequestId: request.clientRequestId,
   createdAtEpochMs: 2000,
-  updatedAtEpochMs: 3000,
   kind: "respond",
   operationId: stableId("op", {
     clientRequestId: request.clientRequestId,
@@ -358,14 +357,15 @@ const operation = hostedOperationRecordSchema.parse({
   }),
   principal,
   requestDigest: digest({ kind: "respond", request, sessionId }),
+  safeErrorCode: "submission_unknown",
   sessionId,
   state: "submission_unknown",
-  safeErrorCode: "submission_unknown",
+  updatedAtEpochMs: 3000,
   version: 1,
 });
 const proof = resourceApprovalResponseProofSchema.parse({
-  adapterSessionId: session.adapterSessionId,
   adapterGeneration: session.adapterGeneration,
+  adapterSessionId: session.adapterSessionId,
   checkpointDigest: session.checkpointDigest,
   request,
 });
@@ -396,9 +396,6 @@ const marker = required(
     session,
     { ...state, pending: [batch], resolved: [] },
     {
-      sessionId,
-      version: 1,
-      receipts: [],
       pendingRequests: [
         {
           callId: receipt.callId,
@@ -407,6 +404,9 @@ const marker = required(
           toolName: receipt.toolName,
         },
       ],
+      receipts: [],
+      sessionId,
+      version: 1,
     },
     request,
   ),
@@ -577,22 +577,22 @@ describe("resource approval response acknowledgement", () => {
     const startOperation = hostedOperationRecordSchema.parse({
       clientRequestId: "start",
       createdAtEpochMs: 1000,
-      updatedAtEpochMs: 1000,
       kind: "start",
       operationId: "start",
       principal,
       requestDigest: `sha256:${"a".repeat(64)}`,
       state: "reserved",
+      updatedAtEpochMs: 1000,
       version: 1,
     });
     await store.reserveOperation(principal, startOperation);
     await store.settleSucceeded({
-      principal,
+      nowEpochMs: 2000,
       operationId: "start",
+      principal,
       requestDigest: startOperation.requestDigest,
       result,
       session,
-      nowEpochMs: 2000,
     });
     const reserved = withoutHostedOperationError(operation);
     await store.reserveOperation(
@@ -600,36 +600,36 @@ describe("resource approval response acknowledgement", () => {
       hostedOperationRecordSchema.parse({ ...reserved, state: "reserved" }),
     );
     await store.settleUnsuccessful({
-      principal,
-      operationId: operation.operationId,
-      requestDigest: operation.requestDigest,
-      state: "submission_unknown",
-      safeErrorCode: "submission_unknown",
       nowEpochMs: 3000,
+      operationId: operation.operationId,
+      principal,
+      requestDigest: operation.requestDigest,
+      safeErrorCode: "submission_unknown",
+      state: "submission_unknown",
     });
     const respond = vi.fn();
     const service = createHostedEveSessionService({
+      assertSendDeliveryOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      now: () => 4000,
       principal,
       store,
-      now: () => 4000,
-      assertSendDeliveryOwner: async () => {},
       transport: {
+        cancel: vi.fn(),
         get: vi.fn(async () => {
           throw new HostedSessionReadTimeoutError();
         }),
-        start: vi.fn(),
-        send: vi.fn(),
         respond,
-        cancel: vi.fn(),
+        send: vi.fn(),
+        start: vi.fn(),
       },
     });
     const recovered = await service.respond(request);
     expect(recovered).toMatchObject({
-      sessionId,
       cursor: 0,
-      events: [],
-      status: "working",
       error: { code: "session_read_delayed" },
+      events: [],
+      sessionId,
+      status: "working",
     });
     expect(respond).not.toHaveBeenCalled();
     const retry = await service.respond(request);
@@ -695,19 +695,19 @@ const postgresSettlementFixture = (changedSession = session, changedMetadata = m
       "agent_session_checkpoint_manifest",
       [
         {
-          publishedAt: new Date(4000),
-          eventCount: 0,
           checkpointDigest: required(changedSession.checkpointRef).digest,
+          eventCount: 0,
+          publishedAt: new Date(4000),
         },
       ],
     ],
     [
       "agent_session_checkpoint_item",
-      [{ itemIndex: -1, byteLength: bytes.byteLength, partCount: 1, digest: itemDigest }],
+      [{ byteLength: bytes.byteLength, digest: itemDigest, itemIndex: -1, partCount: 1 }],
     ],
     [
       "agent_session_checkpoint_chunk",
-      [{ itemIndex: -1, payload: bytes.toString("base64"), chunkDigest: itemDigest, partIndex: 0 }],
+      [{ chunkDigest: itemDigest, itemIndex: -1, partIndex: 0, payload: bytes.toString("base64") }],
     ],
   ]);
   const dialect = new PgDialect();
@@ -737,7 +737,7 @@ const postgresSettlementFixture = (changedSession = session, changedMetadata = m
           },
         ];
       }
-      queries.push({ table, params: query.params });
+      queries.push({ params: query.params, table });
       if (query.sql.endsWith("for update")) {
         locks.push(table);
       }
@@ -762,7 +762,7 @@ const postgresSettlementFixture = (changedSession = session, changedMetadata = m
     throw new Error("Proof read escaped the locked transaction");
   });
   const store = createPostgresHostedEveStore(database);
-  return { store, locks, queries, update };
+  return { locks, queries, store, update };
 };
 
 // oxlint-enable sonarjs/no-nested-functions, promise/prefer-await-to-callbacks
@@ -771,12 +771,12 @@ describe("atomic PostgreSQL resource approval acknowledgement", () => {
   it("reads independently verified checkpoint bytes under operation and session locks", async () => {
     const fixture = postgresSettlementFixture();
     const settled = await fixture.store.settleSucceeded({
-      principal,
-      operationId: operation.operationId,
-      requestDigest: operation.requestDigest,
-      result,
-      resourceApprovalResolution: proof,
       nowEpochMs: 5000,
+      operationId: operation.operationId,
+      principal,
+      requestDigest: operation.requestDigest,
+      resourceApprovalResolution: proof,
+      result,
     });
     expect(settled.state).toBe("succeeded");
     expect(fixture.locks).toEqual(["agent_operation", "agent_session"]);
@@ -823,12 +823,12 @@ describe("atomic PostgreSQL resource approval acknowledgement", () => {
     const fixture = postgresSettlementFixture(current, actual);
     await expect(
       fixture.store.settleSucceeded({
-        principal,
-        operationId: operation.operationId,
-        requestDigest: operation.requestDigest,
-        result,
-        resourceApprovalResolution: proof,
         nowEpochMs: 5000,
+        operationId: operation.operationId,
+        principal,
+        requestDigest: operation.requestDigest,
+        resourceApprovalResolution: proof,
+        result,
       }),
     ).rejects.toThrow("not proved");
     expect(fixture.update).not.toHaveBeenCalled();

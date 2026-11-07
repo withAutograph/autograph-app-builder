@@ -63,21 +63,21 @@ const fixture = () => {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- Deliberate partial database transport fixture.
   const db = database as unknown as Database;
   const store = createPostgresOperatorArtifactStore({
-    database: db,
     assertCurrentOwner: async () => {
       if (revoked) {
         throw new Error("owner revoked");
       }
       await Promise.resolve();
     },
+    database: db,
   });
   return {
     db,
-    rows,
-    store,
     revoke: () => {
       revoked = true;
     },
+    rows,
+    store,
   };
 };
 
@@ -115,8 +115,8 @@ describe("private identity stage artifacts", () => {
           field === "issuer" || field === "audience"
             ? {
                 ...context.authority,
-                issuer: "https://foreign.example/api/auth",
                 audience: "https://foreign.example/mcp",
+                issuer: "https://foreign.example/api/auth",
               }
             : { ...context.authority, [field]: `${context.authority[field]}/foreign` },
       };
@@ -142,11 +142,11 @@ describe("private identity stage artifacts", () => {
     await f.store.put(context, { artifactRef: reference, chunkIndex: 0, content: "sealed-stage" });
     await expect(
       getPrototypeChunk(f.db, {
+        chunkIndex: 0,
+        path: reference,
         principal: { ...context.authority, scopes: ["autograph:get"] },
         sessionId: context.target.sessionId,
-        path: reference,
         transferDigest: "a".repeat(64),
-        chunkIndex: 0,
       }),
     ).rejects.toThrow("Prototype artifact path is not allowed.");
   });
@@ -181,11 +181,11 @@ describe("private tenant export namespace", () => {
     ).toBeUndefined();
     await expect(
       getPrototypeChunk(f.db, {
+        chunkIndex: 1,
+        path: exportRef,
         principal: { ...context.authority, scopes: ["autograph:get"] },
         sessionId: context.target.sessionId,
-        path: exportRef,
         transferDigest: "b".repeat(64),
-        chunkIndex: 1,
       }),
     ).rejects.toThrow("Prototype artifact path is not allowed.");
     f.revoke();

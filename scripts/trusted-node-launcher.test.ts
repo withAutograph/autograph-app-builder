@@ -54,8 +54,8 @@ describe("trusted Node launcher", () => {
     );
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
-      root: environment.ARRUSTED_MANAGED_RUNTIME_TEST_ROOT,
       bun: environment.BUN_BINARY,
+      root: environment.ARRUSTED_MANAGED_RUNTIME_TEST_ROOT,
     });
   });
 
@@ -283,7 +283,7 @@ describe("trusted Node launcher", () => {
 
   it.each(
     [false, true].flatMap((privateHome) =>
-      ["/owner/application data", "", undefined].map((dataHome) => ({ privateHome, dataHome })),
+      ["/owner/application data", "", undefined].map((dataHome) => ({ dataHome, privateHome })),
     ),
   )(
     "projects XDG data through OIDC startup without escaping private home: %j",
@@ -326,14 +326,14 @@ describe("trusted Node launcher", () => {
       );
       const cleanEnvironment: NodeJS.ProcessEnv = {
         ...process.env,
+        AI_GATEWAY_API_KEY: "must-not-be-forwarded",
         HOME: "/untrusted/ambient/home",
-        XDG_CONFIG_HOME: "/owner/unneeded-config",
-        XDG_CACHE_HOME: "/owner/unneeded-cache",
-        XDG_STATE_HOME: "/owner/unneeded-state",
+        OPENAI_API_KEY: "must-not-be-forwarded",
         VERCEL_OIDC_TOKEN: "must-not-be-forwarded",
         VERCEL_TOKEN: "must-not-be-forwarded",
-        AI_GATEWAY_API_KEY: "must-not-be-forwarded",
-        OPENAI_API_KEY: "must-not-be-forwarded",
+        XDG_CACHE_HOME: "/owner/unneeded-cache",
+        XDG_CONFIG_HOME: "/owner/unneeded-config",
+        XDG_STATE_HOME: "/owner/unneeded-state",
       };
       delete cleanEnvironment.NODE_OPTIONS;
       delete cleanEnvironment.XDG_DATA_HOME;
@@ -372,11 +372,11 @@ describe("trusted Node launcher", () => {
           pathToFileURL(pathModule.join(repositoryRoot, "lib/development/local-oidc-startup.ts"))
             .href,
           JSON.stringify({
-            repositoryRoot: projectRoot,
-            nowEpochSeconds: now,
-            vercelExecutable: "/fixture/vercel",
             miseExecutable: "/fixture/mise",
+            nowEpochSeconds: now,
+            repositoryRoot: projectRoot,
             token: jwt(now + 3600),
+            vercelExecutable: "/fixture/vercel",
           }),
         ],
         { cwd: repositoryRoot, encoding: "utf-8", env: cleanEnvironment },
@@ -385,15 +385,15 @@ describe("trusted Node launcher", () => {
       const expectedHome = privateHome ? runtimeHome : accountHome;
       const expectedDataHome = privateHome ? undefined : dataHome;
       expect(JSON.parse(result.stdout)).toEqual({
-        result: { refreshed: true },
         home: expectedHome,
         invocations: ["development-env-pull", "owner-bind"].map((operation) => ({
-          operation,
-          home: expectedHome,
           dataHome: expectedDataHome ?? null,
           dataPresent: expectedDataHome !== undefined,
+          home: expectedHome,
+          operation,
           unexpected: [],
         })),
+        result: { refreshed: true },
       });
     },
   );

@@ -7,19 +7,20 @@ interface PasskeyErrorEnvelope {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function passkeyErrorCode(value: unknown): string | undefined {
-  if (!value || typeof value !== "object") {
+  if (value === null || typeof value !== "object") {
     return undefined;
   }
 
-  const envelope = value as PasskeyErrorEnvelope;
+  const envelope: PasskeyErrorEnvelope = value;
   if (typeof envelope.code === "string") {
     return envelope.code;
   }
-  if (!envelope.error || typeof envelope.error !== "object") {
+  if (envelope.error === null || typeof envelope.error !== "object") {
     return undefined;
   }
 
-  const nestedCode = (envelope.error as PasskeyErrorEnvelope).code;
+  const nestedEnvelope: PasskeyErrorEnvelope = envelope.error;
+  const nestedCode = nestedEnvelope.code;
   return typeof nestedCode === "string" ? nestedCode : undefined;
 }
 

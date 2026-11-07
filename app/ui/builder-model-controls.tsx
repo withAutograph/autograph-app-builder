@@ -32,7 +32,9 @@ export function ModelControls({
           type="checkbox"
           name="zdr"
           checked={zdrOnly}
-          onChange={(event) => onZdrChange(event.target.checked)}
+          onChange={(event) => {
+            onZdrChange(event.target.checked);
+          }}
         />{" "}
         Zero Data Retention
         <InfoTooltip>

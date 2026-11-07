@@ -7,10 +7,10 @@ import { setupCursorClient } from "./cursor-client";
 import { readPreviewOAuthContractConfig } from "./preview-oauth-contract";
 
 const [flag, fd, resourceFlag, resource] = process.argv.slice(2);
+const validPrivateTransport = flag === "--database-url-fd" && fd === "0";
 if (
   process.argv.length !== 6 ||
-  flag !== "--database-url-fd" ||
-  fd !== "0" ||
+  !validPrivateTransport ||
   resourceFlag !== "--resource" ||
   !resource
 ) {

@@ -100,17 +100,17 @@ try {
 `;
 
 export const candidateDependencyCatalogIntentSchema = z.strictObject({
-  root: z.string(),
   appId: z.string(),
   dependency: catalogDependencyName,
-  version: z.string(),
-  index: z.string(),
-  files: z.array(
-    z.strictObject({ path: z.string(), before: z.string().nullable(), after: z.string() }),
-  ),
-  lockGenerated: z.boolean(),
-  lockExitCode: z.number().nullable(),
   diagnostic: z.string(),
+  files: z.array(
+    z.strictObject({ after: z.string(), before: z.string().nullable(), path: z.string() }),
+  ),
+  index: z.string(),
+  lockExitCode: z.number().nullable(),
+  lockGenerated: z.boolean(),
+  root: z.string(),
+  version: z.string(),
 });
 
 export type CandidateDependencyCatalogIntent = z.infer<
@@ -197,7 +197,7 @@ const executeCatalogProgram = async (input: {
   if (completed.exitCode !== 0) {
     throw new Error(`Builder could not normalize candidate dependency metadata: ${diagnostic}`);
   }
-  return { stdout, diagnostic };
+  return { diagnostic, stdout };
 };
 
 export const planCandidateDependencyCatalog = async (input: {
@@ -210,9 +210,9 @@ export const planCandidateDependencyCatalog = async (input: {
   await assertDraftReconciliationCandidateAvailable(input);
   const result = await executeCatalogProgram({
     ...input,
-    root: input.prepared.root,
-    program: normalizeCandidateCatalogProgram,
     args: [input.prepared.root, input.prepared.appId, dependency],
+    program: normalizeCandidateCatalogProgram,
+    root: input.prepared.root,
   });
   return candidateDependencyCatalogIntentSchema.parse({
     ...JSON.parse(result.stdout),
@@ -239,18 +239,18 @@ export const normalizeCandidateDependencyCatalog = async (input: {
   let result: Awaited<ReturnType<typeof executeCatalogProgram>>;
   try {
     await input.sandbox.writeTextFile({
-      path: relativeIntentPath,
       content: JSON.stringify(intent),
+      path: relativeIntentPath,
     });
     result = await executeCatalogProgram({
       ...input,
-      root: input.prepared.root,
-      program: applyCandidateCatalogProgram,
       args: [input.prepared.root, intentPath],
+      program: applyCandidateCatalogProgram,
+      root: input.prepared.root,
     });
   } finally {
     try {
-      await input.sandbox.removePath({ path: relativeIntentPath, force: true });
+      await input.sandbox.removePath({ force: true, path: relativeIntentPath });
     } catch {
       // The retained server intent remains retryable when sandbox cleanup is unavailable.
     }
@@ -258,17 +258,16 @@ export const normalizeCandidateDependencyCatalog = async (input: {
   const applied = z
     .strictObject({
       files: z.array(
-        z.strictObject({ path: z.string(), digest: z.string().regex(/^[a-f0-9]{64}$/u) }),
+        z.strictObject({ digest: z.string().regex(/^[a-f0-9]{64}$/u), path: z.string() }),
       ),
     })
     .parse(JSON.parse(result.stdout));
   return {
     dependency: intent.dependency,
-    version: intent.version,
-    lockGenerated: intent.lockGenerated,
-    lockExitCode: intent.lockExitCode,
     diagnostic: intent.diagnostic,
     files: applied.files,
+    lockExitCode: intent.lockExitCode,
+    lockGenerated: intent.lockGenerated,
     receipt: {
       files: applied.files,
       nonAppIndexDigest: await nonAppIndexDigest(
@@ -277,5 +276,6 @@ export const normalizeCandidateDependencyCatalog = async (input: {
         input.prepared.appId,
       ),
     },
+    version: intent.version,
   };
 };

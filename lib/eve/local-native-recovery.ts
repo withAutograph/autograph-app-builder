@@ -27,8 +27,8 @@ const localPrincipal = {
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const unavailable = () => new Error("The original local terminal recovery is unavailable.");
 const reservationSchema = z.strictObject({
-  kind: z.literal("local-native-recovery-v1"),
   descriptor: nativeRecoveryDescriptorSchema,
+  kind: z.literal("local-native-recovery-v1"),
 });
 const cancellationSchema = z.strictObject({
   kind: z.literal("local-native-recovery-cancel-v1"),
@@ -36,12 +36,12 @@ const cancellationSchema = z.strictObject({
 });
 
 export const localRecoveryResponseSchema = z.object({
-  sessionId: z.string().min(1),
   recoveryBinding: nativeRecoveryBindingSchema,
+  sessionId: z.string().min(1),
 });
 export const localRecoveredControlReceiptSchema = z.object({
-  sessionId: z.string().min(1),
   deliveryId: z.string().min(1).optional(),
+  sessionId: z.string().min(1),
 });
 interface LocalRecoveredControlBody {
   message?: string;
@@ -112,7 +112,7 @@ export const createLocalNativeRecovery = (environment: Record<string, string | u
       | z.infer<typeof cancellationSchema>,
   ) => {
     assertLocal();
-    await mkdir(directory, { recursive: true, mode: 0o700 });
+    await mkdir(directory, { mode: 0o700, recursive: true });
     owned(directory, true);
     const temporary = `${file}.${process.pid}.${randomUUID()}`;
     try {
@@ -171,7 +171,7 @@ export const createLocalNativeRecovery = (environment: Record<string, string | u
       owners.push(receipt.ownerRunId);
     }
   };
-  const authorize: Ports["authorize"] = ({ auth, descriptor }) => {
+  const authorize: Ports["authorize"] = async ({ auth, descriptor }) => {
     assertLocal();
     if (
       auth.authenticator !== "local-dev" ||
@@ -200,10 +200,16 @@ export const createLocalNativeRecovery = (environment: Record<string, string | u
       owners.at(-2) !== descriptor.sourceOwnerRunId
     )
       throw unavailable();
-    return Promise.resolve();
   };
   const ports: Ports = {
     authorize,
+    async authorizeActivation(input) {
+      await authorize(input);
+      const receipt = nativeRecoveryBindingSchema.parse(
+        read(filename(input.descriptor.sourceOwnerRunId, "receipt")),
+      );
+      assertNativeRecoveryReceipt(input.descriptor, receipt);
+    },
     async authorizeRepeatableRecoveryCalls(input) {
       await authorize(input);
       if (
@@ -216,11 +222,6 @@ export const createLocalNativeRecovery = (environment: Record<string, string | u
       // effects and arbitrary missing tool results retain strict reconciliation.
       return authorizeRepeatablePrivateApplyCalls(input);
     },
-    async readReceipt(input) {
-      await authorize(input);
-      const receipt = read(filename(input.descriptor.sourceOwnerRunId, "receipt"));
-      return receipt === undefined ? undefined : nativeRecoveryBindingSchema.parse(receipt);
-    },
     async commitReceipt(input) {
       await authorize(input);
       assertNativeRecoveryReceipt(input.descriptor, input.recoveryBinding);
@@ -230,37 +231,21 @@ export const createLocalNativeRecovery = (environment: Record<string, string | u
       );
       return input.recoveryBinding;
     },
-    async authorizeActivation(input) {
+    async readReceipt(input) {
       await authorize(input);
-      const receipt = nativeRecoveryBindingSchema.parse(
-        read(filename(input.descriptor.sourceOwnerRunId, "receipt")),
-      );
-      assertNativeRecoveryReceipt(input.descriptor, receipt);
+      const receipt = read(filename(input.descriptor.sourceOwnerRunId, "receipt"));
+      return receipt === undefined ? undefined : nativeRecoveryBindingSchema.parse(receipt);
     },
   };
   return {
-    ports,
-    trustForwarder(
-      forwarder: Parameters<Ports["authorize"]>[0]["auth"],
-      assertion: { principal?: { current: Parameters<Ports["authorize"]>[0]["auth"] } },
-    ) {
-      assertLocal();
-      const current = assertion.principal?.current;
-      return (
-        forwarder.authenticator === "local-dev" &&
-        forwarder.principalId === "local-dev" &&
-        current?.authenticator === "local-dev" &&
-        current.principalId === "local-dev" &&
-        current.principalType === "local-dev"
-      );
-    },
-    lineage,
     async cancel(publicId: string) {
       await writeOnce(path.join(directory, `${hash(publicId)}.cancel.${randomUUID()}.json`), {
         kind: "local-native-recovery-cancel-v1",
         publicId,
       });
     },
+    lineage,
+    ports,
     async recover(
       client: LocalSessionClient,
       publicId: string,
@@ -295,10 +280,10 @@ export const createLocalNativeRecovery = (environment: Record<string, string | u
         const descriptor = nativeRecoveryDescriptorSchema.parse(receipt);
         const activated = localRecoveryResponseSchema.parse(
           await post({
+            forwardedPrincipal: { current: localPrincipal },
             operationId: descriptor.operationId,
             recovery: descriptor,
             recoveryPhase: "activate",
-            forwardedPrincipal: { current: localPrincipal },
           }),
         );
         if (
@@ -319,24 +304,24 @@ export const createLocalNativeRecovery = (environment: Record<string, string | u
       const descriptor =
         previous === undefined
           ? nativeRecoveryDescriptorSchema.parse({
-              version: 1,
-              operationId: `local-recovery:${hash(JSON.stringify([publicId, source, clientRequestId]))}`,
-              sourcePublicSessionId: publicId,
-              sourceOwnerRunId: source,
-              sourceAdapterGeneration: owners.length,
               logicalSessionId: publicId,
+              operationId: `local-recovery:${hash(JSON.stringify([publicId, source, clientRequestId]))}`,
               originalAuthoritySessionId: publicId,
               parentCancellationRevision: epoch,
+              sourceAdapterGeneration: owners.length,
+              sourceOwnerRunId: source,
+              sourcePublicSessionId: publicId,
+              version: 1,
             })
           : reservationSchema.parse(previous).descriptor;
       await writeOnce(
         filename(source, "reservation"),
-        reservationSchema.parse({ kind: "local-native-recovery-v1", descriptor }),
+        reservationSchema.parse({ descriptor, kind: "local-native-recovery-v1" }),
       );
       const body = {
+        forwardedPrincipal: { current: localPrincipal },
         operationId: descriptor.operationId,
         recovery: descriptor,
-        forwardedPrincipal: { current: localPrincipal },
       };
       const acceptedSchema = localRecoveryResponseSchema;
       const accepted = acceptedSchema.parse(await post(body));
@@ -351,6 +336,20 @@ export const createLocalNativeRecovery = (environment: Record<string, string | u
         activated.sessionId !== canonical.ownerRunId
       )
         throw unavailable();
+    },
+    trustForwarder(
+      forwarder: Parameters<Ports["authorize"]>[0]["auth"],
+      assertion: { principal?: { current: Parameters<Ports["authorize"]>[0]["auth"] } },
+    ) {
+      assertLocal();
+      const current = assertion.principal?.current;
+      return (
+        forwarder.authenticator === "local-dev" &&
+        forwarder.principalId === "local-dev" &&
+        current?.authenticator === "local-dev" &&
+        current.principalId === "local-dev" &&
+        current.principalType === "local-dev"
+      );
     },
   };
 };
@@ -381,7 +380,6 @@ export const withLocalRecoveredSessions = (
   postControl?: LocalRecoveredControl,
 ): LocalSessionClient => ({
   sessions: {
-    create: client.sessions.create.bind(client.sessions),
     attach: (publicId, options) => {
       const resolve = async () => {
         const owners = recovery.lineage(publicId);
@@ -397,10 +395,10 @@ export const withLocalRecoveredSessions = (
           throw unavailable();
         }
         return {
-          prefix,
           actual: client.sessions.attach(owner, {
             streamIndex: Math.max(0, (options?.streamIndex ?? 0) - prefix.length),
           }),
+          prefix,
         };
       };
       const control = async (actual: ClientSession, body: LocalRecoveredControlBody) => {
@@ -415,8 +413,6 @@ export const withLocalRecoveredSessions = (
           throw unavailable();
         }
         return new MessageResponse({
-          sessionId: publicId,
-          deliveryId: accepted.deliveryId,
           cancelTurn: async (turnId) => await client.sessions.attach(publicId).cancel({ turnId }),
           async *createStream() {
             let matchingTurn = accepted.deliveryId === undefined;
@@ -444,10 +440,26 @@ export const withLocalRecoveredSessions = (
               throw unavailable();
             }
           },
+          deliveryId: accepted.deliveryId,
+          sessionId: publicId,
         });
       };
       return {
-        state: { sessionId: publicId, streamIndex: options?.streamIndex ?? 0 },
+        async cancel(cancelOptions) {
+          return await client.sessions.attach(publicId).cancel(cancelOptions);
+        },
+        async respond(input) {
+          const { actual } = await resolve();
+          return actual.state.sessionId === publicId
+            ? await actual.respond(input)
+            : await control(actual, { inputResponses: input });
+        },
+        async send(message, sendOptions) {
+          const { actual } = await resolve();
+          return actual.state.sessionId === publicId
+            ? await actual.send(message, sendOptions)
+            : await control(actual, { message, ...sendOptions });
+        },
         async snapshot(snapshotOptions) {
           const owners = recovery.lineage(publicId);
           const snapshots = await Promise.all(
@@ -468,26 +480,13 @@ export const withLocalRecoveredSessions = (
             session: { sessionId: publicId, streamIndex: events.length },
           };
         },
-        async send(message, sendOptions) {
-          const { actual } = await resolve();
-          return actual.state.sessionId === publicId
-            ? await actual.send(message, sendOptions)
-            : await control(actual, { message, ...sendOptions });
-        },
-        async respond(input) {
-          const { actual } = await resolve();
-          return actual.state.sessionId === publicId
-            ? await actual.respond(input)
-            : await control(actual, { inputResponses: input });
-        },
-        async cancel(cancelOptions) {
-          return await client.sessions.attach(publicId).cancel(cancelOptions);
-        },
+        state: { sessionId: publicId, streamIndex: options?.streamIndex ?? 0 },
         async *stream(streamOptions) {
           const { actual } = await resolve();
           yield* actual.stream(streamOptions);
         },
       };
     },
+    create: client.sessions.create.bind(client.sessions),
   },
 });

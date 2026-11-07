@@ -23,9 +23,9 @@ describe("owned previous local preview Auth origin", () => {
     chmodSync(directory, 0o700);
     const file = path.join(directory, "environment.json");
     const contents = {
-      BETTER_AUTH_URL: "https://old-owned-preview.vercel.run",
-      BETTER_AUTH_SECRET: "private-never-returned",
       APP_DATABASE_URL: "postgres://private",
+      BETTER_AUTH_SECRET: "private-never-returned",
+      BETTER_AUTH_URL: "https://old-owned-preview.vercel.run",
     };
     writeFileSync(file, JSON.stringify(contents), { mode: 0o600 });
     const run = (target = file, optionalBrowserOrigin = false) =>
@@ -55,17 +55,15 @@ describe("owned previous local preview Auth origin", () => {
       expect(run(link).status).not.toBe(0);
       expect(readFileSync(file, "utf-8")).toBe(JSON.stringify(contents));
     } finally {
-      rmSync(directory, { recursive: true, force: true });
+      rmSync(directory, { force: true, recursive: true });
     }
   });
   it("binds a bounded provider read to the server-derived state path and cancellation", async () => {
-    const run = vi.fn<SandboxSession["run"]>(() =>
-      Promise.resolve({
-        exitCode: 0,
-        stdout: JSON.stringify("https://old-owned-preview.vercel.run"),
-        stderr: "",
-      }),
-    );
+    const run = vi.fn<SandboxSession["run"]>(async () => ({
+      exitCode: 0,
+      stderr: "",
+      stdout: JSON.stringify("https://old-owned-preview.vercel.run"),
+    }));
     const controller = new AbortController();
     await expect(
       readLocalPreviewAuthOrigin({
@@ -80,8 +78,8 @@ describe("owned previous local preview Auth origin", () => {
     expect(run.mock.calls[0]?.[0].abortSignal).toBe(controller.signal);
     run.mockResolvedValueOnce({
       exitCode: 0,
-      stdout: JSON.stringify("https://customer.example"),
       stderr: "",
+      stdout: JSON.stringify("https://customer.example"),
     });
     await expect(
       readLocalPreviewAuthOrigin({

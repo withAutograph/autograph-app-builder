@@ -56,21 +56,21 @@ export const nativeTargetOnboardingRegistryId = (
 };
 
 export const nativeTargetOnboardingApprovalSchema = z.strictObject({
-  requestId: id,
   callId: id,
-  planDigest: digest,
-  responderPrincipalId: id,
-  publicSessionId: id,
-  outcome: z.enum(["approved", "cancelled"]),
   observedAt: instant,
+  outcome: z.enum(["approved", "cancelled"]),
+  planDigest: digest,
+  publicSessionId: id,
+  requestId: id,
+  responderPrincipalId: id,
 });
 export type NativeTargetOnboardingApproval = z.infer<typeof nativeTargetOnboardingApprovalSchema>;
 
 export const nativeTargetOnboardingAttemptSchema = z.strictObject({
   attemptId: z.uuid(),
   candidateName: projectName,
-  leaseId: z.uuid(),
   leaseExpiresAt: instant,
+  leaseId: z.uuid(),
   startedAt: instant,
 });
 export type NativeTargetOnboardingAttempt = z.infer<typeof nativeTargetOnboardingAttemptSchema>;
@@ -88,17 +88,17 @@ export const nativeTargetCompletedAttemptSchema = nativeTargetOnboardingAttemptS
 });
 
 export const nativeTargetProjectReadbackSchema = z.strictObject({
-  projectId: id,
-  name: projectName,
-  teamId: id,
   installationId: id,
+  name: projectName,
+  projectId: id,
   projectSettings: hostedOperatorAppProjectSettingsSchema,
   protection: nativeTargetProjectProtectionSchema,
+  teamId: id,
 });
 export const nativeTargetAcceptedCreationSchema = z.strictObject({
+  acceptedAt: instant,
   attemptId: z.uuid(),
   projectId: id,
-  acceptedAt: instant,
 });
 export type NativeTargetAcceptedCreation = z.infer<typeof nativeTargetAcceptedCreationSchema>;
 export const nativeTargetOnboardingCreationProofSchema = z.strictObject({
@@ -118,9 +118,9 @@ export const nativeTargetCandidateAllowed = (plan: NativeTargetOnboardingPlan, c
     ));
 
 export const nativeTargetCancellationProvenanceSchema = z.strictObject({
+  approval: nativeTargetOnboardingApprovalSchema,
   plan: nativeTargetOnboardingPlanSchema,
   planDigest: digest,
-  approval: nativeTargetOnboardingApprovalSchema,
   previousAttempts: z.array(nativeTargetCompletedAttemptSchema),
 });
 export type NativeTargetCancellationProvenance = z.infer<
@@ -134,14 +134,14 @@ export const nativeTargetPlanSupersessionSchema = z.strictObject({
   supersededAt: instant,
 });
 const common = {
-  kind: z.literal("native-target-onboarding"),
-  version: z.literal(1),
   appId: builderAppIdSchema,
+  kind: z.literal("native-target-onboarding"),
   plan: nativeTargetOnboardingPlanSchema,
   planDigest: digest,
   previousAttempts: z.array(nativeTargetCompletedAttemptSchema),
   priorCancellations: z.array(nativeTargetCancellationProvenanceSchema).optional(),
   priorPlannedScopes: z.array(nativeTargetPlanSupersessionSchema).optional(),
+  version: z.literal(1),
 };
 const approved = { ...common, approval: nativeTargetOnboardingApprovalSchema };
 export const nativeTargetOnboardingRecordSchema = z
@@ -150,27 +150,27 @@ export const nativeTargetOnboardingRecordSchema = z
     z.strictObject({ ...approved, stage: z.literal("approved") }),
     z.strictObject({
       ...approved,
+      acceptedCreation: nativeTargetAcceptedCreationSchema.optional(),
+      attempt: nativeTargetOnboardingAttemptSchema,
+      cancelledBy: nativeTargetOnboardingApprovalSchema.optional(),
+      dispatchAuthorizedAt: instant.optional(),
       stage: z.literal("creating"),
-      attempt: nativeTargetOnboardingAttemptSchema,
-      dispatchAuthorizedAt: instant.optional(),
-      acceptedCreation: nativeTargetAcceptedCreationSchema.optional(),
-      cancelledBy: nativeTargetOnboardingApprovalSchema.optional(),
     }),
     z.strictObject({
       ...approved,
+      acceptedCreation: nativeTargetAcceptedCreationSchema.optional(),
+      attempt: nativeTargetOnboardingAttemptSchema,
+      cancelledBy: nativeTargetOnboardingApprovalSchema.optional(),
+      dispatchAuthorizedAt: instant.optional(),
       stage: z.literal("unknown"),
-      attempt: nativeTargetOnboardingAttemptSchema,
-      dispatchAuthorizedAt: instant.optional(),
-      acceptedCreation: nativeTargetAcceptedCreationSchema.optional(),
-      cancelledBy: nativeTargetOnboardingApprovalSchema.optional(),
     }),
     z.strictObject({
       ...approved,
-      stage: z.literal("ready"),
+      acceptedCreation: nativeTargetAcceptedCreationSchema,
       attempt: nativeTargetOnboardingAttemptSchema,
       dispatchAuthorizedAt: instant,
-      acceptedCreation: nativeTargetAcceptedCreationSchema,
       registration: nativeTargetOnboardingCreationProofSchema,
+      stage: z.literal("ready"),
     }),
     z.strictObject({ ...approved, stage: z.literal("cancelled") }),
   ])

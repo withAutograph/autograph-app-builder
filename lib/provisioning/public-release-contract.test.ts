@@ -37,7 +37,7 @@ describe("public release additive staging metadata", () => {
       approvalReceipts: [
         { approvalId: "genuine-native-receipt", approvedByCallId: "current-call" },
       ],
-      executionLease: { leaseId: "44444444-4444-4444-a444-444444444444", fenceGeneration: 1 },
+      executionLease: { fenceGeneration: 1, leaseId: "44444444-4444-4444-a444-444444444444" },
     });
     expect(record.planDigest).toBe(publicReleasePlanDigest(plan));
     expect(record.approvalReceipts?.[0].approvedByCallId).toBe("current-call");

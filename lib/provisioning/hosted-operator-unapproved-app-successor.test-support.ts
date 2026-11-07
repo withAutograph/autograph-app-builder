@@ -113,138 +113,138 @@ const operationRef = "00000000-0000-4000-8000-000000000001";
 export const observedAt = "2026-10-14T12:00:00Z";
 const sourceWorkload = {
   audience: "https://vercel.com/team",
+  environment: "preview" as const,
   issuer: "https://oidc.vercel.com/team",
   ownerId: "team",
   projectId: "builder",
-  environment: "preview" as const,
   subject: "builder-workload",
 };
 const desiredPlan = () =>
   hostedOperatorPlanSchema.parse({
     ...bootstrapPlan(),
-    normalActorProgram: normalActorProgramSchema.parse({
-      version: 1,
-      appId: context.target.appId,
-      origin: "https://apps.example",
-      actors: [
-        {
-          actorKey: "owner",
-          email: "owner@example.test",
-          name: "Owner",
-          account: "create-email-password",
-        },
-      ],
-      organizations: [],
-      memberships: [],
-      appAccess: [],
-    }),
-    publicGateway: {
-      projectId: "gateway",
-      branch: context.target.branch,
-      origin: "https://apps.example",
-    },
     deploymentBoundary: {
-      authority,
-      teamId: "team",
       app: {
-        projectId: context.target.projectId,
+        branch: context.target.branch,
         deploymentId: "app-deployment",
-        branch: context.target.branch,
         environment: "preview",
+        projectId: context.target.projectId,
       },
+      authority,
       gateway: {
-        projectId: "gateway",
-        deploymentId: "gateway-deployment",
         branch: context.target.branch,
+        deploymentId: "gateway-deployment",
         environment: "preview",
+        projectId: "gateway",
       },
       operator: {
-        projectId: "operator",
         deploymentId: "operator-deployment",
         environment: "preview",
+        projectId: "operator",
       },
+      teamId: "team",
       verification: {
         gatewayOrigin: "https://gateway.example",
         jwksUrl: "https://gateway.example/_platform/jwks.json",
         publicOrigin: "https://apps.example",
       },
     },
+    effects: [
+      ...bootstrapPlan().effects,
+      { description: "Gateway configuration", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
+    ],
     gatewayBindings: {
       authBrowserOrigin: "https://apps.example",
       builderCallbackOrigin: "https://builder.example",
-      operatorOrigin: "https://operator.example",
       catalogAppIds: [context.target.appId],
+      operatorOrigin: "https://operator.example",
       sourceWorkload,
     },
     gatewayDelivery: {
-      projectId: "gateway",
       branch: context.target.branch,
-      repoId: "gateway-repo",
       gitSha: "c".repeat(40),
+      projectId: "gateway",
+      repoId: "gateway-repo",
     },
-    effects: [
-      ...bootstrapPlan().effects,
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway configuration" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
-    ],
+    normalActorProgram: normalActorProgramSchema.parse({
+      actors: [
+        {
+          account: "create-email-password",
+          actorKey: "owner",
+          email: "owner@example.test",
+          name: "Owner",
+        },
+      ],
+      appAccess: [],
+      appId: context.target.appId,
+      memberships: [],
+      organizations: [],
+      origin: "https://apps.example",
+      version: 1,
+    }),
+    publicGateway: {
+      branch: context.target.branch,
+      origin: "https://apps.example",
+      projectId: "gateway",
+    },
   });
 const completedRecord = (plan: HostedOperatorPlan = desiredPlan()) =>
   hostedRuntimeJournalRecordSchema.parse({
-    version: 1,
-    kind: "app-runtime",
     approvedByCallId: "ordinary-public-approval",
-    request: context.target,
-    status: "pending",
-    step: "reserved",
+    kind: "app-runtime",
+    operator: {
+      approvalId: "actual-approval",
+      authPreparation: {
+        assetSha256: "d".repeat(64),
+        catalogFingerprint: "e".repeat(64),
+        database: plan.authDatabase.database,
+        observedAt,
+        runtimeRole: plan.authDatabase.runtimeRole,
+        targetDigest: plan.authSchema?.targetDigest,
+      },
+      deliveredGatewayDeploymentId: "gateway-delivery",
+      gatewayDeliveryCandidates: [
+        {
+          branch: context.target.branch,
+          deploymentId: "gateway-delivery",
+          operationRef,
+          origin: "https://gateway.example",
+          projectId: "gateway",
+          readyState: "READY",
+          repoId: "gateway-repo",
+        },
+      ],
+      gatewayEnvironment: [
+        {
+          branch: context.target.branch,
+          comment: `App Builder protected operator ${operationRef}`,
+          id: "owned-environment-row",
+          key: "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
+          operationRef,
+          projectId: "gateway",
+          valueSha256: hostedOperatorRealmLinkConfigSha256(plan),
+        },
+      ],
+      mode: "protected-operator-v1",
+      operationRef,
+      plan,
+      planDigest: operatorPlanDigest(plan),
+      receipts: plan.effects.map((effect) => ({
+        effectId: effect.id,
+        observedAt,
+        resourceVersion: "actual-readback",
+      })),
+    },
     privateState: {
       encryptedToken: "private-ciphertext",
       keyVersion: "key-version",
       tokenIv: "iv",
       tokenTag: "tag",
     },
-    operator: {
-      mode: "protected-operator-v1",
-      approvalId: "actual-approval",
-      operationRef,
-      plan,
-      planDigest: operatorPlanDigest(plan),
-      authPreparation: {
-        assetSha256: "d".repeat(64),
-        catalogFingerprint: "e".repeat(64),
-        database: plan.authDatabase.database,
-        runtimeRole: plan.authDatabase.runtimeRole,
-        targetDigest: plan.authSchema?.targetDigest,
-        observedAt,
-      },
-      receipts: plan.effects.map((effect) => ({
-        effectId: effect.id,
-        observedAt,
-        resourceVersion: "actual-readback",
-      })),
-      gatewayEnvironment: [
-        {
-          key: "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
-          id: "owned-environment-row",
-          projectId: "gateway",
-          branch: context.target.branch,
-          operationRef,
-          comment: `App Builder protected operator ${operationRef}`,
-          valueSha256: hostedOperatorRealmLinkConfigSha256(plan),
-        },
-      ],
-      gatewayDeliveryCandidates: [
-        {
-          projectId: "gateway",
-          branch: context.target.branch,
-          repoId: "gateway-repo",
-          operationRef,
-          origin: "https://gateway.example",
-          deploymentId: "gateway-delivery",
-          readyState: "READY",
-        },
-      ],
-      deliveredGatewayDeploymentId: "gateway-delivery",
-    },
+    request: context.target,
+    status: "pending",
+    step: "reserved",
+    version: 1,
   });
 
 export const captureFixture = () => {
@@ -253,10 +253,10 @@ export const captureFixture = () => {
     ...template.normalActorProgram,
     actors: [
       {
+        account: "capture-existing",
         actorKey: "owner",
         email: "owner@example.test",
         name: "Owner",
-        account: "capture-existing",
       },
     ],
   });
@@ -265,57 +265,57 @@ export const captureFixture = () => {
     actors: [
       ...original.actors,
       {
+        account: "create-email-password",
         actorKey: "reviewer",
         email: "reviewer@example.test",
         name: "Reviewer",
-        account: "create-email-password",
       },
     ],
   });
   const authPlan = hostedOperatorPlanSchema.parse({
     ...template,
-    normalActorProgram: original,
     gatewayDelivery: { ...template.gatewayDelivery, gitRef: context.target.branch },
+    normalActorProgram: original,
   });
   const record = completedRecord(authPlan);
   record.retainedAuth = retainedOperatorAuthFromJournal(record);
   const accountPlan = hostedOperatorPlanSchema.parse({
     ...authPlan,
+    effects: [{ description: "Accounts", id: "normal-accounts", kind: "normal-accounts" }],
     stage: "auth-participants",
-    effects: [{ id: "normal-accounts", kind: "normal-accounts", description: "Accounts" }],
   });
   const accountRef = "00000000-0000-4000-8000-000000000002";
   const preparation = {
-    program: original,
-    programDigest: normalActorProgramDigest(original),
+    accountApprovalId: "account-approval",
+    accountApprovedByCallId: "account-call",
     accountOperationRef: accountRef,
     accountPlan,
     accountPlanDigest: operatorPlanDigest(accountPlan),
-    accountApprovalId: "account-approval",
-    accountApprovedByCallId: "account-call",
+    accountsCompletedAt: observedAt,
+    captures: [],
+    program: original,
+    programDigest: normalActorProgramDigest(original),
     sealedState: encryptNormalActorState({
       authority,
-      ownerSessionId: context.target.sessionId,
-      operationRef: accountRef,
-      program: original,
       config: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
+      operationRef: accountRef,
+      ownerSessionId: context.target.sessionId,
+      program: original,
       state: initialNormalActorState(original, accountRef),
     }),
-    captures: [],
-    accountsCompletedAt: observedAt,
   };
   record.accountPreparation = preparation;
   const appPlan = hostedOperatorPlanSchema.parse({
     ...authPlan,
-    stage: "app",
-    normalActorPreparation: normalActorPreparationSchema.strip().parse(preparation),
-    gatewayDelivery: { ...authPlan.gatewayDelivery, gitRef: undefined },
     effects: [
       ...authPlan.effects.slice(0, 3),
-      { id: "app-access", kind: "access", description: "Grant" },
-      { id: "app-bindings", kind: "bindings", description: "Bind" },
+      { description: "Grant", id: "app-access", kind: "access" },
+      { description: "Bind", id: "app-bindings", kind: "bindings" },
       ...authPlan.effects.slice(3),
     ],
+    gatewayDelivery: { ...authPlan.gatewayDelivery, gitRef: undefined },
+    normalActorPreparation: normalActorPreparationSchema.strip().parse(preparation),
+    stage: "app",
   });
   const operator = requiredFixture(record.operator);
   operator.plan = appPlan;
@@ -326,5 +326,5 @@ export const captureFixture = () => {
     ["auth-resources", "app-resources", "auth-schema"].includes(receipt.effectId),
   );
   record.approvedByCallId = "operator:unapproved-plan";
-  return { record, added };
+  return { added, record };
 };

@@ -204,7 +204,7 @@ const primitiveKinds = (type: ts.Type): PublicProp["primitiveKinds"] => {
       return undefined;
     }
   }
-  return [...kinds].toSorted() as PublicProp["primitiveKinds"];
+  return [...kinds].toSorted();
 };
 
 const propsForExport = (

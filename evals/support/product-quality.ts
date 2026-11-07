@@ -1,17 +1,22 @@
 import { validateBuildReadyAppSpec } from "../../lib/agent/app-spec-validation";
 import { isProductFacing, forbiddenPublicVocabulary } from "./public-conversation";
 
+const VENDOR_ONBOARDING = "vendor-onboarding";
+const REVIEW_QUEUE = "operations review queue";
+
+const containsAll = (text: string, required: readonly string[]): boolean => {
+  const escaped = required.map((value) => value.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&"));
+  const pattern = escaped.map((value) => `(?=.*${value})`).join("");
+  return new RegExp(pattern, "su").test(text);
+};
+
 export interface ProductQualityScenario {
-  id:
-    | "vendor-onboarding"
-    | "material-product-ambiguity"
-    | "explicit-preference"
-    | "unavailable-product-alternative";
+  id: string;
   brief: string;
   expected: {
     replyIncludes: readonly string[];
     inferredChoices?: readonly string[];
-    question: "forbidden" | "one-recommended";
+    question: string;
     prototype?: {
       appId: string;
       requiredText: readonly string[];
@@ -24,9 +29,9 @@ export const PRODUCT_QUALITY_SCENARIOS: readonly ProductQualityScenario[] = [
     brief:
       "Build an internal vendor-onboarding workflow for operations to review new vendor submissions, resolve missing information, and involve Finance when tax verification is actually required.",
     expected: {
-      inferredChoices: ["vendor-onboarding", "operations review queue", "vendor detail panel"],
+      inferredChoices: [VENDOR_ONBOARDING, REVIEW_QUEUE, "vendor detail panel"],
       prototype: {
-        appId: "vendor-onboarding",
+        appId: VENDOR_ONBOARDING,
         requiredText: [
           "Operations review queue",
           "Finance: verify tax information",
@@ -36,7 +41,7 @@ export const PRODUCT_QUALITY_SCENARIOS: readonly ProductQualityScenario[] = [
       question: "forbidden",
       replyIncludes: [
         "Vendor Onboarding",
-        "operations review queue",
+        REVIEW_QUEUE,
         "vendor detail panel",
         "conditional Finance verification step",
       ],
@@ -110,7 +115,7 @@ export function evaluateConversationQuality(input: {
     hardFailures.push("Conversation used forbidden public vocabulary.");
   }
   for (const expected of input.scenario.expected.replyIncludes) {
-    if (!input.reply.includes(expected)) {
+    if (!containsAll(input.reply, [expected])) {
       hardFailures.push(`Reply omitted required product outcome: ${expected}.`);
     }
   }
@@ -130,9 +135,7 @@ export function evaluateConversationQuality(input: {
     hardFailures,
     score: {
       productFacing: messages.every(isProductFacing),
-      productive: input.scenario.expected.replyIncludes.every((expected) =>
-        input.reply.includes(expected),
-      ),
+      productive: containsAll(input.reply, input.scenario.expected.replyIncludes),
       structured: hardFailures.every(
         (failure) => !failure.includes("unnecessary product question"),
       ),
@@ -159,30 +162,40 @@ export function evaluatePrototypeQuality(input: {
     throw new Error("This product-quality scenario has no prototype contract.");
   }
   const hardFailures: string[] = [];
-  const require = (condition: boolean, message: string) => {
+  const recordFailure = (condition: boolean, message: string) => {
     if (!condition) {
       hardFailures.push(message);
     }
   };
-  require(/<html\s+lang=["']en["']/iu.test(input.html), "Prototype lacks a language.");
-  require(/<meta\s+name=["']viewport["']/iu.test(
-    input.html,
-  ), "Prototype lacks a responsive viewport.");
-  require(/<main[\s>]/iu.test(input.html), "Prototype lacks a main landmark.");
-  require(/<section\s+aria-labelledby=/iu.test(
-    input.html,
-  ), "Prototype lacks labelled workflow regions.");
-  require(!/lorem ipsum|todo:|placeholder text/iu.test(
-    input.html,
-  ), "Prototype contains unfinished placeholder content.");
-  for (const text of prototype.requiredText) {
-    require(input.html.includes(text), `Prototype omitted ${text}.`);
+  const { html } = input;
+  recordFailure(/<html\s+lang=["']en["']/iu.test(html), "Prototype lacks a language.");
+  recordFailure(
+    /<meta\s+name=["']viewport["']/iu.test(html),
+    "Prototype lacks a responsive viewport.",
+  );
+  recordFailure(/<main[\s>]/iu.test(html), "Prototype lacks a main landmark.");
+  recordFailure(
+    /<section\s+aria-labelledby=/iu.test(html),
+    "Prototype lacks labelled workflow regions.",
+  );
+  recordFailure(
+    !/lorem ipsum|todo:|placeholder text/iu.test(html),
+    "Prototype contains unfinished placeholder content.",
+  );
+  if (!containsAll(html, prototype.requiredText)) {
+    for (const text of prototype.requiredText) {
+      if (!containsAll(html, [text])) {
+        hardFailures.push(`Prototype omitted ${text}.`);
+      }
+    }
   }
   const appSpecResult = validateBuildReadyAppSpec(input.appSpec);
-  require(appSpecResult.valid, "Prototype AppSpec is not build-ready.");
-  require(input.appSpec.includes(
-    `prototype/${prototype.appId}/index.html`,
-  ), "AppSpec does not bind the evaluated prototype path.");
+  recordFailure(appSpecResult.valid, "Prototype AppSpec is not build-ready.");
+  const prototypePath = `prototype/${prototype.appId}/index.html`;
+  recordFailure(
+    input.appSpec.includes(prototypePath),
+    "AppSpec does not bind the evaluated prototype path.",
+  );
   return {
     hardFailures,
     score: {

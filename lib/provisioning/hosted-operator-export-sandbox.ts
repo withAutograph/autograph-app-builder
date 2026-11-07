@@ -115,54 +115,9 @@ export const createTenantExportSandbox = (
     },
   });
   return {
-    async prepare(worker: TenantExportWorkerInput, assertCurrent: () => Promise<void>) {
-      const descriptor = tenantExportWorkerDescriptorSchema.parse(configuration.exportWorker);
-      await assertCurrent();
-      const sandbox = await create({
-        ...hostedOperatorSandboxSourceOptions(configuration),
-        ...(await credentials()),
-        persistent: false,
-        ports: [],
-        env: {},
-        networkPolicy: "allow-all",
-        timeout: 300_000,
-      });
-      try {
-        await assertCurrent();
-        const checked = await sandbox.runCommand({
-          cmd: "sha256sum",
-          args: ["--", descriptor.executablePath],
-          env: {},
-        });
-        const pin = await checked.stdout();
-        if (checked.exitCode !== 0 || pin.split(/\s+/u)[0] !== descriptor.sha256) {
-          throw new HostedOperatorError("resource_mismatch");
-        }
-        const metadata = JSON.stringify(worker);
-        let preparationCode: number | null;
-        try {
-          const preparation = await sandbox.runCommand({
-            cmd: "node",
-            args: ["-e", exportMetadataWriter, inputPath(worker), metadata],
-            env: {},
-          });
-          preparationCode = preparation.exitCode;
-        } catch {
-          const observed = await sandbox.readFileToBuffer({ path: inputPath(worker) });
-          if (observed === null || !observed.equals(Buffer.from(metadata))) {
-            throw unavailable();
-          }
-          preparationCode = 0;
-        }
-        if (preparationCode !== 0) {
-          throw unavailable();
-        }
-        await assertCurrent();
-        return { sandboxId: sandbox.name, descriptor };
-      } catch {
-        await sandbox.delete();
-        throw unavailable();
-      }
+    async dispose(locator: TenantExportWorkerLocator) {
+      const sandbox = await reconnect(locator);
+      await sandbox.delete();
     },
     async inspect(
       worker: TenantExportWorkerInput,
@@ -183,14 +138,59 @@ export const createTenantExportSandbox = (
         });
         return manifest === null
           ? { status: "terminal" }
-          : { status: "terminal", source: source(sandbox, worker) };
+          : { source: source(sandbox, worker), status: "terminal" };
       } catch {
         return { status: "unknown" };
       }
     },
-    async dispose(locator: TenantExportWorkerLocator) {
-      const sandbox = await reconnect(locator);
-      await sandbox.delete();
+    async prepare(worker: TenantExportWorkerInput, assertCurrent: () => Promise<void>) {
+      const descriptor = tenantExportWorkerDescriptorSchema.parse(configuration.exportWorker);
+      await assertCurrent();
+      const sandbox = await create({
+        ...hostedOperatorSandboxSourceOptions(configuration),
+        ...(await credentials()),
+        env: {},
+        networkPolicy: "allow-all",
+        persistent: false,
+        ports: [],
+        timeout: 300_000,
+      });
+      try {
+        await assertCurrent();
+        const checked = await sandbox.runCommand({
+          args: ["--", descriptor.executablePath],
+          cmd: "sha256sum",
+          env: {},
+        });
+        const pin = await checked.stdout();
+        if (checked.exitCode !== 0 || pin.split(/\s+/u)[0] !== descriptor.sha256) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        const metadata = JSON.stringify(worker);
+        let preparationCode: number | null;
+        try {
+          const preparation = await sandbox.runCommand({
+            args: ["-e", exportMetadataWriter, inputPath(worker), metadata],
+            cmd: "node",
+            env: {},
+          });
+          preparationCode = preparation.exitCode;
+        } catch {
+          const observed = await sandbox.readFileToBuffer({ path: inputPath(worker) });
+          if (observed === null || !observed.equals(Buffer.from(metadata))) {
+            throw unavailable();
+          }
+          preparationCode = 0;
+        }
+        if (preparationCode !== 0) {
+          throw unavailable();
+        }
+        await assertCurrent();
+        return { descriptor, sandboxId: sandbox.name };
+      } catch {
+        await sandbox.delete();
+        throw unavailable();
+      }
     },
     async run(
       worker: TenantExportWorkerInput,
@@ -202,10 +202,10 @@ export const createTenantExportSandbox = (
       const sandbox = await reconnect(locator);
       await assertCurrent();
       const command = await sandbox.runCommand({
-        cmd: locator.descriptor.executablePath,
         args: [locator.descriptor.subcommand, "--file-spool", inputPath(worker)],
-        env: { AUTOGRAPH_TENANT_EXPORT_APP_MIGRATOR_URL: migrationUrl },
+        cmd: locator.descriptor.executablePath,
         detached: true,
+        env: { AUTOGRAPH_TENANT_EXPORT_APP_MIGRATOR_URL: migrationUrl },
       });
       // Unknown dispatch acknowledgement cannot be called terminal; the prior locator remains private.
       await checkpoint({ ...locator, commandId: command.cmdId });

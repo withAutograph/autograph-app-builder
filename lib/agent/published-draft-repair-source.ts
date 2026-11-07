@@ -6,9 +6,11 @@ import { assertExactImmutableGitHubSourceReceipt } from "../repository/github-pu
 import type { ImmutableGitHubSourceReceipt } from "../repository/github-publication";
 import type { ExistingDraftObservation } from "../repository/github-draft-update";
 
+const PUBLISHED_DRAFT_REPAIR = "published-draft-repair" as const;
+
 /** A second acquired source; the accepted fresh-template workflow remains its origin. */
 export interface PublishedDraftRepairSource {
-  kind: "published-draft-repair";
+  kind: typeof PUBLISHED_DRAFT_REPAIR;
   version: 1;
   appId: string;
   appSpecDigest: string;
@@ -22,31 +24,24 @@ export interface PublishedDraftRepairSource {
 }
 
 const digest = (value: Omit<PublishedDraftRepairSource, "digest">) => {
-  const draft = value.draft;
+  const { draft } = value;
   const material = {
-    kind: value.kind,
-    version: value.version,
     appId: value.appId,
     appSpecDigest: value.appSpecDigest,
-    originSourceReceiptDigest: value.originSourceReceiptDigest,
-    publicationProposalDigest: value.publicationProposalDigest,
-    publicationDigest: value.publicationDigest,
-    installationId: value.installationId,
-    sourceDigest: value.source.digest,
     draft: {
-      repositoryId: draft.repositoryId,
-      owner: draft.owner,
-      name: draft.name,
-      number: draft.number,
-      pullRequestId: draft.pullRequestId,
+      baseBranch: draft.baseBranch,
+      baseRepositoryId: draft.baseRepositoryId,
       draft: draft.draft,
-      state: draft.state,
-      headRepositoryId: draft.headRepositoryId,
       headBranch: draft.headBranch,
+      headRepositoryId: draft.headRepositoryId,
       headSha: draft.headSha,
       headTree: draft.headTree,
-      baseRepositoryId: draft.baseRepositoryId,
-      baseBranch: draft.baseBranch,
+      name: draft.name,
+      number: draft.number,
+      owner: draft.owner,
+      pullRequestId: draft.pullRequestId,
+      repositoryId: draft.repositoryId,
+      state: draft.state,
       verifiedBuilderOrigin:
         draft.verifiedBuilderOrigin === undefined
           ? undefined
@@ -56,6 +51,13 @@ const digest = (value: Omit<PublishedDraftRepairSource, "digest">) => {
               marker: draft.verifiedBuilderOrigin.marker,
             },
     },
+    installationId: value.installationId,
+    kind: value.kind,
+    originSourceReceiptDigest: value.originSourceReceiptDigest,
+    publicationDigest: value.publicationDigest,
+    publicationProposalDigest: value.publicationProposalDigest,
+    sourceDigest: value.source.digest,
+    version: value.version,
   };
   return createHash("sha256").update(JSON.stringify(material)).digest("hex");
 };
@@ -79,7 +81,7 @@ export const assertPublishedDraftRepairSource = (receipt: PublishedDraftRepairSo
   ];
   const matches = [
     Object.keys(receipt).toSorted().join("|") === keys.toSorted().join("|"),
-    receipt.kind === "published-draft-repair",
+    receipt.kind === PUBLISHED_DRAFT_REPAIR,
     receipt.version === 1,
     claimed === digest(unsigned),
     draft.draft,
@@ -103,7 +105,7 @@ export const assertPublishedDraftRepairSource = (receipt: PublishedDraftRepairSo
 export const createPublishedDraftRepairSource = (
   input: Omit<PublishedDraftRepairSource, "kind" | "version" | "digest">,
 ): PublishedDraftRepairSource => {
-  const unsigned = { kind: "published-draft-repair" as const, version: 1 as const, ...input };
+  const unsigned = { kind: PUBLISHED_DRAFT_REPAIR, version: 1 as const, ...input };
   const receipt = { ...unsigned, digest: digest(unsigned) };
   assertPublishedDraftRepairSource(receipt);
   return receipt;
@@ -118,7 +120,7 @@ export const reviewedDraftCandidateSource = (
     return undefined;
   }
   const repair =
-    candidate.kind === "published-draft-repair" ? candidate.repair : candidate.publishedOrigin;
+    candidate.kind === PUBLISHED_DRAFT_REPAIR ? candidate.repair : candidate.publishedOrigin;
   if (repair === undefined) {
     return candidate.publicationScope === undefined &&
       state.githubSource?.digest === candidate.githubSourceDigest
@@ -126,7 +128,7 @@ export const reviewedDraftCandidateSource = (
       : undefined;
   }
   assertPublishedDraftRepairSource(repair);
-  if (candidate.kind !== "published-draft-repair") {
+  if (candidate.kind !== PUBLISHED_DRAFT_REPAIR) {
     const scope = candidate.publicationScope;
     if (scope === undefined) {
       return undefined;
@@ -151,8 +153,8 @@ export const reviewedDraftCandidateSource = (
     candidate.pullRequestNumber === repair.draft.number,
     candidate.headSha === repair.draft.headSha,
     candidate.headTree === repair.draft.headTree,
-    candidate.kind !== "published-draft-repair" || candidate.baseSha === candidate.headSha,
-    candidate.kind !== "published-draft-repair" || candidate.baseTree === candidate.headTree,
+    candidate.kind !== PUBLISHED_DRAFT_REPAIR || candidate.baseSha === candidate.headSha,
+    candidate.kind !== PUBLISHED_DRAFT_REPAIR || candidate.baseTree === candidate.headTree,
   ].every(Boolean);
   if (!matches) {
     return undefined;

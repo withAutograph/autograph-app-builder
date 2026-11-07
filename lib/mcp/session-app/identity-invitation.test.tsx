@@ -9,8 +9,8 @@ import { SessionAppView } from "./view";
 
 const invitation = {
   callId: "call",
-  url: "https://auth.example.com/link?nonce=ordinary",
   expiresAt: "2099-01-01T00:00:00Z",
+  url: "https://auth.example.com/link?nonce=ordinary",
 };
 const result = (
   events: PublicEveEvent[],
@@ -27,30 +27,30 @@ const pending = (
   url = invitation.url,
 ): Extract<PublicEveEvent, { type: "auth_identity_invitation" }> => ({
   ...invitation,
-  url,
   index,
   type: "auth_identity_invitation",
+  url,
 });
 
 describe("pending identity invitation delta state", () => {
   it("accepts all public siblings projected from a single native partial", () => {
     const native: MessageStreamEvent = {
-      type: "action.partial",
-      meta: { at: "2026-10-15T14:00:00Z", id: "identity-invitation-event" },
       data: {
-        turnId: "turn",
-        sequence: 3,
-        stepIndex: 1,
         result: {
-          kind: "tool-result",
-          toolName: "prepare-app-hosted-runtime",
           callId: invitation.callId,
+          kind: "tool-result",
           output: {
             authIdentityLink: invitation.url,
             authIdentityLinkExpiresAt: invitation.expiresAt,
           },
+          toolName: "prepare-app-hosted-runtime",
         },
+        sequence: 3,
+        stepIndex: 1,
+        turnId: "turn",
       },
+      meta: { at: "2026-10-15T14:00:00Z", id: "identity-invitation-event" },
+      type: "action.partial",
     };
     const events = projectInstalledEveEvent(native, 7).flatMap((event) => {
       const projected = toPublicEvent(event);
@@ -85,7 +85,7 @@ describe("pending identity invitation delta state", () => {
     );
     const resolved = reduceIdentityInvitations(
       initial,
-      result([{ type: "auth_identity_invitation_resolved", callId: "call", index: 3 }]),
+      result([{ callId: "call", index: 3, type: "auth_identity_invitation_resolved" }]),
     );
     expect(resolved.invitations.map(({ callId }) => callId)).toEqual(["other"]);
     expect(reduceIdentityInvitations(resolved, result([pending(1)])).invitations).toEqual(
@@ -105,12 +105,12 @@ describe("passive sign-in invitation", () => {
   const render = (expiresAt: string) =>
     renderToStaticMarkup(
       createElement(SessionAppView, {
-        result: result([]),
-        identityInvitations: [{ ...invitation, expiresAt }],
         canCallTools: true,
         canOpenLinks: true,
+        identityInvitations: [{ ...invitation, expiresAt }],
         onOpenLink: async () => {},
         onRespond: async () => {},
+        result: result([]),
       }),
     );
   it("renders an ordinary sign-in hyperlink while working without an answer control", () => {

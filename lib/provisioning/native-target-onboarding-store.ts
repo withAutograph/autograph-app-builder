@@ -68,14 +68,14 @@ const identity = (key: NativeTargetOnboardingKey) =>
   nativeTargetOnboardingRegistryId(key.authority, key.appId);
 const initialRecord = (plan: NativeTargetOnboardingPlan): NativeTargetOnboardingRecord =>
   nativeTargetOnboardingRecordSchema.parse({
-    kind: "native-target-onboarding",
-    version: 1,
     appId: plan.appId,
-    stage: "planned",
+    kind: "native-target-onboarding",
     plan,
     planDigest: nativeTargetOnboardingPlanDigest(plan),
     previousAttempts: [],
     priorCancellations: [],
+    stage: "planned",
+    version: 1,
   });
 const parseRecord = (key: NativeTargetOnboardingKey, value: NativeTargetOnboardingRecord) => {
   const record = nativeTargetOnboardingRecordSchema.parse(value);
@@ -135,9 +135,9 @@ const assertUndispatchedReplan = (
   const expected = [
     ...(before.priorCancellations ?? []),
     {
+      approval: before.approval,
       plan: before.plan,
       planDigest: before.planDigest,
-      approval: before.approval,
       previousAttempts: before.previousAttempts,
     },
   ];
@@ -152,18 +152,18 @@ const assertPlannedScopeSupersession = (
 ) => {
   const target = (plan: NativeTargetOnboardingPlan) => ({
     appId: plan.appId,
-    project: plan.project,
-    branch: plan.branch,
-    productRoles: plan.productRoles,
-    release: plan.origin.release,
     appSpecDigest: plan.origin.appSpecDigest,
-    publicSessionId: plan.origin.publicSessionId,
+    branch: plan.branch,
+    conflictPolicy: plan.conflictPolicy,
+    cost: plan.cost,
     database: plan.appDatabase.database,
     migratorRole: plan.appDatabase.migratorRole,
-    runtimeRole: plan.appDatabase.runtimeRole,
-    cost: plan.cost,
+    productRoles: plan.productRoles,
+    project: plan.project,
+    publicSessionId: plan.origin.publicSessionId,
+    release: plan.origin.release,
     retention: plan.retention,
-    conflictPolicy: plan.conflictPolicy,
+    runtimeRole: plan.appDatabase.runtimeRole,
   });
   const prior = after.priorPlannedScopes?.at(-1);
   if (
@@ -174,15 +174,15 @@ const assertPlannedScopeSupersession = (
       (before.plan.resourceSelectionRevision ?? 0) + 1 ||
     isDeepStrictEqual(
       {
-        profile: before.plan.resourceProfileId,
         authority: before.plan.resourceProfileAuthorityDigest,
         nativeNeon: before.plan.nativeNeon,
+        profile: before.plan.resourceProfileId,
         resourceId: before.plan.appDatabase.resourceId,
       },
       {
-        profile: after.plan.resourceProfileId,
         authority: after.plan.resourceProfileAuthorityDigest,
         nativeNeon: after.plan.nativeNeon,
+        profile: after.plan.resourceProfileId,
         resourceId: after.plan.appDatabase.resourceId,
       },
     ) ||
@@ -262,12 +262,12 @@ const assertTransition = (
     NativeTargetOnboardingRecord["stage"],
     readonly NativeTargetOnboardingRecord["stage"][]
   > = {
-    planned: ["approved", "cancelled"],
     approved: ["creating", "cancelled"],
-    creating: ["creating", "unknown", "ready", "approved", "cancelled"],
-    unknown: ["unknown", "ready", "approved", "cancelled"],
-    ready: [],
     cancelled: [],
+    creating: ["creating", "unknown", "ready", "approved", "cancelled"],
+    planned: ["approved", "cancelled"],
+    ready: [],
+    unknown: ["unknown", "ready", "approved", "cancelled"],
   };
   if (!allowed[before.stage].includes(after.stage)) {
     throw conflict();
@@ -316,37 +316,37 @@ const assertTransition = (
 export const createInMemoryNativeTargetOnboardingStore = (): NativeTargetOnboardingStore => {
   const rows = new Map<string, NativeTargetOnboardingRow>();
   return {
-    read: (key) => Promise.resolve(structuredClone(rows.get(identity(key)))),
-    reserve(input) {
-      const requestId = identity(input);
-      const existing = rows.get(requestId);
-      if (existing !== undefined) {
-        return Promise.resolve(structuredClone(existing));
-      }
-      const record = parseRecord(input, initialRecord(input.plan));
-      const row = {
-        authority: hostedTenantAuthoritySchema.parse(input.authority),
-        appId: record.appId,
-        requestId,
-        revision: 1,
-        record,
-        createdAt: input.now,
-        updatedAt: input.now,
-      };
-      rows.set(requestId, structuredClone(row));
-      return Promise.resolve(structuredClone(row));
-    },
-    compareAndSet(input) {
+    async compareAndSet(input) {
       const requestId = identity(input);
       const current = rows.get(requestId);
       if (current === undefined || current.revision !== input.expectedRevision) {
-        return Promise.resolve(undefined);
+        return undefined;
       }
       const record = parseRecord(input, input.record);
       assertTransition(current.record, record);
-      const row = { ...current, revision: current.revision + 1, record, updatedAt: input.now };
+      const row = { ...current, record, revision: current.revision + 1, updatedAt: input.now };
       rows.set(requestId, structuredClone(row));
-      return Promise.resolve(structuredClone(row));
+      return structuredClone(row);
+    },
+    read: async (key) => structuredClone(rows.get(identity(key))),
+    async reserve(input) {
+      const requestId = identity(input);
+      const existing = rows.get(requestId);
+      if (existing !== undefined) {
+        return structuredClone(existing);
+      }
+      const record = parseRecord(input, initialRecord(input.plan));
+      const row = {
+        appId: record.appId,
+        authority: hostedTenantAuthoritySchema.parse(input.authority),
+        createdAt: input.now,
+        record,
+        requestId,
+        revision: 1,
+        updatedAt: input.now,
+      };
+      rows.set(requestId, structuredClone(row));
+      return structuredClone(row);
     },
   };
 };
@@ -365,29 +365,29 @@ const parseRow = (
   raw: typeof builderProvisioningJournals.$inferSelect,
 ): NativeTargetOnboardingRow => {
   const authority = hostedTenantAuthoritySchema.parse({
-    issuer: raw.issuer,
     audience: raw.audience,
-    workspaceId: raw.workspaceId,
+    issuer: raw.issuer,
     ownerUserId: raw.ownerUserId,
+    workspaceId: raw.workspaceId,
   });
   const record = parseRecord(
-    { authority, appId: nativeTargetOnboardingRecordSchema.parse(raw.record).appId },
+    { appId: nativeTargetOnboardingRecordSchema.parse(raw.record).appId, authority },
     nativeTargetOnboardingRecordSchema.parse(raw.record),
   );
   if (
-    raw.requestId !== identity({ authority, appId: record.appId }) ||
+    raw.requestId !== identity({ appId: record.appId, authority }) ||
     raw.requestDigest !== record.planDigest ||
     raw.state !== nativeTargetOnboardingTableState(record)
   ) {
     throw unavailable();
   }
   return {
-    authority,
     appId: record.appId,
+    authority,
+    createdAt: raw.createdAt,
+    record,
     requestId: raw.requestId,
     revision: raw.revision,
-    record,
-    createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
   };
 };
@@ -405,30 +405,6 @@ export const createPostgresNativeTargetOnboardingStore = (
     return rows[0] === undefined ? undefined : parseRow(rows[0]);
   };
   return {
-    read,
-    async reserve(input) {
-      const authority = hostedTenantAuthoritySchema.parse(input.authority);
-      const record = parseRecord(input, initialRecord(input.plan));
-      const rows = await database
-        .insert(builderProvisioningJournals)
-        .values({
-          ...authority,
-          requestId: identity(input),
-          requestDigest: record.planDigest,
-          record,
-          revision: 1,
-          state: nativeTargetOnboardingTableState(record),
-          createdAt: input.now,
-          updatedAt: input.now,
-        })
-        .onConflictDoNothing()
-        .returning();
-      const row = rows[0] === undefined ? await read(input) : parseRow(rows[0]);
-      if (row === undefined) {
-        throw unavailable();
-      }
-      return row;
-    },
     async compareAndSet(input) {
       const current = await read(input);
       if (current === undefined || current.revision !== input.expectedRevision) {
@@ -441,8 +417,8 @@ export const createPostgresNativeTargetOnboardingStore = (
         .set({
           record,
           requestDigest: record.planDigest,
-          state: nativeTargetOnboardingTableState(record),
           revision: input.expectedRevision + 1,
+          state: nativeTargetOnboardingTableState(record),
           updatedAt: input.now,
         })
         .where(
@@ -450,6 +426,30 @@ export const createPostgresNativeTargetOnboardingStore = (
         )
         .returning();
       return rows[0] === undefined ? undefined : parseRow(rows[0]);
+    },
+    read,
+    async reserve(input) {
+      const authority = hostedTenantAuthoritySchema.parse(input.authority);
+      const record = parseRecord(input, initialRecord(input.plan));
+      const rows = await database
+        .insert(builderProvisioningJournals)
+        .values({
+          ...authority,
+          createdAt: input.now,
+          record,
+          requestDigest: record.planDigest,
+          requestId: identity(input),
+          revision: 1,
+          state: nativeTargetOnboardingTableState(record),
+          updatedAt: input.now,
+        })
+        .onConflictDoNothing()
+        .returning();
+      const row = rows[0] === undefined ? await read(input) : parseRow(rows[0]);
+      if (row === undefined) {
+        throw unavailable();
+      }
+      return row;
     },
   };
 };
@@ -518,7 +518,7 @@ export const createNativeTargetOnboardingRegistry = <Invocation>(
   const current = async (invocation: Invocation, appId: string) => {
     const owner = await ports.authorize(invocation, builderAppIdSchema.parse(appId));
     const authority = hostedTenantAuthoritySchema.parse(owner.authority);
-    return { owner: { ...owner, authority }, key: { authority, appId } };
+    return { key: { appId, authority }, owner: { ...owner, authority } };
   };
   const load = async (invocation: Invocation, appId: string) => {
     const result = await current(invocation, appId);
@@ -532,8 +532,8 @@ export const createNativeTargetOnboardingRegistry = <Invocation>(
     const saved = await ports.store.compareAndSet({
       ...row,
       expectedRevision: row.revision,
-      record,
       now: now(),
+      record,
     });
     if (saved === undefined) {
       throw conflict();
@@ -606,6 +606,32 @@ export const createNativeTargetOnboardingRegistry = <Invocation>(
   };
   return {
     ...createNativeTargetOnboardingReader(ports),
+    /** Required callback after authenticated create2xx, before the independent GET. */
+    async acceptProjectId(
+      invocation: Invocation,
+      appId: string,
+      leaseId: string,
+      rawAccepted: NativeTargetAcceptedCreation,
+    ) {
+      const acceptedCreation = nativeTargetAcceptedCreationSchema.parse(rawAccepted);
+      const { row } = await load(invocation, appId);
+      const { record } = row;
+      if (
+        (record.stage !== "creating" && record.stage !== "unknown") ||
+        record.attempt.attemptId !== acceptedCreation.attemptId ||
+        record.attempt.leaseId !== leaseId ||
+        record.dispatchAuthorizedAt === undefined
+      ) {
+        throw conflict();
+      }
+      if (record.acceptedCreation !== undefined) {
+        if (record.acceptedCreation.projectId !== acceptedCreation.projectId) {
+          throw conflict();
+        }
+        return row;
+      }
+      return await save(row, { ...record, acceptedCreation });
+    },
     async authorizeAttempt(
       invocation: Invocation,
       appId: string,
@@ -621,129 +647,6 @@ export const createNativeTargetOnboardingRegistry = <Invocation>(
         throw conflict();
       }
       return await save(row, { ...record, dispatchAuthorizedAt: now().toISOString() });
-    },
-    async supersedePlannedScope(
-      invocation: Invocation,
-      rawPlan: NativeTargetOnboardingPlan,
-      expectedPlanDigest: string,
-    ) {
-      const plan = nativeTargetOnboardingPlanSchema.parse(rawPlan);
-      const { owner, row } = await load(invocation, plan.appId);
-      if (
-        row.record.stage !== "planned" ||
-        row.record.planDigest !== expectedPlanDigest ||
-        row.record.previousAttempts.length !== 0 ||
-        plan.origin.publicSessionId !== owner.publicSessionId ||
-        plan.origin.adapterSessionId !== owner.adapterSessionId ||
-        plan.origin.adapterGeneration !== owner.adapterGeneration
-      ) {
-        throw conflict();
-      }
-      await ports.assertPlanOrigin(owner, plan);
-      const latest = await current(invocation, plan.appId);
-      if (!isDeepStrictEqual(latest.owner, owner)) {
-        throw unavailable();
-      }
-      return await save(row, {
-        ...initialRecord(plan),
-        priorCancellations: row.record.priorCancellations,
-        priorPlannedScopes: [
-          ...(row.record.priorPlannedScopes ?? []),
-          {
-            plan: row.record.plan,
-            planDigest: row.record.planDigest,
-            supersededAt: now().toISOString(),
-          },
-        ],
-      });
-    },
-    async reservePlan(invocation: Invocation, rawPlan: NativeTargetOnboardingPlan) {
-      const plan = nativeTargetOnboardingPlanSchema.parse(rawPlan);
-      const { owner, key } = await current(invocation, plan.appId);
-      const existing = await ports.store.read(key);
-      if (existing !== undefined && existing.record.stage !== "cancelled") {
-        if (
-          existing.record.stage !== "ready" &&
-          existing.record.planDigest !== nativeTargetOnboardingPlanDigest(plan)
-        ) {
-          throw conflict();
-        }
-        return existing;
-      }
-      if (
-        plan.origin.publicSessionId !== owner.publicSessionId ||
-        plan.origin.adapterSessionId !== owner.adapterSessionId ||
-        plan.origin.adapterGeneration !== owner.adapterGeneration
-      ) {
-        throw unavailable();
-      }
-      await ports.assertPlanOrigin(owner, plan);
-      if (existing?.record.stage === "cancelled") {
-        const prior = existing.record;
-        return await save(existing, {
-          ...initialRecord(plan),
-          priorPlannedScopes: prior.priorPlannedScopes,
-          priorCancellations: [
-            ...(prior.priorCancellations ?? []),
-            {
-              plan: prior.plan,
-              planDigest: prior.planDigest,
-              approval: prior.approval,
-              previousAttempts: prior.previousAttempts,
-            },
-          ],
-        });
-      }
-      const reserved = await ports.store.reserve({ ...key, plan, now: now() });
-      if (
-        reserved.record.stage !== "ready" &&
-        reserved.record.planDigest !== nativeTargetOnboardingPlanDigest(plan)
-      ) {
-        throw conflict();
-      }
-      return reserved;
-    },
-    async recordApproval(invocation: Invocation, appId: string) {
-      const { owner, row } = await load(invocation, appId);
-      if (row.record.stage === "ready" || row.record.stage === "cancelled") {
-        return row;
-      }
-      const receipt = await approval(owner, row.record);
-      if (
-        receipt.outcome === "cancelled" &&
-        (row.record.stage === "creating" || row.record.stage === "unknown")
-      ) {
-        if (
-          row.record.dispatchAuthorizedAt === undefined &&
-          row.record.acceptedCreation === undefined
-        ) {
-          return await save(row, {
-            ...initialRecord(row.record.plan),
-            priorCancellations: row.record.priorCancellations,
-            priorPlannedScopes: row.record.priorPlannedScopes,
-            stage: "cancelled",
-            approval: receipt,
-            previousAttempts: [
-              ...row.record.previousAttempts,
-              { ...row.record.attempt, reason: "not_dispatched" },
-            ],
-          });
-        }
-        return await save(row, { ...row.record, stage: "unknown", cancelledBy: receipt });
-      }
-      if (row.record.stage !== "planned" && row.record.stage !== "approved") {
-        return row;
-      }
-      // The stored approval is the immutable initial plan approval. A later
-      // invocation must independently authorize every effect, without rewriting it.
-      if (row.record.stage === "approved" && receipt.outcome === "approved") {
-        return row;
-      }
-      return await save(row, {
-        ...row.record,
-        stage: receipt.outcome === "approved" ? "approved" : "cancelled",
-        approval: receipt,
-      });
     },
     async claimAttempt(
       invocation: Invocation,
@@ -787,43 +690,49 @@ export const createNativeTargetOnboardingRegistry = <Invocation>(
       ) {
         throw conflict();
       }
-      return await save(row, { ...row.record, stage: "creating", attempt });
+      return await save(row, { ...row.record, attempt, stage: "creating" });
     },
-    /** Required callback after authenticated create2xx, before the independent GET. */
-    async acceptProjectId(
-      invocation: Invocation,
-      appId: string,
-      leaseId: string,
-      rawAccepted: NativeTargetAcceptedCreation,
-    ) {
-      const acceptedCreation = nativeTargetAcceptedCreationSchema.parse(rawAccepted);
-      const { row } = await load(invocation, appId);
-      const { record } = row;
-      if (
-        (record.stage !== "creating" && record.stage !== "unknown") ||
-        record.attempt.attemptId !== acceptedCreation.attemptId ||
-        record.attempt.leaseId !== leaseId ||
-        record.dispatchAuthorizedAt === undefined
-      ) {
-        throw conflict();
-      }
-      if (record.acceptedCreation !== undefined) {
-        if (record.acceptedCreation.projectId !== acceptedCreation.projectId) {
-          throw conflict();
-        }
+    async recordApproval(invocation: Invocation, appId: string) {
+      const { owner, row } = await load(invocation, appId);
+      if (row.record.stage === "ready" || row.record.stage === "cancelled") {
         return row;
       }
-      return await save(row, { ...record, acceptedCreation });
-    },
-    async recordUnknown(invocation: Invocation, appId: string, attemptId: string) {
-      const { row } = await load(invocation, appId);
+      const receipt = await approval(owner, row.record);
       if (
-        (row.record.stage !== "creating" && row.record.stage !== "unknown") ||
-        row.record.attempt.attemptId !== attemptId
+        receipt.outcome === "cancelled" &&
+        (row.record.stage === "creating" || row.record.stage === "unknown")
       ) {
-        throw conflict();
+        if (
+          row.record.dispatchAuthorizedAt === undefined &&
+          row.record.acceptedCreation === undefined
+        ) {
+          return await save(row, {
+            ...initialRecord(row.record.plan),
+            approval: receipt,
+            previousAttempts: [
+              ...row.record.previousAttempts,
+              { ...row.record.attempt, reason: "not_dispatched" },
+            ],
+            priorCancellations: row.record.priorCancellations,
+            priorPlannedScopes: row.record.priorPlannedScopes,
+            stage: "cancelled",
+          });
+        }
+        return await save(row, { ...row.record, cancelledBy: receipt, stage: "unknown" });
       }
-      return await save(row, { ...row.record, stage: "unknown" });
+      if (row.record.stage !== "planned" && row.record.stage !== "approved") {
+        return row;
+      }
+      // The stored approval is the immutable initial plan approval. A later
+      // invocation must independently authorize every effect, without rewriting it.
+      if (row.record.stage === "approved" && receipt.outcome === "approved") {
+        return row;
+      }
+      return await save(row, {
+        ...row.record,
+        approval: receipt,
+        stage: receipt.outcome === "approved" ? "approved" : "cancelled",
+      });
     },
     /** Only a trusted, definitive no-create outcome can retire an attempt and allow another POST. */
     async recordNotCreated(
@@ -841,16 +750,16 @@ export const createNativeTargetOnboardingRegistry = <Invocation>(
         throw conflict();
       }
       return await save(row, {
-        kind: record.kind,
-        version: record.version,
         appId,
+        approval: record.approval,
+        kind: record.kind,
         plan: record.plan,
         planDigest: record.planDigest,
-        stage: "approved",
-        approval: record.approval,
         previousAttempts: [...record.previousAttempts, { ...record.attempt, reason }],
         priorCancellations: record.priorCancellations,
         priorPlannedScopes: record.priorPlannedScopes,
+        stage: "approved",
+        version: record.version,
       });
     },
     /** Trusted independent GET adapter supplies proof; matching GET without a saved2xx cannot register. */
@@ -866,10 +775,101 @@ export const createNativeTargetOnboardingRegistry = <Invocation>(
       }
       return await save(row, {
         ...record,
-        stage: "ready",
-        dispatchAuthorizedAt: record.dispatchAuthorizedAt,
         acceptedCreation: record.acceptedCreation,
+        dispatchAuthorizedAt: record.dispatchAuthorizedAt,
         registration,
+        stage: "ready",
+      });
+    },
+    async recordUnknown(invocation: Invocation, appId: string, attemptId: string) {
+      const { row } = await load(invocation, appId);
+      if (
+        (row.record.stage !== "creating" && row.record.stage !== "unknown") ||
+        row.record.attempt.attemptId !== attemptId
+      ) {
+        throw conflict();
+      }
+      return await save(row, { ...row.record, stage: "unknown" });
+    },
+    async reservePlan(invocation: Invocation, rawPlan: NativeTargetOnboardingPlan) {
+      const plan = nativeTargetOnboardingPlanSchema.parse(rawPlan);
+      const { owner, key } = await current(invocation, plan.appId);
+      const existing = await ports.store.read(key);
+      if (existing !== undefined && existing.record.stage !== "cancelled") {
+        if (
+          existing.record.stage !== "ready" &&
+          existing.record.planDigest !== nativeTargetOnboardingPlanDigest(plan)
+        ) {
+          throw conflict();
+        }
+        return existing;
+      }
+      if (
+        plan.origin.publicSessionId !== owner.publicSessionId ||
+        plan.origin.adapterSessionId !== owner.adapterSessionId ||
+        plan.origin.adapterGeneration !== owner.adapterGeneration
+      ) {
+        throw unavailable();
+      }
+      await ports.assertPlanOrigin(owner, plan);
+      if (existing?.record.stage === "cancelled") {
+        const prior = existing.record;
+        return await save(existing, {
+          ...initialRecord(plan),
+          priorCancellations: [
+            ...(prior.priorCancellations ?? []),
+            {
+              approval: prior.approval,
+              plan: prior.plan,
+              planDigest: prior.planDigest,
+              previousAttempts: prior.previousAttempts,
+            },
+          ],
+          priorPlannedScopes: prior.priorPlannedScopes,
+        });
+      }
+      const reserved = await ports.store.reserve({ ...key, now: now(), plan });
+      if (
+        reserved.record.stage !== "ready" &&
+        reserved.record.planDigest !== nativeTargetOnboardingPlanDigest(plan)
+      ) {
+        throw conflict();
+      }
+      return reserved;
+    },
+    async supersedePlannedScope(
+      invocation: Invocation,
+      rawPlan: NativeTargetOnboardingPlan,
+      expectedPlanDigest: string,
+    ) {
+      const plan = nativeTargetOnboardingPlanSchema.parse(rawPlan);
+      const { owner, row } = await load(invocation, plan.appId);
+      if (
+        row.record.stage !== "planned" ||
+        row.record.planDigest !== expectedPlanDigest ||
+        row.record.previousAttempts.length !== 0 ||
+        plan.origin.publicSessionId !== owner.publicSessionId ||
+        plan.origin.adapterSessionId !== owner.adapterSessionId ||
+        plan.origin.adapterGeneration !== owner.adapterGeneration
+      ) {
+        throw conflict();
+      }
+      await ports.assertPlanOrigin(owner, plan);
+      const latest = await current(invocation, plan.appId);
+      if (!isDeepStrictEqual(latest.owner, owner)) {
+        throw unavailable();
+      }
+      return await save(row, {
+        ...initialRecord(plan),
+        priorCancellations: row.record.priorCancellations,
+        priorPlannedScopes: [
+          ...(row.record.priorPlannedScopes ?? []),
+          {
+            plan: row.record.plan,
+            planDigest: row.record.planDigest,
+            supersededAt: now().toISOString(),
+          },
+        ],
       });
     },
   };

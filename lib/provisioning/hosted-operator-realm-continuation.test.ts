@@ -16,54 +16,54 @@ import type { HostedOperatorContext } from "./hosted-operator-service";
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
 
 const authority = {
-  issuer: "https://builder.test",
   audience: "https://builder.test/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.test",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 const principal = { ...authority, scopes: ["autograph:start", "autograph:get"] };
 const context: HostedOperatorContext = {
   authority,
+  ownerContext: {
+    adapterGeneration: 1,
+    adapterSessionId: "native-session",
+    authority,
+    kind: "direct",
+    principal,
+    sessionId: "public-session",
+  },
   target: {
     appId: "app",
-    sessionId: "public-session",
     branch: "preview",
     environment: "preview",
     installationId: "installation",
     projectId: "project",
     scopeId: "team",
     scopeType: "team",
-  },
-  ownerContext: {
-    kind: "direct",
-    authority,
-    principal,
-    adapterGeneration: 1,
-    adapterSessionId: "native-session",
     sessionId: "public-session",
   },
 };
 const observed: RealmContinuationObservation = {
-  authority,
-  appId: "app",
-  ownerSessionId: "public-session",
   adapterSessionId: "native-session",
-  operationRef: "11111111-1111-4111-8111-111111111111",
+  appId: "app",
   approvedPlanDigest: "a".repeat(64),
-  nonceSha256: "b".repeat(64),
-  reason: { kind: "consumed-proof", proofRef: "private-proof", proofSha256: "c".repeat(64) },
+  authority,
   initiator: {
+    attributes: {
+      "mcp:audience": authority.audience,
+      "mcp:scopes": principal.scopes,
+      "mcp:workspace-id": "workspace",
+    },
     authenticator: "mcp-oauth-jwks",
     issuer: authority.issuer,
     principalId: "owner",
     principalType: "user",
     subject: "owner",
-    attributes: {
-      "mcp:audience": authority.audience,
-      "mcp:workspace-id": "workspace",
-      "mcp:scopes": principal.scopes,
-    },
   },
+  nonceSha256: "b".repeat(64),
+  operationRef: "11111111-1111-4111-8111-111111111111",
+  ownerSessionId: "public-session",
+  reason: { kind: "consumed-proof", proofRef: "private-proof", proofSha256: "c".repeat(64) },
 };
 const plan = hostedOperatorPlanSchema.parse({
   access: [],
@@ -115,60 +115,59 @@ const plan = hostedOperatorPlanSchema.parse({
 });
 
 const initialRecord = (): HostedRuntimeJournalRecord => ({
-  kind: "app-runtime",
-  version: 1,
   approvedByCallId: "approval-call",
-  status: "pending",
-  step: "reserved",
-  request: context.target,
+  kind: "app-runtime",
   operator: {
-    mode: "protected-operator-v1",
-    plan,
-    planDigest: operatorPlanDigest(plan),
-    operationRef: observed.operationRef,
-    receipts: [],
     identityLink: {
       audience: "https://builder.test",
       authResourceId: "auth-resource",
       bootstrapPlanDigest: operatorPlanDigest(plan),
       browserOrigin: "https://auth.test",
       endpointOrigin: "https://gateway.test",
+      expiresAt: "2026-10-14T00:00:00.000Z",
       issuer: "https://auth.test",
+      nonceSha256: observed.nonceSha256,
       organizationId: null,
       ownerSessionId: "public-session",
-      nonceSha256: observed.nonceSha256,
-      expiresAt: "2026-10-14T00:00:00.000Z",
     },
+    mode: "protected-operator-v1",
+    operationRef: observed.operationRef,
+    plan,
+    planDigest: operatorPlanDigest(plan),
+    receipts: [],
   },
+  request: context.target,
+  status: "pending",
+  step: "reserved",
+  version: 1,
 });
 
 const fixture = () => {
   // The dispatcher only changes its private sibling; full plan parsing belongs to the canonical observer.
   let row: HostedRuntimeJournalRow = {
-    revision: 1,
     record: initialRecord(),
+    revision: 1,
   };
   const dispatch = vi.fn<RealmContinuationPorts["dispatch"]>(async (request) => ({
-    version: 1,
-    dispatchId: request.dispatchId,
     adapterSessionId: "native-session",
+    dispatchId: request.dispatchId,
     status: "accepted",
+    version: 1,
   }));
   const reconcile = vi.fn<RealmContinuationPorts["reconcile"]>(async (request) => ({
-    version: 1,
-    dispatchId: request.dispatchId,
     adapterSessionId: "native-session",
+    dispatchId: request.dispatchId,
     status: "unknown",
+    version: 1,
   }));
   const observe = vi.fn<RealmContinuationPorts["observe"]>(async () => structuredClone(observed));
   const ports: RealmContinuationPorts = {
+    dispatch,
     now: () => 1_800_000_000_000,
     observe,
-    dispatch,
     reconcile,
     seal: () => "private-encrypted-authority",
     store: {
-      read: async () => structuredClone(row),
       // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS misses intentionally return undefined as the store interface specifies.
       compareAndSet: async (input): Promise<HostedRuntimeJournalRow | undefined> => {
         if (input.expectedRevision !== row.revision) {
@@ -177,13 +176,14 @@ const fixture = () => {
         row = { record: structuredClone(input.record), revision: row.revision + 1 };
         return structuredClone(row);
       },
+      read: async () => structuredClone(row),
     },
   };
   return {
-    ports,
     dispatch,
-    reconcile,
     observe,
+    ports,
+    reconcile,
     row: () => row,
     run: createHostedOperatorRealmContinuation(ports),
   };
@@ -195,10 +195,10 @@ describe("Realm continuation durable dispatcher", () => {
     f.dispatch.mockImplementation(async (request) => {
       expect(f.row().record.realmContinuation?.status).toBe("claimed");
       return {
-        version: 1,
-        dispatchId: request.dispatchId,
         adapterSessionId: "native-session",
+        dispatchId: request.dispatchId,
         status: "accepted",
+        version: 1,
       };
     });
     expect(await f.run(context)).toBe("accepted");
@@ -211,10 +211,10 @@ describe("Realm continuation durable dispatcher", () => {
     f.dispatch.mockRejectedValue(new Error("connection lost after native acceptance"));
     expect(await f.run(context)).toBe("unknown");
     f.reconcile.mockImplementation(async (request) => ({
-      version: 1,
-      dispatchId: request.dispatchId,
       adapterSessionId: "native-session",
+      dispatchId: request.dispatchId,
       status: "accepted",
+      version: 1,
     }));
     expect(await f.run(context)).toBe("accepted");
     expect(f.dispatch).toHaveBeenCalledOnce();
@@ -225,10 +225,10 @@ describe("Realm continuation durable dispatcher", () => {
     f.dispatch.mockRejectedValueOnce(new Error("crash before native receiver"));
     await f.run(context);
     f.reconcile.mockImplementation(async (request) => ({
-      version: 1,
-      dispatchId: request.dispatchId,
       adapterSessionId: "native-session",
+      dispatchId: request.dispatchId,
       status: "not-submitted",
+      version: 1,
     }));
     expect(await f.run(context)).toBe("accepted");
     expect(f.dispatch.mock.calls[0]?.[0].dispatchId).toBe(f.dispatch.mock.calls[1]?.[0].dispatchId);
@@ -248,10 +248,10 @@ describe("Realm continuation durable dispatcher", () => {
   it("rejects foreign native receipts and changed canonical authority", async () => {
     const f = fixture();
     f.dispatch.mockImplementation(async (request) => ({
-      version: 1,
-      dispatchId: request.dispatchId,
       adapterSessionId: "foreign-session",
+      dispatchId: request.dispatchId,
       status: "accepted",
+      version: 1,
     }));
     await expect(f.run(context)).rejects.toThrow("authorization");
     f.observe.mockRejectedValue(new Error("owner revoked"));
@@ -266,10 +266,10 @@ describe("Realm continuation durable dispatcher", () => {
         row.record.realmContinuation.receiverClaimedAt = "2026-10-15T00:00:00.000Z";
       }
       return {
-        version: 1,
-        dispatchId: request.dispatchId,
         adapterSessionId: "native-session",
+        dispatchId: request.dispatchId,
         status: "accepted",
+        version: 1,
       };
     });
     await f.run(context);
@@ -282,13 +282,13 @@ describe("Realm continuation observation", () => {
   it("reports expired links truthfully without inventing proof capture", () => {
     const result = observeRealmContinuationRecord({
       context,
-      record: record(),
       initiator: observed.initiator,
       now: Date.parse("2026-10-15"),
+      record: record(),
     });
     expect(result?.reason).toEqual({
-      kind: "expired-technical-wait",
       expiresAt: "2026-10-14T00:00:00.000Z",
+      kind: "expired-technical-wait",
     });
   });
   it("retains real consumed proof provenance even after the link expires", () => {
@@ -301,9 +301,9 @@ describe("Realm continuation observation", () => {
     expect(
       observeRealmContinuationRecord({
         context,
-        record: value,
         initiator: observed.initiator,
         now: Date.parse("2026-10-15"),
+        record: value,
       })?.reason.kind,
     ).toBe("consumed-proof");
   });
@@ -315,9 +315,9 @@ describe("Realm continuation observation", () => {
     expect(() =>
       observeRealmContinuationRecord({
         context,
-        record: value,
         initiator: observed.initiator,
         now: Date.now(),
+        record: value,
       }),
     ).toThrow("authorization");
     expect(realmContinuationDispatchId({ ...observed, nonceSha256: "d".repeat(64) })).not.toBe(
@@ -337,33 +337,33 @@ describe("Exact obsolete technical question guard", () => {
     link.nonceSha256 = realmIdentityNonceSha256(nonce);
     const url = new URL("/api/auth/platform/operator-link", link.browserOrigin);
     for (const [key, value] of Object.entries({
+      authResourceId: link.authResourceId,
+      bootstrapPlanDigest: link.bootstrapPlanDigest,
       nonce,
       ownerSessionId: link.ownerSessionId,
-      bootstrapPlanDigest: link.bootstrapPlanDigest,
-      authResourceId: link.authResourceId,
     })) {
       url.searchParams.set(key, value);
     }
     const action = {
-      kind: "tool-call",
-      toolName: "prepare-app-hosted-runtime",
       callId: record.approvedByCallId,
       input: {
         ...plan.selection,
         operationRef: observed.operationRef,
-        planDigest: operatorPlanDigest(plan),
         plan,
+        planDigest: operatorPlanDigest(plan),
       },
+      kind: "tool-call",
+      toolName: "prepare-app-hosted-runtime",
     };
     return {
       record,
-      url,
       request: {
-        kind: "question",
-        requestId: "original-request",
         action,
+        kind: "question",
         prompt: `Any localized wording [link](${url.href})`,
+        requestId: "original-request",
       },
+      url,
     };
   };
   it("binds structured tool operation and frozen challenge independent of wording", () => {

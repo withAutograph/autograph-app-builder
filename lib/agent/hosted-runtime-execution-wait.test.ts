@@ -33,15 +33,13 @@ const fixture = () => {
   const selection = {
     appId: "reports",
     branch: "review",
+    environment: "preview" as const,
     projectId: "project-reports",
     sessionId: "session-reports",
-    environment: "preview" as const,
   };
   const plan = hostedOperatorPlanSchema.parse({
-    version: 1,
+    access: [],
     action: "prepare",
-    selection,
-    contextId: "context",
     appDatabase: {
       database: "reports",
       migratorRole: "reports_owner",
@@ -54,141 +52,149 @@ const fixture = () => {
       resourceId: "identity",
       runtimeRole: "identity_reader",
     },
-    access: [],
+    contextId: "context",
     cost: { class: "shared-recovery-group", description: "fixture", owner: "fixture" },
     effects: [
-      { id: "resources", kind: "resources", description: "Resources" },
-      { id: "install", kind: "install", description: "Install" },
-      { id: "access", kind: "access", description: "Access" },
-      { id: "bindings", kind: "bindings", description: "Bind" },
+      { description: "Resources", id: "resources", kind: "resources" },
+      { description: "Install", id: "install", kind: "install" },
+      { description: "Access", id: "access", kind: "access" },
+      { description: "Bind", id: "bindings", kind: "bindings" },
     ],
     installer: { reference: "installer", sha256: "a".repeat(64) },
     neon: {
-      projectId: "neon",
       branchId: "branch",
-      endpoint: "ep-fixture.neon.tech",
       connectionRef: "connection",
+      endpoint: "ep-fixture.neon.tech",
+      projectId: "neon",
       source: "synthetic-only",
     },
-    release: { id: "release", artifactRef: "artifact", sha256: "b".repeat(64) },
+    release: { artifactRef: "artifact", id: "release", sha256: "b".repeat(64) },
     retention: { expiresAt: "2027-01-01T00:00:00Z", policy: "retain" },
+    selection,
+    version: 1,
   });
   const approved = {
     appId: selection.appId,
     branch: selection.branch,
-    projectId: selection.projectId,
     environment: selection.environment,
     operationRef: "801583e6-b763-46eb-b9ca-9ac5a13733c4",
     plan,
     planDigest: operatorPlanDigest(plan),
+    projectId: selection.projectId,
   };
   const principal = {
-    issuer: "https://builder.example/api/auth",
     audience: "https://builder.example/mcp",
+    issuer: "https://builder.example/api/auth",
     ownerUserId: "owner",
-    workspaceId: "workspace",
     scopes: ["autograph:session"],
+    workspaceId: "workspace",
   };
   const ownerContext = operatorOwnerContextSchema.parse({
-    kind: "direct",
-    sessionId: selection.sessionId,
-    adapterSessionId: "adapter",
     adapterGeneration: 1,
+    adapterSessionId: "adapter",
     authority: {
-      issuer: principal.issuer,
       audience: principal.audience,
-      workspaceId: principal.workspaceId,
+      issuer: principal.issuer,
       ownerUserId: principal.ownerUserId,
+      workspaceId: principal.workspaceId,
     },
+    kind: "direct",
     principal,
+    sessionId: selection.sessionId,
   });
   const receipt = privateHostedApprovalReceiptSchema.parse({
-    format: "autograph-hosted-approval-v1",
     callId: "human-call",
-    requestId: "human-request",
+    format: "autograph-hosted-approval-v1",
     outcome: "approved",
+    requestId: "human-request",
     responderPrincipalId: principal.ownerUserId,
     sequence: 1,
-    toolName: "prepare-app-hosted-runtime",
     toolInput: approved,
+    toolName: "prepare-app-hosted-runtime",
     turnId: "turn",
   });
   const session = durableHostedSessionRecordSchema.parse({
-    version: 2,
-    sessionId: selection.sessionId,
-    adapterSessionId: "adapter",
     adapterGeneration: 1,
-    originAdapterSessionId: "adapter",
+    adapterSessionId: "adapter",
     cancellationRevision: 3,
-    resumedCancellationRevision: 3,
-    principal,
     createdAtEpochMs: 1,
     lastProgressAtEpochMs: 1,
-    updatedAtEpochMs: 1,
+    originAdapterSessionId: "adapter",
+    principal,
+    privateApprovalReceipts: [receipt],
     resumability: "live",
+    resumedCancellationRevision: 3,
+    sessionId: selection.sessionId,
     stage: "planning",
     status: "working",
     title: "Reports",
-    privateApprovalReceipts: [receipt],
+    updatedAtEpochMs: 1,
+    version: 2,
   });
   const abort = new AbortController();
   const context: WorkflowToolContext = {
-    callId: "original-tool-call",
-    toolName: "prepare-app-hosted-runtime",
     abortSignal: abort.signal,
-    ask: () => Promise.reject(new Error("No human continuation")),
+    agent: async () => {
+      throw new Error("No agent call");
+    },
     agents: {},
-    agent: () => Promise.reject(new Error("No agent call")),
-    getToken: () => Promise.reject(new Error("No provider grant")),
+    ask: async () => {
+      throw new Error("No human continuation");
+    },
+    callId: "original-tool-call",
+    getToken: async () => {
+      throw new Error("No provider grant");
+    },
     requireAuth: () => {
       throw new Error("No provider grant");
     },
     session: {
-      id: "adapter",
       auth: { current: null, initiator: null },
+      id: "adapter",
       turn: { id: "turn", sequence: 1 },
     },
+    toolName: "prepare-app-hosted-runtime",
   };
   const snapshot = {
-    sessionId: selection.sessionId,
-    adapterSessionId: "adapter",
     adapterGeneration: 1,
-    cancellationRevision: 3,
+    adapterSessionId: "adapter",
     callId: context.callId,
+    cancellationRevision: 3,
     operationRef: approved.operationRef,
     planDigest: approved.planDigest,
+    sessionId: selection.sessionId,
   };
-  const store = { getSession: () => Promise.resolve(session) };
+  const store = { getSession: async () => session };
   const calls: string[] = [];
   let observed: OperatorPublicResult = {
     appId: approved.appId,
     authenticatedBehavior: "unassessed",
+    execution: { state: "running" },
     operationRef: approved.operationRef,
     planDigest: approved.planDigest,
     status: "pending",
-    execution: { state: "running" },
   };
   const operator = createHostedOperatorClient({
     endpoint: "https://operator.example",
-    ownerContext,
-    sessionId: selection.sessionId,
-    token: () => Promise.resolve("synthetic-private"),
-    fetch: (_url, init) => {
+    fetch: async (_url, init) => {
       const body = operatorRequestSchema.parse(JSON.parse(z.string().parse(init?.body)));
       calls.push(body.action);
       if (body.action === "execute") {
-        return Promise.reject(new TypeError("synthetic lost transport"));
+        throw new TypeError("synthetic lost transport");
       }
-      return Promise.resolve(Response.json(observed));
+      return Response.json(observed);
     },
+    ownerContext,
+    sessionId: selection.sessionId,
+    token: async () => "synthetic-private",
   });
   const contract = {
     createResourceMismatch: () => new HostedOperatorError("resource_mismatch"),
     digest: operatorPlanDigest,
     isOperatorError: (error: unknown): error is HostedOperatorError =>
       error instanceof HostedOperatorError,
-    sameSelection: sameOperatorSelection,
     isTransportUnknown: isHostedOperatorTransportUnknown,
+    sameSelection: sameOperatorSelection,
   };
   const retain = vi.fn<(selection: PreparedRuntimeSelection) => void>();
   const prepare = vi.fn(
@@ -196,8 +202,6 @@ const fixture = () => {
       await prepareHostedRuntimeWithOperator(approved, context, operator, retain, contract),
   );
   const read = createHostedRuntimeExecutionObserver({
-    now: () => 1000,
-    isTransportUnknown: isHostedOperatorTransportUnknown,
     assertAuthority: async (_input, ctx, expected) => {
       await assertHostedRuntimeExecutionObservationAuthority({
         approved,
@@ -207,31 +211,33 @@ const fixture = () => {
         store,
       });
     },
+    isTransportUnknown: isHostedOperatorTransportUnknown,
+    now: () => 1000,
+    prepareObserved: async (_input, ctx, result) =>
+      await prepareHostedRuntimeWithOperator(approved, ctx, operator, retain, contract, result),
     readStatus: async () =>
       await operator.request(
         { action: "status", operationRef: approved.operationRef, selection },
         abort.signal,
       ),
-    prepareObserved: async (_input, ctx, result) =>
-      await prepareHostedRuntimeWithOperator(approved, ctx, operator, retain, contract, result),
   });
   return {
-    approved,
-    context,
-    snapshot,
-    session,
     abort,
-    operator,
-    read,
-    prepare,
-    retain,
+    approved,
     calls,
-    setObserved: (next: OperatorPublicResult) => {
-      observed = next;
-    },
+    context,
     get observed() {
       return observed;
     },
+    operator,
+    prepare,
+    read,
+    retain,
+    session,
+    setObserved: (next: OperatorPublicResult) => {
+      observed = next;
+    },
+    snapshot,
     store,
   };
 };
@@ -242,21 +248,21 @@ describe("automatic observation of one approved execution", () => {
     const readReceivers: boolean[] = [];
     const sleepReceivers: boolean[] = [];
     const ports: HostedRuntimeExecutionWaitPorts = {
-      snapshot: f.snapshot,
-      read: function read(this: undefined, input, ctx, snapshot, delayMs) {
+      read: async function read(this: undefined, input, ctx, snapshot, delayMs) {
         readReceivers.push(this === undefined);
         expect(snapshot).toBe(f.snapshot);
-        return f.read(input, ctx, snapshot, delayMs);
+        return await f.read(input, ctx, snapshot, delayMs);
       },
-      sleepUntil: function sleepUntil(this: undefined) {
+      sleepUntil: async function sleepUntil(this: undefined) {
         sleepReceivers.push(this === undefined);
         f.setObserved({
           ...f.observed,
+          execution: { outcome: { status: "prepared" }, state: "settled" },
           status: "prepared",
-          execution: { state: "settled", outcome: { status: "prepared" } },
         });
-        return Promise.resolve();
+        return;
       },
+      snapshot: f.snapshot,
     };
     const prepared = await f.prepare();
     const generator = continueHostedRuntimeExecutionObservation(
@@ -279,14 +285,14 @@ describe("automatic observation of one approved execution", () => {
     const prepared = await f.prepare();
     f.setObserved({
       ...f.observed,
+      execution: { outcome: { status: "planned" }, state: "settled" },
       status: "pending",
-      execution: { state: "settled", outcome: { status: "planned" } },
     });
-    const sleepUntil = vi.fn<(deadline: Date) => Promise<void>>(() => Promise.resolve());
+    const sleepUntil = vi.fn<(deadline: Date) => Promise<void>>(async () => {});
     const generator = continueHostedRuntimeExecutionObservation(f.approved, f.context, prepared, {
-      snapshot: f.snapshot,
       read: f.read,
       sleepUntil,
+      snapshot: f.snapshot,
     });
     expect(await generator.next()).toMatchObject({ done: false, value: { status: "pending" } });
     expect(await generator.next()).toMatchObject({
@@ -294,20 +300,20 @@ describe("automatic observation of one approved execution", () => {
       value: {
         identityInput: null,
         result: {
-          status: "planned",
-          operationRef: f.approved.operationRef,
-          planDigest: f.approved.planDigest,
           nextAction: {
-            tool: "plan-app-hosted-runtime",
             approval: "normal-plan-approval",
             input: {
               appId: f.approved.appId,
               branch: f.approved.branch,
-              projectId: f.approved.projectId,
               environment: f.approved.environment,
               operation: "prepare",
+              projectId: f.approved.projectId,
             },
+            tool: "plan-app-hosted-runtime",
           },
+          operationRef: f.approved.operationRef,
+          planDigest: f.approved.planDigest,
+          status: "planned",
         },
       },
     });
@@ -321,16 +327,15 @@ describe("automatic observation of one approved execution", () => {
       const f = fixture();
       let sleeps = 0;
       const generator = continueHostedRuntimeOwnerPreparation(f.approved, f.context, f.prepare, {
+        acknowledge: async () => {
+          throw new Error("No identity");
+        },
         createHook: () => {
           throw new Error("No identity hook");
         },
-        register: () => Promise.reject(new Error("No identity")),
-        acknowledge: () => Promise.reject(new Error("No identity")),
-        sleepUntil: () => Promise.resolve(),
         execution: {
-          snapshot: f.snapshot,
           read: f.read,
-          sleepUntil: () => {
+          sleepUntil: async () => {
             sleeps += 1;
             const status = outcome === "prepared" ? "prepared" : "blocked";
             f.setObserved({
@@ -338,13 +343,18 @@ describe("automatic observation of one approved execution", () => {
               status,
               ...(outcome === "prepared" ? {} : { code: outcome }),
               execution: {
-                state: "settled",
                 outcome: { status, ...(outcome === "prepared" ? {} : { code: outcome }) },
+                state: "settled",
               },
             });
-            return Promise.resolve();
+            return;
           },
+          snapshot: f.snapshot,
         },
+        register: async () => {
+          throw new Error("No identity");
+        },
+        sleepUntil: async () => {},
       });
       expect(await generator.next()).toMatchObject({ done: false, value: { status: "pending" } });
       expect(await generator.next()).toMatchObject({
@@ -401,8 +411,6 @@ describe("automatic observation of one approved execution", () => {
     const f = fixture();
     const publish = vi.fn<() => void>();
     const read = createHostedRuntimeExecutionObserver({
-      now: () => 1000,
-      isTransportUnknown: isHostedOperatorTransportUnknown,
       assertAuthority: async (_input, ctx, expected) => {
         await assertHostedRuntimeExecutionObservationAuthority({
           approved: f.approved,
@@ -412,20 +420,21 @@ describe("automatic observation of one approved execution", () => {
           store: f.store,
         });
       },
-      readStatus: () =>
-        Promise.resolve({
-          ...f.observed,
-          status: "prepared",
-          execution: { state: "settled", outcome: { status: "prepared" } },
-        }),
-      prepareObserved: () => {
+      commitObserved: publish,
+      isTransportUnknown: isHostedOperatorTransportUnknown,
+      now: () => 1000,
+      prepareObserved: async () => {
         f.session.cancellationRevision = 4;
-        return Promise.resolve({
+        return {
           identityInput: null,
           result: { ...f.observed, status: "prepared" },
-        });
+        };
       },
-      commitObserved: publish,
+      readStatus: async () => ({
+        ...f.observed,
+        execution: { outcome: { status: "prepared" }, state: "settled" },
+        status: "prepared",
+      }),
     });
     await expect(read(f.approved, f.context, f.snapshot, 1000)).rejects.toMatchObject({
       code: "authorization_required",
@@ -460,11 +469,11 @@ describe("automatic observation of one approved execution", () => {
     expect(() =>
       observedHostedRuntimeExecutionIsSettled(f.approved, {
         ...f.observed,
-        status: "prepared",
         execution: {
+          outcome: { code: "reconciliation_required", status: "blocked" },
           state: "settled",
-          outcome: { status: "blocked", code: "reconciliation_required" },
         },
+        status: "prepared",
       }),
     ).toThrow();
   });
@@ -472,8 +481,6 @@ describe("automatic observation of one approved execution", () => {
     const f = fixture();
     let reads = 0;
     const read = createHostedRuntimeExecutionObserver({
-      now: () => 1000,
-      isTransportUnknown: isHostedOperatorTransportUnknown,
       assertAuthority: async (_input, ctx, snapshot) => {
         await assertHostedRuntimeExecutionObservationAuthority({
           approved: f.approved,
@@ -483,17 +490,19 @@ describe("automatic observation of one approved execution", () => {
           store: f.store,
         });
       },
-      readStatus: () => {
-        reads += 1;
-        return Promise.reject(
-          new HostedOperatorTransportUnknown(new TypeError("lost STATUS transport")),
-        );
+      isTransportUnknown: isHostedOperatorTransportUnknown,
+      now: () => 1000,
+      prepareObserved: async () => {
+        throw new Error("No terminal evidence");
       },
-      prepareObserved: () => Promise.reject(new Error("No terminal evidence")),
+      readStatus: async () => {
+        reads += 1;
+        throw new HostedOperatorTransportUnknown(new TypeError("lost STATUS transport"));
+      },
     });
     expect(await read(f.approved, f.context, f.snapshot, 1000)).toEqual({
-      status: "waiting",
       checkAfter: new Date(2000).toISOString(),
+      status: "waiting",
     });
     expect(reads).toBe(1);
     expect(f.calls).toEqual([]);
@@ -506,16 +515,18 @@ describe("automatic observation of one approved execution", () => {
     expect(
       observedHostedRuntimeExecutionIsSettled(f.approved, {
         ...f.observed,
-        status: "prepared",
         execution: undefined,
+        status: "prepared",
       }),
     ).toBe(true);
   });
   it("returns the original approval-wait snapshot for observation while existing ignored-return callers remain valid", async () => {
     const f = fixture();
     const result = await waitForHostedRuntimeApprovalReceipt(f.approved, f.context, {
-      read: () => Promise.resolve({ status: "approved", snapshot: f.snapshot }),
-      sleepUntil: () => Promise.reject(new Error("No wait")),
+      read: async () => ({ snapshot: f.snapshot, status: "approved" }),
+      sleepUntil: async () => {
+        throw new Error("No wait");
+      },
     });
     expect(result.snapshot).toBe(f.snapshot);
   });

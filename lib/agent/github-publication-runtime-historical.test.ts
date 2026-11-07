@@ -129,44 +129,44 @@ const ownedDraftFixture = (
     verifiedBuilderOrigin: { appId: "123", authorId: "900", marker: "d".repeat(64) },
   };
   const unsigned: Omit<DraftPullRequestSuccessReceipt, "digest"> = {
-    version: GITHUB_PUBLICATION_VERSION,
-    kind: "draft-pull-request",
-    status: "succeeded",
-    proposalDigest: "a".repeat(64),
-    idempotencyKey: "b".repeat(64),
     approvedByCallId: "original-publication",
-    installationIdentityDigest: installation.digest,
-    repositoryId: "100",
+    baseBranch: "main",
+    baseSha: repository.headSha,
     branchName: draft.headBranch,
     branchSha: "6".repeat(40),
     branchTree: "7".repeat(40),
-    pullRequestId: draft.pullRequestId,
-    pullRequestNumber: draft.number,
-    draft: true,
-    baseBranch: "main",
-    baseSha: repository.headSha,
     changeSetDigest: "c".repeat(64),
     changedContentDigest: "d".repeat(64),
+    draft: true,
+    idempotencyKey: "b".repeat(64),
+    installationIdentityDigest: installation.digest,
+    kind: "draft-pull-request",
     normalizedChangedPaths: ["apps/demo/page.tsx"],
-    releaseGateUnchanged: true,
-    recoveredFromPending: false,
+    proposalDigest: "a".repeat(64),
     providerReadBackDigest: "e".repeat(64),
+    pullRequestId: draft.pullRequestId,
+    pullRequestNumber: draft.number,
+    recoveredFromPending: false,
+    releaseGateUnchanged: true,
+    repositoryId: "100",
+    status: "succeeded",
+    version: GITHUB_PUBLICATION_VERSION,
     ...receiptOverrides,
   };
   const receipt = {
     ...unsigned,
     digest: createHash("sha256").update(JSON.stringify(unsigned)).digest("hex"),
   };
-  const read = vi.fn<GitHubPublicationReceiptStore["read"]>(() => Promise.resolve(receipt));
+  const read = vi.fn<GitHubPublicationReceiptStore["read"]>(async () => receipt);
   const findDraftByPullRequest = vi.fn<
     NonNullable<GitHubPublicationReceiptStore["findDraftByPullRequest"]>
-  >(() => Promise.resolve(receipt));
+  >(async () => receipt);
   const runtime = composeGitHubPublicationRuntime({
     adapter: {
       ...adapterWithoutHistoricalLookup(),
-      inspectExistingDraft: () => Promise.resolve(draft),
-      inspectRepository: () => Promise.resolve(repository),
-      inspectInstallation: () => Promise.resolve(installation),
+      inspectExistingDraft: async () => draft,
+      inspectInstallation: async () => installation,
+      inspectRepository: async () => repository,
       ...adapterOverrides,
     },
     enabled: true,
@@ -177,24 +177,24 @@ const ownedDraftFixture = (
 };
 
 const recordedSource = (draft: ExistingDraftObservation) => ({
-  repositoryId: draft.repositoryId,
   branch: draft.headBranch,
+  changeSetDigest: "c".repeat(64),
   gitSha: draft.headSha,
   gitTree: draft.headTree,
-  changeSetDigest: "c".repeat(64),
+  repositoryId: draft.repositoryId,
   reviewDigest: "d".repeat(64),
 });
 
 describe("same-session owned draft repair", () => {
   it("recovers the exact owned historical published head without retained reconciliation slots", async () => {
     const { draft, runtime } = ownedDraftFixture();
-    const readPublishedSource = vi.fn(() => Promise.resolve(recordedSource(draft)));
+    const readPublishedSource = vi.fn(async () => recordedSource(draft));
     const result = await runtime.inspectExistingDraftReconciliationSource({
       name: draft.name,
       owner: draft.owner,
-      repositoryId: draft.repositoryId,
       pullRequestNumber: draft.number,
       readPublishedSource,
+      repositoryId: draft.repositoryId,
     });
     expect(result.publishedHeadSha).toBe(draft.headSha);
     expect(result.draft).toEqual(draft);
@@ -211,18 +211,18 @@ describe("same-session owned draft repair", () => {
       const result = await runtime.inspectExistingDraftReconciliationSource({
         name: draft.name,
         owner: draft.owner,
-        repositoryId: draft.repositoryId,
         pullRequestNumber: draft.number,
-        readPublishedSource: () => Promise.resolve(recordedSource(draft)),
+        readPublishedSource: async () => recordedSource(draft),
+        repositoryId: draft.repositoryId,
       });
       expect(result.publishedHeadSha).toBe(draft.headSha);
       expect(log).toHaveBeenCalledWith(
         JSON.stringify({
+          canonicalPublishedSourceMatched: true,
           event: "app_builder.draft_reconciliation_baseline",
-          source: "published-source",
           previousReconciliationPresent: false,
           publishedReconciliationPresent: false,
-          canonicalPublishedSourceMatched: true,
+          source: "published-source",
         }),
       );
     } finally {
@@ -238,9 +238,9 @@ describe("same-session owned draft repair", () => {
       const result = await runtime.inspectExistingDraftReconciliationSource({
         name: draft.name,
         owner: draft.owner,
-        repositoryId: draft.repositoryId,
         pullRequestNumber: draft.number,
-        readPublishedSource: () => Promise.resolve(changed),
+        readPublishedSource: async () => changed,
+        repositoryId: draft.repositoryId,
       });
       expect(result.publishedHeadSha).toBe(receipt.branchSha);
       expect(result.draft).toEqual(draft);
@@ -250,13 +250,13 @@ describe("same-session owned draft repair", () => {
   it("never consults a marker without the tenant-owned original publication receipt", async () => {
     const { draft, findDraftByPullRequest, runtime } = ownedDraftFixture();
     findDraftByPullRequest.mockImplementationOnce(missingPublicationReceipt);
-    const readPublishedSource = vi.fn(() => Promise.resolve(recordedSource(draft)));
+    const readPublishedSource = vi.fn(async () => recordedSource(draft));
     const result = await runtime.inspectExistingDraftReconciliationSource({
       name: draft.name,
       owner: draft.owner,
-      repositoryId: draft.repositoryId,
       pullRequestNumber: draft.number,
       readPublishedSource,
+      repositoryId: draft.repositoryId,
     });
     expect(result.publishedHeadSha).toBeUndefined();
     expect(readPublishedSource).not.toHaveBeenCalled();
@@ -264,13 +264,13 @@ describe("same-session owned draft repair", () => {
 
   it("keeps the existing original-head baseline without an additional marker read", async () => {
     const { draft, runtime } = ownedDraftFixture({ branchSha: "1".repeat(40) });
-    const readPublishedSource = vi.fn(() => Promise.resolve(recordedSource(draft)));
+    const readPublishedSource = vi.fn(async () => recordedSource(draft));
     const result = await runtime.inspectExistingDraftReconciliationSource({
       name: draft.name,
       owner: draft.owner,
-      repositoryId: draft.repositoryId,
       pullRequestNumber: draft.number,
       readPublishedSource,
+      repositoryId: draft.repositoryId,
     });
     expect(result.publishedHeadSha).toBe(draft.headSha);
     expect(readPublishedSource).not.toHaveBeenCalled();
@@ -281,9 +281,9 @@ describe("same-session owned draft repair", () => {
     const result = await runtime.inspectExistingDraftReconciliationSource({
       name: draft.name,
       owner: draft.owner,
-      repositoryId: draft.repositoryId,
-      pullRequestNumber: draft.number,
       priorPublishedProposalDigest: receipt.proposalDigest,
+      pullRequestNumber: draft.number,
+      repositoryId: draft.repositoryId,
     });
     expect(result.draft.headSha).toBe(draft.headSha);
     expect(result.publishedHeadSha).toBe(receipt.branchSha);
@@ -293,7 +293,7 @@ describe("same-session owned draft repair", () => {
   it.each([true, false])(
     "uses the last approved merge as the second revision baseline only with provider proof (%s)",
     async (applied) => {
-      const inspectAppliedDraftReconciliation = vi.fn(() => Promise.resolve(applied));
+      const inspectAppliedDraftReconciliation = vi.fn(async () => applied);
       const { draft, receipt, repository, runtime } = ownedDraftFixture(
         {},
         {
@@ -313,7 +313,6 @@ describe("same-session owned draft repair", () => {
       });
       const proposal = await runtime.sealExistingDraftReconciliation({
         githubSource: {
-          version: GITHUB_PUBLICATION_VERSION,
           digest: "f".repeat(64),
           installationIdentityDigest: repository.installationIdentityDigest,
           repository,
@@ -321,6 +320,7 @@ describe("same-session owned draft repair", () => {
           resolvedRef: "refs/heads/main",
           resolvedSha: repository.headSha,
           resolvedTree: repository.headTree,
+          version: GITHUB_PUBLICATION_VERSION,
         },
         priorPublishedProposalDigest: receipt.proposalDigest,
         pullRequestNumber: draft.number,
@@ -334,10 +334,10 @@ describe("same-session owned draft repair", () => {
       const result = await runtime.inspectExistingDraftReconciliationSource({
         name: draft.name,
         owner: draft.owner,
-        repositoryId: draft.repositoryId,
-        pullRequestNumber: draft.number,
-        priorPublishedProposalDigest: receipt.proposalDigest,
         previousReconciliation: proposal,
+        priorPublishedProposalDigest: receipt.proposalDigest,
+        pullRequestNumber: draft.number,
+        repositoryId: draft.repositoryId,
       });
       expect(result.publishedHeadSha).toBe(applied ? draft.headSha : receipt.branchSha);
       const verifyOwnedHeadMatcher: unknown = expect.any(Function);
@@ -348,10 +348,10 @@ describe("same-session owned draft repair", () => {
       const unrelated = await runtime.inspectExistingDraftReconciliationSource({
         name: draft.name,
         owner: draft.owner,
-        repositoryId: draft.repositoryId,
-        pullRequestNumber: draft.number,
-        priorPublishedProposalDigest: receipt.proposalDigest,
         previousReconciliation: { ...proposal, branchName: "another-draft" },
+        priorPublishedProposalDigest: receipt.proposalDigest,
+        pullRequestNumber: draft.number,
+        repositoryId: draft.repositoryId,
       });
       expect(unrelated.publishedHeadSha).toBe(receipt.branchSha);
       if (!applied || result.publishedReconciliation === undefined) {
@@ -370,7 +370,6 @@ describe("same-session owned draft repair", () => {
       });
       const nextProposal = await runtime.sealExistingDraftReconciliation({
         githubSource: {
-          version: GITHUB_PUBLICATION_VERSION,
           digest: "f".repeat(64),
           installationIdentityDigest: repository.installationIdentityDigest,
           repository,
@@ -378,6 +377,7 @@ describe("same-session owned draft repair", () => {
           resolvedRef: "refs/heads/main",
           resolvedSha: repository.headSha,
           resolvedTree: repository.headTree,
+          version: GITHUB_PUBLICATION_VERSION,
         },
         priorPublishedProposalDigest: receipt.proposalDigest,
         pullRequestNumber: draft.number,
@@ -389,11 +389,11 @@ describe("same-session owned draft repair", () => {
       const rebuilt = await runtime.inspectExistingDraftReconciliationSource({
         name: draft.name,
         owner: draft.owner,
-        repositoryId: draft.repositoryId,
-        pullRequestNumber: draft.number,
-        priorPublishedProposalDigest: receipt.proposalDigest,
         previousReconciliation: nextProposal,
+        priorPublishedProposalDigest: receipt.proposalDigest,
         publishedReconciliation: result.publishedReconciliation,
+        pullRequestNumber: draft.number,
+        repositoryId: draft.repositoryId,
       });
       expect(rebuilt.publishedReconciliation).toEqual(proposal);
       expect(rebuilt.publishedHeadSha).toBe(draft.headSha);
@@ -403,11 +403,11 @@ describe("same-session owned draft repair", () => {
       const recovered = await runtime.inspectExistingDraftReconciliationSource({
         name: draft.name,
         owner: draft.owner,
-        repositoryId: draft.repositoryId,
-        pullRequestNumber: draft.number,
-        priorPublishedProposalDigest: receipt.proposalDigest,
         previousReconciliation: nextProposal,
+        priorPublishedProposalDigest: receipt.proposalDigest,
         publishedReconciliation: result.publishedReconciliation,
+        pullRequestNumber: draft.number,
+        repositoryId: draft.repositoryId,
       });
       expect(recovered.publishedReconciliation).toEqual(nextProposal);
       expect(recovered.publishedHeadSha).toBe(draft.headSha);
@@ -418,8 +418,8 @@ describe("same-session owned draft repair", () => {
     const result = await runtime.inspectExistingDraftReconciliationSource({
       name: draft.name,
       owner: draft.owner,
-      repositoryId: draft.repositoryId,
       pullRequestNumber: draft.number,
+      repositoryId: draft.repositoryId,
     });
     expect(result.publishedHeadSha).toBe(receipt.branchSha);
     expect(result.draft.headSha).toBe(draft.headSha);
@@ -432,8 +432,8 @@ describe("same-session owned draft repair", () => {
     const result = await runtime.inspectExistingDraftReconciliationSource({
       name: draft.name,
       owner: draft.owner,
-      repositoryId: draft.repositoryId,
       pullRequestNumber: draft.number,
+      repositoryId: draft.repositoryId,
     });
     expect(result).not.toHaveProperty("publishedHeadSha");
     expect(result.draft).toEqual(draft);
@@ -446,9 +446,9 @@ describe("same-session owned draft repair", () => {
       runtime.inspectExistingDraftReconciliationSource({
         name: draft.name,
         owner: draft.owner,
-        repositoryId: draft.repositoryId,
-        pullRequestNumber: draft.number,
         priorPublishedProposalDigest: receipt.proposalDigest,
+        pullRequestNumber: draft.number,
+        repositoryId: draft.repositoryId,
       }),
     ).rejects.toThrow("receipt is unavailable in this tenant");
     expect(findDraftByPullRequest).not.toHaveBeenCalled();
@@ -461,8 +461,8 @@ describe("same-session owned draft repair", () => {
       runtime.inspectExistingDraftReconciliationSource({
         name: draft.name,
         owner: draft.owner,
-        repositoryId: draft.repositoryId,
         pullRequestNumber: draft.number,
+        repositoryId: draft.repositoryId,
       }),
     ).rejects.toThrow("digest");
   });
@@ -478,8 +478,8 @@ describe("same-session owned draft repair", () => {
       runtime.inspectExistingDraftReconciliationSource({
         name: draft.name,
         owner: draft.owner,
-        repositoryId: draft.repositoryId,
         pullRequestNumber: draft.number,
+        repositoryId: draft.repositoryId,
       }),
     ).rejects.toThrow("does not match this workflow's tenant-owned published pull request");
   });
@@ -494,9 +494,9 @@ describe("same-session owned draft repair", () => {
       runtime.inspectExistingDraftReconciliationSource({
         name: draft.name,
         owner: draft.owner,
-        repositoryId: draft.repositoryId,
-        pullRequestNumber: draft.number,
         priorPublishedProposalDigest: receipt.proposalDigest,
+        pullRequestNumber: draft.number,
+        repositoryId: draft.repositoryId,
       }),
     ).rejects.toThrow("does not match this workflow's tenant-owned published pull request");
   });
@@ -506,7 +506,6 @@ describe("same-session owned draft repair", () => {
     async (marker) => {
       const { draft, findDraftByPullRequest, receipt, repository, runtime } = ownedDraftFixture();
       const githubSource: ImmutableGitHubSourceReceipt = {
-        version: GITHUB_PUBLICATION_VERSION,
         digest: "f".repeat(64),
         installationIdentityDigest: repository.installationIdentityDigest,
         repository,
@@ -514,6 +513,7 @@ describe("same-session owned draft repair", () => {
         resolvedRef: "refs/heads/main",
         resolvedSha: repository.headSha,
         resolvedTree: repository.headTree,
+        version: GITHUB_PUBLICATION_VERSION,
       };
       const change = {
         after: { digest: "a".repeat(64), mode: "644" },

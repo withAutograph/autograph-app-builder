@@ -388,7 +388,11 @@ export const createOperatorArtifactPublication = (
         manifestSha256: string;
         schemaSha256: string;
       },
-    ) {
+    ): Promise<{
+      artifactRef: string;
+      files: GeneratedAppReleaseFiles;
+      description?: AppDescription;
+    }> {
       try {
         const envelope = await read(context, expected.artifactRef);
         if (envelope.kind !== generatedKind) {
@@ -403,7 +407,7 @@ export const createOperatorArtifactPublication = (
         if (invalid.some(Boolean)) {
           throw operatorArtifactUnavailable();
         }
-        const description = envelope.description;
+        const { description } = envelope;
         if (description !== undefined) {
           if (description.backend.kind !== "generated-postgres") {
             throw operatorArtifactUnavailable();
@@ -433,9 +437,13 @@ export const createOperatorArtifactPublication = (
         if (hash(requiredMember(files, "release-manifest.json")) !== expected.manifestSha256) {
           throw operatorArtifactUnavailable();
         }
+        const artifact = { artifactRef: expected.artifactRef };
+        const describedArtifact =
+          envelope.description === undefined
+            ? artifact
+            : { ...artifact, description: envelope.description };
         return {
-          artifactRef: expected.artifactRef,
-          ...(envelope.description === undefined ? {} : { description: envelope.description }),
+          ...describedArtifact,
           // SAFETY: Exactly every member has been decoded and checked above.
           // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- All closed worker release members have been checked.
           files: files as GeneratedAppReleaseFiles,

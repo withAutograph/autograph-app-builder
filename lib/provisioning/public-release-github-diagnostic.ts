@@ -4,6 +4,7 @@ import {
   githubReleaseDiagnosticSchema,
   githubReleaseGraphqlTypeSchema,
 } from "./public-release-provider-diagnostic";
+import type { githubReleaseHttpCodeSchema } from "./public-release-provider-diagnostic";
 
 const requestRef = (headers: Readonly<Record<string, string | number | undefined>>) => {
   const parsed = githubReleaseDiagnosticSchema.shape.requestRef.safeParse(
@@ -11,7 +12,7 @@ const requestRef = (headers: Readonly<Record<string, string | number | undefined
   );
   return parsed.success && parsed.data !== undefined ? { requestRef: parsed.data } : {};
 };
-const httpCodes = new Map([
+const httpCodes = new Map<number, z.infer<typeof githubReleaseHttpCodeSchema>>([
   [401, "bad_credentials"],
   [403, "forbidden"],
   [404, "not_found"],
@@ -27,8 +28,8 @@ export const githubReleaseFailure = (error: unknown): PublicReleaseProviderError
   }
   const status = z
     .object({
-      status: z.number().int().min(400).max(599),
       response: z.object({ status: z.number().int().min(400).max(599) }),
+      status: z.number().int().min(400).max(599),
     })
     .safeParse(error);
   if (!status.success || status.data.status !== status.data.response.status) {
@@ -42,14 +43,20 @@ export const githubReleaseFailure = (error: unknown): PublicReleaseProviderError
   const code =
     httpCodes.get(status.data.status) ??
     (status.data.status >= 500 ? "provider_unavailable" : undefined);
-  return new PublicReleaseProviderError(
-    githubReleaseDiagnosticSchema.parse({
-      provider: "github",
-      statusCode: status.data.status,
-      ...(code === undefined ? {} : { code }),
-      ...(metadata.success ? requestRef(metadata.data.response.headers) : {}),
-    }),
-  );
+  const diagnostic: z.infer<typeof githubReleaseDiagnosticSchema> = {
+    provider: "github",
+    statusCode: status.data.status,
+  };
+  if (code !== undefined) {
+    diagnostic.code = code;
+  }
+  if (metadata.success) {
+    const ref = requestRef(metadata.data.response.headers);
+    if (ref.requestRef !== undefined) {
+      diagnostic.requestRef = ref.requestRef;
+    }
+  }
+  return new PublicReleaseProviderError(githubReleaseDiagnosticSchema.parse(diagnostic));
 };
 
 /** GraphQL rejects mutations with HTTP200; retain only a closed error type. */
@@ -70,10 +77,16 @@ export const githubReleaseGraphqlFailure = (
       break;
     }
   }
-  return new PublicReleaseProviderError({
-    provider: "github",
+  const ref = requestRef(headers);
+  const diagnostic: z.infer<typeof githubReleaseDiagnosticSchema> = {
+    provider: "github" as const,
     statusCode: 200,
-    ...(code === undefined ? {} : { code }),
-    ...requestRef(headers),
-  });
+  };
+  if (code !== undefined) {
+    diagnostic.code = code;
+  }
+  if (ref.requestRef !== undefined) {
+    diagnostic.requestRef = ref.requestRef;
+  }
+  return new PublicReleaseProviderError(diagnostic);
 };

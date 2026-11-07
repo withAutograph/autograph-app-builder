@@ -62,15 +62,11 @@ it("stores prepared review context under the original native session and selecte
     sessionId: "native-parent",
   });
   const prepared = {
-    version: 1 as const,
     appId: "example",
-    parentSessionId: "native-parent",
-    sandboxName: "server-selected",
     applyRoot: "/workspace/repository",
-    observed: { files: [], treeDigest: "tree" },
     normalizedChanges: [],
-    visiblePaths: [],
-    reviewKey: "a".repeat(64),
+    observed: { files: [], treeDigest: "tree" },
+    parentSessionId: "native-parent",
     reviewInput: {
       appSpec: "Full requested behavior",
       appSpecDigest: "spec",
@@ -79,6 +75,10 @@ it("stores prepared review context under the original native session and selecte
       originalRequest: "Original brief",
       sourceDigest: "tree",
     },
+    reviewKey: "a".repeat(64),
+    sandboxName: "server-selected",
+    version: 1 as const,
+    visiblePaths: [],
   };
   const ref = await first.publishContext(prepared);
   const resumed = await sourceReviewContextStoreForSession({
@@ -101,10 +101,10 @@ it("stores prepared review context under the original native session and selecte
   await expect(otherApp.readContext(ref)).rejects.toThrow();
   const controller = new AbortController();
   const cancelled = await sourceReviewContextStoreForSession({
+    abortSignal: controller.signal,
     appId: "example",
     sessionAuth: {},
     sessionId: "native-parent",
-    abortSignal: controller.signal,
   });
   controller.abort(new Error("Stopped"));
   await expect(cancelled.readContext(ref)).rejects.toThrow("Stopped");

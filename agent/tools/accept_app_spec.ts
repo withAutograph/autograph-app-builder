@@ -31,17 +31,20 @@ import { openHostedPostgresDatabase } from "@/lib/mcp/hosted-route";
 const acceptanceResult = (appSpec: AcceptedAppSpec, reused: boolean) => {
   const state = appBuilderWorkflowState.get();
   const upgrade = "proposal" in state ? state.proposal.target?.frameworkUpgrade : undefined;
-  return {
-    ...appSpec,
-    ...(upgrade === undefined
-      ? {}
+  const accepted = { ...appSpec };
+  const withUpgrade =
+    upgrade === undefined
+      ? accepted
       : {
+          ...accepted,
           frameworkUpgradePlan: {
             scope: upgrade.scope,
-            versions: upgrade.versions,
             sharedPaths: ["package.json", "bun.lock"],
+            versions: upgrade.versions,
           },
-        }),
+        };
+  return {
+    ...withUpgrade,
     productAcceptance: productAcceptanceObligations(appSpec),
     reused,
   };
@@ -68,16 +71,24 @@ const planAcceptedAppSpec = async (
     updateExactWorkflow({
       expected: current,
       operation: "framework upgrade planning",
-      transition: () => ({
-        appSpec: { ...current.appSpec, frameworkUpgrade: "latest" },
-        artifacts: current.artifacts,
-        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-        phase: "app_spec_accepted",
-        preparedByCallId: current.preparedByCallId,
-        sourceReceipt: current.sourceReceipt,
-        version: APP_BUILDER_WORKFLOW_VERSION,
-        workspace: current.workspace,
-      }),
+      transition: () => {
+        const prepared = {
+          appSpec: { ...current.appSpec, frameworkUpgrade: "latest" as const },
+          artifacts: current.artifacts,
+        };
+        const withSource =
+          current.githubSource === undefined
+            ? prepared
+            : { ...prepared, githubSource: current.githubSource };
+        return {
+          ...withSource,
+          phase: "app_spec_accepted",
+          preparedByCallId: current.preparedByCallId,
+          sourceReceipt: current.sourceReceipt,
+          version: APP_BUILDER_WORKFLOW_VERSION,
+          workspace: current.workspace,
+        };
+      },
     });
     latest = appBuilderWorkflowState.get();
   }
@@ -126,12 +137,14 @@ export default defineTool({
       throw new Error("Start a workspace before creating an implementation plan.");
     }
     const path = `prototype/${appId}/app-spec.md`;
+    const matchesExpectedArtifact = (candidate: (typeof current.artifacts)[number]) =>
+      (expectedArtifactDigest === undefined || candidate.digest === expectedArtifactDigest) &&
+      (expectedArtifactRevision === undefined || candidate.revision === expectedArtifactRevision);
     const artifact = current.artifacts.find(
       (candidate) =>
         candidate.path === path &&
         candidate.sessionId === ctx.session.id &&
-        (expectedArtifactDigest === undefined || candidate.digest === expectedArtifactDigest) &&
-        (expectedArtifactRevision === undefined || candidate.revision === expectedArtifactRevision),
+        matchesExpectedArtifact(candidate),
     );
     if (artifact === undefined) {
       throw new Error("Create a product design before creating its implementation plan.");
@@ -179,16 +192,24 @@ export default defineTool({
       }
       digest = sha256(content);
     }
-    const accepted: AcceptedAppSpec = {
-      acceptedByCallId: ctx.callId,
-      ...(frameworkUpgrade === undefined ? {} : { frameworkUpgrade }),
+    const acceptedBy = { acceptedByCallId: ctx.callId };
+    const upgraded =
+      frameworkUpgrade === undefined ? acceptedBy : { ...acceptedBy, frameworkUpgrade };
+    const artifactInfo = {
+      ...upgraded,
       appId,
       artifactPath: artifact.path,
       artifactRevision: artifact.revision,
-      ...(content === undefined ? { version: 2, walkthrough } : { content }),
-      digest,
-      ...(current.phase === "ui_accepted" ? { uiRevision: current.uiPreview.revision } : {}),
     };
+    const specContent =
+      content === undefined
+        ? { ...artifactInfo, version: 2 as const, walkthrough }
+        : { ...artifactInfo, content };
+    const digested = { ...specContent, digest };
+    const accepted: AcceptedAppSpec =
+      current.phase === "ui_accepted"
+        ? { ...digested, uiRevision: current.uiPreview.revision }
+        : digested;
     if (
       "appSpec" in current &&
       current.appSpec.digest === accepted.digest &&
@@ -201,16 +222,21 @@ export default defineTool({
     updateExactWorkflow({
       expected: current,
       operation: "AppSpec acceptance",
-      transition: () => ({
-        appSpec: accepted,
-        artifacts: current.artifacts,
-        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-        phase: "app_spec_accepted",
-        preparedByCallId: current.preparedByCallId,
-        sourceReceipt: current.sourceReceipt,
-        version: APP_BUILDER_WORKFLOW_VERSION,
-        workspace: current.workspace,
-      }),
+      transition: () => {
+        const prepared = { appSpec: accepted, artifacts: current.artifacts };
+        const withSource =
+          current.githubSource === undefined
+            ? prepared
+            : { ...prepared, githubSource: current.githubSource };
+        return {
+          ...withSource,
+          phase: "app_spec_accepted",
+          preparedByCallId: current.preparedByCallId,
+          sourceReceipt: current.sourceReceipt,
+          version: APP_BUILDER_WORKFLOW_VERSION,
+          workspace: current.workspace,
+        };
+      },
     });
     await planAcceptedAppSpec(ctx, existingAppChanges, frameworkUpgrade);
     await emitCurrentBuildWorkflowProjection(ctx);
@@ -218,12 +244,6 @@ export default defineTool({
   },
   inputSchema: z.strictObject({
     appId: z.string().min(1),
-    frameworkUpgrade: z
-      .literal("latest")
-      .optional()
-      .describe(
-        "Upgrade this existing app to the latest stable Next.js and React versions; new apps select current stable versions automatically. Shared catalog and lockfile updates are included in the reviewed change set.",
-      ),
     existingAppChanges: existingAppChangesSchema.optional(),
     expectedArtifactDigest: z
       .string()
@@ -233,5 +253,11 @@ export default defineTool({
       .string()
       .regex(/^[0-9a-f]{64}$/u)
       .optional(),
+    frameworkUpgrade: z
+      .literal("latest")
+      .optional()
+      .describe(
+        "Upgrade this existing app to the latest stable Next.js and React versions; new apps select current stable versions automatically. Shared catalog and lockfile updates are included in the reviewed change set.",
+      ),
   }),
 });

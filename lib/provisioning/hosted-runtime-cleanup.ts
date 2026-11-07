@@ -67,8 +67,8 @@ export const cleanupHostedRuntime = async (input: Parameters<typeof prepareHoste
       throw new HostedRuntimeProviderError("authorization_required");
     }
     const client = createHostedRuntimeVercelProvider({
-      environmentGitBranch,
       credential,
+      environmentGitBranch,
       fetch: input.fetch,
       signal,
       target,

@@ -14,19 +14,19 @@ import type {
 import type { RepositoryProductionEffectContext } from "./repository-production-setup";
 
 const scope: RepositoryProductionScope = {
+  appId: "equipment-log",
   authority: {
-    issuer: "https://builder.example/api/auth",
     audience: "https://builder.example/mcp",
+    issuer: "https://builder.example/api/auth",
     ownerUserId: "owner-1",
     workspaceId: "workspace-1",
   },
-  appId: "equipment-log",
-  repositoryId: "repo-1",
-  repositoryFullName: "team/apps",
-  projectId: "project-1",
-  organizationId: "org-1",
-  publicOrigin: "https://apps.example",
   environment: "production",
+  organizationId: "org-1",
+  projectId: "project-1",
+  publicOrigin: "https://apps.example",
+  repositoryFullName: "team/apps",
+  repositoryId: "repo-1",
 };
 type StoredInvitation = Record<string, z.infer<ReturnType<typeof z.json>>>;
 const harness = (
@@ -39,13 +39,13 @@ const harness = (
   const targetScope = options.scope ?? scope;
   let row: RepositoryProductionRow = {
     operationRef: repositoryProductionOperationRef(targetScope),
-    revision: 0,
     record: initialRepositoryProductionRecord(targetScope, {
+      creatorRoles: ["editor"],
       sessionId: "original-session",
       sourceSha: "a".repeat(40),
-      creatorRoles: ["editor"],
       storage: { kind: "none" },
     }),
+    revision: 0,
   };
   let invitation: Record<string, z.infer<ReturnType<typeof z.json>>> | null = null;
   const requests: { action: string; operationRef: string; frameCount: number }[] = [];
@@ -60,53 +60,35 @@ const harness = (
     }
   };
   const context = (): RepositoryProductionEffectContext => ({
-    row,
-    effect: "creator-access",
     assertCurrent: assertAuthorized,
     checkpoint: async (value) => {
       row = {
         ...row,
-        revision: row.revision + 1,
         record: { ...row.record, workerCheckpoints: [...row.record.workerCheckpoints, value] },
+        revision: row.revision + 1,
       };
     },
+    effect: "creator-access",
+    row,
   });
   const bridge = createRepositoryProductionCreator({
-    builderOrigin: "https://builder.example",
-    realmDigest: () => options.realmDigest ?? "e".repeat(64),
-    async *linkedCreatorCandidates() {
-      for (const candidate of options.candidates ?? []) {
-        yield candidate.row;
-      }
-    },
-    now: () => clock,
-    readOwner: async () => ({ email: "Creator@Example.com" }),
-    readCurrent: async () => row,
-    findInvitation: async (id) => (id === row.operationRef ? row : undefined),
-    readInvitation: async (saved) =>
-      saved.operationRef === row.operationRef
-        ? invitation
-        : options.candidates?.find((candidate) => candidate.row.operationRef === saved.operationRef)
-            ?.invitation,
     assertAuthorized,
-    resume: async (_row, sessionId) => {
-      resumes.push(sessionId);
-      return { state: "ready" };
-    },
+    builderOrigin: "https://builder.example",
+    findInvitation: async (id) => (id === row.operationRef ? row : undefined),
     invokeAuth: async (current, request) => {
       const parsed = z
         .object({
           action: z.string(),
-          invitation: z.record(z.string(), z.json()).optional(),
-          expiresAt: z.string().optional(),
-          sourceInvitationId: z.uuid().optional(),
           actorId: z.string().optional(),
+          expiresAt: z.string().optional(),
+          invitation: z.record(z.string(), z.json()).optional(),
+          sourceInvitationId: z.uuid().optional(),
         })
         .parse(request);
       requests.push({
         action: parsed.action,
-        operationRef: current.row.operationRef,
         frameCount: row.record.workerCheckpoints.length,
+        operationRef: current.row.operationRef,
       });
       if (parsed.action === "create") {
         if (invitation !== null) {
@@ -114,15 +96,15 @@ const harness = (
         }
         invitation = {
           ...parsed.invitation,
-          workspaceId: targetScope.authority.workspaceId,
           appId: targetScope.appId,
-          organizationId: targetScope.organizationId,
+          deliveryStatus: "ready",
           operationRef: current.row.operationRef,
+          organizationId: targetScope.organizationId,
           scopeDigest: "b".repeat(64),
           status: "pending",
           verifiedActorId: null,
           verifiedSessionId: null,
-          deliveryStatus: "ready",
+          workspaceId: targetScope.authority.workspaceId,
         };
         if (failAfterCreate) {
           failAfterCreate = false;
@@ -145,23 +127,30 @@ const harness = (
       }
       return invitation;
     },
+    async *linkedCreatorCandidates() {
+      for (const candidate of options.candidates ?? []) {
+        yield candidate.row;
+      }
+    },
+    now: () => clock,
+    readCurrent: async () => row,
+    readInvitation: async (saved) =>
+      saved.operationRef === row.operationRef
+        ? invitation
+        : options.candidates?.find((candidate) => candidate.row.operationRef === saved.operationRef)
+            ?.invitation,
+    readOwner: async () => ({ email: "Creator@Example.com" }),
+    realmDigest: () => options.realmDigest ?? "e".repeat(64),
+    resume: async (_row, sessionId) => {
+      resumes.push(sessionId);
+      return { state: "ready" };
+    },
   });
   return {
+    advance: () => {
+      clock = new Date(clock.getTime() + 8 * 24 * 60 * 60 * 1000);
+    },
     bridge,
-    context,
-    requests,
-    resumes,
-    row: () => row,
-    invitation: () => invitation,
-    patchInvitation: (value: Record<string, z.infer<ReturnType<typeof z.json>>>) => {
-      invitation = { ...invitation, ...value };
-    },
-    loseCreateResponse: () => {
-      failAfterCreate = true;
-    },
-    loseLinkResponse: () => {
-      failAfterLink = true;
-    },
     completeCreator: () => {
       row = {
         ...row,
@@ -171,12 +160,25 @@ const harness = (
         },
       };
     },
+    context,
+    corruptScope: () => {
+      row = { ...row, record: { ...row.record, scope: { ...scope, organizationId: "other-org" } } };
+    },
     deny: () => {
       authorized = false;
     },
-    advance: () => {
-      clock = new Date(clock.getTime() + 8 * 24 * 60 * 60 * 1000);
+    invitation: () => invitation,
+    loseCreateResponse: () => {
+      failAfterCreate = true;
     },
+    loseLinkResponse: () => {
+      failAfterLink = true;
+    },
+    patchInvitation: (value: Record<string, z.infer<ReturnType<typeof z.json>>>) => {
+      invitation = { ...invitation, ...value };
+    },
+    requests,
+    resumes,
     revise: () => {
       row = {
         ...row,
@@ -184,16 +186,14 @@ const harness = (
           ...row.record,
           intent: {
             ...row.record.intent,
+            creatorRoles: ["reader"],
             sessionId: "revision-session",
             sourceSha: "c".repeat(40),
-            creatorRoles: ["reader"],
           },
         },
       };
     },
-    corruptScope: () => {
-      row = { ...row, record: { ...row.record, scope: { ...scope, organizationId: "other-org" } } };
-    },
+    row: () => row,
   };
 };
 
@@ -207,18 +207,18 @@ describe("Production creator continuation", () => {
       verifiedSessionId: "expired-original-session",
     });
     original.completeCreator();
-    return { row: original.row(), invitation: original.invitation() };
+    return { invitation: original.invitation(), row: original.row() };
   };
 
   it("reuses the verified owner identity for a different app without sending another sign-in email", async () => {
     const source = await linkedOwner();
-    const next = harness({ scope: { ...scope, appId: "another-app" }, candidates: [source] });
+    const next = harness({ candidates: [source], scope: { ...scope, appId: "another-app" } });
     await next.bridge.prepare(next.context());
     expect(next.requests.map((request) => request.action)).toEqual(["create", "link-creator"]);
     expect(await next.bridge.readCreator(next.row())).toMatchObject({
-      kind: "managed-invitation",
       actorId: "actor-1",
       invitationId: next.row().operationRef,
+      kind: "managed-invitation",
     });
     expect(next.row().operationRef).not.toBe(source.row.operationRef);
     expect(source.invitation?.status).toBe("accepted");
@@ -226,8 +226,8 @@ describe("Production creator continuation", () => {
     next.patchInvitation({ status: "accepted" });
     next.completeCreator();
     const third = harness({
+      candidates: [{ invitation: next.invitation(), row: next.row() }],
       scope: { ...scope, appId: "third-app" },
-      candidates: [{ row: next.row(), invitation: next.invitation() }],
     });
     await third.bridge.prepare(third.context());
     expect(third.requests.map((request) => request.action)).toEqual(["create", "link-creator"]);
@@ -236,7 +236,7 @@ describe("Production creator continuation", () => {
 
   it("requires the exact recorded source and actor when reading a linked target", async () => {
     const source = await linkedOwner();
-    const next = harness({ scope: { ...scope, appId: "another-app" }, candidates: [source] });
+    const next = harness({ candidates: [source], scope: { ...scope, appId: "another-app" } });
     await next.bridge.prepare(next.context());
     next.patchInvitation({ linkedFromInvitationId: randomUUID() });
     expect(await next.bridge.readCreator(next.row())).toHaveProperty("state", "required");
@@ -252,19 +252,19 @@ describe("Production creator continuation", () => {
     "does not reuse a verified creator across a different %s",
     async (difference) => {
       const source = await linkedOwner();
-      const next = harness({
+      const authority = { ...scope.authority };
+      const options: NonNullable<Parameters<typeof harness>[0]> = {
+        candidates: [source],
         scope: {
           ...scope,
           appId: "another-app",
-          authority: {
-            ...scope.authority,
-            ...(difference === "owner" ? { ownerUserId: "other-owner" } : {}),
-            ...(difference === "workspace" ? { workspaceId: "other-workspace" } : {}),
-          },
+          authority,
         },
-        ...(difference === "realm" ? { realmDigest: "f".repeat(64) } : {}),
-        candidates: [source],
-      });
+      };
+      if (difference === "owner") authority.ownerUserId = "other-owner";
+      if (difference === "workspace") authority.workspaceId = "other-workspace";
+      if (difference === "realm") options.realmDigest = "f".repeat(64);
+      const next = harness(options);
       await next.bridge.prepare(next.context());
       expect(next.requests.map((request) => request.action)).toEqual(["create", "send"]);
       expect(await next.bridge.readCreator(next.row())).toHaveProperty("state", "required");
@@ -274,12 +274,12 @@ describe("Production creator continuation", () => {
   it("requires an accepted source identity and reconciles a lost link reply without another enrollment", async () => {
     const source = await linkedOwner();
     const rejected = harness({
-      scope: { ...scope, appId: "not-linked" },
       candidates: [{ ...source, invitation: { ...source.invitation, status: "pending" } }],
+      scope: { ...scope, appId: "not-linked" },
     });
     await rejected.bridge.prepare(rejected.context());
     expect(rejected.requests.map((request) => request.action)).toEqual(["create", "send"]);
-    const next = harness({ scope: { ...scope, appId: "another-app" }, candidates: [source] });
+    const next = harness({ candidates: [source], scope: { ...scope, appId: "another-app" } });
     next.loseLinkResponse();
     await expect(next.bridge.prepare(next.context())).rejects.toThrow("link response lost");
     await next.bridge.prepare(next.context());
@@ -290,8 +290,8 @@ describe("Production creator continuation", () => {
   it("does not use another destination's same-app link to restore app access", async () => {
     const source = await linkedOwner();
     const next = harness({
-      scope: { ...scope, organizationId: "another-organization" },
       candidates: [source],
+      scope: { ...scope, organizationId: "another-organization" },
     });
     await next.bridge.prepare(next.context());
     expect(next.requests.map((request) => request.action)).toEqual(["create", "send"]);
@@ -309,8 +309,8 @@ describe("Production creator continuation", () => {
       returnUrl: "https://builder.example/builds/original-session/access",
     });
     expect(await h.bridge.readCreator(h.row())).toEqual({
-      state: "required",
       signInUrl: `https://apps.example/api/auth/platform/app-invitation/accept?invitationId=${h.row().operationRef}`,
+      state: "required",
     });
   });
 
@@ -331,9 +331,9 @@ describe("Production creator continuation", () => {
     expect(h.resumes).toEqual([]);
     h.patchInvitation({ verifiedSessionId: "real-auth-session" });
     expect(await h.bridge.readCreator(h.row())).toEqual({
-      kind: "managed-invitation",
-      invitationId: h.row().operationRef,
       actorId: "actor-1",
+      invitationId: h.row().operationRef,
+      kind: "managed-invitation",
       scopeDigest: "b".repeat(64),
     });
     expect(await h.bridge.complete(h.row().operationRef)).toBe("ready");

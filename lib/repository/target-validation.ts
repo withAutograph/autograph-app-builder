@@ -376,8 +376,8 @@ export const readTargetValidationTestShards = async (input: {
 }): Promise<readonly string[]> => {
   input.signal?.throwIfAborted();
   const content = await input.sandbox.readTextFile({
-    path: nodePath.posix.join(input.root, input.workspacePath, "package.json"),
     abortSignal: input.signal,
+    path: nodePath.posix.join(input.root, input.workspacePath, "package.json"),
   });
   input.signal?.throwIfAborted();
   if (content === null) {
@@ -566,18 +566,16 @@ exit "$status"`;
 
 export const fixtureValidationCommandExecutor =
   (): ValidationCommandExecutor =>
-  ({ appId, command }) => {
+  async ({ appId, command }) => {
     const isBuild = command === repositoryDeliveryBuildCommand(appId);
     if (appId === "validation-interruption" && isBuild) {
       const error = new Error("fixture validation interruption");
       error.name = "TimeoutError";
-      return Promise.reject(error);
+      throw error;
     }
-    return Promise.resolve(
-      appId === "validation-failure" && isBuild
-        ? { exitCode: 1, stderr: "fixture validation failure", stdout: "" }
-        : { exitCode: 0, stderr: "", stdout: `${command} passed` },
-    );
+    return appId === "validation-failure" && isBuild
+      ? { exitCode: 1, stderr: "fixture validation failure", stdout: "" }
+      : { exitCode: 0, stderr: "", stdout: `${command} passed` };
   };
 
 const failureReceipt = (
@@ -604,7 +602,7 @@ const failureReceipt = (
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
 };
 
-export const executeProposalBoundValidation = (input: {
+export const executeProposalBoundValidation = async (input: {
   sandbox: SandboxSession;
   executor: ValidationCommandExecutor;
   apply: TargetApplyReceipt;
@@ -677,13 +675,13 @@ export const executeProposalBoundValidation = (input: {
         appId: input.appId,
         command: planned.command,
         environment: input.environment,
-        sandbox: input.sandbox,
-        validationRoot: planned.validationRoot,
         onChunk: async (channel: ValidationLogChannel, content: string) => {
           toolingFailure.observe(channel, content);
           const writer = channel === "stdout" ? stdoutLog : stderrLog;
           await writer?.append(content);
         },
+        sandbox: input.sandbox,
+        validationRoot: planned.validationRoot,
       });
       toolingFailure.observe("stdout", result.stdout);
       toolingFailure.observe("stderr", result.stderr);
@@ -804,7 +802,7 @@ export const executeProposalBoundValidation = (input: {
         ),
       };
     }
-    return execute(index + 1);
+    return await execute(index + 1);
   };
-  return execute(0);
+  return await execute(0);
 };

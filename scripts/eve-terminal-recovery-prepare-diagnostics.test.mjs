@@ -10,27 +10,27 @@ const sdk = pathToFileURL(`${path.dirname(require.resolve("eve/package.json"))}/
 const { recoverTerminalSession } = await import(`${sdk}execution/session/terminal-recovery.js`);
 
 const descriptor = {
-  version: 1,
-  operationId: "prepare-private-operation-canary",
-  sourcePublicSessionId: "prepare-private-source-canary",
-  sourceOwnerRunId: "prepare-private-physical-canary",
-  sourceAdapterGeneration: 1,
   logicalSessionId: "prepare-private-logical-canary",
+  operationId: "prepare-private-operation-canary",
   originalAuthoritySessionId: "prepare-private-authority-canary",
   parentCancellationRevision: 0,
+  sourceAdapterGeneration: 1,
+  sourceOwnerRunId: "prepare-private-physical-canary",
+  sourcePublicSessionId: "prepare-private-source-canary",
+  version: 1,
 };
 const auth = {
   authenticator: "fixture",
-  principalType: "user",
-  principalId: "private-principal-canary",
   issuer: "fixture-issuer",
+  principalId: "private-principal-canary",
+  principalType: "user",
 };
 const provenance = {
+  checkpointVersion: 1,
   kind: "failed-turn-input",
-  sourceStepId: "prepare-private-step-canary",
   sourceEventId: "prepare-private-event-canary",
   sourceSlot: 0,
-  checkpointVersion: 1,
+  sourceStepId: "prepare-private-step-canary",
 };
 
 const fixture = (failure) => {
@@ -38,25 +38,25 @@ const fixture = (failure) => {
   fault.code = "TRANSPORT";
   fault.status = 503;
   const checkpoint = {
-    version: 9,
-    sessionTimeoutMs: false,
     capabilities: { requestInput: true },
     serializedContext: { "eve.sessionId": descriptor.logicalSessionId },
-    sessionState: { sessionId: descriptor.logicalSessionId, continuationToken: "" },
+    sessionState: { continuationToken: "", sessionId: descriptor.logicalSessionId },
+    sessionTimeoutMs: false,
+    version: 9,
   };
   const candidate = Object.freeze({ kind: "private-native-recovery-candidate", version: 1 });
   const payload = {
     binding: {
-      ownerRunId: descriptor.sourceOwnerRunId,
       logicalSessionId: descriptor.logicalSessionId,
+      ownerRunId: descriptor.sourceOwnerRunId,
     },
     candidates: [
       {
         kind: provenance.kind,
         origin: {
           eventId: provenance.sourceEventId,
-          stepId: provenance.sourceStepId,
           slot: provenance.sourceSlot,
+          stepId: provenance.sourceStepId,
         },
       },
     ],
@@ -65,39 +65,28 @@ const fixture = (failure) => {
   let holderClosed = false;
   let readyHook;
   const ports = {
-    authorize() {
+    async authorize() {
       if (failure === "source_authorization") {
         throw fault;
       }
-      return Promise.resolve();
     },
-    readReceipt() {
-      if (failure === "receipt_read" || (failure === "post_holder_receipt_read" && holderClosed)) {
-        throw fault;
-      }
-      return Promise.resolve(null);
-    },
-    commitReceipt(input) {
+    async commitReceipt(input) {
       if (failure === "receipt_commit") {
         throw fault;
       }
       if (failure === "success") {
-        return Promise.resolve(input.recoveryBinding);
+        return input.recoveryBinding;
       }
       throw new Error("unexpected-commit");
     },
-  };
-  const deps = {
-    getHook() {
-      if (failure === "initial_ready_lookup" || (failure === "owner_readiness_lookup" && started)) {
+    async readReceipt() {
+      if (failure === "receipt_read" || (failure === "post_holder_receipt_read" && holderClosed)) {
         throw fault;
       }
-      if (readyHook === undefined) {
-        throw new Error("hook-not-found");
-      }
-      return Promise.resolve(readyHook);
+      return null;
     },
-    isHookNotFound: (error) => error?.message === "hook-not-found",
+  };
+  const deps = {
     async closeHolder(input) {
       await input.authorizeCurrent();
       if (failure === "holder_closure") {
@@ -107,32 +96,42 @@ const fixture = (failure) => {
     },
     async collect(input) {
       await input.authorizeOwner(input.binding);
-      return { kind: "candidate", candidate };
+      return { candidate, kind: "candidate" };
     },
+    async getHook() {
+      if (failure === "initial_ready_lookup" || (failure === "owner_readiness_lookup" && started)) {
+        throw fault;
+      }
+      if (readyHook === undefined) {
+        throw new Error("hook-not-found");
+      }
+      return readyHook;
+    },
+    isHookNotFound: (error) => error?.message === "hook-not-found",
+    now: Date.now,
     readCandidate(handle) {
       assert.equal(handle, candidate);
       return payload;
     },
-    reconcile() {
-      return Promise.resolve({
-        kind: "ready",
+    async readEntry() {
+      return { checkpoint, kind: "handoff" };
+    },
+    async reconcile() {
+      return {
         checkpointCore: {
           serializedContext: checkpoint.serializedContext,
           sessionState: checkpoint.sessionState,
         },
+        kind: "ready",
         provenance: { selectedOrigin: payload.candidates[0].origin },
-      });
+      };
     },
-    readEntry() {
-      return Promise.resolve({ kind: "handoff", checkpoint });
-    },
-    start(input) {
+    async start(input) {
       if (failure === "owner_start") {
         throw fault;
       }
       started = true;
       readyHook = {
-        runId: "prepared-child-physical",
         metadata: Promise.resolve({
           recoveryBinding: {
             ...descriptor,
@@ -140,18 +139,17 @@ const fixture = (failure) => {
             provenance: input.provenance,
           },
         }),
+        runId: "prepared-child-physical",
       };
-      return Promise.resolve();
     },
-    now: Date.now,
     wait() {
       throw new Error("unexpected-wait");
     },
   };
   return {
+    deps,
     fault,
     ports,
-    deps,
     recover: async () => await recoverTerminalSession({ auth, descriptor, ports }, deps),
   };
 };

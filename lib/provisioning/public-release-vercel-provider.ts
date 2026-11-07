@@ -7,38 +7,38 @@ import type { PublicReleasePlan, PublicReleaseObservation } from "./public-relea
 import { publicReleaseRequiresNativeGitEvent } from "./public-release-contract";
 import type { PublicReleaseInvocation, PublicReleaseEffectContext } from "./public-release-handler";
 
-import { vercelProvisionDiagnosticSchema } from "./contracts";
+import { vercelProvisionDiagnosticSchema } from "./contracts-schema";
 import { PublicReleaseProviderError } from "./public-release-provider-error";
 
 const id = z.string().min(1);
 const rowSchema = z.object({
-  id,
-  key: id,
-  type: id,
-  target: z.array(id),
   comment: z.string().optional(),
-  gitBranch: z.string().nullable().optional(),
   configurationId: z.string().nullable().optional(),
   customEnvironmentIds: z.array(id).optional(),
+  gitBranch: z.string().nullable().optional(),
+  id,
+  key: id,
+  target: z.array(id),
+  type: id,
 });
 type Row = z.infer<typeof rowSchema>;
 const projectSchema = z.object({
-  id,
   accountId: id,
   framework: id,
-  rootDirectory: id,
+  id,
   link: z.object({
-    type: z.literal("github"),
-    repoId: z.union([id, z.number()]).transform(String),
     productionBranch: id,
+    repoId: z.union([id, z.number()]).transform(String),
+    type: z.literal("github"),
   }),
-  ssoProtection: z.object({ deploymentType: id }),
-  oidcTokenConfig: z.object({ enabled: z.boolean(), issuerMode: id }),
-  targets: z.object({ production: z.object({ id }).nullable().optional() }).optional(),
   microfrontends: z
     .object({ groupIds: z.array(id).optional() })
     .nullable()
     .optional(),
+  oidcTokenConfig: z.object({ enabled: z.boolean(), issuerMode: id }),
+  rootDirectory: id,
+  ssoProtection: z.object({ deploymentType: id }),
+  targets: z.object({ production: z.object({ id }).nullable().optional() }).optional(),
 });
 const valueHash = (value: string) => createHash("sha256").update(value).digest("hex");
 const assertSnapshotCurrent = async (signal: AbortSignal, assertCurrent: () => Promise<void>) => {
@@ -48,6 +48,8 @@ const assertSnapshotCurrent = async (signal: AbortSignal, assertCurrent: () => P
 };
 const marker = (operationRef: string) => `autograph:public-app-release:${operationRef}`;
 const fail = () => new Error("public_release_provider_mismatch");
+const VERCEL_API_ORIGIN = "https://api.vercel.com";
+const VERCEL_REQUEST_ID_HEADER = "x-vercel-id";
 
 /** Private server ports. No secret value, credential or provider body is returned or journaled. */
 export interface PublicReleaseVercelDependencies {
@@ -161,24 +163,27 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
     ) {
       throw fail();
     }
-    const url = new URL(route, "https://api.vercel.com");
-    if (url.origin !== "https://api.vercel.com") {
+    const url = new URL(route, VERCEL_API_ORIGIN);
+    if (url.origin !== VERCEL_API_ORIGIN) {
       throw fail();
     }
     url.searchParams.set("teamId", plan.project.teamId);
-    const response = await (deps.fetch ?? fetch)(url, {
-      method,
+    const init: RequestInit = {
       headers: { authorization: `Bearer ${credential.token}`, "content-type": "application/json" },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      method,
       redirect: "error",
       signal: invocation.signal,
-    });
+    };
+    if (body !== undefined) {
+      init.body = JSON.stringify(body);
+    }
+    const response = await (deps.fetch ?? fetch)(url, init);
     await check(invocation, plan, approval);
     if (!response.ok) {
       const requestRef = vercelProvisionDiagnosticSchema.shape.requestRef.safeParse(
-        response.headers.get("x-vercel-id"),
+        response.headers.get(VERCEL_REQUEST_ID_HEADER),
       );
-      let code: string | undefined;
+      let code: z.output<typeof vercelProvisionDiagnosticSchema>["code"];
       try {
         // Error bodies are untrusted diagnostic input; read only a bounded projection.
         const errorBody = await boundedJson(response, invocation.signal, 16_384);
@@ -186,18 +191,26 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
           .object({ error: z.object({ code: vercelProvisionDiagnosticSchema.shape.code }) })
           .safeParse(errorBody);
         if (parsed.success) {
-          code = parsed.data.error.code;
+          const {
+            error: { code: parsedCode },
+          } = parsed.data;
+          code = parsedCode;
         }
       } catch {
         invocation.signal.throwIfAborted();
         // Non-JSON, oversized and malformed errors still preserve safe HTTP facts.
       }
       await check(invocation, plan, approval);
-      const diagnostic = vercelProvisionDiagnosticSchema.parse({
+      const diagnosticInput: z.input<typeof vercelProvisionDiagnosticSchema> = {
         statusCode: response.status,
-        ...(code === undefined ? {} : { code }),
-        ...(requestRef.success ? { requestRef: requestRef.data } : {}),
-      });
+      };
+      if (code !== undefined) {
+        diagnosticInput.code = code;
+      }
+      if (requestRef.success) {
+        diagnosticInput.requestRef = requestRef.data;
+      }
+      const diagnostic = vercelProvisionDiagnosticSchema.parse(diagnosticInput);
       throw new PublicReleaseProviderError(diagnostic);
     }
     const result = await boundedJson(response, invocation.signal);
@@ -253,7 +266,7 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
       // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing provider state is a distinct reconciliation observation.
       return undefined;
     }
-    const row = matches[0];
+    const [row] = matches;
     const entry = context.plan.environment.find((item) => item.key === key);
     const owned =
       row.comment === marker(context.operationRef) ||
@@ -306,44 +319,6 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
   };
 
   return {
-    async reconcileBindings(
-      context: PublicReleaseEffectContext,
-    ): Promise<"applied" | "not-applied" | "unknown"> {
-      await project(context.invocation, context.plan, true);
-      const all = await rows(context);
-      assertOwnedAppProductionEnvironment(
-        context.plan,
-        all.flatMap((row) => (row.target.includes("production") ? [row.key] : [])),
-      );
-      const states = await context.bindings.read();
-      let applied = 0;
-      for (const entry of context.plan.environment) {
-        const row = findRow(context, all, entry.key);
-        const state = Object.hasOwn(states, entry.key) ? states[entry.key] : undefined;
-        if (!row) {
-          if (
-            state?.state === "pending" ||
-            state?.acceptedEnvId !== undefined ||
-            (state === undefined && context.priorPhase !== "idle")
-          ) {
-            return "unknown";
-          }
-          continue;
-        }
-        if (state?.acceptedEnvId !== undefined && state.acceptedEnvId !== row.id) {
-          throw fail();
-        }
-        const hash = valueHash(await readValue(context, row));
-        if (hash === entry.sha256) {
-          await recordObservedBinding(context, entry.key, row.id);
-          applied += 1;
-        } else if (state?.state !== "idle" || entry.priorBinding?.valueSha256 !== hash) {
-          return "unknown";
-        }
-      }
-      await check(context.invocation, context.plan, true);
-      return applied === context.plan.environment.length ? "applied" : "not-applied";
-    },
     async bindRuntime(context: PublicReleaseEffectContext) {
       await project(context.invocation, context.plan, true);
       const values = await deps.readRuntimeBindings(context.invocation, context.plan);
@@ -411,11 +386,11 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
           true,
           current ? "PATCH" : "POST",
           {
-            key: entry.key,
-            value,
-            type: "encrypted",
-            target: ["production"],
             comment: marker(context.operationRef),
+            key: entry.key,
+            target: ["production"],
+            type: "encrypted",
+            value,
           },
         );
         const returned = current
@@ -471,10 +446,10 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
       const host = new URL(plan.publicOrigin).hostname;
       const domain = z
         .object({
-          name: id,
-          verified: z.boolean(),
           gitBranch: z.string().nullable().optional(),
+          name: id,
           redirect: z.string().nullable().optional(),
+          verified: z.boolean(),
         })
         .parse(
           await request(
@@ -485,7 +460,7 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
           ),
         );
       const alias = z
-        .object({ alias: id, projectId: id, deploymentId: id })
+        .object({ alias: id, deploymentId: id, projectId: id })
         .parse(await request(invocation, plan, `/v4/aliases/${encodeURIComponent(host)}`, false));
       if (
         domain.name !== host ||
@@ -500,14 +475,14 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
       }
       const deployment = z
         .object({
-          id,
-          projectId: id,
-          target: id,
-          readyState: id,
           gitSource: z
             .object({ sha: z.string().regex(/^[a-f0-9]{40}$/u) })
             .nullable()
             .optional(),
+          id,
+          projectId: id,
+          readyState: id,
+          target: id,
         })
         .parse(
           await request(
@@ -538,7 +513,7 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
       }
       const active = await project(invocation, plan, false);
       const currentAlias = z
-        .object({ alias: id, projectId: id, deploymentId: id })
+        .object({ alias: id, deploymentId: id, projectId: id })
         .parse(await request(invocation, plan, `/v4/aliases/${encodeURIComponent(host)}`, false));
       if (
         active.targets?.production?.id !== deploymentId ||
@@ -549,13 +524,51 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
         return { status: "pending" };
       }
       return {
-        status: "ready",
         deploymentId,
-        projectId: plan.project.projectId,
         environment: "production",
+        projectId: plan.project.projectId,
         publicOrigin: plan.publicOrigin,
         releaseId: release.releaseId,
+        status: "ready",
       };
+    },
+    async reconcileBindings(
+      context: PublicReleaseEffectContext,
+    ): Promise<"applied" | "not-applied" | "unknown"> {
+      await project(context.invocation, context.plan, true);
+      const all = await rows(context);
+      assertOwnedAppProductionEnvironment(
+        context.plan,
+        all.flatMap((row) => (row.target.includes("production") ? [row.key] : [])),
+      );
+      const states = await context.bindings.read();
+      let applied = 0;
+      for (const entry of context.plan.environment) {
+        const row = findRow(context, all, entry.key);
+        const state = Object.hasOwn(states, entry.key) ? states[entry.key] : undefined;
+        if (!row) {
+          if (
+            state?.state === "pending" ||
+            state?.acceptedEnvId !== undefined ||
+            (state === undefined && context.priorPhase !== "idle")
+          ) {
+            return "unknown";
+          }
+          continue;
+        }
+        if (state?.acceptedEnvId !== undefined && state.acceptedEnvId !== row.id) {
+          throw fail();
+        }
+        const hash = valueHash(await readValue(context, row));
+        if (hash === entry.sha256) {
+          await recordObservedBinding(context, entry.key, row.id);
+          applied += 1;
+        } else if (state?.state !== "idle" || entry.priorBinding?.valueSha256 !== hash) {
+          return "unknown";
+        }
+      }
+      await check(context.invocation, context.plan, true);
+      return applied === context.plan.environment.length ? "applied" : "not-applied";
     },
   };
 };
@@ -578,7 +591,9 @@ export const createPublicReleaseVercelBindingSnapshot =
     fetch?: typeof fetch;
   }) =>
   async (scope: PublicReleaseVercelBindingSnapshotScope) => {
-    const check = () => assertSnapshotCurrent(scope.signal, deps.assertCurrent);
+    const check = async () => {
+      await assertSnapshotCurrent(scope.signal, deps.assertCurrent);
+    };
     const read = async (route: string) => {
       await check();
       const credential = await deps.readCredential();
@@ -593,11 +608,11 @@ export const createPublicReleaseVercelBindingSnapshot =
       ) {
         throw fail();
       }
-      const url = new URL(route, "https://api.vercel.com");
+      const url = new URL(route, VERCEL_API_ORIGIN);
       url.searchParams.set("teamId", scope.teamId);
       const response = await (deps.fetch ?? fetch)(url, {
-        method: "GET",
         headers: { authorization: `Bearer ${credential.token}` },
+        method: "GET",
         redirect: "error",
         signal: scope.signal,
       });
@@ -641,7 +656,7 @@ export const createPublicReleaseVercelBindingSnapshot =
       if (rows.length !== 1) {
         throw fail();
       }
-      const row = rows[0];
+      const [row] = rows;
       const markerMatch = /^autograph:public-app-release:(?<operationRef>[0-9a-f-]{36})$/u.exec(
         row.comment ?? "",
       );
@@ -656,16 +671,16 @@ export const createPublicReleaseVercelBindingSnapshot =
       ) {
         throw fail();
       }
-      const value = z
+      const { value } = z
         .object({ value: z.string() })
         .parse(
           await read(
             `/v1/projects/${encodeURIComponent(scope.projectId)}/env/${encodeURIComponent(row.id)}`,
           ),
-        ).value;
+        );
       snapshots.push({
-        key,
         id: row.id,
+        key,
         operationRef: operationRef.data,
         sha256: valueHash(value),
       });
@@ -689,7 +704,9 @@ export const createPublicReleaseVercelActiveDeploymentSnapshot =
       productionBranch: string;
     },
   ): Promise<{ priorActiveDeploymentId: string | null }> => {
-    const check = () => assertSnapshotCurrent(scope.signal, deps.assertCurrent);
+    const check = async () => {
+      await assertSnapshotCurrent(scope.signal, deps.assertCurrent);
+    };
     await check();
     const credential = await deps.readCredential();
     await check();
@@ -709,8 +726,8 @@ export const createPublicReleaseVercelActiveDeploymentSnapshot =
     );
     url.searchParams.set("teamId", scope.teamId);
     const response = await (deps.fetch ?? fetch)(url, {
-      method: "GET",
       headers: { authorization: `Bearer ${credential.token}` },
+      method: "GET",
       redirect: "error",
       signal: scope.signal,
     });

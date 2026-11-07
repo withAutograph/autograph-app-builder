@@ -10,19 +10,19 @@ vi.mock("./working-preview-ownership", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
-    previewOwnershipOperation: (_provider: unknown, operation: Record<string, unknown>) => {
+    previewOwnershipOperation: async (_provider: unknown, operation: Record<string, unknown>) => {
       if (operation.kind === "read") {
-        return Promise.resolve(ownership.current);
+        return ownership.current;
       }
       if (operation.kind === "claim") {
         if (ownership.current !== null) {
-          return Promise.resolve({ claimed: false });
+          return { claimed: false };
         }
         ownership.current = operation.attempt as Record<string, unknown>;
-        return Promise.resolve({ claimed: true });
+        return { claimed: true };
       }
       if (ownership.current?.attemptId !== operation.attemptId) {
-        return Promise.reject(new Error("ownership changed"));
+        throw new Error("ownership changed");
       }
       if (operation.kind === "release") {
         ownership.current = null;
@@ -30,7 +30,7 @@ vi.mock("./working-preview-ownership", async (importOriginal) => {
       if (operation.kind === "update") {
         ownership.current = { ...ownership.current, ...(operation.patch as object) };
       }
-      return Promise.resolve(ownership.current);
+      return ownership.current;
     },
   };
 });
@@ -44,7 +44,7 @@ const setup = () => {
     cmdId: "command-1",
     exitCode: null as number | null,
     kill: vi.fn(async () => {}),
-    wait: vi.fn(() => Promise.resolve()),
+    wait: vi.fn(async () => {}),
   };
   const provider = {
     currentSession: () => ({ sessionId: "provider-1" }),
@@ -53,28 +53,26 @@ const setup = () => {
     extendTimeout: vi.fn(),
     fs: {
       mkdir: vi.fn(),
-      readFile: vi.fn((file: string, _options?: { signal?: AbortSignal }) => {
+      readFile: vi.fn(async (file: string, _options?: { signal?: AbortSignal }) => {
         if (file.endsWith("listener-ready")) {
           events.push("bound");
-          return Promise.resolve("ready");
+          return "ready";
         }
-        return Promise.reject(Object.assign(new Error("missing"), { code: "ENOENT" }));
+        throw Object.assign(new Error("missing"), { code: "ENOENT" });
       }),
-      writeFile: vi.fn((file: string) => {
+      writeFile: vi.fn(async (file: string) => {
         if (file.endsWith("access.json")) {
           events.push("activated");
         }
-        return Promise.resolve();
       }),
     },
-    getCommand: vi.fn(() => Promise.resolve(command)),
-    runCommand: vi.fn(() => {
+    getCommand: vi.fn(async () => command),
+    runCommand: vi.fn(async () => {
       events.push("spawn");
-      return Promise.resolve(command);
+      return command;
     }),
-    update: vi.fn(({ ports }: { ports: number[] }) => {
+    update: vi.fn(async ({ ports }: { ports: number[] }) => {
       events.push(ports.length === 0 ? "closed" : "exposed");
-      return Promise.resolve();
     }),
   };
   const options = {
@@ -110,12 +108,12 @@ describe("shared working preview startup", () => {
     await expect(
       startWorkingPreview({
         ...options,
-        fetch: fetcher,
         assertCurrent: () => {
           if (ownership.current?.status === "ready") {
             throw new Error("Prior artifact changed.");
           }
         },
+        fetch: fetcher,
       }),
     ).rejects.toThrow("Prior artifact changed.");
     expect(command.kill).toHaveBeenCalledOnce();
@@ -157,30 +155,28 @@ describe("shared working preview startup", () => {
       const clock = vi.spyOn(Date, "now");
       let delayed = false;
       if (phase === "listener") {
-        provider.fs.readFile.mockImplementation((file) => {
+        provider.fs.readFile.mockImplementation(async (file) => {
           if (file.endsWith("listener-ready")) {
             if (!delayed) {
               delayed = true;
               clock.mockReturnValue(originalNow + 120_001);
-              return Promise.resolve("");
+              return "";
             }
-            return Promise.resolve("ready");
+            return "ready";
           }
-          return Promise.reject(Object.assign(new Error("missing"), { code: "ENOENT" }));
+          throw Object.assign(new Error("missing"), { code: "ENOENT" });
         });
       }
-      const fetcher = vi.fn<typeof fetch>((url) => {
+      const fetcher = vi.fn<typeof fetch>(async (url) => {
         if (String(url).includes("/__autograph_preview_launch")) {
-          return Promise.resolve(launchResponse());
+          return launchResponse();
         }
         if (phase === "HTTP" && !delayed) {
           delayed = true;
           clock.mockReturnValue(originalNow + 120_001);
-          return Promise.resolve(new Response(null, { status: 503 }));
+          return new Response(null, { status: 503 });
         }
-        return Promise.resolve(
-          new Response("<main>Ready</main>", { headers: { "content-type": "text/html" } }),
-        );
+        return new Response("<main>Ready</main>", { headers: { "content-type": "text/html" } });
       });
       try {
         const result = await startWorkingPreview({ ...options, fetch: fetcher });
@@ -197,23 +193,21 @@ describe("shared working preview startup", () => {
   it("continues the same supervisor after an individual provider probe times out", async () => {
     const { options, provider, command } = setup();
     let reads = 0;
-    provider.fs.readFile.mockImplementation((file, readOptions) => {
+    provider.fs.readFile.mockImplementation(async (file, readOptions) => {
       if (file.endsWith("listener-ready")) {
         reads += 1;
         return reads === 1
-          ? delay(100, "ready", { signal: readOptions?.signal })
-          : Promise.resolve("ready");
+          ? await delay(100, "ready", { signal: readOptions?.signal })
+          : await Promise.resolve("ready");
       }
-      return Promise.reject(Object.assign(new Error("missing"), { code: "ENOENT" }));
+      throw Object.assign(new Error("missing"), { code: "ENOENT" });
     });
     const fetcher = vi
       .fn<typeof fetch>()
-      .mockImplementation((url) =>
-        Promise.resolve(
-          String(url).includes("/__autograph_preview_launch")
-            ? launchResponse()
-            : new Response("<main>Ready</main>", { headers: { "content-type": "text/html" } }),
-        ),
+      .mockImplementation(async (url) =>
+        String(url).includes("/__autograph_preview_launch")
+          ? launchResponse()
+          : new Response("<main>Ready</main>", { headers: { "content-type": "text/html" } }),
       );
     const result = await startWorkingPreview({ ...options, fetch: fetcher, probeTimeoutMs: 20 });
     expect(result.receipt.status).toBe("ready");
@@ -226,12 +220,10 @@ describe("shared working preview startup", () => {
     const { options, provider } = setup();
     const fetcher = vi
       .fn<typeof fetch>()
-      .mockImplementation((url) =>
-        Promise.resolve(
-          String(url).includes("/__autograph_preview_launch")
-            ? launchResponse()
-            : new Response("<main>Ready</main>", { headers: { "content-type": "text/html" } }),
-        ),
+      .mockImplementation(async (url) =>
+        String(url).includes("/__autograph_preview_launch")
+          ? launchResponse()
+          : new Response("<main>Ready</main>", { headers: { "content-type": "text/html" } }),
       );
     const previous = await startWorkingPreview({ ...options, fetch: fetcher });
     const missingCommand = new APIError(new Response("", { status: 404 }), {
@@ -262,11 +254,11 @@ describe("shared working preview startup", () => {
     const lease = new AbortController();
     const clock = vi.spyOn(Date, "now").mockReturnValue(now);
     const timer = vi.spyOn(AbortSignal, "timeout").mockReturnValueOnce(lease.signal);
-    const fetcher = vi.fn<typeof fetch>(() => {
+    const fetcher = vi.fn<typeof fetch>(async () => {
       // A relative timer can fire just before the wall clock reaches expiry.
       clock.mockReturnValue(expiresAt - 1);
       lease.abort(new DOMException("Provider lease expired", "TimeoutError"));
-      return Promise.resolve(new Response(null, { status: 503 }));
+      return new Response(null, { status: 503 });
     });
     try {
       await expect(startWorkingPreview({ ...options, fetch: fetcher })).rejects.toThrow(
@@ -342,9 +334,9 @@ describe("shared working preview startup", () => {
   it("stops polling immediately when cancelled instead of resuming the stopped sandbox", async () => {
     const { command, options, provider } = setup();
     const controller = new AbortController();
-    const fetcher = vi.fn<typeof fetch>(() => {
+    const fetcher = vi.fn<typeof fetch>(async () => {
       controller.abort();
-      return Promise.reject(controller.signal.reason);
+      throw controller.signal.reason;
     });
     await expect(
       startWorkingPreview({ ...options, fetch: fetcher, signal: controller.signal }),
@@ -385,15 +377,13 @@ describe("safe interrupted startup diagnostics", () => {
 
   it("reports application HTTP status without copying response bodies, cookies, or URLs", async () => {
     const { options } = setup();
-    const fetcher = vi.fn<typeof fetch>((url) =>
-      Promise.resolve(
-        String(url).includes("/__autograph_preview_launch")
-          ? launchResponse()
-          : new Response("secret-response-body", {
-              headers: { location: "/private?token=secret-token", "set-cookie": "secret-cookie" },
-              status: 503,
-            }),
-      ),
+    const fetcher = vi.fn<typeof fetch>(async (url) =>
+      String(url).includes("/__autograph_preview_launch")
+        ? launchResponse()
+        : new Response("secret-response-body", {
+            headers: { location: "/private?token=secret-token", "set-cookie": "secret-cookie" },
+            status: 503,
+          }),
     );
     const failure = await startWorkingPreview({
       ...options,
@@ -430,8 +420,8 @@ describe("preview command termination", () => {
     const exited = Promise.withResolvers<null>();
     const command = {
       exitCode: null,
-      kill: vi.fn(() => Promise.resolve()),
-      wait: vi.fn(() => exited.promise),
+      kill: vi.fn(async () => {}),
+      wait: vi.fn(async () => await exited.promise),
     };
     let settled = false;
     const cleanup = stopWorkingPreviewCommand(
@@ -439,7 +429,9 @@ describe("preview command termination", () => {
     ).then(() => {
       settled = true;
     });
-    await vi.waitFor(() => expect(command.wait).toHaveBeenCalledOnce());
+    await vi.waitFor(() => {
+      expect(command.wait).toHaveBeenCalledOnce();
+    });
     expect(settled).toBe(false);
     exited.resolve(null);
     await cleanup;
@@ -453,9 +445,9 @@ describe("preview command termination", () => {
     const cancellation = new AbortController();
     command.wait.mockRejectedValue(new Error("termination unconfirmed"));
     // Abort after the detached command has been obtained so cleanup owns it.
-    provider.runCommand.mockImplementation(() => {
+    provider.runCommand.mockImplementation(async () => {
       cancellation.abort();
-      return Promise.resolve(command);
+      return command;
     });
     await expect(startWorkingPreview({ ...options, signal: cancellation.signal })).rejects.toThrow(
       "cleanup was incomplete",
@@ -468,7 +460,7 @@ describe("startup ownership recovery", () => {
   it("does not launch or mutate ingress while a previous startup remains pending", async () => {
     const { options, provider } = setup();
     const response = Promise.withResolvers<Response>();
-    const fetcher = vi.fn<typeof fetch>(() => response.promise);
+    const fetcher = vi.fn<typeof fetch>(async () => await response.promise);
     const first = (async () => {
       try {
         return await startWorkingPreview({
@@ -481,7 +473,9 @@ describe("startup ownership recovery", () => {
         return error;
       }
     })();
-    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
+    await vi.waitFor(() => {
+      expect(fetcher).toHaveBeenCalledOnce();
+    });
     const mutations = provider.update.mock.calls.length;
     await expect(startWorkingPreview(options)).rejects.toThrow("still pending");
     expect(provider.update.mock.calls).toHaveLength(mutations);
@@ -502,13 +496,13 @@ describe("startup ownership recovery", () => {
 
   it("cannot close replacement ingress when an old startup fails late", async () => {
     const { options, provider, command } = setup();
-    const fetcher = vi.fn<typeof fetch>(() => {
+    const fetcher = vi.fn<typeof fetch>(async () => {
       ownership.current = {
         attemptId: "replacement",
         providerSessionId: "provider-1",
         status: "starting",
       };
-      return Promise.resolve(new Response(null, { status: 503 }));
+      return new Response(null, { status: 503 });
     });
     await expect(
       startWorkingPreview({
@@ -526,10 +520,10 @@ describe("startup ownership recovery", () => {
 
 it("bounds each provider readiness read while cancellation ends the startup", async () => {
   const { options, provider, command } = setup();
-  provider.fs.readFile.mockImplementation((file, readOptions) =>
+  provider.fs.readFile.mockImplementation(async (file, readOptions) =>
     file.endsWith("listener-ready")
-      ? delay(60_000, "ready", { signal: readOptions?.signal })
-      : Promise.reject(Object.assign(new Error("missing"), { code: "ENOENT" })),
+      ? await delay(60_000, "ready", { signal: readOptions?.signal })
+      : await Promise.reject(Object.assign(new Error("missing"), { code: "ENOENT" })),
   );
   const started = Date.now();
   await expect(
@@ -541,15 +535,13 @@ it("bounds each provider readiness read while cancellation ends the startup", as
 
 it("sanitizes startup error files and keeps the safe cause visible if cleanup fails", async () => {
   const { options, provider, command } = setup();
-  provider.fs.readFile.mockImplementation((file) =>
-    Promise.resolve(
-      file.endsWith("listener-ready")
-        ? "ready"
-        : JSON.stringify({
-            stderr:
-              "Error: API_KEY=private-value request https://preview.example/?token=private-token failed",
-          }),
-    ),
+  provider.fs.readFile.mockImplementation(async (file) =>
+    file.endsWith("listener-ready")
+      ? "ready"
+      : JSON.stringify({
+          stderr:
+            "Error: API_KEY=private-value request https://preview.example/?token=private-token failed",
+        }),
   );
   command.wait.mockRejectedValue(new Error("termination not confirmed"));
   const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 503 }));

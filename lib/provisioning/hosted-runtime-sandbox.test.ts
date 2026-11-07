@@ -10,9 +10,8 @@ describe("protected hosted runtime Sandbox transport", () => {
   it("allocates a private checkpoint with prepare's checkpoint-only flag before installation", async () => {
     const stdout = vi.fn();
     const runCommand = vi.fn().mockResolvedValue({ exitCode: 0, stdout });
-    const signal = new AbortController().signal;
+    const { signal } = new AbortController();
     const executor = createHostedRuntimeSandboxExecutor({
-      signal,
       appId: "spend-review",
       provider: {
         fs: { mkdir: vi.fn(), readFile: vi.fn(), readdir: vi.fn() },
@@ -20,6 +19,7 @@ describe("protected hosted runtime Sandbox transport", () => {
         writeFiles: vi.fn(),
       },
       root: "/workspace/repository",
+      signal,
       stateDirectory: "/private-runtime",
     });
 

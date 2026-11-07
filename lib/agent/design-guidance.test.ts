@@ -23,21 +23,24 @@ describe("high-fidelity design guidance", () => {
     if (reference === undefined) {
       throw new Error("Hosted preview authoring guidance is unavailable.");
     }
-    const content = reference.match(/```tsx\n(?<content>[\s\S]*?)\n```/u)?.groups?.content;
-    const manifest = reference.match(/```json\n(?<manifest>[\s\S]*?)\n```/u)?.groups?.manifest;
+    const content = /```tsx\n(?<content>[\s\S]*?)\n```/u.exec(reference)?.groups?.content;
+    const manifest = /```json\n(?<manifest>[\s\S]*?)\n```/u.exec(reference)?.groups?.manifest;
     expect(content).toBeDefined();
     expect(manifest).toBeDefined();
     if (manifest === undefined) {
       throw new Error("Expected the reference to include a JSON manifest.");
     }
+    const parsedManifest: unknown = JSON.parse(manifest);
     const input = uiPreviewInputSchema.parse({
       appId: "request-review",
       catalogGaps: [],
       files: [{ content, path: "src/routes/index.tsx" }],
-      manifest: JSON.parse(manifest),
+      manifest: parsedManifest,
       routes: ["/"],
     });
-    expect(() => validateUiPreview(input)).not.toThrow();
+    expect(() => {
+      validateUiPreview(input);
+    }).not.toThrow();
   });
 
   it.each([

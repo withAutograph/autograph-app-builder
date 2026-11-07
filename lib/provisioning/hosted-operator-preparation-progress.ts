@@ -16,7 +16,7 @@ export const readOperatorPreparationProgress = (
   record: PreparationRecord,
   now: number,
 ): OperatorPreparationProgress | undefined => {
-  const operator = record.operator;
+  const { operator } = record;
   if (operator === undefined) {
     return undefined;
   }
@@ -39,21 +39,24 @@ export const readOperatorPreparationProgress = (
   const missingEffectKinds = [...missingKinds];
   const pendingEffect = plan.effects.find((effect) => effect.id === operator.pendingEffectId);
   const preparation = record.accountPreparation;
-  return {
-    ...(plan.stage === undefined ? {} : { planStage: plan.stage }),
-    lease,
-    hasPendingEffect: operator.pendingEffectId !== undefined,
-    ...(pendingEffect === undefined ? {} : { pendingEffectKind: pendingEffect.kind }),
-    hasPendingAttempt: operator.pendingEffectAttempt !== undefined,
-    allPlanEffectsReceipted: missingEffectKinds.length === 0,
-    missingEffectKinds,
-    hasAccountPreparation: preparation !== undefined,
+  const progress: OperatorPreparationProgress = {
     accountsCompleted: preparation?.accountsCompletedAt !== undefined,
-    ...(preparation === undefined || plan.normalActorProgram === undefined
-      ? {}
-      : {
-          accountProgramMatchesPlan:
-            preparation.programDigest === normalActorProgramDigest(plan.normalActorProgram),
-        }),
+    allPlanEffectsReceipted: missingEffectKinds.length === 0,
+    hasAccountPreparation: preparation !== undefined,
+    hasPendingAttempt: operator.pendingEffectAttempt !== undefined,
+    hasPendingEffect: operator.pendingEffectId !== undefined,
+    lease,
+    missingEffectKinds,
   };
+  if (plan.stage !== undefined) {
+    progress.planStage = plan.stage;
+  }
+  if (pendingEffect !== undefined) {
+    progress.pendingEffectKind = pendingEffect.kind;
+  }
+  if (preparation !== undefined && plan.normalActorProgram !== undefined) {
+    progress.accountProgramMatchesPlan =
+      preparation.programDigest === normalActorProgramDigest(plan.normalActorProgram);
+  }
+  return progress;
 };

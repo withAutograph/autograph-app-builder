@@ -11,56 +11,56 @@ import reconcileTool from "../../agent/tools/reconcile_github_draft_pr";
 const hooks = vi.hoisted(() => {
   const digest = "a".repeat(64);
   const review = {
-    digest,
     appSpecDigest: "c".repeat(64),
-    changeSetDigest: "b".repeat(64),
     baseChanges: [],
+    changeSetDigest: "b".repeat(64),
+    digest,
   };
   const proposal: DraftReconciliationCompletion["proposal"] = {
-    digest,
-    repositoryId: "repository",
-    reviewDigest: digest,
-    resolvedTree: "tree",
-    version: 1,
-    intendedOutcome: "reconcile-existing-draft-pull-request",
-    installationIdentityDigest: "d".repeat(64),
-    owner: "fixture-owner",
-    name: "fixture-repository",
-    pullRequestNumber: 42,
-    pullRequestId: "fixture-pr-42",
-    branchName: "app-builder/fixture",
+    approvedPaths: [],
     baseBranch: "main",
-    expectedHeadSha: "1".repeat(40),
-    expectedHeadTree: "2".repeat(40),
+    baseChangesDigest: "e".repeat(64),
+    branchName: "app-builder/fixture",
+    digest,
     expectedBaseSha: "3".repeat(40),
     expectedBaseTree: "4".repeat(40),
-    approvedPaths: [],
-    baseChangesDigest: "e".repeat(64),
+    expectedHeadSha: "1".repeat(40),
+    expectedHeadTree: "2".repeat(40),
     headChangesDigest: "f".repeat(64),
-    originMarker: "fixture-builder-origin",
-    priorPublicationDigest: "b".repeat(64),
     idempotencyKey: "c".repeat(64),
+    installationIdentityDigest: "d".repeat(64),
+    intendedOutcome: "reconcile-existing-draft-pull-request",
+    name: "fixture-repository",
+    originMarker: "fixture-builder-origin",
+    owner: "fixture-owner",
+    priorPublicationDigest: "b".repeat(64),
+    pullRequestId: "fixture-pr-42",
+    pullRequestNumber: 42,
+    repositoryId: "repository",
+    resolvedTree: "tree",
+    reviewDigest: digest,
+    version: 1,
   };
   const reconciliationReview: DraftReconciliationCompletion["review"] = {
-    version: 1,
     appId: "spend-review",
-    digest,
-    resolvedTree: proposal.resolvedTree,
-    baseChanges: [],
-    headChanges: [],
     approvedPaths: [],
+    baseChanges: [],
     baseSha: proposal.expectedBaseSha,
     baseTree: proposal.expectedBaseTree,
+    digest,
+    headChanges: [],
     headSha: proposal.expectedHeadSha,
     headTree: proposal.expectedHeadTree,
+    resolvedTree: proposal.resolvedTree,
+    version: 1,
   };
   const compilation: DraftReconciliationCompletion["compilation"] = {
     context: {
       authority: {
-        issuer: "https://fixture-builder.example/api/auth",
         audience: "https://fixture-builder.example/mcp",
-        workspaceId: "fixture-workspace",
+        issuer: "https://fixture-builder.example/api/auth",
         ownerUserId: "fixture-owner",
+        workspaceId: "fixture-workspace",
       },
       target: { appId: "spend-review", sessionId: "original-owner-session" },
     },
@@ -80,29 +80,29 @@ const hooks = vi.hoisted(() => {
     update: vi.fn(),
     reconcile: vi.fn(),
     state: {
-      phase: "reviewed",
       appBackendKind: "static",
       appSpec: { appId: "spend-review", digest: "c".repeat(64) },
       applyReceipt: { applyRoot: "/workspace/applied" },
-      sourceReceipt: { sourceKind: "existing-repository" },
-      githubSource: { digest, repository: { repositoryId: "repository" } },
+      existingDraftUpdate: { githubSourceDigest: digest, proposal, reviewDigest: digest },
       githubDraftProposal: { proposal },
-      existingDraftUpdate: { proposal, githubSourceDigest: digest, reviewDigest: digest },
+      githubSource: { digest, repository: { repositoryId: "repository" } },
+      phase: "reviewed",
       reviewReceipt: review,
+      sourceReceipt: { sourceKind: "existing-repository" },
     },
     candidate: {
       appId: "spend-review",
-      proposal,
-      review: reconciliationReview,
-      validation: {
-        resolvedTree: "tree",
-        compilation,
-      },
       githubSourceDigest: digest,
       originalReviewDigest: digest,
-      root: "/workspace/resolved",
-      workspaceRoot: "/workspace",
+      proposal,
       publishedReconciliation: undefined,
+      review: reconciliationReview,
+      root: "/workspace/resolved",
+      validation: {
+        compilation,
+        resolvedTree: "tree",
+      },
+      workspaceRoot: "/workspace",
     },
   };
 });
@@ -111,17 +111,17 @@ vi.mock("eve/tools", () => ({ defineTool: <T>(tool: T) => tool }));
 vi.mock("./approval-receipt", async (importOriginal) => ({
   ...(await importOriginal<{ approvalReceiptSchema: typeof ActualApprovalReceiptSchema }>()),
   approvalTargetFromDraftProposal: () => ({}),
-  approvalTargetFromExistingDraftUpdate: () => ({}),
   approvalTargetFromExistingDraftReconciliation: () => ({}),
+  approvalTargetFromExistingDraftUpdate: () => ({}),
   assertApprovalReceipt: hooks.assertApproval,
 }));
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: async () =>
     await Promise.resolve({
-      publishDraftPullRequest: hooks.publish,
-      updateExistingDraft: hooks.update,
-      reconcileExistingDraft: hooks.reconcile,
       inspectAppliedExistingDraftReconciliation: hooks.applied,
+      publishDraftPullRequest: hooks.publish,
+      reconcileExistingDraft: hooks.reconcile,
+      updateExistingDraft: hooks.update,
     }),
 }));
 vi.mock("./github-publication-content-source", () => ({
@@ -131,8 +131,8 @@ vi.mock("./workflow-state", () => ({ appBuilderWorkflowState: { get: () => hooks
 vi.mock("./app-baseline-state", () => ({ appBaselineState: { get: () => null } }));
 vi.mock("../repository/reviewed-change-set", () => ({ assertExistingAppReviewScope: () => {} }));
 vi.mock("./draft-reconciliation-state", () => ({
-  draftReconciliationState: { get: () => hooks.candidate },
   draftReconciliationCompletions: { get: () => hooks.completions },
+  draftReconciliationState: { get: () => hooks.candidate },
   publishedDraftRepairCompletions: { get: () => [] },
   retainDraftReconciliationCompletion: (completion: DraftReconciliationCompletion) => {
     hooks.completions.push(completion);
@@ -169,12 +169,11 @@ vi.mock("./compiled-operator-artifacts", () => ({
 }));
 
 const tools = [
-  { name: "initial publication", tool: publishTool, publish: hooks.publish },
-  { name: "existing draft update", tool: updateTool, publish: hooks.update },
-  { name: "draft reconciliation", tool: reconcileTool, publish: hooks.reconcile },
+  { name: "initial publication", publish: hooks.publish, tool: publishTool },
+  { name: "existing draft update", publish: hooks.update, tool: updateTool },
+  { name: "draft reconciliation", publish: hooks.reconcile, tool: reconcileTool },
 ];
 const input = {
-  expectedProposalDigest: "a".repeat(64),
   approvalReceipt: {
     baseRef: "refs/heads/main",
     baseSha: "b".repeat(40),
@@ -185,24 +184,25 @@ const input = {
     repositoryId: "123",
     subjectDigest: "a".repeat(64),
   },
+  expectedProposalDigest: "a".repeat(64),
 };
 const ctx = {
   callId: "approved-publication-call",
-  session: { id: "adapter-session", auth: { principal: "original-owner" } },
   getSandbox: async () => await Promise.resolve({}),
+  session: { auth: { principal: "original-owner" }, id: "adapter-session" },
 };
 
 const originalCandidate = structuredClone(hooks.candidate);
 const originalState = structuredClone(hooks.state);
 const completionFixture = (): DraftReconciliationCompletion => ({
+  appId: hooks.state.appSpec.appId,
+  appReview: hooks.state.reviewReceipt,
+  compilation: hooks.candidate.validation.compilation,
+  githubSourceDigest: hooks.candidate.githubSourceDigest,
   preparation: "sealed-before-approval",
   proposal: hooks.candidate.proposal,
   review: hooks.candidate.review,
-  appId: hooks.state.appSpec.appId,
-  appReview: hooks.state.reviewReceipt,
-  githubSourceDigest: hooks.candidate.githubSourceDigest,
   root: hooks.candidate.root,
-  compilation: hooks.candidate.validation.compilation,
 });
 
 const recoveryCompletionFixture = (): DraftReconciliationCompletion => {
@@ -227,7 +227,7 @@ describe("publication records actual source for its compiled app release", () =>
     hooks.candidate = structuredClone(originalCandidate);
     hooks.state = structuredClone(originalState);
     hooks.completions = [completionFixture()];
-    hooks.inspect.mockResolvedValue({ unresolvedConflicts: [], resolvedTree: "tree" });
+    hooks.inspect.mockResolvedValue({ resolvedTree: "tree", unresolvedConflicts: [] });
     hooks.candidate.publishedReconciliation = undefined;
   });
 
@@ -237,9 +237,9 @@ describe("publication records actual source for its compiled app release", () =>
       async (status) => {
         hooks.record.mockResolvedValue({ status });
         const publication = {
-          repositoryId: "repository",
           headSha: "actual-new-head",
           recovered: true,
+          repositoryId: "repository",
         };
         entry.publish.mockResolvedValue(publication);
         // SAFETY: The mocked Eve/publication ports consume only the supplied session, call ID and sandbox fields.
@@ -254,13 +254,13 @@ describe("publication records actual source for its compiled app release", () =>
                   appId: hooks.state.appSpec.appId,
                   appSpecDigest: hooks.state.appSpec.digest,
                   backendKind: hooks.state.appBackendKind,
-                  root: hooks.state.applyReceipt.applyRoot,
                   callId: ctx.callId,
                   review: hooks.state.reviewReceipt,
+                  root: hooks.state.applyReceipt.applyRoot,
                 }),
             adapterSessionId: ctx.session.id,
-            sessionAuth: ctx.session.auth,
             publication,
+            sessionAuth: ctx.session.auth,
           }),
         );
         expect(result).not.toHaveProperty("appSourceRecording.recoveryRequired");
@@ -276,7 +276,7 @@ describe("publication records actual source for its compiled app release", () =>
     );
 
     it(`${entry.name} preserves successful publication and exposes recoverable unavailable recording`, async () => {
-      const publication = { repositoryId: "repository", headSha: "already-published-head" };
+      const publication = { headSha: "already-published-head", repositoryId: "repository" };
       entry.publish.mockResolvedValue(publication);
       hooks.record.mockRejectedValue(new Error("private artifact detail"));
       // SAFETY: The mocked Eve/publication ports consume only the supplied session, call ID and sandbox fields.
@@ -284,7 +284,7 @@ describe("publication records actual source for its compiled app release", () =>
       const result = await entry.tool.execute(input, ctx as never);
       expect(result).toMatchObject({
         ...publication,
-        appSourceRecording: { status: "unavailable", recoveryRequired: true },
+        appSourceRecording: { recoveryRequired: true, status: "unavailable" },
       });
       expect(JSON.stringify(result)).not.toContain("private artifact detail");
       expect(entry.publish).toHaveBeenCalledTimes(1);
@@ -411,9 +411,9 @@ describe("publication records actual source for its compiled app release", () =>
         ctx as never,
       );
       expect(found).toMatchObject({
+        recoveries: [],
         status: "publication-recovery",
         verification: "unverified",
-        recoveries: [],
       });
       expect(hooks.applied).not.toHaveBeenCalled();
       expect(hooks.record).not.toHaveBeenCalled();
@@ -432,17 +432,17 @@ describe("publication records actual source for its compiled app release", () =>
     expect(hooks.sandbox).not.toHaveBeenCalled();
   });
   it("returns selection-changed if the accepted specification moves during discovery", async () => {
-    hooks.assertOwner.mockImplementation(() => {
+    hooks.assertOwner.mockImplementation(async () => {
       hooks.state.appSpec.digest = "f".repeat(64);
-      return Promise.resolve();
+      return;
     });
     // SAFETY: A controlled in-flight state change simulates the existing current-owner asynchronous boundary.
     await expect(
       inspectReconciliation.execute({ kind: "publication-recovery" }, ctx as never),
     ).resolves.toMatchObject({
+      recoveries: [],
       status: "selection-changed",
       verification: "unverified",
-      recoveries: [],
     });
     expect(hooks.applied).not.toHaveBeenCalled();
     expect(hooks.record).not.toHaveBeenCalled();
@@ -453,7 +453,7 @@ describe("publication records actual source for its compiled app release", () =>
     const completion = hooks.completions[0];
     hooks.applied.mockResolvedValue({
       applied: true,
-      observation: { repositoryId: "repository", headSha: "verified-existing-head" },
+      observation: { headSha: "verified-existing-head", repositoryId: "repository" },
     });
     hooks.inspect.mockRejectedValue(
       new Error("Current candidate must not be read in this recovery"),
@@ -462,8 +462,8 @@ describe("publication records actual source for its compiled app release", () =>
     await expect(
       reconcileTool.execute({ ...input, recordCurrentEquivalentRelease: true }, ctx as never),
     ).resolves.toMatchObject({
-      headSha: "verified-existing-head",
       appSourceRecording: { status: "recorded" },
+      headSha: "verified-existing-head",
     });
     expect(hooks.record).toHaveBeenCalledWith(
       expect.objectContaining({ completion, recordCurrentEquivalentRelease: true }),
@@ -483,7 +483,7 @@ describe("publication records actual source for its compiled app release", () =>
     await expect(
       reconcileTool.execute({ ...input, recordCurrentEquivalentRelease: true }, ctx as never),
     ).resolves.toMatchObject({
-      appSourceRecording: { status: "selection-changed", recoveryRequired: true },
+      appSourceRecording: { recoveryRequired: true, status: "selection-changed" },
     });
     expect(hooks.reconcile).not.toHaveBeenCalled();
     expect(hooks.inspect).not.toHaveBeenCalled();
@@ -536,7 +536,7 @@ describe("publication records actual source for its compiled app release", () =>
     expect(hooks.completions[0]).toBe(completion);
     // SAFETY: Simulate a lost/replaced candidate without changing its independent sealed context.
     hooks.candidate = null as never;
-    const publication = { repositoryId: "repository", headSha: "verified-applied-head" };
+    const publication = { headSha: "verified-applied-head", repositoryId: "repository" };
     hooks.applied.mockResolvedValue({ applied: true, observation: publication });
     hooks.inspect.mockRejectedValue(new Error("candidate sandbox is gone"));
     // SAFETY: Same approved session context is reused for completion only.
@@ -552,8 +552,8 @@ describe("publication records actual source for its compiled app release", () =>
     const original = hooks.completions[0];
     hooks.candidate = {
       ...hooks.candidate,
-      root: "/workspace/new-candidate",
       proposal: { ...hooks.candidate.proposal, digest: "new-proposal" },
+      root: "/workspace/new-candidate",
     };
     hooks.state.appSpec.digest = "changed-current-app-spec";
     hooks.state.reviewReceipt.digest = "changed-current-app-review";
@@ -566,7 +566,7 @@ describe("publication records actual source for its compiled app release", () =>
   });
 
   it("keeps fresh publication checkout checks and never writes a changed tree", async () => {
-    hooks.inspect.mockResolvedValue({ unresolvedConflicts: [], resolvedTree: "changed-tree" });
+    hooks.inspect.mockResolvedValue({ resolvedTree: "changed-tree", unresolvedConflicts: [] });
     // SAFETY: Minimal production tool context with trusted ports mocked.
     await expect(reconcileTool.execute(input, ctx as never)).rejects.toThrow("checkout changed");
     expect(hooks.reconcile).not.toHaveBeenCalled();

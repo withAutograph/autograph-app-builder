@@ -36,27 +36,27 @@ const scope = {
 const fixture = () =>
   ({
     appSpec: { appId: scope.appId, digest: scope.appSpecDigest },
-    sourceReceipt: { digest: "source" },
-    workspace: {
-      workspaceId: scope.workspaceId,
+    applyReceipt: {
+      appSpecDigest: scope.appSpecDigest,
+      applyRoot: "/workspace/repository",
+      proposalDigest: scope.proposalDigest,
+      sourceReceiptDigest: "source",
       workspaceDigest: "workspace-digest",
-      workspacePath: "/workspace/repository",
     },
     proposal: {
       digest: scope.proposalDigest,
       target: {
         contract: { appId: scope.appId, appSpec: { sha256: scope.appSpecDigest } },
         privateCompute: {
-          checkPolicy: { path: task, beforeSha256: recipeDigest, afterSha256: afterDigest },
+          checkPolicy: { afterSha256: afterDigest, beforeSha256: recipeDigest, path: task },
         },
       },
     },
-    applyReceipt: {
-      appSpecDigest: scope.appSpecDigest,
-      proposalDigest: scope.proposalDigest,
+    sourceReceipt: { digest: "source" },
+    workspace: {
       workspaceDigest: "workspace-digest",
-      sourceReceiptDigest: "source",
-      applyRoot: "/workspace/repository",
+      workspaceId: scope.workspaceId,
+      workspacePath: "/workspace/repository",
     },
   }) as Parameters<typeof prepareValidationPrivateComputeRepair>[0]["state"];
 const approve = () => {
@@ -70,9 +70,9 @@ describe("explicit reviewed compute task validation repair", () => {
       const state = fixture();
       const repair = prepareValidationPrivateComputeRepair(
         {
-          state,
-          files: [{ path: task, content: recipe }],
+          files: [{ content: recipe, path: task }],
           sessionId: scope.sessionId,
+          state,
         },
         installPolicy,
       );
@@ -81,10 +81,10 @@ describe("explicit reviewed compute task validation repair", () => {
       const sandbox = {} as SandboxSession;
       await repair?.applyPolicy(sandbox);
       expect(installPolicy).toHaveBeenCalledWith({
-        sandbox,
-        profile: state.proposal.target.privateCompute,
-        applyRoot: state.applyReceipt.applyRoot,
         abortSignal: undefined,
+        applyRoot: state.applyReceipt.applyRoot,
+        profile: state.proposal.target.privateCompute,
+        sandbox,
       });
     });
   });
@@ -92,20 +92,20 @@ describe("explicit reviewed compute task validation repair", () => {
     contextStorage.run(new ContextContainer(), () => {
       for (const files of [
         [],
-        [{ path: task, operation: "delete" as const }],
-        [{ path: "apps/example/app/page.tsx", content: "page" }],
+        [{ operation: "delete" as const, path: task }],
+        [{ content: "page", path: "apps/example/app/page.tsx" }],
       ]) {
         expect(
-          prepareValidationPrivateComputeRepair({ state: fixture(), files, sessionId: "foreign" }),
+          prepareValidationPrivateComputeRepair({ files, sessionId: "foreign", state: fixture() }),
         ).toBeUndefined();
       }
       const state = fixture();
       delete state.proposal.target.privateCompute;
       expect(
         prepareValidationPrivateComputeRepair({
-          state,
-          files: [{ path: task, content: recipe }],
+          files: [{ content: recipe, path: task }],
           sessionId: "foreign",
+          state,
         }),
       ).toBeUndefined();
     });
@@ -115,19 +115,19 @@ describe("explicit reviewed compute task validation repair", () => {
       approve();
       expect(() =>
         prepareValidationPrivateComputeRepair({
-          state: fixture(),
-          files: [{ path: task, content: "custom task" }],
+          files: [{ content: "custom task", path: task }],
           sessionId: scope.sessionId,
+          state: fixture(),
         }),
       ).toThrow("not an exact reviewed recipe");
       const controller = new AbortController();
       controller.abort();
       expect(() =>
         prepareValidationPrivateComputeRepair({
-          state: fixture(),
-          files: [{ path: task, content: recipe }],
+          files: [{ content: recipe, path: task }],
           sessionId: scope.sessionId,
           signal: controller.signal,
+          state: fixture(),
         }),
       ).toThrow();
     });
@@ -136,9 +136,9 @@ describe("explicit reviewed compute task validation repair", () => {
     await contextStorage.run(new ContextContainer(), async () => {
       approve();
       const prepared = prepareValidationPrivateComputeRepair({
-        state: fixture(),
-        files: [{ path: task, content: recipe }],
+        files: [{ content: recipe, path: task }],
         sessionId: scope.sessionId,
+        state: fixture(),
       });
       const different = { ...scope, proposalDigest: "new-proposal" };
       requestPrivateApplyApproval(different, "new-approval");
@@ -148,10 +148,10 @@ describe("explicit reviewed compute task validation repair", () => {
       approve();
       const controller = new AbortController();
       const cancelled = prepareValidationPrivateComputeRepair({
-        state: fixture(),
-        files: [{ path: task, content: recipe }],
+        files: [{ content: recipe, path: task }],
         sessionId: scope.sessionId,
         signal: controller.signal,
+        state: fixture(),
       });
       controller.abort();
       // SAFETY: Cancellation rejects before any mocked Sandbox method can run.
@@ -161,9 +161,9 @@ describe("explicit reviewed compute task validation repair", () => {
   it("returns the exact canonical recipe only for an approved matching repair", () => {
     contextStorage.run(new ContextContainer(), () => {
       const input = {
-        state: fixture(),
-        files: [{ path: task, content: "guessed task" }],
+        files: [{ content: "guessed task", path: task }],
         sessionId: scope.sessionId,
+        state: fixture(),
       };
       let denied: unknown;
       try {
@@ -185,9 +185,9 @@ describe("explicit reviewed compute task validation repair", () => {
         throw new Error("Expected trusted recipe guidance");
       }
       expect(guidance.implementationFile).toEqual({
-        path: task,
-        operation: "upsert",
         content: PRIVATE_COMPUTE_CHECK_TASK,
+        operation: "upsert",
+        path: task,
       });
       const profile = input.state.proposal.target.privateCompute;
       if (profile === undefined) {
@@ -202,9 +202,9 @@ describe("explicit reviewed compute task validation repair", () => {
   it("requires retained approval for this exact session and current workspace", () => {
     contextStorage.run(new ContextContainer(), () => {
       const input = {
-        state: fixture(),
-        files: [{ path: task, content: recipe }],
+        files: [{ content: recipe, path: task }],
         sessionId: scope.sessionId,
+        state: fixture(),
       };
       expect(() => prepareValidationPrivateComputeRepair(input)).toThrow();
       approve();
@@ -246,9 +246,9 @@ describe("explicit reviewed compute task validation repair", () => {
         const path = state.proposal.target.privateCompute?.checkPolicy.path ?? task;
         expect(() =>
           prepareValidationPrivateComputeRepair({
-            state,
-            files: [{ path, content: recipe }],
+            files: [{ content: recipe, path }],
             sessionId: scope.sessionId,
+            state,
           }),
         ).toThrow("another app");
       });

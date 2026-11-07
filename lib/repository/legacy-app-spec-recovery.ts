@@ -129,7 +129,7 @@ export const recoverLegacyAppSpecTransport = async (input: LegacyAppSpecRecovery
   await ensureSandboxDirectories(input.sandbox, [
     externalPath.slice(0, externalPath.lastIndexOf("/")),
   ]);
-  await input.sandbox.writeBinaryFile({ path: externalPath, content: Buffer.from(accepted) });
+  await input.sandbox.writeBinaryFile({ content: Buffer.from(accepted), path: externalPath });
   const { baseline } = input;
   if (
     baseline?.receipt === undefined ||
@@ -139,8 +139,8 @@ export const recoverLegacyAppSpecTransport = async (input: LegacyAppSpecRecovery
     return preserved;
   }
   assertAppBaselineAuthority({
-    selection: baseline.selection,
     repository: input.repository,
+    selection: baseline.selection,
     sessionId: input.sessionId,
   });
   const marker = await readAppBaselineMarker(input.sandbox, baseline.selection);
@@ -149,10 +149,10 @@ export const recoverLegacyAppSpecTransport = async (input: LegacyAppSpecRecovery
   }
   const expected = marker.platformFiles.find((file) => file.path === path) ?? null;
   const request = {
-    root: `${input.workspaceRoot ?? "/workspace"}/repository`,
-    path,
     commit: marker.receipt.platform.commitSha,
     expected,
+    path,
+    root: `${input.workspaceRoot ?? "/workspace"}/repository`,
     writerDigest: input.appSpecDigest,
     writerMode: postimage.mode === "100755" || postimage.mode === "755" ? "755" : "644",
   };

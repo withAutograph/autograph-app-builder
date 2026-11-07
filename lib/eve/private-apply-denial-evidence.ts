@@ -18,12 +18,12 @@ type ToolOutput = Extract<
   { kind: "tool-result" }
 >["output"];
 const deniedResultSchema = z.object({
-  code: z.literal("TOOL_EXECUTION_DENIED"),
-  tool: z.object({ result: z.literal("not_run") }),
   approval: z.object({
     requestId: z.string().min(1),
     status: z.enum(["denied", "ignored", "invalid"]),
   }),
+  code: z.literal("TOOL_EXECUTION_DENIED"),
+  tool: z.object({ result: z.literal("not_run") }),
 });
 /** Parse only the documented runtime-owned denied action payload. */
 export const readFrameworkPrivateApplyDenial = (
@@ -104,48 +104,44 @@ export const observePrivateApplyDenials = (input: {
         }
       }
     }
-    if (conflict || requests.size !== 1 || results.length !== 1) {
-      continue;
+    if (!conflict && requests.size === 1 && results.length === 1) {
+      const [requestId, requestEventId] = [...requests.entries()][0] ?? [];
+      const terminal = requestId === undefined ? undefined : outcomes.get(requestId);
+      if (
+        requestId !== undefined &&
+        requestEventId !== undefined &&
+        results[0]?.requestId === requestId &&
+        terminal?.size === 1 &&
+        terminal.has(results[0].status)
+      ) {
+        const settled = settlements.get(requestId);
+        if (settled === undefined || (settled.size === 1 && settled.has("cancelled"))) {
+          const resolutionEvents = [...events.values()].flatMap((event) =>
+            event.type === "input.resolved" &&
+            event.data.resolutions.some((item) => item.requestId === requestId)
+              ? [event.meta.id]
+              : [],
+          );
+          const positions = [...events.keys()];
+          const requestPosition = positions.indexOf(requestEventId);
+          const resultPosition = positions.indexOf(results[0].eventId);
+          const orderedResolutions = resolutionEvents.every(
+            (id) =>
+              positions.indexOf(id) > requestPosition && positions.indexOf(id) < resultPosition,
+          );
+          if (orderedResolutions) {
+            const unsigned = {
+              callId,
+              eventIds: [requestEventId, ...resolutionEvents, results[0].eventId],
+              outcome: `${results[0].status}-not-run` as const,
+              requestId,
+              sessionId: input.sessionId,
+            };
+            result.push({ ...unsigned, evidenceDigest: digest(JSON.stringify(unsigned)) });
+          }
+        }
+      }
     }
-    const [requestId, requestEventId] = [...requests.entries()][0] ?? [];
-    const terminal = requestId === undefined ? undefined : outcomes.get(requestId);
-    if (
-      requestId === undefined ||
-      requestEventId === undefined ||
-      results[0]?.requestId !== requestId ||
-      terminal?.size !== 1 ||
-      !terminal.has(results[0].status)
-    ) {
-      continue;
-    }
-    const settled = settlements.get(requestId);
-    if (settled !== undefined && (settled.size !== 1 || !settled.has("cancelled"))) {
-      continue;
-    }
-    const resolutionEvents = [...events.values()].flatMap((event) =>
-      event.type === "input.resolved" &&
-      event.data.resolutions.some((item) => item.requestId === requestId)
-        ? [event.meta.id]
-        : [],
-    );
-    const positions = [...events.keys()];
-    const requestPosition = positions.indexOf(requestEventId);
-    const resultPosition = positions.indexOf(results[0].eventId);
-    if (
-      resolutionEvents.some(
-        (id) => positions.indexOf(id) <= requestPosition || positions.indexOf(id) >= resultPosition,
-      )
-    ) {
-      continue;
-    }
-    const unsigned = {
-      sessionId: input.sessionId,
-      callId,
-      requestId,
-      outcome: `${results[0].status}-not-run` as const,
-      eventIds: [requestEventId, ...resolutionEvents, results[0].eventId],
-    };
-    result.push({ ...unsigned, evidenceDigest: digest(JSON.stringify(unsigned)) });
   }
   return result;
 };
@@ -156,11 +152,11 @@ export const createPrivateApplyDenialEvidence = (
   },
 ): PrivateApplyDenialEvidence => {
   const unsigned = {
-    sessionId: input.sessionId,
     callId: input.callId,
-    requestId: input.requestId,
-    outcome: `${input.status}-not-run` as const,
     eventIds: input.eventIds,
+    outcome: `${input.status}-not-run` as const,
+    requestId: input.requestId,
+    sessionId: input.sessionId,
   };
   return { ...unsigned, evidenceDigest: digest(JSON.stringify(unsigned)) };
 };

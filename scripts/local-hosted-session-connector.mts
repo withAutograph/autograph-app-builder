@@ -7,8 +7,8 @@ import { connectHostedSession } from "../lib/development/hosted-session-client.t
 const { values } = parseArgs({
   options: {
     "codex-bin": { type: "string" },
-    "resource-url": { type: "string" },
     cwd: { type: "string" },
+    "resource-url": { type: "string" },
   },
 });
 if (
@@ -29,8 +29,8 @@ process.once("SIGINT", () => {
 });
 const upstream = await connectHostedSession({
   codexBin: values["codex-bin"],
-  resourceUrl: values["resource-url"],
   cwd: values.cwd,
+  resourceUrl: values["resource-url"],
   signal: cancellation.signal,
 });
 const handle = serveStdio(

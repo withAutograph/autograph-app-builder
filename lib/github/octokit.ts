@@ -7,15 +7,11 @@ const GITHUB_API_ORIGIN = "https://api.github.com";
 const GITHUB_API_VERSION = "2026-03-10";
 const REQUEST_TIMEOUT_MS = 15_000;
 const USER_AGENT = "autograph-app-builder";
+const GITHUB_OAUTH_REQUEST_INVALID = "github-oauth-request-invalid";
+const silentConsoleMethods = new Set<PropertyKey>(["debug", "info", "warn", "error", "log"]);
 const silentConsole = new Proxy(console, {
   get(target, property) {
-    if (
-      property === "debug" ||
-      property === "info" ||
-      property === "warn" ||
-      property === "error" ||
-      property === "log"
-    ) {
+    if (silentConsoleMethods.has(property)) {
       return () => {
         // The mocked request has no teardown.
       };
@@ -96,11 +92,11 @@ export function createGitHubOAuthApp(input: {
       url.pathname === "/login/oauth/access_token"
     ) {
       if (typeof init?.body !== "string") {
-        throw new TypeError("github-oauth-request-invalid");
+        throw new TypeError(GITHUB_OAUTH_REQUEST_INVALID);
       }
       let body: string;
       try {
-        const parsed = JSON.parse(init.body) as unknown;
+        const parsed: unknown = JSON.parse(init.body);
         if (
           typeof parsed !== "object" ||
           parsed === null ||
@@ -114,17 +110,17 @@ export function createGitHubOAuthApp(input: {
         if (error instanceof SyntaxError) {
           const parsed = new URLSearchParams(init.body);
           if (parsed.has("code_verifier")) {
-            throw new Error("github-oauth-request-invalid", { cause: error });
+            throw new Error(GITHUB_OAUTH_REQUEST_INVALID, { cause: error });
           }
           parsed.set("code_verifier", input.codeVerifier);
           body = parsed.toString();
         } else {
-          throw new TypeError("github-oauth-request-invalid", { cause: error });
+          throw new TypeError(GITHUB_OAUTH_REQUEST_INVALID, { cause: error });
         }
       }
-      return request(resource, { ...init, body });
+      return await request(resource, { ...init, body });
     }
-    return request(resource, init);
+    return await request(resource, init);
   };
   return new OAuthApp({
     Octokit: octokitClass(oauthFetch),

@@ -40,8 +40,8 @@ export interface BuilderDraftAutosaveOptions<T> {
 
 export interface BuilderDraftAutosave<T> {
   status: BuilderDraftAutosaveStatus;
-  error: Error | undefined;
-  lastSavedAt: string | undefined;
+  error: Error | null;
+  lastSavedAt: string | null;
   schedule: (snapshot: T) => string;
   flush: (reason?: Exclude<BuilderDraftAutosaveReason, "debounce">) => Promise<void>;
   retry: () => Promise<void>;
@@ -63,10 +63,7 @@ type Pending<T> = BuilderDraftOutboxEntry<T>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function createMutationId() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return crypto.randomUUID();
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -76,7 +73,7 @@ function cloneSnapshot<T>(snapshot: T): T {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function browserIsOnline() {
-  return typeof navigator === "undefined" || navigator.onLine !== false;
+  return typeof navigator === "undefined" || navigator.onLine;
 }
 
 /**
@@ -89,32 +86,35 @@ export function useBuilderDraftAutosave<T>(
   options: BuilderDraftAutosaveOptions<T>,
 ): BuilderDraftAutosave<T> {
   const [status, setStatus] = useState<BuilderDraftAutosaveStatus>("idle");
-  const [error, setError] = useState<Error>();
-  const [lastSavedAt, setLastSavedAt] = useState<string>();
-  const queued = useRef<Pending<T> | undefined>(globalThis.undefined);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(globalThis.undefined);
-  const draining = useRef<Promise<boolean> | undefined>(globalThis.undefined);
+  const [error, setError] = useState<Error | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const queued = useRef<Pending<T> | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draining = useRef<Promise<boolean> | null>(null);
   const acknowledgedRevision = useRef(options.initialRevision ?? 0);
   const mounted = useRef(true);
   const save = useRef(options.save);
-  const isOnline = useRef(options.isOnline);
-  const onVisibilityFlush = useRef(options.onVisibilityFlush);
-  const onAcknowledged = useRef(options.onAcknowledged);
+  const isOnline = useRef(options.isOnline ?? null);
+  const onVisibilityFlush = useRef(options.onVisibilityFlush ?? null);
+  const onAcknowledged = useRef(options.onAcknowledged ?? null);
 
   useEffect(() => {
     save.current = options.save;
-    isOnline.current = options.isOnline;
-    onVisibilityFlush.current = options.onVisibilityFlush;
-    onAcknowledged.current = options.onAcknowledged;
+    isOnline.current = options.isOnline ?? null;
+    onVisibilityFlush.current = options.onVisibilityFlush ?? null;
+    onAcknowledged.current = options.onAcknowledged ?? null;
   }, [options.isOnline, options.onAcknowledged, options.onVisibilityFlush, options.save]);
 
-  const updateStatus = useCallback((next: BuilderDraftAutosaveStatus, nextError?: Error) => {
-    if (!mounted.current) {
-      return;
-    }
-    setStatus(next);
-    setError(nextError);
-  }, []);
+  const updateStatus = useCallback(
+    (next: BuilderDraftAutosaveStatus, nextError: Error | null = null) => {
+      if (!mounted.current) {
+        return;
+      }
+      setStatus(next);
+      setError(nextError);
+    },
+    [],
+  );
 
   const online = useCallback(() => {
     const check = isOnline.current ?? browserIsOnline;
@@ -125,11 +125,11 @@ export function useBuilderDraftAutosave<T>(
     async (reason: BuilderDraftAutosaveReason): Promise<boolean> => {
       if (timer.current) {
         clearTimeout(timer.current);
-        timer.current = undefined;
+        timer.current = null;
       }
 
-      if (draining.current) {
-        return draining.current;
+      if (draining.current !== null) {
+        return await draining.current;
       }
       const run = async () => {
         while (queued.current) {
@@ -139,7 +139,7 @@ export function useBuilderDraftAutosave<T>(
           }
 
           const { current } = queued;
-          queued.current = undefined;
+          queued.current = null;
           updateStatus("saving");
           try {
             // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -165,12 +165,10 @@ export function useBuilderDraftAutosave<T>(
               : options.outbox.clearIfMutationId(current.mutationId));
             onAcknowledged.current?.(acknowledgement);
             if (mounted.current) {
-              setLastSavedAt(acknowledgement.savedAt);
+              setLastSavedAt(acknowledgement.savedAt ?? null);
             }
           } catch (saveError) {
-            if (!queued.current) {
-              queued.current = current;
-            }
+            queued.current ??= current;
             updateStatus(
               online() ? "error" : "offline",
               saveError instanceof Error ? saveError : new Error("builder-draft-save-failed"),
@@ -187,7 +185,7 @@ export function useBuilderDraftAutosave<T>(
         return await pending;
       } finally {
         if (draining.current === pending) {
-          draining.current = undefined;
+          draining.current = null;
         }
       }
     },
@@ -228,7 +226,7 @@ export function useBuilderDraftAutosave<T>(
         clearTimeout(timer.current);
       }
       timer.current = setTimeout(() => {
-        timer.current = undefined;
+        timer.current = null;
         void dispatch("debounce");
       }, options.debounceMs ?? 500);
       return entry.mutationId;
@@ -236,7 +234,7 @@ export function useBuilderDraftAutosave<T>(
     [dispatch, online, options.debounceMs, options.outbox, updateStatus],
   );
 
-  const restorePending = useCallback(() => options.outbox.read(), [options.outbox]);
+  const restorePending = useCallback(async () => await options.outbox.read(), [options.outbox]);
 
   const resumePending = useCallback(async () => {
     const entry = await options.outbox.read();
@@ -248,14 +246,16 @@ export function useBuilderDraftAutosave<T>(
     await flush("flush");
   }, [flush, online, options.outbox, updateStatus]);
 
-  const retry = useCallback(() => flush("flush"), [flush]);
+  const retry = useCallback(async () => {
+    await flush("flush");
+  }, [flush]);
 
   const discardPending = useCallback(async () => {
     if (timer.current) {
       clearTimeout(timer.current);
-      timer.current = undefined;
+      timer.current = null;
     }
-    queued.current = undefined;
+    queued.current = null;
     await options.outbox.clear();
     updateStatus("saved");
   }, [options.outbox, updateStatus]);
@@ -267,7 +267,7 @@ export function useBuilderDraftAutosave<T>(
       }
       acknowledgedRevision.current = revision;
       if (queued.current && (queued.current.baseRevision ?? 0) < revision) {
-        queued.current = undefined;
+        queued.current = null;
       }
       const pending = await options.outbox.read();
       if (pending && (pending.baseRevision ?? 0) < revision) {
@@ -281,10 +281,12 @@ export function useBuilderDraftAutosave<T>(
 
   useEffect(() => {
     const retryWhenOnline = () => {
-      flush("flush");
+      void flush("flush");
     };
     window.addEventListener("online", retryWhenOnline);
-    return () => window.removeEventListener("online", retryWhenOnline);
+    return () => {
+      window.removeEventListener("online", retryWhenOnline);
+    };
   }, [flush]);
 
   useEffect(() => {

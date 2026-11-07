@@ -11,16 +11,16 @@ import {
 } from "./private-preview-browser-access";
 
 const preview = (): WorkingPreviewRuntime => ({
-  sandboxId: "sandbox",
-  providerSessionId: "provider",
   commandId: "command",
+  providerSessionId: "provider",
   receipt: {
     appId: "example",
-    status: "ready",
     expiresAt: new Date(Date.now() + 120_000).toISOString(),
-    verifiedAt: new Date().toISOString(),
+    status: "ready",
     url: "https://preview.vercel.run/__autograph_preview_launch?token=fixture-owner-capability",
+    verifiedAt: new Date().toISOString(),
   },
+  sandboxId: "sandbox",
 });
 describe("owned private browser authority", () => {
   it.each(["app", "sandbox", "expired", "url"])(
@@ -44,12 +44,12 @@ describe("owned private browser authority", () => {
       await expect(
         withPrivatePreviewBrowserAccess({
           appId: "example",
-          root: "/workspace/repository",
-          sandboxId: "sandbox",
-          preview: current,
-          sandbox: { run, writeTextFile },
           assertCurrent: () => {},
-          operation: () => Promise.resolve("unused"),
+          operation: vi.fn<() => Promise<string>>().mockResolvedValue("unused"),
+          preview: current,
+          root: "/workspace/repository",
+          sandbox: { run, writeTextFile },
+          sandboxId: "sandbox",
         }),
       ).rejects.toBeInstanceOf(PrivatePreviewBrowserPrerequisiteError);
       expect(run).not.toHaveBeenCalled();
@@ -85,10 +85,6 @@ describe("owned private browser authority", () => {
     try {
       const result = await withPrivatePreviewBrowserAccess({
         appId: "example",
-        root: "/workspace/repository",
-        sandboxId: "sandbox",
-        preview: preview(),
-        sandbox: { run, writeTextFile },
         assertCurrent: () => {},
         operation: async (environment) => {
           actualFile = translate(environment.APP_TEST_PREVIEW_AUTHORITY_FILE ?? "");
@@ -104,12 +100,16 @@ describe("owned private browser authority", () => {
           expect(await readFile(actualFile, "utf-8")).toContain("fixture-owner-capability");
           return "executed";
         },
+        preview: preview(),
+        root: "/workspace/repository",
+        sandbox: { run, writeTextFile },
+        sandboxId: "sandbox",
       });
       expect(result).toBe("executed");
       expect(commands.join("\n")).not.toContain("fixture-owner-capability");
       await expect(stat(actualFile)).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { force: true, recursive: true });
     }
   });
   it.each(["source-changed", "cancelled"])(
@@ -119,30 +119,29 @@ describe("owned private browser authority", () => {
       let current = true;
       const run = vi
         .fn<Parameters<typeof withPrivatePreviewBrowserAccess>[0]["sandbox"]["run"]>()
-        .mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
-      const writeTextFile = vi.fn(() => {
+        .mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
+      const writeTextFile = vi.fn(async () => {
         if (kind === "cancelled") {
           controller.abort();
         } else {
           current = false;
         }
-        return Promise.resolve();
       });
       const operation = vi.fn();
       await expect(
         withPrivatePreviewBrowserAccess({
           appId: "example",
-          root: "/workspace/repository",
-          sandboxId: "sandbox",
-          preview: preview(),
-          sandbox: { run, writeTextFile },
-          signal: controller.signal,
           assertCurrent: () => {
             if (!current) {
               throw new PrivatePreviewBrowserPrerequisiteError();
             }
           },
           operation,
+          preview: preview(),
+          root: "/workspace/repository",
+          sandbox: { run, writeTextFile },
+          sandboxId: "sandbox",
+          signal: controller.signal,
         }),
       ).rejects.toBeDefined();
       expect(operation).not.toHaveBeenCalled();
@@ -162,13 +161,13 @@ describe("owned private browser authority", () => {
     await expect(
       withPrivatePreviewBrowserAccess({
         appId: "example",
-        root: "/workspace/repository",
-        sandboxId: "sandbox",
-        preview: preview(),
-        sandbox: { run, writeTextFile: vi.fn() },
-        signal: controller.signal,
         assertCurrent: () => {},
         operation,
+        preview: preview(),
+        root: "/workspace/repository",
+        sandbox: { run, writeTextFile: vi.fn() },
+        sandboxId: "sandbox",
+        signal: controller.signal,
       }),
     ).rejects.toBeDefined();
     expect(run).not.toHaveBeenCalled();

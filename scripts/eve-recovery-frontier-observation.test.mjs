@@ -7,7 +7,7 @@ import { afterAll, test } from "vitest";
 
 const require = createRequire(import.meta.url);
 const eve = path.dirname(require.resolve("eve/package.json"));
-const load = (name) => import(pathToFileURL(path.join(eve, "dist/src", name)).href);
+const load = async (name) => await import(pathToFileURL(path.join(eve, "dist/src", name)).href);
 const { recordTerminalRecoveryObservation, protocolIdentityHash } = await load(
   "harness/model-protocol-diagnostic.js",
 );
@@ -24,158 +24,158 @@ setLogRecordSubscriber((record) => {
 afterAll(() => setLogRecordSubscriber());
 const secret = "PRIVATE_ARGUMENT_RESULT_OR_PROMPT";
 const call = {
-  type: "tool-call",
+  input: { secret },
   toolCallId: "call-original",
   toolName: "private-tool",
-  input: { secret },
+  type: "tool-call",
 };
 const request = {
-  kind: "tool-approval",
-  requestId: "approval-original",
   action: {
-    kind: "tool-call",
     callId: call.toolCallId,
-    toolName: call.toolName,
     input: call.input,
+    kind: "tool-call",
+    toolName: call.toolName,
   },
+  kind: "tool-approval",
   prompt: secret,
+  requestId: "approval-original",
 };
-const response = { requestId: request.requestId, optionId: "approve" };
+const response = { optionId: "approve", requestId: request.requestId };
 const coordinates = { sequence: 7, stepIndex: 2, turnId: "private-turn" };
+const state = (session) => ({ snapshot: { session } });
 const setup = () => {
   let before = appendPendingInputBatch({
-    session: { sessionId: "logical", history: [], state: {} },
+    event: coordinates,
     requests: [request],
+    responseAuthRequiredRequestIds: [request.requestId],
     responseMessages: [
       {
-        role: "assistant",
         content: [
           call,
           {
-            type: "tool-approval-request",
             approvalId: request.requestId,
             toolCallId: call.toolCallId,
+            type: "tool-approval-request",
           },
         ],
+        role: "assistant",
       },
     ],
-    event: coordinates,
-    responseAuthRequiredRequestIds: [request.requestId],
+    session: { history: [], sessionId: "logical", state: {} },
     toolReplayIdentities: { [request.requestId]: secret },
   });
   before = setPendingCoordinationBatch({
-    session: before,
-    responseMessages: [],
-    tasks: [{ callId: call.toolCallId, toolName: call.toolName }],
-    runtimeActions: [],
     event: coordinates,
+    responseMessages: [],
+    runtimeActions: [],
+    session: before,
+    tasks: [{ callId: call.toolCallId, toolName: call.toolName }],
   });
   const after = {
     ...before,
-    state: {},
     history: [
       {
-        role: "assistant",
         content: [
           call,
           {
-            type: "tool-approval-request",
             approvalId: request.requestId,
             toolCallId: call.toolCallId,
+            type: "tool-approval-request",
           },
         ],
+        role: "assistant",
       },
       {
-        role: "tool",
         content: [
-          { type: "tool-approval-response", approvalId: request.requestId, approved: true },
+          { approvalId: request.requestId, approved: true, type: "tool-approval-response" },
         ],
+        role: "tool",
       },
-      { role: "user", kind: "context.instruction", content: secret },
+      { content: secret, kind: "context.instruction", role: "user" },
     ],
+    state: {},
   };
-  const state = (session) => ({ snapshot: { session } });
   const candidates = [
     {
       kind: "terminal-finalizer-input",
-      origin: { slot: 30, stepId: "finalizer", eventId: "evnt_30" },
+      origin: { eventId: "evnt_30", slot: 30, stepId: "finalizer" },
       sessionState: state(after),
     },
     {
-      kind: "completed-terminal-turn-input",
-      origin: { slot: 20, stepId: "turnStep", eventId: "evnt_20" },
-      sessionState: state(before),
       incoming: {
         delivery: { auth: { principalId: secret }, payloads: [{ inputResponses: [response] }] },
       },
+      kind: "completed-terminal-turn-input",
+      origin: { eventId: "evnt_20", slot: 20, stepId: "turnStep" },
+      sessionState: state(before),
     },
   ];
   const nativeEvents = [
     {
-      type: "input.resolved",
       data: {
         ...coordinates,
         resolutions: [
-          { requestId: request.requestId, kind: "tool-approval", outcome: "approved", response },
+          { kind: "tool-approval", outcome: "approved", requestId: request.requestId, response },
         ],
       },
+      type: "input.resolved",
     },
     {
-      type: "approval.settled",
       data: {
         ...coordinates,
-        requestId: request.requestId,
         outcome: "approved",
+        requestId: request.requestId,
         responderPrincipalId: secret,
       },
+      type: "approval.settled",
     },
-    { type: "step.started", data: coordinates },
+    { data: coordinates, type: "step.started" },
     {
-      type: "step.failed",
       data: {
         ...coordinates,
         code: "MODEL_CALL_FAILED",
         message: `No tool output found for function call ${call.toolCallId}`,
       },
+      type: "step.failed",
     },
   ];
   return {
     descriptor: {
-      operationId: "operation",
-      sourceOwnerRunId: "owner",
       logicalSessionId: "logical",
-      sourceAdapterGeneration: 1,
+      operationId: "operation",
       parentCancellationRevision: 0,
+      sourceAdapterGeneration: 1,
+      sourceOwnerRunId: "owner",
     },
-    ownerRunId: "owner",
-    receiptPresent: true,
     outcome: "candidate",
+    ownerRunId: "owner",
     payload: {
-      run: { status: "completed" },
       candidates,
-      nativeEvents,
-      issues: [],
-      frontier: [],
       events: [
         {
+          correlationId: "dispatch",
+          eventData: { input: secret, stepName: "dispatchCoordinationStep" },
           eventId: "evnt_21",
           eventType: "step_started",
-          correlationId: "dispatch",
-          eventData: { stepName: "dispatchCoordinationStep", input: secret },
         },
       ],
+      frontier: [],
+      issues: [],
+      nativeEvents,
+      run: { status: "completed" },
       steps: [
         {
-          step: { stepId: "dispatch", stepName: "dispatchCoordinationStep", status: "completed" },
           arguments: { args: [{ sessionState: state(before), sessionWritable: {} }] },
           output: { results: [{ callId: call.toolCallId, output: secret }] },
+          step: { status: "completed", stepId: "dispatch", stepName: "dispatchCoordinationStep" },
         },
         {
-          step: { stepId: "turnStep", stepName: "turnStep", status: "completed" },
           arguments: { args: [{ sessionState: state(before), sessionWritable: {} }] },
+          step: { status: "completed", stepId: "turnStep", stepName: "turnStep" },
         },
       ],
     },
+    receiptPresent: true,
   };
 };
 test("reports exact retained approval lineage, outcome frontier and durable dispatch without authored content", () => {
@@ -183,7 +183,7 @@ test("reports exact retained approval lineage, outcome frontier and durable disp
   const unchanged = JSON.stringify(input);
   assert.equal(recordTerminalRecoveryObservation(input), true);
   const summary = logs.at(-1);
-  const fact = summary.missingCallFrontier.sample[0];
+  const [fact] = summary.missingCallFrontier.sample;
   assert.equal(fact.callHash, protocolIdentityHash(call.toolCallId));
   assert.equal(fact.toolNameHash, protocolIdentityHash(call.toolName));
   assert.equal(fact.bindingSample[0].sameCallBytes, true);
@@ -210,7 +210,7 @@ test("does not call missing outcome an execution proof and counts mismatching ac
     optionId: "deny",
   };
   assert.equal(recordTerminalRecoveryObservation(input), true);
-  const fact = logs.at(-1).missingCallFrontier.sample[0];
+  const [fact] = logs.at(-1).missingCallFrontier.sample;
   assert.equal(fact.bindingSample[0].acceptedIncomingResponseMatchCount, 0);
   assert.equal(fact.actionResultCount, 0);
   assert.equal(fact.durableResultStepCount, 0);
@@ -223,7 +223,7 @@ test("reports child without ancestor evidence honestly", () => {
   input.payload.nativeEvents = [];
   input.payload.steps = [];
   assert.equal(recordTerminalRecoveryObservation(input), true);
-  const fact = logs.at(-1).missingCallFrontier.sample[0];
+  const [fact] = logs.at(-1).missingCallFrontier.sample;
   assert.equal(fact.bindingCount, 0);
   assert.equal(fact.frontierUsesWholeStream, true);
   assert.equal(fact.retainedTurnInputCount, 0);
@@ -233,7 +233,7 @@ test("bounded failure samples retain full counts and reject malformed payload on
   const failure = input.payload.nativeEvents.at(-1);
   input.payload.nativeEvents.push(...Array.from({ length: 30 }, () => failure));
   assert.equal(recordTerminalRecoveryObservation(input), true);
-  const fact = logs.at(-1).missingCallFrontier.sample[0];
+  const [fact] = logs.at(-1).missingCallFrontier.sample;
   assert.equal(fact.failedStepOrTurnCount, 31);
   assert.equal(fact.failureSample.length, 12);
   assert.equal(fact.exactMissingCallFailureCount, 31);
@@ -243,18 +243,18 @@ test("bounded failure samples retain full counts and reject malformed payload on
 test("logs only typed safe app facts and retained native retry counters", () => {
   const input = setup();
   input.candidateFacts = {
-    flags: { explicitNull: true, absent: null, raw: secret },
-    counts: { matched: 2, invalid: -1 },
-    hashes: { callId: protocolIdentityHash(call.toolCallId), raw: secret, absent: null },
+    counts: { invalid: -1, matched: 2 },
+    flags: { absent: null, explicitNull: true, raw: secret },
+    hashes: { absent: null, callId: protocolIdentityHash(call.toolCallId), raw: secret },
   };
   input.payload.steps[0].step.attempt = 2;
   input.payload.events[0].eventData.attempt = 2;
   assert.equal(recordTerminalRecoveryObservation(input), true);
   const report = logs.at(-1);
   assert.deepEqual(report.candidateFacts, {
-    flags: { explicitNull: true, absent: null },
     counts: { matched: 2 },
-    hashes: { callId: protocolIdentityHash(call.toolCallId), absent: null },
+    flags: { absent: null, explicitNull: true },
+    hashes: { absent: null, callId: protocolIdentityHash(call.toolCallId) },
   });
   assert.equal(report.nativeStepFrontier.retainedStepSample[0].attempt, 2);
   assert.equal(JSON.stringify(report).includes(secret), false);

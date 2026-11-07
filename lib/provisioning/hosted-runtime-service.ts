@@ -285,8 +285,8 @@ export const prepareHostedRuntime = async (input: {
     const previous = await input.store.read({ authority: input.authority, target });
     environmentGitBranch = savedRuntimeEnvironmentScope(target, previous);
     const provider = createHostedRuntimeVercelProvider({
-      environmentGitBranch,
       credential,
+      environmentGitBranch,
       fetch: input.fetch,
       signal: input.signal,
       target,
@@ -303,9 +303,9 @@ export const prepareHostedRuntime = async (input: {
       identity.runtimeId,
     );
     const reserved = await input.store.reserve({
-      environmentGitBranch,
       approvedByCallId: input.approvedByCallId,
       authority: input.authority,
+      environmentGitBranch,
       now: new Date(now()),
       target,
     });
@@ -382,8 +382,8 @@ export const prepareHostedRuntime = async (input: {
       throw new HostedRuntimeProviderError("authorization_required");
     }
     const prepareProvider = createHostedRuntimeVercelProvider({
-      environmentGitBranch,
       credential: prepareCredential,
+      environmentGitBranch,
       fetch: input.fetch,
       signal: executionSignal,
       target,
@@ -425,8 +425,8 @@ export const prepareHostedRuntime = async (input: {
       throw new HostedRuntimeProviderError("authorization_required");
     }
     const bindingProvider = createHostedRuntimeVercelProvider({
-      environmentGitBranch,
       credential: bindingCredential,
+      environmentGitBranch,
       fetch: input.fetch,
       signal: executionSignal,
       target,

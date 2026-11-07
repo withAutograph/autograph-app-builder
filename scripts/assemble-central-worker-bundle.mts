@@ -30,11 +30,11 @@ const required = (flag: string) => {
 console.log(
   JSON.stringify(
     await assembleCentralWorkerBundle({
-      sourceRoot: required("--source-root"),
       artifactRoot: required("--artifact-root"),
       destination: required("--destination"),
-      reviewedSourceSha: required("--reviewed-source-sha"),
       receiptSha256: required("--receipt-sha256"),
+      reviewedSourceSha: required("--reviewed-source-sha"),
+      sourceRoot: required("--source-root"),
     }),
   ),
 );
