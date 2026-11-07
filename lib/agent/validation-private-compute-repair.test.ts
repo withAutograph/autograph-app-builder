@@ -150,25 +150,36 @@ describe("explicit reviewed compute task validation repair", () => {
   it("rechecks approval and cancellation after asynchronous file writes", async () => {
     await contextStorage.run(new ContextContainer(), async () => {
       approve();
-      const prepared = prepareValidationPrivateComputeRepair({
-        state: fixture(),
-        files: [{ path: task, content: recipe }],
-        sessionId: scope.sessionId,
-      });
+      const installer = vi.fn<typeof applyPrivateComputeCheckPolicy>().mockResolvedValue();
+      const prepared = prepareValidationPrivateComputeRepair(
+        {
+          state: fixture(),
+          files: [{ path: task, content: recipe }],
+          sessionId: scope.sessionId,
+        },
+        installer,
+      );
       const different = { ...scope, proposalDigest: "new-proposal" };
       requestPrivateApplyApproval(different, "new-approval");
       recordApprovedPrivateApply(different, "new-approval");
-      await expect(prepared?.applyPolicy(createSandbox())).rejects.toThrow();
+      await expect(prepared?.applyPolicy(createSandbox())).rejects.toThrow(
+        "Private artifact capture no longer belongs to this approved build session.",
+      );
+      expect(installer).not.toHaveBeenCalled();
       approve();
       const controller = new AbortController();
-      const cancelled = prepareValidationPrivateComputeRepair({
-        state: fixture(),
-        files: [{ path: task, content: recipe }],
-        sessionId: scope.sessionId,
-        signal: controller.signal,
-      });
+      const cancelled = prepareValidationPrivateComputeRepair(
+        {
+          state: fixture(),
+          files: [{ path: task, content: recipe }],
+          sessionId: scope.sessionId,
+          signal: controller.signal,
+        },
+        installer,
+      );
       controller.abort();
-      await expect(cancelled?.applyPolicy(createSandbox())).rejects.toThrow();
+      await expect(cancelled?.applyPolicy(createSandbox())).rejects.toBe(controller.signal.reason);
+      expect(installer).not.toHaveBeenCalled();
     });
   });
   it("returns the exact canonical recipe only for an approved matching repair", () => {
