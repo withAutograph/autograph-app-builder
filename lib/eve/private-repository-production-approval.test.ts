@@ -6,6 +6,11 @@ import type {
   RepositoryProductionScope,
 } from "../provisioning/repository-production-contract";
 import {
+  deriveInstalledEveStatus,
+  outstandingInstalledEveRequests,
+  projectInstalledEveEvent,
+} from "./public-events";
+import {
   createPrivateRepositoryProductionApprovalCapture,
   readRepositoryProductionApproval,
 } from "./private-repository-production-approval";
@@ -71,6 +76,69 @@ const settle = (
   },
 });
 describe("Production setup consent", () => {
+  it.each(["postgres", "none"] as const)(
+    "shows the ordinary setup approval for %s without treating the card as consent",
+    (storageKind) => {
+      const setupPlan = repositoryProductionApprovalInput(scope, {
+        ...intent,
+        storage: storageKind === "none" ? { kind: "none" } : intent.storage,
+      });
+      const pending = request(setupPlan);
+      const projected = projectInstalledEveEvent(pending, 0);
+      expect(projected).toMatchObject([
+        {
+          type: "input.requested",
+          request: {
+            kind: "approval",
+            requestId: "request",
+          },
+        },
+      ]);
+      const publicRequest = outstandingInstalledEveRequests([pending])[0];
+      expect(publicRequest?.description).toContain(scope.appId);
+      expect(publicRequest?.description).toContain(scope.repositoryFullName);
+      expect(publicRequest?.description).toContain(
+        storageKind === "postgres" ? "database and keeps it" : "does not need a database",
+      );
+      expect(deriveInstalledEveStatus([pending])).toBe("input_required");
+      expect(JSON.stringify(projected)).not.toContain(scope.authority.ownerUserId);
+      expect(JSON.stringify(projected)).not.toContain(intent.sessionId);
+      const capture = createPrivateRepositoryProductionApprovalCapture({
+        plan: setupPlan,
+        callId: "call",
+      });
+      capture.observe(pending);
+      expect(capture.read()).toBeNull();
+      capture.observe(settle());
+      expect(capture.read()).toEqual({ approvalId: "request", approvedByCallId: "call" });
+      expect(outstandingInstalledEveRequests([pending, settle()])).toEqual([]);
+    },
+  );
+  it.each([
+    { ...plan, scope: null },
+    { ...plan, intent: { ...intent, creatorRoles: null } },
+    { ...plan, intent: { ...intent, storage: { kind: "unsupported" } } },
+  ])("keeps an unreadable setup confirmation closed", (invalidPlan) => {
+    const pending = request();
+    if (pending.type !== "input.requested") {
+      throw new Error("Expected the approval request");
+    }
+    const approval = pending.data.requests[0];
+    if (approval.kind !== "tool-approval") {
+      throw new Error("Expected the tool approval");
+    }
+    approval.action.input = invalidPlan;
+    expect(projectInstalledEveEvent(pending, 0)).toMatchObject([
+      { type: "error.public", code: "confirmation_unavailable" },
+      { type: "status", status: "failed" },
+    ]);
+    expect(outstandingInstalledEveRequests([pending])).toEqual([]);
+    expect(deriveInstalledEveStatus([pending])).toBe("failed");
+    const capture = createPrivateRepositoryProductionApprovalCapture({ plan, callId: "call" });
+    capture.observe(pending);
+    capture.observe(settle());
+    expect(capture.read()).toBeNull();
+  });
   it("accepts the actual creator settlement for the current setup call", () => {
     const capture = createPrivateRepositoryProductionApprovalCapture({ plan, callId: "call" });
     capture.observe(request());
