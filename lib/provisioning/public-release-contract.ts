@@ -43,11 +43,11 @@ export const publicReleasePlanSchema = z
   .strictObject({
     authority: hostedTenantAuthoritySchema,
     effects: z.union([
-      z.tuple([z.literal("bind-production-runtime"), z.literal("publish-release-source")]),
+      z.tuple([z.literal(publicReleaseEffects[1]), z.literal(publicReleaseEffects[2])]),
       z.tuple([
-        z.literal("fence-app-integration-authority"),
-        z.literal("bind-production-runtime"),
-        z.literal("publish-release-source"),
+        z.literal(publicReleaseEffects[0]),
+        z.literal(publicReleaseEffects[1]),
+        z.literal(publicReleaseEffects[2]),
       ]),
     ]),
     environment: z
