@@ -204,15 +204,17 @@ export function buildPreviewCimdOptions(input: {
         throw new Error("Preview CIMD resources must be JSON objects.");
       }
 
-      const record = document as Record<string, unknown>;
       const looksLikeClientMetadata =
-        "client_name" in record ||
-        "redirect_uris" in record ||
-        "token_endpoint_auth_method" in record;
-      if (!looksLikeClientMetadata && Array.isArray(record.keys)) {
+        "client_name" in document ||
+        "redirect_uris" in document ||
+        "token_endpoint_auth_method" in document;
+      if (!looksLikeClientMetadata && "keys" in document && Array.isArray(document.keys)) {
         return response;
       }
-      if (record.token_endpoint_auth_method !== "none") {
+      if (
+        !("token_endpoint_auth_method" in document) ||
+        document.token_endpoint_auth_method !== "none"
+      ) {
         throw new Error("Preview CIMD clients must use token_endpoint_auth_method none.");
       }
       return response;
