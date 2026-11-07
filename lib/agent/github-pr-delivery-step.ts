@@ -80,12 +80,15 @@ export async function continueGitHubPrDelivery(
     return { status: "revision-changed" as const };
   }
   const approvedByCallId = ctx.callId;
-  const effect = {
+  const effectBase = {
     approvedByCallId,
     proposalDigest,
     reviewedTarget,
-    ...(reconciliationDigest === undefined ? {} : { reconciledHeadSha: reviewedTarget.headSha }),
   };
+  const effect =
+    reconciliationDigest === undefined
+      ? effectBase
+      : { ...effectBase, reconciledHeadSha: reviewedTarget.headSha };
   const activeEffect = { ...effect, abortSignal: ctx.abortSignal };
   if (observed.state === "merged" && observed.mergeCommitSha !== undefined) {
     if (readyAt !== undefined && observed.readyAt === readyAt) {
