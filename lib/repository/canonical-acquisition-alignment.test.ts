@@ -16,6 +16,9 @@ import { validateApplicationSourceArtifact } from "../handoff/application-source
 
 const remote = "https://github.com/withAutograph/arrusted-development.git";
 const roots: string[] = [];
+const unsupported = async (): Promise<never> => {
+  throw new Error("Unused Sandbox port");
+};
 const git = (root: string, args: readonly string[]) =>
   execFileSync(
     "/usr/bin/git",
@@ -90,9 +93,6 @@ const fixture = (existing?: "main" | "provider-default" | "historical-main") => 
   });
   const file = (name: string) =>
     path.join(checkout, name.replace(/^\/workspace\/repository\//u, ""));
-  const unsupported = async (): Promise<never> => {
-    throw new Error("Unused Sandbox port");
-  };
   const sandbox: SandboxSession & {
     id: string;
     materializeGitSource: typeof materializeGitSource;
