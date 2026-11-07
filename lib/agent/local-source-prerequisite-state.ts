@@ -29,17 +29,35 @@ const binding = (state: AppBuilderWorkflowState, sessionId: string) => {
   if (!("appSpec" in state)) {
     return undefined;
   }
-  return {
-    appId: state.appSpec.appId,
-    appSpecDigest: state.appSpec.digest,
-    sourceReceiptDigest: state.sourceReceipt.digest,
-    originalSourceSha: state.sourceReceipt.sourceSha,
-    originalWorkspaceDigest:
-      "proposal" in state ? state.proposal.workspaceDigest : state.workspace.workspaceDigest,
-    ...("proposal" in state ? { proposalDigest: state.proposal.digest } : {}),
-    workspaceId: state.workspace.workspaceId,
+  const { appId, digest: appSpecDigest } = state.appSpec;
+  const sourceReceiptDigest = state.sourceReceipt.digest;
+  const originalSourceSha = state.sourceReceipt.sourceSha;
+  const originalWorkspaceDigest =
+    "proposal" in state ? state.proposal.workspaceDigest : state.workspace.workspaceDigest;
+  const hasProposal = "proposal" in state;
+  const proposalDigest = hasProposal ? state.proposal.digest : undefined;
+  const { workspaceId } = state.workspace;
+  const result: Pick<
+    LocalSourcePrerequisiteObservation,
+    | "appId"
+    | "appSpecDigest"
+    | "originalSourceSha"
+    | "originalWorkspaceDigest"
+    | "proposalDigest"
+    | "sessionId"
+    | "sourceReceiptDigest"
+    | "workspaceId"
+  > = {
+    appId,
+    appSpecDigest,
+    originalSourceSha,
+    originalWorkspaceDigest,
     sessionId,
+    sourceReceiptDigest,
+    workspaceId,
   };
+  if (hasProposal) result.proposalDigest = proposalDigest;
+  return result;
 };
 export const matchingLocalSourcePrerequisite = (input: {
   state: AppBuilderWorkflowState;
