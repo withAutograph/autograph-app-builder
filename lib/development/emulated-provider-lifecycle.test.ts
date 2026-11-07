@@ -49,8 +49,8 @@ it("requires both real listeners to belong to the owned emulator PID", async () 
 });
 
 it("resolves the installed listener utility with a sanitized PATH", async () => {
-  // oxlint-disable-next-line typescript/strict-void-return -- Adapt Node callback API.
-  const execute = promisify(execFile);
+  const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+  const execute = promisifyExecFile(execFile);
   const result = await execute(path.resolve(".config/mise/scripts/resolve-lsof"), [], {
     env: { NODE_ENV: "test", PATH: "/usr/bin:/bin" },
   });
