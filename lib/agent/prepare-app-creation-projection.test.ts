@@ -179,7 +179,7 @@ describe("normal private compute recipe projection", () => {
       }
       Reflect.deleteProperty(current.proposal.target, "privateCompute");
       appBuilderWorkflowState.update(() => current);
-      ports.profile.mockImplementation(() => Promise.resolve());
+      ports.profile.mockResolvedValue(undefined);
       const result = await prepareAppCreation({}, context);
       expect(result.reused).toBe(true);
       expect(result).not.toHaveProperty("privateCompute");

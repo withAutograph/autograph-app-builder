@@ -86,7 +86,7 @@ describe("owner-only handoff browser data", () => {
       user: { id: authority.ownerUserId },
     });
     mocks.cursorReady.mockReset().mockResolvedValue(false);
-    mocks.findLatestPending.mockReset().mockImplementation(() => Promise.resolve());
+    mocks.findLatestPending.mockReset().mockResolvedValue(undefined);
     mocks.read.mockReset().mockImplementation(
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async (input: { authority: BuilderHandoffRecord["authority"]; handoffId: string }) =>
@@ -121,7 +121,7 @@ describe("owner-only handoff browser data", () => {
   });
 
   it("returns undefined without login before reading any handoff or checking Cursor readiness", async () => {
-    mocks.session.mockImplementation(() => Promise.resolve());
+    mocks.session.mockResolvedValue(undefined);
     expect(await getBuilderHandoffPageData(pageInput)).toBeUndefined();
     expect(mocks.read).not.toHaveBeenCalled();
     expect(mocks.cursorReady).not.toHaveBeenCalled();
@@ -145,7 +145,7 @@ describe("owner-only handoff browser data", () => {
   });
 
   it("does not expose pending handoffs without an authenticated authority", async () => {
-    mocks.session.mockImplementation(() => Promise.resolve());
+    mocks.session.mockResolvedValue(undefined);
     await expect(
       findAuthenticatedPendingBuilderHandoff({
         environment: pageInput.environment,
