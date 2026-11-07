@@ -3,54 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import {
-  account,
-  agentOperations,
-  agentSessionCheckpointChunks,
-  agentSessionCheckpointItems,
-  agentSessionCheckpointManifests,
-  agentSessions,
-  builderDrafts,
-  builderHandoffs,
-  builderProvisioningJournals,
-  emulatePreviewState,
-  githubInstallationAuthorizationStates,
-  githubPublicationJournals,
-  githubPublicationProposals,
-  githubRepositoryAccessContinuations,
-  hostedGitHubDraftAdoptions,
-  hostedGitHubInstallations,
-  hostedGitHubInstallationBindings,
-  hostedGitHubPrEffectJournals,
-  hostedGitHubPublicationJournals,
-  hostedGitHubPublicationProposals,
-  hostedGitHubUserCredentials,
-  hostedVercelInstallations,
-  hostedWorkspaceMemberships,
-  invitation,
-  jwks,
-  member,
-  oauthAccessToken,
-  oauthClient,
-  oauthClientAssertion,
-  oauthClientResource,
-  oauthConsent,
-  oauthRefreshToken,
-  oauthResource,
-  organization,
-  passkey,
-  passkeyOnboarding,
-  personalWorkspace,
-  productSourceReviewJournal,
-  prototypeArtifactChunks,
-  sandboxExecutionLeases,
-  session,
-  user,
-  validationLogChunks,
-  validationLogManifests,
-  verification,
-  vercelInstallationAuthorizationStates,
-} from "../../lib/db/schema";
+import * as schema from "../../lib/db/schema";
 import { hostedEveOperationScopes } from "../../lib/eve/hosted-auth";
 import type { HostedPrincipal } from "../../lib/eve/hosted-auth";
 import { createHostedEveSessionService } from "../../lib/eve/hosted-service";
@@ -77,18 +30,16 @@ export const exerciseReferenceLifecycle = async (input: {
       counts.cancels += 1;
       const value = snapshot("cancelled");
       snapshots.set(adapterSessionId, value);
-      return value;
+      return Promise.resolve(value);
     },
     get: ({ adapterSessionId }) => {
       const value = snapshots.get(adapterSessionId);
       if (!value) {
         throw new Error(`Missing snapshot for ${adapterSessionId}.`);
       }
-      return value;
+      return Promise.resolve(value);
     },
-    respond: () => {
-      throw new Error("This fixture does not support approval responses.");
-    },
+    respond: () => Promise.reject(new Error("This fixture does not support approval responses.")),
     send: async ({ adapterSessionId, onAccepted }) => {
       counts.sends += 1;
       const deliveryId = randomUUID();
@@ -115,21 +66,21 @@ export const exerciseReferenceLifecycle = async (input: {
       const adapterSessionId = randomUUID();
       const value = snapshot("working");
       snapshots.set(adapterSessionId, value);
-      return { adapterSessionId, snapshot: value };
+      return Promise.resolve({ adapterSessionId, snapshot: value });
     },
   };
   const service = () =>
     createHostedEveSessionService({
       ...input,
-      assertSendDeliveryOwner: async (ownedSession) => {
-        const current = await input.store.getSession(input.principal, ownedSession.sessionId);
+      assertSendDeliveryOwner: async (session) => {
+        const current = await input.store.getSession(input.principal, session.sessionId);
         if (!current) {
           throw new Error("Controlled continuation owner is unavailable.");
         }
         const binding = toDurableHostedSessionRecord(current);
         if (
-          binding.adapterSessionId !== ownedSession.adapterSessionId ||
-          binding.adapterGeneration !== ownedSession.adapterGeneration ||
+          binding.adapterSessionId !== session.adapterSessionId ||
+          binding.adapterGeneration !== session.adapterGeneration ||
           !snapshots.has(binding.adapterSessionId)
         ) {
           throw new Error("Controlled continuation ownership changed.");
@@ -141,38 +92,36 @@ export const exerciseReferenceLifecycle = async (input: {
     clientRequestId: randomUUID(),
     prompt: "Controlled pending reference operation",
   });
-  const [cancelled, persistedCancel] = await Promise.all([
-    service().cancel({ sessionId: cancellation.sessionId }),
-    service().get({ cursor: 0, limit: 100, sessionId: cancellation.sessionId }),
-  ]);
-  if (persistedCancel === null) {
+  const cancelled = await service().cancel({ sessionId: cancellation.sessionId });
+  const persistedCancel = await input.store.getSession(input.principal, cancellation.sessionId);
+  const reopenedCancel = await service().get({
+    cursor: 0,
+    limit: 100,
+    sessionId: cancellation.sessionId,
+  });
+  if (!persistedCancel) {
     throw new Error("Cancellation session was not persisted.");
   }
-  const [reopenedCancel, lateResult] = await Promise.all([
-    input.store.getSession(input.principal, cancellation.sessionId),
-    service().get({
-      cursor: 0,
-      limit: 100,
-      sessionId: cancellation.sessionId,
-    }),
-  ]);
-  const cancelledAdapter = toDurableHostedSessionRecord(persistedCancel).adapterSessionId;
+  const cancelledAdapter = persistedCancel.adapterSessionId;
   snapshots.set(cancelledAdapter, snapshot("completed"));
+  const lateResult = await service().get({
+    cursor: 0,
+    limit: 100,
+    sessionId: cancellation.sessionId,
+  });
   const recovery = await service().start({
     clientRequestId: randomUUID(),
     prompt: "Controlled interrupted reference operation",
   });
+  const reopened = await service().get({ cursor: 0, limit: 100, sessionId: recovery.sessionId });
   const request = {
     clientRequestId: randomUUID(),
     message: "Continue controlled operation",
     sessionId: recovery.sessionId,
   };
-  const [reopened, first, repeated, persistedResult] = await Promise.all([
-    service().get({ cursor: 0, limit: 100, sessionId: recovery.sessionId }),
-    service().send(request),
-    service().send(request),
-    input.store.getSession(input.principal, recovery.sessionId),
-  ]);
+  const first = await service().send(request);
+  const repeated = await service().send(request);
+  const persistedResult = await input.store.getSession(input.principal, recovery.sessionId);
   return {
     assertions: [
       {
@@ -236,58 +185,7 @@ export const runReferenceLifecycle = async (input: { databaseUrl: string; output
   try {
     const result = await exerciseReferenceLifecycle({
       principal,
-      store: createPostgresHostedEveStore(
-        drizzle(sql, {
-          schema: {
-            account,
-            agentOperations,
-            agentSessionCheckpointChunks,
-            agentSessionCheckpointItems,
-            agentSessionCheckpointManifests,
-            agentSessions,
-            builderDrafts,
-            builderHandoffs,
-            builderProvisioningJournals,
-            emulatePreviewState,
-            githubInstallationAuthorizationStates,
-            githubPublicationJournals,
-            githubPublicationProposals,
-            githubRepositoryAccessContinuations,
-            hostedGitHubDraftAdoptions,
-            hostedGitHubInstallationBindings,
-            hostedGitHubInstallations,
-            hostedGitHubPrEffectJournals,
-            hostedGitHubPublicationJournals,
-            hostedGitHubPublicationProposals,
-            hostedGitHubUserCredentials,
-            hostedVercelInstallations,
-            hostedWorkspaceMemberships,
-            invitation,
-            jwks,
-            member,
-            oauthAccessToken,
-            oauthClient,
-            oauthClientAssertion,
-            oauthClientResource,
-            oauthConsent,
-            oauthRefreshToken,
-            oauthResource,
-            organization,
-            passkey,
-            passkeyOnboarding,
-            personalWorkspace,
-            productSourceReviewJournal,
-            prototypeArtifactChunks,
-            sandboxExecutionLeases,
-            session,
-            user,
-            validationLogChunks,
-            validationLogManifests,
-            vercelInstallationAuthorizationStates,
-            verification,
-          },
-        }),
-      ),
+      store: createPostgresHostedEveStore(drizzle(sql, { schema })),
     });
     const evidence = { ...result, persistence: "PostgreSQL", principal };
     await mkdir(input.outputRoot, { recursive: true });
