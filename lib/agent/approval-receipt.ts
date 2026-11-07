@@ -103,6 +103,18 @@ export const approvalTargetFromDraftProposal = (
   repositoryId: proposal.repositoryId,
 });
 
+/** The sealed publication subject is input to Eve's approval request, not evidence of consent. */
+export const approvalReceiptForDraftProposal = (
+  proposal: Parameters<typeof approvalTargetFromDraftProposal>[0] & { digest: string },
+): ApprovalReceipt =>
+  approvalReceiptSchema.parse({
+    ...approvalTargetFromDraftProposal(proposal),
+    format: "autograph-eve-approval-receipt-v2",
+    outcome: "create-draft-pr",
+    phase: "publication",
+    subjectDigest: proposal.digest,
+  });
+
 type DraftHeadApprovalSubject = Pick<
   ExistingDraftUpdateProposal,
   "branchName" | "expectedHeadSha" | "name" | "owner" | "repositoryId"
