@@ -59,7 +59,7 @@ describe("direct app creation", () => {
           }
           return { exitCode: 0, stderr: "", stdout: JSON.stringify(receipt) };
         }),
-        setNetworkPolicy: vi.fn(async () => {}),
+        setNetworkPolicy: vi.fn<() => Promise<void>>().mockResolvedValue(),
         writeTextFile: vi.fn(async ({ path }: { path: string }) => {
           calls.push(path);
         }),
@@ -109,7 +109,7 @@ describe("direct app creation", () => {
         readBinaryFile: vi.fn(async ({ path }: { path: string }) =>
           path.includes("prototype/") ? Buffer.from(content) : null,
         ),
-        removePath: vi.fn(async () => {}),
+        removePath: vi.fn<() => Promise<void>>().mockResolvedValue(),
         run: vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: "" })),
         writeBinaryFile: vi.fn(async ({ path }: { path: string }) => {
           writes.push(path);
@@ -223,7 +223,7 @@ describe("direct app creation", () => {
           files.delete(path);
         }),
         run: vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: JSON.stringify(receipt) })),
-        setNetworkPolicy: vi.fn(async () => {}),
+        setNetworkPolicy: vi.fn<() => Promise<void>>().mockResolvedValue(),
         writeBinaryFile: vi.fn(
           async ({ path, content: bytes }: { path: string; content: Uint8Array }) => {
             writes.push(path);

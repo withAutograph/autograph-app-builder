@@ -143,8 +143,8 @@ describe("public profile with the actual native OIDC signature and claim verifie
     const token = await signedToken(variant);
     const getOidc = vi.fn(async () => token);
     const gatewayFetch = vi.fn<typeof fetch>(async () => Response.json({ keys: [gatewayKey] }));
-    const assertPlanningAuthorized = vi.fn(async () => {});
-    const assertCurrentOwner = vi.fn(async () => {});
+    const assertPlanningAuthorized = vi.fn<() => Promise<void>>().mockResolvedValue();
+    const assertCurrentOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
     // No verifyOidc override: the installed @vercel/oidc SDK and Jose fetch keys and verify this RS256 token.
     const reader = createHostedOperatorPublicJwksReader(
       { configuration, assertPlanningAuthorized, assertCurrentOwner },
