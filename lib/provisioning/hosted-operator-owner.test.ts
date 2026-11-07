@@ -291,8 +291,9 @@ const makeFixture = (
     },
   };
   const handoffs: Pick<BuilderHandoffStore, "read"> = {
-    // oxlint-disable-next-line eslint/require-await -- this in-memory store seam has no asynchronous work.
-    read: vi.fn(async () => (missingHandoff ? undefined : handoff)),
+    read: vi
+      .fn<BuilderHandoffStore["read"]>()
+      .mockResolvedValue(missingHandoff ? undefined : handoff),
   };
   const membership: HostedWorkspaceMembership = {
     // oxlint-disable-next-line eslint/require-await -- this in-memory membership seam has no asynchronous work.
