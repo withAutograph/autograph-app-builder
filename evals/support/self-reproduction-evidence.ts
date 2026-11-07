@@ -53,7 +53,7 @@ export function sanitizeEvidence(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(sanitizeEvidence);
   }
-  if (value && typeof value === "object") {
+  if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
         key,
@@ -147,12 +147,6 @@ export function evidenceSink(logPath: string, transcriptPath: string, records: E
 
 export type CandidateExportFile = Readonly<{ path: string; content: string }>;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function asEvidenceRecord(value: unknown): EvidenceRecord | undefined {
-  const parsed = jsonObjectSchema.safeParse(value);
-  return parsed.success ? parsed.data : undefined;
-}
-
 const isStatusTool = (value: JsonValue | undefined) => {
   const name = z.string().safeParse(value);
   return name.success && (name.data === "change-set-status" || name.data === "change_set_status");
@@ -165,12 +159,16 @@ const changeSetStatusOutput = (record: EvidenceRecord): EvidenceRecord | undefin
   }
   const { data: dataValue } = parsedEvent.data;
   const resultValue = dataValue.result;
-  if (resultValue && isStatusTool(resultValue.toolName)) {
-    return asEvidenceRecord(resultValue.output);
+  if (!resultValue) {
+    return undefined;
   }
-  return resultValue && isStatusTool(dataValue.toolName)
-    ? asEvidenceRecord(resultValue)
-    : undefined;
+  const outputIsStatus = isStatusTool(resultValue.toolName);
+  if (!outputIsStatus && !isStatusTool(dataValue.toolName)) {
+    return undefined;
+  }
+  const candidate = outputIsStatus ? resultValue.output : resultValue;
+  const parsed = jsonObjectSchema.safeParse(candidate);
+  return parsed.success ? parsed.data : undefined;
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
