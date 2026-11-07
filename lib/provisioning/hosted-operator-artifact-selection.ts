@@ -18,6 +18,7 @@ import type {
 import { createOperatorArtifactPublication } from "./hosted-operator-artifacts";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const selectionChangedStatus = "selection-changed" as const;
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 export const publishedAppSourceSchema = z.object({
   branch: z.string().min(1),
@@ -267,19 +268,19 @@ export const createPostgresOperatorArtifactSelections = (input: {
             )
             .limit(1);
           if (latest === undefined) {
-            return { status: "selection-changed" };
+            return { status: selectionChangedStatus };
           }
           if (latest.chunkDigest !== hash(latest.content)) {
             throw operatorArtifactUnavailable();
           }
           const current = compiledOperatorReleaseSelectionSchema.parse(JSON.parse(latest.content));
           if (!isEquivalentCompiledOperatorRelease(current, approved)) {
-            return { status: "selection-changed" };
+            return { status: selectionChangedStatus };
           }
           if (current.publishedSource !== undefined) {
             return isDeepStrictEqual(current.publishedSource, source)
               ? { selection: current, status: "recorded" }
-              : { status: "selection-changed" };
+              : { status: selectionChangedStatus };
           }
           const selection = { ...current, publishedSource: source };
           const content = JSON.stringify(selection);
