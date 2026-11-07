@@ -75,10 +75,10 @@ const fixture = () => {
         candidate(25, "committed-turn-output"),
         { ...candidate(20, "completed-terminal-turn-input"), incoming: { delivery: {} } },
       ],
-      // SAFETY: The empty mutable fixture list accepts only this native event shape.
-      nativeEvents: [] as { type: string; data: { sequence: number } }[],
       // SAFETY: The empty mutable fixture list accepts only typed issue reasons.
       issues: [] as { reason: string }[],
+      // SAFETY: The empty mutable fixture list accepts only this native event shape.
+      nativeEvents: [] as { type: string; data: { sequence: number } }[],
     },
   };
 };
