@@ -11,10 +11,10 @@ async function privateRoot(root: string) {
   await mkdir(root, { mode: 0o700, recursive: true });
   const canonical = await realpath(root);
   const info = await lstat(canonical);
+  if (canonical !== root || !info.isDirectory() || info.isSymbolicLink()) {
+    throw new Error(`Development root must be canonical, owner-only, and mode 0700: ${root}`);
+  }
   if (
-    canonical !== root ||
-    !info.isDirectory() ||
-    info.isSymbolicLink() ||
     info.uid !== process.getuid?.() ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & 0o077) !== 0
