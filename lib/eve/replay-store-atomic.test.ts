@@ -146,6 +146,8 @@ const metadata = {
   version: 1 as const,
 };
 
+const emptyEvents = async function* emptyEvents() {};
+
 const fixture = () => {
   let current = { ...row };
   const update = vi.fn();
@@ -209,7 +211,7 @@ const fixture = () => {
   }
   const submit = async (override: Partial<Parameters<typeof observe>[0]> = {}) =>
     await observe({
-      events: (async function* events() {})(),
+      events: emptyEvents(),
       expectedCheckpointDigest: oldDigest,
       metadata,
       nowEpochMs: 2000,
