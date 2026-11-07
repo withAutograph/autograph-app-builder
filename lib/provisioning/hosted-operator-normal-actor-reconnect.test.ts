@@ -112,7 +112,7 @@ describe("expired pre-delivery captured account", () => {
     const network = vi.fn<typeof fetch>(async () => {
       throw new Error("expired cookie used");
     });
-    const invitation = vi.fn(async () => {
+    const invitation = vi.fn<NormalActorOperationsDependencies["prepareActorCapture"]>(async () => {
       throw new Error("ordinary invitation");
     });
     const deps: NormalActorOperationsDependencies = {

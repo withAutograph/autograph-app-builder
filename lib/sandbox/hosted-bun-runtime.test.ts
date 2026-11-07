@@ -15,14 +15,7 @@ describe("hosted validation runtime", () => {
     const run = vi.fn((request: Parameters<SandboxSession["run"]>[0]) => {
       requests.push(request);
       const result = Promise.resolve({ exitCode: 0, stderr: "", stdout: "" });
-      const thenProperty = String.fromCodePoint(116, 104, 101, 110);
-      return Object.fromEntries([
-        [thenProperty, result.then.bind(result)],
-      ]) as unknown as PromiseLike<{
-        exitCode: number;
-        stdout: string;
-        stderr: string;
-      }>;
+      return { then: result.then.bind(result) };
     });
     const install = createHostedRuntimeInstaller();
     const sandbox = { id: "sandbox-1", run };
