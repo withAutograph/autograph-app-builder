@@ -343,7 +343,6 @@ describe("private native target terminal approval", () => {
       let state: PrivateNativeTargetApprovalObservation | undefined;
       const save = vi.fn(async (next: PrivateNativeTargetApprovalObservation) => {
         state = structuredClone(next);
-        return;
       });
       const base = {
         assertOwner: async () => {},
@@ -392,7 +391,6 @@ describe("private native target terminal approval", () => {
     let state: PrivateNativeTargetApprovalObservation | undefined;
     const save = async (next: PrivateNativeTargetApprovalObservation) => {
       state = structuredClone(next);
-      return;
     };
     await expect(
       readPrivateNativeTargetApproval({
