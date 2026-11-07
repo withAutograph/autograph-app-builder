@@ -120,9 +120,12 @@ export const decidePreapprovalAuthoring = (input: {
   ) {
     return { ...base, decision: "blocked" };
   }
+  const authority = { authoritySessionId: input.adapterSessionId };
+  const candidateAuthority = correcting
+    ? { ...authority, correction: input.correction }
+    : authority;
   const candidate = preapprovalAuthoringScopeSchema.safeParse({
-    authoritySessionId: input.adapterSessionId,
-    ...(correcting ? { correction: input.correction } : {}),
+    ...candidateAuthority,
     appId: current.appSpec.appId,
     appSpecDigest: current.appSpec.digest,
     acceptedByCallId: current.appSpec.acceptedByCallId,
