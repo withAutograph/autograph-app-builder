@@ -14,6 +14,7 @@ import type { TargetApplyFailureReceipt } from "../repository/target-apply";
 import type { TargetValidationFailureReceipt } from "../repository/target-validation";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const COMMAND_FAILED_REASON = "command-failed" as const;
 export const approvedBuildScopeSchema = z.strictObject({
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
   appSpecDigest: digest,
@@ -46,7 +47,7 @@ export const approvedBuildDecisionSchema = z.strictObject({
       command: z.enum(["check-build", "test"]),
       exitCode: z.number().int(),
       failureClass: z.enum(["native-tool-panic", "missing-app-task"]).optional(),
-      reason: z.enum(["command-failed", "tooling-prerequisite"]),
+      reason: z.enum([COMMAND_FAILED_REASON, "tooling-prerequisite"]),
     })
     .optional(),
   version: z.literal(1),
@@ -139,7 +140,7 @@ const projectExistingRepositorySource = (
 };
 
 const canRepairApplyFailure = (failure: TargetApplyFailureReceipt): boolean =>
-  failure.reason === "command-failed" &&
+  failure.reason === COMMAND_FAILED_REASON &&
   failure.command.exitCode > 0 &&
   !["app-lock", "partial-state", "stale-proposal", "timeout"].includes(
     failure.commandFailureKind ?? "",
@@ -249,7 +250,7 @@ export const decideApprovedBuildContinuation = (input: {
   // The validator runs the approved app's check/test command. Diagnostic paths
   // describe stack frames, not repair ownership: unchanged tests and shared
   // runtime frames must not stop the approved app's private repair loop.
-  if (failure.reason !== "command-failed" || !isAppValidationFailure(command)) {
+  if (failure.reason !== COMMAND_FAILED_REASON || !isAppValidationFailure(command)) {
     return { ...base, decision: "blocked", scope };
   }
   return approvedBuildDecisionSchema.parse({
