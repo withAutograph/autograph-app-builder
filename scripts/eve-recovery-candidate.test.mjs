@@ -188,18 +188,16 @@ const fixture = async function fixture(options = {}) {
       },
     ],
   ]);
-  const event = (slot, eventType, stepId, eventData = {}) => ({
-    eventId: slotToEventId(slot),
-    eventType,
-    runId: ownerRunId,
-    ...(stepId === undefined ? {} : { correlationId: stepId }),
-    eventData: {
-      ...(steps.has(stepId) ? { stepName: steps.get(stepId).stepName } : {}),
-      ...(eventType === "step_completed" ? { result: steps.get(stepId)?.output } : {}),
-      ...eventData,
-    },
-    createdAt: new Date(10_000 - slot),
-  });
+  const event = (slot, eventType, stepId, eventData = {}) => {
+    const result = { eventId: slotToEventId(slot), eventType, runId: ownerRunId };
+    if (stepId !== undefined) result.correlationId = stepId;
+    const data = {};
+    if (steps.has(stepId)) data.stepName = steps.get(stepId).stepName;
+    if (eventType === "step_completed") data.result = steps.get(stepId)?.output;
+    result.eventData = { ...data, ...eventData };
+    result.createdAt = new Date(10_000 - slot);
+    return result;
+  };
   const events = [
     event(1, "run_created"),
     event(2, "step_started", "step-prior"),
