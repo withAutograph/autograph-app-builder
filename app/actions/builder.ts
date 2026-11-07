@@ -121,6 +121,7 @@ export async function provisionBuilderProvider(input: {
   requestId: string;
   operation: "github" | "vercel";
   appName: string;
+  deploymentAccess?: "public-app";
   repository: { name: string; private: boolean };
   providers: {
     githubInstallationId?: string;
@@ -271,25 +272,25 @@ async function createContinuationHandoff(
   input: ResolvedHandoffContinuationInput,
   provisioning: BuilderProvisionResponse,
 ) {
-  const handoffInput: Parameters<typeof createBuilderHandoff>[0] = {
-    appName: input.form.appName,
-    brief: input.form.brief,
-    connections: input.form.connections,
+  return createBuilderHandoff({
     creationRequestId: input.creationRequestId,
     destination: input.form.buildDestination === "cursor" ? "cursor" : "codex",
+    version: 1,
+    ...(provisioning.requestDigest === "0".repeat(64)
+      ? {}
+      : { provisioningRequestId: provisioning.requestId }),
+    appName: input.form.appName,
+    ...(input.form.sourceCandidate === undefined
+      ? {}
+      : { sourceCandidate: input.form.sourceCandidate }),
+    brief: input.form.brief,
+    connections: input.form.connections,
     modelId: input.form.modelId,
     repository: {
       name: input.form.repository,
       private: input.form.privateRepository,
     },
-  };
-  if (provisioning.requestDigest !== "0".repeat(64)) {
-    handoffInput.provisioningRequestId = provisioning.requestId;
-  }
-  if (input.form.sourceCandidate !== undefined) {
-    handoffInput.sourceCandidate = input.form.sourceCandidate;
-  }
-  return await createBuilderHandoff(handoffInput);
+  });
 }
 
 /**
