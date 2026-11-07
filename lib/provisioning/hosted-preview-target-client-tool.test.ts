@@ -430,15 +430,15 @@ describe("saved continuity lookup tool", () => {
     });
   });
   it("routes saved checkpoint and verified actor reads without effects", async () => {
-    const checkpoint = { intentId, checkpoints: { suiteDispatch: "unrecorded" } };
-    const actors = { requestCorrelation: "not_established", actors: [] };
+    const checkpoint = { checkpoints: { suiteDispatch: "unrecorded" }, intentId };
+    const actors = { actors: [], requestCorrelation: "not_established" };
     hooks.readContinuityCheckpoints.mockResolvedValueOnce(checkpoint);
     hooks.readContinuityVerifiedActors.mockResolvedValueOnce(actors);
     await expect(
-      getTool.execute({ operation: "continuity-checkpoints", intentId }, toolCtx),
+      getTool.execute({ intentId, operation: "continuity-checkpoints" }, toolCtx),
     ).resolves.toEqual(checkpoint);
     await expect(
-      getTool.execute({ operation: "continuity-verified-actors", intentId }, toolCtx),
+      getTool.execute({ intentId, operation: "continuity-verified-actors" }, toolCtx),
     ).resolves.toEqual(actors);
     expect(hooks.request).not.toHaveBeenCalled();
     expect(hooks.resolve).not.toHaveBeenCalled();
@@ -447,8 +447,8 @@ describe("saved continuity lookup tool", () => {
     const result = {
       bindings: [
         {
-          appId: "spend-review",
           actorId: "actor",
+          appId: "spend-review",
           organizationId: "org",
           role: "reviewer",
           status: "actor_active",
@@ -457,7 +457,7 @@ describe("saved continuity lookup tool", () => {
     };
     hooks.readContinuityBindings.mockResolvedValueOnce(result);
     await expect(
-      getTool.execute({ operation: "continuity-bindings", intentId }, toolCtx),
+      getTool.execute({ intentId, operation: "continuity-bindings" }, toolCtx),
     ).resolves.toEqual(result);
     expect(hooks.readContinuityBindings).toHaveBeenCalledWith(intentId, ctx.abortSignal);
     expect(hooks.request).not.toHaveBeenCalled();
@@ -500,18 +500,18 @@ describe("saved continuity lookup tool", () => {
   it("preserves an operator-provided recovery stage and progress without replaying the intent", async () => {
     hooks.readContinuity.mockRejectedValueOnce(
       new HostedOperatorError("operator_unavailable", {
-        recoveryStage: "canonical_read",
-        recoveryProgressAdvanced: false,
         continuityReadStage: "client_response_validation",
+        recoveryProgressAdvanced: false,
+        recoveryStage: "canonical_read",
       }),
     );
-    await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toEqual({
-      intentId,
+    await expect(getTool.execute({ intentId, operation: "continuity" }, toolCtx)).resolves.toEqual({
       authenticatedBehavior: "unassessed",
       code: "operator_unavailable",
-      recoveryStage: "canonical_read",
-      recoveryProgressAdvanced: false,
       continuityReadStage: "client_response_validation",
+      intentId,
+      recoveryProgressAdvanced: false,
+      recoveryStage: "canonical_read",
       status: "blocked",
     });
     expect(hooks.readContinuity).toHaveBeenCalledOnce();
@@ -520,10 +520,10 @@ describe("saved continuity lookup tool", () => {
   });
   it("does not invent a stage or expose raw details for an unclassified failure", async () => {
     hooks.readContinuity.mockRejectedValueOnce(new Error("private provider detail"));
-    await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toEqual({
-      intentId,
+    await expect(getTool.execute({ intentId, operation: "continuity" }, toolCtx)).resolves.toEqual({
       authenticatedBehavior: "unassessed",
       code: "operator_unavailable",
+      intentId,
       status: "blocked",
     });
   });
