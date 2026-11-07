@@ -83,15 +83,20 @@ const resolveNativePreview = async (
   current: ReturnType<typeof appBuilderWorkflowState.get>,
 ) => {
   const protectedAppId = "appSpec" in current ? current.appSpec.appId : input.appId;
-  reportHostedRuntimeHandoffDiagnostic({
+  const diagnostic = {
     acceptedAppIdPresent: "appSpec" in current,
     inputAppIdPresent: input.appId !== undefined,
     lookupAttempted: protectedAppId !== undefined,
-    ...(input.appId === undefined || protectedAppId === undefined
-      ? {}
-      : { appIdMatches: input.appId === protectedAppId }),
-    stage: "native_preview_candidate",
-  });
+  };
+  if (input.appId === undefined || protectedAppId === undefined) {
+    reportHostedRuntimeHandoffDiagnostic({ ...diagnostic, stage: "native_preview_candidate" });
+  } else {
+    reportHostedRuntimeHandoffDiagnostic({
+      ...diagnostic,
+      appIdMatches: input.appId === protectedAppId,
+      stage: "native_preview_candidate",
+    });
+  }
   if (protectedAppId !== undefined) {
     if (input.appId !== undefined && input.appId !== protectedAppId) {
       throw new Error("The requested app does not match the accepted app.");
