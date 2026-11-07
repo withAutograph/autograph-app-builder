@@ -27,7 +27,7 @@ export const createPrivateAppIntegrationCapabilityApprovalCapture = (input: {
     plan: input.plan,
     planDigest: appIntegrationCapabilityPlanDigest(input.plan),
   });
-  const capture = createPrivateOperatorApprovalCapture({
+  const captureInput: Parameters<typeof createPrivateOperatorApprovalCapture>[0] = {
     callId: input.callId,
     ownerUserId: input.plan.authority.ownerUserId,
     request: {
@@ -36,8 +36,11 @@ export const createPrivateAppIntegrationCapabilityApprovalCapture = (input: {
       planDigest: expected.planDigest,
       planRef: expected.operationRef,
     },
-    ...(input.state === undefined ? {} : { state: input.state }),
-  });
+  };
+  if (input.state !== undefined) {
+    captureInput.state = input.state;
+  }
+  const capture = createPrivateOperatorApprovalCapture(captureInput);
   return {
     observe(event: MessageStreamEvent) {
       if (event.type === "input.requested") {
@@ -87,16 +90,25 @@ export const readPrivateAppIntegrationCapabilityApproval = async (input: {
   ) {
     throw new Error("Integration capability approval owner changed");
   }
-  return await readPrivateOperatorApproval({
-    owner: input.owner,
-    ...(input.observation === undefined ? {} : { observation: input.observation }),
-    capture: (state) =>
-      createPrivateAppIntegrationCapabilityApprovalCapture({
+  const approvalInput: Parameters<typeof readPrivateOperatorApproval>[0] = {
+    assertOwner: input.assertOwner,
+    capture: (state) => {
+      const captureInput: Parameters<
+        typeof createPrivateAppIntegrationCapabilityApprovalCapture
+      >[0] = {
         callId: input.callId,
         plan: input.plan,
-        ...(state === undefined ? {} : { state }),
-      }),
+      };
+      if (state !== undefined) {
+        captureInput.state = state;
+      }
+      return createPrivateAppIntegrationCapabilityApprovalCapture(captureInput);
+    },
+    owner: input.owner,
     readHistory: input.readHistory,
-    assertOwner: input.assertOwner,
-  });
+  };
+  if (input.observation !== undefined) {
+    approvalInput.observation = input.observation;
+  }
+  return await readPrivateOperatorApproval(approvalInput);
 };
