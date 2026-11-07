@@ -371,17 +371,18 @@ const captureFixture = async () => {
   const request = (
     phase: "authorize" | "capture",
     extra: Record<string, z.infer<ReturnType<typeof z.json>>> = {},
-  ) =>
-    new Request(`https://builder.example.test${NORMAL_ACTOR_CAPTURE_PATH}`, {
-      body: JSON.stringify({
-        ...body,
-        phase,
-        ...(phase === "capture" ? { normalCookie } : {}),
-        ...extra,
-      }),
+  ) => {
+    const requestBody: typeof body & { phase: typeof phase; normalCookie?: typeof normalCookie } = {
+      ...body,
+      phase,
+    };
+    if (phase === "capture") requestBody.normalCookie = normalCookie;
+    return new Request(`https://builder.example.test${NORMAL_ACTOR_CAPTURE_PATH}`, {
+      body: JSON.stringify({ ...requestBody, ...extra }),
       headers: { authorization: "Bearer signed.oidc.token", "content-type": "application/json" },
       method: "POST",
     });
+  };
   return {
     consume() {
       pendingConsumed = true;
