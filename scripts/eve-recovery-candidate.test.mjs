@@ -237,13 +237,14 @@ const fixture = async function fixture(options = {}) {
     runs: {
       get: async (id, params) => {
         calls.push(["run", id, params]);
-        return {
+        const result = {
           deploymentId: "original-deployment",
           input: runInput,
           runId: ownerRunId,
           status: options.status ?? "failed",
-          ...(options.expired === true ? { expiredAt: new Date(0) } : {}),
         };
+        if (options.expired === true) result.expiredAt = new Date(0);
+        return result;
       },
     },
     steps: {
@@ -502,7 +503,9 @@ test("foreign logical checkpoints fail before the native stream is read", async 
   await assert.rejects(
     f.collect({
       ...f.input,
-      authorizeOwner: async () => {},
+      authorizeOwner: async () => {
+        // Permit the owner so the logical identity check is exercised.
+      },
       binding: { ...binding, logicalSessionId: "foreign" },
     }),
     /logical identity differs/u,
@@ -791,6 +794,16 @@ for (const fault of [
   });
 }
 
+const join = (parts) => {
+  const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    bytes.set(part, offset);
+    offset += part.length;
+  }
+  return bytes;
+};
+
 const reconnectingSnapshot = async (mode) => {
   const native = Array.from({ length: 5 }, (_, index) => ({
     data: { text: index < 2 ? "same valid repeated value" : `private ${index}` },
@@ -801,15 +814,6 @@ const reconnectingSnapshot = async (mode) => {
     native.map((event) => new TextEncoder().encode(`${JSON.stringify(event)}\n`)),
     key,
   );
-  const join = (parts) => {
-    const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
-    let offset = 0;
-    for (const part of parts) {
-      bytes.set(part, offset);
-      offset += part.length;
-    }
-    return bytes;
-  };
   let partial = new Uint8Array();
   if (mode === "partial-header") {
     partial = chunks[2].data.subarray(0, 2);
@@ -1129,7 +1133,8 @@ test("646 independent checkpoint histories retain every value while sharing immu
     records.flatMap((value) => value.sessionState.snapshot.session.history),
   );
   assert.equal(uniqueMessages.size, history.length);
-  const shared = records[0].sessionState.snapshot.session.history[0];
+  const [firstRecord] = records;
+  const [shared] = firstRecord.sessionState.snapshot.session.history;
   assert.equal(Object.isFrozen(shared), true);
   assert.equal(Object.isFrozen(shared.content[0].output), true);
   assert.throws(() => {
