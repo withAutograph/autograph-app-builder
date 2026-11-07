@@ -3,6 +3,7 @@ import { publicRealmEnrollmentSchema } from "./public-realm-enrollment";
 
 import { verifyVercelOidcToken } from "@vercel/oidc";
 import { createHash, randomBytes } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { createRemoteJWKSet, customFetch } from "jose";
 import { z } from "zod";
 import {
@@ -18,6 +19,8 @@ import type { VercelTokenKeyringConfig } from "../integrations/vercel-installati
 import type { openHostedOperatorCompositionResources } from "./hosted-operator-source-configuration";
 import type { HostedOperatorContext } from "./hosted-operator-service";
 import type { OperatorArtifactStore } from "./hosted-operator-artifact-store";
+import { selectNativeTargetAuthOnlyRealmCallback } from "./native-target-auth-only-realm-callback-selection";
+import type { NativeTargetAuthOnlyRealmCallbackPorts } from "./native-target-auth-only-realm-callback-selection";
 import type { NormalActorCaptureSender } from "./hosted-operator-normal-actor-capture";
 import {
   readVerifiedRealmAccess,
@@ -38,19 +41,19 @@ const bodySchema = z.strictObject({
 });
 const stageSchema = bodySchema.extend({ expiresAt: z.number().int(), version: z.literal(1) });
 const privateStageRequestSchema = z.strictObject({
-  version: z.literal(1),
-  purpose: z.literal("realm-owner-identity-stage-v1"),
-  origin: z.url(),
   nonce: bodySchema.shape.nonce,
+  origin: z.url(),
   proof: bodySchema.shape.proof,
+  purpose: z.literal("realm-owner-identity-stage-v1"),
+  version: z.literal(1),
 });
 const privateStageSchema = stageSchema.extend({ claimHash: bodySchema.shape.nonce });
 const routingTicketSchema = z.strictObject({
-  version: z.literal(1),
-  ownerSessionId: bodySchema.shape.ownerSessionId,
-  nonceSha256: bodySchema.shape.nonce,
   claimSecret: bodySchema.shape.nonce,
   expiresAt: z.number().int(),
+  nonceSha256: bodySchema.shape.nonce,
+  ownerSessionId: bodySchema.shape.ownerSessionId,
+  version: z.literal(1),
 });
 const envelopeSchema = z.strictObject({
   encryptedToken: z.string(),
@@ -183,11 +186,11 @@ const privateStageAad = (origin: string, sessionId: string, claimHash: string) =
 const stageReference = (context: HostedOperatorContext, claimHash: string) =>
   `_protected-operator/artifacts/realm-identity-stage/${context.target.appId}/${claimHash}`;
 const senderClaimsSchema = z.object({
-  iss: z.string(),
   aud: z.string(),
+  environment: z.string(),
+  iss: z.string(),
   owner_id: z.string(),
   project_id: z.string(),
-  environment: z.string(),
   sub: z.string(),
 });
 
@@ -227,10 +230,10 @@ export const createRealmIdentityHandoffSenderVerifier =
     }
     const verified = await verify(bearer, {
       audience: sender.audience,
+      environment: sender.environment,
       issuer: sender.issuer,
       ownerId: sender.ownerId,
       projectId: sender.projectId,
-      environment: sender.environment,
       subject: sender.subject,
     });
     const claims = senderClaimsSchema.parse(verified.payload);
@@ -291,7 +294,7 @@ const observeJwksResponse = (response: Response): JwksResponseObservation => {
     contentType = "html";
   }
   const providerError = response.headers.get("x-vercel-error");
-  const observation: JwksResponseObservation = { httpStatus: response.status, contentType };
+  const observation: JwksResponseObservation = { contentType, httpStatus: response.status };
   if (providerError !== null && providerError !== "") {
     observation.vercelError =
       providerError === "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH" ||
@@ -314,8 +317,8 @@ const reportPrivateStageFailure = (
   jwks?: JwksResponseObservation,
 ) => {
   const failure: PrivateStageFailure = {
-    stage,
     errorClass: "unknown",
+    stage,
     ...(stage === "proof_verification" && jwks !== undefined ? { jwks } : {}),
   };
   try {
@@ -385,8 +388,8 @@ const privateStage = async (ports: RealmIdentityCallbackPorts, request: Request)
     });
     stage = "context";
     const context = await handoff.context({
-      ownerSessionId: input.ownerSessionId,
       nonceSha256: staging.link.nonceSha256,
+      ownerSessionId: input.ownerSessionId,
     });
     if (context.target.sessionId !== input.ownerSessionId) {
       throw new Error("realm_callback_scope");
@@ -404,7 +407,7 @@ const privateStage = async (ports: RealmIdentityCallbackPorts, request: Request)
     const encrypted = seal(
       ports,
       privateStageAad(ports.builderOrigin, input.ownerSessionId, claimHash),
-      JSON.stringify({ ...input, expiresAt, claimHash, version: 1 }),
+      JSON.stringify({ ...input, claimHash, expiresAt, version: 1 }),
     );
     stage = "artifact";
     await handoff.artifacts.put(
@@ -422,10 +425,10 @@ const privateStage = async (ports: RealmIdentityCallbackPorts, request: Request)
       ports,
       ticketAad(ports.builderOrigin),
       JSON.stringify({
-        ownerSessionId: input.ownerSessionId,
-        nonceSha256: staging.link.nonceSha256,
         claimSecret,
         expiresAt,
+        nonceSha256: staging.link.nonceSha256,
+        ownerSessionId: input.ownerSessionId,
         version: 1,
       }),
     );
@@ -433,8 +436,8 @@ const privateStage = async (ports: RealmIdentityCallbackPorts, request: Request)
     stage = "response";
     return Response.json(
       {
-        version: 1,
         continuationUrl: `${ports.builderOrigin}${PATH}?handoff=${encodeURIComponent(value)}`,
+        version: 1,
       },
       { headers: noStore },
     );
@@ -650,7 +653,10 @@ export const createRealmIdentityCallbackHandler =
 
 /** Production route composition opens only existing source-owned readers; no caller policy or Realm cookie port. */
 export const createRealmIdentityCallbackDeploymentHandler =
-  (environment: Readonly<Record<string, string | undefined>> = process.env) =>
+  (
+    environment: Readonly<Record<string, string | undefined>> = process.env,
+    authOnly?: NativeTargetAuthOnlyRealmCallbackPorts,
+  ) =>
   async (request: Request): Promise<Response> => {
     let resources: Awaited<ReturnType<typeof openHostedOperatorCompositionResources>> | undefined;
     let initialResources: typeof resources;
@@ -679,6 +685,11 @@ export const createRealmIdentityCallbackDeploymentHandler =
       initialResources = resources;
       let { configuration, controlPlane } = resources;
       const initialControlPlane = controlPlane;
+      const authOnlyPorts: NativeTargetAuthOnlyRealmCallbackPorts | undefined =
+        authOnly ??
+        (controlPlane.createNativeTargetAuthOnlyRealmCallbackPorts === undefined
+          ? undefined
+          : await controlPlane.createNativeTargetAuthOnlyRealmCallbackPorts());
 
       const runtime = readPreviewOAuthRuntimeConfig({ ...environment });
       if (new URL(runtime.issuer).origin !== configuration.builderCallbackOrigin) {
@@ -686,6 +697,7 @@ export const createRealmIdentityCallbackDeploymentHandler =
       }
       let selectedEndpointOrigin: string | undefined;
       let selectedNonceSha256: string | undefined;
+      let selectedAuthOnly: Awaited<ReturnType<typeof selectNativeTargetAuthOnlyRealmCallback>>;
       const sender = configuration.gateway.workload;
       if (
         sender.environment !== "preview" ||
@@ -703,6 +715,30 @@ export const createRealmIdentityCallbackDeploymentHandler =
       }) => {
         if (selectedNonceSha256 !== undefined && selectedNonceSha256 !== selector.nonceSha256) {
           throw new Error("realm_callback_scope");
+        }
+        if (authOnlyPorts !== undefined) {
+          const selected = await selectNativeTargetAuthOnlyRealmCallback(
+            authOnlyPorts,
+            selector,
+            configuration.builderCallbackOrigin,
+          );
+          if (selected !== undefined) {
+            if (
+              selectedNonceSha256 !== undefined &&
+              (selectedAuthOnly === undefined ||
+                !isDeepStrictEqual(selected.binding, selectedAuthOnly.binding) ||
+                !isDeepStrictEqual(selected.context, selectedAuthOnly.context))
+            ) {
+              throw new Error("realm_callback_scope");
+            }
+            selectedAuthOnly = selected;
+            selectedNonceSha256 = selector.nonceSha256;
+            selectedEndpointOrigin = selected.binding.gateway.origin;
+            return selected.staging;
+          }
+          if (selectedAuthOnly !== undefined) {
+            throw new Error("realm_callback_scope");
+          }
         }
         if (
           selectedNonceSha256 === undefined &&
@@ -725,7 +761,6 @@ export const createRealmIdentityCallbackDeploymentHandler =
             try {
               const canonical = await resolveOwnedStandardRuntimeConfiguration({
                 configuration,
-                resources: privateResources,
                 context: {
                   authority: selected.context.authority,
                   ownerContext: operatorOwnerContextSchema.parse(selected.context.ownerContext),
@@ -735,6 +770,7 @@ export const createRealmIdentityCallbackDeploymentHandler =
                   },
                 },
                 environment,
+                resources: privateResources,
               });
               resources = await openHostedOperatorConfigurationResources(canonical, environment);
               configuration = resources.configuration;
@@ -751,18 +787,47 @@ export const createRealmIdentityCallbackDeploymentHandler =
         return pending;
       };
       const assertCurrent = async (context: HostedOperatorContext) => {
+        if (selectedAuthOnly !== undefined && selectedNonceSha256 !== undefined) {
+          if (!isDeepStrictEqual(context, selectedAuthOnly.context)) {
+            throw new Error("realm_callback_scope");
+          }
+          await selectCanonicalRuntime({
+            nonceSha256: selectedNonceSha256,
+            ownerSessionId: context.target.sessionId,
+          });
+          return;
+        }
         await controlPlane.assertPlanningAuthorized(context);
         if (selectedPublicRealm !== undefined && selectedNonceSha256 !== undefined) {
           await controlPlane.readPendingRealmIdentityLinkForStaging({
-            ownerSessionId: context.target.sessionId,
             nonceSha256: selectedNonceSha256,
+            ownerSessionId: context.target.sessionId,
           });
         }
       };
 
+      const resolveCallbackContext = async (
+        selector: Parameters<typeof controlPlane.resolveRealmIdentityCallbackContext>[0],
+      ) => {
+        if (selectedAuthOnly === undefined) {
+          return await controlPlane.resolveRealmIdentityCallbackContext(selector);
+        }
+        const { context } = selectedAuthOnly;
+        if (
+          selector.ownerSessionId !== context.target.sessionId ||
+          selector.nonceSha256 !== selectedNonceSha256 ||
+          (selector.authority !== undefined &&
+            !isDeepStrictEqual(selector.authority, context.authority))
+        ) {
+          throw new Error("realm_callback_scope");
+        }
+        await assertCurrent(context);
+        return context;
+      };
+
       const stageArtifacts = createPostgresOperatorArtifactStore({
         assertCurrentOwner: async (artifactContext) => {
-          const context = await controlPlane.resolveRealmIdentityCallbackContext({
+          const context = await resolveCallbackContext({
             authority: hostedTenantAuthoritySchema.parse(artifactContext.authority),
             ownerSessionId: artifactContext.target.sessionId,
             // The exact pending nonce is selected by the verified routing ticket or private POST below.
@@ -771,14 +836,20 @@ export const createRealmIdentityCallbackDeploymentHandler =
           if (context.target.appId !== artifactContext.target.appId) {
             throw new Error("realm_callback_scope");
           }
-          await controlPlane.assertPlanningAuthorized(context);
+          await assertCurrent(context);
         },
         database: openHostedPostgresDatabase(runtime.databaseUrl),
       });
       return await createRealmIdentityCallbackHandler({
+        afterLinked: async (context, proof) => {
+          if (selectedAuthOnly !== undefined) {
+            await authOnlyPorts?.afterLinked?.(context, selectedAuthOnly.binding, proof);
+            return;
+          }
+          await controlPlane.reconcileOwnerRealmContinuation(context);
+        },
         assertCurrent,
         authenticate: async (incoming, selector) => {
-          await selectCanonicalRuntime(selector);
           await selectCanonicalRuntime(selector);
           const session = await ensurePreviewOAuthDeploymentSessionOrganization({
             environment: { ...environment },
@@ -795,21 +866,34 @@ export const createRealmIdentityCallbackDeploymentHandler =
                 });
           return authority === undefined
             ? undefined
-            : await controlPlane.resolveRealmIdentityCallbackContext({ authority, ...selector });
+            : await resolveCallbackContext({ authority, ...selector });
         },
         builderOrigin: configuration.builderCallbackOrigin,
-        afterLinked: async (context) => {
-          await controlPlane.reconcileOwnerRealmContinuation(context);
-        },
         consume: async (input) => {
+          if (selectedAuthOnly !== undefined) {
+            if (authOnlyPorts === undefined) {
+              throw new Error("realm_callback_configuration");
+            }
+            await assertCurrent(input.context);
+            await authOnlyPorts.ownerLink.consume({
+              binding: selectedAuthOnly.binding,
+              nonceSha256: input.nonceSha256,
+              proofRef: input.proofRef,
+              proofSha256: input.proofSha256,
+            });
+            return;
+          }
           await controlPlane.consumeOwnerRealmIdentityCallback(input);
         },
         fetch: async (input, init) => {
           if (selectedEndpointOrigin === undefined) {
             throw new Error("realm_callback_configuration");
           }
+          if (selectedAuthOnly !== undefined) {
+            await assertCurrent(selectedAuthOnly.context);
+          }
           const response = await createHostedOperatorRealmHttpTransport(
-            configuration,
+            selectedAuthOnly?.configuration ?? configuration,
             "builder",
             undefined,
             selectedEndpointOrigin,
@@ -841,8 +925,11 @@ export const createRealmIdentityCallbackDeploymentHandler =
           return Response.json({ keys: [pinned] }, { headers: noStore });
         },
         identityHandoff: {
+          artifacts: stageArtifacts,
+          context: resolveCallbackContext,
           verifySender: async (incoming) => {
             if (
+              authOnlyPorts !== undefined ||
               environment.PROTECTED_HOSTED_OPERATOR_STANDARD_RUNTIME_PROFILES !== undefined ||
               configuration.standardDevelopmentRuntime !== undefined
             ) {
@@ -856,17 +943,15 @@ export const createRealmIdentityCallbackDeploymentHandler =
               });
             }
             const nativeSender: NormalActorCaptureSender =
-              selectedPublicRealm === undefined
+              selectedAuthOnly?.binding.sender ??
+              (selectedPublicRealm === undefined
                 ? { ...sender, environment: "preview" }
                 : {
                     ...selectedPublicRealm.sender,
                     publicEnrollment: selectedPublicRealm.enrollment,
-                  };
+                  });
             await createRealmIdentityHandoffSenderVerifier(nativeSender)(incoming);
           },
-          context: async (selector) =>
-            await controlPlane.resolveRealmIdentityCallbackContext(selector),
-          artifacts: stageArtifacts,
         },
         keyring: readVercelTokenKeyringEnvironment({ ...environment }),
         publish: async (context, proof) => {
@@ -875,7 +960,7 @@ export const createRealmIdentityCallbackDeploymentHandler =
           const proofRef = `_protected-operator/artifacts/realm-identity-proof/${context.target.appId}/${proofSha256}`;
           const artifacts = createPostgresOperatorArtifactStore({
             assertCurrentOwner: async () => {
-              await controlPlane.assertPlanningAuthorized(context);
+              await assertCurrent(context);
             },
             database: openHostedPostgresDatabase(runtime.databaseUrl),
           });
@@ -890,7 +975,7 @@ export const createRealmIdentityCallbackDeploymentHandler =
               content: Buffer.from(proof).toString("base64"),
             },
           );
-          await controlPlane.assertPlanningAuthorized(context);
+          await assertCurrent(context);
           return { proofRef, proofSha256 };
         },
         staging: selectCanonicalRuntime,

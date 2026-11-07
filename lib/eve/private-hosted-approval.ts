@@ -11,7 +11,7 @@ import {
   sameOperatorSelection,
 } from "../provisioning/hosted-operator-contract";
 import type { OperatorSelection } from "../provisioning/hosted-operator-contract";
-import { nativeTargetPreparationRequestSchema } from "../agent/native-target-onboarding-input-schema";
+import { nativeTargetPreparationRequestSchema } from "../provisioning/native-target-onboarding-plan-schema";
 import { nativeTargetOnboardingPlanDigest } from "../provisioning/native-target-onboarding-contract";
 
 const hostedRuntimeToolName = z.enum(["prepare-app-hosted-runtime", "cleanup-app-hosted-runtime"]);

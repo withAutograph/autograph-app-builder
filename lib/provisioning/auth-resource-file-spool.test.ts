@@ -1,0 +1,533 @@
+import { createHash } from "node:crypto";
+import { statSync } from "node:fs";
+import { CommandFinished } from "@vercel/sandbox";
+import { z } from "zod";
+import { expect, it, vi } from "vitest";
+import { HostedOperatorError } from "./hosted-operator-contract";
+import { runAuthResourceFileSpool } from "./hosted-operator-sandbox-launcher";
+import type { RecordWorkerCheckpoint } from "./hosted-operator-service";
+
+type CreateSandbox = NonNullable<
+  NonNullable<Parameters<typeof runAuthResourceFileSpool>[2]>["createSandbox"]
+>;
+type OperatorSandbox = Awaited<ReturnType<CreateSandbox>>;
+
+const operationRef = "11111111-1111-4111-a111-111111111111";
+const workerAttemptId = "22222222-2222-4222-a222-222222222222";
+const spool = `/vercel/sandbox/protected-installer/${workerAttemptId}`;
+const bytes = (value: z.infer<ReturnType<typeof z.json>>) => Buffer.from(JSON.stringify(value));
+const requiredFile = (files: ReadonlyMap<string, Buffer>, filePath: string) => {
+  const content = files.get(filePath);
+  if (content === undefined) {
+    throw new Error(`Missing worker protocol file: ${filePath}`);
+  }
+  return content;
+};
+const readJson = (files: ReadonlyMap<string, Buffer>, filePath: string) =>
+  z.json().parse(JSON.parse(requiredFile(files, filePath).toString()));
+const launcherCommandSchema = z.object({
+  args: z.array(z.string()).optional(),
+  cmd: z.string(),
+  detached: z.boolean().optional(),
+});
+// Parse only the fields the synthetic worker reads; hash the original complete wire bytes.
+const workerContextSchema = z.object({
+  app_id: z.string(),
+  installer: z.object({ id: z.string(), sha256: z.string() }),
+  operation: z.object({
+    approval_digest: z.string(),
+    fence_generation: z.number(),
+    operation_id: z.string(),
+  }),
+  release: z.object({ id: z.string() }),
+  resource: z.object({ resource_id: z.string() }),
+});
+const sha = (value: Buffer) => createHash("sha256").update(value).digest("hex");
+const worker = {
+  executablePath: "/worker/resources",
+  id: "neon-resource-bootstrap-v1",
+  operationScope: "neon-resource-bootstrap-v1",
+  sha256: "a".repeat(64),
+  subcommand: "neon-resource-bootstrap",
+} as const;
+const plan = {
+  action: "prepare",
+  authDatabase: {
+    database: "pilot_auth",
+    migratorRole: "pilot_migrator",
+    resourceId: "isolated-auth",
+    runtimeRole: "pilot_runtime",
+  },
+  bootstrap: { endpointId: "ep-isolated", maintenanceDatabase: "neondb", role: "neondb_owner" },
+  effects: [{ id: "auth-resources", kind: "resources", resourceId: "isolated-auth" }],
+  neon: {
+    branchId: "isolated-branch",
+    endpoint: "ep-isolated.neon.tech",
+    projectId: "isolated-project",
+  },
+  owner: { appId: "pilot", sessionId: "saved-pilot-session", userId: "owner" },
+  resourcesInstaller: { reference: worker.id, sha256: worker.sha256 },
+  source: { sha256: "b".repeat(64) },
+  version: 1,
+};
+const passwordPair = { migratorPassword: "m".repeat(40), runtimePassword: "r".repeat(40) };
+const config = {
+  image: "pinned-control",
+  projectId: "operator-project",
+  resourcesWorker: worker,
+  teamId: "owned-team",
+  workers: {},
+};
+const fixture = (
+  options: {
+    denyFence?: boolean;
+    wrongPin?: boolean;
+    forbiddenEffect?: string;
+    foreignResource?: boolean;
+    tenant?: boolean;
+    wrongReadback?: boolean;
+    mutateDuringInspect?: boolean;
+  } = {},
+) => {
+  const files = new Map<string, Buffer>();
+  const modes = new Map<string, number | undefined>();
+  let fenceRequested = false;
+  const checkpoint = vi.fn<RecordWorkerCheckpoint>(() => Promise.resolve());
+  const bindWorkerContext = vi.fn((_binding: { contextDigest: string }) =>
+    Promise.resolve(checkpoint),
+  );
+  const assertCredentialsCheckpointed = vi.fn(
+    (_binding: { approvalDigest: string; resourceId: string; credentialsSha256: string }) =>
+      Promise.resolve(),
+  );
+  const kill = vi.fn(() => Promise.resolve());
+  const frame = (name: string, value: z.infer<ReturnType<typeof z.json>>) =>
+    files.set(`${spool}/${name}`, bytes(value));
+  const sandbox = {
+    delete: vi.fn(() => Promise.resolve()),
+    extendTimeout: vi.fn(() => Promise.resolve()),
+    fs: {
+      readFile: vi.fn(() =>
+        Promise.reject(new Error("Expected launcher file reads through readFileToBuffer")),
+      ),
+      lstat: vi.fn((path: string) =>
+        Promise.resolve(
+          Object.assign(statSync(new URL(import.meta.url)), {
+            isFile: () => files.has(path),
+            size: files.get(path)?.length ?? 0,
+          }),
+        ),
+      ),
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- mkdir resolves an absent path, whereas resolve() would infer void outside the SDK contract.
+      mkdir: vi.fn(() => Promise.resolve(undefined)),
+      rm: vi.fn(() => Promise.resolve()),
+    },
+    readFileToBuffer: vi.fn(({ path }: { path: string }) =>
+      Promise.resolve(files.get(path) ?? null),
+    ),
+    runCommand: vi.fn((input: string | Parameters<OperatorSandbox["runCommand"]>[0]) => {
+      const command = launcherCommandSchema.parse(input);
+      // Cached output and overridden process methods keep this SDK instance inert.
+      const completed = new CommandFinished({
+        cmd: {
+          args: command.args ?? [],
+          cwd: spool,
+          exitCode: 0,
+          id: "fixture-command",
+          name: command.cmd,
+          sessionId: workerAttemptId,
+          startedAt: 0,
+        },
+        exitCode: 0,
+        output: {
+          stderr: "",
+          stdout: `${options.wrongPin === true ? "f".repeat(64) : worker.sha256}  ${worker.executablePath}\n`,
+        },
+        sessionId: workerAttemptId,
+      });
+      if (command.detached !== true) {
+        return Promise.resolve(completed);
+      }
+      const contextBytes = requiredFile(files, `${spool}/startup/context.json`);
+      const context = workerContextSchema.parse(readJson(files, `${spool}/startup/context.json`));
+      const contextDigest = sha(contextBytes);
+      const common = {
+        version: 1,
+        operation_id: context.operation.operation_id,
+        approval_digest: context.operation.approval_digest,
+        context_digest: contextDigest,
+        fence_generation: context.operation.fence_generation,
+        app_id: context.app_id,
+        resource_id: context.resource.resource_id,
+        release_id: context.release.id,
+        installer_id: context.installer.id,
+        installer_sha256: context.installer.sha256,
+        tenant_id: null,
+      };
+      frame("requests/1.json", { ...common, kind: "check_fence" });
+      frame("requests/1.ready", { version: 1, run_id: workerAttemptId, frame_id: 1 });
+      const notices: [string, number][] = [
+        ["protected_installer_frame_ready", 1],
+        ["protected_installer_lifecycle_ready", 1],
+      ];
+      const inspect = command.args?.[0] === "neon-resource-inspect";
+      if (!inspect || options.mutateDuringInspect === true) {
+        for (const [index, effect] of [
+          "resources:roles",
+          "resources:database",
+          "resources:acl",
+        ].entries()) {
+          const authorityFrame = 2 + index * 2;
+          const effectId = options.forbiddenEffect ?? effect;
+          const resourceId =
+            options.foreignResource === true ? "foreign-resource" : common.resource_id;
+          const tenantId = options.tenant === true ? "foreign-tenant" : null;
+          frame(`requests/${authorityFrame}.json`, {
+            ...common,
+            resource_id: resourceId,
+            tenant_id: tenantId,
+            kind: "authorize_effect",
+            effect_id: effectId,
+            sequence: index + 1,
+          });
+          frame(`requests/${authorityFrame + 1}.json`, {
+            kind: "checkpoint_effect",
+            version: 1,
+            operation_id: operationRef,
+            context_digest: contextDigest,
+            fence_generation: context.operation.fence_generation,
+            sequence: index + 1,
+            effect_id: effectId,
+            resource_id: resourceId,
+            tenant_id: tenantId,
+            receipt: { state: "applied", readback_sha256: "c".repeat(64) },
+          });
+          for (const frameId of [authorityFrame, authorityFrame + 1]) {
+            frame(`requests/${frameId}.ready`, {
+              version: 1,
+              run_id: workerAttemptId,
+              frame_id: frameId,
+            });
+            notices.push(["protected_installer_frame_ready", frameId]);
+          }
+        }
+      }
+      for (const [frameId, kind] of [
+        [1, "worker_started"],
+        [2, "worker_succeeded"],
+      ] as const) {
+        frame(`lifecycle/${frameId}.json`, { version: 1, run_id: workerAttemptId, kind });
+        frame(`lifecycle/${frameId}.ready`, {
+          version: 1,
+          run_id: workerAttemptId,
+          frame_id: frameId,
+        });
+      }
+      notices.push(["protected_installer_lifecycle_ready", 2]);
+      if (inspect) {
+        frame("resource-observation.json", {
+          version: 1,
+          operation_id: operationRef,
+          context_digest: contextDigest,
+          fence_generation: context.operation.fence_generation,
+          resource_id: options.wrongReadback === true ? "foreign-resource" : common.resource_id,
+          scope: "auth_database",
+          status: "applied",
+          readback_sha256: "d".repeat(64),
+        });
+      }
+      return Promise.resolve(
+        Object.assign(completed, {
+          kill,
+          wait: () => Promise.resolve(completed),
+          logs: () => {
+            const stream = (async function* logs() {
+              for (const [kind, frameId] of notices) {
+                if (kind === "protected_installer_frame_ready" && frameId === 1) {
+                  fenceRequested = true;
+                }
+                yield {
+                  stream: "stdout" as const,
+                  data: `${JSON.stringify({ kind, version: 1, run_id: workerAttemptId, frame_id: frameId })}\n`,
+                };
+              }
+            })();
+            return Object.assign(stream, {
+              close: vi.fn<() => void>(),
+              [Symbol.dispose]: vi.fn<() => void>(),
+            });
+          },
+        }),
+      );
+    }),
+    writeFiles: vi.fn((rows: { path: string; content: Buffer; mode?: number }[]) => {
+      for (const row of rows) {
+        files.set(row.path, row.content);
+        modes.set(row.path, row.mode);
+      }
+      return Promise.resolve();
+    }),
+  } satisfies OperatorSandbox;
+  const createSandbox = vi.fn(() => {
+    expect(assertCredentialsCheckpointed).toHaveBeenCalledOnce();
+    return Promise.resolve(sandbox);
+  });
+  const input = {
+    approvalDigest: sha(bytes(plan)),
+    approvedPlanBytes: bytes(plan),
+    assertCredentialsCheckpointed,
+    assertCurrent: vi.fn(() => {
+      if (options.denyFence === true && fenceRequested) {
+        return Promise.reject(new HostedOperatorError("authorization_required"));
+      }
+      return Promise.resolve();
+    }),
+    bindWorkerContext,
+    credentials: {
+      bytes: bytes(passwordPair),
+      maintenanceUrl:
+        "postgresql://neondb_owner:fixture@ep-isolated.neon.tech/neondb?sslmode=verify-full",
+      sha256: sha(bytes(passwordPair)),
+    },
+    effectId: "auth-resources",
+    fenceGeneration: 7,
+    operationRef,
+    workerAttemptId,
+  };
+  const dependencies = { createSandbox };
+  const inspectInput = () => ({
+    ...input,
+    bindWorkerContext: undefined,
+    readbackOnly: true as const,
+  });
+  return {
+    assertCredentialsCheckpointed,
+    bindWorkerContext,
+    checkpoint,
+    createSandbox,
+    dependencies,
+    files,
+    input,
+    inspectInput,
+    kill,
+    modes,
+    sandbox,
+  };
+};
+
+it("bootstraps only the approved Auth resource through all three fenced checkpointed effects", async () => {
+  const f = fixture();
+  await expect(runAuthResourceFileSpool(config, f.input, f.dependencies)).resolves.toBeNull();
+  const contextBytes = requiredFile(f.files, `${spool}/startup/context.json`);
+  expect(readJson(f.files, `${spool}/startup/context.json`)).toMatchObject({
+    app_id: "auth",
+    kind: "neon_resource_bootstrap",
+    operation: {
+      approval_digest: f.input.approvalDigest,
+      fence_generation: 7,
+      operation_id: operationRef,
+    },
+    release: { id: f.input.approvalDigest, sha256: f.input.approvalDigest },
+    resource: {
+      credentials_sha256: f.input.credentials.sha256,
+      database: "pilot_auth",
+      provider_endpoint_id: "ep-isolated",
+      resource_id: "isolated-auth",
+      scope: "auth_database",
+    },
+    tenant_targets: [],
+  });
+  expect(f.assertCredentialsCheckpointed).toHaveBeenCalledWith({
+    approvalDigest: f.input.approvalDigest,
+    credentialsSha256: f.input.credentials.sha256,
+    resourceId: "isolated-auth",
+  });
+  expect(f.bindWorkerContext).toHaveBeenCalledWith({ contextDigest: sha(contextBytes) });
+  expect(f.files.get(`${spool}/startup/resource-credentials.json`)).toEqual(bytes(passwordPair));
+  expect(f.files.get(`${spool}/startup/direct-database-url.json`)).toEqual(
+    bytes(f.input.credentials.maintenanceUrl),
+  );
+  expect(
+    [...f.modes].filter(([path]) => path.includes("/startup/")).every(([, mode]) => mode === 0o600),
+  ).toBe(true);
+  expect(f.checkpoint.mock.calls.map(([value]) => value.effectId)).toEqual([
+    "resources:roles",
+    "resources:database",
+    "resources:acl",
+  ]);
+  expect(f.createSandbox).toHaveBeenCalledWith(
+    expect.objectContaining({ env: {}, networkPolicy: "allow-all" }),
+  );
+  expect(f.sandbox.delete).toHaveBeenCalledOnce();
+});
+
+it("inspects the same immutable resource without granting mutation authority", async () => {
+  const f = fixture();
+  await expect(
+    runAuthResourceFileSpool(config, f.inspectInput(), f.dependencies),
+  ).resolves.toMatchObject({
+    resource_id: "isolated-auth",
+    scope: "auth_database",
+    status: "applied",
+  });
+  expect(f.bindWorkerContext).not.toHaveBeenCalled();
+  expect(f.checkpoint).not.toHaveBeenCalled();
+  expect(f.sandbox.runCommand).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      args: ["neon-resource-inspect", "--file-spool", spool, workerAttemptId, "120000"],
+      env: {},
+    }),
+  );
+});
+
+it.each(["mutation", "foreign-readback"])("rejects %s during resource inspection", async (kind) => {
+  const f = fixture({
+    mutateDuringInspect: kind === "mutation",
+    wrongReadback: kind === "foreign-readback",
+  });
+  await expect(
+    runAuthResourceFileSpool(config, f.inspectInput(), f.dependencies),
+  ).rejects.toThrow();
+  expect(f.files.has(`${spool}/responses/2.ready`)).toBe(false);
+  expect(f.checkpoint).not.toHaveBeenCalled();
+});
+
+it("requires durable credential custody before allocating a Sandbox", async () => {
+  const f = fixture();
+  f.assertCredentialsCheckpointed.mockRejectedValue(
+    new HostedOperatorError("operation_in_progress"),
+  );
+  await expect(runAuthResourceFileSpool(config, f.input, f.dependencies)).rejects.toThrow(
+    "operation_in_progress",
+  );
+  expect(f.createSandbox).not.toHaveBeenCalled();
+  expect(f.bindWorkerContext).not.toHaveBeenCalled();
+});
+
+it("withholds the startup fence grant after current authority is lost", async () => {
+  const f = fixture({ denyFence: true });
+  await expect(runAuthResourceFileSpool(config, f.input, f.dependencies)).rejects.toThrow(
+    "authorization_required",
+  );
+  expect(f.files.has(`${spool}/responses/1.ready`)).toBe(false);
+  expect(f.checkpoint).not.toHaveBeenCalled();
+  expect(f.kill).toHaveBeenCalledOnce();
+  expect(f.sandbox.delete).toHaveBeenCalledOnce();
+});
+
+it.each(["resources:retire", "generated_app.grant_access", "auth:apply-schema-plan"])(
+  "denies the unrelated effect %s",
+  async (forbiddenEffect) => {
+    const f = fixture({ forbiddenEffect });
+    await expect(runAuthResourceFileSpool(config, f.input, f.dependencies)).rejects.toThrow();
+    expect(f.files.has(`${spool}/responses/2.ready`)).toBe(false);
+    expect(f.checkpoint).not.toHaveBeenCalled();
+  },
+);
+
+it.each(["resource", "tenant"])("denies a foreign %s in worker frames", async (kind) => {
+  const f = fixture({ foreignResource: kind === "resource", tenant: kind === "tenant" });
+  await expect(runAuthResourceFileSpool(config, f.input, f.dependencies)).rejects.toThrow();
+  expect(f.files.has(`${spool}/responses/2.ready`)).toBe(false);
+});
+
+it("verifies the pinned executable before writing maintenance or role credentials", async () => {
+  const f = fixture({ wrongPin: true });
+  await expect(runAuthResourceFileSpool(config, f.input, f.dependencies)).rejects.toThrow();
+  expect(f.files.has(`${spool}/startup/resource-credentials.json`)).toBe(false);
+  expect(f.files.has(`${spool}/startup/direct-database-url.json`)).toBe(false);
+});
+
+it("accepts equivalent credential JSON while preserving the worker's canonical credential hash", async () => {
+  const f = fixture();
+  f.input.credentials.bytes = Buffer.from(
+    JSON.stringify(
+      {
+        migratorPassword: passwordPair.migratorPassword,
+        runtimePassword: passwordPair.runtimePassword,
+      },
+      null,
+      2,
+    ),
+  );
+  await expect(runAuthResourceFileSpool(config, f.input, f.dependencies)).resolves.toBeNull();
+  expect(f.files.get(`${spool}/startup/resource-credentials.json`)).toEqual(bytes(passwordPair));
+});
+
+it("freezes resource, credentials, execution mode and worker pin before custody awaits", async () => {
+  const f = fixture();
+  const configuration = { ...config, resourcesWorker: { ...worker } };
+  f.input.assertCurrent.mockImplementationOnce(() => {
+    f.input.approvedPlanBytes.fill(32);
+    f.input.credentials.bytes.fill(32);
+    f.input.credentials.maintenanceUrl = "postgresql://other:fixture@foreign.invalid/other";
+    f.input.fenceGeneration = 99;
+    configuration.resourcesWorker.sha256 = "f".repeat(64);
+    Object.assign(f.input, { readbackOnly: true });
+    return Promise.resolve();
+  });
+  await expect(
+    runAuthResourceFileSpool(configuration, f.input, f.dependencies),
+  ).resolves.toBeNull();
+  expect(f.checkpoint).toHaveBeenCalledTimes(3);
+  expect(f.files.get(`${spool}/startup/resource-credentials.json`)).toEqual(bytes(passwordPair));
+});
+
+it.each([
+  "approval",
+  "effect",
+  "second-resource",
+  "installer",
+  "credential-hash",
+  "pooled-admin",
+  "foreign-admin",
+  "maintenance-database",
+  "role",
+  "fence",
+] as const)("rejects invalid %s before private custody or allocation", async (kind) => {
+  const f = fixture();
+  const changed = structuredClone(plan);
+  if (kind === "approval") {
+    f.input.approvalDigest = "f".repeat(64);
+  }
+  if (kind === "effect") {
+    f.input.effectId = "other";
+  }
+  if (kind === "second-resource") {
+    changed.effects.push({ id: "app-resources", kind: "resources", resourceId: "app-resource" });
+  }
+  if (kind === "installer") {
+    changed.resourcesInstaller.sha256 = "f".repeat(64);
+  }
+  if (kind === "credential-hash") {
+    f.input.credentials.sha256 = "f".repeat(64);
+  }
+  if (kind === "pooled-admin") {
+    f.input.credentials.maintenanceUrl = f.input.credentials.maintenanceUrl.replace(
+      "ep-isolated.",
+      "ep-isolated-pooler.",
+    );
+  }
+  if (kind === "foreign-admin") {
+    f.input.credentials.maintenanceUrl = f.input.credentials.maintenanceUrl.replace(
+      "neondb_owner",
+      "other",
+    );
+  }
+  if (kind === "maintenance-database") {
+    changed.authDatabase.database = "neondb";
+  }
+  if (kind === "role") {
+    changed.authDatabase.runtimeRole = changed.bootstrap.role;
+  }
+  if (kind === "fence") {
+    f.input.fenceGeneration = 0;
+  }
+  if (["second-resource", "installer", "maintenance-database", "role"].includes(kind)) {
+    f.input.approvedPlanBytes = bytes(changed);
+    f.input.approvalDigest = sha(f.input.approvedPlanBytes);
+  }
+  await expect(runAuthResourceFileSpool(config, f.input, f.dependencies)).rejects.toThrow();
+  expect(f.assertCredentialsCheckpointed).not.toHaveBeenCalled();
+  expect(f.createSandbox).not.toHaveBeenCalled();
+});

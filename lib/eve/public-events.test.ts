@@ -407,8 +407,8 @@ describe("installed Eve 0.68 projection", () => {
           result: {
             callId: "integration_install_1",
             kind: "tool-result",
+            output: { problem: "private installer diagnosis", status },
             toolName: "install-app-integrations",
-            output: { status, problem: "private installer diagnosis" },
           },
           status: "completed",
         },
@@ -417,9 +417,9 @@ describe("installed Eve 0.68 projection", () => {
     ]);
     expect(events).toContainEqual(
       expect.objectContaining({
-        type: "progress",
         label: "Installing the app's requested integrations",
         state,
+        type: "progress",
       }),
     );
     expect(JSON.stringify(events)).not.toContain("private installer diagnosis");
@@ -618,10 +618,21 @@ describe("installed Eve 0.68 projection", () => {
     });
 
     const tampered = structuredClone(events);
-    const last = tampered.at(-1) as MessageStreamEvent & {
-      data: { result: { output: { digest: string } } };
+    const last = tampered.at(-1);
+    if (last?.type !== "action.result") {
+      throw new Error("Expected the final artifact record result");
+    }
+    const { output } = last.data.result;
+    if (output === null || typeof output !== "object" || !("digest" in output)) {
+      throw new Error("Expected the artifact record output object");
+    }
+    tampered[tampered.length - 1] = {
+      ...last,
+      data: {
+        ...last.data,
+        result: { ...last.data.result, output: { ...output, digest: "0".repeat(64) } },
+      },
     };
-    last.data.result.output.digest = "0".repeat(64);
     expect(latestInstalledPrototype(tampered)).toBeUndefined();
   });
 
@@ -1033,7 +1044,6 @@ describe("installed Eve 0.68 projection", () => {
   it("shows the selected private compute footprint and ephemeral billing on the ordinary Build card", () => {
     const projected = projectInstalledEveEvent(
       installedEvent({
-        type: "input.requested",
         data: {
           requests: [
             {
@@ -1051,6 +1061,7 @@ describe("installed Eve 0.68 projection", () => {
             },
           ],
         },
+        type: "input.requested",
       }),
       4,
     );
@@ -1661,29 +1672,29 @@ describe("suspended hosted identity invitation", () => {
   const link = "https://auth.example.com/api/auth/platform/operator-link?nonce=ordinary-link-nonce";
   const partial = (output: unknown, toolName = "prepare-app-hosted-runtime") =>
     installedEvent({
-      type: "action.partial",
       data: {
-        turnId: "owner-turn",
+        result: { callId: "prepare-call", kind: "tool-result", output, toolName },
         sequence: 8,
         stepIndex: 2,
-        result: { kind: "tool-result", toolName, callId: "prepare-call", output },
+        turnId: "owner-turn",
       },
+      type: "action.partial",
     });
   it("exposes the ordinary link before completion without creating a response request", () => {
     const event = partial({
       authIdentityLink: link,
       authIdentityLinkExpiresAt: "2026-10-15T15:00:00Z",
       nextStep: "private instruction must not be copied",
-      token: "private-hook-token",
       proof: "private-proof",
       sealedAuthority: "private-seal",
+      token: "private-hook-token",
     });
     const projected = projectInstalledEveEvents([event]);
     expect(projected).toHaveLength(2);
     expect(projected[0]).toMatchObject({ type: "assistant_message" });
     expect(projected[1]).toMatchObject({
-      type: "auth_identity_invitation",
       callId: "prepare-call",
+      type: "auth_identity_invitation",
       url: link,
     });
     expect(JSON.stringify(projected)).toContain(link);
@@ -1696,12 +1707,65 @@ describe("suspended hosted identity invitation", () => {
       turnId: projected[0].type === "assistant_message" ? projected[0].turnId : "",
     });
   });
+  const authOnlyTool = "prepare-app-native-target-auth-only-delivery";
+  const authOnlyLink = new URL("https://auth.example.com/api/auth/platform/operator-link");
+  authOnlyLink.search = new URLSearchParams({
+    authResourceId: "isolated-auth",
+    bootstrapPlanDigest: "b".repeat(64),
+    nonce: "a".repeat(64),
+    ownerSessionId: "saved-session",
+  }).toString();
+  const authOnlyExpiry = "2026-10-15T15:00:00Z";
+  it("publishes only the Auth-only browser invitation and expiry", () => {
+    const projected = projectInstalledEveEvents([
+      partial(
+        {
+          authIdentityLink: authOnlyLink.href,
+          authIdentityLinkExpiresAt: authOnlyExpiry,
+          proof: "private-proof",
+          providerSecret: "private-key",
+          sealedNonce: "private-nonce",
+        },
+        authOnlyTool,
+      ),
+    ]);
+    expect(projected).toHaveLength(2);
+    expect(projected[1]).toMatchObject({
+      callId: "prepare-call",
+      expiresAt: authOnlyExpiry,
+      type: "auth_identity_invitation",
+      url: authOnlyLink.href,
+    });
+    expect(JSON.stringify(projected)).not.toMatch(/private-/u);
+  });
+  it("rejects Auth-only output with an unexpected path, proof query, fragment, or no expiry", () => {
+    for (const invalid of [
+      authOnlyLink.href.replace("/operator-link", "/other-path"),
+      `${authOnlyLink.href}&proof=private-proof`,
+      `${authOnlyLink.href}#private-proof`,
+    ]) {
+      expect(
+        projectInstalledEveEvents([
+          partial(
+            {
+              authIdentityLink: invalid,
+              authIdentityLinkExpiresAt: authOnlyExpiry,
+            },
+            authOnlyTool,
+          ),
+        ]),
+      ).toEqual([]);
+    }
+    expect(
+      projectInstalledEveEvents([partial({ authIdentityLink: authOnlyLink.href }, authOnlyTool)]),
+    ).toEqual([]);
+  });
   it("keeps the invitation separate from the eventual assistant reply", () => {
     const projected = projectInstalledEveEvents([
       partial({ authIdentityLink: link }),
       installedEvent({
+        data: { message: "Ready", turnId: "owner-turn" },
         type: "message.completed",
-        data: { turnId: "owner-turn", message: "Ready" },
       }),
     ]);
     expect(projected).toHaveLength(2);
@@ -1725,27 +1789,30 @@ describe("suspended hosted identity invitation", () => {
   });
 });
 
-it("closes only the finished hosted identity tool invitation", () => {
-  const events = projectInstalledEveEvents([
-    installedEvent({
-      type: "action.result",
-      data: {
-        turnId: "owner-turn",
-        sequence: 9,
-        stepIndex: 2,
-        status: "completed",
-        result: {
-          kind: "tool-result",
-          toolName: "prepare-app-hosted-runtime",
-          callId: "prepare-call",
-          output: { status: "prepared" },
+it.each(["prepare-app-hosted-runtime", "prepare-app-native-target-auth-only-delivery"])(
+  "closes only the finished hosted identity tool invitation for %s",
+  (toolName) => {
+    const events = projectInstalledEveEvents([
+      installedEvent({
+        data: {
+          result: {
+            callId: "prepare-call",
+            kind: "tool-result",
+            output: { status: "prepared" },
+            toolName,
+          },
+          sequence: 9,
+          status: "completed",
+          stepIndex: 2,
+          turnId: "owner-turn",
         },
-      },
-    }),
-  ]);
-  expect(events).toContainEqual({
-    type: "auth_identity_invitation_resolved",
-    callId: "prepare-call",
-    index: 1,
-  });
-});
+        type: "action.result",
+      }),
+    ]);
+    expect(events).toContainEqual({
+      callId: "prepare-call",
+      index: toolName === "prepare-app-hosted-runtime" ? 1 : 0,
+      type: "auth_identity_invitation_resolved",
+    });
+  },
+);

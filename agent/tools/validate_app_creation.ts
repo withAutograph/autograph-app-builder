@@ -77,7 +77,7 @@ const captureValidatedRelease = async (
   description: Awaited<ReturnType<typeof describeSelectedApp>> | undefined,
   input: Parameters<typeof publishCompiledOperatorArtifactsForSession>[0],
 ) => {
-  if (description?.backend.kind !== GENERATED_BACKEND) {
+  if (description === undefined) {
     return null;
   }
   try {
@@ -114,20 +114,20 @@ const prepareBackendValidationRuntime = async (
   signal?: AbortSignal,
 ) => {
   if (description?.backend.kind !== GENERATED_BACKEND || description.validation.browser === null) {
-    return { runtime: null, failure: null };
+    return { failure: null, runtime: null };
   }
   try {
-    return { runtime: await resolvePreparedRuntimeExecution(execution()), failure: null };
+    return { failure: null, runtime: await resolvePreparedRuntimeExecution(execution()) };
   } catch (error) {
     signal?.throwIfAborted();
     return {
-      runtime: null,
       failure: {
         problem:
           error instanceof Error ? error.message : "Authenticated runtime preparation failed.",
         reason: "authenticated-runtime-preparation",
         status: "blocked" as const,
       },
+      runtime: null,
     };
   }
 };
@@ -231,27 +231,27 @@ export const createAppValidationTool = (
         )
       ) {
         return {
-          status: "needs_repair" as const,
-          reason: "validation-tooling-prerequisite",
           failureClass: "private-compute-check-policy",
           problem: privateComputeCheckIntegrityProblem,
+          reason: "validation-tooling-prerequisite",
+          status: "needs_repair" as const,
         };
       }
       let repairComputeCheck: ReturnType<typeof prepareValidationPrivateComputeRepair>;
       try {
         repairComputeCheck = prepareValidationPrivateComputeRepair({
-          state: current,
           files: input.implementationFiles,
           sessionId: ctx.session.id,
           signal: ctx.abortSignal,
+          state: current,
         });
       } catch (error) {
         if (error instanceof ReviewedCheckRecipeRequiredError) {
           return {
-            status: "needs_repair" as const,
-            reason: error.code,
-            problem: error.message,
             implementationFiles: [error.implementationFile],
+            problem: error.message,
+            reason: error.code,
+            status: "needs_repair" as const,
           };
         }
         throw error;
@@ -303,17 +303,17 @@ export const createAppValidationTool = (
         !fixture &&
         !(await verifyPrivateComputeCheckIntegrity({
           appId: current.appSpec.appId,
-          root: current.applyReceipt.applyRoot,
           profile: current.proposal.target.privateCompute,
+          root: current.applyReceipt.applyRoot,
           sandbox,
           signal: ctx.abortSignal,
         }))
       ) {
         return {
-          status: "needs_repair" as const,
-          reason: "validation-tooling-prerequisite",
           failureClass: "private-compute-check-policy",
           problem: privateComputeCheckIntegrityProblem,
+          reason: "validation-tooling-prerequisite",
+          status: "needs_repair" as const,
         };
       }
       let logStore: Awaited<ReturnType<typeof validationLogStoreForSession>> | undefined;
@@ -391,9 +391,9 @@ export const createAppValidationTool = (
         fixture,
         parameters: {
           adapterSessionId: ctx.session.id,
-          callbackExecution: hostedOperatorCallbackExecution(ctx.session),
           appId: current.appSpec.appId,
           callId: ctx.callId,
+          callbackExecution: hostedOperatorCallbackExecution(ctx.session),
           root: current.applyReceipt.applyRoot,
           sandbox,
           sessionAuth: ctx.session.auth,
@@ -430,10 +430,10 @@ export const createAppValidationTool = (
       }
       validationPhase(ctx.callId, "running_repository_commands");
       const testShards = await readTargetValidationTestShards({
-        sandbox,
         root: current.applyReceipt.applyRoot,
-        workspacePath: current.applyReceipt.targetReceipt.workspacePath,
+        sandbox,
         signal: ctx.abortSignal,
+        workspacePath: current.applyReceipt.targetReceipt.workspacePath,
       });
       const attempt = createTargetValidationAttempt(current.applyReceipt, ctx.callId, testShards);
       appBuilderWorkflowState.update(() => ({
@@ -509,10 +509,10 @@ export const createAppValidationTool = (
       validationPhase(ctx.callId, "capturing_validated_release");
       const captureFailure = await executionPorts.captureRelease(description, {
         adapterSessionId: ctx.session.id,
-        callbackExecution: hostedOperatorCallbackExecution(ctx.session),
         appId: current.appSpec.appId,
         appSpecDigest: current.appSpec.digest,
         callId: ctx.callId,
+        callbackExecution: hostedOperatorCallbackExecution(ctx.session),
         root: current.applyReceipt.applyRoot,
         sandbox,
         sessionAuth: ctx.session.auth,
@@ -539,9 +539,9 @@ export const createAppValidationTool = (
         browserDescription,
         () => ({
           appId: current.appSpec.appId,
+          callbackExecution: hostedOperatorCallbackExecution(ctx.session),
           root: current.applyReceipt.applyRoot,
           sandboxId: getBuilderSandboxId(sandbox),
-          callbackExecution: hostedOperatorCallbackExecution(ctx.session),
           sessionAuth: ctx.session.auth,
           sessionId: ctx.session.id,
           signal: ctx.abortSignal,
@@ -549,7 +549,7 @@ export const createAppValidationTool = (
         }),
         ctx.abortSignal,
       );
-      const runtime = preparedBackend.runtime;
+      const { runtime } = preparedBackend;
       // A rejected protected reference never falls back to repository-local browser execution.
       const backendValidation =
         preparedBackend.failure ??

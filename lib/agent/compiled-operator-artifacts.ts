@@ -1,5 +1,6 @@
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
+import { z } from "zod";
 import type { SandboxSession } from "eve/sandbox";
 import type { HostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import { appBuilderWorkflowState } from "./workflow-state";
@@ -21,6 +22,7 @@ import type {
 } from "./draft-reconciliation-state";
 import type { PrivateApplyScope } from "./private-apply-authority";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
+import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { resolveHostedOperatorOwnerContext } from "../provisioning/hosted-operator-owner-context";
 import {
   createPostgresOperatorArtifactStore,
@@ -28,6 +30,8 @@ import {
 } from "../provisioning/hosted-operator-artifact-store";
 import type { OperatorArtifactContext } from "../provisioning/hosted-operator-artifact-store";
 import { createOperatorArtifactPublication } from "../provisioning/hosted-operator-artifacts";
+import { createCapturedAppDescriptionStore } from "../provisioning/captured-app-description";
+import type { CapturedAppDescriptionStore } from "../provisioning/captured-app-description";
 import type { OperatorArtifactPublicationDiagnostic } from "../provisioning/hosted-operator-artifacts";
 import {
   createPostgresOperatorArtifactSelections,
@@ -142,9 +146,9 @@ const resolveCompiledArtifactSession = async (
         adapterSessionId: input.adapterSessionId,
         authority,
         environment: process.env,
+        execution: input.callbackExecution,
         principal,
         sessionAuth: input.sessionAuth,
-        execution: input.callbackExecution,
       });
     const owner = await resolve();
     context = {
@@ -221,14 +225,16 @@ const resolveCompiledArtifactSession = async (
     context,
     ...(privateApplyScope === undefined ? {} : { privateApplyScope }),
   };
-  return { assertCurrentOwner, context, localAuthority, captureAuthority };
+  return { assertCurrentOwner, captureAuthority, context, localAuthority };
 };
 
 const openCompiledArtifactStorage = async (
   binding: Awaited<ReturnType<typeof resolveCompiledArtifactSession>>,
 ) => {
   const { assertCurrentOwner, localAuthority } = binding;
-  let storage: Awaited<ReturnType<typeof createLocalOperatorArtifactStorage>>;
+  let storage: Awaited<ReturnType<typeof createLocalOperatorArtifactStorage>> & {
+    descriptions?: CapturedAppDescriptionStore;
+  };
   if (localAuthority === undefined) {
     database ??= openArtifactDatabase();
     const pendingDatabase = database;
@@ -240,6 +246,10 @@ const openCompiledArtifactStorage = async (
       throw operatorArtifactUnavailable();
     }
     storage = {
+      descriptions: createCapturedAppDescriptionStore({
+        assertCurrentOwner,
+        database: opened,
+      }),
       selections: createPostgresOperatorArtifactSelections({
         assertCurrentOwner,
         database: opened,
@@ -247,10 +257,13 @@ const openCompiledArtifactStorage = async (
       store: createPostgresOperatorArtifactStore({ assertCurrentOwner, database: opened }),
     };
   } else {
-    storage = await createLocalOperatorArtifactStorage({
-      assertCurrentOwner,
-      authority: localAuthority,
-    });
+    storage = {
+      ...(await createLocalOperatorArtifactStorage({
+        assertCurrentOwner,
+        authority: localAuthority,
+      })),
+      descriptions: undefined,
+    };
   }
   return storage;
 };
@@ -262,10 +275,77 @@ export const recordPublishedOperatorSourceForSession = async (
     backendKind?: AppDescription["backend"]["kind"];
   },
 ): Promise<
-  { status: "not-required" } | { status: "recorded"; selection: CompiledOperatorReleaseSelection }
+  | { status: "not-required" }
+  | { status: "recorded"; selection: CompiledOperatorReleaseSelection }
+  | { status: "recorded-static"; publishedSource: PublishedAppSource }
 > => {
   if (input.backendKind === "static") {
-    return { status: "not-required" };
+    if (appBuilderWorkflowState.get() === null) {
+      return { status: "not-required" };
+    }
+    const binding = await resolveCompiledArtifactSession(input);
+    const storage = await openCompiledArtifactStorage(binding);
+    if (storage.descriptions === undefined) {
+      return { status: "not-required" };
+    }
+    const description = await storage.descriptions.read(binding.context, input.appSpecDigest);
+    if (description === undefined || description.backend.kind !== "static") {
+      throw operatorArtifactUnavailable();
+    }
+    const source = publishedAppSourceSchema.parse(input.publishedSource);
+    const artifactPath = `_protected-operator/static-published-source/${input.appId}/${input.appSpecDigest}`;
+    const [{ prototypeArtifactChunks }, { and, eq }, { createHash }, db] = await Promise.all([
+      import("../db/schema"),
+      import("drizzle-orm"),
+      import("node:crypto"),
+      openArtifactDatabase(),
+    ]);
+    const key = {
+      ...hostedTenantAuthoritySchema.parse(binding.context.authority),
+      chunkIndex: 0,
+      path: artifactPath,
+      sessionId: binding.context.target.sessionId,
+    };
+    const scope = and(
+      eq(prototypeArtifactChunks.issuer, key.issuer),
+      eq(prototypeArtifactChunks.audience, key.audience),
+      eq(prototypeArtifactChunks.workspaceId, key.workspaceId),
+      eq(prototypeArtifactChunks.ownerUserId, key.ownerUserId),
+      eq(prototypeArtifactChunks.sessionId, key.sessionId),
+      eq(prototypeArtifactChunks.path, key.path),
+      eq(prototypeArtifactChunks.chunkIndex, key.chunkIndex),
+    );
+    const content = JSON.stringify({
+      appId: input.appId,
+      appSpecDigest: input.appSpecDigest,
+      descriptionSha256: createHash("sha256").update(JSON.stringify(description)).digest("hex"),
+      source,
+      version: 1,
+    });
+    const chunkDigest = createHash("sha256").update(content).digest("hex");
+    const transferDigest = createHash("sha256").update(source.reviewDigest).digest("hex");
+    await binding.assertCurrentOwner(binding.context);
+    await db
+      .insert(prototypeArtifactChunks)
+      .values({
+        ...key,
+        chunkDigest,
+        content,
+        createdAt: new Date(),
+        transferDigest,
+      })
+      .onConflictDoNothing();
+    const rows = await db
+      .select()
+      .from(prototypeArtifactChunks)
+      .where(and(scope, eq(prototypeArtifactChunks.transferDigest, transferDigest)))
+      .limit(1);
+    await binding.assertCurrentOwner(binding.context);
+    const row = rows.at(0);
+    if (row === undefined || row.chunkDigest !== chunkDigest || row.content !== content) {
+      throw operatorArtifactUnavailable();
+    }
+    return { publishedSource: source, status: "recorded-static" };
   }
   const binding = await resolveCompiledArtifactSession(input);
   const storage = await openCompiledArtifactStorage(binding);
@@ -281,6 +361,85 @@ export const recordPublishedOperatorSourceForSession = async (
   return { selection, status: "recorded" };
 };
 
+/** Read exact owner/session/AppSpec static publication provenance after independent owner resolution. */
+export const readPublishedStaticAppSourceForSession = async (
+  input: CompiledOperatorArtifactSessionInput,
+): Promise<PublishedAppSource | undefined> => {
+  const binding = await resolveCompiledArtifactSession(input);
+  const storage = await openCompiledArtifactStorage(binding);
+  if (storage.descriptions === undefined) {
+    return undefined;
+  }
+  const description = await storage.descriptions.read(binding.context, input.appSpecDigest);
+  if (description === undefined || description.backend.kind !== "static") {
+    return undefined;
+  }
+  const [{ prototypeArtifactChunks }, { and, desc, eq }, { createHash }, db] = await Promise.all([
+    import("../db/schema"),
+    import("drizzle-orm"),
+    import("node:crypto"),
+    openArtifactDatabase(),
+  ]);
+  const scope = and(
+    eq(
+      prototypeArtifactChunks.issuer,
+      hostedTenantAuthoritySchema.parse(binding.context.authority).issuer,
+    ),
+    eq(
+      prototypeArtifactChunks.audience,
+      hostedTenantAuthoritySchema.parse(binding.context.authority).audience,
+    ),
+    eq(
+      prototypeArtifactChunks.workspaceId,
+      hostedTenantAuthoritySchema.parse(binding.context.authority).workspaceId,
+    ),
+    eq(
+      prototypeArtifactChunks.ownerUserId,
+      hostedTenantAuthoritySchema.parse(binding.context.authority).ownerUserId,
+    ),
+    eq(prototypeArtifactChunks.sessionId, binding.context.target.sessionId),
+    eq(
+      prototypeArtifactChunks.path,
+      `_protected-operator/static-published-source/${input.appId}/${input.appSpecDigest}`,
+    ),
+    eq(prototypeArtifactChunks.chunkIndex, 0),
+  );
+  await binding.assertCurrentOwner(binding.context);
+  const rows = await db
+    .select()
+    .from(prototypeArtifactChunks)
+    .where(scope)
+    .orderBy(desc(prototypeArtifactChunks.createdAt), desc(prototypeArtifactChunks.transferDigest))
+    .limit(1);
+  await binding.assertCurrentOwner(binding.context);
+  const row = rows.at(0);
+  if (
+    row === undefined ||
+    createHash("sha256").update(row.content).digest("hex") !== row.chunkDigest
+  ) {
+    return undefined;
+  }
+  const value = z
+    .strictObject({
+      appId: z.string(),
+      appSpecDigest: z.string(),
+      descriptionSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+      source: publishedAppSourceSchema,
+      version: z.literal(1),
+    })
+    .safeParse(JSON.parse(row.content));
+  if (
+    !value.success ||
+    value.data.appId !== input.appId ||
+    value.data.appSpecDigest !== input.appSpecDigest ||
+    value.data.descriptionSha256 !==
+      createHash("sha256").update(JSON.stringify(description)).digest("hex")
+  ) {
+    return undefined;
+  }
+  return value.data.source;
+};
+
 /** A sealed context records no grant: every completion re-resolves the current authenticated owner. */
 export const assertReconciliationCompletionOwnerForSession = async (input: {
   completion: DraftPublicationCompletion;
@@ -293,8 +452,8 @@ export const assertReconciliationCompletionOwnerForSession = async (input: {
       ...input,
       appId: input.completion.appId,
       appSpecDigest: input.completion.appReview.appSpecDigest,
-      root: input.completion.root,
       callId: input.completion.proposal.digest,
+      root: input.completion.root,
     },
     input.completion,
   );
@@ -319,8 +478,8 @@ export const recordPublishedReconciliationSourceForSession = async (input: {
       ...input,
       appId: completion.appId,
       appSpecDigest: completion.appReview.appSpecDigest,
-      root: completion.root,
       callId: completion.proposal.digest,
+      root: completion.root,
     },
     completion,
   );
@@ -352,8 +511,8 @@ export const recordPublishedReconciliationSourceForSession = async (input: {
       assertCurrentOwner: binding.assertCurrentOwner,
       context: binding.context,
       lookup: {
-        artifactRef: release.selection.artifactRef,
         appSpecDigest: release.selection.appSpecDigest,
+        artifactRef: release.selection.artifactRef,
       },
       selections: storage.selections,
       store: storage.store,
@@ -374,8 +533,8 @@ export const recordPublishedReconciliationSourceForSession = async (input: {
       }
       return await storage.selections.associatePublishedSource(binding.context, {
         approvedSelection: release.selection,
-        publishedSource: input.publishedSource,
         operationId: `draft-reconciliation:${completion.proposal.digest}`,
+        publishedSource: input.publishedSource,
       });
     }
     const selection = await storage.selections.record(
@@ -437,10 +596,29 @@ export const readExactCompiledOperatorReleaseForSession = async (
   });
 };
 
+/** Read the static description captured for the exact app, owner session, and AppSpec digest. */
+export const readCapturedAppDescriptionForSession = async (
+  input: CompiledOperatorArtifactSessionInput,
+): Promise<AppDescription | undefined> => {
+  input.signal?.throwIfAborted();
+  const binding = await resolveCompiledArtifactSession(input);
+  const storage = await openCompiledArtifactStorage(binding);
+  if (storage.descriptions === undefined) {
+    return undefined;
+  }
+  await binding.assertCurrentOwner(binding.context);
+  const description = await storage.descriptions.read(binding.context, input.appSpecDigest);
+  await binding.assertCurrentOwner(binding.context);
+  input.signal?.throwIfAborted();
+  return description;
+};
+
 /** Closed workflow hook. Public tool input cannot provide SQL, release paths, hashes or owner facts. */
 export const publishCompiledOperatorArtifactsForSession = async (
   input: CompiledOperatorArtifactSessionInput & {
     sandbox: Pick<SandboxSession, "run" | "readBinaryFile">;
+    /** Internal Auth-only planner guard: capture static description, never publish a generated release. */
+    expectedBackend?: "static";
     onCaptured?: (
       captured: Pick<
         CompiledOperatorReleaseSelection,
@@ -491,25 +669,20 @@ export const publishCompiledOperatorArtifactsForSession = async (
     await assertCurrentOwner(context);
     checkStopped();
     observe({ outcome: "completed", stage: "description" });
+    if (input.expectedBackend === "static" && description.backend.kind !== "static") {
+      throw operatorArtifactUnavailable();
+    }
     if (description.backend.kind === "static") {
-      // Hosted frontend-only apps need an authoritative description too; there
-      // is deliberately no compiled SQL release or database allocation.
-      if (binding.localAuthority === undefined) {
-        const { createCapturedAppDescriptionStore } =
-          await import("../provisioning/captured-app-description");
-        database ??= openArtifactDatabase();
-        const descriptions = createCapturedAppDescriptionStore({
-          database: await database,
-          assertCurrentOwner,
-        });
-        await descriptions.record(context, input.appSpecDigest, input.callId, description);
-      }
+      const storage = await openCompiledArtifactStorage(binding);
+      await storage.descriptions?.record(context, input.appSpecDigest, input.callId, description);
+      await assertCurrentOwner(context);
+      checkStopped();
       return {
-        status: "not-required" as const,
         compilation: {
           ...binding.captureAuthority,
           release: { status: "not-required" as const },
         } satisfies ReconciliationCompilation,
+        status: "not-required" as const,
       };
     }
     observe({ outcome: "started", stage: "storage" });
@@ -558,12 +731,12 @@ export const publishCompiledOperatorArtifactsForSession = async (
     checkStopped();
     observe({ outcome: "completed", stage: "selection" });
     return {
-      selection,
-      status: "published" as const,
       compilation: {
         ...binding.captureAuthority,
         release: { status: "published" as const, selection },
       } satisfies ReconciliationCompilation,
+      selection,
+      status: "published" as const,
     };
   } catch (error) {
     observe({ outcome: input.signal?.aborted === true ? "cancelled" : "failed", stage });

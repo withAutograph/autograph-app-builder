@@ -19,12 +19,12 @@ export const createCapturedAppDescriptionStore = (input: {
 }) => {
   const scope = (context: OperatorArtifactContext, appSpecDigest: string) => ({
     ...hostedTenantAuthoritySchema.parse(context.authority),
-    sessionId: z.string().min(1).parse(context.target.sessionId),
+    chunkIndex: 0,
     path: `_protected-operator/selections/app-description/${z
       .string()
       .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)
       .parse(context.target.appId)}/${digest.parse(appSpecDigest)}`,
-    chunkIndex: 0,
+    sessionId: z.string().min(1).parse(context.target.sessionId),
   });
   const predicate = (value: ReturnType<typeof scope>) =>
     and(
@@ -50,6 +50,24 @@ export const createCapturedAppDescriptionStore = (input: {
     return description;
   };
   return {
+    async read(
+      context: OperatorArtifactContext,
+      appSpecDigest: string,
+    ): Promise<AppDescription | undefined> {
+      await input.assertCurrentOwner(context);
+      const rows = await input.database
+        .select()
+        .from(prototypeArtifactChunks)
+        .where(predicate(scope(context, appSpecDigest)))
+        .orderBy(
+          desc(prototypeArtifactChunks.createdAt),
+          desc(prototypeArtifactChunks.transferDigest),
+        )
+        .limit(1);
+      await input.assertCurrentOwner(context);
+      const row = rows.at(0);
+      return row === undefined ? undefined : parse(context, row);
+    },
     async record(
       context: OperatorArtifactContext,
       appSpecDigest: string,
@@ -85,23 +103,7 @@ export const createCapturedAppDescriptionStore = (input: {
       }
       return parse(context, row);
     },
-    async read(
-      context: OperatorArtifactContext,
-      appSpecDigest: string,
-    ): Promise<AppDescription | undefined> {
-      await input.assertCurrentOwner(context);
-      const rows = await input.database
-        .select()
-        .from(prototypeArtifactChunks)
-        .where(predicate(scope(context, appSpecDigest)))
-        .orderBy(
-          desc(prototypeArtifactChunks.createdAt),
-          desc(prototypeArtifactChunks.transferDigest),
-        )
-        .limit(1);
-      await input.assertCurrentOwner(context);
-      const row = rows.at(0);
-      return row === undefined ? undefined : parse(context, row);
-    },
   };
 };
+
+export type CapturedAppDescriptionStore = ReturnType<typeof createCapturedAppDescriptionStore>;

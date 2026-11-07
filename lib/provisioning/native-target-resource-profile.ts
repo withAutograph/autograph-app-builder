@@ -10,11 +10,18 @@ import {
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration-schema";
 
 const profileSchema = z.strictObject({
-  id: z.string().min(1),
-  authority: hostedTenantAuthoritySchema,
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+  authority: hostedTenantAuthoritySchema,
   configuration: hostedOperatorSourceConfigurationSchema,
+  id: z.string().min(1),
 });
+
+const authOnlyProfileSchema = profileSchema.refine(
+  (profile) =>
+    profile.configuration.authOnlyApplications?.[profile.appId] !== undefined &&
+    profile.configuration.applications[profile.appId] === undefined,
+  "Additive resource profiles must declare an Auth-only app without an application database.",
+);
 
 /** Select only a deployment-owned profile bound to the authenticated canonical app owner. */
 export const resolveNativeTargetResourceProfile = (input: {
@@ -30,11 +37,22 @@ export const resolveNativeTargetResourceProfile = (input: {
   const unavailable = () => new Error("Protected operator resource profile is unavailable.");
   try {
     const authority = hostedTenantAuthoritySchema.parse(input.authority);
-    const text = (input.environment ?? process.env).PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES;
-    if (text === undefined || text === "" || input.resourceProfileId === "") {
+    const environment = input.environment ?? process.env;
+    const sharedText = environment.PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES;
+    const authOnlyText = environment.PROTECTED_HOSTED_OPERATOR_AUTH_ONLY_RESOURCE_PROFILES;
+    if (input.resourceProfileId === "") {
       throw unavailable();
     }
-    const profiles = z.array(profileSchema).parse(JSON.parse(text));
+    // A separate private setting adds Auth-only custody without rewriting the shared inventory.
+    // Parse both inventories before selection: malformed input and duplicate IDs never grant fallback authority.
+    const profiles = [
+      ...(sharedText === undefined || sharedText === ""
+        ? []
+        : z.array(profileSchema).parse(JSON.parse(sharedText))),
+      ...(authOnlyText === undefined || authOnlyText === ""
+        ? []
+        : z.array(authOnlyProfileSchema).parse(JSON.parse(authOnlyText))),
+    ];
     const selected = profiles.filter((profile) => profile.id === input.resourceProfileId);
     if (selected.length !== 1) {
       throw unavailable();
@@ -83,34 +101,34 @@ export const nativeTargetResourceProfileAuthorityDigest = (
       : { operationScope: worker.operationScope, subcommand: worker.subcommand };
   const authority = {
     authDatabase: config.authDatabase,
-    nativeNeon: {
-      store: config.nativeNeon.configuration.nativeStore,
-      scope: config.nativeNeon.scope,
-      connector: config.nativeNeon.configuration.connector,
-      operator: config.nativeNeon.configuration.operator,
-    },
+    builderCallbackOrigin: config.builderCallbackOrigin,
     gateway: {
-      projectId: config.gateway.projectId,
-      environment: config.gateway.environment,
-      branch: config.gateway.branch,
       authBrowserOrigin: config.gateway.authBrowserOrigin,
+      branch: config.gateway.branch,
+      environment: config.gateway.environment,
       gatewayOrigin: config.gateway.gatewayOrigin,
+      projectId: config.gateway.projectId,
       publicOrigin: config.gateway.publicOrigin,
       workload: config.gateway.workload,
     },
+    nativeNeon: {
+      connector: config.nativeNeon.configuration.connector,
+      operator: config.nativeNeon.configuration.operator,
+      scope: config.nativeNeon.scope,
+      store: config.nativeNeon.configuration.nativeStore,
+    },
     operator: {
-      projectId: config.operator.projectId,
       environment: config.operator.environment,
       origin: config.operator.origin,
+      projectId: config.operator.projectId,
     },
-    builderCallbackOrigin: config.builderCallbackOrigin,
     sandbox: {
-      projectId: config.sandbox.projectId,
-      teamId: config.sandbox.teamId,
-      resources: capability(config.sandbox.resourcesWorker),
-      auth: capability(config.sandbox.authWorker),
       access: capability(config.sandbox.accessWorker),
+      auth: capability(config.sandbox.authWorker),
       membership: capability(config.sandbox.membershipWorker),
+      projectId: config.sandbox.projectId,
+      resources: capability(config.sandbox.resourcesWorker),
+      teamId: config.sandbox.teamId,
     },
   };
   return createHash("sha256").update(JSON.stringify(authority)).digest("hex");

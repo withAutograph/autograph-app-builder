@@ -1,13 +1,35 @@
+import { nativeTargetAuthOnlyEntryApprovalInputSchema } from "../provisioning/native-target-auth-only-entry-plan-store";
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
+import type { z } from "zod";
 import type { ApprovalResponseContext } from "eve/tools/approval";
+import { nativeTargetAuthOnlyDeliveryPreparationInputSchema } from "../eve/private-native-target-auth-only-delivery-approval";
+import {
+  nativeTargetAuthOnlyFinalRoutingApprovalInputSchema,
+  nativeTargetAuthOnlyFinalRoutingPlanInputSchema,
+} from "../eve/private-native-target-auth-only-final-routing-approval";
+import {
+  nativeTargetAuthOnlyFinalRoutingResultSchema,
+  nativeTargetAuthOnlyEntryPlanInputSchema,
+  nativeTargetAuthOnlyEntryResultSchema,
+  nativeTargetAuthOnlyDeliveryPlanInputSchema,
+  nativeTargetAuthOnlyDeliveryResultSchema,
+} from "../provisioning/native-target-onboarding-transport";
+import { nativeTargetAuthOnlyResourcePreparationInputSchema } from "../eve/private-native-target-auth-only-resource-approval";
+import type { nativeTargetAuthOnlyResourceResultSchema } from "../provisioning/native-target-onboarding-transport";
 import type { AppDescription } from "../repository/app-description";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import {
+  nativeTargetAuthOnlyPlanRequestSchema,
+  nativeTargetAuthOnlyPreparationRequestSchema,
   nativeTargetPlanRequestSchema,
   nativeTargetPreparationRequestSchema,
 } from "./native-target-onboarding-input-schema";
 import type {
+  NativeTargetAuthOnlyPlanRequest,
+  NativeTargetAuthOnlyPlanResult,
+  NativeTargetAuthOnlyPreparationRequest,
+  NativeTargetAuthOnlyDispatchResult,
   NativeTargetPlanRequest,
   NativeTargetPreparationRequest,
   NativeTargetOnboardingResult,
@@ -31,11 +53,15 @@ import type {
 } from "../provisioning/native-target-vercel-provider";
 
 export {
+  nativeTargetAuthOnlyPlanRequestSchema,
+  nativeTargetAuthOnlyPlanResultSchema,
   nativeTargetPlanRequestSchema,
   nativeTargetPreparationRequestSchema,
   nativeTargetOnboardingResultSchema,
 } from "./native-target-onboarding-input-schema";
 export type {
+  NativeTargetAuthOnlyPlanRequest,
+  NativeTargetAuthOnlyPlanResult,
   NativeTargetPlanRequest,
   NativeTargetPreparationRequest,
   NativeTargetOnboardingResult,
@@ -62,13 +88,92 @@ export interface NativeTargetCapturedRelease {
 /** All ports are private server capabilities; none are constructed from tool input. */
 export type NativeTargetNonCreationReason = NativeTargetNoCreationReason;
 const nonCreationReason = {
+  authorization_denied: "not_dispatched",
   collision: "name_conflict",
   permission_denied: "provider_permission_denied",
   provider_rejected: "provider_validation_failed",
   rate_limited: "provider_rate_limited",
-  authorization_denied: "not_dispatched",
 } as const;
+const matchesAll = (...conditions: boolean[]) => conditions.every(Boolean);
 export interface NativeTargetOnboardingRuntimePorts {
+  planAuthOnly?: (
+    input: NativeTargetAuthOnlyPlanRequest,
+    ctx: NativeTargetInvocation,
+    selectedApp: { appId: string; appSpecDigest: string },
+  ) => Promise<NativeTargetAuthOnlyPlanResult>;
+  prepareAuthOnly?: (
+    input: NativeTargetAuthOnlyPreparationRequest,
+    ctx: NativeTargetInvocation,
+  ) => Promise<NativeTargetAuthOnlyDispatchResult>;
+  hasAuthOnlyApproval?: (
+    input: NativeTargetAuthOnlyPreparationRequest,
+    ctx: NativeTargetInvocation,
+  ) => Promise<boolean>;
+  prepareAuthOnlyResources?: (
+    input: z.infer<typeof nativeTargetAuthOnlyResourcePreparationInputSchema>,
+    ctx: NativeTargetInvocation,
+  ) => Promise<z.infer<typeof nativeTargetAuthOnlyResourceResultSchema>>;
+  hasAuthOnlyResourceApproval?: (
+    input: z.infer<typeof nativeTargetAuthOnlyResourcePreparationInputSchema>,
+    ctx: NativeTargetInvocation,
+  ) => Promise<boolean>;
+  planAuthOnlyEntry?: (
+    input: z.infer<typeof nativeTargetAuthOnlyEntryPlanInputSchema>,
+    ctx: NativeTargetInvocation,
+  ) => Promise<z.infer<typeof nativeTargetAuthOnlyEntryApprovalInputSchema>>;
+  prepareAuthOnlyEntry?: (
+    input: z.infer<typeof nativeTargetAuthOnlyEntryApprovalInputSchema>,
+    ctx: NativeTargetInvocation,
+  ) => Promise<z.infer<typeof nativeTargetAuthOnlyEntryResultSchema>>;
+  hasAuthOnlyEntryApproval?: (
+    input: z.infer<typeof nativeTargetAuthOnlyEntryApprovalInputSchema>,
+    ctx: NativeTargetInvocation,
+  ) => Promise<boolean>;
+  authorizeAuthOnlyEntryApprovalResponse?: (
+    ctx: ApprovalResponseContext<z.infer<typeof nativeTargetAuthOnlyEntryApprovalInputSchema>>,
+  ) => Promise<void>;
+  planAuthOnlyFinalRouting?: (
+    input: z.infer<typeof nativeTargetAuthOnlyFinalRoutingPlanInputSchema>,
+    ctx: NativeTargetInvocation,
+  ) => Promise<z.infer<typeof nativeTargetAuthOnlyFinalRoutingApprovalInputSchema>>;
+  prepareAuthOnlyFinalRouting?: (
+    input: z.infer<typeof nativeTargetAuthOnlyFinalRoutingApprovalInputSchema>,
+    ctx: NativeTargetInvocation,
+  ) => Promise<z.infer<typeof nativeTargetAuthOnlyFinalRoutingResultSchema>>;
+  hasAuthOnlyFinalRoutingApproval?: (
+    input: z.infer<typeof nativeTargetAuthOnlyFinalRoutingApprovalInputSchema>,
+    ctx: NativeTargetInvocation,
+  ) => Promise<boolean>;
+  authorizeAuthOnlyFinalRoutingApprovalResponse?: (
+    ctx: ApprovalResponseContext<
+      z.infer<typeof nativeTargetAuthOnlyFinalRoutingApprovalInputSchema>
+    >,
+  ) => Promise<void>;
+  planAuthOnlyDelivery?: (
+    input: z.infer<typeof nativeTargetAuthOnlyDeliveryPlanInputSchema>,
+    ctx: NativeTargetInvocation,
+  ) => Promise<z.infer<typeof nativeTargetAuthOnlyDeliveryPreparationInputSchema>>;
+  prepareAuthOnlyDelivery?: (
+    input: z.infer<typeof nativeTargetAuthOnlyDeliveryPreparationInputSchema>,
+    ctx: NativeTargetInvocation,
+  ) => Promise<z.infer<typeof nativeTargetAuthOnlyDeliveryResultSchema>>;
+  hasAuthOnlyDeliveryApproval?: (
+    input: z.infer<typeof nativeTargetAuthOnlyDeliveryPreparationInputSchema>,
+    ctx: NativeTargetInvocation,
+  ) => Promise<boolean>;
+  authorizeAuthOnlyDeliveryApprovalResponse?: (
+    ctx: ApprovalResponseContext<
+      z.infer<typeof nativeTargetAuthOnlyDeliveryPreparationInputSchema>
+    >,
+  ) => Promise<void>;
+  authorizeAuthOnlyResourceApprovalResponse?: (
+    ctx: ApprovalResponseContext<
+      z.infer<typeof nativeTargetAuthOnlyResourcePreparationInputSchema>
+    >,
+  ) => Promise<void>;
+  authorizeAuthOnlyApprovalResponse?: (
+    ctx: ApprovalResponseContext<NativeTargetAuthOnlyPreparationRequest>,
+  ) => Promise<void>;
   /** Reauthorizes current owner/app and reads captured immutable release metadata. */
   readCapturedRelease: (
     ctx: NativeTargetInvocation,
@@ -175,8 +280,8 @@ const invalid = () => new Error("native_target_onboarding_mismatch");
 const envelope = (row: NativeTargetOnboardingRow): NativeTargetPreparationRequest => ({
   appId: row.appId,
   operationRef: row.requestId,
-  planDigest: row.record.planDigest,
   plan: structuredClone(row.record.plan),
+  planDigest: row.record.planDigest,
 });
 const publicStatus = (stage: NativeTargetOnboardingRow["record"]["stage"]) => {
   if (stage === "ready" || stage === "cancelled" || stage === "planned") {
@@ -258,7 +363,7 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
     row: NativeTargetOnboardingRow,
     observed: NativeTargetVercelProjectObservation,
   ) => {
-    const record = row.record;
+    const { record } = row;
     if (!("attempt" in record)) {
       throw invalid();
     }
@@ -271,12 +376,12 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
       await ports.journal.recordReady(ctx, row.appId, {
         attemptId: record.attempt.attemptId,
         observed: {
-          projectId: observed.projectId,
-          name: observed.name,
-          teamId: observed.scopeId,
           installationId: record.plan.project.installationId,
+          name: observed.name,
+          projectId: observed.projectId,
           projectSettings: observed.settings,
           protection: observed.protection,
+          teamId: observed.scopeId,
         },
         observedAt: now().toISOString(),
       }),
@@ -302,18 +407,23 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
     const started = now();
     const attempt: NativeTargetOnboardingAttempt = {
       attemptId: uuid(),
-      leaseId: uuid(),
       candidateName,
-      startedAt: started.toISOString(),
       leaseExpiresAt: new Date(started.getTime() + 300_000).toISOString(),
+      leaseId: uuid(),
+      startedAt: started.toISOString(),
     };
     ctx.abortSignal.throwIfAborted();
     row = await ports.journal.claimAttempt(ctx, record.appId, attempt);
     let result: NativeTargetVercelProjectCreation;
     try {
       result = await ports.createProject(ctx, {
-        plan: record.plan,
-        candidateName,
+        acceptProjectId: async (projectId) => {
+          await ports.journal.acceptProjectId(ctx, record.appId, attempt.leaseId, {
+            attemptId: attempt.attemptId,
+            projectId,
+            acceptedAt: now().toISOString(),
+          });
+        },
         authorizeAttempt: async () => {
           ctx.abortSignal.throwIfAborted();
           await ports.journal.authorizeAttempt(
@@ -323,13 +433,8 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
             attempt.leaseId,
           );
         },
-        acceptProjectId: async (projectId) => {
-          await ports.journal.acceptProjectId(ctx, record.appId, attempt.leaseId, {
-            attemptId: attempt.attemptId,
-            projectId,
-            acceptedAt: now().toISOString(),
-          });
-        },
+        candidateName,
+        plan: record.plan,
       });
     } catch {
       return publicResult(await ports.journal.recordUnknown(ctx, record.appId, attempt.attemptId));
@@ -341,7 +446,7 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
         attempt.attemptId,
         nonCreationReason[result.reason],
       );
-      return { ...publicResult(retired), status: "blocked" as const, reason: result.reason };
+      return { ...publicResult(retired), reason: result.reason, status: "blocked" as const };
     }
     if (result.status !== "verified") {
       return publicResult(await ports.journal.recordUnknown(ctx, record.appId, attempt.attemptId));
@@ -367,10 +472,10 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
     // manufacture cancellation or settle the previous public response.
     if (
       !isDeepStrictEqual(proposal.project, {
-        name: prior.plan.project.name,
-        teamId: prior.plan.project.teamId,
         installationId: prior.plan.project.installationId,
+        name: prior.plan.project.name,
         projectSettings: prior.plan.project.projectSettings,
+        teamId: prior.plan.project.teamId,
       }) ||
       proposal.branch !== prior.plan.branch ||
       proposal.conflictPolicy !== prior.plan.conflictPolicy
@@ -391,9 +496,9 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
       throw invalid();
     }
     const resourceIdentity = (plan: NativeTargetOnboardingPlan) => ({
-      profile: plan.resourceProfileId,
       authority: plan.resourceProfileAuthorityDigest,
       nativeNeon: plan.nativeNeon,
+      profile: plan.resourceProfileId,
       resourceId: plan.appDatabase.resourceId,
     });
     if (isDeepStrictEqual(resourceIdentity(candidate), resourceIdentity(prior.plan))) {
@@ -412,6 +517,139 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
     );
   };
   return {
+    async authorizeApprovalResponse(ctx: ApprovalResponseContext<NativeTargetPreparationRequest>) {
+      if (
+        ctx.request.toolName !== "prepare-app-native-target" ||
+        ctx.request.toolInput === undefined
+      ) {
+        throw invalid();
+      }
+      const input = nativeTargetPreparationRequestSchema.parse(ctx.request.toolInput);
+      if (
+        input.appId !== input.plan.appId ||
+        nativeTargetOnboardingPlanDigest(input.plan) !== input.planDigest
+      ) {
+        throw invalid();
+      }
+      await ports.authorizeApprovalResponse(ctx);
+    },
+    async authorizeAuthOnlyApprovalResponse(
+      ctx: ApprovalResponseContext<NativeTargetAuthOnlyPreparationRequest>,
+    ) {
+      if (ports.authorizeAuthOnlyApprovalResponse === undefined) {
+        throw invalid();
+      }
+      await ports.authorizeAuthOnlyApprovalResponse(ctx);
+    },
+    async authorizeAuthOnlyDeliveryApprovalResponse(
+      ctx: ApprovalResponseContext<
+        z.infer<typeof nativeTargetAuthOnlyDeliveryPreparationInputSchema>
+      >,
+    ) {
+      if (ports.authorizeAuthOnlyDeliveryApprovalResponse === undefined) {
+        throw invalid();
+      }
+      await ports.authorizeAuthOnlyDeliveryApprovalResponse(ctx);
+    },
+    async authorizeAuthOnlyEntryApprovalResponse(
+      ctx: ApprovalResponseContext<z.infer<typeof nativeTargetAuthOnlyEntryApprovalInputSchema>>,
+    ) {
+      if (ports.authorizeAuthOnlyEntryApprovalResponse === undefined) {
+        throw invalid();
+      }
+      await ports.authorizeAuthOnlyEntryApprovalResponse(ctx);
+    },
+    async authorizeAuthOnlyFinalRoutingApprovalResponse(
+      ctx: ApprovalResponseContext<
+        z.infer<typeof nativeTargetAuthOnlyFinalRoutingApprovalInputSchema>
+      >,
+    ) {
+      if (ports.authorizeAuthOnlyFinalRoutingApprovalResponse === undefined) {
+        throw invalid();
+      }
+      await ports.authorizeAuthOnlyFinalRoutingApprovalResponse(ctx);
+    },
+    async authorizeAuthOnlyResourceApprovalResponse(
+      ctx: ApprovalResponseContext<
+        z.infer<typeof nativeTargetAuthOnlyResourcePreparationInputSchema>
+      >,
+    ) {
+      if (ports.authorizeAuthOnlyResourceApprovalResponse === undefined) {
+        throw invalid();
+      }
+      await ports.authorizeAuthOnlyResourceApprovalResponse(ctx);
+    },
+    async hasApproval(input: NativeTargetPreparationRequest, ctx: NativeTargetInvocation) {
+      const row = await readExact(input, ctx);
+      if (
+        row.record.stage === "cancelled" ||
+        ("cancelledBy" in row.record && row.record.cancelledBy !== undefined)
+      ) {
+        throw invalid();
+      }
+      const terminal = await readTerminalApproval(input, ctx, row);
+      if (terminal?.outcome === "cancelled") {
+        throw invalid();
+      }
+      return terminal !== null;
+    },
+    async hasAuthOnlyApproval(
+      raw: NativeTargetAuthOnlyPreparationRequest,
+      ctx: NativeTargetInvocation,
+    ) {
+      const proposal = nativeTargetAuthOnlyPreparationRequestSchema.parse(raw);
+      if (ports.hasAuthOnlyApproval === undefined) {
+        throw invalid();
+      }
+      return await ports.hasAuthOnlyApproval(proposal, ctx);
+    },
+    async hasAuthOnlyDeliveryApproval(
+      raw: z.infer<typeof nativeTargetAuthOnlyDeliveryPreparationInputSchema>,
+      ctx: NativeTargetInvocation,
+    ) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyDeliveryPreparationInputSchema.parse(raw);
+      if (ports.hasAuthOnlyDeliveryApproval === undefined) {
+        throw invalid();
+      }
+      return await ports.hasAuthOnlyDeliveryApproval(proposal, ctx);
+    },
+    async hasAuthOnlyEntryApproval(
+      raw: z.infer<typeof nativeTargetAuthOnlyEntryApprovalInputSchema>,
+      ctx: NativeTargetInvocation,
+    ) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyEntryApprovalInputSchema.parse(raw);
+      if (ports.hasAuthOnlyEntryApproval === undefined) {
+        throw invalid();
+      }
+      const result = await ports.hasAuthOnlyEntryApproval(proposal, ctx);
+      ctx.abortSignal.throwIfAborted();
+      return result;
+    },
+    async hasAuthOnlyFinalRoutingApproval(
+      raw: z.infer<typeof nativeTargetAuthOnlyFinalRoutingApprovalInputSchema>,
+      ctx: NativeTargetInvocation,
+    ) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyFinalRoutingApprovalInputSchema.parse(raw);
+      if (ports.hasAuthOnlyFinalRoutingApproval === undefined) {
+        throw invalid();
+      }
+      const result = await ports.hasAuthOnlyFinalRoutingApproval(proposal, ctx);
+      ctx.abortSignal.throwIfAborted();
+      return result;
+    },
+    async hasAuthOnlyResourceApproval(
+      raw: z.infer<typeof nativeTargetAuthOnlyResourcePreparationInputSchema>,
+      ctx: NativeTargetInvocation,
+    ) {
+      const proposal = nativeTargetAuthOnlyResourcePreparationInputSchema.parse(raw);
+      if (ports.hasAuthOnlyResourceApproval === undefined) {
+        throw invalid();
+      }
+      return await ports.hasAuthOnlyResourceApproval(proposal, ctx);
+    },
     async plan(
       raw: NativeTargetPlanRequest,
       ctx: NativeTargetInvocation,
@@ -475,35 +713,103 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
       ctx.abortSignal.throwIfAborted();
       return publicResult(await ports.journal.reservePlan(ctx, plan));
     },
-    async hasApproval(input: NativeTargetPreparationRequest, ctx: NativeTargetInvocation) {
-      const row = await readExact(input, ctx);
+    async planAuthOnly(
+      raw: NativeTargetAuthOnlyPlanRequest,
+      ctx: NativeTargetInvocation,
+      state: NativeTargetSelectedAppState,
+    ): Promise<NativeTargetAuthOnlyPlanResult> {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyPlanRequestSchema.parse(raw);
       if (
-        row.record.stage === "cancelled" ||
-        ("cancelledBy" in row.record && row.record.cancelledBy !== undefined)
+        state.appSpec === undefined ||
+        state.appSpec.appId !== proposal.appId ||
+        ports.planAuthOnly === undefined
       ) {
         throw invalid();
       }
-      const terminal = await readTerminalApproval(input, ctx, row);
-      if (terminal?.outcome === "cancelled") {
+      const result = await ports.planAuthOnly(proposal, ctx, {
+        appId: state.appSpec.appId,
+        appSpecDigest: state.appSpec.digest,
+      });
+      if (
+        result.plan.appId !== proposal.appId ||
+        result.plan.origin.appSpecDigest !== state.appSpec.digest
+      ) {
         throw invalid();
       }
-      return terminal !== null;
+      return result;
     },
-    async authorizeApprovalResponse(ctx: ApprovalResponseContext<NativeTargetPreparationRequest>) {
+    async planAuthOnlyDelivery(
+      raw: z.infer<typeof nativeTargetAuthOnlyDeliveryPlanInputSchema>,
+      ctx: NativeTargetInvocation,
+    ) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyDeliveryPlanInputSchema.parse(raw);
+      if (ports.planAuthOnlyDelivery === undefined) {
+        throw invalid();
+      }
+      const result = nativeTargetAuthOnlyDeliveryPreparationInputSchema.parse(
+        await ports.planAuthOnlyDelivery(proposal, ctx),
+      );
       if (
-        ctx.request.toolName !== "prepare-app-native-target" ||
-        ctx.request.toolInput === undefined
+        !matchesAll(
+          result.appId === proposal.appId,
+          result.operationRef === proposal.operationRef,
+          result.planDigest === proposal.planDigest,
+          result.resourcePlanDigest === proposal.resourcePlanDigest,
+          result.deliveryPlan.target.appId === proposal.appId,
+          result.deliveryPlan.authOnlyPlanDigest === proposal.planDigest,
+          result.deliveryPlan.resourcePlanDigest === proposal.resourcePlanDigest,
+        )
       ) {
         throw invalid();
       }
-      const input = nativeTargetPreparationRequestSchema.parse(ctx.request.toolInput);
+      return result;
+    },
+    async planAuthOnlyEntry(
+      raw: z.infer<typeof nativeTargetAuthOnlyEntryPlanInputSchema>,
+      ctx: NativeTargetInvocation,
+    ) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyEntryPlanInputSchema.parse(raw);
+      if (ports.planAuthOnlyEntry === undefined) {
+        throw invalid();
+      }
+      const result = nativeTargetAuthOnlyEntryApprovalInputSchema.parse(
+        await ports.planAuthOnlyEntry(proposal, ctx),
+      );
+      ctx.abortSignal.throwIfAborted();
       if (
-        input.appId !== input.plan.appId ||
-        nativeTargetOnboardingPlanDigest(input.plan) !== input.planDigest
+        result.appId !== proposal.appId ||
+        result.deliveryOperationRef !== proposal.deliveryOperationRef ||
+        result.deliveryPlanDigest !== proposal.deliveryPlanDigest ||
+        result.effect !== proposal.effect
       ) {
         throw invalid();
       }
-      await ports.authorizeApprovalResponse(ctx);
+      return result;
+    },
+    async planAuthOnlyFinalRouting(
+      raw: z.infer<typeof nativeTargetAuthOnlyFinalRoutingPlanInputSchema>,
+      ctx: NativeTargetInvocation,
+    ) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyFinalRoutingPlanInputSchema.parse(raw);
+      if (ports.planAuthOnlyFinalRouting === undefined) {
+        throw invalid();
+      }
+      const result = nativeTargetAuthOnlyFinalRoutingApprovalInputSchema.parse(
+        await ports.planAuthOnlyFinalRouting(proposal, ctx),
+      );
+      ctx.abortSignal.throwIfAborted();
+      if (
+        result.appId !== proposal.appId ||
+        result.operationRef !== proposal.operationRef ||
+        result.deliveryPlanDigest !== proposal.deliveryPlanDigest
+      ) {
+        throw invalid();
+      }
+      return result;
     },
     async prepare(
       input: NativeTargetPreparationRequest,
@@ -565,6 +871,117 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
       const retryCandidate = `${retry.record.plan.project.name.slice(0, 93).replace(/-+$/u, "")}-${uuid().replaceAll("-", "").slice(0, 6)}`;
       return await runAttempt(ctx, retry, retryCandidate);
     },
+    async prepareAuthOnly(
+      raw: NativeTargetAuthOnlyPreparationRequest,
+      ctx: NativeTargetInvocation,
+    ) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyPreparationRequestSchema.parse(raw);
+      if (ports.prepareAuthOnly === undefined) {
+        throw invalid();
+      }
+      const result = await ports.prepareAuthOnly(proposal, ctx);
+      return result;
+    },
+    async prepareAuthOnlyDelivery(
+      raw: z.infer<typeof nativeTargetAuthOnlyDeliveryPreparationInputSchema>,
+      ctx: NativeTargetInvocation,
+    ) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyDeliveryPreparationInputSchema.parse(raw);
+      if (ports.prepareAuthOnlyDelivery === undefined) {
+        throw invalid();
+      }
+      const result = nativeTargetAuthOnlyDeliveryResultSchema.parse(
+        await ports.prepareAuthOnlyDelivery(proposal, ctx),
+      );
+      if (result.deliveryPlanDigest !== proposal.deliveryPlanDigest) {
+        throw invalid();
+      }
+      if (
+        result.status === "routing-required" &&
+        (result.finalRoutingPlan.appId !== proposal.appId ||
+          result.finalRoutingPlan.operationRef !== proposal.operationRef ||
+          result.finalRoutingPlan.deliveryPlanDigest !== proposal.deliveryPlanDigest)
+      ) {
+        throw invalid();
+      }
+      if (result.status === "prepared" && result.finalRoutingPlan !== undefined) {
+        const routing = result.finalRoutingPlan;
+        if (
+          !matchesAll(
+            routing.appId === proposal.appId,
+            routing.operationRef === proposal.operationRef,
+            routing.deliveryPlanDigest === proposal.deliveryPlanDigest,
+            routing.routingOperationRef !== proposal.operationRef,
+            result.gateway.operationRef === routing.routingOperationRef,
+            result.app.operationRef === proposal.operationRef,
+          )
+        ) {
+          throw invalid();
+        }
+      }
+      return result;
+    },
+    async prepareAuthOnlyEntry(
+      raw: z.infer<typeof nativeTargetAuthOnlyEntryApprovalInputSchema>,
+      ctx: NativeTargetInvocation,
+    ) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyEntryApprovalInputSchema.parse(raw);
+      if (ports.prepareAuthOnlyEntry === undefined) {
+        throw invalid();
+      }
+      const result = nativeTargetAuthOnlyEntryResultSchema.parse(
+        await ports.prepareAuthOnlyEntry(proposal, ctx),
+      );
+      ctx.abortSignal.throwIfAborted();
+      if (
+        result.effect !== proposal.effect ||
+        result.childOperationRef !== proposal.childOperationRef ||
+        result.childPlanDigest !== proposal.childPlanDigest
+      ) {
+        throw invalid();
+      }
+      return result;
+    },
+    async prepareAuthOnlyFinalRouting(
+      raw: z.infer<typeof nativeTargetAuthOnlyFinalRoutingApprovalInputSchema>,
+      ctx: NativeTargetInvocation,
+    ) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyFinalRoutingApprovalInputSchema.parse(raw);
+      if (ports.prepareAuthOnlyFinalRouting === undefined) {
+        throw invalid();
+      }
+      const result = nativeTargetAuthOnlyFinalRoutingResultSchema.parse(
+        await ports.prepareAuthOnlyFinalRouting(proposal, ctx),
+      );
+      ctx.abortSignal.throwIfAborted();
+      if (
+        !matchesAll(
+          result.deliveryPlanDigest === proposal.deliveryPlanDigest,
+          result.gateway.operationRef === proposal.routingOperationRef,
+          result.app.operationRef === proposal.operationRef,
+          result.gateway.projectId !== result.app.projectId,
+          result.gateway.deploymentId !== result.app.deploymentId,
+        )
+      ) {
+        throw invalid();
+      }
+      return result;
+    },
+    async prepareAuthOnlyResources(
+      raw: z.infer<typeof nativeTargetAuthOnlyResourcePreparationInputSchema>,
+      ctx: NativeTargetInvocation,
+    ) {
+      ctx.abortSignal.throwIfAborted();
+      const proposal = nativeTargetAuthOnlyResourcePreparationInputSchema.parse(raw);
+      if (ports.prepareAuthOnlyResources === undefined) {
+        throw invalid();
+      }
+      return await ports.prepareAuthOnlyResources(proposal, ctx);
+    },
   };
 };
 export type NativeTargetOnboardingRuntime = ReturnType<typeof createNativeTargetOnboardingRuntime>;
@@ -572,7 +989,12 @@ export type NativeTargetOnboardingRuntime = ReturnType<typeof createNativeTarget
 /** Optional trusted embedding override; production resolves its protected client per invocation. */
 export type NativeTargetRuntimeResolutionContext =
   | Pick<NativeTargetInvocation, "session">
-  | ApprovalResponseContext<NativeTargetPreparationRequest>;
+  | ApprovalResponseContext<NativeTargetPreparationRequest>
+  | ApprovalResponseContext<NativeTargetAuthOnlyPreparationRequest>
+  | ApprovalResponseContext<z.infer<typeof nativeTargetAuthOnlyResourcePreparationInputSchema>>
+  | ApprovalResponseContext<z.infer<typeof nativeTargetAuthOnlyDeliveryPreparationInputSchema>>
+  | ApprovalResponseContext<z.infer<typeof nativeTargetAuthOnlyEntryApprovalInputSchema>>
+  | ApprovalResponseContext<z.infer<typeof nativeTargetAuthOnlyFinalRoutingApprovalInputSchema>>;
 export type NativeTargetOnboardingRuntimeResolver = (
   ctx: NativeTargetRuntimeResolutionContext,
 ) => Promise<NativeTargetOnboardingRuntime>;

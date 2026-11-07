@@ -29,6 +29,7 @@ import type {
 } from "./native-target-onboarding-store";
 import { nativeTargetTransportResponseSchemas } from "./native-target-onboarding-transport";
 import type {
+  NativeTargetRequest,
   NativeTargetTransportRequest,
   NativeTargetTransportResponse,
 } from "./native-target-onboarding-transport";
@@ -38,6 +39,20 @@ import type {
 } from "./native-target-vercel-provider";
 import type { NativeTargetVercelAuthorizationObservation } from "./native-target-vercel-authorization";
 
+const onboardingServiceActions = [
+  "native-target-plan",
+  "native-target-prepare",
+  "native-target-approval-read",
+  "native-target-approval-candidate",
+] as const;
+export type NativeTargetOnboardingServiceRequest = Extract<
+  NativeTargetTransportRequest,
+  { action: (typeof onboardingServiceActions)[number] }
+>;
+export const isNativeTargetOnboardingServiceRequest = (
+  input: NativeTargetRequest,
+): input is NativeTargetOnboardingServiceRequest =>
+  onboardingServiceActions.some((action) => action === input.action);
 type Invocation = NativeTargetTransportRequest;
 type Current = NativeTargetCurrentOwner & { historyOwner: OperatorOwnerContext };
 
@@ -332,6 +347,9 @@ export const createNativeTargetOnboardingService =
       callId: input.callId,
       abortSignal: request.signal,
     };
+    if (!isNativeTargetOnboardingServiceRequest(input)) {
+      throw mismatch();
+    }
     let output: NativeTargetTransportResponse;
     switch (input.action) {
       case "native-target-plan": {

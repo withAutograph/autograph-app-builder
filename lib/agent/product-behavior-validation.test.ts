@@ -309,8 +309,9 @@ describe("behavior evidence invalidation during validation repair", () => {
     }
   });
 
-  it("reports skipped persistent validation as unassessed and capture as requiring no repair", async () => {
+  it("captures the static description while leaving persistent validation unassessed", async () => {
     mocks.state.current = workflow("validated");
+    mocks.publish.mockResolvedValueOnce({ status: "not-required" });
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate_static",
@@ -330,8 +331,17 @@ describe("behavior evidence invalidation during validation repair", () => {
       event: "app_builder.validation_phase",
       phase: "validated_release_capture_finished",
     });
-    expect(mocks.publish).not.toHaveBeenCalled();
+    expect(mocks.publish).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        adapterSessionId: "private-session",
+        appId: "app",
+        appSpecDigest: "a",
+        callId: "validate_static",
+        root: "/workspace/repository",
+      }),
+    );
     expect(mocks.browser).not.toHaveBeenCalled();
+    expect(mocks.runtime).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       backendValidation: { status: "unassessed" },
       status: "validated",
