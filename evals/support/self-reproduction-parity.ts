@@ -374,7 +374,7 @@ const assessObservation = (
 const assessSide = async (
   side: (typeof sides)[number],
   evidence: ParityEvidence,
-  artifactExists: (path: string) => Promise<boolean>,
+  artifactExists: (path: string) => boolean | Promise<boolean>,
 ): Promise<Assessment["rows"]> => {
   const bundle = evidence[side];
   const rows: Assessment["rows"] = [];
@@ -414,7 +414,7 @@ const assessSide = async (
 
 export const assessParity = async (
   evidence: ParityEvidence,
-  artifactExists: (path: string) => Promise<boolean>,
+  artifactExists: (path: string) => boolean | Promise<boolean>,
 ): Promise<Assessment> => {
   const sideRows = await Promise.all(
     sides.map(async (side) => await assessSide(side, evidence, artifactExists)),
