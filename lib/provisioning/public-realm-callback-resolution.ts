@@ -283,7 +283,7 @@ export const createPostgresPublicRealmCallbackResolver = (input: {
           sessionId: context.target.sessionId,
         },
       });
-      const scope = {
+      const scopeBase = {
         appId: context.target.appId,
         authority: context.authority,
         projectId: context.target.projectId,
@@ -292,10 +292,11 @@ export const createPostgresPublicRealmCallbackResolver = (input: {
         runtimeOperationRef: plan.runtime.operationRef,
         runtimePlanDigest: plan.runtime.planDigest,
         sessionId: context.target.sessionId,
-        ...(plan.runtime.realmEnrollmentRef === undefined
-          ? {}
-          : { realmEnrollmentRef: plan.runtime.realmEnrollmentRef }),
       };
+      const scope =
+        plan.runtime.realmEnrollmentRef === undefined
+          ? scopeBase
+          : { ...scopeBase, realmEnrollmentRef: plan.runtime.realmEnrollmentRef };
       if (store.reference(scope) !== plan.runtime.configurationRef) {
         throw unavailable();
       }
