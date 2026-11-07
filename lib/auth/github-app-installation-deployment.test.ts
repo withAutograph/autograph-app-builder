@@ -258,8 +258,7 @@ describe("GitHub App installation routes", () => {
         .mockRejectedValue(new Error("authorization was not expected")),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       classify: vi.fn(async () => readyAccess),
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      hasBuilderDraft: vi.fn(async () => false),
+      hasBuilderDraft: vi.fn<() => Promise<boolean>>().mockResolvedValue(false),
       // oxlint-disable-next-line unicorn/no-useless-undefined -- Model an expired continuation.
       inspect: vi.fn<() => Promise<typeof target | undefined>>().mockResolvedValue(undefined),
     };
@@ -291,8 +290,7 @@ describe("GitHub App installation routes", () => {
       authorize: vi.fn<() => Promise<string | undefined>>().mockResolvedValue(undefined),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       classify: vi.fn(async () => readyAccess),
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      hasBuilderDraft: vi.fn(async () => true),
+      hasBuilderDraft: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
       // oxlint-disable-next-line unicorn/no-useless-undefined -- No repository continuation exists for a Builder draft.
       inspect: vi.fn<() => Promise<typeof target | undefined>>().mockResolvedValue(undefined),
     };

@@ -12,8 +12,7 @@ import {
 
 describe("Preview OAuth deployment handlers", () => {
   it("enables self-service signup only for the gated local emulator", async () => {
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const managedAuthority = vi.fn(async () => false);
+    const managedAuthority = vi.fn<() => Promise<boolean>>().mockResolvedValue(false);
 
     await expect(selfServiceSignupAuthority("local", managedAuthority)()).resolves.toBe(true);
     await expect(selfServiceSignupAuthority("preview", managedAuthority)()).resolves.toBe(false);
@@ -190,8 +189,7 @@ describe("Preview OAuth deployment handlers", () => {
       ensurePreviewSessionOrganization({
         auth: {
           api: {
-            // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-            getSession: vi.fn(async () => null),
+            getSession: vi.fn<() => Promise<null>>().mockResolvedValue(null),
             setActiveOrganization,
           },
         },

@@ -115,8 +115,7 @@ describe("PostgreSQL Better Auth organization authority", () => {
         .mockReturnValueOnce("organization_one")
         .mockReturnValueOnce("workspace_one")
         .mockReturnValueOnce("member_one"),
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      isSelfServiceSignupEnabled: vi.fn(async () => true),
+      isSelfServiceSignupEnabled: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
     });
 
     await expect(
@@ -153,8 +152,7 @@ describe("PostgreSQL Better Auth organization authority", () => {
         .mockReturnValueOnce("organization_one")
         .mockReturnValueOnce("workspace_one")
         .mockReturnValueOnce("member_one"),
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      isSelfServiceSignupEnabled: vi.fn(async () => true),
+      isSelfServiceSignupEnabled: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
     });
 
     await expect(
