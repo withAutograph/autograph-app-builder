@@ -147,11 +147,10 @@ export const readUnapprovedCapturePredecessor = (
     ) {
       return {
         account,
-        bootstrap: {
-          auth,
-          candidate: gateway,
-          ...(gatewayAuthority === undefined ? {} : { gateway: gatewayAuthority }),
-        },
+        bootstrap:
+          gatewayAuthority === undefined
+            ? { auth, candidate: gateway }
+            : { auth, candidate: gateway, gateway: gatewayAuthority },
         priorOperator: old,
       };
     }

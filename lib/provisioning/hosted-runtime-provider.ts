@@ -317,17 +317,23 @@ export const createHostedRuntimeVercelProvider = (input: {
         await request(
           `/v10/projects/${projectPath}/env`,
           { upsert: String(upsert) },
-          selectedKeys.map((key) => ({
-            comment:
+          selectedKeys.map((key) => {
+            const comment =
               options === undefined
                 ? `App Builder isolated runtime for ${input.target.appId}`
-                : runtimeComment(options.runtimeId),
-            ...(environmentGitBranch === null ? {} : { gitBranch: environmentGitBranch }),
-            key,
-            target: ["preview"],
-            type: "encrypted",
-            value: values[key],
-          })),
+                : runtimeComment(options.runtimeId);
+            const prefix =
+              environmentGitBranch === null
+                ? { comment }
+                : { comment, gitBranch: environmentGitBranch };
+            return {
+              ...prefix,
+              key,
+              target: ["preview"],
+              type: "encrypted",
+              value: values[key],
+            };
+          }),
         );
       };
       if (options === undefined) {
