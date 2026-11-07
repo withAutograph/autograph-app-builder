@@ -29,7 +29,7 @@ describe("acceptance workspace recovery", () => {
     const describeRelease = vi.fn(async (root: string) =>
       root === "/missing" ? undefined : root === "/old" ? "v1" : "v3",
     );
-    const recover = vi.fn(async () => "/separate-recovered");
+    const recover = vi.fn<() => Promise<string>>().mockResolvedValue("/separate-recovered");
     await expect(
       resolveCompatibleAcceptanceRoot({
         roots: ["/missing", "/old"],
@@ -104,7 +104,7 @@ describe("acceptance workspace recovery", () => {
     const roots: string[] = [];
     const commands: string[] = [];
     const acquireCredential = vi.fn(async () => ({ token: "private-installation-token" }));
-    const setNetworkPolicy = vi.fn(async () => {});
+    const setNetworkPolicy = vi.fn<() => Promise<void>>().mockResolvedValue();
     const result = await prepareWithVerifiedGitHubFetchRecovery({
       acquireCredential,
       sandbox: { setNetworkPolicy },

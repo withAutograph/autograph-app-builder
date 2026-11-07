@@ -155,8 +155,8 @@ const fixture = (readerPath: ReaderPath, selected = "br-child", enrolled = true)
       vercelProjectId: configuration.nativeStore.sourceProjectId,
     });
   });
-  const approved = vi.fn(async () => {});
-  const planning = vi.fn(async () => {});
+  const approved = vi.fn<() => Promise<void>>().mockResolvedValue();
+  const planning = vi.fn<() => Promise<void>>().mockResolvedValue();
   const consume = vi.fn(
     async (material: {
       maintenanceUrl: string;

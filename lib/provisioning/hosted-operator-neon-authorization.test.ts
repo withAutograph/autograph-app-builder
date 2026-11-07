@@ -59,7 +59,7 @@ const fixture = () => {
   const diagnosticSink = vi.fn<HostedOperatorConsentDiagnosticSink>();
   const assertCurrentOwner = vi.fn(async () => {});
   const io = {
-    getOidc: vi.fn(async () => "private-operator-oidc"),
+    getOidc: vi.fn<() => Promise<string>>().mockResolvedValue("private-operator-oidc"),
     getTokenResponse: vi.fn(async () => ({
       connector: { id: "connector-id", type: "oauth", uid: "mcp.neon.tech/neon-preview-operator" },
       expiresAt: Date.now() + 60_000,
