@@ -19,7 +19,13 @@ describe("release proof evidence", () => {
   it("accepts only Browser-backed reviewed proof without publication", () => {
     // Keep receipt construction scoped to the proof fixture.
     // oxlint-disable-next-line unicorn/consistent-function-scoping
-    const receipt = (overrides: Record<string, unknown> = {}) =>
+    const receipt = (
+      overrides: Partial<{
+        browserPreview: boolean;
+        publicationAttempted: boolean;
+        terminalPhase: string;
+      }> = {},
+    ) =>
       JSON.stringify({
         browserPreview: true,
         publicationAttempted: false,
