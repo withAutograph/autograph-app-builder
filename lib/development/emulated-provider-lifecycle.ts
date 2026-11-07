@@ -4,8 +4,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 
-// oxlint-disable-next-line typescript/strict-void-return -- Adapt Node's overloaded callback API.
-const execute = promisify(execFile);
+const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+const execute = promisifyExecFile(execFile);
 const resolver = fileURLToPath(new URL("../../.config/mise/scripts/resolve-lsof", import.meta.url));
 const resolveLsof = async () => {
   const result = await execute(resolver);

@@ -12,8 +12,8 @@ import {
   prepareDevelopmentEmulatedWeb,
 } from "./emulated-web";
 
-// oxlint-disable-next-line typescript/strict-void-return -- Adapt Node overloaded callback API with promisify.
-const execute = promisify(execFile);
+const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+const execute = promisifyExecFile(execFile);
 const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(

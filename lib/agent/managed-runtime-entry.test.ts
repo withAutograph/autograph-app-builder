@@ -14,8 +14,8 @@ import { createManagedOwnedChildLauncher } from "../sandbox/managed-runtime-supe
 import { createManagedRuntimeIpcClient } from "../sandbox/managed-runtime-ipc";
 import { managedRuntimeEntryInputSchema, managedRuntimeReadySchema } from "./managed-runtime-entry";
 
-// oxlint-disable-next-line typescript/strict-void-return -- Node execFile intentionally returns a child handle in addition to its documented completion callback.
-const executeFile = promisify(execFile);
+const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+const executeFile = promisifyExecFile(execFile);
 // This cross-repository assembly acceptance is explicitly opt-in. Normal Builder
 // CI does not acquire another repository, install tools or manufacture a verifier.
 const arrustedRoot = process.env.ARRUSTED_MANAGED_RUNTIME_TEST_ROOT;
