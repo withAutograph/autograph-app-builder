@@ -11,6 +11,12 @@ const rejectedFetch = () =>
     "Builder could not fetch the current draft head (exit 128). Check the selected repository and GitHub access, then retry. Cause: remote: Repository not found. fatal: repository '[URL REDACTED]' not found",
   );
 
+const appendedAdvisory = (error: Error, original: string) => {
+  expect(error.message.startsWith(original)).toBe(true);
+  const suffix = error.message.slice(original.length);
+  return z.json().parse(JSON.parse(suffix.slice(suffix.indexOf("{"))));
+};
+
 const fixture = () => {
   const setNetworkPolicy = vi.fn().mockResolvedValue(null);
   const acquireCredential = vi
@@ -100,12 +106,6 @@ describe("preparation failure cleanup advisory", () => {
     retired: 1,
     status: "complete",
   };
-  const appendedAdvisory = (error: Error, original: string) => {
-    expect(error.message.startsWith(original)).toBe(true);
-    const suffix = error.message.slice(original.length);
-    return z.json().parse(JSON.parse(suffix.slice(suffix.indexOf("{"))));
-  };
-
   it("preserves the actual command error identity and cause while adding sanitized maintenance evidence", async () => {
     const f = fixture();
     const cause = new Error("controlled command cause");

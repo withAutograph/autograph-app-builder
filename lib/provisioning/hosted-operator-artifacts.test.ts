@@ -430,7 +430,7 @@ describe("immutable private operator artifacts", () => {
     });
     const read = await f.publication.readGeneratedRelease(ownerOnly, published);
     expect(read.description).toEqual(actual);
-    expect(read.description?.backend).toMatchObject({ roles: [] });
+    expect(read.description).toMatchObject({ backend: { roles: [] } });
     expect(read.description).not.toHaveProperty("buildCommand");
     expect(read.description).not.toHaveProperty("framework");
     expect(read.files).toEqual(f.files);
