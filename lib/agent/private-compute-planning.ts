@@ -19,6 +19,8 @@ import type { PrivateComputeProfile } from "../sandbox/private-compute-profile";
 import type { SandboxSession } from "eve/sandbox";
 import { canAutoSelectDevelopmentSource } from "../repository/development-source";
 
+const hash = (text: string) => createHash("sha256").update(text).digest("hex");
+
 /** Select one declared, provider-observed profile before the new proposal is hashed; this performs no resource effect. */
 export const planPrivateComputeProfile = async (
   sandbox: SandboxSession,
@@ -57,7 +59,6 @@ export const planPrivateComputeProfile = async (
       "This app has a custom check task. Preserve it and plan its compute-aware adaptation through the normal reviewed app change flow; no task was replaced.",
     );
   }
-  const hash = (text: string) => createHash("sha256").update(text).digest("hex");
   return privateComputeProfileSchema.parse({
     checkPolicy: {
       afterSha256: hash(PRIVATE_COMPUTE_CHECK_TASK),
@@ -129,19 +130,22 @@ export const refreshPrivateComputePlanning = (
   }
   appBuilderWorkflowState.update((latest) => {
     assertExactWorkflowState(latest, current, "prepare a new private compute plan");
-    return {
+    const nextState = {
       appSpec: current.appSpec,
       artifacts: current.artifacts,
-      phase: "app_spec_accepted",
+      phase: "app_spec_accepted" as const,
       preparedByCallId: callId,
       sourceReceipt: current.sourceReceipt,
       version: APP_BUILDER_WORKFLOW_VERSION,
       workspace: current.workspace,
-      ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-      ...(current.checkoutDependencyAttempts === undefined
-        ? {}
-        : { checkoutDependencyAttempts: current.checkoutDependencyAttempts }),
     };
+    const withSource =
+      current.githubSource === undefined
+        ? nextState
+        : { ...nextState, githubSource: current.githubSource };
+    return current.checkoutDependencyAttempts === undefined
+      ? withSource
+      : { ...withSource, checkoutDependencyAttempts: current.checkoutDependencyAttempts };
   });
 };
 export const preparePrivateComputePlanning = async (input: {
