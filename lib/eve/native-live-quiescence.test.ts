@@ -1052,14 +1052,10 @@ describe("owned running-lineage execution transfer", () => {
   const terminalAncestors = () => {
     const f = fixture("idle-checkpoint");
     f.setTurnState("");
-    const parents = Array.from(
-      { length: 64 },
-      (_, index) => `settled-parent-${index}`,
-    );
+    const parents = Array.from({ length: 64 }, (_, index) => `settled-parent-${index}`);
     f.setLineage(parents);
     for (const [index, parent] of parents.entries()) {
-      const status =
-        ["completed", "failed", "cancelled"][index % 3] ?? "completed";
+      const status = ["completed", "failed", "cancelled"][index % 3] ?? "completed";
       f.setAncestorStatus(parent, status);
       if (status === "cancelled") {
         f.markStopReceipt(parent);
@@ -1102,8 +1098,7 @@ describe("owned running-lineage execution transfer", () => {
     // This cost budget catches one whole ancestry download per already terminal
     // parent while allowing the initial, live pre-stop, and final full reads.
     expect(
-      f.collect.mock.calls.filter(([input]) => input.allowParked === true)
-        .length,
+      f.collect.mock.calls.filter(([input]) => input.allowParked === true).length,
     ).toBeLessThanOrEqual(4);
   });
   it("rechecks a changed live owner after skipping terminal ancestors", async () => {
