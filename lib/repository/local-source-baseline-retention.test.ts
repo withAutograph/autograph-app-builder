@@ -124,7 +124,7 @@ describe("retained first local planning baseline", () => {
       writeFileSync(path.join(source, "dirty.txt"), "actual initial dirty bytes\n");
       const initial = await inspectDevelopmentSourceGeneration(source);
       const authority = { kind: "local" as const, ownerUid: process.getuid?.() ?? -1, stateRoot };
-      const readAuthority = async () => authority;
+      const readAuthority = vi.fn().mockResolvedValue(authority);
       await retainPreparedLocalSourceBaseline(initial, { readAuthority });
       const manifestPath = path.join(
         stateRoot,
