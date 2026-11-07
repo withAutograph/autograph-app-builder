@@ -46,7 +46,7 @@ test.beforeAll(async () => {
   });
   await promise;
   const address = prototypeServer.address();
-  if (address === null || !("port" in address)) {
+  if (address === null || typeof address === "string") {
     throw new Error("Prototype server did not bind to a TCP address");
   }
   prototypeUrl = `http://127.0.0.1:${address.port}/prototype/vendor-onboarding`;

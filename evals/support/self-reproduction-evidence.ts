@@ -27,6 +27,7 @@ const statusEventSchema = z.looseObject({
 });
 
 export const evidencePrefix = "SELF_REPRODUCTION_EVIDENCE ";
+const redactedPrefix = "$<prefix>[REDACTED]";
 
 // Apply to structured receipts and native diagnostics before persistence. Never
 // serialize the runtime environment or session continuation credentials.
@@ -38,15 +39,15 @@ export function sanitizeEvidence(value: unknown): unknown {
       .replaceAll(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu, "[REDACTED JWT]")
       .replaceAll(
         /(?<prefix>[A-Z_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)[A-Z_]*["']?\s*[:=]\s*["']?)[^\s"',}]+/gu,
-        "$<prefix>[REDACTED]",
+        redactedPrefix,
       )
       .replaceAll(
         /(?<prefix>["'](?:authorization|cookie|continuationToken|[^"']*(?:token|secret|password)|api[_-]?key)["']\s*:\s*["'])[^"']+/giu,
-        "$<prefix>[REDACTED]",
+        redactedPrefix,
       )
       .replaceAll(
         /(?<prefix>[?&](?:token|key|signature|code|state|x-vercel-protection-bypass)=)[^&\s"']+/giu,
-        "$<prefix>[REDACTED]",
+        redactedPrefix,
       );
   }
   if (Array.isArray(value)) {
@@ -147,7 +148,7 @@ export function evidenceSink(logPath: string, transcriptPath: string, records: E
 export type CandidateExportFile = Readonly<{ path: string; content: string }>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function asEvidenceRecord(value: JsonValue | undefined): EvidenceRecord | undefined {
+function asEvidenceRecord(value: unknown): EvidenceRecord | undefined {
   const parsed = jsonObjectSchema.safeParse(value);
   return parsed.success ? parsed.data : undefined;
 }
