@@ -23,7 +23,7 @@ const fixture = () => {
   const run = vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: JSON.stringify(rows) }));
   return {
     appId: "app",
-    assertCurrent: vi.fn(async () => {}),
+    assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
     displayName: "App",
     rows,
     sandbox: { readBinaryFile, run },
@@ -91,7 +91,7 @@ it("prunes actual Playwright reports and browser auth while retaining nested cod
     }
     const result = await captureApplicationSource({
       appId: "app",
-      assertCurrent: async () => {},
+      assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
       displayName: "App",
       sandbox: {
         readBinaryFile: async ({ path }) => {
