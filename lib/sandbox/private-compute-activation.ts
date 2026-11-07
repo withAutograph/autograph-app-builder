@@ -71,7 +71,7 @@ export const activatePrivateComputeProfile = async <T extends PrivateComputeNati
   let previous = await ports.readActivation();
   const write = async (phase: PrivateComputeActivation["phase"]) => {
     await ports.assertCurrent();
-    await ports.writeActivation({
+    const activation: PrivateComputeActivation = {
       appId: input.appId,
       phase,
       profileId: profile.id,
@@ -79,8 +79,11 @@ export const activatePrivateComputeProfile = async <T extends PrivateComputeNati
       sandboxId: profile.target.sandboxId,
       sessionId: input.sessionId,
       workspaceDrive: profile.target.workspaceDrive,
-      ...(phase === "ready" ? { completedByCallId: input.callId } : {}),
-    });
+    };
+    if (phase === "ready") {
+      activation.completedByCallId = input.callId;
+    }
+    await ports.writeActivation(activation);
     previous = await ports.readActivation();
   };
   if (configured(native, profile) && running(native, profile)) {
