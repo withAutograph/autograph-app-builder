@@ -246,7 +246,6 @@ const fixture = (
   );
   input = {
     assertCurrent,
-    ...(observationGuards ? { assertCurrentObservation } : {}),
     authority,
     checkpoint: vi.fn(async () => {}),
     checkpointGatewayEnvironment,
@@ -280,6 +279,9 @@ const fixture = (
     target: structuredClone(target),
     workerCheckpoints: [],
   };
+  if (observationGuards) {
+    input.assertCurrentObservation = assertCurrentObservation;
+  }
   const project: FixtureProject = {
     id: gateway.projectId,
     accountId: target.scopeId,
@@ -370,15 +372,18 @@ const fixture = (
     rows: structuredClone(canonicalRows),
   }));
   const diagnostics = vi.fn<HostedOperatorConsentDiagnosticSink>();
-  const writer = createHostedOperatorGatewayBindings({
+  const writerOptions: Parameters<typeof createHostedOperatorGatewayBindings>[0] = {
     diagnosticSink: diagnostics,
     assertAuthorized,
-    ...(observationGuards ? { assertCanonicalOwner } : {}),
     readCanonicalGatewayRows,
     fetch: fetcher,
     readAuthRuntimeUrl,
     readCredential,
-  });
+  };
+  if (observationGuards) {
+    writerOptions.assertCanonicalOwner = assertCanonicalOwner;
+  }
+  const writer = createHostedOperatorGatewayBindings(writerOptions);
   return {
     project,
     setLoseProtectionPatchResponse: (value: boolean) => (loseProtectionPatchResponse = value),
@@ -611,14 +616,17 @@ it("keeps legacy plans free of Trusted Sources writes", async () => {
 });
 
 const approveAppSource = (f: ReturnType<typeof fixture>, includeLegacy = false) => {
+  const appSource = {
+    appPreview: { projectId: selection.projectId, from: "preview", to: "preview" },
+  };
+  const trustedSources = includeLegacy ? { ...approvedSources, ...appSource } : appSource;
   f.input.plan = hostedOperatorPlanSchema.parse({
     ...f.input.plan,
     stage: "app",
     gatewayBindings: {
       ...f.input.plan.gatewayBindings,
       trustedSources: {
-        ...(includeLegacy ? approvedSources : {}),
-        appPreview: { projectId: selection.projectId, from: "preview", to: "preview" },
+        ...trustedSources,
       },
     },
   });
@@ -2432,14 +2440,11 @@ it("distinguishes authority and private runtime binding failures without added r
 
 it.each(["sync", "async"] as const)(
   "preserves exact binding requests and results when the %s diagnostic sink fails",
-  async (kind) => {
+  async () => {
     const control = fixture();
     const expected = await control.writer.bind(control.input);
     const f = fixture();
     f.diagnostics.mockImplementation(async () => {
-      if (kind === "sync") {
-        throw new Error(privateAuthUrl);
-      }
       throw new Error(privateAuthUrl);
     });
     expect(await f.writer.bind(f.input)).toEqual(expected);

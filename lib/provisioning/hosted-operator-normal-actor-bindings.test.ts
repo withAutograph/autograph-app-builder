@@ -390,12 +390,22 @@ const boundFixture = async (normal = true) => {
   const request = await prepared(f);
   f.approve();
   await f.client.request(request);
-  const selectedPlan = hostedOperatorPlanSchema.parse({
+  const selectedPlanInput = {
     ...plan,
     access: [],
+    delivery: { branch: selection.branch, projectId: selection.projectId, repoId: "repo-app" },
+    effects: [
+      ...plan.effects,
+      { description: "App delivery", id: "delivery", kind: "delivery" },
+      { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
+    ],
+    gatewayDelivery: { branch: selection.branch, projectId: "prj_gateway", repoId: "repo-gateway" },
     stage: "app",
-    ...(normal
+  };
+  const selectedPlan = hostedOperatorPlanSchema.parse(
+    normal
       ? {
+          ...selectedPlanInput,
           normalActorPreparation: {
             accountApprovalId: "account-approval",
             accountApprovedByCallId: "account-call",
@@ -405,15 +415,8 @@ const boundFixture = async (normal = true) => {
           },
           normalActorProgram: normalProgram,
         }
-      : {}),
-    delivery: { branch: selection.branch, projectId: selection.projectId, repoId: "repo-app" },
-    gatewayDelivery: { branch: selection.branch, projectId: "prj_gateway", repoId: "repo-gateway" },
-    effects: [
-      ...plan.effects,
-      { description: "App delivery", id: "delivery", kind: "delivery" },
-      { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
-    ],
-  });
+      : selectedPlanInput,
+  );
   if (f.row?.record.operator === undefined) {
     throw new Error("Missing prepared journal");
   }
