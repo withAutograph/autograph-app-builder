@@ -159,7 +159,7 @@ const fixture = () => {
     endpoint: "https://operator.example",
     fetch: request,
     ownerContext: owner,
-    token: async () => "synthetic-oidc",
+    token: vi.fn<() => Promise<string>>().mockResolvedValue("synthetic-oidc"),
   });
   const proof = {
     callId: "original-approved-call",
@@ -355,7 +355,7 @@ describe("native target protected client", () => {
         createNativeTargetOnboardingClient({
           endpoint,
           ownerContext: f.owner,
-          token: async () => "synthetic",
+          token: vi.fn<() => Promise<string>>().mockResolvedValue("synthetic"),
         }),
       ).toThrow();
     }

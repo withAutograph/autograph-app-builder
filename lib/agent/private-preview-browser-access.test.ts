@@ -45,7 +45,7 @@ describe("owned private browser authority", () => {
         withPrivatePreviewBrowserAccess({
           appId: "example",
           assertCurrent: () => {},
-          operation: async () => "unused",
+          operation: vi.fn<() => Promise<string>>().mockResolvedValue("unused"),
           preview: current,
           root: "/workspace/repository",
           sandbox: { run, writeTextFile },
