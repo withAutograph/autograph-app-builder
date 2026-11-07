@@ -196,7 +196,7 @@ export default defineTool({
     };
     if (fixture) {
       applyInput.snapshotter = async (fixtureSandbox, applyRoot) =>
-        inspectFixtureApplyOverlay(fixtureSandbox, applyRoot, current.appSpec.appId);
+        await inspectFixtureApplyOverlay(fixtureSandbox, applyRoot, current.appSpec.appId);
     }
     const result = await executeProposalBoundApply(applyInput);
     if (!result.ok) {
