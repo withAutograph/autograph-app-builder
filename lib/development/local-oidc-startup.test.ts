@@ -80,7 +80,9 @@ describe("local Development OIDC startup", () => {
     expect(
       ensureLocalDevelopmentOidc({
         ...baseInput(repositoryRoot),
-        runCommand: (invocation) => invocations.push(invocation),
+        runCommand: (invocation) => {
+          invocations.push(invocation);
+        },
       }),
     ).toEqual({ refreshed: false });
     expect(invocations).toEqual([]);
@@ -201,18 +203,21 @@ describe("local Development OIDC startup", () => {
         "OPENAI_API_KEY",
       ];
       const input = baseInput(repositoryRoot);
+      const baseEnvironment = { ...input.environment };
+      const dataEnvironment =
+        dataHome === undefined ? baseEnvironment : { ...baseEnvironment, XDG_DATA_HOME: dataHome };
+      const environment = {
+        ...dataEnvironment,
+        OPENAI_API_KEY: "must-not-be-forwarded",
+        XDG_BIN_HOME: "/owner/unneeded-bin",
+        XDG_CACHE_HOME: "/owner/unneeded-cache",
+        XDG_CONFIG_HOME: "/owner/unneeded-config",
+        XDG_STATE_HOME: "/owner/unneeded-state",
+      };
       expect(
         ensureLocalDevelopmentOidc({
           ...input,
-          environment: {
-            ...input.environment,
-            ...(dataHome === undefined ? {} : { XDG_DATA_HOME: dataHome }),
-            OPENAI_API_KEY: "must-not-be-forwarded",
-            XDG_BIN_HOME: "/owner/unneeded-bin",
-            XDG_CACHE_HOME: "/owner/unneeded-cache",
-            XDG_CONFIG_HOME: "/owner/unneeded-config",
-            XDG_STATE_HOME: "/owner/unneeded-state",
-          },
+          environment,
           runCommand: (invocation) => {
             invocations.push(invocation);
             runLocalOidcStartupCommand({
