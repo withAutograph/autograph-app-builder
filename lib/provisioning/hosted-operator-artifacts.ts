@@ -388,7 +388,11 @@ export const createOperatorArtifactPublication = (
         manifestSha256: string;
         schemaSha256: string;
       },
-    ) {
+    ): Promise<{
+      artifactRef: string;
+      files: GeneratedAppReleaseFiles;
+      description?: AppDescription;
+    }> {
       try {
         const envelope = await read(context, expected.artifactRef);
         if (envelope.kind !== generatedKind) {
