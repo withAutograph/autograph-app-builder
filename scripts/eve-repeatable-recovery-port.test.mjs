@@ -8,6 +8,7 @@ import { test } from "vitest";
 
 const require = createRequire(import.meta.url);
 const sdk = path.dirname(require.resolve("eve/package.json"));
+const originalCallId = "original-call";
 const { recoverTerminalSession } = await import(
   pathToFileURL(path.join(sdk, "dist/src/execution/session/terminal-recovery.js")).href
 );
@@ -97,7 +98,7 @@ const fixture = () => {
       assert.equal(candidate, payload);
       state.calls.push("reconcile");
       state.options = options;
-      return options?.repeatableCallIds?.includes("original-call") === true
+      return options?.repeatableCallIds?.includes(originalCallId) === true
         ? { checkpointCore, kind: "ready", provenance: { selectedOrigin: origin } }
         : { kind: "uncertain", reason: "approval-transcript-unavailable" };
     },
@@ -126,13 +127,13 @@ test("only exact trusted IDs reach reconciliation after current authority and re
     assert.equal(input.descriptor, f.input.descriptor);
     assert.equal(input.payload, f.payload);
     assert.deepEqual(input.binding, f.payload.binding);
-    return ["original-call", "original-call"];
+    return [originalCallId, originalCallId];
   };
   assert.deepEqual(await recoverTerminalSession(f.input, f.deps), {
     kind: "accepted",
     recoveryBinding: f.accepted,
   });
-  assert.deepEqual(f.state.options, { repeatableCallIds: ["original-call"] });
+  assert.deepEqual(f.state.options, { repeatableCallIds: [originalCallId] });
   const decision = f.state.calls.indexOf("decision");
   const reconcile = f.state.calls.indexOf("reconcile");
   assert.deepEqual(f.state.calls.slice(decision + 1, reconcile), ["authorize", "read-receipt"]);
@@ -145,7 +146,7 @@ test("missing, failed or malformed app decisions grant no IDs and cannot start a
     async () => {
       throw new Error("unavailable");
     },
-    async () => ["original-call", null],
+    async () => [originalCallId, null],
   ];
   await Promise.all(
     decisions.map(async (decision) => {
@@ -165,7 +166,7 @@ test("revocation during the trusted decision prevents reconciliation and owner c
   const f = fixture();
   f.input.ports.authorizeRepeatableRecoveryCalls = async () => {
     f.state.denied = true;
-    return ["original-call"];
+    return [originalCallId];
   };
   await assert.rejects(recoverTerminalSession(f.input, f.deps), /authority revoked/u);
   assert.equal(f.state.calls.includes("reconcile"), false);
@@ -177,7 +178,7 @@ test("a concurrently committed receipt prevents replay planning and exact retry 
   f.input.ports.authorizeRepeatableRecoveryCalls = async () => {
     decisions += 1;
     f.state.receipt = f.accepted;
-    return ["original-call"];
+    return [originalCallId];
   };
   await assert.rejects(recoverTerminalSession(f.input, f.deps), /receipt changed/u);
   assert.deepEqual(await recoverTerminalSession(f.input, f.deps), {
@@ -194,7 +195,7 @@ test("a foreign candidate binding cannot reach the trusted policy", async () => 
   f.payload.binding.ownerRunId = "foreign-owner";
   f.input.ports.authorizeRepeatableRecoveryCalls = async () => {
     decisions += 1;
-    return ["original-call"];
+    return [originalCallId];
   };
   await assert.rejects(recoverTerminalSession(f.input, f.deps), /source binding changed/u);
   assert.equal(decisions, 0);
