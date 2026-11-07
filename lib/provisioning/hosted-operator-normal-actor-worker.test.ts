@@ -283,7 +283,9 @@ const fixture = () => {
     execute,
     inspect,
   }));
-  const getOidcToken = vi.fn(async () => "private-fixture-project-oidc");
+  const getOidcToken = vi
+    .fn<() => Promise<string>>()
+    .mockResolvedValue("private-fixture-project-oidc");
   // Dispatch unit fixtures exercise this adapter; the real launcher's protocol tests cover Sandbox frames separately.
   const configuration: NormalActorOrganizationWorkerDependencies["configuration"] = {
     operator: {
