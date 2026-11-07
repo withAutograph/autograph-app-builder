@@ -210,8 +210,8 @@ export const createRepositoryProductionNativeHandler =
           target: { appId: owner.appId, sessionId: owner.sessionId },
         };
         const selections = createPostgresOperatorArtifactSelections({
-          database,
           assertCurrentOwner,
+          database,
         });
         const [selection, destination] = await Promise.all([
           selections.read(artifactContext, spec.appSpecDigest),
