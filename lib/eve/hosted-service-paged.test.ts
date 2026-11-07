@@ -38,8 +38,10 @@ import {
 } from "../provisioning/hosted-operator-contract";
 
 const createHostedEveSessionService = (input: Parameters<typeof createHostedService>[0]) =>
-  // oxlint-disable-next-line eslint/require-await -- This owner fixture has the asynchronous authority contract.
-  createHostedService({ assertSendDeliveryOwner: async () => {}, ...input });
+  createHostedService({
+    assertSendDeliveryOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    ...input,
+  });
 const sendProof = {
   turns: [
     {

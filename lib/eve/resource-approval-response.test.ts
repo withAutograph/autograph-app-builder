@@ -609,7 +609,7 @@ describe("resource approval response acknowledgement", () => {
     });
     const respond = vi.fn();
     const service = createHostedEveSessionService({
-      assertSendDeliveryOwner: async () => {},
+      assertSendDeliveryOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
       now: () => 4000,
       principal,
       store,

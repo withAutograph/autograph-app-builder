@@ -101,7 +101,7 @@ const setup = async (events: MessageStreamEvent[] = [event()], uncertain = false
   const store = new InMemoryHostedEveStore();
   const reservation = vi.spyOn(store, "reserveOperation");
   let current = snapshot(events);
-  const assertOwner = vi.fn(async () => {});
+  const assertOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
   // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous native transport contract in this provider-free fixture.
   // oxlint-disable-next-line eslint/require-await -- Preserve asynchronous native response acceptance in this provider-free fixture.
   const respond = vi.fn(async (input: Parameters<HostedEveTransport["respond"]>[0]) => {
@@ -533,7 +533,7 @@ describe("typed framework session usage continuation", () => {
       principal,
       sessionId: fixture.sessionId,
     });
-    fixture.adapter.sendAccepted = vi.fn(async () => {});
+    fixture.adapter.sendAccepted = vi.fn<() => Promise<void>>().mockResolvedValue();
     await fixture.create().cancel({ sessionId: fixture.sessionId, turnId: "old-turn" });
     expect(fixture.respond).toHaveBeenCalledOnce();
     expect(fixture.respond).toHaveBeenCalledWith(
