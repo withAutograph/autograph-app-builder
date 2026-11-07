@@ -18,6 +18,22 @@ import {
 } from "./validation-private-compute-repair";
 import type { applyPrivateComputeCheckPolicy } from "../repository/private-compute-check-policy";
 
+const unexpectedSandboxOperation = (): never => {
+  throw new Error("Unexpected sandbox operation in test fixture");
+};
+const createSandbox = (): SandboxSession => ({
+  readBinaryFile: unexpectedSandboxOperation,
+  readFile: unexpectedSandboxOperation,
+  readTextFile: unexpectedSandboxOperation,
+  removePath: unexpectedSandboxOperation,
+  resolvePath: unexpectedSandboxOperation,
+  run: unexpectedSandboxOperation,
+  spawn: unexpectedSandboxOperation,
+  writeBinaryFile: unexpectedSandboxOperation,
+  writeFile: unexpectedSandboxOperation,
+  writeTextFile: unexpectedSandboxOperation,
+});
+
 const installPolicy = vi.fn<typeof applyPrivateComputeCheckPolicy>(async () => {
   await Promise.resolve();
 });
@@ -77,8 +93,7 @@ describe("explicit reviewed compute task validation repair", () => {
         installPolicy,
       );
       expect(installPolicy).not.toHaveBeenCalled();
-      // SAFETY: The mocked installer only checks identity and cannot invoke Sandbox methods.
-      const sandbox = {} as SandboxSession;
+      const sandbox = createSandbox();
       await repair?.applyPolicy(sandbox);
       expect(installPolicy).toHaveBeenCalledWith({
         sandbox,
@@ -143,8 +158,7 @@ describe("explicit reviewed compute task validation repair", () => {
       const different = { ...scope, proposalDigest: "new-proposal" };
       requestPrivateApplyApproval(different, "new-approval");
       recordApprovedPrivateApply(different, "new-approval");
-      // SAFETY: Approval rejects before any mocked Sandbox method can run.
-      await expect(prepared?.applyPolicy({} as SandboxSession)).rejects.toThrow();
+      await expect(prepared?.applyPolicy(createSandbox())).rejects.toThrow();
       approve();
       const controller = new AbortController();
       const cancelled = prepareValidationPrivateComputeRepair({
@@ -154,8 +168,7 @@ describe("explicit reviewed compute task validation repair", () => {
         signal: controller.signal,
       });
       controller.abort();
-      // SAFETY: Cancellation rejects before any mocked Sandbox method can run.
-      await expect(cancelled?.applyPolicy({} as SandboxSession)).rejects.toThrow();
+      await expect(cancelled?.applyPolicy(createSandbox())).rejects.toThrow();
     });
   });
   it("returns the exact canonical recipe only for an approved matching repair", () => {

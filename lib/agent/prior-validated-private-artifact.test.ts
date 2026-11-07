@@ -149,7 +149,22 @@ const seed = (
     stderr: "",
   });
   const run = vi.fn(() => Promise.resolve(result()));
-  const sandbox = { id: workspace.workspaceId, run } as unknown as SandboxSession;
+  const unexpectedSandboxOperation = () => {
+    throw new Error("Unexpected sandbox operation");
+  };
+  const sandbox: SandboxSession & { id: string } = {
+    id: workspace.workspaceId,
+    run,
+    spawn: unexpectedSandboxOperation,
+    readFile: unexpectedSandboxOperation,
+    readBinaryFile: unexpectedSandboxOperation,
+    readTextFile: unexpectedSandboxOperation,
+    writeFile: unexpectedSandboxOperation,
+    writeBinaryFile: unexpectedSandboxOperation,
+    writeTextFile: unexpectedSandboxOperation,
+    resolvePath: unexpectedSandboxOperation,
+    removePath: unexpectedSandboxOperation,
+  };
   return {
     input: { appId, sessionId, sandbox, state: current },
     current,

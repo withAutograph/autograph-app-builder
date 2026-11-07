@@ -22,7 +22,7 @@ const sandboxDefaults = {
   readFile: unexpectedSandboxOperation,
   readTextFile: unexpectedSandboxOperation,
   removePath: unexpectedSandboxOperation,
-  resolvePath: (path: string) => path,
+  resolvePath: unexpectedSandboxOperation,
   run: unexpectedSandboxOperation,
   spawn: unexpectedSandboxOperation,
   writeBinaryFile: unexpectedSandboxOperation,

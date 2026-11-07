@@ -42,6 +42,26 @@ import { recordApprovedPrivateApply, requestPrivateApplyApproval } from "./priva
 import * as artifacts from "./compiled-operator-artifacts";
 import { inspectDraftReconciliation } from "../repository/sandbox-draft-reconciliation";
 
+const unexpectedSandboxOperation = (): never => {
+  throw new Error("Unexpected sandbox operation in test fixture");
+};
+const sandboxDefaults = {
+  readBinaryFile: unexpectedSandboxOperation,
+  readFile: unexpectedSandboxOperation,
+  readTextFile: unexpectedSandboxOperation,
+  removePath: unexpectedSandboxOperation,
+  resolvePath: unexpectedSandboxOperation,
+  run: unexpectedSandboxOperation,
+  spawn: unexpectedSandboxOperation,
+  writeBinaryFile: unexpectedSandboxOperation,
+  writeFile: unexpectedSandboxOperation,
+  writeTextFile: unexpectedSandboxOperation,
+} satisfies SandboxSession;
+const createSandbox = <T extends Partial<SandboxSession>>(overrides: T): SandboxSession & T => ({
+  ...sandboxDefaults,
+  ...overrides,
+});
+
 const roots: string[] = [];
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 const appPath = "apps/orchard/value.js";
@@ -120,9 +140,7 @@ const fixture = () => {
   }
   const commands: { root: string; command: string }[] = [];
   let failure: "none" | "startup" | "interrupted" = "none";
-  // SAFETY: This adapter executes maintained Git/path programs unchanged and replaces only provider command execution with owned local processes.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- Only the SandboxSession ports used by these tools are implemented.
-  const sandbox = {
+  const sandbox = createSandbox({
     id: "owned-physical-session",
     async readTextFile(input: { path: string; abortSignal?: AbortSignal }) {
       input.abortSignal?.throwIfAborted();
@@ -192,7 +210,7 @@ const fixture = () => {
       });
       return { exitCode: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
     },
-  } as unknown as SandboxSession;
+  });
   // SAFETY: Consumed apply fields are complete; unused preparation contracts are controlled fixture identities.
   const apply = {
     appSpecDigest: hash("orchard-spec"),

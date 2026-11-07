@@ -73,10 +73,25 @@ function sandboxFixture() {
         })
       : null;
   });
+  const unexpectedSandboxOperation = () => {
+    throw new Error("Unexpected sandbox operation");
+  };
+  const sandbox: SandboxSession = {
+    readBinaryFile,
+    readFile,
+    readTextFile: unexpectedSandboxOperation,
+    removePath: unexpectedSandboxOperation,
+    resolvePath: unexpectedSandboxOperation,
+    run: unexpectedSandboxOperation,
+    spawn: unexpectedSandboxOperation,
+    writeBinaryFile: unexpectedSandboxOperation,
+    writeFile: unexpectedSandboxOperation,
+    writeTextFile: unexpectedSandboxOperation,
+  };
   return {
     readBinaryFile,
     readFile,
-    sandbox: { readBinaryFile, readFile } as unknown as SandboxSession,
+    sandbox,
   };
 }
 
