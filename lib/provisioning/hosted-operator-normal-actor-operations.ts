@@ -35,7 +35,10 @@ import {
   prepareNormalActorAccounts,
   prepareNormalActorMemberships,
 } from "./hosted-operator-normal-actors";
-import type { NormalActorOrganizationOwnerProof } from "./hosted-operator-normal-actors";
+import type {
+  NormalActorAccountPorts,
+  NormalActorOrganizationOwnerProof,
+} from "./hosted-operator-normal-actors";
 
 interface OrganizationWorkerInput {
   effect: HostedOperatorEffectContext;
@@ -200,7 +203,10 @@ export const createHostedOperatorNormalActorOperations = (
     }
     return prepared;
   };
-  const readRequired = async (context: HostedOperatorContext, plan: HostedOperatorPlan) => {
+  const readRequired = async (
+    context: HostedOperatorContext,
+    plan: HostedOperatorPlan,
+  ): Promise<{ preparation: NormalActorAccountPreparation; state: NormalActorState }> => {
     const prepared = await read(context, plan);
     if (prepared === undefined) {
       throw required();
@@ -214,7 +220,7 @@ export const createHostedOperatorNormalActorOperations = (
     preparation: NormalActorAccountPreparation,
     stateInput: NormalActorState,
     options?: { carryExpiredCapturedActor?: boolean },
-  ) => {
+  ): Promise<NormalActorState> => {
     const state = assertNormalActorState(
       preparation.program,
       stateInput,
@@ -279,7 +285,10 @@ export const createHostedOperatorNormalActorOperations = (
   ) => {
     const fetch = await transport(input, preparation.program);
     const assertObservation = input.assertCurrentObservation;
-    return {
+    const authorityPorts: Pick<
+      NormalActorAccountPorts,
+      "assertCurrent" | "assertCurrentObservation"
+    > = {
       assertCurrent: async (scope: { operationRef: string; programDigest: string }) => {
         if (
           scope.operationRef !== preparation.accountOperationRef ||
@@ -290,23 +299,21 @@ export const createHostedOperatorNormalActorOperations = (
         await deps.assertCurrentPlan(input);
         await input.assertCurrent();
       },
-      ...(assertObservation === undefined
-        ? {}
-        : {
-            assertCurrentObservation: async (scope: {
-              operationRef: string;
-              programDigest: string;
-            }) => {
-              if (
-                scope.operationRef !== preparation.accountOperationRef ||
-                scope.programDigest !== preparation.programDigest
-              ) {
-                throw mismatch();
-              }
-              await deps.assertCurrentPlan(input);
-              await assertObservation();
-            },
-          }),
+    };
+    if (assertObservation !== undefined) {
+      authorityPorts.assertCurrentObservation = async (scope) => {
+        if (
+          scope.operationRef !== preparation.accountOperationRef ||
+          scope.programDigest !== preparation.programDigest
+        ) {
+          throw mismatch();
+        }
+        await deps.assertCurrentPlan(input);
+        await assertObservation();
+      };
+    }
+    const accountStatePorts = {
+      ...authorityPorts,
       checkpoint: async (state: NormalActorState) => {
         await checkpoint(input, state);
       },
@@ -328,12 +335,18 @@ export const createHostedOperatorNormalActorOperations = (
           ? null
           : { session: scoped.session, storageState: scoped.storageState };
       },
+    };
+    return {
+      ...accountStatePorts,
       clientFactory: (
         options: Parameters<typeof createHostedOperatorNormalAuthClient>[0],
       ): NormalAuthClient => createHostedOperatorNormalAuthClient({ ...options, fetch }),
     };
   };
-  const verifyMemberships = async (input: HostedOperatorEffectContext, organizationId?: string) => {
+  const verifyMemberships = async (
+    input: HostedOperatorEffectContext,
+    organizationId?: string,
+  ): Promise<{ complete: boolean; state: NormalActorState }> => {
     await deps.assertCurrentPlan(input);
     await input.assertCurrent();
     const prepared = await readRequired(input, input.plan);
