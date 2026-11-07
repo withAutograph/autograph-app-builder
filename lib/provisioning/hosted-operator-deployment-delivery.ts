@@ -259,23 +259,18 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
 }) => {
   const deliveryDiagnostic = (input: HostedOperatorDeploymentContext) => {
     let stage: OperatorGatewayDeliveryDiagnostic["stage"] = "context";
-    let phase: OperatorGatewayDeliveryDiagnostic["phase"];
-    let method: OperatorGatewayDeliveryDiagnostic["method"];
-    let httpStatus: OperatorGatewayDeliveryDiagnostic["httpStatus"];
-    let providerFailure:
-      | Pick<
-          OperatorGatewayDeliveryDiagnostic,
-          "providerCode" | "providerTerms" | "validationFields"
-        >
-      | undefined;
+    let requestDetails: Pick<OperatorGatewayDeliveryDiagnostic, "phase" | "method" | "httpStatus"> =
+      {};
+    let providerFailure: Pick<
+      OperatorGatewayDeliveryDiagnostic,
+      "providerCode" | "providerTerms" | "validationFields"
+    > | null = null;
     let failure: Pick<OperatorGatewayDeliveryDiagnostic, "errorClass" | "publicCode"> = {};
     return {
       at(value: OperatorGatewayDeliveryDiagnostic["stage"]) {
         stage = value;
-        phase = undefined;
-        method = undefined;
-        httpStatus = undefined;
-        providerFailure = undefined;
+        requestDetails = {};
+        providerFailure = null;
       },
       failed(error: Parameters<typeof projectOperatorGatewayDeliveryFailure>[0]) {
         failure = projectOperatorGatewayDeliveryFailure(error);
@@ -288,9 +283,9 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
           createHostedOperatorConsentDiagnostic(input.target.sessionId)({
             boundary: "operator",
             gatewayDelivery: {
-              httpStatus,
-              method,
-              phase,
+              httpStatus: requestDetails.httpStatus,
+              method: requestDetails.method,
+              phase: requestDetails.phase,
               result,
               stage,
               ...providerFailure,
@@ -305,18 +300,18 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         }
       },
       phase(value: OperatorGatewayDeliveryDiagnostic["phase"]) {
-        phase = value;
+        requestDetails.phase = value;
       },
       providerFailure(value: NonNullable<typeof providerFailure>) {
         providerFailure = value;
       },
       request(value: OperatorGatewayDeliveryDiagnostic["method"]) {
-        method = value;
-        httpStatus = undefined;
-        providerFailure = undefined;
+        requestDetails.method = value;
+        delete requestDetails.httpStatus;
+        providerFailure = null;
       },
       response(value: number) {
-        httpStatus = value;
+        requestDetails.httpStatus = value;
       },
     };
   };
@@ -593,19 +588,29 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         projectName = project.name;
         scopeSlug = team.slug;
       }
+      const aliasField: Pick<OperatorDeploymentCandidate, "gatewayAliasAttempted"> = {};
+      const projectField: Pick<OperatorDeploymentCandidate, "projectName"> = {};
+      const scopeField: Pick<OperatorDeploymentCandidate, "scopeSlug"> = {};
+      if (saved?.gatewayAliasAttempted !== undefined) {
+        aliasField.gatewayAliasAttempted = saved.gatewayAliasAttempted;
+      }
+      if (projectName !== undefined) {
+        projectField.projectName = projectName;
+      }
+      if (scopeSlug !== undefined) {
+        scopeField.scopeSlug = scopeSlug;
+      }
       return {
-        ...(saved?.gatewayAliasAttempted === undefined
-          ? {}
-          : { gatewayAliasAttempted: saved.gatewayAliasAttempted }),
+        ...aliasField,
         branch: delivery.branch,
         deploymentId: observed.id,
         operationRef: input.operationRef,
         origin: origin.origin,
         projectId: delivery.projectId,
-        ...(projectName === undefined ? {} : { projectName }),
+        ...projectField,
         readyState: observed.readyState,
         repoId: delivery.repoId,
-        ...(scopeSlug === undefined ? {} : { scopeSlug }),
+        ...scopeField,
       };
     };
     const readCandidate = async (deploymentId: string, verifyProject = true) =>
@@ -1166,27 +1171,24 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
           await reader.assertCurrent();
         }
         observation.at("deployment_create");
-        const response = z.object({ id }).parse(
-          await reader.request(
-            "/v13/deployments",
-            {},
-            {
-              gitSource: {
-                ref: reader.gitRef,
-                repoId: reader.delivery.repoId,
-                sha: gitSha,
-                type: "github",
-              },
-              meta: reader.expectedMeta,
-              name: project.name,
-              project: project.id,
-              ...((deps.target ?? "app") === "app" &&
-              input.plan.delivery?.projectSettings !== undefined
-                ? { projectSettings: input.plan.delivery.projectSettings }
-                : {}),
-            },
-          ),
-        );
+        const deploymentBase = {
+          gitSource: {
+            ref: reader.gitRef,
+            repoId: reader.delivery.repoId,
+            sha: gitSha,
+            type: "github" as const,
+          },
+          meta: reader.expectedMeta,
+          name: project.name,
+          project: project.id,
+        };
+        const deploymentBody =
+          (deps.target ?? "app") === "app" && input.plan.delivery?.projectSettings !== undefined
+            ? { ...deploymentBase, projectSettings: input.plan.delivery.projectSettings }
+            : deploymentBase;
+        const response = z
+          .object({ id })
+          .parse(await reader.request("/v13/deployments", {}, deploymentBody));
         observation.at("deployment_readback");
         const candidate = await reader.readCandidateOrRejection(response.id);
         if (candidate === undefined) {
