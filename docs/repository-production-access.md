@@ -63,8 +63,19 @@ Managed Connect also obtains the distinct configured operator role, never the
 Auth schema owner. Historical Preview configuration remains separate.
 
 The operator independently reads the canonical Builder owner and saved
-repository choice, including recovered session lineage. App descriptions and
-compiled releases come from owner-scoped captured artifacts. The normal plan
+repository choice, including recovered session lineage. An acquired repository
+and a publication destination are separate authorities: a new app built from a
+fresh template can use its owner/session/app/spec-bound compiled release's
+verified `publishedSource.repositoryId`. The operator resolves that identity
+through the exact configured workspace mapping. It does not change the acquired
+source. If an acquired repository is also present, both repository identities
+must agree. Missing, foreign, or ambiguous destinations do not authorize setup;
+a configured profile alone is insufficient. Acquired frontend-only apps retain
+their existing repository path without requiring a compiled SQL release. Fresh
+frontend-only apps still need a separately retained publication destination;
+this compiled-release fallback does not invent one.
+
+App descriptions and compiled releases come from owner-scoped captured artifacts. The normal plan
 operation returns the app's resource and access intent; preparation reads the
 actual approval from Builder's private history. A caller-supplied approval ID
 alone is insufficient. Source hashes remain diagnostics; the reviewed resource,
@@ -131,3 +142,7 @@ description without provider writes. The preparation approval covers data and
 access setup. Code publication, Ready, and merge remain tied to the reviewed
 revision through the existing delivery flow. Setup status does not claim that
 the native deployment is active or that app behavior has been tested.
+
+A missing saved destination is reported explicitly. Failed plan and status reads
+do not claim that setup was started or saved by that read. An uncertain
+preparation still requires status reconciliation before any retry.

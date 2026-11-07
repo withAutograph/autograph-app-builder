@@ -1,5 +1,6 @@
 /* oxlint-disable eslint/complexity, sonarjs/cognitive-complexity -- The two authenticated entry points explicitly dispatch their closed request union. */
 import { setTimeout as delay } from "node:timers/promises";
+import { RepositoryProductionDestinationRequiredError } from "./repository-production-destination";
 import { z } from "zod";
 import { appAccessCommandSchema, appAccessSnapshotSchema } from "../app-access/contracts";
 import type { AppAccessCommand, AppAccessSnapshot } from "../app-access/contracts";
@@ -178,6 +179,12 @@ export const createRepositoryProductionHandler =
     } catch (error) {
       if (!authenticated) {
         return reply({ code: "app_access_denied" }, 403);
+      }
+      if (
+        error instanceof RepositoryProductionDestinationRequiredError &&
+        pathname === repositoryProductionPath
+      ) {
+        return reply({ code: error.code }, 409);
       }
       const code = error instanceof Error && "code" in error ? error.code : undefined;
       if (code === "app_access_denied" || code === "authorization_required") {

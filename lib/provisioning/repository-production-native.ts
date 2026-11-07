@@ -47,6 +47,7 @@ import type {
   RepositoryProductionRequestOwner,
 } from "./repository-production-dispatcher";
 import { readRepositoryProductionConfiguration } from "./repository-production-configuration";
+import { resolveRepositoryProductionDestination } from "./repository-production-destination";
 import {
   repositoryProductionApprovalInput,
   repositoryProductionApprovalDigest,
@@ -197,17 +198,8 @@ export const createRepositoryProductionNativeHandler =
         const decision = session.privateBuildDecision;
         const source = decision?.existingRepositorySource;
         const spec = decision?.currentSpec;
-        if (!source || !spec || spec.appId !== owner.appId) {
+        if (!spec || spec.appId !== owner.appId) {
           throw new Error("repository_production_source_unavailable");
-        }
-        const profile = configuration.repositories.find(
-          (item) =>
-            item.workspaceId === owner.ownerContext.authority.workspaceId &&
-            item.repositoryId === source.repository.repositoryId &&
-            item.repositoryFullName === `${source.repository.owner}/${source.repository.name}`,
-        );
-        if (!profile) {
-          throw new Error("repository_production_scope_denied");
         }
         const assertCurrentOwner = async () => {
           await readSession(owner);
@@ -221,6 +213,14 @@ export const createRepositoryProductionNativeHandler =
           assertCurrentOwner,
         });
         const selection = await selections.read(artifactContext, spec.appSpecDigest);
+        const { profile, sourceSha } = resolveRepositoryProductionDestination({
+          workspaceId: owner.ownerContext.authority.workspaceId,
+          appId: owner.appId,
+          appSpecDigest: spec.appSpecDigest,
+          source,
+          selection,
+          repositories: configuration.repositories,
+        });
         const capture = selection
           ? await createOperatorArtifactPublication({
               store: createPostgresOperatorArtifactStore({ database, assertCurrentOwner }),
@@ -252,7 +252,7 @@ export const createRepositoryProductionNativeHandler =
         });
         const intent: RepositoryProductionIntent = {
           sessionId: owner.sessionId,
-          sourceSha: selection?.publishedSource?.gitSha ?? source.repository.headSha,
+          sourceSha,
           creatorRoles:
             description.backend.kind === "generated-postgres" ? description.backend.roles : [],
           storage:
