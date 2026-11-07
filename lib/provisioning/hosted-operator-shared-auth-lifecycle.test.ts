@@ -386,6 +386,7 @@ const composed = (active = true) => {
     centralIntegrationHostRequest: unavailable,
     centralIntegrationDeploymentReceiptRequest: unavailable,
     continuityRequest: unavailable,
+    continueProtectedSignup: unavailable,
     exportRequest: unavailable,
     readApprovedPlan: unavailable,
     registerOwnerRealmIdentityWait: unavailable,

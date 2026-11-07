@@ -49,6 +49,7 @@ import {
   operatorPlanDigest,
   nativeDeliveryGitRef,
   hostedOperatorAuthSignupPolicyInputSchema,
+  hostedOperatorInstallationCustomerIds,
   operatorReceiptSchema,
   restrictedOperatorEnvironment,
   operatorSelectionSchema,
@@ -255,10 +256,24 @@ const bootstrapCostDescription = (
     : "Preview-only resources and Auth bootstrap. Explicit normal Git delivery retries may create duplicate owned Preview deployments and provider usage charges. No human login or app preparation is established by schema readiness.";
 };
 const resourcePreparationPlan = (plan: HostedOperatorPlan): HostedOperatorPlan => {
-  if (plan.runtimePreparation === undefined) {
-    return plan;
+  // The approved signup organization needs its own installed schema even when
+  // the app declares no business roles and named actor grants are empty.
+  const policy = plan.authSignupPolicy;
+  const selected =
+    policy?.enrollment === "protected-v1"
+      ? {
+          ...plan,
+          appInstallation: {
+            customerIds: [
+              ...new Set([...hostedOperatorInstallationCustomerIds(plan), policy.organizationId]),
+            ],
+          },
+        }
+      : plan;
+  if (selected.runtimePreparation === undefined) {
+    return selected;
   }
-  const { delivery, gatewayBindings, gatewayDelivery, appTrustedSources, ...resources } = plan;
+  const { delivery, gatewayBindings, gatewayDelivery, appTrustedSources, ...resources } = selected;
   void delivery;
   void gatewayBindings;
   void gatewayDelivery;
@@ -311,6 +326,7 @@ const bindSignupPolicy = (
   }
   return {
     ...policy,
+    enrollment: "protected-v1",
     policyId: `${plan.selection.appId}:${organizationId}:signup`,
     authResourceId: plan.authDatabase.resourceId,
     appId: plan.selection.appId,
@@ -905,7 +921,7 @@ const withRetainedAppInstallationTargets = async (
     return appPlan;
   }
   const customerIds = [
-    ...new Set([...appPlan.access.map((grant) => grant.organizationId), ...retainedCustomers]),
+    ...new Set([...hostedOperatorInstallationCustomerIds(appPlan), ...retainedCustomers]),
   ];
   await controlPlane.assertPlanningAuthorized(context);
   return hostedOperatorPlanSchema.parse({

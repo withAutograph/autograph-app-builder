@@ -23,7 +23,10 @@ import {
   createHostedOperatorSandboxLauncher,
 } from "./hosted-operator-sandbox-launcher";
 import type { HostedOperatorConsentDiagnosticSink } from "./hosted-operator-consent-diagnostic";
-import type { GeneratedAppReleaseFiles } from "./hosted-operator-sandbox-launcher";
+import type {
+  GeneratedAppReleaseFiles,
+  HostedOperatorSandboxWorkerInput,
+} from "./hosted-operator-sandbox-launcher";
 
 const currentReceipt = structuredClone(sourceReceipt);
 currentReceipt.workers.genericInstaller.path = "trusted-worker";
@@ -142,6 +145,7 @@ const makeFixture = (
     captured?: boolean;
     auth?: boolean;
     signupPolicy?: boolean;
+    signupEnrollment?: boolean;
     startupFailure?: { code: string; metadata?: unknown };
     startupAdvisory?: unknown;
     snapshotId?: string;
@@ -185,7 +189,7 @@ const makeFixture = (
         installer: { reference: "auth-protected-schema-v1", sha256: "f".repeat(64) },
       },
     });
-  } else if (options.signupPolicy) {
+  } else if (options.signupPolicy || options.signupEnrollment) {
     selectedPlan = hostedOperatorPlanSchema.parse({
       ...plan,
       action: "prepare",
@@ -201,7 +205,23 @@ const makeFixture = (
         origin: "https://apps.example",
         projectId: "gateway",
       },
-      installer: { reference: "auth-owned-organization-v1", sha256: workerDigest },
+      installer: {
+        reference: options.signupEnrollment
+          ? "generated-app-protected-installer-v1"
+          : "auth-owned-organization-v1",
+        sha256: workerDigest,
+      },
+      ...(options.signupEnrollment
+        ? {
+            appInstallation: { customerIds: ["tenant-a", "org-fixture"] },
+            release: {
+              ...plan.release,
+              sha256: createHash("sha256")
+                .update(generatedFiles["release-manifest.json"])
+                .digest("hex"),
+            },
+          }
+        : {}),
       authMembership: {
         actorId: "owner",
         bootstrapPlanDigest: "1".repeat(64),
@@ -292,10 +312,14 @@ const makeFixture = (
     });
   }
   const customWorker =
-    options.generated === true || options.auth === true || options.signupPolicy === true;
+    options.generated === true ||
+    options.auth === true ||
+    options.signupPolicy === true ||
+    options.signupEnrollment === true;
+  const ordinaryPurpose = options.access ? "access" : "install";
   const baseSelectedContext = buildProtectedInstallContext({
     plan: selectedPlan,
-    purpose: options.access ? "access" : "install",
+    purpose: options.signupEnrollment ? "signup-enrollment" : ordinaryPurpose,
     database: options.auth || options.signupPolicy ? "authDatabase" : "appDatabase",
     ...(options.auth || options.signupPolicy ? { subject: "auth" as const } : {}),
     fenceGeneration: 3,
@@ -321,6 +345,16 @@ const makeFixture = (
   if (options.signupPolicy) {
     selectedEffectId = "auth-signup-policy";
   }
+  if (options.signupEnrollment) {
+    selectedEffectId = "generated_app.enroll_signup";
+  }
+  let selectedTenantId = rustAuthorization.tenant_id;
+  if (options.signupPolicy || options.auth) {
+    selectedTenantId = null;
+  }
+  if (options.signupEnrollment) {
+    selectedTenantId = "org-fixture";
+  }
   const scopedAuthorization = customWorker
     ? {
         ...rustAuthorization,
@@ -332,7 +366,7 @@ const makeFixture = (
         effect_id: selectedEffectId,
         release_id: selectedContext.release.id,
         resource_id: selectedContext.resource.resource_id,
-        tenant_id: options.auth || options.signupPolicy ? null : rustAuthorization.tenant_id,
+        tenant_id: selectedTenantId,
       }
     : rustAuthorization;
   const files = new Map<string, Buffer>();
@@ -363,7 +397,7 @@ const makeFixture = (
     ),
     writeFiles: vi.fn(async (entries: { path: string; content: Buffer; mode?: number }[]) => {
       for (const entry of entries) {
-        files.set(entry.path, entry.content);
+        files.set(entry.path, Buffer.from(entry.content));
         written.push(entry.path);
       }
     }),
@@ -527,10 +561,14 @@ const makeFixture = (
   let selectedEffect = plan.effects[1]!;
   if (options.access) {
     selectedEffect = selectedPlan.effects.find((effect) => effect.kind === "access")!;
-  } else if (options.signupPolicy) {
+  } else if (options.signupPolicy || options.signupEnrollment) {
     selectedEffect = selectedPlan.effects.find((effect) => effect.kind === "auth-signup-policy")!;
   }
-  const input = {
+  const includeAccessConnections =
+    options.access === true ||
+    options.signupEnrollment === true ||
+    (options.generated === true && options.readbackStatus !== undefined);
+  const input: HostedOperatorSandboxWorkerInput = {
     authority: {} as HostedOperatorWorkerEffectContext["authority"],
     target: {} as HostedOperatorWorkerEffectContext["target"],
     effect: selectedEffect,
@@ -581,7 +619,24 @@ const makeFixture = (
           },
         }
       : {}),
-    ...(options.generated
+    ...(options.signupEnrollment
+      ? {
+          signupEnrollment: {
+            policyId: "hc:org-fixture:signup",
+            policyDigest: "1".repeat(64),
+            policyOperationRef: "36ff8b89-c8ea-4c29-ad8c-bc0f394110ed",
+            planDigest: operatorPlanDigest(selectedPlan),
+            resourceDigest: "2".repeat(64),
+            actorId: "new-signup-actor",
+            sessionId: "new-signup-actor-auth-session",
+            organizationId: "org-fixture",
+            origin: "https://apps.example",
+            appPath: "/dashboard",
+            roles: ["reviewer"],
+          },
+        }
+      : {}),
+    ...(options.generated || options.signupEnrollment
       ? {
           generatedRelease: {
             artifactRef: selectedPlan.release.artifactRef,
@@ -596,7 +651,7 @@ const makeFixture = (
     bindWorkerContext,
     signal: new AbortController().signal,
     database: options.auth || options.signupPolicy ? "authDatabase" : "appDatabase",
-    ...(options.access || (options.generated && options.readbackStatus !== undefined)
+    ...(includeAccessConnections
       ? {
           accessConnections: {
             appMigrator:
@@ -848,6 +903,101 @@ describe("hosted protected installer Sandbox launcher", () => {
     expect(inspector.sandbox.runCommand.mock.calls.at(-1)?.[0].args?.[0]).toBe(
       "auth-protected-membership-readback",
     );
+  });
+
+  it("runs signup enrollment under the pinned access worker and preserves the exact approved plan", async () => {
+    const fixture = makeFixture({ signupEnrollment: true });
+    await fixture.launcher.execute(fixture.input);
+    const command = fixture.sandbox.runCommand.mock.calls.at(-1)?.[0];
+    expect(command?.args?.[0]).toBe("protected-generated-app-signup-enroll");
+    expect(command?.args).toContain("--release-directory");
+    expect(command?.env).toEqual({});
+    const files = fixture.sandbox.writeFiles.mock.calls.flatMap(([entries]) => entries);
+    const signupFile = files.find((entry) =>
+      entry.path.endsWith("/startup/signup-enrollment.json"),
+    );
+    expect(signupFile?.mode).toBe(0o600);
+    expect(signupFile?.content.every((byte) => byte === 0)).toBe(true);
+    expect(fixture.files.get(signupFile!.path)).toEqual(frame(fixture.input.signupEnrollment));
+    expect(
+      files.filter((entry) => fixture.files.get(entry.path)?.includes("new-signup-actor")),
+    ).toEqual([signupFile]);
+    const approvedPlan = files.find((entry) =>
+      entry.path.endsWith("/startup/approved-access-plan.json"),
+    );
+    expect(approvedPlan?.content).toEqual(frame(fixture.input.plan));
+    expect(files.some((entry) => entry.path.endsWith("/startup/access-connections.json"))).toBe(
+      true,
+    );
+    const contextFile = files.find((entry) => entry.path.endsWith("/startup/context.json"));
+    expect(JSON.parse(contextFile!.content.toString("utf-8"))).toMatchObject({
+      tenant_targets: ["org-fixture"],
+      operation: { operation_id: runId, approval_digest: operatorPlanDigest(fixture.input.plan) },
+    });
+    expect(fixture.records).toEqual([
+      expect.objectContaining({
+        effectId: "generated_app.enroll_signup",
+        tenantId: "org-fixture",
+      }),
+    ]);
+  });
+
+  it("uses signup readback without binding or recording a mutation checkpoint", async () => {
+    const fixture = makeFixture({
+      signupEnrollment: true,
+      fenceOnly: true,
+      readbackStatus: "applied",
+    });
+    const observed = await fixture.launcher.inspect({ ...fixture.input, readbackOnly: true });
+    expect(observed).toMatchObject({ status: "applied", readback_sha256: "9".repeat(64) });
+    expect(fixture.sandbox.runCommand.mock.calls.at(-1)?.[0].args?.[0]).toBe(
+      "protected-generated-app-signup-enroll-readback",
+    );
+    expect(fixture.bindWorkerContext).not.toHaveBeenCalled();
+    expect(fixture.records).toEqual([]);
+  });
+
+  it.each([
+    { effectId: "generated_app.grant_access" },
+    { tenantId: "tenant-a" },
+    { tenantId: null },
+  ])(
+    "refuses a signup worker request outside the policy effect and tenant %j",
+    async (override) => {
+      const fixture = makeFixture({ signupEnrollment: true, ...override });
+      await expect(fixture.launcher.execute(fixture.input)).rejects.toMatchObject({
+        code: "resource_mismatch",
+      });
+      expect(fixture.records).toEqual([]);
+    },
+  );
+
+  it.each([
+    { planDigest: "0".repeat(64) },
+    { roles: ["unexpected"] },
+    { policyOperationRef: runId },
+  ])("rejects a mismatched signup selector before creating a sandbox %j", async (override) => {
+    const fixture = makeFixture({ signupEnrollment: true });
+    await expect(
+      fixture.launcher.execute({
+        ...fixture.input,
+        signupEnrollment: { ...fixture.input.signupEnrollment!, ...override },
+      }),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(fixture.createSandbox).not.toHaveBeenCalled();
+  });
+
+  it("requires the signup policy organization to be an approved installation customer", async () => {
+    const fixture = makeFixture({ signupEnrollment: true });
+    fixture.input.plan = hostedOperatorPlanSchema.parse({
+      ...fixture.input.plan,
+      appInstallation: { customerIds: ["tenant-a"] },
+    });
+    fixture.input.signupEnrollment!.planDigest = operatorPlanDigest(fixture.input.plan);
+    await expect(fixture.launcher.execute(fixture.input)).rejects.toMatchObject({
+      code: "resource_mismatch",
+    });
+    expect(fixture.createSandbox).not.toHaveBeenCalled();
   });
 
   it("independently inspects access under the real leased context without a new worker attempt or receipt", async () => {

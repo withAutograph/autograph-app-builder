@@ -69,6 +69,8 @@ const RESOURCES_RETIRED_INSPECT_COMMAND = "neon-resource-inspect-retired";
 const ACCESS_SCOPE = "generated-app-access-v1";
 const ACCESS_COMMAND = "protected-generated-app-access";
 const ACCESS_INSPECT_COMMAND = "protected-generated-app-access-readback";
+const SIGNUP_ENROLL_COMMAND = "protected-generated-app-signup-enroll";
+const SIGNUP_ENROLL_INSPECT_COMMAND = "protected-generated-app-signup-enroll-readback";
 const AUTH_SCOPE = "auth-protected-schema-v1";
 const AUTH_MEMBERSHIP_EFFECT = "auth-membership";
 const AUTH_SIGNUP_POLICY_EFFECT = "auth-signup-policy";
@@ -110,6 +112,20 @@ interface GeneratedAppReleaseMetadata {
 
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 const workerRunIdSchema = z.uuid();
+const signupEnrollmentSchema = z.strictObject({
+  policyId: z.string().min(1),
+  policyDigest: digestSchema,
+  policyOperationRef: workerRunIdSchema,
+  planDigest: digestSchema,
+  resourceDigest: digestSchema,
+  actorId: z.string().min(1),
+  sessionId: z.string().min(1),
+  organizationId: z.string().min(1),
+  origin: z.string().min(1),
+  appPath: z.string().min(1),
+  roles: z.array(z.string().min(1)),
+});
+export type HostedOperatorSignupEnrollmentWorkerInput = z.infer<typeof signupEnrollmentSchema>;
 const resourceSchema = z
   .strictObject({
     database: z.string().min(1),
@@ -165,6 +181,8 @@ const workerSubcommandSchema = z.enum([
   RESOURCES_RETIRE_COMMAND,
   ACCESS_COMMAND,
   ACCESS_INSPECT_COMMAND,
+  SIGNUP_ENROLL_COMMAND,
+  SIGNUP_ENROLL_INSPECT_COMMAND,
   GENERATED_INSPECT_COMMAND,
   "integration-control-schema",
   "integration-control-schema-readback",
@@ -283,6 +301,8 @@ interface PrivateSandboxWorkerInput {
   /** Private reviewed Auth plan resolved from plan.authSchema.artifactRef. */
   authSchemaPlan?: { artifactRef: string; content: Buffer };
   membershipProof?: { proof?: string; oidcToken: string; organizationId?: string };
+  /** Private actor and Auth session bound to the independently approved signup policy. */
+  signupEnrollment?: HostedOperatorSignupEnrollmentWorkerInput;
   accessConnections?: {
     appMigrator: string;
     appRuntime: string;
@@ -516,18 +536,31 @@ export const buildProtectedInstallContext = (input: {
   fenceGeneration: number;
   database: "appDatabase" | "authDatabase";
   subject?: "auth";
-  purpose?: "install" | "access";
+  purpose?: "install" | "access" | "signup-enrollment";
 }): ProtectedInstallContextWire => {
   const resource = resourceSchema.parse(input.plan[input.database]);
   const auth = input.subject === "auth" ? input.plan.authSchema : undefined;
   if (input.subject === "auth" && (auth === undefined || input.database !== "authDatabase")) {
     throw resourceMismatch();
   }
-  const appTenantTargets =
-    input.purpose === "install"
-      ? hostedOperatorInstallationCustomerIds(input.plan)
-      : [...new Set(input.plan.access.map((target) => target.organizationId))];
-  const tenantTargets = auth === undefined ? appTenantTargets : [];
+  let tenantTargets: string[] = [];
+  if (input.purpose === "signup-enrollment") {
+    const policy = input.plan.authSignupPolicy;
+    if (
+      policy === undefined ||
+      input.database !== "appDatabase" ||
+      auth !== undefined ||
+      !hostedOperatorInstallationCustomerIds(input.plan).includes(policy.organizationId)
+    ) {
+      throw resourceMismatch();
+    }
+    tenantTargets = [policy.organizationId];
+  } else if (auth === undefined) {
+    tenantTargets =
+      input.purpose === "install"
+        ? hostedOperatorInstallationCustomerIds(input.plan)
+        : [...new Set(input.plan.access.map((target) => target.organizationId))];
+  }
   if (auth === undefined && tenantTargets.length === 0) {
     throw resourceMismatch();
   }
@@ -848,6 +881,13 @@ const requestMatchesWorkerScope = (
     );
   }
   if (worker.operationScope === ACCESS_SCOPE) {
+    if (worker.subcommand === SIGNUP_ENROLL_COMMAND) {
+      return (
+        effectId === "generated_app.enroll_signup" &&
+        context.tenant_targets.length === 1 &&
+        tenantId === context.tenant_targets[0]
+      );
+    }
     return (
       worker.subcommand === ACCESS_COMMAND &&
       tenantId === null &&
@@ -1039,10 +1079,35 @@ const runSandboxWorker = async (
       : input.assertCurrent;
   const runId =
     input.readbackOnly === true ? randomUUID() : workerRunIdSchema.parse(input.workerAttemptId);
+  let signupEnrollment: HostedOperatorSignupEnrollmentWorkerInput | undefined;
+  if (input.signupEnrollment !== undefined) {
+    const enrollment = signupEnrollmentSchema.safeParse(input.signupEnrollment);
+    const policy = input.plan.authSignupPolicy;
+    if (
+      !enrollment.success ||
+      policy === undefined ||
+      input.effect.kind !== AUTH_SIGNUP_POLICY_EFFECT ||
+      input.operationRef === enrollment.data.policyOperationRef ||
+      enrollment.data.planDigest !== operatorPlanDigest(input.plan) ||
+      enrollment.data.policyId !== policy.policyId ||
+      enrollment.data.organizationId !== policy.organizationId ||
+      enrollment.data.origin !== policy.origin ||
+      enrollment.data.appPath !== policy.appPath ||
+      !isDeepStrictEqual(enrollment.data.roles, policy.appRoles)
+    ) {
+      throw resourceMismatch();
+    }
+    signupEnrollment = enrollment.data;
+  }
   const resources = input.effect.kind === "resources" || input.effect.kind === "retire";
-  const access = input.effect.kind === "access" || input.effect.kind === "revoke";
+  const access =
+    signupEnrollment !== undefined ||
+    input.effect.kind === "access" ||
+    input.effect.kind === "revoke";
   const membership =
-    input.effect.kind === AUTH_MEMBERSHIP_EFFECT || input.effect.kind === AUTH_SIGNUP_POLICY_EFFECT;
+    signupEnrollment === undefined &&
+    (input.effect.kind === AUTH_MEMBERSHIP_EFFECT ||
+      input.effect.kind === AUTH_SIGNUP_POLICY_EFFECT);
   const installReadback =
     input.readbackOnly === true &&
     input.effect.kind === "install" &&
@@ -1078,6 +1143,12 @@ const runSandboxWorker = async (
   }
   if (worker !== undefined && resources) {
     worker = { ...worker, subcommand: resourceCommand };
+  } else if (worker !== undefined && signupEnrollment !== undefined) {
+    worker = {
+      ...worker,
+      subcommand:
+        input.readbackOnly === true ? SIGNUP_ENROLL_INSPECT_COMMAND : SIGNUP_ENROLL_COMMAND,
+    };
   } else if (worker !== undefined && access) {
     worker = {
       ...worker,
@@ -1086,7 +1157,11 @@ const runSandboxWorker = async (
   }
   if (worker !== undefined && membership && input.readbackOnly === true) {
     worker = { ...worker, subcommand: MEMBERSHIP_INSPECT_COMMAND };
-  } else if (worker !== undefined && input.effect.kind === AUTH_SIGNUP_POLICY_EFFECT) {
+  } else if (
+    worker !== undefined &&
+    membership &&
+    input.effect.kind === AUTH_SIGNUP_POLICY_EFFECT
+  ) {
     worker = { ...worker, subcommand: SIGNUP_POLICY_COMMAND };
   }
   if (worker !== undefined && installReadback) {
@@ -1143,7 +1218,9 @@ const runSandboxWorker = async (
     purpose:
       input.effect.kind === "install" && input.database === "appDatabase" ? "install" : "access",
   };
-  if (auth) {
+  if (signupEnrollment !== undefined) {
+    contextInput.purpose = "signup-enrollment";
+  } else if (auth) {
     contextInput.subject = "auth";
   }
   const context = resources
@@ -1251,7 +1328,10 @@ const runSandboxWorker = async (
   }
   if (
     !input.plan.effects.some(
-      (effect) => effect.id === input.effect.id && effect.kind === input.effect.kind,
+      (effect) =>
+        effect.id === input.effect.id &&
+        effect.kind === input.effect.kind &&
+        (signupEnrollment === undefined || effect.resourceId === input.effect.resourceId),
     )
   ) {
     throw resourceMismatch();
@@ -1293,6 +1373,7 @@ const runSandboxWorker = async (
     createSandbox,
     {
       ...input,
+      signupEnrollment,
       legacyPlan: input.plan,
       legacyEffect: input.effect,
       effectKind: input.effect.kind,
@@ -1325,6 +1406,7 @@ type SharedSpoolInput = Pick<SandboxWorkerInput, "signal" | "readbackOnly" | "fe
   legacyEffect?: SandboxWorkerInput["effect"];
   effectKind?: string;
   membershipProof?: PrivateSandboxWorkerInput["membershipProof"];
+  signupEnrollment?: PrivateSandboxWorkerInput["signupEnrollment"];
   accessConnections?: PrivateSandboxWorkerInput["accessConnections"];
   startupFiles?: Readonly<Record<string, Buffer>>;
   /** Only the closed repository Production wrapper can supply these fixed worker files. */
@@ -1924,6 +2006,20 @@ const runPinnedFileSpoolTransport = async (
         });
       }
       await sandbox.writeFiles(files, { signal });
+    }
+    if (input.signupEnrollment !== undefined) {
+      const content = Buffer.from(JSON.stringify(input.signupEnrollment), "utf-8");
+      try {
+        if (content.length > MAX_PROTOCOL_FRAME_BYTES) {
+          throw resourceMismatch();
+        }
+        await sandbox.writeFiles(
+          [{ content, mode: 0o600, path: path.posix.join(startup, "signup-enrollment.json") }],
+          { signal },
+        );
+      } finally {
+        content.fill(0);
+      }
     }
     const releaseDirectory = path.posix.join(spool, "release");
     if (generatedMetadata !== undefined) {

@@ -1018,6 +1018,7 @@ describe("native composition adoption boundary", () => {
       centralIntegrationHostRequest: unavailable,
       centralIntegrationDeploymentReceiptRequest: unavailable,
       continuityRequest: unavailable,
+      continueProtectedSignup: unavailable,
       exportRequest: unavailable,
       readApprovedPlan: unavailable,
       registerOwnerRealmIdentityWait: unavailable,

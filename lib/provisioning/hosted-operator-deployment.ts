@@ -63,6 +63,17 @@ import {
 import type { HostedTenantExportPlan } from "./hosted-operator-export-contract";
 import { createPostgresTenantExportJournalStore } from "./postgres-hosted-operator-export-journal";
 import { createPostgresPhysicalResourceLease } from "./postgres-physical-resource-lease";
+import { createHostedOperatorSandboxLauncher } from "./hosted-operator-sandbox-launcher";
+import { createRealmIdentityHandoffSenderVerifier } from "./hosted-operator-realm-callback";
+import {
+  continueProtectedSignupEnrollment,
+  signupEnrollmentIdentity,
+} from "./protected-signup-enrollment";
+import { createPostgresProtectedSignupEnrollmentStore } from "./postgres-protected-signup-enrollment";
+import type {
+  ProtectedSignupEnrollmentRequest,
+  ProtectedSignupEnrollmentResponse,
+} from "./protected-signup-enrollment-request";
 import { createTenantExportSandbox } from "./hosted-operator-export-sandbox";
 import { createTenantExportArtifacts } from "./hosted-operator-export-artifacts";
 import { createTenantExportDispatcher } from "./hosted-operator-export-transport";
@@ -81,7 +92,7 @@ import {
 import { nativeObservationStateSchema } from "../eve/native-observation-state";
 import { realmContinuationPendingBaseline } from "./hosted-operator-realm-pending";
 import { createHostedOperatorRealmIdentityWait } from "./hosted-operator-realm-identity-wait";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   createHostedOperatorRealmContinuation,
   observeRealmContinuationRecord,
@@ -247,7 +258,10 @@ import {
   hostedRuntimeJournalRecordSchema,
 } from "./hosted-runtime-journal";
 import { createPostgresHostedRuntimeJournalStore } from "./postgres-hosted-runtime-journal";
-import { createPostgresHostedOperatorResourceLease } from "./postgres-hosted-operator-resource-lease";
+import {
+  createPostgresHostedOperatorResourceLease,
+  hostedOperatorDatabaseLockKeys,
+} from "./postgres-hosted-operator-resource-lease";
 
 const PARTICIPANT_STAGE = "auth-participants";
 
@@ -2681,6 +2695,352 @@ export const createHostedOperatorControlPlane = async (input: {
       withResourceLease,
     };
     const configuration = structuredClone(input.sourceConfiguration);
+    const readProtectedSignupParent = async (requested: ProtectedSignupEnrollmentRequest) => {
+      const rows = await database
+        .select()
+        .from(builderProvisioningJournals)
+        .where(
+          and(
+            eq(builderProvisioningJournals.issuer, config.issuer),
+            eq(builderProvisioningJournals.audience, config.resource),
+            sql`${builderProvisioningJournals.record}->>'kind' = 'app-runtime'`,
+            sql`${builderProvisioningJournals.record} #>> '{operator,operationRef}' = ${requested.policyOperationRef}`,
+            sql`${builderProvisioningJournals.record} #>> '{operator,planDigest}' = ${requested.planDigest}`,
+          ),
+        )
+        .limit(2);
+      const row = rows[0];
+      if (rows.length !== 1 || row === undefined) {
+        return null;
+      }
+      const authority = hostedTenantAuthoritySchema.parse({
+        issuer: row.issuer,
+        audience: row.audience,
+        workspaceId: row.workspaceId,
+        ownerUserId: row.ownerUserId,
+      });
+      const record = hostedRuntimeJournalRecordSchema.parse(row.record);
+      const { operator, request: target } = record;
+      const plan = operator?.plan;
+      const policy = plan?.authSignupPolicy;
+      const effect = plan?.effects.find((candidate) => candidate.kind === "auth-signup-policy");
+      if (
+        operator === undefined ||
+        plan === undefined ||
+        policy === undefined ||
+        effect === undefined
+      ) {
+        return null;
+      }
+      const matches = [
+        policy.enrollment === "protected-v1",
+        record.status === "prepared",
+        plan.action === "prepare",
+        operatorPlanDigest(plan) === requested.planDigest,
+        operator.receipts.some((entry) => entry.effectId === effect.id),
+        policy.policyId === requested.policyId,
+        policy.appId === requested.appId,
+        policy.origin === requested.origin,
+        policy.appPath === requested.appPath,
+        target.appId === policy.appId,
+        plan.authDatabase.resourceId === policy.authResourceId,
+        record.privateState !== undefined,
+        Date.parse(plan.retention.expiresAt) > Date.now(),
+      ].every(Boolean);
+      if (!matches) {
+        return null;
+      }
+      const [sourceSession] = await database
+        .select()
+        .from(agentSessions)
+        .where(
+          and(
+            eq(agentSessions.issuer, authority.issuer),
+            eq(agentSessions.audience, authority.audience),
+            eq(agentSessions.workspaceId, authority.workspaceId),
+            eq(agentSessions.ownerUserId, authority.ownerUserId),
+            eq(agentSessions.sessionId, target.sessionId),
+          ),
+        )
+        .limit(1);
+      if (sourceSession === undefined) {
+        return null;
+      }
+      const { current } = await readCurrentRealmSession(parseHostedSessionRow(sourceSession));
+      const ownerContext = await ownerContextResolver({
+        adapterSessionId: current.adapterSessionId,
+        authority,
+        principal: current.principal,
+        sessionAuth: forwardedSessionAuth(current.principal, current.sourceHandoffId),
+      });
+      return {
+        authority,
+        context: { authority, target, ownerContext },
+        record,
+        operator,
+        plan,
+        effect,
+        policy,
+      };
+    };
+    const continueProtectedSignup = async (
+      request: Request,
+      requested: ProtectedSignupEnrollmentRequest,
+    ): Promise<ProtectedSignupEnrollmentResponse> => {
+      const parent = await readProtectedSignupParent(requested);
+      if (parent === null) {
+        return { status: "blocked" };
+      }
+      const { context, operator, plan, effect, policy, record } = parent;
+      if (
+        plan.runtimePreparation === "single-project-resources-v1" &&
+        configuration.standardRuntime?.publicRealmWorkload.projectId !== context.target.projectId
+      ) {
+        const { openNativeTargetConfigurationResources, resolveOwnedStandardRuntimeConfiguration } =
+          await import("./native-target-configuration-resolver");
+        const resources = await openNativeTargetConfigurationResources(configuration, environment);
+        try {
+          const selected = await resolveOwnedStandardRuntimeConfiguration({
+            configuration,
+            resources,
+            environment,
+            context: {
+              authority: context.authority,
+              ownerContext: operatorOwnerContextSchema.parse(context.ownerContext),
+              target: { appId: context.target.appId, sessionId: context.target.sessionId },
+            },
+          });
+          if (
+            selected.standardRuntime?.publicRealmWorkload.projectId !== context.target.projectId
+          ) {
+            return { status: "blocked" };
+          }
+          const scoped = await createHostedOperatorControlPlane({
+            environment,
+            sourceConfiguration: selected,
+            workloadPolicy: selected.workloadPolicy,
+            ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+          });
+          try {
+            return await scoped.continueProtectedSignup(request, requested);
+          } finally {
+            await scoped.close();
+          }
+        } finally {
+          await resources.close();
+        }
+      }
+      const verifySender = async () => {
+        if (plan.runtimePreparation === "single-project-resources-v1") {
+          const resolved = await resolvePublicRealm(context);
+          const sender = resolved.linkConfiguration.identityHandoff?.sender;
+          if (
+            sender?.environment !== "production" ||
+            resolved.enrollment.publicOrigin !== policy.origin
+          ) {
+            throw new HostedOperatorError("authorization_required");
+          }
+          await createRealmIdentityHandoffSenderVerifier({
+            ...sender,
+            environment: "production",
+            publicEnrollment: resolved.enrollment,
+          })(request);
+        } else {
+          const sender = configuration.gateway.workload;
+          if (
+            sender.environment !== "preview" ||
+            plan.publicGateway?.projectId !== sender.projectId ||
+            plan.publicGateway.origin !== policy.origin
+          ) {
+            throw new HostedOperatorError("authorization_required");
+          }
+          await createRealmIdentityHandoffSenderVerifier({ ...sender, environment: "preview" })(
+            request,
+          );
+        }
+      };
+      try {
+        await verifySender();
+      } catch {
+        return { status: "blocked" };
+      }
+      await owner.assertArtifactAuthorized(context);
+      const approval = await readApproval({
+        ...context,
+        action: "prepare",
+        callId: record.approvedByCallId,
+        planDigest: operator.planDigest,
+      });
+      if (
+        !approval?.approved ||
+        approval.approvalId !== operator.approvalId ||
+        approval.callId !== record.approvedByCallId
+      ) {
+        return { status: "blocked" };
+      }
+      const assertPolicyCurrent = async () => {
+        const snapshot = await store.read(context);
+        const live = snapshot?.record;
+        const unchanged = [
+          live?.status === "prepared",
+          live?.operator?.planDigest === operator.planDigest,
+          live?.operator?.operationRef === operator.operationRef,
+          live?.operator?.approvalId === operator.approvalId,
+          isDeepStrictEqual(live?.privateState, record.privateState),
+          Date.parse(plan.retention.expiresAt) > Date.now(),
+        ].every(Boolean);
+        if (!unchanged) {
+          throw new HostedOperatorError("authorization_required");
+        }
+      };
+      await assertPolicyCurrent();
+      const enrollmentStore = createPostgresProtectedSignupEnrollmentStore(database);
+      const key = {
+        authority: parent.authority,
+        scope: {
+          authResourceId: policy.authResourceId,
+          appResourceId: plan.appDatabase.resourceId,
+          appId: policy.appId,
+          organizationId: policy.organizationId,
+          actorId: requested.actorId,
+        },
+      };
+      const operationRef = signupEnrollmentIdentity(key.scope).requestId;
+      const signupEnrollment = {
+        policyId: policy.policyId,
+        policyDigest: requested.policyDigest,
+        policyOperationRef: operator.operationRef,
+        planDigest: operator.planDigest,
+        resourceDigest: requested.resourceDigest,
+        actorId: requested.actorId,
+        sessionId: requested.sessionId,
+        organizationId: policy.organizationId,
+        origin: policy.origin,
+        appPath: policy.appPath,
+        roles: policy.appRoles,
+      };
+      const launcher = createHostedOperatorSandboxLauncher(configuration.sandbox);
+      const readWorkerInputs = async () => {
+        await assertPolicyCurrent();
+        const selection = await controlPlane.readGeneratedSelection(context, plan.contextId, {
+          artifactRef: plan.release.artifactRef,
+        });
+        if (
+          !selection ||
+          selection.releaseId !== plan.release.id ||
+          selection.manifestSha256 !== plan.release.sha256 ||
+          selection.artifactRef !== plan.release.artifactRef
+        ) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        const generatedRelease = await controlPlane.readGeneratedRelease(context, selection);
+        const urls = readHostedOperatorResourceBindings({
+          ...context,
+          config: tokenKeyring,
+          plan,
+          record,
+        });
+        return {
+          ...context,
+          effect,
+          plan,
+          operationRef,
+          signupEnrollment,
+          generatedRelease,
+          database: "appDatabase" as const,
+          directDatabaseUrl: urls.appDatabase.migrationUrl,
+          accessConnections: {
+            appMigrator: urls.appDatabase.migrationUrl,
+            appRuntime: urls.appDatabase.runtimeUrl,
+            authMigrator: urls.authDatabase.migrationUrl,
+            authRuntime: urls.authDatabase.runtimeUrl,
+          },
+          workerCheckpoints: [],
+          checkpoint: () => Promise.reject(new HostedOperatorError("authorization_required")),
+        };
+      };
+      let workerInputs: ReturnType<typeof readWorkerInputs> | undefined;
+      const inputs = () => (workerInputs ??= readWorkerInputs());
+      const withSignupLock = createPostgresPhysicalResourceLease({
+        openLockClient: (onConnectionClosed) =>
+          postgres(parseProtectedResourceLockDatabaseUrl(config.databaseUrl), {
+            ...hostedRuntimePostgresOptions,
+            idle_timeout: 0,
+            max: 1,
+            max_lifetime: 0,
+            onclose: onConnectionClosed,
+          }),
+      });
+      const status = await continueProtectedSignupEnrollment({
+        key,
+        store: enrollmentStore,
+        assertPolicyCurrent,
+        policy: {
+          policyId: policy.policyId,
+          policyDigest: requested.policyDigest,
+          operationRef: operator.operationRef,
+          planDigest: operator.planDigest,
+          roles: policy.appRoles,
+        },
+        access: {
+          async inspect(enrollment) {
+            const observed = await launcher.inspect({
+              ...(await inputs()),
+              readbackOnly: true,
+              fenceGeneration: enrollment.generation,
+              assertCurrent: assertPolicyCurrent,
+              signal: request.signal,
+            });
+            if (observed?.status === "applied") {
+              return "granted";
+            }
+            if (["absent", "retryable"].includes(observed?.status ?? "")) {
+              return "applicable";
+            }
+            return "unknown";
+          },
+          async grant(enrollment, assertCurrent) {
+            const leaseId = enrollment.lease?.id;
+            if (leaseId === undefined) {
+              throw new HostedOperatorError("operation_in_progress");
+            }
+            await withSignupLock(
+              {
+                lockKeys: hostedOperatorDatabaseLockKeys(plan),
+                readCurrentFence: async () => {
+                  await assertCurrent();
+                  return { operationRef, leaseId, fenceGeneration: enrollment.generation };
+                },
+              },
+              async (assertFence) => {
+                await launcher.execute({
+                  ...(await inputs()),
+                  workerAttemptId: randomUUID(),
+                  fenceGeneration: enrollment.generation,
+                  assertCurrent: assertFence,
+                  signal: request.signal,
+                  bindWorkerContext: async () => {
+                    await assertFence();
+                    // Independent database readback settles the signup journal after the worker returns.
+                    return async () => {
+                      await assertFence();
+                    };
+                  },
+                });
+              },
+            );
+          },
+        },
+      });
+      if (status !== "ready") {
+        return { status };
+      }
+      const row = await enrollmentStore.read(key);
+      const enrolled = row?.record;
+      return enrolled?.state === "granted"
+        ? { status: "ready", generation: enrolled.generation }
+        : { status: "pending" };
+    };
     const assertCurrentPlan: NormalActorOperationsDependencies["assertCurrentPlan"] = async (
       currentInput,
     ) => {
@@ -4049,6 +4409,7 @@ export const createHostedOperatorControlPlane = async (input: {
     > = {};
     return {
       ...controlPlane,
+      continueProtectedSignup,
       ...normalActors,
       ...deferredIntegrationPorts,
       ...nativeTargetPort,
