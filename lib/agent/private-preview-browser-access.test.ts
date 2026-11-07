@@ -126,7 +126,6 @@ describe("owned private browser authority", () => {
         } else {
           current = false;
         }
-        return;
       });
       const operation = vi.fn();
       await expect(
