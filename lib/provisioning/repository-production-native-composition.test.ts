@@ -18,42 +18,42 @@ import { repositoryProductionApprovalDigest } from "./repository-production-appr
 import type { RepositoryProductionSetupPorts } from "./repository-production-setup";
 
 const scope: RepositoryProductionScope = {
+  appId: "requests",
   authority: {
-    issuer: "https://builder.example/api/auth",
     audience: "https://builder.example/mcp",
+    issuer: "https://builder.example/api/auth",
     ownerUserId: "owner",
     workspaceId: "workspace",
   },
-  appId: "requests",
-  repositoryId: "repo",
-  repositoryFullName: "team/apps",
-  projectId: "project",
-  organizationId: "org",
-  publicOrigin: "https://apps.example",
   environment: "production",
+  organizationId: "org",
+  projectId: "project",
+  publicOrigin: "https://apps.example",
+  repositoryFullName: "team/apps",
+  repositoryId: "repo",
 };
 const oldIntent: RepositoryProductionIntent = {
+  creatorRoles: ["reader"],
   sessionId: "saved-session",
   sourceSha: "a".repeat(40),
-  creatorRoles: ["reader"],
   storage: {
-    kind: "postgres",
     artifactRef: "old-artifact",
-    releaseId: "old-release",
-    manifestSha256: "b".repeat(64),
     databaseEnvironment: "APP_DATABASE_URL",
+    kind: "postgres",
+    manifestSha256: "b".repeat(64),
+    releaseId: "old-release",
   },
 };
 const revised: RepositoryProductionIntent = {
   ...oldIntent,
-  sourceSha: "c".repeat(40),
   creatorRoles: ["reader", "editor"],
+  sourceSha: "c".repeat(40),
   storage: {
-    kind: "postgres",
     artifactRef: "new-artifact",
-    releaseId: "new-release",
-    manifestSha256: "d".repeat(64),
     databaseEnvironment: "APP_DATABASE_URL",
+    kind: "postgres",
+    manifestSha256: "d".repeat(64),
+    releaseId: "new-release",
   },
 };
 
@@ -61,21 +61,21 @@ const fixture = () => {
   const initial = initialRepositoryProductionRecord(scope, oldIntent);
   initial.effects = {
     "allocate-storage": { state: "applied" },
-    "install-schema": { state: "applied" },
-    "creator-access": { state: "applied" },
     "bind-runtime": { state: "applied" },
+    "creator-access": { state: "applied" },
+    "install-schema": { state: "applied" },
   };
   initial.creatorActorId = "creator";
   initial.privateState = { retainedCredential: "encrypted-fixture" };
   initial.approval = {
-    planDigest: repositoryProductionApprovalDigest(scope, revised),
     approvalId: "new-approval",
     approvedByCallId: "new-call",
+    planDigest: repositoryProductionApprovalDigest(scope, revised),
   };
   let row: RepositoryProductionRow = {
     operationRef: repositoryProductionOperationRef(scope),
-    revision: 1,
     record: initial,
+    revision: 1,
   };
   const applied: string[] = [];
   let creatorActive = true;
@@ -89,35 +89,36 @@ const fixture = () => {
     }
   };
   const ports: Omit<RepositoryProductionSetupPorts, "withLease"> = {
-    assertAuthorized,
-    store: {
-      read: async () => structuredClone(row),
-      reserve: async () => {
-        throw new Error("must reuse original app");
-      },
-      compareAndSet: async (previous, record) => {
-        if (previous.revision !== row.revision) {
-          throw new Error("conflicting setup");
-        }
-        row = { ...row, revision: row.revision + 1, record: structuredClone(record) };
-        return structuredClone(row);
-      },
-    },
-    reservePrivateState: async () => {
-      throw new Error("must reuse original credentials");
-    },
-    readCreatorIdentity: async () => ({ state: "verified", actorId: "creator" }),
-    reconcileCreatorRoles: async () => {
-      applied.push("roles");
-      return "applied";
-    },
     apply: async (context) => {
       applied.push(context.effect);
       if (context.effect === "creator-access") {
         creatorActive = true;
       }
     },
-    reconcile: async (context) => ({ state: "applied", receipt: { effect: context.effect } }),
+    assertAuthorized,
+    readCreatorIdentity: async () => ({ actorId: "creator", state: "verified" }),
+    reconcile: async (context) => ({ receipt: { effect: context.effect }, state: "applied" }),
+    reconcileCreatorRoles: async () => {
+      applied.push("roles");
+      return "applied";
+    },
+    reservePrivateState: async () => {
+      throw new Error("must reuse original credentials");
+    },
+    store: {
+      compareAndSet: async (previous, record) => {
+        if (previous.revision !== row.revision) {
+          throw new Error("conflicting setup");
+        }
+        const revision = row.revision + 1;
+        row = { ...row, record: structuredClone(record), revision };
+        return structuredClone(row);
+      },
+      read: async () => structuredClone(row),
+      reserve: async () => {
+        throw new Error("must reuse original app");
+      },
+    },
   };
   const setup = createRepositoryProductionIntentBoundSetup(
     ports,
@@ -125,30 +126,33 @@ const fixture = () => {
       acquired.push(requested);
       // Mirrors the real lease's initialization and every subsequent fence read.
       await assertAuthorized(target, requested);
+      const revision = row.revision + 1;
+      const leaseId = randomUUID();
+      const fenceGeneration = (row.record.lease?.fenceGeneration ?? 0) + 1;
       row = {
         ...row,
-        revision: row.revision + 1,
         record: {
           ...row.record,
           lease: {
-            leaseId: randomUUID(),
-            fenceGeneration: (row.record.lease?.fenceGeneration ?? 0) + 1,
+            fenceGeneration,
+            leaseId,
           },
         },
+        revision,
       };
       return await run(async () => {
         await assertAuthorized(target, requested);
       });
     },
   );
+  const resource = structuredClone(initial.resource);
+  const credentials = structuredClone(initial.privateState);
   return {
-    setup,
-    row: () => row,
-    applied,
     acquired,
+    applied,
     assertAuthorized,
-    resource: structuredClone(initial.resource),
-    credentials: structuredClone(initial.privateState),
+    creatorActive: () => creatorActive,
+    credentials,
     markPending: (effect: "creator-access" | "install-schema") => {
       row = {
         ...row,
@@ -156,15 +160,17 @@ const fixture = () => {
           ...row.record,
           effects: {
             ...row.record.effects,
-            [effect]: { state: "pending", attemptId: randomUUID() },
+            [effect]: { attemptId: randomUUID(), state: "pending" },
           },
         },
       };
     },
-    creatorActive: () => creatorActive,
     removeCreator: () => {
       creatorActive = false;
     },
+    resource,
+    row: () => row,
+    setup,
   };
 };
 
@@ -198,16 +204,16 @@ describe("Production setup approval and lease composition", () => {
     f.markPending("creator-access");
     const command = {
       action: "remove" as const,
-      memberId: "creator",
       clientRequestId: randomUUID(),
+      memberId: "creator",
     };
     expect(() => {
-      assertNoConflictingProductionSetup({ row: f.row(), command, pendingCommandIds: [] });
+      assertNoConflictingProductionSetup({ command, pendingCommandIds: [], row: f.row() });
     }).toThrow();
     expect(f.creatorActive()).toBe(true);
     await f.setup.prepare(scope, revised);
     expect(() => {
-      assertNoConflictingProductionSetup({ row: f.row(), command, pendingCommandIds: [] });
+      assertNoConflictingProductionSetup({ command, pendingCommandIds: [], row: f.row() });
     }).not.toThrow();
     f.removeCreator();
     await f.setup.prepare(scope, revised);
@@ -223,27 +229,28 @@ describe("Production setup approval and lease composition", () => {
       f.markPending(effect);
       for (const action of ["retry-setup", "renew-sign-in"] as const) {
         expect(() => {
+          const row = f.row();
           assertNoConflictingProductionSetup({
-            row: f.row(),
             command: { action, clientRequestId: randomUUID() },
             pendingCommandIds: [],
+            row,
           });
         }).not.toThrow();
       }
       const command = {
         action: "remove" as const,
-        memberId: "guest",
         clientRequestId: randomUUID(),
+        memberId: "guest",
       };
       expect(() => {
         assertNoConflictingProductionSetup({
-          row: f.row(),
           command,
           pendingCommandIds: [command.clientRequestId],
+          row: f.row(),
         });
       }).not.toThrow();
       expect(() => {
-        assertNoConflictingProductionSetup({ row: f.row(), command, pendingCommandIds: [] });
+        assertNoConflictingProductionSetup({ command, pendingCommandIds: [], row: f.row() });
       }).toThrow();
     },
   );
