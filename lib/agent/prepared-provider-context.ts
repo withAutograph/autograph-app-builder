@@ -27,7 +27,7 @@ export function preparedHandoffReturnPath(sessionAuth: unknown) {
     .object({
       initiator: z.object({
         attributes: z.object({
-          "autograph:source-handoff-id": z.string().uuid(),
+          "autograph:source-handoff-id": z.uuid(),
         }),
       }),
     })

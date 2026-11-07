@@ -5,10 +5,7 @@ export const providerConnectionReturnToSchema = z.union([
   z.literal("/"),
   z
     .string()
-    .refine(
-      (value) =>
-        value.startsWith("/handoff/") && z.string().uuid().safeParse(value.slice(9)).success,
-    )
+    .refine((value) => value.startsWith("/handoff/") && z.uuid().safeParse(value.slice(9)).success)
     .transform((value) => value as `/handoff/${string}`),
 ]);
 

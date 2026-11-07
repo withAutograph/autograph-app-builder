@@ -12,13 +12,13 @@ import {
 } from "@/lib/handoff/deployment";
 
 const renewalInputSchema = z.strictObject({
-  creationRequestId: z.string().uuid(),
-  handoffId: z.string().uuid(),
+  creationRequestId: z.uuid(),
+  handoffId: z.uuid(),
 });
 
 const renewedHandoffSchema = z.strictObject({
-  expiresAt: z.string().datetime(),
-  handoffId: z.string().uuid(),
+  expiresAt: z.iso.datetime(),
+  handoffId: z.uuid(),
   version: z.literal(1),
 });
 
