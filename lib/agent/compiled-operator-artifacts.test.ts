@@ -115,15 +115,20 @@ vi.mock("../provisioning/hosted-operator-artifact-store", async (importOriginal)
 }));
 vi.mock("../provisioning/hosted-operator-artifact-selection", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  createPostgresOperatorArtifactSelections: () => ({
-    read: mocks.readSelection,
-    readExact: mocks.readExact,
-    ...(mocks.publishedSourceLookupAvailable
-      ? { readPublishedSource: mocks.readPublishedSource }
-      : {}),
-    record: mocks.record,
-    ...(mocks.associationAvailable ? { associatePublishedSource: mocks.associate } : {}),
-  }),
+  createPostgresOperatorArtifactSelections: () => {
+    const reads: Pick<OperatorArtifactSelections, "read" | "readExact" | "readPublishedSource"> = {
+      read: mocks.readSelection,
+      readExact: mocks.readExact,
+    };
+    if (mocks.publishedSourceLookupAvailable) {
+      reads.readPublishedSource = mocks.readPublishedSource;
+    }
+    const selections: OperatorArtifactSelections = { ...reads, record: mocks.record };
+    if (mocks.associationAvailable) {
+      selections.associatePublishedSource = mocks.associate;
+    }
+    return selections;
+  },
 }));
 
 const digest = "a".repeat(64);
@@ -474,12 +479,9 @@ describe("owned compiled artifact workflow hook", () => {
     expect(mocks.record).toHaveBeenCalledWith(
       completion.compilation.context,
       `draft-reconciliation:${digest}`,
-      {
-        ...(completion.compilation.release.status === "published"
-          ? completion.compilation.release.selection
-          : {}),
-        publishedSource: historicalSource,
-      },
+      completion.compilation.release.status === "published"
+        ? { ...completion.compilation.release.selection, publishedSource: historicalSource }
+        : { publishedSource: historicalSource },
     );
   });
 
