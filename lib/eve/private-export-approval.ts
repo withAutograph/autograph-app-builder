@@ -51,31 +51,36 @@ export const createPrivateTenantExportApprovalCapture = (input: {
   if (!isDeepStrictEqual(input.plan.authority, { audience, issuer, ownerUserId, workspaceId })) {
     throw new Error("Private approval owner differs from its frozen plan.");
   }
-  const capture = createPrivateOperatorApprovalCapture({
+  const captureInput: Parameters<typeof createPrivateOperatorApprovalCapture>[0] = {
     ownerUserId: input.principal.ownerUserId,
     request: input.request,
-    ...(input.callId === undefined ? {} : { callId: input.callId }),
-    ...(input.state === undefined ? {} : { state: input.state }),
-  });
+  };
+  if (input.callId !== undefined) {
+    captureInput.callId = input.callId;
+  }
+  if (input.state !== undefined) {
+    captureInput.state = input.state;
+  }
+  const capture = createPrivateOperatorApprovalCapture(captureInput);
   return {
     observe(event: MessageStreamEvent) {
       if (event.type === "input.requested") {
         for (const requested of event.data.requests) {
           if (
-            requested.kind !== "tool-approval" ||
-            requested.action.toolName !== "export-app-hosted-data"
+            requested.kind === "tool-approval" &&
+            requested.action.toolName === "export-app-hosted-data"
           ) {
-            continue;
+            const parsed = tenantExportApprovalInputSchema.safeParse(requested.action.input);
+            if (parsed.success) {
+              const { plan, ...request } = parsed.data;
+              if (
+                isDeepStrictEqual(plan, input.plan) &&
+                isDeepStrictEqual(request, input.request)
+              ) {
+                capture.acceptRequest(requested.requestId, requested.action.callId);
+              }
+            }
           }
-          const parsed = tenantExportApprovalInputSchema.safeParse(requested.action.input);
-          if (!parsed.success) {
-            continue;
-          }
-          const { plan, ...request } = parsed.data;
-          if (!isDeepStrictEqual(plan, input.plan) || !isDeepStrictEqual(request, input.request)) {
-            continue;
-          }
-          capture.acceptRequest(requested.requestId, requested.action.callId);
         }
         return;
       }
