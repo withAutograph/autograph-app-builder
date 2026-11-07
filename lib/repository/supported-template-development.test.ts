@@ -247,11 +247,11 @@ const legacyWorkspaceFixture = () => {
   const files = new Map<string, Buffer>();
   const sandbox = {
     id: "sandbox",
-    readTextFile: vi.fn(({ path: target }: { path: string }) =>
-      Promise.resolve(files.get(target)?.toString("utf-8") ?? null),
-    ),
     readBinaryFile: vi.fn(({ path: target }: { path: string }) =>
       Promise.resolve(files.get(target) ?? null),
+    ),
+    readTextFile: vi.fn(({ path: target }: { path: string }) =>
+      Promise.resolve(files.get(target)?.toString("utf-8") ?? null),
     ),
     removePath: vi.fn(({ path: target, recursive }: { path: string; recursive?: boolean }) => {
       for (const name of files.keys()) {

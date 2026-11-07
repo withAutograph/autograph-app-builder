@@ -223,7 +223,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
           {localization.cancel}
         </Button>
         <Button disabled={!canRespond} onClick={() => consent.mutate({ accept: true })}>
-          {consent.isPending && consent.variables?.accept === true ? <Spinner /> : null}
+          {consent.isPending && consent.variables?.accept ? <Spinner /> : null}
           {localization.allow}
         </Button>
       </CardFooter>
