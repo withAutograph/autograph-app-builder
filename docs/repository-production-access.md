@@ -23,10 +23,11 @@ connection in its configuration entry:
 
 ```json
 {
+  "authOperatorRole": "arrusted_app_access_operator",
   "connection": {
     "kind": "deployment-secrets",
     "maintenanceUrlEnvironment": "ARRUSTED_PRODUCTION_MAINTENANCE_URL",
-    "authMigratorEnvironment": "ARRUSTED_PRODUCTION_AUTH_MIGRATOR_URL",
+    "authOperatorEnvironment": "ARRUSTED_PRODUCTION_AUTH_OPERATOR_URL",
     "authRuntimeEnvironment": "ARRUSTED_PRODUCTION_AUTH_RUNTIME_URL"
   }
 }
@@ -34,7 +35,7 @@ connection in its configuration entry:
 
 These fields name environment variables on the protected Production operator;
 they never contain URL values. The platform operator binds the three approved
-direct Neon credentials there. The shared Auth migrator and runtime bindings
+direct Neon credentials there. The shared Auth operator and runtime bindings
 must use their distinct configured roles, and the maintenance binding must use
 the configured maintenance database and role. Current Production OIDC remains
 required. Every URL must match the configured direct endpoint, database, role
@@ -42,11 +43,24 @@ and TLS policy; read-only SQL verifies the actual database and role before any
 worker receives credentials. Connection values and driver error details stay
 private. This path does not reuse a synthetic Preview connector or credential.
 
+Production requires an explicit `authOperatorRole` distinct from the Auth schema
+owner (`authResource.migratorRole`) and runtime role. Its restricted permissions
+support managed invitations, existing-organization membership and app access;
+the platform operator prepares the schema and grants separately. Builder does
+not persist or pass an Auth schema-owner connection to Production workers.
+The full approved worker plan binds `authOperatorRole`; generated access
+workers receive `authOperator` beside the app and Auth runtime connections.
+The Auth resource, realm digest and schema-owner descriptors stay unchanged.
+Workers verify the exact login and required restricted permissions before
+effects. A schema-owner or runtime URL in the operator binding is rejected.
+
 The existing top-level managed Connect configuration remains supported for
 repositories without a per-repository connection. It can be omitted when every
 repository has an explicit deployment binding. An invalid or missing selected
 binding stops setup; it never falls back to another credential. App creators
 continue to provide only the repository and ordinary app requirements.
+Managed Connect also obtains the distinct configured operator role, never the
+Auth schema owner. Historical Preview configuration remains separate.
 
 The operator independently reads the canonical Builder owner and saved
 repository choice, including recovered session lineage. App descriptions and

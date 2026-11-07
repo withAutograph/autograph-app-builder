@@ -9,7 +9,7 @@ const environmentName = z.string().regex(/^[A-Z][A-Z0-9_]*$/u);
 export const repositoryProductionSecretConnectionSchema = z.strictObject({
   kind: z.literal("deployment-secrets"),
   maintenanceUrlEnvironment: environmentName,
-  authMigratorEnvironment: environmentName,
+  authOperatorEnvironment: environmentName,
   authRuntimeEnvironment: environmentName,
 });
 export type RepositoryProductionSecretConnection = z.infer<
@@ -84,6 +84,7 @@ const repository = z.strictObject({
   publicOrigin: origin,
   connection: repositoryProductionSecretConnectionSchema.optional(),
   authWorkload: workload,
+  authOperatorRole: z.string().regex(/^[a-z][a-z0-9_]{0,62}$/u),
   authResource: z.strictObject({ resourceId: id, database: id, migratorRole: id, runtimeRole: id }),
   neon: z.strictObject({
     endpoint: id,
@@ -133,6 +134,16 @@ export const repositoryProductionConfigurationSchema = z
       });
     }
     for (const item of config.repositories) {
+      if (
+        [item.authResource.migratorRole, item.authResource.runtimeRole].includes(
+          item.authOperatorRole,
+        )
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "The Auth operator role must be separate from schema-owner and runtime roles.",
+        });
+      }
       if (item.connection === undefined && config.connection === undefined) {
         context.addIssue({
           code: "custom",

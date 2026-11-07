@@ -18,6 +18,7 @@ const repository = {
   organization: { id: "organization", name: "Organization" },
   publicOrigin: "https://apps.example",
   authWorkload: workload,
+  authOperatorRole: "auth_operator",
   authResource: {
     resourceId: "auth",
     database: "auth",
@@ -36,7 +37,7 @@ const repository = {
 const secretConnection = {
   kind: "deployment-secrets",
   maintenanceUrlEnvironment: "REPO_MAINTENANCE",
-  authMigratorEnvironment: "REPO_AUTH_MIGRATOR",
+  authOperatorEnvironment: "REPO_AUTH_OPERATOR",
   authRuntimeEnvironment: "REPO_AUTH_RUNTIME",
 };
 const connect = {
@@ -112,6 +113,36 @@ describe("Production repository connection configuration", () => {
         repositories: [repository],
       }).success,
     ).toBe(true);
+  });
+
+  it.each([undefined, "auth_migrator", "auth_runtime", "unsafe-role"])(
+    "requires a distinct explicit Auth operator role (%s)",
+    (authOperatorRole) => {
+      expect(
+        repositoryProductionConfigurationSchema.safeParse({
+          ...base,
+          connection: connect,
+          repositories: [{ ...repository, authOperatorRole }],
+        }).success,
+      ).toBe(false);
+    },
+  );
+
+  it("does not accept the old owner credential as an operator binding", () => {
+    const { authOperatorEnvironment: _operator, ...otherBindings } = secretConnection;
+    void _operator;
+    expect(
+      repositoryProductionConfigurationSchema.safeParse({
+        ...base,
+        connection: connect,
+        repositories: [
+          {
+            ...repository,
+            connection: { ...otherBindings, authMigratorEnvironment: "REPO_AUTH_MIGRATOR" },
+          },
+        ],
+      }).success,
+    ).toBe(false);
   });
 
   it("rejects any repository that has no explicit connection authority", () => {
