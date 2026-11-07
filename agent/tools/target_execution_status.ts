@@ -10,11 +10,13 @@ export default defineTool({
   async execute({ expectedProposalDigest }, ctx) {
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "target execution readiness inspection");
-    if (
+    const isNotPreparedPhase =
       current.phase !== "planned" &&
       current.phase !== "apply_failed" &&
       current.phase !== "applied" &&
-      current.phase !== "validation_pending" &&
+      current.phase !== "validation_pending";
+    if (
+      isNotPreparedPhase &&
       current.phase !== "validation_failed" &&
       current.phase !== "validated" &&
       current.phase !== "reviewed"
