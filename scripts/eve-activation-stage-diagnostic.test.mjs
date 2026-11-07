@@ -104,10 +104,10 @@ test("receipt read errors retain identity and log only closed compiled error fac
     throw failure;
   };
   assert.deepEqual(await captureFailure(f, failure, "receipt_read"), {
+    code: "TRANSPORT",
+    errorClass: "WorkflowWorldError",
     event: "eve.terminal_recovery_activation_failed",
     stage: "receipt_read",
-    errorClass: "WorkflowWorldError",
-    code: "TRANSPORT",
     status: 503,
   });
   assert.equal(f.state.resumes, 0);
@@ -126,10 +126,10 @@ test("an actual expired hook lookup remains a failure and is never treated as a 
     throw failure;
   };
   assert.deepEqual(await captureFailure(f, failure, "hook_lookup"), {
+    code: "run-expired",
+    errorClass: "RunExpiredError",
     event: "eve.terminal_recovery_activation_failed",
     stage: "hook_lookup",
-    errorClass: "RunExpiredError",
-    code: "run-expired",
     status: 410,
   });
   assert.equal(f.state.resumes, 0);
@@ -144,9 +144,9 @@ test("metadata decryption errors never expose their message or private context",
     },
   });
   assert.deepEqual(await captureFailure(f, failure, "hook_metadata"), {
+    errorClass: "RuntimeDecryptionError",
     event: "eve.terminal_recovery_activation_failed",
     stage: "hook_metadata",
-    errorClass: "RuntimeDecryptionError",
   });
   assert.equal(f.state.resumes, 0);
 });
@@ -197,9 +197,9 @@ test("unknown names, arbitrary codes, invalid status and deep causes cannot leak
     throw failure;
   };
   assert.deepEqual(await captureFailure(f, failure, "receipt_read"), {
+    errorClass: "other",
     event: "eve.terminal_recovery_activation_failed",
     stage: "receipt_read",
-    errorClass: "other",
   });
 });
 test("hostile error getters are not called and cause cycles terminate", async () => {

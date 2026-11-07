@@ -250,11 +250,11 @@ describe("deployment Browser preview route", () => {
     );
     expect(response.headers.get("cache-control")).toBe("no-store");
     await expect(response.json()).resolves.toEqual({
-      operationId: "operation",
-      logicalSessionId: "wrun_original",
-      sourceOwnerRunId: "wrun_source",
-      ownerRunId: "wrun_recovered",
       checkpointOwnerRunId: "wrun_checkpoint",
+      logicalSessionId: "wrun_original",
+      operationId: "operation",
+      ownerRunId: "wrun_recovered",
+      sourceOwnerRunId: "wrun_source",
     });
   });
 

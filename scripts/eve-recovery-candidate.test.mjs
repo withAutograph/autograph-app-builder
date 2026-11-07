@@ -367,11 +367,11 @@ test("native serialization preserves paired state, original approval, Drive and 
     ]),
   );
   assert.deepEqual(counts, {
-    run: 1,
-    key: 1,
-    step: 3,
     "hydrate-input": 2,
     "hydrate-output": 1,
+    key: 1,
+    run: 1,
+    step: 3,
     stream: 1,
   });
   assert.equal(new Set(f.calls.filter(([name]) => name === "step").map((call) => call[2])).size, 3);

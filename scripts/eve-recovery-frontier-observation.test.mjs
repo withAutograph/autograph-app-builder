@@ -252,7 +252,7 @@ test("logs only typed safe app facts and retained native retry counters", () => 
   assert.equal(recordTerminalRecoveryObservation(input), true);
   const report = logs.at(-1);
   assert.deepEqual(report.candidateFacts, {
-    flags: { explicitNull: true, absent: null },
+    flags: { absent: null, explicitNull: true },
     counts: { matched: 2 },
     hashes: { callId: protocolIdentityHash(call.toolCallId), absent: null },
   });

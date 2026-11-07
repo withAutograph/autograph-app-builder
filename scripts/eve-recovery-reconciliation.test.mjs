@@ -946,9 +946,9 @@ test("retained inbox commands never waive unknown native effects", async () => {
   });
   const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
   assert.deepEqual(result, {
+    callId: "original-native",
     kind: "uncertain",
     reason: "uncommitted-action-result",
-    callId: "original-native",
   });
 });
 

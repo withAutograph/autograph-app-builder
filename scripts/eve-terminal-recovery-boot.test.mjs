@@ -466,7 +466,7 @@ it("recovered first turn admits a queued cancellation before any turn step", asy
     settled += 1;
     return { kind: "park", cancelled: true };
   };
-  assert.deepEqual(await execution.runTurn(undefined, true), { kind: "park", cancelled: true });
+  assert.deepEqual(await execution.runTurn(undefined, true), { cancelled: true, kind: "park" });
   assert.equal(steps, 0);
   assert.equal(settled, 1);
   assert.equal(cleanups, 2);
@@ -689,8 +689,8 @@ it("receipt-bound historical FIFO reaches real ActiveTurn cancellation and retai
     return { kind: "park", cancelled: true };
   };
   assert.deepEqual(await execution.runTurn(boot.session.initialTurnInput, true), {
-    kind: "park",
     cancelled: true,
+    kind: "park",
   });
   assert.equal(turnSteps, 0);
   assert.equal(cancellationBoundaries, 1);
