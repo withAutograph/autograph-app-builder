@@ -12,7 +12,7 @@ import type {
 
 type DependencyPreparationState = Exclude<
   AppBuilderWorkflowState,
-  { phase: "empty" | "prepared" | "ui_previewed" | "ui_accepted" }
+  { phase: "empty" } | { phase: "prepared" } | { phase: "ui_previewed" } | { phase: "ui_accepted" }
 >;
 
 export type DependencyReadyState = Exclude<
@@ -48,7 +48,7 @@ export async function prepareOrReuseDependencies(input: {
       state: current,
     };
   }
-  const unsigned = {
+  const unsigned: Omit<DependencyPreparationReceipt, "digest"> = {
     appSpecDigest: current.appSpec.digest,
     artifactRevision: current.appSpec.artifactRevision,
     cacheContentDigest: "checkout",
@@ -56,9 +56,9 @@ export async function prepareOrReuseDependencies(input: {
     dependencyCacheDigest: "checkout",
     dependencyLayout: {
       kind: "checkout" as const,
-      roots: [] as [],
+      roots: [],
       version: 1 as const,
-      workspaceLinks: [] as [],
+      workspaceLinks: [],
     },
     eligibilityDigest: current.workspace.eligibilityDigest,
     imageDigest: "vercel-sandbox",
@@ -75,11 +75,19 @@ export async function prepareOrReuseDependencies(input: {
     ...unsigned,
     digest: sha256(JSON.stringify(unsigned)),
   };
-  const preparedState: DependencyReadyState = {
+  const preparedStatePrefix: Pick<
+    DependencyReadyState,
+    "appSpec" | "artifacts" | "dependencyReceipt" | "githubSource"
+  > = {
     appSpec: current.appSpec,
     artifacts: current.artifacts,
     dependencyReceipt,
-    ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+  };
+  if (current.githubSource !== undefined) {
+    preparedStatePrefix.githubSource = current.githubSource;
+  }
+  const preparedState: DependencyReadyState = {
+    ...preparedStatePrefix,
     phase: "dependencies_prepared",
     preparedByCallId: current.preparedByCallId,
     sourceReceipt: current.sourceReceipt,
