@@ -188,7 +188,7 @@ function FieldError({
       return children;
     }
 
-    if (!errors?.length) {
+    if ((errors?.length ?? 0) === 0) {
       return null;
     }
 
