@@ -1,8 +1,17 @@
+/// <reference types="node" />
+/// <reference lib="es2023.array" />
+
 import { lstatSync, realpathSync } from "node:fs";
 import nodePath from "node:path";
 import { developmentExecutionEnvironment } from "../lib/development/execution-environment.mjs";
 
 const { isAbsolute, relative, resolve, sep } = nodePath;
+const sourceRootField = "source root";
+const hostedArtifactProfile = "hosted-artifact";
+
+/** @typedef {{ [key: string]: unknown }} UnknownRecord */
+/** @typedef {{ path: string, device: string, inode: string, uid: string, mode: string, nlink: string }} RootIdentity */
+/** @typedef {{ profile: "general", localPublication: "0" | "1", version: 1 } | { profile: "fresh", stateRoot: RootIdentity, allowedRoot: RootIdentity, fault: "after-stage" | null, version: 1 } | { profile: "sandbox" | "hosted-artifact", image: string | null, sourceRoot: RootIdentity | null, version: 1 }} GateAEvalProfile */
 
 export const gateAEvalProfileKey = "__appBuilderAuthorizedGateAEvalProfileV1";
 
@@ -31,26 +40,28 @@ export const gateAEnvironmentFields = Object.freeze([
 
 const imagePattern = /^[A-Za-z0-9][A-Za-z0-9._/-]*(?::[A-Za-z0-9._-]+)?@sha256:[0-9a-f]{64}$/u;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function fail(field) {
+/** @param {string} field @returns {never} */
+const fail = (field) => {
   throw new Error(`The trusted Gate A eval ${field} was invalid.`);
-}
+};
 
+/** @param {unknown} value @returns {value is UnknownRecord} */
+const isRecord = (value) => typeof value === "object" && value !== null;
+
+/** @param {unknown} value @param {string[]} keys @returns {value is UnknownRecord} */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactKeys(value, keys) {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    Object.keys(value).toSorted().join(",") === [...keys].toSorted().join(",")
-  );
+  return isRecord(value) && Object.keys(value).toSorted().join(",") === [...keys].toSorted().join(",");
 }
 
+/** @param {string} root @param {string} candidate */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function within(root, candidate) {
   const path = relative(root, candidate);
   return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 }
 
+/** @param {unknown} path @param {string} repositoryRoot @returns {RootIdentity} */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function observeRoot(path, repositoryRoot) {
   if (typeof path !== "string" || !isAbsolute(path)) {
@@ -63,11 +74,19 @@ function observeRoot(path, repositoryRoot) {
     if (
       canonical !== resolved ||
       !state.isDirectory() ||
-      state.isSymbolicLink() ||
+      state.isSymbolicLink()
+    ) {
+      fail("root");
+    }
+    if (
       state.uid !== BigInt(process.getuid?.() ?? -1) ||
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (state.mode & 0o777n) !== 0o700n ||
-      within(repositoryRoot, canonical) ||
+      within(repositoryRoot, canonical)
+    ) {
+      fail("root");
+    }
+    if (
       within(canonical, repositoryRoot)
     ) {
       fail("root");
@@ -82,17 +101,18 @@ function observeRoot(path, repositoryRoot) {
       uid: String(state.uid),
     });
   } catch {
-    fail("root");
+    return fail("root");
   }
 }
 
+/** @param {unknown} path @param {string} repositoryRoot @returns {RootIdentity | null} */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function observeReadOnlyRoot(path, repositoryRoot) {
   if (path === null) {
     return null;
   }
   if (typeof path !== "string" || !isAbsolute(path)) {
-    fail("source root");
+    fail(sourceRootField);
   }
   try {
     const resolved = resolve(path);
@@ -101,14 +121,22 @@ function observeReadOnlyRoot(path, repositoryRoot) {
     if (
       canonical !== resolved ||
       !state.isDirectory() ||
-      state.isSymbolicLink() ||
+      state.isSymbolicLink()
+    ) {
+      fail(sourceRootField);
+    }
+    if (
       state.uid !== BigInt(process.getuid?.() ?? -1) ||
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (state.mode & 0o022n) !== 0n ||
-      within(repositoryRoot, canonical) ||
+      within(repositoryRoot, canonical)
+    ) {
+      fail(sourceRootField);
+    }
+    if (
       within(canonical, repositoryRoot)
     ) {
-      fail("source root");
+      fail(sourceRootField);
     }
     return Object.freeze({
       device: String(state.dev),
@@ -120,10 +148,11 @@ function observeReadOnlyRoot(path, repositoryRoot) {
       uid: String(state.uid),
     });
   } catch {
-    fail("source root");
+    return fail(sourceRootField);
   }
 }
 
+/** @param {unknown} value @param {string} repositoryRoot */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validateReadOnlyRootIdentity(value, repositoryRoot) {
   if (value === null) {
@@ -141,6 +170,7 @@ function validateReadOnlyRootIdentity(value, repositoryRoot) {
   return observed;
 }
 
+/** @param {unknown} value @param {string} repositoryRoot */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function validateRootIdentity(value, repositoryRoot) {
   if (!exactKeys(value, ["path", "device", "inode", "uid", "mode", "nlink"])) {
@@ -155,6 +185,7 @@ function validateRootIdentity(value, repositoryRoot) {
   return observed;
 }
 
+/** @param {unknown} input @param {string} repositoryRoot @returns {GateAEvalProfile} */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGateAEvalProfile(input, repositoryRoot) {
   if (!isAbsolute(repositoryRoot) || realpathSync(repositoryRoot) !== repositoryRoot) {
@@ -192,7 +223,7 @@ export function createGateAEvalProfile(input, repositoryRoot) {
   }
   if (
     exactKeys(input, ["profile", "image", "sourceRoot"]) &&
-    (input.profile === "sandbox" || input.profile === "hosted-artifact")
+    (input.profile === "sandbox" || input.profile === hostedArtifactProfile)
   ) {
     if (
       input.image !== null &&
@@ -203,14 +234,15 @@ export function createGateAEvalProfile(input, repositoryRoot) {
     const sourceRoot = observeReadOnlyRoot(input.sourceRoot, repositoryRoot);
     return Object.freeze({
       image: input.image,
-      profile: input.profile === "sandbox" ? "sandbox" : "hosted-artifact",
+      profile: input.profile === "sandbox" ? "sandbox" : hostedArtifactProfile,
       sourceRoot,
       version: 1,
     });
   }
-  fail("profile");
+  return fail("profile");
 }
 
+/** @param {unknown} value @param {string} repositoryRoot @returns {GateAEvalProfile} */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function validateGateAEvalProfile(value, repositoryRoot) {
   if (typeof value !== "object" || value === null || value.version !== 1) {
@@ -243,7 +275,7 @@ export function validateGateAEvalProfile(value, repositoryRoot) {
     });
   }
   if (
-    (value.profile === "sandbox" || value.profile === "hosted-artifact") &&
+    (value.profile === "sandbox" || value.profile === hostedArtifactProfile) &&
     exactKeys(value, ["version", "profile", "image", "sourceRoot"])
   ) {
     if (
@@ -254,15 +286,16 @@ export function validateGateAEvalProfile(value, repositoryRoot) {
     }
     return Object.freeze({
       image: value.image,
-      profile: value.profile === "sandbox" ? "sandbox" : "hosted-artifact",
+      profile: value.profile === "sandbox" ? "sandbox" : hostedArtifactProfile,
       sourceRoot: validateReadOnlyRootIdentity(value.sourceRoot, repositoryRoot),
       version: 1,
     });
   }
-  fail("profile envelope");
+  return fail("profile envelope");
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+/** @param {Record<string, string | undefined>} environment @param {unknown} value @param {string} repositoryRoot */
 export function installGateAEvalProfile(environment, value, repositoryRoot) {
   const profile = validateGateAEvalProfile(value, repositoryRoot);
   for (const field of gateAEnvironmentFields) {
@@ -285,7 +318,7 @@ export function installGateAEvalProfile(environment, value, repositoryRoot) {
     if (profile.profile === "sandbox") Object.assign(environment, developmentExecutionEnvironment);
     environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS = "360000";
     environment.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS = "360000";
-    if (profile.profile === "hosted-artifact") {
+    if (profile.profile === hostedArtifactProfile) {
       environment.APP_BUILDER_HOSTED_ARTIFACT_PROOF = "1";
     }
     if (profile.image !== null) {
