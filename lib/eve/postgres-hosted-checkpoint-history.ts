@@ -435,7 +435,7 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
         throw new Error("Hosted checkpoint stage manifest does not match its items.");
       }
       const [countRow] = await transaction
-        .select({ chunkCount: sql<number>`count(*)::integer` })
+        .select({ chunkCount: sql`count(*)::integer`.mapWith(Number) })
         .from(agentSessionCheckpointChunks)
         .where(
           and(
