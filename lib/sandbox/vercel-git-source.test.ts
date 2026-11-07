@@ -122,8 +122,8 @@ const fixture = () => {
           return {
             exitCode: 0,
             kill: vi.fn().mockResolvedValue(null),
-            stderr: async () => "",
-            stdout: async () => "/home/vercel\n",
+            stderr: vi.fn().mockResolvedValue(""),
+            stdout: vi.fn().mockResolvedValue("/home/vercel\n"),
             wait: async () => ({ exitCode: 0 }),
           };
         }
