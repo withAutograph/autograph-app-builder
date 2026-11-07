@@ -165,7 +165,7 @@ describe("sandbox execution lease", () => {
       nowEpochMs: 1 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
     });
     expect(claim).toBeDefined();
-    if (!claim) {
+    if (claim === undefined) {
       throw new Error("expected an expired lease claim");
     }
     await expect(
