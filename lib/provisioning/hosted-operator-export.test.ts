@@ -54,6 +54,13 @@ const context: HostedOperatorContext = {
     sessionId: "saved-session",
   },
 };
+const operatorRequest = () => new Request("https://operator.test/v1/runtime");
+const preparationUnavailable = async () => {
+  throw new Error("Preparation must not execute during export");
+};
+const preparationAndSqlUnavailable = async () => {
+  throw new Error("No preparation or SQL may execute");
+};
 const selection = {
   authority,
   format: fixture.worker.format,
@@ -264,12 +271,14 @@ describe("protected tenant export orchestration", () => {
           changed === "owner"
             ? { ...context.authority, ownerUserId: "another-owner" }
             : context.authority,
-        target: {
-          ...context.target,
-          ...(changed === "app" ? { appId: "another-app" } : {}),
-          ...(changed === "session" ? { sessionId: "another-session" } : {}),
-        },
+        target: { ...context.target },
       };
+      if (changed === "app") {
+        foreign.target.appId = "another-app";
+      }
+      if (changed === "session") {
+        foreign.target.sessionId = "another-session";
+      }
       await expect(f.operations.readPlan(foreign, planned.plan.exportId)).rejects.toThrow();
       expect(f.dependencies.readApproval).not.toHaveBeenCalled();
       expect(f.dependencies.runWorker).not.toHaveBeenCalled();
@@ -454,9 +463,6 @@ describe("existing operator transport export dispatch", () => {
       principal: { ...authority, scopes: ["autograph:send"] },
       sessionId: context.target.sessionId,
     };
-    const unavailable = async () => {
-      throw new Error("Preparation must not execute during export");
-    };
     const authorize = vi.fn<ProtectedHostedOperatorDependencies["authorize"]>(
       async (request, requestedSelection, owner) => {
         expect(request.headers.get("authorization")).toBe("Bearer workload-token");
@@ -467,7 +473,7 @@ describe("existing operator transport export dispatch", () => {
         return { ...context, ownerContext };
       },
     );
-    const prepare = vi.fn(unavailable);
+    const prepare = vi.fn(preparationUnavailable);
     const authorizeRead = vi.fn(
       async (_request: Request, selectedContext: HostedOperatorContext) => selectedContext,
     );
@@ -490,22 +496,22 @@ describe("existing operator transport export dispatch", () => {
       },
     });
     const handler = createProtectedHostedOperatorHandler({
-      assertAuthorized: unavailable,
+      assertAuthorized: preparationUnavailable,
       authorize,
-      bindings: unavailable,
-      executeEffect: unavailable,
+      bindings: preparationUnavailable,
+      executeEffect: preparationUnavailable,
       exportRequest: dispatch,
       plan: prepare,
-      readApproval: unavailable,
-      reconcile: unavailable,
+      readApproval: preparationUnavailable,
+      reconcile: preparationUnavailable,
       store: {
-        compareAndSet: unavailable,
-        read: unavailable,
-        reserve: unavailable,
-        reserveFenceGeneration: unavailable,
+        compareAndSet: preparationUnavailable,
+        read: preparationUnavailable,
+        reserve: preparationUnavailable,
+        reserveFenceGeneration: preparationUnavailable,
       },
-      verify: unavailable,
-      withResourceLease: unavailable,
+      verify: preparationUnavailable,
+      withResourceLease: preparationUnavailable,
     });
     const client = createHostedOperatorClient({
       endpoint: "https://operator.test",
@@ -571,9 +577,6 @@ describe("existing operator transport export dispatch", () => {
       const authorizeRead = vi.fn(
         async (_request: Request, selected: HostedOperatorContext) => selected,
       );
-      const unavailable = async () => {
-        throw new Error("No preparation or SQL may execute");
-      };
       const verifyWorkload = createOperatorWorkloadVerifier(
         {
           audience: "https://vercel.com/team",
@@ -595,22 +598,22 @@ describe("existing operator transport export dispatch", () => {
         verifyWorkload,
       });
       const handler = createProtectedHostedOperatorHandler({
-        assertAuthorized: unavailable,
+        assertAuthorized: preparationAndSqlUnavailable,
         authorize,
-        bindings: unavailable,
-        executeEffect: unavailable,
+        bindings: preparationAndSqlUnavailable,
+        executeEffect: preparationAndSqlUnavailable,
         exportRequest: dispatch,
-        plan: unavailable,
-        readApproval: unavailable,
-        reconcile: unavailable,
+        plan: preparationAndSqlUnavailable,
+        readApproval: preparationAndSqlUnavailable,
+        reconcile: preparationAndSqlUnavailable,
         store: {
-          compareAndSet: unavailable,
-          read: unavailable,
-          reserve: unavailable,
-          reserveFenceGeneration: unavailable,
+          compareAndSet: preparationAndSqlUnavailable,
+          read: preparationAndSqlUnavailable,
+          reserve: preparationAndSqlUnavailable,
+          reserveFenceGeneration: preparationAndSqlUnavailable,
         },
-        verify: unavailable,
-        withResourceLease: unavailable,
+        verify: preparationAndSqlUnavailable,
+        withResourceLease: preparationAndSqlUnavailable,
       });
       const actions = [
         { action: "export-status", exportId: planned.plan.exportId },
@@ -618,14 +621,15 @@ describe("existing operator transport export dispatch", () => {
         { ...planned.request, callId: "export-call" },
       ];
       for (const action of actions) {
+        const headers = new Headers({ "content-type": "application/json" });
+        if (credential === "invalid") {
+          headers.set("authorization", "Bearer invalid-token");
+        }
         // oxlint-disable-next-line eslint/no-await-in-loop -- Each rejected ordinary transport action must remain before the private lookup.
         const response = await handler(
           new Request("https://operator.test/v1/runtime", {
             body: JSON.stringify({ ...action, ownerContext }),
-            headers: {
-              "content-type": "application/json",
-              ...(credential === "invalid" ? { authorization: "Bearer invalid-token" } : {}),
-            },
+            headers,
             method: "POST",
           }),
         );
@@ -741,7 +745,6 @@ describe("export planning failure boundaries", () => {
     ownerContext,
     selection: { ...context.target, environment: "preview" as const },
   };
-  const request = () => new Request("https://operator.test/v1/runtime");
 
   it.each([
     "dispatcher_workload_verification",
@@ -794,7 +797,7 @@ describe("export planning failure boundaries", () => {
         store: f.dependencies.store,
         verifyWorkload: stage === "dispatcher_workload_verification" ? reject : async () => {},
       });
-      const outcome = dispatch(request(), input);
+      const outcome = dispatch(operatorRequest(), input);
       await (stage === "plan_reservation_match"
         ? expect(outcome).rejects.toThrow("resource_mismatch")
         : expect(outcome).rejects.toBe(failure));
@@ -851,7 +854,7 @@ describe("export planning failure boundaries", () => {
         verifyWorkload: async () => {},
       });
       await expect(
-        dispatch(request(), {
+        dispatch(operatorRequest(), {
           action: "export-status",
           exportId: "40000000-0000-4000-8000-000000000004",
           ownerContext,
@@ -879,14 +882,14 @@ describe("export planning failure boundaries", () => {
       },
     });
     try {
-      await expect(dispatch(request(), input)).rejects.toBe(failure);
+      await expect(dispatch(operatorRequest(), input)).rejects.toBe(failure);
       const hostileInput = {
         ...input,
         get ownerContext(): typeof ownerContext {
           throw new Error("invalid diagnostic context");
         },
       };
-      await expect(dispatch(request(), hostileInput)).rejects.toBe(failure);
+      await expect(dispatch(operatorRequest(), hostileInput)).rejects.toBe(failure);
     } finally {
       consoleSink.mockRestore();
     }
