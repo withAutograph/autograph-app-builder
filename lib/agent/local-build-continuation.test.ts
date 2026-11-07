@@ -141,7 +141,7 @@ describe("actual private local approved build continuation", () => {
           reason: "tooling-prerequisite",
         },
       });
-      const dispatch = vi.fn(async () => {});
+      const dispatch = vi.fn<() => Promise<void>>().mockResolvedValue();
       expect(
         await continueApprovedLocalBuild({
           active: false,

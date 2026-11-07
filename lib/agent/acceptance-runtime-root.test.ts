@@ -104,7 +104,7 @@ describe("acceptance workspace recovery", () => {
     const roots: string[] = [];
     const commands: string[] = [];
     const acquireCredential = vi.fn(async () => ({ token: "private-installation-token" }));
-    const setNetworkPolicy = vi.fn(async () => {});
+    const setNetworkPolicy = vi.fn<() => Promise<void>>().mockResolvedValue();
     const result = await prepareWithVerifiedGitHubFetchRecovery({
       acquireCredential,
       prepare: async () => {
