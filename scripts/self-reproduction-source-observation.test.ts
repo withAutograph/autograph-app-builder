@@ -12,7 +12,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { observeSource } from "./self-reproduction-source-observation";
 
 const fs = { lstat, readFile, readdir, readlink };
@@ -57,7 +57,7 @@ it("preserves partial evidence for unreadable or changing sources", async () => 
         },
       },
       root,
-      async () => {},
+      vi.fn<Parameters<typeof observeSource>[2]>().mockResolvedValue(),
     );
     expect(unreadable.completeWithinDeclaredScope).toBe(false);
     expect(JSON.stringify(unreadable)).not.toContain("secret credential");
