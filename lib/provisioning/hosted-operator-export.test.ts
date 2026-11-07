@@ -646,7 +646,7 @@ describe("existing operator transport export dispatch", () => {
     const f = setup();
     const planned = await f.operations.plan(context, "customer-one", "original-request");
     const read = vi.spyOn(f.dependencies.store, "read");
-    const verifyWorkload = vi.fn(async () => {});
+    const verifyWorkload = vi.fn<() => Promise<void>>().mockResolvedValue();
     const authorizeRead = vi.fn(async () => {
       throw new HostedOperatorError("authorization_required");
     });
