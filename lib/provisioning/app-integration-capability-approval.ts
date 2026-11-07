@@ -178,7 +178,7 @@ export const createAppIntegrationCapabilityApprovalAuthority =
       plan,
     });
     const state = await checkpoint.read();
-    const transport = createNativeTargetApprovalHistoryTransport({
+    const transportInput = {
       appId: plan.selection.appId,
       assertCanonicalAppOwner: input.authority.assertCanonicalAppOwner,
       builderOrigin: input.builderOrigin,
@@ -193,8 +193,11 @@ export const createAppIntegrationCapabilityApprovalAuthority =
         authorization: input.request.headers.get("authorization"),
         signal: input.request.signal,
       },
-      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-    });
+    };
+    if (input.fetch !== undefined) {
+      Object.assign(transportInput, { fetch: input.fetch });
+    }
+    const transport = createNativeTargetApprovalHistoryTransport(transportInput);
     const observe = transport.observePrivateHistory;
     if (!observe) {
       throw unavailable();
@@ -202,7 +205,10 @@ export const createAppIntegrationCapabilityApprovalAuthority =
     const approval = await readPrivateAppIntegrationCapabilityApproval({
       assertOwner: input.assertCurrentOwner,
       callId,
-      observation: { ...(state === undefined ? {} : { state }), save: checkpoint.save },
+      observation: (() => {
+        const initialObservation = state === undefined ? {} : { state };
+        return { ...initialObservation, save: checkpoint.save };
+      })(),
       owner: input.owner,
       plan,
       readHistory: async (startIndex, onEvent) =>
