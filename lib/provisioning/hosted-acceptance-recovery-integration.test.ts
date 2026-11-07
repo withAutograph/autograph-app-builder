@@ -48,8 +48,8 @@ it("recovers a missing published runtime and requires successor approval before 
   await writeFile(path.join(source, "release.txt"), preparedPlan.release.id);
   await writeFile(path.join(stale, "release.txt"), "older-release");
   await writeFile(path.join(stale, "private.txt"), "retain private edits");
-  // oxlint-disable-next-line typescript/strict-void-return -- Node supplies execFile promisification with stdout/stderr.
-  const exec = promisify(execFile);
+  const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+  const exec = promisifyExecFile(execFile);
   const git = async (...args: string[]) => await exec("git", ["-C", source, ...args]);
   await git("init");
   await git("add", "release.txt");
