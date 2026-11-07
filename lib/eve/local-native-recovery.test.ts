@@ -183,7 +183,7 @@ describe("local native terminal recovery authority", () => {
 
     const get = () => service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
     const first = await get();
-    expect(first).toMatchObject({ sessionId: "wrun_original", status: "waiting", cursor: 3 });
+    expect(first).toMatchObject({ cursor: 3, sessionId: "wrun_original", status: "waiting" });
     expect(f.snapshots).toHaveBeenCalledTimes(2);
     expect(await get()).toEqual(first);
     expect(f.snapshots).toHaveBeenCalledTimes(4);
@@ -203,14 +203,14 @@ describe("local native terminal recovery authority", () => {
       resumeSessionId: "wrun_original",
       clientRequestId: "read-only-resume",
     });
-    expect(original).toMatchObject({ sessionId: "wrun_original", status: "failed", cursor: 2 });
+    expect(original).toMatchObject({ cursor: 2, sessionId: "wrun_original", status: "failed" });
     expect(f.post).not.toHaveBeenCalled();
     const recovered = await service.start({
       resumeSessionId: "wrun_original",
       resumeMode: "recover",
       clientRequestId: "explicit-public-recovery",
     });
-    expect(recovered).toMatchObject({ sessionId: "wrun_original", status: "waiting", cursor: 3 });
+    expect(recovered).toMatchObject({ cursor: 3, sessionId: "wrun_original", status: "waiting" });
     expect(recovered.events[0]).toEqual(original.events[0]);
     expect(f.post).toHaveBeenCalledTimes(2);
   });
@@ -241,14 +241,14 @@ describe("local native terminal recovery authority", () => {
       resumeMode: "recover",
       clientRequestId: "resume-delayed-tail",
     });
-    expect(initial).toMatchObject({ status: "failed", cursor: 2 });
+    expect(initial).toMatchObject({ cursor: 2, status: "failed" });
     childVisible = true;
     const current = await service.get({
       sessionId: "wrun_original",
       cursor: initial.cursor,
       limit: 100,
     });
-    expect(current).toMatchObject({ sessionId: "wrun_original", status: "waiting", cursor: 3 });
+    expect(current).toMatchObject({ cursor: 3, sessionId: "wrun_original", status: "waiting" });
     expect(current.events).toHaveLength(1);
     const readback = await service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
     expect(readback.events).toHaveLength(3);
@@ -499,9 +499,9 @@ describe("local native terminal recovery authority", () => {
     });
     recovered = true;
     const result = await service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
-    expect(result).toMatchObject({ status: "waiting", cursor: 3 });
+    expect(result).toMatchObject({ cursor: 3, status: "waiting" });
     expect(result.error).toBeUndefined();
-    expect(result.events[0]).toMatchObject({ type: "error", code: "model_error" });
+    expect(result.events[0]).toMatchObject({ code: "model_error", type: "error" });
     expect(f.post).toHaveBeenCalledTimes(2);
   });
   it("clears an unavailable read projection only after canonical recovery readback", async () => {
@@ -526,7 +526,7 @@ describe("local native terminal recovery authority", () => {
     });
     f.snapshots.mockImplementation(good);
     const restored = await service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
-    expect(restored).toMatchObject({ status: "waiting", cursor: 3 });
+    expect(restored).toMatchObject({ cursor: 3, status: "waiting" });
     expect(restored.error).toBeUndefined();
     expect(f.post).toHaveBeenCalledTimes(2);
   });
@@ -550,8 +550,8 @@ describe("local native terminal recovery authority", () => {
     });
     const rejected = await service.get({ sessionId: "wrun_original", cursor: 0, limit: 100 });
     expect(rejected).toMatchObject({
-      status: "failed",
       error: { code: "session_recovery_unavailable" },
+      status: "failed",
     });
     expect(f.post).toHaveBeenCalledTimes(2);
   });
@@ -616,7 +616,7 @@ describe("local native terminal recovery authority", () => {
       expect(event.meta.id).toBe("accepted");
     }
     expect(post).toHaveBeenLastCalledWith("wrun_original", {
-      inputResponses: [{ requestId: "current-input", optionId: "approve" }],
+      inputResponses: [{ optionId: "approve", requestId: "current-input" }],
     });
   });
   it("rejects a control receipt naming a different logical session", async () => {

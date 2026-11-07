@@ -365,8 +365,8 @@ describe("owned compiled artifact workflow hook", () => {
         recordCurrentEquivalentRelease: true,
       }),
     ).resolves.toMatchObject({
-      status: "recorded",
       selection: { publishedSource: historicalSource },
+      status: "recorded",
     });
     expect(mocks.associate).toHaveBeenCalledWith(
       completion.compilation.context,
@@ -1048,7 +1048,7 @@ describe("owned compiled artifact workflow hook", () => {
     expect(mocks.record).toHaveBeenCalledWith(
       { authority, target: { appId: input.appId, sessionId: source.sessionId } },
       input.callId,
-      expect.objectContaining({ releaseId: "fixture-v1", appSpecDigest: digest }),
+      expect.objectContaining({ appSpecDigest: digest, releaseId: "fixture-v1" }),
     );
     const selection = {
       appId: input.appId,

@@ -896,13 +896,13 @@ describe("normal organization owner proof collector", () => {
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           normalActorProofFailure: {
-            stage: "proof_response",
-            cookiePresent: true,
-            httpStatus: status,
-            contentTypeValid: valid,
-            redirected: false,
-            errorClass: "operator_error",
             code: "auth_identity_required",
+            contentTypeValid: valid,
+            cookiePresent: true,
+            errorClass: "operator_error",
+            httpStatus: status,
+            redirected: false,
+            stage: "proof_response",
           },
         }),
       );
@@ -924,9 +924,9 @@ describe("normal organization owner proof collector", () => {
       "[builder:hosted-neon-consent]",
       expect.objectContaining({
         normalActorProofFailure: {
-          stage: "proof_request",
           cookiePresent: true,
           errorClass: "type_error",
+          stage: "proof_request",
         },
       }),
     );
@@ -943,11 +943,11 @@ describe("normal organization owner proof collector", () => {
       "[builder:hosted-neon-consent]",
       expect.objectContaining({
         normalActorProofFailure: {
-          stage: "proof_readback_response",
+          code: "auth_identity_required",
+          errorClass: "operator_error",
           httpStatus: 403,
           redirected: false,
-          errorClass: "operator_error",
-          code: "auth_identity_required",
+          stage: "proof_readback_response",
         },
       }),
     );

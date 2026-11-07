@@ -508,7 +508,7 @@ describe("managed runtime execution through supported SDK ports", () => {
     const failed = f.read();
     expect(failed.locator?.dispatchAttempted).not.toBe(true);
     expect(failed.locator?.commandId).toBeUndefined();
-    expect(failed.workerAsset).toMatchObject({ installed: false, disposed: true });
+    expect(failed.workerAsset).toMatchObject({ disposed: true, installed: false });
     expect(f.source.delete).toHaveBeenCalledWith({ deleteOrphanSnapshots: false });
     expect(f.provider.runCommand).not.toHaveBeenCalled();
     await f.runtime.close(context, failed, async () => {});
@@ -532,7 +532,7 @@ describe("managed runtime execution through supported SDK ports", () => {
     vi.mocked(f.deps.readExecution).mockRejectedValueOnce(new Error("Interrupted after setup"));
     await expect(f.start()).rejects.toThrow("Interrupted after setup");
     const interrupted = f.read();
-    expect(interrupted.workerAsset).toMatchObject({ installed: true, disposed: true });
+    expect(interrupted.workerAsset).toMatchObject({ disposed: true, installed: true });
     expect(interrupted.locator?.dispatchAttempted).not.toBe(true);
     expect(interrupted.locator?.commandId).toBeUndefined();
     expect(f.provider.runCommand).not.toHaveBeenCalled();
@@ -565,14 +565,14 @@ describe("managed runtime execution through supported SDK ports", () => {
       attemptId: original.attemptId,
       fence: original.fence,
       approval: original.approval,
-      workerAsset: { installed: true, disposed: true },
+      workerAsset: { disposed: true, installed: true },
       locator: {
         ...original.locator,
         providerSessionId: "resumed-physical-session",
         dispatchAttempted: true,
         commandId: "runtime-command",
       },
-      current: { state: "ready", providerSessionId: "resumed-physical-session" },
+      current: { providerSessionId: "resumed-physical-session", state: "ready" },
     });
     expect(f.deps.installWorkerAsset).toHaveBeenCalledTimes(2);
     expect(f.readSourceCreates()).toBe(1);
@@ -685,7 +685,7 @@ describe("managed runtime execution through supported SDK ports", () => {
       attemptId: retained.attemptId,
       fence: retained.fence,
       approval: retained.approval,
-      current: { state: "revoked", providerSessionId: "resumed-physical-session" },
+      current: { providerSessionId: "resumed-physical-session", state: "revoked" },
     });
     expect(f.read().pendingStage).toBeUndefined();
     expect(
@@ -898,7 +898,7 @@ describe("managed runtime execution through supported SDK ports", () => {
     expect(input.appEnvironment.BETTER_AUTH_SECRET).toBeUndefined();
     expect(input.appEnvironment.VERCEL_OIDC_TOKEN).toBeUndefined();
     expect(input.appEnvironment.PLATFORM_AUTH_DATABASE_URL).toBeUndefined();
-    expect(record.workerAsset).toMatchObject({ installed: true, disposed: true });
+    expect(record.workerAsset).toMatchObject({ disposed: true, installed: true });
     expect(
       vi
         .mocked(f.provider.runCommand)
@@ -1001,7 +1001,7 @@ describe("managed runtime execution through supported SDK ports", () => {
       throw new Error("Prepared actor identities were not written");
     }
     expect(JSON.parse(identities.toString("utf-8"))).toMatchObject({
-      actors: [{ actorKey: "fixture", actorId: "actor-one", organizationId: "organization-one" }],
+      actors: [{ actorId: "actor-one", actorKey: "fixture", organizationId: "organization-one" }],
     });
     expect(suite.env?.APP_TEST_MANAGED_SUITE_SELECTOR).toBe(f.capabilities.suiteSelector);
     expect(suite.env?.APP_TEST_MANAGED_LIFECYCLE_CAPABILITY).toBe(f.capabilities.lifecycle);

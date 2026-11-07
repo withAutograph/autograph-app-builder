@@ -293,9 +293,9 @@ describe("owner-authorized native target configuration", () => {
     expect(readReady).toHaveBeenCalledExactlyOnceWith(ownerContext, "new-app");
     expect(effective.applications["new-app"]).toEqual({
       accessRoles: [],
-      nativeTargetRegistration: true,
       appDatabase: registration.plan.appDatabase,
       branch: "main",
+      nativeTargetRegistration: true,
       projectId: registration.registration.observed.projectId,
       projectSettings: registration.registration.observed.projectSettings,
     });
@@ -609,9 +609,9 @@ describe("ready target selected resource custody", () => {
     expect(effective.authDatabase).toEqual(f.selected.authDatabase);
     expect(effective.nativeNeon).toEqual(f.selected.nativeNeon);
     expect(effective.gateway).toMatchObject({
-      projectId: "isolated-gateway",
       authBrowserOrigin: "https://isolated-auth.example",
       gatewayOrigin: "https://isolated-gateway.example",
+      projectId: "isolated-gateway",
       publicOrigin: "https://isolated-apps.example",
     });
     expect(effective.applications["new-app"]).toMatchObject({
