@@ -98,7 +98,6 @@ const fixture = () => {
       if (!allowed) {
         throw new Error("current-owner-revoked");
       }
-      return;
     },
     store: {
       // oxlint-disable-next-line eslint/require-await -- The in-memory read follows the store's asynchronous port.
