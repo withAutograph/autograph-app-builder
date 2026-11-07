@@ -33,6 +33,8 @@ export interface RepositoryProductionManagementDependencies extends Pick<
   renewSignIn: (scope: RepositoryProductionScope, context: AppAccessEffectContext) => Promise<void>;
 }
 
+const CHANGE_ROLE_ACTION = "change-role";
+
 const invitationSchema = z.object({
   id: z.uuid(),
   appId: z.string(),
@@ -290,7 +292,7 @@ export const createRepositoryProductionManagement = (
     if (removed.length > 0 || command.action === "remove") {
       await setAccess(scope, member.id, removed, false, effect, "revoke");
     }
-    if (command.action === "change-role") {
+    if (command.action === CHANGE_ROLE_ACTION) {
       await setAccess(scope, member.id, desired, true, effect, "grant");
     }
     return "applied" as const;
@@ -467,7 +469,7 @@ export const createRepositoryProductionManagement = (
         if (command.action === "resend") {
           await auth(scope, { action: "send", invitationId: found.id }, false, effect, "send");
         }
-      } else if (command.action === "change-role" || command.action === "remove") {
+      } else if (command.action === CHANGE_ROLE_ACTION || command.action === "remove") {
         const result = await updateMember(scope, command, effect);
         if (result === "rejected") {
           return result;
@@ -494,7 +496,7 @@ export const createRepositoryProductionManagement = (
       ) {
         return await reconcileInvitation(scope, command, effect);
       }
-      if (command.action === "change-role" || command.action === "remove") {
+      if (command.action === CHANGE_ROLE_ACTION || command.action === "remove") {
         return await reconcileMember(scope, command, effect);
       }
       // Setup and link renewal have their own durable same-operation reconciliation.

@@ -17,6 +17,7 @@ import type {
 } from "./hosted-operator-artifact-store";
 import { createOperatorArtifactPublication } from "./hosted-operator-artifacts";
 
+const GENERATED_RELEASE_KIND = "generated-release";
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 export const publishedAppSourceSchema = z.object({
@@ -235,7 +236,7 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 const scoped = (
   context: OperatorArtifactContext,
   appSpecDigest: string,
-  kind: "generated-release" | "app-publication" = "generated-release",
+  kind: "generated-release" | "app-publication" = GENERATED_RELEASE_KIND,
 ) => ({
   ...hostedTenantAuthoritySchema.parse(context.authority),
   path: `_protected-operator/selections/${kind}/${appId.parse(context.target.appId)}/${digest.parse(appSpecDigest)}`,
@@ -424,7 +425,7 @@ export const createPostgresOperatorArtifactSelections = (input: {
       const pathPrefix = `_protected-operator/selections/generated-release/${selectedApp}/`;
       if (
         "artifactRef" in lookup &&
-        (lookup.artifactRef.split("/")[2] !== "generated-release" ||
+        (lookup.artifactRef.split("/")[2] !== GENERATED_RELEASE_KIND ||
           lookup.artifactRef.split("/")[3] !== selectedApp)
       ) {
         throw operatorArtifactUnavailable();
@@ -533,7 +534,7 @@ export const createPostgresOperatorArtifactSelections = (input: {
       const scope = scoped(context, selection.appSpecDigest);
       if (
         selection.appId !== context.target.appId ||
-        selection.artifactRef.split("/")[2] !== "generated-release" ||
+        selection.artifactRef.split("/")[2] !== GENERATED_RELEASE_KIND ||
         selection.artifactRef.split("/")[3] !== selection.appId
       ) {
         throw operatorArtifactUnavailable();
