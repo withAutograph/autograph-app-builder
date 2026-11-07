@@ -163,8 +163,8 @@ const fixture = () => {
   const input: RetainedIntegrationReadScope = {
     owner: { ...sourceOwner, sessionId: "revision-session", adapterSessionId: "revision-native" },
     authority: {
-      verifyWorkload: vi.fn(async () => {}),
-      assertCanonicalAppOwner: vi.fn(async () => {}),
+      verifyWorkload: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      assertCanonicalAppOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
     },
     owned: {
       purpose: "auth-bootstrap",
@@ -184,7 +184,7 @@ const fixture = () => {
       },
     },
     publicOrigin: capPlan.publicOrigin,
-    assertCurrent: vi.fn(async () => {}),
+    assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
     readSourceOwner: vi.fn(async () => sourceOwner),
     readProviderBindings: vi.fn(async () => structuredClone(provider)),
   };

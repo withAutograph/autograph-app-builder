@@ -490,7 +490,7 @@ const makeFixture = (
           });
         }
         workerCommand = {
-          kill: vi.fn(async () => undefined),
+          kill: vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined),
           logs: async function* () {
             for (const notice of notices) {
               if (
@@ -1329,7 +1329,7 @@ describe("resource bootstrap launcher", () => {
         }),
       );
       return {
-        kill: vi.fn(async () => undefined),
+        kill: vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined),
         logs: async function* () {
           yield {
             stream: "stdout",
