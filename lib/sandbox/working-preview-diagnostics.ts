@@ -1,3 +1,11 @@
+import { z } from "zod";
+
+const diagnosticEntrySchema = z.looseObject({
+  message: z.unknown().optional(),
+  stderr: z.unknown().optional(),
+  stdout: z.unknown().optional(),
+});
+
 /** Private, bounded process output only. This is diagnostic evidence, not readiness proof. */
 export const workingPreviewDiagnosticCollectorSource = String.raw`
 import * as previewDiagnosticFs from "node:fs";
@@ -32,7 +40,7 @@ const sanitize = (value: string): string =>
 
 /** Best-effort common-secret redaction; arbitrary application logging may still contain sensitive text. */
 export const workingPreviewDiagnosticExcerpt = (content: string | null): string => {
-  if (!content || content.length > 65_536) {
+  if (content === null || content.length === 0 || content.length > 65_536) {
     return "";
   }
   let parsed: unknown;
@@ -41,10 +49,11 @@ export const workingPreviewDiagnosticExcerpt = (content: string | null): string 
   } catch {
     return "";
   }
-  if (typeof parsed !== "object" || parsed === null) {
+  const fieldsResult = diagnosticEntrySchema.safeParse(parsed);
+  if (!fieldsResult.success) {
     return "";
   }
-  const fields = parsed as Record<string, unknown>;
+  const fields = fieldsResult.data;
   const output = [fields.message, fields.stderr, fields.stdout]
     .filter((value): value is string => typeof value === "string")
     .map((value) => sanitize(value.slice(-8192)))

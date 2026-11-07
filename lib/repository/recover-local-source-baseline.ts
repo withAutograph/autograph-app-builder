@@ -18,6 +18,9 @@ import {
 import { safeSourcePath } from "./source-path";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const SOURCE_BASELINE_AUTHORITY_UNAVAILABLE = "source_baseline_authority_unavailable";
+const GIT_EXECUTABLE = "/usr/bin/git";
+const SYSTEM_PATH = "/usr/bin:/bin";
 const sourcePath = z
   .string()
   .refine(
@@ -49,7 +52,7 @@ export const localSourceRecoveryRequestSchema = z.strictObject({
 const hash = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
 const cleanGit = (root: string, args: string[], input?: string) =>
   execFileSync(
-    "/usr/bin/git",
+    GIT_EXECUTABLE,
     ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-C", root, ...args],
     {
       env: {
@@ -59,7 +62,7 @@ const cleanGit = (root: string, args: string[], input?: string) =>
         GIT_TERMINAL_PROMPT: "0",
         HOME: root,
         NODE_ENV: "test",
-        PATH: "/usr/bin:/bin",
+        PATH: SYSTEM_PATH,
       },
       input,
       maxBuffer: 32 * 1024 * 1024,
@@ -83,7 +86,7 @@ export const recoverLocalSourceBaseline = async (input: {
 }) => {
   const request = localSourceRecoveryRequestSchema.parse(input.request);
   if (!path.isAbsolute(input.runsRoot) || path.resolve(input.runsRoot) !== input.runsRoot) {
-    throw new Error("source_baseline_authority_unavailable");
+    throw new Error(SOURCE_BASELINE_AUTHORITY_UNAVAILABLE);
   }
   const authority = await readLocalOperatorArtifactAuthority({
     APP_BUILDER_DEV_RUNS_ROOT: input.runsRoot,
@@ -94,7 +97,7 @@ export const recoverLocalSourceBaseline = async (input: {
     EVE_HOSTED_ADAPTER: "0",
   });
   if (authority === undefined) {
-    throw new Error("source_baseline_authority_unavailable");
+    throw new Error(SOURCE_BASELINE_AUTHORITY_UNAVAILABLE);
   }
   const cycleFile = path.join(authority.stateRoot, "eve-cycle");
   const cycle = readLocalEveCycleBinding(cycleFile);
@@ -121,18 +124,18 @@ export const recoverLocalSourceBaseline = async (input: {
       .filter(Boolean)
       .map((line) => line.split(/\s/u)[2]),
   ];
-  const producer = spawn("/usr/bin/git", ["-C", originalRoot, "pack-objects", "--stdout"], {
+  const producer = spawn(GIT_EXECUTABLE, ["-C", originalRoot, "pack-objects", "--stdout"], {
     env: {
       GIT_CONFIG_GLOBAL: "/dev/null",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_NO_REPLACE_OBJECTS: "1",
       NODE_ENV: "test",
-      PATH: "/usr/bin:/bin",
+      PATH: SYSTEM_PATH,
     },
     stdio: ["pipe", "pipe", "pipe"],
   });
   const consumer = spawn(
-    "/usr/bin/git",
+    GIT_EXECUTABLE,
     ["--git-dir", gitRoot, "index-pack", "--stdin", "--strict"],
     {
       env: {
@@ -140,7 +143,7 @@ export const recoverLocalSourceBaseline = async (input: {
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_NO_REPLACE_OBJECTS: "1",
         NODE_ENV: "test",
-        PATH: "/usr/bin:/bin",
+        PATH: SYSTEM_PATH,
       },
       stdio: ["pipe", "ignore", "pipe"],
     },
@@ -257,7 +260,7 @@ export const recoverLocalSourceBaseline = async (input: {
   }
   const tree = localBaselineGit(gitRoot, ["write-tree"]).toString().trim();
   const captured = execFileSync(
-    "/usr/bin/git",
+    GIT_EXECUTABLE,
     [
       "--git-dir",
       gitRoot,
@@ -278,7 +281,7 @@ export const recoverLocalSourceBaseline = async (input: {
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_NO_REPLACE_OBJECTS: "1",
         NODE_ENV: "test",
-        PATH: "/usr/bin:/bin",
+        PATH: SYSTEM_PATH,
       },
       input: "Explicit source-only baseline recovery capture\n",
     },
@@ -307,13 +310,13 @@ export const recoverLocalSourceBaseline = async (input: {
     version: 1 as const,
     workspaceDigest: request.workspaceDigest,
   };
-  const pack = spawn("/usr/bin/git", ["--git-dir", gitRoot, "pack-objects", "--stdout", "--revs"], {
+  const pack = spawn(GIT_EXECUTABLE, ["--git-dir", gitRoot, "pack-objects", "--stdout", "--revs"], {
     env: {
       GIT_CONFIG_GLOBAL: "/dev/null",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_NO_REPLACE_OBJECTS: "1",
       NODE_ENV: "test",
-      PATH: "/usr/bin:/bin",
+      PATH: SYSTEM_PATH,
     },
     stdio: ["pipe", "pipe", "pipe"],
   });
