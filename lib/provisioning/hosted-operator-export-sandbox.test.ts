@@ -85,11 +85,11 @@ const runCommand = vi.fn(
   },
 );
 const sandbox = {
-  delete: vi.fn(async () => {}),
-  extendTimeout: vi.fn(async () => {}),
+  delete: vi.fn<() => Promise<void>>().mockResolvedValue(),
+  extendTimeout: vi.fn<() => Promise<void>>().mockResolvedValue(),
   getCommand: vi.fn(async () => ({ ...command, exitCode: commandTerminal ? 0 : null })),
   name: "private-vm",
-  readFile: vi.fn(async () => null),
+  readFile: vi.fn<() => Promise<null>>().mockResolvedValue(null),
   readFileToBuffer: vi.fn(async (input: { path: string }) =>
     input.path.endsWith("manifest.json")
       ? Buffer.from("private manifest")
@@ -119,9 +119,9 @@ beforeEach(() => {
 describe("fixed tenant export Sandbox transport", () => {
   it("creates exclusive private metadata and confines the migrator credential to the fixed command environment", async () => {
     const executor = launcher();
-    const assertCurrent = vi.fn(async () => {});
+    const assertCurrent = vi.fn<() => Promise<void>>().mockResolvedValue();
     const locator = await executor.prepare(fixture.worker, assertCurrent);
-    const checkpoint = vi.fn(async () => {});
+    const checkpoint = vi.fn<() => Promise<void>>().mockResolvedValue();
     const credential = "postgres://app-migrator:synthetic-password@private.test/app";
     await executor.run(fixture.worker, locator, credential, assertCurrent, checkpoint);
     expect(sdk.create).toHaveBeenCalledWith(
@@ -158,7 +158,7 @@ describe("fixed tenant export Sandbox transport", () => {
   it("preserves uncertain command dispatch without inventing a command identity or retrying it", async () => {
     const executor = launcher();
     const locator = await executor.prepare(fixture.worker, async () => {});
-    const checkpoint = vi.fn(async () => {});
+    const checkpoint = vi.fn<() => Promise<void>>().mockResolvedValue();
     dispatchUnknown = true;
     await expect(
       executor.run(fixture.worker, locator, "private-credential", async () => {}, checkpoint),
