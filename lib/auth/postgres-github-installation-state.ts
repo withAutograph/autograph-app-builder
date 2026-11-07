@@ -1,12 +1,11 @@
 import { and, eq, gt, isNull } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { HostedDatabase } from "../db/hosted-postgres";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import type * as databaseSchema from "../db/schema";
 import { githubInstallationAuthorizationStates } from "../db/schema";
 import type { GitHubInstallationAuthorizationStateStore } from "./github-app-installation";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresGitHubInstallationAuthorizationStateStore(
