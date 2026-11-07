@@ -35,6 +35,7 @@ const completionSession = (ctx: ToolContext) => ({
   callbackExecution: hostedOperatorCallbackExecution(ctx.session),
   sessionAuth: ctx.session.auth,
 });
+const PUBLISHED_DRAFT_REPAIR_KIND = "published-draft-repair" as const;
 
 export const sealPublishedDraftRepair = async (input: {
   ctx: ToolContext;
@@ -45,7 +46,7 @@ export const sealPublishedDraftRepair = async (input: {
   const { ctx } = input;
   const state = appBuilderWorkflowState.get();
   const candidate = draftReconciliationState.get();
-  if (state.phase !== "reviewed" || candidate?.kind !== "published-draft-repair") {
+  if (state.phase !== "reviewed" || candidate?.kind !== PUBLISHED_DRAFT_REPAIR_KIND) {
     throw new Error("Prepare the current owned draft repair before sealing its update.");
   }
   if (
@@ -102,7 +103,7 @@ export const sealPublishedDraftRepair = async (input: {
       digest: review.digest,
     },
     compilation,
-    kind: "published-draft-repair" as const,
+    kind: PUBLISHED_DRAFT_REPAIR_KIND,
     proposal,
     repair,
     review,
@@ -173,7 +174,7 @@ export const updatePublishedDraftRepair = async (input: {
   const state = appBuilderWorkflowState.get();
   const candidate = draftReconciliationState.get();
   if (
-    candidate?.kind !== "published-draft-repair" ||
+    candidate?.kind !== PUBLISHED_DRAFT_REPAIR_KIND ||
     state.phase !== "reviewed" ||
     candidate.validation === undefined
   ) {
