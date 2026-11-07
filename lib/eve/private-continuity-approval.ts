@@ -87,12 +87,17 @@ export const createPrivateContinuityApprovalCapture = (input: {
   if (!isDeepStrictEqual(input.plan.authority, { audience, issuer, ownerUserId, workspaceId })) {
     throw new Error("Private approval owner differs from its frozen plan.");
   }
-  const capture = createPrivateOperatorApprovalCapture({
+  const captureOptions: Parameters<typeof createPrivateOperatorApprovalCapture>[0] = {
     ownerUserId: input.principal.ownerUserId,
     request: input.request,
-    ...(input.callId === undefined ? {} : { callId: input.callId }),
-    ...(input.state === undefined ? {} : { state: input.state }),
-  });
+  };
+  if (input.callId !== undefined) {
+    captureOptions.callId = input.callId;
+  }
+  if (input.state !== undefined) {
+    captureOptions.state = input.state;
+  }
+  const capture = createPrivateOperatorApprovalCapture(captureOptions);
   return {
     observe(event: MessageStreamEvent) {
       if (event.type === "input.requested") {
@@ -104,15 +109,18 @@ export const createPrivateContinuityApprovalCapture = (input: {
             continue;
           }
           const parsed = continuityApprovalToolInputSchema.safeParse(requested.action.input);
-          if (!parsed.success) {
-            continue;
+          if (parsed.success) {
+            let verified = false;
+            try {
+              verifySavedContinuityIntent(parsed.data, { plan: input.plan, request: input.request });
+              verified = true;
+            } catch {
+              // A request for another intent is not captured.
+            }
+            if (verified) {
+              capture.acceptRequest(requested.requestId, requested.action.callId);
+            }
           }
-          try {
-            verifySavedContinuityIntent(parsed.data, { plan: input.plan, request: input.request });
-          } catch {
-            continue;
-          }
-          capture.acceptRequest(requested.requestId, requested.action.callId);
         }
         return;
       }
