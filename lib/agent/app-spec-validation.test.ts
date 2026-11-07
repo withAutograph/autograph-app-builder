@@ -137,16 +137,16 @@ describe("build-ready AppSpec validation", () => {
       throw new Error("expected invalid AppSpec");
     }
     expect(result.issues).toEqual([expect.objectContaining({ code: "build_ready_intent" })]);
-    const diagnostic = JSON.parse(appSpecRepairDiagnostic(result)) as {
-      code: string;
-      instruction: string;
-      buildHandoffExample: unknown;
-    };
+    const diagnostic: unknown = JSON.parse(appSpecRepairDiagnostic(result));
     expect(diagnostic).toMatchObject({
       buildHandoffExample: BUILD_READY_HANDOFF_EXAMPLE,
       code: "app_spec_invalid",
-      instruction: expect.stringContaining("without asking the user"),
     });
+    expect(diagnostic).toHaveProperty("instruction");
+    if (typeof diagnostic !== "object" || diagnostic === null || !("instruction" in diagnostic)) {
+      throw new Error("Missing diagnostic instruction");
+    }
+    expect(diagnostic.instruction).toEqual(expect.stringContaining("without asking the user"));
     expect(diagnostic).not.toHaveProperty("requiredHeadings");
   });
 
