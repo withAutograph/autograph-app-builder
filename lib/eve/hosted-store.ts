@@ -79,7 +79,7 @@ export const HOSTED_SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 export const HOSTED_SESSION_MAX_LIFETIME_MS = 24 * 60 * 60 * 1000;
 
 export const hostedSessionTimeoutPolicySchema = z
-  .object({
+  .strictObject({
     idleTimeoutMs: z
       .number()
       .int()
@@ -91,7 +91,6 @@ export const hostedSessionTimeoutPolicySchema = z
       .min(60_000)
       .max(7 * 24 * 60 * 60 * 1000),
   })
-  .strict()
   .refine(
     ({ idleTimeoutMs, maxLifetimeMs }) => idleTimeoutMs <= maxLifetimeMs,
     "Hosted session idle timeout cannot exceed its maximum lifetime.",
@@ -105,7 +104,7 @@ export const DEFAULT_HOSTED_SESSION_TIMEOUT_POLICY = hostedSessionTimeoutPolicyS
 });
 
 const legacyHostedSessionRecordSchema = z
-  .object({
+  .strictObject({
     adapterSessionId: z.string().min(1).max(500),
     createdAtEpochMs: z.number().int().nonnegative(),
     principal: hostedPrincipalSchema,
@@ -114,14 +113,13 @@ const legacyHostedSessionRecordSchema = z
     updatedAtEpochMs: z.number().int().nonnegative(),
     version: z.literal(1),
   })
-  .strict()
   .refine(
     ({ createdAtEpochMs, updatedAtEpochMs }) => updatedAtEpochMs >= createdAtEpochMs,
     "Hosted session updates cannot precede creation.",
   );
 
 export const hostedSessionCheckpointSchema = z
-  .object({
+  .strictObject({
     capturedAtEpochMs: z.number().int().nonnegative(),
     events: z.array(publicEveEventSchema).max(512),
     // Private legacy checkpoint bytes remain digest-stable for resume/cancel.
@@ -137,7 +135,6 @@ export const hostedSessionCheckpointSchema = z
     version: z.literal(1),
     workingPreview: publicWorkingPreviewSchema.nullable().optional(),
   })
-  .strict()
   .refine(
     (checkpoint) => new TextEncoder().encode(JSON.stringify(checkpoint)).byteLength <= 512 * 1024,
     "Hosted session checkpoints must be at most 524288 bytes.",
@@ -156,7 +153,7 @@ export interface HostedCheckpointPage {
 export const hostedCheckpointRefSchema = z.strictObject({
   digest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
   eventCount: z.number().int().nonnegative(),
-  id: z.string().uuid(),
+  id: z.uuid(),
 });
 
 const canonicalRecordValue = (value: unknown): string => {
@@ -262,7 +259,7 @@ const reportCheckpointDigestMismatch = (
 };
 
 export const durableHostedSessionRecordSchema = z
-  .object({
+  .strictObject({
     cancellationRevision: z.number().int().nonnegative().optional(),
     // Server-owned proof of an explicit SEND that superseded this cancellation revision.
     resumedCancellationRevision: z.number().int().nonnegative().optional(),
@@ -294,7 +291,7 @@ export const durableHostedSessionRecordSchema = z
     nativeRecoveryBinding: nativeRecoveryBindingSchema.optional(),
     resumability: publicSessionResumabilitySchema,
     sessionId: z.string().min(1).max(200),
-    sourceHandoffId: z.string().uuid().optional(),
+    sourceHandoffId: z.uuid().optional(),
     builderDestination: builderSessionDestinationSchema.optional(),
 
     stage: publicSessionStageSchema,
@@ -303,7 +300,6 @@ export const durableHostedSessionRecordSchema = z
     updatedAtEpochMs: z.number().int().nonnegative(),
     version: z.literal(2),
   })
-  .strict()
   .superRefine((record, context) => {
     if ((record.resumedCancellationRevision ?? 0) > (record.cancellationRevision ?? 0)) {
       context.addIssue({
@@ -485,12 +481,10 @@ export const hostedSessionCreationDigest = (record: HostedSessionRecord): string
     .digest("hex")}`;
 };
 
-const hostedStartAliasSchema = z
-  .object({
-    canonicalClientRequestId: z.string().min(1).max(200),
-    sourceHandoffId: z.string().uuid(),
-  })
-  .strict();
+const hostedStartAliasSchema = z.strictObject({
+  canonicalClientRequestId: z.string().min(1).max(200),
+  sourceHandoffId: z.uuid(),
+});
 
 const reportInvalidStartAlias = (
   record: {
@@ -534,41 +528,33 @@ const hostedOperationCommonShape = {
 
 export const hostedOperationRecordSchema = z
   .discriminatedUnion("state", [
-    z
-      .object({
-        ...hostedOperationCommonShape,
-        sessionId: z.string().min(1).max(200).optional(),
-        state: z.literal("reserved"),
-      })
-      .strict(),
-    z
-      .object({
-        ...hostedOperationCommonShape,
-        safeErrorCode: z.string().min(1).max(100),
-        sessionId: z.string().min(1).max(200).optional(),
-        state: z.literal("submission_unknown"),
-      })
-      .strict(),
-    z
-      .object({
-        ...hostedOperationCommonShape,
-        result: eveSessionResultSchema,
-        sessionId: z.string().min(1).max(200),
-        sessionRecordDigest: z
-          .string()
-          .regex(/^sha256:[a-f0-9]{64}$/u)
-          .optional(),
-        state: z.literal("succeeded"),
-      })
-      .strict(),
-    z
-      .object({
-        ...hostedOperationCommonShape,
-        safeErrorCode: z.string().min(1).max(100),
-        sessionId: z.string().min(1).max(200).optional(),
-        state: z.literal("rejected"),
-      })
-      .strict(),
+    z.strictObject({
+      ...hostedOperationCommonShape,
+      sessionId: z.string().min(1).max(200).optional(),
+      state: z.literal("reserved"),
+    }),
+    z.strictObject({
+      ...hostedOperationCommonShape,
+      safeErrorCode: z.string().min(1).max(100),
+      sessionId: z.string().min(1).max(200).optional(),
+      state: z.literal("submission_unknown"),
+    }),
+    z.strictObject({
+      ...hostedOperationCommonShape,
+      result: eveSessionResultSchema,
+      sessionId: z.string().min(1).max(200),
+      sessionRecordDigest: z
+        .string()
+        .regex(/^sha256:[a-f0-9]{64}$/u)
+        .optional(),
+      state: z.literal("succeeded"),
+    }),
+    z.strictObject({
+      ...hostedOperationCommonShape,
+      safeErrorCode: z.string().min(1).max(100),
+      sessionId: z.string().min(1).max(200).optional(),
+      state: z.literal("rejected"),
+    }),
   ])
   // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Operation parsing checks each durable recovery identity alongside the existing state machine.
   .superRefine((record, context) => {
@@ -1163,25 +1149,19 @@ export const withoutHostedOperationError = (operation: HostedOperationRecord) =>
 };
 
 export const reserveOperationResultSchema = z.discriminatedUnion("disposition", [
-  z
-    .object({
-      disposition: z.literal("reserved"),
-      operation: hostedOperationRecordSchema,
-    })
-    .strict(),
-  z
-    .object({
-      disposition: z.literal("existing"),
-      operation: hostedOperationRecordSchema,
-    })
-    .strict(),
-  z.object({ disposition: z.literal("conflict") }).strict(),
-  z
-    .object({
-      disposition: z.literal("rejected"),
-      reason: z.literal("session_busy"),
-    })
-    .strict(),
+  z.strictObject({
+    disposition: z.literal("reserved"),
+    operation: hostedOperationRecordSchema,
+  }),
+  z.strictObject({
+    disposition: z.literal("existing"),
+    operation: hostedOperationRecordSchema,
+  }),
+  z.strictObject({ disposition: z.literal("conflict") }),
+  z.strictObject({
+    disposition: z.literal("rejected"),
+    reason: z.literal("session_busy"),
+  }),
 ]);
 
 export type ReserveOperationResult = z.infer<typeof reserveOperationResultSchema>;

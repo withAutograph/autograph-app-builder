@@ -248,7 +248,7 @@ const prototypePathPattern = /^prototype\/(?<appId>[a-z][a-z0-9]*(?:-[a-z0-9]+)*
 const lowercaseSha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
 const sha256 = (value: string): string => createHash("sha256").update(value, "utf-8").digest("hex");
 const prototypeRequestSchema = z
-  .object({
+  .strictObject({
     baseRevision: lowercaseSha256Schema.optional(),
     chunkIndex: z.number().int().nonnegative().optional(),
     content: z.string().min(1),
@@ -257,7 +257,6 @@ const prototypeRequestSchema = z
     mediaType: z.literal("text/html"),
     path: z.string().regex(prototypePathPattern),
   })
-  .strict()
   .superRefine((input, context) => {
     if (input.chunkIndex === undefined && input.expectedDigest !== undefined) {
       context.addIssue({ code: "custom", message: "Missing chunk index.", path: ["chunkIndex"] });
@@ -277,22 +276,20 @@ const prototypeRequestSchema = z
       });
     }
   });
-const prototypeResultSchema = z
-  .object({
-    appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-    complete: z.boolean().optional(),
-    digest: lowercaseSha256Schema,
-    invalidated: z.boolean().optional(),
-    mediaType: z.literal("text/html"),
-    nextChunkIndex: z.number().int().nonnegative().optional(),
-    path: z.string().regex(prototypePathPattern),
-    recordedByCallId: z.string().min(1),
-    reused: z.boolean(),
-    revision: lowercaseSha256Schema,
-    sessionId: z.string().min(1),
-    size: z.number().int().min(1),
-  })
-  .strict();
+const prototypeResultSchema = z.strictObject({
+  appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+  complete: z.boolean().optional(),
+  digest: lowercaseSha256Schema,
+  invalidated: z.boolean().optional(),
+  mediaType: z.literal("text/html"),
+  nextChunkIndex: z.number().int().nonnegative().optional(),
+  path: z.string().regex(prototypePathPattern),
+  recordedByCallId: z.string().min(1),
+  reused: z.boolean(),
+  revision: lowercaseSha256Schema,
+  sessionId: z.string().min(1),
+  size: z.number().int().min(1),
+});
 
 const prototypeReferenceResultSchema = z
   .object({
@@ -308,7 +305,7 @@ const prototypeReferenceResultSchema = z
     sessionId: z.string().min(1),
     version: z.literal(2),
   })
-  .passthrough();
+  .loose();
 
 export const installedPrototypeReferenceStateSchema = z.strictObject({
   latest: publicPrototypeReferenceSchema.optional(),
@@ -389,17 +386,14 @@ export const createInstalledPrototypeReferenceReducer = (input: {
   let latest: PublicPrototypeReference | undefined = state?.latest;
   return {
     accept(candidate: unknown) {
-      const event = z
-        .object({ data: z.unknown(), type: z.string() })
-        .passthrough()
-        .safeParse(candidate);
+      const event = z.object({ data: z.unknown(), type: z.string() }).loose().safeParse(candidate);
       if (!event.success) {
         return;
       }
       if (event.data.type === "actions.requested") {
         const actions = z
           .object({ actions: z.array(z.unknown()) })
-          .passthrough()
+          .loose()
           .safeParse(event.data.data);
         if (!actions.success) {
           return;
@@ -412,7 +406,7 @@ export const createInstalledPrototypeReferenceReducer = (input: {
               kind: z.string(),
               toolName: z.string(),
             })
-            .passthrough()
+            .loose()
             .safeParse(candidateAction);
           if (!action.success || action.data.kind !== "tool-call") {
             continue;
@@ -422,7 +416,7 @@ export const createInstalledPrototypeReferenceReducer = (input: {
             if (action.data.toolName === "record_ui_preview") {
               const preview = z
                 .object({ appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u) })
-                .passthrough()
+                .loose()
                 .safeParse(action.data.input);
               if (preview.success) {
                 requestedUiPreview.set(action.data.callId, preview.data.appId);
@@ -453,10 +447,10 @@ export const createInstalledPrototypeReferenceReducer = (input: {
               output: z.unknown(),
               toolName: z.enum(["record_prototype_artifact", "record_ui_preview"]),
             })
-            .passthrough(),
+            .loose(),
           status: z.literal("completed"),
         })
-        .passthrough()
+        .loose()
         .safeParse(event.data.data);
       if (!resultEvent.success) {
         return;
@@ -483,7 +477,7 @@ export const createInstalledPrototypeReferenceReducer = (input: {
             sessionId: z.string(),
             version: z.literal(2),
           })
-          .passthrough()
+          .loose()
           .safeParse(receipt.output);
         if (!output.success) {
           return;
@@ -592,7 +586,7 @@ const uiPreviewResultSchema = z
     routes: z.array(z.string().startsWith("/")).min(1),
     totalBytes: z.number().int().positive().optional(),
   })
-  .passthrough();
+  .loose();
 
 /**
  * Recovers only a successfully recorded HTML prototype from Eve's durable

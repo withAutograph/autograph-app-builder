@@ -52,140 +52,118 @@ const mutationRejectionCode = z.enum([
   "reviewed-path-changed",
 ]);
 
-const permissionSnapshotSchema = z
-  .object({
-    administration: z.enum(["none", "write"]),
-    contents: z.enum(["read", "write"]),
-    metadata: z.literal("read"),
-    pullRequests: z.enum(["none", "write"]),
-    variables: z.literal("read"),
-    workflows: z.enum(["none", "write"]),
-  })
-  .strict();
+const permissionSnapshotSchema = z.strictObject({
+  administration: z.enum(["none", "write"]),
+  contents: z.enum(["read", "write"]),
+  metadata: z.literal("read"),
+  pullRequests: z.enum(["none", "write"]),
+  variables: z.literal("read"),
+  workflows: z.enum(["none", "write"]),
+});
 
-const installationSnapshotSchema = z
-  .object({
-    accountId: decimal,
-    accountLogin: z.string().min(1).max(100),
-    accountType: z.enum(["Organization", "User"]),
-    grantedPermissions: permissionSnapshotSchema,
-    installationId: decimal,
-    repositorySelection: z.enum(["all", "selected"]),
-    selectedRepositoryIds: z.array(decimal),
-  })
-  .strict();
+const installationSnapshotSchema = z.strictObject({
+  accountId: decimal,
+  accountLogin: z.string().min(1).max(100),
+  accountType: z.enum(["Organization", "User"]),
+  grantedPermissions: permissionSnapshotSchema,
+  installationId: decimal,
+  repositorySelection: z.enum(["all", "selected"]),
+  selectedRepositoryIds: z.array(decimal),
+});
 
-const repositorySnapshotSchema = z
-  .object({
-    defaultBranch: z.string().min(1).max(200),
-    headSha: objectId,
-    headTree: objectId,
-    name: z.string().min(1).max(100),
-    owner: z.string().min(1).max(100),
-    repositoryId: decimal,
-    repositoryVariableNames: z.array(z.string().min(1).max(255)),
-    visibility: z.literal("private"),
-  })
-  .strict();
+const repositorySnapshotSchema = z.strictObject({
+  defaultBranch: z.string().min(1).max(200),
+  headSha: objectId,
+  headTree: objectId,
+  name: z.string().min(1).max(100),
+  owner: z.string().min(1).max(100),
+  repositoryId: decimal,
+  repositoryVariableNames: z.array(z.string().min(1).max(255)),
+  visibility: z.literal("private"),
+});
 
-const freshReadBackSchema = z
-  .object({
-    idempotencyKey: digest,
-    initialCommit: z
-      .object({
-        parents: z.array(objectId),
-        sha: objectId,
-        tree: objectId,
-      })
-      .strict(),
-    repository: repositorySnapshotSchema,
-  })
-  .strict();
+const freshReadBackSchema = z.strictObject({
+  idempotencyKey: digest,
+  initialCommit: z.strictObject({
+    parents: z.array(objectId),
+    sha: objectId,
+    tree: objectId,
+  }),
+  repository: repositorySnapshotSchema,
+});
 
 const branchSchema = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("absent") }).strict(),
-  z
-    .object({
-      branchName: z.string().min(1).max(200),
-      branchSha: objectId,
-      branchTree: objectId,
-      changedContentDigest: digest,
-      idempotencyKey: digest,
-      normalizedChangedPaths: z.array(z.string()),
-      status: z.literal("present"),
-    })
-    .strict(),
+  z.strictObject({ status: z.literal("absent") }),
+  z.strictObject({
+    branchName: z.string().min(1).max(200),
+    branchSha: objectId,
+    branchTree: objectId,
+    changedContentDigest: digest,
+    idempotencyKey: digest,
+    normalizedChangedPaths: z.array(z.string()),
+    status: z.literal("present"),
+  }),
 ]);
 
 const pullRequestSchema = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("absent") }).strict(),
-  z
-    .object({
-      baseBranch: z.string().min(1).max(200),
-      baseRepositoryId: decimal,
-      baseSha: objectId,
-      changeSetDigest: digest,
-      draft: z.boolean(),
-      headBranch: z.string().min(1).max(200),
-      headRepositoryId: decimal,
-      headSha: objectId,
-      idempotencyKey: digest,
-      pullRequestId: decimal,
-      pullRequestNumber: z.number().int().positive().safe(),
-      status: z.literal("present"),
-    })
-    .strict(),
-]);
-
-const draftReadBackSchema = z
-  .object({
-    branch: branchSchema,
-    changedPathsSinceBase: z.array(z.string()),
-    idempotencyKey: digest,
-    pullRequest: pullRequestSchema,
-    repository: repositorySnapshotSchema,
-  })
-  .strict();
-
-const existingDraftSchema = z
-  .object({
-    baseBranch: z.string().min(1),
+  z.strictObject({ status: z.literal("absent") }),
+  z.strictObject({
+    baseBranch: z.string().min(1).max(200),
     baseRepositoryId: decimal,
+    baseSha: objectId,
+    changeSetDigest: digest,
     draft: z.boolean(),
-    headBranch: z.string().min(1),
+    headBranch: z.string().min(1).max(200),
     headRepositoryId: decimal,
     headSha: objectId,
-    headTree: objectId,
-    name: z.string().min(1),
-    number: z.number().int().positive(),
-    owner: z.string().min(1),
+    idempotencyKey: digest,
     pullRequestId: decimal,
-    repositoryId: decimal,
-    state: z.enum(["open", "closed"]),
-    verifiedBuilderOrigin: z
-      .object({ appId: decimal, authorId: decimal, marker: digest })
-      .strict()
-      .optional(),
-  })
-  .strict();
+    pullRequestNumber: z.number().int().positive().int(),
+    status: z.literal("present"),
+  }),
+]);
+
+const draftReadBackSchema = z.strictObject({
+  branch: branchSchema,
+  changedPathsSinceBase: z.array(z.string()),
+  idempotencyKey: digest,
+  pullRequest: pullRequestSchema,
+  repository: repositorySnapshotSchema,
+});
+
+const existingDraftSchema = z.strictObject({
+  baseBranch: z.string().min(1),
+  baseRepositoryId: decimal,
+  draft: z.boolean(),
+  headBranch: z.string().min(1),
+  headRepositoryId: decimal,
+  headSha: objectId,
+  headTree: objectId,
+  name: z.string().min(1),
+  number: z.number().int().positive(),
+  owner: z.string().min(1),
+  pullRequestId: decimal,
+  repositoryId: decimal,
+  state: z.enum(["open", "closed"]),
+  verifiedBuilderOrigin: z
+    .strictObject({ appId: decimal, authorId: decimal, marker: digest })
+    .optional(),
+});
 
 const acknowledgementSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    requestId: z.string().regex(/^[-A-Za-z0-9_]{1,128}$/u),
+    status: z.literal("accepted"),
+  }),
   z
-    .object({
-      requestId: z.string().regex(/^[-A-Za-z0-9_]{1,128}$/u),
-      status: z.literal("accepted"),
-    })
-    .strict(),
-  z
-    .object({
-      bytes: z.number().int().nonnegative().safe().optional(),
+    .strictObject({
+      bytes: z.number().int().nonnegative().int().optional(),
       code: mutationRejectionCode,
       operation: z.literal("create-blob").optional(),
       path: z.string().refine(safeSourcePath).optional(),
       providerStatus: z.number().int().min(400).max(599).optional(),
       status: z.literal("rejected"),
     })
-    .strict()
     .refine((value) => {
       if (value.code === "reviewed-path-changed") {
         return (
@@ -317,7 +295,7 @@ export interface GitHubAppInstallationProvider {
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const inspectSelectedRepositoryRevisionAction = "inspect the selected repository revision";
 
-const providerStatus = z.object({ status: z.number().int().min(400).max(599) }).passthrough();
+const providerStatus = z.looseObject({ status: z.number().int().min(400).max(599) });
 
 // eslint-disable-next-line eslint/func-style -- Keep provider errors free of URLs, headers, and tokens.
 function safeProviderStatus(error: unknown): number | undefined {
