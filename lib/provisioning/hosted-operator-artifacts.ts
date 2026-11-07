@@ -437,9 +437,13 @@ export const createOperatorArtifactPublication = (
         if (hash(requiredMember(files, "release-manifest.json")) !== expected.manifestSha256) {
           throw operatorArtifactUnavailable();
         }
+        const artifact = { artifactRef: expected.artifactRef };
+        const describedArtifact =
+          envelope.description === undefined
+            ? artifact
+            : { ...artifact, description: envelope.description };
         return {
-          artifactRef: expected.artifactRef,
-          ...(envelope.description === undefined ? {} : { description: envelope.description }),
+          ...describedArtifact,
           // SAFETY: Exactly every member has been decoded and checked above.
           // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- All closed worker release members have been checked.
           files: files as GeneratedAppReleaseFiles,
