@@ -119,8 +119,12 @@ running handoff ancestors using the retained activation, checkpoint and inbox
 proofs. It cannot boot a child. Builder proves effect closure across the complete
 verified lineage, stops each active owner from root to current inbox owner, and
 independently verifies an operation-bound native cancellation receipt for every
-stopped run. Completed ancestors are observed without stopping them. Exact retries
-reconstruct partial progress from those native receipts. A newly discovered
+stopped run. Ancestors confirmed terminal by the initial full-lineage preflight
+are observed without stopping them or repeating the entire history scan solely
+to skip their stop. A fresh full-lineage preflight still precedes every live stop,
+and the final full-lineage preflight rechecks all retained state before adoption.
+No retained history or effect checks are omitted. Exact retries reconstruct
+partial progress from those native receipts. A newly discovered
 handoff refuses adoption until the same operation rechecks and quiesces that
 lineage. Only terminal-only collection and reconciliation can boot a successor.
 Active, cancelled, or unproven failed effect steps cause refusal before stop or

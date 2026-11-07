@@ -3750,10 +3750,10 @@ index 0000000000000000000000000000000000000000..e8d470c6a395dcc9ea20780c0c65acd2
 +}
 diff --git a/dist/src/execution/session/terminal-recovery.js b/dist/src/execution/session/terminal-recovery.js
 new file mode 100644
-index 0000000000000000000000000000000000000000..c2afff8a67385dceff096b73e3ed87ca49049515
+index 0000000000000000000000000000000000000000..3fee51edd998bac9df10ea4d7b602809ef88671e
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.js
-@@ -0,0 +1,795 @@
+@@ -0,0 +1,799 @@
 +import { deriveTerminalRecoveryResumePhase } from "#execution/session/recovery-resume-phase.js";
 +export { deriveTerminalRecoveryResumePhase };
 +import { createHash } from "node:crypto";
@@ -4350,7 +4350,11 @@ index 0000000000000000000000000000000000000000..c2afff8a67385dceff096b73e3ed87ca
 +  const initial = await preflight();
 +  if (initial.kind !== "preflight") return initial;
 +  const ownerRunIds = initial.ownerRunIds;
-+  for (const runId of ownerRunIds) {
++  for (const initialObservation of initial.observations) {
++    // Terminal physical runs cannot resume. Their retained state is still
++    // checked by the initial and final full-lineage preflights.
++    if (["completed", "failed", "cancelled"].includes(initialObservation.status)) continue;
++    const runId = initialObservation.runId;
 +    const current = await preflight();
 +    if (current.kind !== "preflight") return current;
 +    if (current.resumePhase !== initial.resumePhase || !sameOwnerIds(current.ownerRunIds, ownerRunIds)) return { kind: "uncertain", reason: "source-physical-owner-changed" };

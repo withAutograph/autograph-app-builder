@@ -307,6 +307,7 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
         dependencies,
       ),
     getNativeStatus: () => nativeStatus,
+    getCheckpointState: () => after,
     setCheckpointState: (state: typeof before) => {
       before = state;
       after = state;
@@ -1047,6 +1048,136 @@ describe("owned running-lineage execution transfer", () => {
     expect(await f.run()).toMatchObject({ kind: "accepted" });
     expect(f.start).toHaveBeenCalledOnce();
     expect(f.stopSource).toHaveBeenCalledTimes(2);
+  });
+  const terminalAncestors = () => {
+    const f = fixture("idle-checkpoint");
+    f.setTurnState("");
+    const parents = Array.from(
+      { length: 64 },
+      (_, index) => `settled-parent-${index}`,
+    );
+    f.setLineage(parents);
+    for (const [index, parent] of parents.entries()) {
+      const status =
+        ["completed", "failed", "cancelled"][index % 3] ?? "completed";
+      f.setAncestorStatus(parent, status);
+      if (status === "cancelled") {
+        f.markStopReceipt(parent);
+      }
+    }
+    return { ...f, parents };
+  };
+  const changeBeforeLivePreflight = (
+    f: ReturnType<typeof terminalAncestors>,
+    change: () => void,
+  ) => {
+    const collect = f.dependencies.collectLineagePreflight;
+    if (collect === undefined) {
+      throw new Error("Missing lineage preflight fixture");
+    }
+    let initialCollected = false;
+    f.dependencies.collectLineagePreflight = async (input) => {
+      if (initialCollected) {
+        change();
+      }
+      initialCollected = true;
+      return await collect(input);
+    };
+  };
+  it("recovers the same idle checkpoint through long terminal ancestry without repeated history scans", async () => {
+    const f = terminalAncestors();
+    expect(await f.run()).toMatchObject({
+      kind: "accepted",
+      recoveryBinding: {
+        operationId: descriptor.operationId,
+        logicalSessionId: descriptor.logicalSessionId,
+        provenance: { resumePhase: "await-input" },
+      },
+    });
+    expect(f.stopSource.mock.calls.map(([id]) => id)).toEqual(["old-native"]);
+    expect(f.start).toHaveBeenCalledOnce();
+    const started = f.start.mock.calls[0]?.[0];
+    expect(started?.checkpoint.sessionState).toEqual(f.getCheckpointState());
+    expect(started?.replayInput).toBeUndefined();
+    // This cost budget catches one whole ancestry download per already terminal
+    // parent while allowing the initial, live pre-stop, and final full reads.
+    expect(
+      f.collect.mock.calls.filter(([input]) => input.allowParked === true)
+        .length,
+    ).toBeLessThanOrEqual(4);
+  });
+  it("rechecks a changed live owner after skipping terminal ancestors", async () => {
+    const f = terminalAncestors();
+    changeBeforeLivePreflight(f, () => {
+      f.setPhysicalOwner("changed-live-owner");
+    });
+    expect(await f.run()).toMatchObject({
+      kind: "uncertain",
+      reason: "source-physical-owner-changed",
+    });
+    expect(f.stopSource).not.toHaveBeenCalled();
+    expect(f.start).not.toHaveBeenCalled();
+  });
+  it("rechecks authorization before the live stop after terminal ancestors", async () => {
+    const f = terminalAncestors();
+    changeBeforeLivePreflight(f, f.revoke);
+    await expect(f.run()).rejects.toThrow("owner revoked");
+    expect(f.stopSource).not.toHaveBeenCalled();
+    expect(f.start).not.toHaveBeenCalled();
+  });
+  it("still rejects unsettled effects on a terminal ancestor before stopping the live owner", async () => {
+    const f = terminalAncestors();
+    const inspect = f.dependencies.inspectSource?.bind(f.dependencies);
+    if (inspect === undefined) {
+      throw new Error("Missing lineage inspection fixture");
+    }
+    let changed = false;
+    changeBeforeLivePreflight(f, () => {
+      changed = true;
+    });
+    f.dependencies.inspectSource = async (runId) => ({
+      ...(await inspect(runId)),
+      ...(changed && runId === f.parents[0]
+        ? { unsettledStepIds: ["unconfirmed-provider-effect"] }
+        : {}),
+    });
+    expect(await f.run()).toMatchObject({
+      kind: "uncertain",
+      reason: "source-lineage-effects-unsettled",
+    });
+    expect(f.stopSource).not.toHaveBeenCalled();
+    expect(f.start).not.toHaveBeenCalled();
+  });
+  it("still rejects a foreign cancellation on a terminal ancestor before the live stop", async () => {
+    const f = terminalAncestors();
+    changeBeforeLivePreflight(f, () => {
+      f.setAncestorStatus(f.parents[0] ?? "", "cancelled");
+    });
+    expect(await f.run()).toMatchObject({
+      kind: "uncertain",
+      reason: "source-stop-not-owned",
+    });
+    expect(f.stopSource).not.toHaveBeenCalled();
+    expect(f.start).not.toHaveBeenCalled();
+  });
+  it("rechecks terminal ancestor effects after the owned live stop before adopting a successor", async () => {
+    const f = terminalAncestors();
+    const inspect = f.dependencies.inspectSource?.bind(f.dependencies);
+    if (inspect === undefined) {
+      throw new Error("Missing lineage inspection fixture");
+    }
+    f.dependencies.inspectSource = async (runId) => ({
+      ...(await inspect(runId)),
+      ...(f.getNativeStatus() === "cancelled" && runId === f.parents[0]
+        ? { unsettledStepIds: ["late-unconfirmed-effect"] }
+        : {}),
+    });
+    expect(await f.run()).toMatchObject({
+      kind: "uncertain",
+      reason: "source-lineage-effects-unsettled",
+    });
+    expect(f.stopSource.mock.calls.map(([id]) => id)).toEqual(["old-native"]);
+    expect(f.start).not.toHaveBeenCalled();
   });
   it("observes a naturally completed ancestor without cancelling it", async () => {
     const f = twoOwners();
