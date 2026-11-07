@@ -140,7 +140,8 @@ export const resolveNativeTargetAuthOnlyRegistration = async (input: {
     plan.origin.publicSessionId !== input.sessionId ||
     !isDeepStrictEqual(plan.origin.authority, input.authority) ||
     !policy.accessRoles.includes(plan.appRole)
-  ) throw new HostedOperatorError("resource_mismatch");
+  )
+    throw new HostedOperatorError("resource_mismatch");
   let selected: HostedOperatorSourceConfiguration;
   try {
     selected = resolveNativeTargetResourceProfile({
@@ -190,7 +191,8 @@ export const resolveNativeTargetAuthOnlyRegistration = async (input: {
     selected.nativeNeon.scope.endpointId !== plan.authResource.endpointId ||
     selected.nativeNeon.scope.hostname !== plan.authResource.hostname ||
     authorityDigest !== plan.authResource.authorityDigest
-  ) throw new HostedOperatorError("resource_mismatch");
+  )
+    throw new HostedOperatorError("resource_mismatch");
   // Return the selected owner/app profile so downstream Auth runtime setup cannot
   // fall back to base/shared Auth custody.
   const effective = structuredClone(selected);
@@ -360,7 +362,9 @@ export const createNativeTargetConfigurationResolver =
         const authOnlyRuntimeRequest =
           parsed.data.action === "resolve-preview-target" ||
           ("selection" in parsed.data &&
-            ["plan", "execute", "status", "bindings", "auth-identity-input"].includes(parsed.data.action));
+            ["plan", "execute", "status", "bindings", "auth-identity-input"].includes(
+              parsed.data.action,
+            ));
         if (
           authOnlyRuntimeRequest &&
           input.configuration.authOnlyApplications?.[selected.appId] !== undefined
@@ -375,7 +379,9 @@ export const createNativeTargetConfigurationResolver =
           const effective = await resolveNativeTargetAuthOnlyRegistration({
             configuration: input.configuration,
             store: resources.authOnlyDispatch ?? {
-              read: async () => { throw new HostedOperatorError("resource_mismatch"); },
+              read: async () => {
+                throw new HostedOperatorError("resource_mismatch");
+              },
             },
             authority: ownerContext.authority,
             sessionId: selected.sessionId,

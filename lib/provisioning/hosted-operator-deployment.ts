@@ -145,14 +145,31 @@ import { parseProtectedResourceLockDatabaseUrl } from "../db/protected-resource-
 import { createVercelWorkloadIdentity } from "../eve/vercel-workload-identity";
 import { parseHostedSessionRow, createPostgresHostedEveStore } from "../eve/postgres-hosted-store";
 import { createHostedOperatorApprovalObserver } from "./hosted-operator-approval-observer";
-import { buildNativeTargetAuthOnlyResourcePlanBytes, createNativeTargetOnboardingDeployment, nativeTargetApprovalCheckpointId } from "./native-target-onboarding-deployment";
-import { createPostgresNativeTargetAuthOnlyOwnerLinkStore, createNativeTargetAuthOnlyOwnerLink } from "./native-target-auth-only-owner-link";
+import {
+  buildNativeTargetAuthOnlyResourcePlanBytes,
+  createNativeTargetOnboardingDeployment,
+  nativeTargetApprovalCheckpointId,
+} from "./native-target-onboarding-deployment";
+import {
+  createPostgresNativeTargetAuthOnlyOwnerLinkStore,
+  createNativeTargetAuthOnlyOwnerLink,
+} from "./native-target-auth-only-owner-link";
 import type { NativeTargetAuthOnlyOwnerLinkBinding } from "./native-target-auth-only-owner-link";
-import { createPostgresNativeTargetAuthOnlyDispatchStore, nativeTargetAuthOnlyApprovalSchema } from "./native-target-auth-only-dispatch";
+import {
+  createPostgresNativeTargetAuthOnlyDispatchStore,
+  nativeTargetAuthOnlyApprovalSchema,
+} from "./native-target-auth-only-dispatch";
 import { createNativeTargetAuthOnlyPlanStore } from "./native-target-auth-only-plan-store";
-import { createNativeTargetAuthOnlyResourcePlanStore, nativeTargetAuthOnlyResourcePlanDigest } from "./native-target-auth-only-resource-plan-store";
+import {
+  createNativeTargetAuthOnlyResourcePlanStore,
+  nativeTargetAuthOnlyResourcePlanDigest,
+} from "./native-target-auth-only-resource-plan-store";
 import { createPostgresNativeTargetAuthOnlyRuntimeStore } from "./hosted-operator-auth-only-runtime";
-import { createPostgresNativeTargetAuthOnlyDeliveryStore, nativeTargetAuthOnlyDeliveryAllowsReadyBinding, readNativeTargetAuthOnlyDeliveryPlan } from "./native-target-auth-only-delivery-runtime";
+import {
+  createPostgresNativeTargetAuthOnlyDeliveryStore,
+  nativeTargetAuthOnlyDeliveryAllowsReadyBinding,
+  readNativeTargetAuthOnlyDeliveryPlan,
+} from "./native-target-auth-only-delivery-runtime";
 import type { NativeTargetAuthOnlyAfterGatewayReadyInput } from "./native-target-auth-only-delivery-runtime";
 import { nativeTargetAuthOnlyDeliveryPlanDigest } from "./native-target-auth-only-delivery-plan";
 import { buildNativeTargetAuthOnlyDeliveryPlanBytes } from "./native-target-auth-only-delivery-plan";
@@ -167,8 +184,15 @@ import {
   authOnlySignupPolicyPlanSchema,
   runAuthSignupPolicyFileSpool,
 } from "./hosted-operator-sandbox-launcher";
-import { createNativeTargetAuthOnlyCredentialCustody, nativeTargetAuthOnlyCredentialContextForPlan, nativeTargetAuthOnlyCredentialOperationRef } from "./native-target-auth-only-credential-store";
-import { nativeTargetAuthOnlyPlanDigest, nativeTargetAuthOnlySchemaEffectDigest } from "./native-target-auth-only-plan-schema";
+import {
+  createNativeTargetAuthOnlyCredentialCustody,
+  nativeTargetAuthOnlyCredentialContextForPlan,
+  nativeTargetAuthOnlyCredentialOperationRef,
+} from "./native-target-auth-only-credential-store";
+import {
+  nativeTargetAuthOnlyPlanDigest,
+  nativeTargetAuthOnlySchemaEffectDigest,
+} from "./native-target-auth-only-plan-schema";
 import { resolveNativeTargetResourceProfile } from "./native-target-resource-profile";
 import { createPostgresNativeTargetOnboardingStore } from "./native-target-onboarding-store";
 import {
@@ -1725,7 +1749,10 @@ export const createHostedOperatorControlPlane = async (input: {
 
     const readNativeTargetAuthOnlyReadyBinding = async (
       binding: NativeTargetAuthOnlyOwnerLinkBinding,
-      leaseContext?: Pick<NativeTargetAuthOnlyAfterGatewayReadyInput, "fenceGeneration" | "assertCurrent"> & {
+      leaseContext?: Pick<
+        NativeTargetAuthOnlyAfterGatewayReadyInput,
+        "fenceGeneration" | "assertCurrent"
+      > & {
         mode?: "running" | "retained" | "fenced";
       },
     ) => {
@@ -1757,10 +1784,7 @@ export const createHostedOperatorControlPlane = async (input: {
         adapterSessionId: currentSession.adapterSessionId,
         authority,
         principal: currentSession.principal,
-        sessionAuth: forwardedSessionAuth(
-          currentSession.principal,
-          currentSession.sourceHandoffId,
-        ),
+        sessionAuth: forwardedSessionAuth(currentSession.principal, currentSession.sourceHandoffId),
       });
       const context: HostedOperatorContext = {
         authority,
@@ -1891,9 +1915,7 @@ export const createHostedOperatorControlPlane = async (input: {
         .limit(1);
       if (resourceApprovalRow === undefined || resourceApprovalRow.state !== "settled")
         return undefined;
-      const resourceApproval = nativeTargetAuthOnlyApprovalSchema.parse(
-        resourceApprovalRow.record,
-      );
+      const resourceApproval = nativeTargetAuthOnlyApprovalSchema.parse(resourceApprovalRow.record);
       if (
         resourceApproval.outcome !== "approved" ||
         resourceApproval.planDigest !== binding.authOnlyPlanDigest ||
@@ -1937,7 +1959,11 @@ export const createHostedOperatorControlPlane = async (input: {
         artifactContext,
         assertCurrentOwner,
         readRetainedPlan: async () =>
-          await planStore.read(artifactContext, plan.origin.appSpecDigest, binding.authOnlyPlanDigest),
+          await planStore.read(
+            artifactContext,
+            plan.origin.appSpecDigest,
+            binding.authOnlyPlanDigest,
+          ),
         readApproval: async () => preparedRuntime.approval,
       });
       const credentialReference = await credentials.findReference();
@@ -1952,10 +1978,8 @@ export const createHostedOperatorControlPlane = async (input: {
       const authReadiness = createHostedOperatorAuthReadiness<typeof readinessPlan>({
         assertAuthorized: async () => await assertCurrentOwner(artifactContext),
         readAuthPlan: async () =>
-          (await authArtifacts.publication.readAuthPlan(
-            authArtifacts.context,
-            plan.authSchema,
-          )).content,
+          (await authArtifacts.publication.readAuthPlan(authArtifacts.context, plan.authSchema))
+            .content,
         readRuntimeUrl: async () => runtimeUrl,
       });
       const readiness = await authReadiness.verify({
@@ -2076,10 +2100,7 @@ export const createHostedOperatorControlPlane = async (input: {
         adapterSessionId: currentSession.adapterSessionId,
         authority,
         principal: currentSession.principal,
-        sessionAuth: forwardedSessionAuth(
-          currentSession.principal,
-          currentSession.sourceHandoffId,
-        ),
+        sessionAuth: forwardedSessionAuth(currentSession.principal, currentSession.sourceHandoffId),
       });
       const context: HostedOperatorContext = { authority, ownerContext, target: value.target };
       const artifactContext: OperatorArtifactContext = {
@@ -2166,9 +2187,7 @@ export const createHostedOperatorControlPlane = async (input: {
       });
       value.signal.throwIfAborted();
       await value.assertCurrent();
-      return ready === undefined
-        ? undefined
-        : { ...ready, binding, sandbox: selected.sandbox };
+      return ready === undefined ? undefined : { ...ready, binding, sandbox: selected.sandbox };
     };
 
     const retainedAppScopeAuthority: RetainedAppScopeDependencies = {
@@ -2242,8 +2261,7 @@ export const createHostedOperatorControlPlane = async (input: {
         return {
           ownerLink,
           readReadyBinding: readNativeTargetAuthOnlyReadyBinding,
-          readRunningLeaseReadyBinding:
-            readNativeTargetAuthOnlyRunningLeaseReadyBinding,
+          readRunningLeaseReadyBinding: readNativeTargetAuthOnlyRunningLeaseReadyBinding,
         };
       },
       ...installationPlanning,
@@ -4645,7 +4663,11 @@ export const createHostedOperatorControlPlane = async (input: {
         if (
           resource === undefined ||
           !resource.bytes.equals(
-            buildNativeTargetAuthOnlyResourcePlanBytes({ plan: value.plan, selected, registration }),
+            buildNativeTargetAuthOnlyResourcePlanBytes({
+              plan: value.plan,
+              selected,
+              registration,
+            }),
           )
         )
           throw new HostedOperatorError("resource_mismatch");
@@ -4665,7 +4687,8 @@ export const createHostedOperatorControlPlane = async (input: {
           delivery.record.deliveryPlanDigest !== value.approval.planDigest ||
           !isDeepStrictEqual(delivery.record.approval, value.approval) ||
           value.approval.outcome !== "approved" ||
-          value.approval.planDigest !== nativeTargetAuthOnlyDeliveryPlanDigest(retainedDelivery.bytes) ||
+          value.approval.planDigest !==
+            nativeTargetAuthOnlyDeliveryPlanDigest(retainedDelivery.bytes) ||
           value.approval.sourceDigest !== value.approval.planDigest ||
           value.approval.publicSessionId !== value.target.sessionId ||
           value.approval.responderPrincipalId !== authority.ownerUserId
@@ -4879,59 +4902,60 @@ export const createHostedOperatorControlPlane = async (input: {
             realmSessionId: live.identity.sessionId,
           };
         };
-      const readCredentials: NativeTargetAuthOnlyEntryPreparationPorts["readCredentials"] =
-        async (scope) => {
-          const latest = await readNativeTargetAuthOnlyRunningLeaseReadyBinding(scope.input, mode);
-          if (latest === undefined) throw new HostedOperatorError("auth_schema_not_ready");
-          const runtime = await createPostgresNativeTargetAuthOnlyRuntimeStore(database).read({
-            authority: scope.binding.authority,
+      const readCredentials: NativeTargetAuthOnlyEntryPreparationPorts["readCredentials"] = async (
+        scope,
+      ) => {
+        const latest = await readNativeTargetAuthOnlyRunningLeaseReadyBinding(scope.input, mode);
+        if (latest === undefined) throw new HostedOperatorError("auth_schema_not_ready");
+        const runtime = await createPostgresNativeTargetAuthOnlyRuntimeStore(database).read({
+          authority: scope.binding.authority,
+          appId: scope.binding.target.appId,
+          sessionId: scope.binding.target.sessionId,
+        });
+        if (runtime?.state.stage !== "prepared")
+          throw new HostedOperatorError("auth_schema_not_ready");
+        const preparedRuntime = runtime.state;
+        const artifactContext: OperatorArtifactContext = {
+          authority: scope.binding.authority,
+          target: {
             appId: scope.binding.target.appId,
             sessionId: scope.binding.target.sessionId,
-          });
-          if (runtime?.state.stage !== "prepared")
-            throw new HostedOperatorError("auth_schema_not_ready");
-          const preparedRuntime = runtime.state;
-          const artifactContext: OperatorArtifactContext = {
-            authority: scope.binding.authority,
-            target: {
-              appId: scope.binding.target.appId,
-              sessionId: scope.binding.target.sessionId,
-            },
-          };
-          const assertCurrentOwner = async (observed: OperatorArtifactContext) => {
-            if (!isDeepStrictEqual(observed, artifactContext))
-              throw new HostedOperatorError("authorization_required");
-            await scope.input.assertCurrent();
-            await owner.assertArtifactAuthorized(latest.context);
-            await owner.assertPlanningAuthorized(latest.context);
-          };
-          const planStore = createNativeTargetAuthOnlyPlanStore({ database, assertCurrentOwner });
-          const credentialContext = nativeTargetAuthOnlyCredentialContextForPlan({
-            plan: scope.input.plan,
-            configuration: latest.configuration,
-            environment,
-          });
-          const custody = createNativeTargetAuthOnlyCredentialCustody({
-            database,
-            keyring: tokenKeyring,
-            context: credentialContext,
-            plan: scope.input.plan,
-            configuration: latest.configuration,
-            environment,
-            artifactContext,
-            assertCurrentOwner,
-            readRetainedPlan: async () =>
-              await planStore.read(
-                artifactContext,
-                scope.input.plan.origin.appSpecDigest,
-                nativeTargetAuthOnlyPlanDigest(scope.input.plan),
-              ),
-            readApproval: async () => preparedRuntime.approval,
-          });
-          const reference = await custody.findReference();
-          if (reference === null) throw new HostedOperatorError("auth_schema_not_ready");
-          return { migrationUrl: (await custody.read(reference)).migrationUrl };
+          },
         };
+        const assertCurrentOwner = async (observed: OperatorArtifactContext) => {
+          if (!isDeepStrictEqual(observed, artifactContext))
+            throw new HostedOperatorError("authorization_required");
+          await scope.input.assertCurrent();
+          await owner.assertArtifactAuthorized(latest.context);
+          await owner.assertPlanningAuthorized(latest.context);
+        };
+        const planStore = createNativeTargetAuthOnlyPlanStore({ database, assertCurrentOwner });
+        const credentialContext = nativeTargetAuthOnlyCredentialContextForPlan({
+          plan: scope.input.plan,
+          configuration: latest.configuration,
+          environment,
+        });
+        const custody = createNativeTargetAuthOnlyCredentialCustody({
+          database,
+          keyring: tokenKeyring,
+          context: credentialContext,
+          plan: scope.input.plan,
+          configuration: latest.configuration,
+          environment,
+          artifactContext,
+          assertCurrentOwner,
+          readRetainedPlan: async () =>
+            await planStore.read(
+              artifactContext,
+              scope.input.plan.origin.appSpecDigest,
+              nativeTargetAuthOnlyPlanDigest(scope.input.plan),
+            ),
+          readApproval: async () => preparedRuntime.approval,
+        });
+        const reference = await custody.findReference();
+        if (reference === null) throw new HostedOperatorError("auth_schema_not_ready");
+        return { migrationUrl: (await custody.read(reference)).migrationUrl };
+      };
       const organizationIdFor = () =>
         `auth-${createHash("sha256")
           .update(
@@ -5009,7 +5033,11 @@ export const createHostedOperatorControlPlane = async (input: {
             sha256: worker.sha256,
           },
           effects: [
-            { id: "auth-membership", kind: "auth-membership", resourceId: scope.binding.authResourceId },
+            {
+              id: "auth-membership",
+              kind: "auth-membership",
+              resourceId: scope.binding.authResourceId,
+            },
           ],
         });
       };

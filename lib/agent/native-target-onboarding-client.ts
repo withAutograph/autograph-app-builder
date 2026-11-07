@@ -29,8 +29,14 @@ import {
 } from "../provisioning/native-target-onboarding-transport";
 import type { NativeTargetRequest } from "../provisioning/native-target-onboarding-transport";
 import { nativeTargetOnboardingPlanDigest } from "../provisioning/native-target-onboarding-contract";
-import { nativeTargetAuthOnlyDeliveryPreparationInputSchema, nativeTargetAuthOnlyDeliveryApprovalTool } from "../eve/private-native-target-auth-only-delivery-approval";
-import { nativeTargetAuthOnlyResourcePreparationInputSchema, nativeTargetAuthOnlyResourceApprovalTool } from "../eve/private-native-target-auth-only-resource-approval";
+import {
+  nativeTargetAuthOnlyDeliveryPreparationInputSchema,
+  nativeTargetAuthOnlyDeliveryApprovalTool,
+} from "../eve/private-native-target-auth-only-delivery-approval";
+import {
+  nativeTargetAuthOnlyResourcePreparationInputSchema,
+  nativeTargetAuthOnlyResourceApprovalTool,
+} from "../eve/private-native-target-auth-only-resource-approval";
 import type {
   NativeTargetInvocation,
   NativeTargetOnboardingRuntime,
@@ -266,7 +272,11 @@ export const createNativeTargetOnboardingClient = (options: {
     async hasAuthOnlyResourceApproval(input, ctx) {
       const proposal = nativeTargetAuthOnlyResourcePreparationInputSchema.parse(input);
       const output = await send(
-        { ...common(ctx), action: "native-target-auth-only-resource-approval-read", input: proposal },
+        {
+          ...common(ctx),
+          action: "native-target-auth-only-resource-approval-read",
+          input: proposal,
+        },
         nativeTargetTransportResponseSchemas["native-target-auth-only-resource-approval-read"],
         ctx.abortSignal,
       );
@@ -280,9 +290,12 @@ export const createNativeTargetOnboardingClient = (options: {
         ctx.abortSignal,
       );
       if (
-        output.appId !== proposal.appId || output.deliveryOperationRef !== proposal.deliveryOperationRef ||
-        output.deliveryPlanDigest !== proposal.deliveryPlanDigest || output.effect !== proposal.effect
-      ) throw denied();
+        output.appId !== proposal.appId ||
+        output.deliveryOperationRef !== proposal.deliveryOperationRef ||
+        output.deliveryPlanDigest !== proposal.deliveryPlanDigest ||
+        output.effect !== proposal.effect
+      )
+        throw denied();
       return output;
     },
     async prepareAuthOnlyEntry(input, ctx) {
@@ -293,9 +306,11 @@ export const createNativeTargetOnboardingClient = (options: {
         ctx.abortSignal,
       );
       if (
-        output.effect !== proposal.effect || output.childOperationRef !== proposal.childOperationRef ||
+        output.effect !== proposal.effect ||
+        output.childOperationRef !== proposal.childOperationRef ||
         output.childPlanDigest !== proposal.childPlanDigest
-      ) throw denied();
+      )
+        throw denied();
       return output;
     },
     async hasAuthOnlyEntryApproval(input, ctx) {
@@ -309,11 +324,17 @@ export const createNativeTargetOnboardingClient = (options: {
     },
     async authorizeAuthOnlyEntryApprovalResponse(ctx) {
       assertInvocation(ctx.session);
-      if (ctx.request.toolInput === undefined || ctx.request.toolName !== nativeTargetAuthOnlyEntryApprovalTool) throw denied();
+      if (
+        ctx.request.toolInput === undefined ||
+        ctx.request.toolName !== nativeTargetAuthOnlyEntryApprovalTool
+      )
+        throw denied();
       nativeTargetAuthOnlyEntryApprovalInputSchema.parse(ctx.request.toolInput);
       if (
-        ctx.responder.principalId !== owner.authority.ownerUserId || ctx.responder.principalType !== "user"
-      ) throw denied();
+        ctx.responder.principalId !== owner.authority.ownerUserId ||
+        ctx.responder.principalType !== "user"
+      )
+        throw denied();
       // The deployment route binds these digest-only references to the retained
       // owner/session plan and actual settled approval before any child effect.
     },
@@ -325,9 +346,11 @@ export const createNativeTargetOnboardingClient = (options: {
         ctx.abortSignal,
       );
       if (
-        output.appId !== proposal.appId || output.operationRef !== proposal.operationRef ||
+        output.appId !== proposal.appId ||
+        output.operationRef !== proposal.operationRef ||
         output.deliveryPlanDigest !== proposal.deliveryPlanDigest
-      ) throw denied();
+      )
+        throw denied();
       return output;
     },
     async prepareAuthOnlyFinalRouting(input, ctx) {
@@ -343,13 +366,18 @@ export const createNativeTargetOnboardingClient = (options: {
         output.app.operationRef !== proposal.operationRef ||
         output.gateway.projectId === output.app.projectId ||
         output.gateway.deploymentId === output.app.deploymentId
-      ) throw denied();
+      )
+        throw denied();
       return output;
     },
     async hasAuthOnlyFinalRoutingApproval(input, ctx) {
       const proposal = nativeTargetAuthOnlyFinalRoutingApprovalInputSchema.parse(input);
       const output = await send(
-        { ...common(ctx), action: "native-target-auth-only-final-routing-approval-read", input: proposal },
+        {
+          ...common(ctx),
+          action: "native-target-auth-only-final-routing-approval-read",
+          input: proposal,
+        },
         nativeTargetTransportResponseSchemas["native-target-auth-only-final-routing-approval-read"],
         ctx.abortSignal,
       );
@@ -357,9 +385,17 @@ export const createNativeTargetOnboardingClient = (options: {
     },
     async authorizeAuthOnlyFinalRoutingApprovalResponse(ctx) {
       assertInvocation(ctx.session);
-      if (ctx.request.toolInput === undefined || ctx.request.toolName !== nativeTargetAuthOnlyFinalRoutingApprovalTool) throw denied();
+      if (
+        ctx.request.toolInput === undefined ||
+        ctx.request.toolName !== nativeTargetAuthOnlyFinalRoutingApprovalTool
+      )
+        throw denied();
       nativeTargetAuthOnlyFinalRoutingApprovalInputSchema.parse(ctx.request.toolInput);
-      if (ctx.responder.principalId !== owner.authority.ownerUserId || ctx.responder.principalType !== "user") throw denied();
+      if (
+        ctx.responder.principalId !== owner.authority.ownerUserId ||
+        ctx.responder.principalType !== "user"
+      )
+        throw denied();
       // The private route resolves these references to the exact same-session retained
       // routing bytes and observes the original settled approval before any effect.
     },
@@ -371,11 +407,16 @@ export const createNativeTargetOnboardingClient = (options: {
         ctx.abortSignal,
       );
       if (
-        output.appId !== proposal.appId || output.operationRef !== proposal.operationRef ||
-        output.planDigest !== proposal.planDigest || output.resourcePlanDigest !== proposal.resourcePlanDigest ||
-        output.deliveryPlan.target.appId !== proposal.appId || output.deliveryPlan.target.sessionId !== owner.sessionId ||
-        output.deliveryPlan.authOnlyPlanDigest !== proposal.planDigest || output.deliveryPlan.resourcePlanDigest !== proposal.resourcePlanDigest
-      ) throw denied();
+        output.appId !== proposal.appId ||
+        output.operationRef !== proposal.operationRef ||
+        output.planDigest !== proposal.planDigest ||
+        output.resourcePlanDigest !== proposal.resourcePlanDigest ||
+        output.deliveryPlan.target.appId !== proposal.appId ||
+        output.deliveryPlan.target.sessionId !== owner.sessionId ||
+        output.deliveryPlan.authOnlyPlanDigest !== proposal.planDigest ||
+        output.deliveryPlan.resourcePlanDigest !== proposal.resourcePlanDigest
+      )
+        throw denied();
       return output;
     },
     async prepareAuthOnlyDelivery(input, ctx) {
@@ -392,7 +433,8 @@ export const createNativeTargetOnboardingClient = (options: {
         (output.finalRoutingPlan.appId !== proposal.appId ||
           output.finalRoutingPlan.operationRef !== proposal.operationRef ||
           output.finalRoutingPlan.deliveryPlanDigest !== proposal.deliveryPlanDigest)
-      ) throw denied();
+      )
+        throw denied();
       const finalRoutingPlan = output.status === "prepared" ? output.finalRoutingPlan : undefined;
       if (
         finalRoutingPlan !== undefined &&
@@ -400,20 +442,34 @@ export const createNativeTargetOnboardingClient = (options: {
           finalRoutingPlan.operationRef !== proposal.operationRef ||
           finalRoutingPlan.deliveryPlanDigest !== proposal.deliveryPlanDigest ||
           finalRoutingPlan.routingOperationRef === proposal.operationRef)
-      ) throw denied();
+      )
+        throw denied();
       const app = proposal.deliveryPlan.delivery.delivery;
       const gateway = proposal.deliveryPlan.delivery.gatewayDelivery;
       if (
-        app === undefined || gateway === undefined ||
-        output.app.projectId !== app.projectId || output.app.branch !== app.branch || output.app.repoId !== app.repoId || output.app.operationRef !== proposal.operationRef ||
-        output.gateway.projectId !== gateway.projectId || output.gateway.branch !== gateway.branch || output.gateway.repoId !== gateway.repoId || output.gateway.operationRef !== (finalRoutingPlan?.routingOperationRef ?? proposal.operationRef)
-      ) throw denied();
+        app === undefined ||
+        gateway === undefined ||
+        output.app.projectId !== app.projectId ||
+        output.app.branch !== app.branch ||
+        output.app.repoId !== app.repoId ||
+        output.app.operationRef !== proposal.operationRef ||
+        output.gateway.projectId !== gateway.projectId ||
+        output.gateway.branch !== gateway.branch ||
+        output.gateway.repoId !== gateway.repoId ||
+        output.gateway.operationRef !==
+          (finalRoutingPlan?.routingOperationRef ?? proposal.operationRef)
+      )
+        throw denied();
       return output;
     },
     async hasAuthOnlyDeliveryApproval(input, ctx) {
       const proposal = nativeTargetAuthOnlyDeliveryPreparationInputSchema.parse(input);
       const output = await send(
-        { ...common(ctx), action: "native-target-auth-only-delivery-approval-read", input: proposal },
+        {
+          ...common(ctx),
+          action: "native-target-auth-only-delivery-approval-read",
+          input: proposal,
+        },
         nativeTargetTransportResponseSchemas["native-target-auth-only-delivery-approval-read"],
         ctx.abortSignal,
       );
@@ -421,36 +477,58 @@ export const createNativeTargetOnboardingClient = (options: {
     },
     async authorizeAuthOnlyDeliveryApprovalResponse(ctx) {
       assertInvocation(ctx.session);
-      if (ctx.request.toolInput === undefined || ctx.request.toolName !== nativeTargetAuthOnlyDeliveryApprovalTool) throw denied();
-      const proposal = nativeTargetAuthOnlyDeliveryPreparationInputSchema.parse(ctx.request.toolInput);
       if (
-        proposal.appId !== proposal.deliveryPlan.target.appId || proposal.deliveryPlan.target.sessionId !== owner.sessionId ||
-        proposal.deliveryPlan.authOnlyPlanDigest !== proposal.planDigest || proposal.deliveryPlan.resourcePlanDigest !== proposal.resourcePlanDigest ||
-        ctx.responder.principalId !== owner.authority.ownerUserId || ctx.responder.principalType !== "user"
-      ) throw denied();
+        ctx.request.toolInput === undefined ||
+        ctx.request.toolName !== nativeTargetAuthOnlyDeliveryApprovalTool
+      )
+        throw denied();
+      const proposal = nativeTargetAuthOnlyDeliveryPreparationInputSchema.parse(
+        ctx.request.toolInput,
+      );
+      if (
+        proposal.appId !== proposal.deliveryPlan.target.appId ||
+        proposal.deliveryPlan.target.sessionId !== owner.sessionId ||
+        proposal.deliveryPlan.authOnlyPlanDigest !== proposal.planDigest ||
+        proposal.deliveryPlan.resourcePlanDigest !== proposal.resourcePlanDigest ||
+        ctx.responder.principalId !== owner.authority.ownerUserId ||
+        ctx.responder.principalType !== "user"
+      )
+        throw denied();
     },
     async authorizeAuthOnlyResourceApprovalResponse(ctx) {
       assertInvocation(ctx.session);
-      if (ctx.request.toolInput === undefined || ctx.request.toolName !== nativeTargetAuthOnlyResourceApprovalTool) throw denied();
-      const proposal = nativeTargetAuthOnlyResourcePreparationInputSchema.parse(ctx.request.toolInput);
+      if (
+        ctx.request.toolInput === undefined ||
+        ctx.request.toolName !== nativeTargetAuthOnlyResourceApprovalTool
+      )
+        throw denied();
+      const proposal = nativeTargetAuthOnlyResourcePreparationInputSchema.parse(
+        ctx.request.toolInput,
+      );
       if (
         proposal.resourcePlan.authOnlyPlanDigest !== proposal.planDigest ||
         proposal.appId !== proposal.resourcePlan.target.appId ||
         proposal.resourcePlan.target.sessionId !== owner.sessionId ||
         ctx.responder.principalId !== owner.authority.ownerUserId ||
         ctx.responder.principalType !== "user"
-      ) throw denied();
+      )
+        throw denied();
     },
     async authorizeAuthOnlyApprovalResponse(ctx) {
       assertInvocation(ctx.session);
-      if (ctx.request.toolName !== "prepare-app-native-target-auth-only" || ctx.request.toolInput === undefined) throw denied();
+      if (
+        ctx.request.toolName !== "prepare-app-native-target-auth-only" ||
+        ctx.request.toolInput === undefined
+      )
+        throw denied();
       const proposal = nativeTargetAuthOnlyPreparationRequestSchema.parse(ctx.request.toolInput);
       if (
         proposal.appId !== ctx.request.toolInput.appId ||
         proposal.plan.origin.authority.ownerUserId !== owner.authority.ownerUserId ||
         ctx.responder.principalId !== owner.authority.ownerUserId ||
         ctx.responder.principalType !== "user"
-      ) throw denied();
+      )
+        throw denied();
     },
     async plan(input, ctx, state) {
       if (state.appSpec !== undefined && state.appSpec.appId !== input.appId) {

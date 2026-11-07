@@ -13,18 +13,20 @@ export default defineTool({
       { publishCompiledOperatorArtifactsForSession },
       { hostedOperatorCallbackExecution },
     ] = await Promise.all([
-        import("../../lib/agent/native-target-onboarding-runtime"),
-        import("../../lib/agent/workflow-state"),
-        import("../../lib/agent/compiled-operator-artifacts"),
-        import("../../lib/provisioning/hosted-operator-callback-owner"),
-      ]);
+      import("../../lib/agent/native-target-onboarding-runtime"),
+      import("../../lib/agent/workflow-state"),
+      import("../../lib/agent/compiled-operator-artifacts"),
+      import("../../lib/provisioning/hosted-operator-callback-owner"),
+    ]);
     const state = appBuilderWorkflowState.get();
     if (
       !("applyReceipt" in state) ||
       state.phase !== "validated" ||
       state.appSpec.appId !== input.appId
     ) {
-      throw new Error("Auth-only target planning requires the same validated selected app session.");
+      throw new Error(
+        "Auth-only target planning requires the same validated selected app session.",
+      );
     }
     const sandbox = await ctx.getSandbox();
     await publishCompiledOperatorArtifactsForSession({

@@ -1,13 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
 
 const resolveProfileMock = vi.hoisted(() => vi.fn());
-vi.mock("./native-target-resource-profile", () => ({ resolveNativeTargetResourceProfile: resolveProfileMock }));
+vi.mock("./native-target-resource-profile", () => ({
+  resolveNativeTargetResourceProfile: resolveProfileMock,
+}));
 
 import type { OperatorArtifactContext } from "./hosted-operator-artifact-store";
 import { createNativeTargetAuthOnlyRuntime } from "./hosted-operator-auth-only-runtime";
 import type { NativeTargetAuthOnlyRuntimeStore } from "./hosted-operator-auth-only-runtime";
-import { nativeTargetAuthOnlyPlanDigest, nativeTargetAuthOnlySchemaEffectDigest } from "./native-target-auth-only-plan-schema";
-import { nativeTargetAuthOnlyAuthorityDigest, planNativeTargetAuthOnly } from "./native-target-auth-only-planner";
+import {
+  nativeTargetAuthOnlyPlanDigest,
+  nativeTargetAuthOnlySchemaEffectDigest,
+} from "./native-target-auth-only-plan-schema";
+import {
+  nativeTargetAuthOnlyAuthorityDigest,
+  planNativeTargetAuthOnly,
+} from "./native-target-auth-only-planner";
 import { nativeTargetRequiredProjectProtection } from "./native-target-onboarding-plan-schema";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration-schema";
 
@@ -21,7 +29,11 @@ const description = {
   app: { id: "signup-reset-pilot", routes: ["/"], workspacePath: "apps/signup-reset-pilot" },
   backend: { kind: "static" },
   deployment: { framework: "nextjs", sourceFilesOutsideRootDirectory: true },
-  validation: { browser: null, check: { task: "mise run app:check signup-reset-pilot" }, test: null },
+  validation: {
+    browser: null,
+    check: { task: "mise run app:check signup-reset-pilot" },
+    test: null,
+  },
   version: 1,
 };
 const source = {
@@ -43,11 +55,19 @@ const selectedProfile = {
   authOnlyApplications: { "signup-reset-pilot": { accessRoles: ["pilot_user"] } },
   nativeNeon: { scope: { endpointId: "isolated-endpoint", hostname: "auth-preview.neon.tech" } },
   gateway: {
-    projectId: "gateway-fixture", environment: "preview", branch: "preview-fixture",
-    authBrowserOrigin: "https://auth.example", gatewayOrigin: "https://gateway.example",
-    publicOrigin: "https://apps.example", workload: { projectId: "gateway-fixture" },
+    projectId: "gateway-fixture",
+    environment: "preview",
+    branch: "preview-fixture",
+    authBrowserOrigin: "https://auth.example",
+    gatewayOrigin: "https://gateway.example",
+    publicOrigin: "https://apps.example",
+    workload: { projectId: "gateway-fixture" },
   },
-  operator: { projectId: "operator-fixture", environment: "preview", origin: "https://operator.example" },
+  operator: {
+    projectId: "operator-fixture",
+    environment: "preview",
+    origin: "https://operator.example",
+  },
 };
 const authorityBinding = {
   authDatabase,
@@ -56,15 +76,29 @@ const authorityBinding = {
   operator: selectedProfile.operator,
 };
 const plan = planNativeTargetAuthOnly({
-  owner: { authority, publicSessionId: "public_original", adapterSessionId: "adapter_original", adapterGeneration: 1 },
+  owner: {
+    authority,
+    publicSessionId: "public_original",
+    adapterSessionId: "adapter_original",
+    adapterGeneration: 1,
+  },
   proposal: {
-    appId: "signup-reset-pilot", authProfileId: "signup-reset-pilot-auth-preview",
-    project: { name: "signup-reset-pilot", teamId: "team_fixture", installationId: "installation_fixture" },
-    branch: "main", appSpecDigest: "a".repeat(64), appRole: "pilot_user",
+    appId: "signup-reset-pilot",
+    authProfileId: "signup-reset-pilot-auth-preview",
+    project: {
+      name: "signup-reset-pilot",
+      teamId: "team_fixture",
+      installationId: "installation_fixture",
+    },
+    branch: "main",
+    appSpecDigest: "a".repeat(64),
+    appRole: "pilot_user",
   },
   capturedDescription: description,
   selectedProfile: {
-    id: "signup-reset-pilot-auth-preview", appId: "signup-reset-pilot", authority,
+    id: "signup-reset-pilot-auth-preview",
+    appId: "signup-reset-pilot",
+    authority,
     configuration: { authDatabase },
   },
   sharedAuthResourceId: "shared-auth-resource",
@@ -73,20 +107,34 @@ const plan = planNativeTargetAuthOnly({
   authAuthorityBinding: authorityBinding,
   configuredAppRoles: ["pilot_user"],
   publishedSource: source,
-  authSchema: { artifactRef: "artifact_fixture", planDigest: "1".repeat(64), targetDigest: "2".repeat(64), installer: { reference: "auth-worker", sha256: "3".repeat(64) } },
+  authSchema: {
+    artifactRef: "artifact_fixture",
+    planDigest: "1".repeat(64),
+    targetDigest: "2".repeat(64),
+    installer: { reference: "auth-worker", sha256: "3".repeat(64) },
+  },
 });
 const planDigest = nativeTargetAuthOnlyPlanDigest(plan);
 const sourceDigest = nativeTargetAuthOnlySchemaEffectDigest(plan, source);
 const approval = {
-  requestId: "approval_fixture", callId: "call_fixture", planDigest, sourceDigest,
-  responderPrincipalId: authority.ownerUserId, publicSessionId: plan.origin.publicSessionId,
-  outcome: "approved" as const, observedAt: "2026-11-06T12:00:00.000Z",
+  requestId: "approval_fixture",
+  callId: "call_fixture",
+  planDigest,
+  sourceDigest,
+  responderPrincipalId: authority.ownerUserId,
+  publicSessionId: plan.origin.publicSessionId,
+  outcome: "approved" as const,
+  observedAt: "2026-11-06T12:00:00.000Z",
 };
 const context: OperatorArtifactContext = {
   authority,
   target: { appId: plan.appId, sessionId: plan.origin.publicSessionId },
 };
-const authSchema = { artifactRef: "artifact_fixture", planDigest: "1".repeat(64), targetDigest: "2".repeat(64) };
+const authSchema = {
+  artifactRef: "artifact_fixture",
+  planDigest: "1".repeat(64),
+  targetDigest: "2".repeat(64),
+};
 const initialState = {
   kind: "native-target-auth-only-runtime" as const,
   version: 1 as const,
@@ -115,15 +163,29 @@ const makeStore = (): NativeTargetAuthOnlyRuntimeStore => {
   };
 };
 
-const makeRuntime = (overrides: {
-  prepareAuthSchema?: (input: { assertCurrent: () => Promise<void> }) => Promise<{ authSchema: typeof authSchema; readiness: string }>;
-  reconcileAuthSchema?: (input: { attemptId: string }) => Promise<{ status: "prepared"; authSchema: typeof authSchema; readiness: string } | { status: "not-applied" } | { status: "uncertain" }>;
-  now?: () => Date;
-} = {}) => {
+const makeRuntime = (
+  overrides: {
+    prepareAuthSchema?: (input: {
+      assertCurrent: () => Promise<void>;
+    }) => Promise<{ authSchema: typeof authSchema; readiness: string }>;
+    reconcileAuthSchema?: (input: {
+      attemptId: string;
+    }) => Promise<
+      | { status: "prepared"; authSchema: typeof authSchema; readiness: string }
+      | { status: "not-applied" }
+      | { status: "uncertain" }
+    >;
+    now?: () => Date;
+  } = {},
+) => {
   const store = makeStore();
   const now = overrides.now ?? (() => new Date("2026-11-06T12:00:00.000Z"));
-  const prepareAuthSchema = vi.fn(overrides.prepareAuthSchema ?? (async () => ({ authSchema, readiness: "auth_schema_ready" })));
-  const reconcileAuthSchema = vi.fn(overrides.reconcileAuthSchema ?? (async () => ({ status: "uncertain" as const })));
+  const prepareAuthSchema = vi.fn(
+    overrides.prepareAuthSchema ?? (async () => ({ authSchema, readiness: "auth_schema_ready" })),
+  );
+  const reconcileAuthSchema = vi.fn(
+    overrides.reconcileAuthSchema ?? (async () => ({ status: "uncertain" as const })),
+  );
   resolveProfileMock.mockReturnValue(selectedProfile);
   const runtime = createNativeTargetAuthOnlyRuntime({
     database: {} as never,
@@ -135,7 +197,8 @@ const makeRuntime = (overrides: {
     readCapturedDescription: async () => description,
     readAuthSchemaSelection: async () => plan.authSchema,
     readApproval: async ({ effectDigest }) => ({ ...approval, sourceDigest: effectDigest }),
-    prepareAuthSchema: async (input) => await prepareAuthSchema({ assertCurrent: input.assertCurrent }),
+    prepareAuthSchema: async (input) =>
+      await prepareAuthSchema({ assertCurrent: input.assertCurrent }),
     reconcileAuthSchema: async (input) => await reconcileAuthSchema({ attemptId: input.attemptId }),
     now,
     leaseMs: 1_000,
@@ -146,12 +209,18 @@ const makeRuntime = (overrides: {
 describe("Auth-only schema runtime", () => {
   it("requires a private exact-source approval before claiming a worker lease", async () => {
     const { runtime, store, prepareAuthSchema } = makeRuntime();
-    await store.write({ authority, appId: plan.appId, sessionId: plan.origin.publicSessionId }, undefined, initialState);
+    await store.write(
+      { authority, appId: plan.appId, sessionId: plan.origin.publicSessionId },
+      undefined,
+      initialState,
+    );
     resolveProfileMock.mockReturnValue({
       ...selectedProfile,
       authOnlyApplications: { "signup-reset-pilot": { accessRoles: ["different_role"] } },
     });
-    await expect(runtime.prepare(context, plan, planDigest)).rejects.toThrow("native_target_auth_only_resource_mismatch");
+    await expect(runtime.prepare(context, plan, planDigest)).rejects.toThrow(
+      "native_target_auth_only_resource_mismatch",
+    );
     expect(prepareAuthSchema).not.toHaveBeenCalled();
   });
 
@@ -159,14 +228,23 @@ describe("Auth-only schema runtime", () => {
     let failOnce = true;
     const { runtime, store, prepareAuthSchema, reconcileAuthSchema } = makeRuntime({
       prepareAuthSchema: async () => {
-        if (failOnce) { failOnce = false; throw new Error("transport_lost_after_dispatch"); }
+        if (failOnce) {
+          failOnce = false;
+          throw new Error("transport_lost_after_dispatch");
+        }
         return { authSchema, readiness: "auth_schema_ready" };
       },
-      reconcileAuthSchema: async () => ({ status: "prepared", authSchema, readiness: "auth_schema_ready" }),
+      reconcileAuthSchema: async () => ({
+        status: "prepared",
+        authSchema,
+        readiness: "auth_schema_ready",
+      }),
     });
     const key = { authority, appId: plan.appId, sessionId: plan.origin.publicSessionId };
     await store.write(key, undefined, initialState);
-    await expect(runtime.prepare(context, plan, planDigest)).rejects.toThrow("transport_lost_after_dispatch");
+    await expect(runtime.prepare(context, plan, planDigest)).rejects.toThrow(
+      "transport_lost_after_dispatch",
+    );
     expect((await store.read(key))?.state.stage).toBe("unknown");
     const recovered = await runtime.prepare(context, plan, planDigest);
     expect(recovered.stage).toBe("prepared");
@@ -178,14 +256,19 @@ describe("Auth-only schema runtime", () => {
     let failOnce = true;
     const { runtime, store, prepareAuthSchema, reconcileAuthSchema } = makeRuntime({
       prepareAuthSchema: async () => {
-        if (failOnce) { failOnce = false; throw new Error("transport_lost_before_result"); }
+        if (failOnce) {
+          failOnce = false;
+          throw new Error("transport_lost_before_result");
+        }
         return { authSchema, readiness: "auth_schema_ready" };
       },
       reconcileAuthSchema: async () => ({ status: "not-applied" }),
     });
     const key = { authority, appId: plan.appId, sessionId: plan.origin.publicSessionId };
     await store.write(key, undefined, initialState);
-    await expect(runtime.prepare(context, plan, planDigest)).rejects.toThrow("transport_lost_before_result");
+    await expect(runtime.prepare(context, plan, planDigest)).rejects.toThrow(
+      "transport_lost_before_result",
+    );
     const recovered = await runtime.prepare(context, plan, planDigest);
     expect(recovered.stage).toBe("prepared");
     expect(reconcileAuthSchema).toHaveBeenCalledTimes(1);
@@ -203,7 +286,9 @@ describe("Auth-only schema runtime", () => {
     const key = { authority, appId: plan.appId, sessionId: plan.origin.publicSessionId };
     nestedPrepare = async () => await runtime.prepare(context, plan, planDigest);
     await store.write(key, undefined, initialState);
-    await expect(runtime.prepare(context, plan, planDigest)).resolves.toMatchObject({ stage: "prepared" });
+    await expect(runtime.prepare(context, plan, planDigest)).resolves.toMatchObject({
+      stage: "prepared",
+    });
     expect(prepareAuthSchema).toHaveBeenCalledOnce();
     expect(reconcileAuthSchema).not.toHaveBeenCalled();
   });

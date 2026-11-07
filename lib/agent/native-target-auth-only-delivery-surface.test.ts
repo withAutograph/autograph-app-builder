@@ -105,7 +105,12 @@ const fixture = () => {
     deliveryPlanDigest: createHash("sha256").update(JSON.stringify(deliveryPlan)).digest("hex"),
     deliveryPlan,
   });
-  const planInput = nativeTargetAuthOnlyDeliveryPlanInputSchema.parse({ appId: prep.appId, operationRef: prep.operationRef, planDigest: prep.planDigest, resourcePlanDigest: prep.resourcePlanDigest });
+  const planInput = nativeTargetAuthOnlyDeliveryPlanInputSchema.parse({
+    appId: prep.appId,
+    operationRef: prep.operationRef,
+    planDigest: prep.planDigest,
+    resourcePlanDigest: prep.resourcePlanDigest,
+  });
   const prepared = nativeTargetAuthOnlyDeliveryResultSchema.parse({
     status: "prepared",
     deliveryPlanDigest: prep.deliveryPlanDigest,
@@ -401,7 +406,6 @@ it("uses the real private tools for settled retry, owner response and exactly tw
   ).toHaveLength(1);
 });
 
-
 it("returns the retained digest-only routing approval intent while delivery remains incomplete", async () => {
   const f = fixture();
   const routing = {
@@ -431,14 +435,18 @@ it.each(["appId", "operationRef", "deliveryPlanDigest", "routingPlanBase64"] as 
       routingOperationRef: "22222222-2222-4222-a222-222222222222",
       routingPlanDigest: "f".repeat(64),
     };
-    intent[field] = field === "appId" ? "another-app"
-      : field === "operationRef" ? "33333333-3333-4333-a333-333333333333"
-      : field === "deliveryPlanDigest" ? "e".repeat(64) : "private-fixture";
+    intent[field] =
+      field === "appId"
+        ? "another-app"
+        : field === "operationRef"
+          ? "33333333-3333-4333-a333-333333333333"
+          : field === "deliveryPlanDigest"
+            ? "e".repeat(64)
+            : "private-fixture";
     f.output({ ...f.prepared, status: "routing-required", finalRoutingPlan: intent });
     await expect(f.client.prepareAuthOnlyDelivery(f.prep, f.ctx)).rejects.toThrow();
   },
 );
-
 
 const finalPrepared = (f: ReturnType<typeof fixture>) => {
   if (f.prepared.status !== "prepared") throw new Error("Expected prepared fixture");
@@ -453,7 +461,11 @@ const finalPrepared = (f: ReturnType<typeof fixture>) => {
     ...f.prepared,
     finalRoutingPlan,
     projectionDigest: "e".repeat(64),
-    gateway: { ...f.prepared.gateway, deploymentId: "refreshed-gateway", operationRef: finalRoutingPlan.routingOperationRef },
+    gateway: {
+      ...f.prepared.gateway,
+      deploymentId: "refreshed-gateway",
+      operationRef: finalRoutingPlan.routingOperationRef,
+    },
   };
 };
 
@@ -463,31 +475,51 @@ it("accepts the verified refreshed Gateway on an approved normal delivery replay
   f.output(final);
   expect(await f.client.prepareAuthOnlyDelivery(f.prep, f.ctx)).toEqual(final);
   const runtime = createNativeTargetOnboardingRuntime(
-    z.custom<NativeTargetOnboardingRuntimePorts>().parse({ prepareAuthOnlyDelivery: async () => final }),
+    z
+      .custom<NativeTargetOnboardingRuntimePorts>()
+      .parse({ prepareAuthOnlyDelivery: async () => final }),
   );
   expect(await runtime.prepareAuthOnlyDelivery(f.prep, f.ctx)).toEqual(final);
   expect(f.sent).toHaveLength(1);
   expect(f.sent[0]?.action).toBe("native-target-auth-only-delivery");
 });
 
-it.each(["missing-intent", "missing-projection", "app", "parent-operation", "parent-digest", "same-operation", "gateway-operation", "app-operation"] as const)(
+it.each([
+  "missing-intent",
+  "missing-projection",
+  "app",
+  "parent-operation",
+  "parent-digest",
+  "same-operation",
+  "gateway-operation",
+  "app-operation",
+] as const)(
   "rejects incomplete or mismatched final routing on normal delivery: %s",
   async (kind) => {
     const f = fixture();
     const final = finalPrepared(f);
     const changed = structuredClone(final);
     if (kind === "app") changed.finalRoutingPlan.appId = "another-app";
-    if (kind === "parent-operation") changed.finalRoutingPlan.operationRef = "33333333-3333-4333-a333-333333333333";
+    if (kind === "parent-operation")
+      changed.finalRoutingPlan.operationRef = "33333333-3333-4333-a333-333333333333";
     if (kind === "parent-digest") changed.finalRoutingPlan.deliveryPlanDigest = "d".repeat(64);
-    if (kind === "same-operation") changed.finalRoutingPlan.routingOperationRef = f.prep.operationRef;
+    if (kind === "same-operation")
+      changed.finalRoutingPlan.routingOperationRef = f.prep.operationRef;
     if (kind === "gateway-operation") changed.gateway.operationRef = f.prep.operationRef;
-    if (kind === "app-operation") changed.app.operationRef = final.finalRoutingPlan.routingOperationRef;
-    const output = kind === "missing-intent" ? { ...changed, finalRoutingPlan: undefined }
-      : kind === "missing-projection" ? { ...changed, projectionDigest: undefined } : changed;
+    if (kind === "app-operation")
+      changed.app.operationRef = final.finalRoutingPlan.routingOperationRef;
+    const output =
+      kind === "missing-intent"
+        ? { ...changed, finalRoutingPlan: undefined }
+        : kind === "missing-projection"
+          ? { ...changed, projectionDigest: undefined }
+          : changed;
     f.output(output);
     await expect(f.client.prepareAuthOnlyDelivery(f.prep, f.ctx)).rejects.toThrow();
     const runtime = createNativeTargetOnboardingRuntime(
-      z.custom<NativeTargetOnboardingRuntimePorts>().parse({ prepareAuthOnlyDelivery: async () => output }),
+      z
+        .custom<NativeTargetOnboardingRuntimePorts>()
+        .parse({ prepareAuthOnlyDelivery: async () => output }),
     );
     await expect(runtime.prepareAuthOnlyDelivery(f.prep, f.ctx)).rejects.toThrow();
   },

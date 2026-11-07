@@ -541,7 +541,10 @@ const selectedApplication = (
 /** Resolve configured metadata under the same live owner/provider authority used by planning. */
 export const createConfiguredPreviewTargetResolver =
   (
-    configuration: Pick<HostedOperatorSourceConfiguration, "applications" | "authOnlyApplications" | "teamId">,
+    configuration: Pick<
+      HostedOperatorSourceConfiguration,
+      "applications" | "authOnlyApplications" | "teamId"
+    >,
     consentOwner: Pick<ReturnType<typeof createHostedOperatorConsentOwner>, "authorize">,
     controlPlane: Pick<ControlPlane, "authorize" | "assertPlanningAuthorized">,
   ): NonNullable<ProtectedHostedOperatorDependencies["resolvePreviewTarget"]> =>
@@ -556,7 +559,8 @@ export const createConfiguredPreviewTargetResolver =
       application === undefined &&
       (authOnlyRegistration?.sessionId !== identity.sessionId ||
         authOnlyRegistration.ownerUserId !== currentOwner.authority.ownerUserId)
-    ) throw new HostedOperatorError(RESOURCE_MISMATCH);
+    )
+      throw new HostedOperatorError(RESOURCE_MISMATCH);
     const selection = operatorSelectionSchema.parse({
       appId: identity.appId,
       branch: application?.branch ?? authOnlyRegistration!.branch,
@@ -570,7 +574,8 @@ export const createConfiguredPreviewTargetResolver =
       context.target.projectId !== authOnlyRegistration?.projectId ||
       context.target.branch !== authOnlyRegistration.branch ||
       context.target.scopeId !== configuration.teamId
-    ) throw new HostedOperatorError(RESOURCE_MISMATCH);
+    )
+      throw new HostedOperatorError(RESOURCE_MISMATCH);
     await controlPlane.assertPlanningAuthorized(context);
     return context;
   };

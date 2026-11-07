@@ -70,15 +70,20 @@ export const nativeTargetAuthOnlyAuthorityDigest = (input: {
   roles: readonly string[];
   authorityBinding: unknown;
   physicalEndpointId: string;
-}) => createHash("sha256").update(JSON.stringify({
-  authority: hostedTenantAuthoritySchema.parse(input.authority),
-  appId: nativeTargetOnboardingPlanSchema.shape.appId.parse(input.appId),
-  profileId: z.string().min(1).parse(input.profileId),
-  authDatabase: resourceSchema.parse(input.authDatabase),
-  roles: z.array(roleSchema).parse(input.roles),
-  authorityBinding: nativeTargetAuthOnlyAuthorityBindingSchema.parse(input.authorityBinding),
-  physicalEndpointId: z.string().min(1).parse(input.physicalEndpointId),
-})).digest("hex");
+}) =>
+  createHash("sha256")
+    .update(
+      JSON.stringify({
+        authority: hostedTenantAuthoritySchema.parse(input.authority),
+        appId: nativeTargetOnboardingPlanSchema.shape.appId.parse(input.appId),
+        profileId: z.string().min(1).parse(input.profileId),
+        authDatabase: resourceSchema.parse(input.authDatabase),
+        roles: z.array(roleSchema).parse(input.roles),
+        authorityBinding: nativeTargetAuthOnlyAuthorityBindingSchema.parse(input.authorityBinding),
+        physicalEndpointId: z.string().min(1).parse(input.physicalEndpointId),
+      }),
+    )
+    .digest("hex");
 
 /** Resolve only from captured repository output and a deployment-owned isolated Auth profile. */
 export const planNativeTargetAuthOnly = (input: {
@@ -102,7 +107,9 @@ export const planNativeTargetAuthOnly = (input: {
   const description = appDescriptionSchema.parse(input.capturedDescription);
   const profile = authOnlyProfileSchema.parse(input.selectedProfile);
   const roles = z.array(roleSchema).parse(input.configuredAppRoles);
-  const authorityBinding = nativeTargetAuthOnlyAuthorityBindingSchema.parse(input.authAuthorityBinding);
+  const authorityBinding = nativeTargetAuthOnlyAuthorityBindingSchema.parse(
+    input.authAuthorityBinding,
+  );
   const publishedSource = publishedAppSourceSchema.parse(input.publishedSource);
   if (
     description.app.id !== proposal.appId ||
@@ -225,22 +232,23 @@ export const planNativeTargetAuthOnlyFromOwnedState = async (input: {
     appId: proposal.appId,
     profileId: proposal.authProfileId,
   };
-  const [capturedDescription, selectedProfile, configuredAppRoles, publishedSource] = await Promise.all([
-    input.readCapturedDescription({
-      authority: owner.authority,
-      appId: proposal.appId,
-      appSpecDigest: proposal.appSpecDigest,
-      publicSessionId: owner.publicSessionId,
-    }),
-    input.readAuthProfile(lookup),
-    input.readConfiguredAppRoles(lookup),
-    input.readPublishedSource({
-      authority: owner.authority,
-      appId: proposal.appId,
-      appSpecDigest: proposal.appSpecDigest,
-      publicSessionId: owner.publicSessionId,
-    }),
-  ]);
+  const [capturedDescription, selectedProfile, configuredAppRoles, publishedSource] =
+    await Promise.all([
+      input.readCapturedDescription({
+        authority: owner.authority,
+        appId: proposal.appId,
+        appSpecDigest: proposal.appSpecDigest,
+        publicSessionId: owner.publicSessionId,
+      }),
+      input.readAuthProfile(lookup),
+      input.readConfiguredAppRoles(lookup),
+      input.readPublishedSource({
+        authority: owner.authority,
+        appId: proposal.appId,
+        appSpecDigest: proposal.appSpecDigest,
+        publicSessionId: owner.publicSessionId,
+      }),
+    ]);
   const authSchema = await input.readAuthSchemaSelection({
     authority: owner.authority,
     appId: proposal.appId,

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { nativeTargetAuthOnlyPlanDigest, nativeTargetAuthOnlySchemaEffectDigest } from "./native-target-auth-only-plan-schema";
+import {
+  nativeTargetAuthOnlyPlanDigest,
+  nativeTargetAuthOnlySchemaEffectDigest,
+} from "./native-target-auth-only-plan-schema";
 import {
   planNativeTargetAuthOnly,
   planNativeTargetAuthOnlyFromOwnedState,
@@ -69,8 +72,20 @@ const makePlan = (overrides: Partial<Parameters<typeof planNativeTargetAuthOnly>
     selectedPhysicalEndpointId: "isolated-endpoint",
     authAuthorityBinding,
     configuredAppRoles: ["pilot_user"],
-    publishedSource: { branch: "main", changeSetDigest: "c".repeat(64), gitSha: "d".repeat(40), gitTree: "e".repeat(40), repositoryId: "repo_fixture", reviewDigest: "f".repeat(64) },
-    authSchema: { artifactRef: "auth-artifact", planDigest: "1".repeat(64), targetDigest: "2".repeat(64), installer: { reference: "auth-worker", sha256: "3".repeat(64) } },
+    publishedSource: {
+      branch: "main",
+      changeSetDigest: "c".repeat(64),
+      gitSha: "d".repeat(40),
+      gitTree: "e".repeat(40),
+      repositoryId: "repo_fixture",
+      reviewDigest: "f".repeat(64),
+    },
+    authSchema: {
+      artifactRef: "auth-artifact",
+      planDigest: "1".repeat(64),
+      targetDigest: "2".repeat(64),
+      installer: { reference: "auth-worker", sha256: "3".repeat(64) },
+    },
     ...overrides,
   });
 
@@ -79,10 +94,24 @@ describe("native Auth-only planning", () => {
     const plan = makePlan();
     const source = plan.publishedSource;
     const original = nativeTargetAuthOnlySchemaEffectDigest(plan, source);
-    expect(nativeTargetAuthOnlySchemaEffectDigest(plan, { ...source, gitSha: "1".repeat(40) })).not.toBe(original);
-    expect(nativeTargetAuthOnlySchemaEffectDigest({ ...plan, appRole: "pilot_reviewer" }, source)).not.toBe(original);
-    expect(nativeTargetAuthOnlySchemaEffectDigest({ ...plan, authResource: { ...plan.authResource, resourceId: "different-auth-resource" } }, source)).not.toBe(original);
-    expect(nativeTargetAuthOnlySchemaEffectDigest({ ...plan, authSchema: { ...plan.authSchema, artifactRef: "different-auth-artifact" } }, source)).not.toBe(original);
+    expect(
+      nativeTargetAuthOnlySchemaEffectDigest(plan, { ...source, gitSha: "1".repeat(40) }),
+    ).not.toBe(original);
+    expect(
+      nativeTargetAuthOnlySchemaEffectDigest({ ...plan, appRole: "pilot_reviewer" }, source),
+    ).not.toBe(original);
+    expect(
+      nativeTargetAuthOnlySchemaEffectDigest(
+        { ...plan, authResource: { ...plan.authResource, resourceId: "different-auth-resource" } },
+        source,
+      ),
+    ).not.toBe(original);
+    expect(
+      nativeTargetAuthOnlySchemaEffectDigest(
+        { ...plan, authSchema: { ...plan.authSchema, artifactRef: "different-auth-artifact" } },
+        source,
+      ),
+    ).not.toBe(original);
   });
 
   it("plans from captured static source and owner-bound isolated Auth profile", () => {
@@ -183,11 +212,23 @@ describe("native Auth-only planning", () => {
       },
       readPublishedSource: async (input) => {
         reads.push(`published:${input.appId}:${input.appSpecDigest}:${input.publicSessionId}`);
-        return { branch: "main", changeSetDigest: "c".repeat(64), gitSha: "d".repeat(40), gitTree: "e".repeat(40), repositoryId: "repo_fixture", reviewDigest: "f".repeat(64) };
+        return {
+          branch: "main",
+          changeSetDigest: "c".repeat(64),
+          gitSha: "d".repeat(40),
+          gitTree: "e".repeat(40),
+          repositoryId: "repo_fixture",
+          reviewDigest: "f".repeat(64),
+        };
       },
       readAuthSchemaSelection: async (input) => {
         reads.push(`auth-schema:${input.appId}:${input.appSpecDigest}:${input.publicSessionId}`);
-        return { artifactRef: "auth-artifact", planDigest: "1".repeat(64), targetDigest: "2".repeat(64), installer: { reference: "auth-worker", sha256: "3".repeat(64) } };
+        return {
+          artifactRef: "auth-artifact",
+          planDigest: "1".repeat(64),
+          targetDigest: "2".repeat(64),
+          installer: { reference: "auth-worker", sha256: "3".repeat(64) },
+        };
       },
     });
     expect(planned.authResource.resourceId).toBe("isolated-auth-resource");

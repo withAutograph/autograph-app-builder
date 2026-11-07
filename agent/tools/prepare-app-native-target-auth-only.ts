@@ -31,7 +31,10 @@ export default defineWorkflowTool({
         await runtime.authorizeAuthOnlyApprovalResponse(ctx);
         return { status: "allowed" };
       } catch {
-        return { status: "rejected", reason: "Only the current owner can approve this exact Auth-only target." };
+        return {
+          status: "rejected",
+          reason: "Only the current owner can approve this exact Auth-only target.",
+        };
       }
     },
   },

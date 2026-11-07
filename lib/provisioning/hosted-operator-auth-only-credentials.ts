@@ -93,7 +93,8 @@ type Access = {
 const mismatch = () => new HostedOperatorError("resource_mismatch");
 const canonical = (value: unknown) => centralHostCanonicalBytes(z.json().parse(value));
 const hash = (value: unknown) => createHash("sha256").update(canonical(value)).digest("hex");
-export const authOnlyCredentialContextDigest = (context: AuthOnlyCredentialContext) => hash(context);
+export const authOnlyCredentialContextDigest = (context: AuthOnlyCredentialContext) =>
+  hash(context);
 const associatedData = (context: AuthOnlyCredentialContext) =>
   canonical({ purpose, context }).toString("utf-8");
 const reference = (record: AuthOnlyCredentialRecord): AuthOnlyCredentialRef => ({
@@ -194,11 +195,16 @@ export const createHostedOperatorAuthOnlyCredentials = (deps: {
     ): Promise<{ migratorPassword: string; runtimePassword: string }> {
       const context = parseContext(input.context);
       const parsedRef = authOnlyCredentialRefSchema.safeParse(input.reference);
-      if (!parsedRef.success || parsedRef.data.contextDigest !== authOnlyCredentialContextDigest(context)) throw mismatch();
+      if (
+        !parsedRef.success ||
+        parsedRef.data.contextDigest !== authOnlyCredentialContextDigest(context)
+      )
+        throw mismatch();
       await assertCurrent(input, context);
       const record = await readRecord(context);
       await assertCurrent(input, context);
-      if (record === undefined || !isDeepStrictEqual(reference(record), parsedRef.data)) throw mismatch();
+      if (record === undefined || !isDeepStrictEqual(reference(record), parsedRef.data))
+        throw mismatch();
       const secret = decrypt(record, context);
       await assertCurrent(input, context);
       return structuredClone(secret);
@@ -258,7 +264,11 @@ export const createHostedOperatorAuthOnlyCredentials = (deps: {
     ): Promise<{ migrationUrl: string; runtimeUrl: string }> {
       const context = parseContext(input.context);
       const parsedRef = authOnlyCredentialRefSchema.safeParse(input.reference);
-      if (!parsedRef.success || parsedRef.data.contextDigest !== authOnlyCredentialContextDigest(context)) throw mismatch();
+      if (
+        !parsedRef.success ||
+        parsedRef.data.contextDigest !== authOnlyCredentialContextDigest(context)
+      )
+        throw mismatch();
       const expected = parsedRef.data;
       const runtimeConnection = input.runtimeConnection ?? "direct";
       if (runtimeConnection !== "direct" && runtimeConnection !== "pooled") throw mismatch();

@@ -110,11 +110,16 @@ export const nativeTargetAuthOnlyPlanDigest = (plan: NativeTargetAuthOnlyPlan) =
 export const nativeTargetAuthOnlySchemaEffectDigest = (
   plan: NativeTargetAuthOnlyPlan,
   source: PublishedAppSource,
-) => createHash("sha256").update(JSON.stringify({
-  kind: "native-target-auth-schema-effect-v1",
-  planDigest: nativeTargetAuthOnlyPlanDigest(plan),
-  source: publishedAppSourceSchema.parse(source),
-  resourceId: plan.authResource.resourceId,
-  appRole: plan.appRole,
-  signupPolicy: plan.signupPolicy,
-})).digest("hex");
+) =>
+  createHash("sha256")
+    .update(
+      JSON.stringify({
+        kind: "native-target-auth-schema-effect-v1",
+        planDigest: nativeTargetAuthOnlyPlanDigest(plan),
+        source: publishedAppSourceSchema.parse(source),
+        resourceId: plan.authResource.resourceId,
+        appRole: plan.appRole,
+        signupPolicy: plan.signupPolicy,
+      }),
+    )
+    .digest("hex");

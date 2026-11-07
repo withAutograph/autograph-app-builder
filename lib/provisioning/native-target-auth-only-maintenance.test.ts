@@ -167,7 +167,12 @@ const plan = planNativeTargetAuthOnly({
   },
   configuredAppRoles: ["pilot_user"],
   publishedSource: source,
-  authSchema: { artifactRef: "auth-artifact", planDigest: "1".repeat(64), targetDigest: "2".repeat(64), installer: { reference: "auth-worker", sha256: "4".repeat(64) } },
+  authSchema: {
+    artifactRef: "auth-artifact",
+    planDigest: "1".repeat(64),
+    targetDigest: "2".repeat(64),
+    installer: { reference: "auth-worker", sha256: "4".repeat(64) },
+  },
 });
 const planDigest = nativeTargetAuthOnlyPlanDigest(plan);
 const resourcePlan = {

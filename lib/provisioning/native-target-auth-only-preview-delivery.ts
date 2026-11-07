@@ -97,7 +97,9 @@ export const createNativeTargetAuthOnlyPreviewDelivery = (deps: {
   target?: "app" | "gateway";
   wait?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
   observeAlias?: (diagnostic: GatewayAliasDiagnostic) => void | Promise<void>;
-  beforeAliasWrite?: Parameters<typeof createHostedOperatorDeploymentDelivery>[0]["beforeAliasWrite"];
+  beforeAliasWrite?: Parameters<
+    typeof createHostedOperatorDeploymentDelivery
+  >[0]["beforeAliasWrite"];
 }) => {
   const delivery = createHostedOperatorDeploymentDelivery({
     assertAuthorized: async () => {},

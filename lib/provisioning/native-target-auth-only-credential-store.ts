@@ -48,7 +48,10 @@ const requestIdFor = (contextDigest: string) => {
 
 const validateKey = (key: AuthOnlyCredentialStorageKey) => {
   const context = authOnlyCredentialContextSchema.parse(key.context);
-  const contextDigest = z.string().regex(/^[a-f0-9]{64}$/u).parse(key.contextDigest);
+  const contextDigest = z
+    .string()
+    .regex(/^[a-f0-9]{64}$/u)
+    .parse(key.contextDigest);
   if (authOnlyCredentialContextDigest(context) !== contextDigest) {
     throw new Error("native_target_auth_only_credential_context_mismatch");
   }
@@ -189,7 +192,8 @@ export const nativeTargetAuthOnlyCredentialContextForPlan = (input: {
     !roles.includes(plan.appRole) ||
     profile.applications[plan.appId] !== undefined ||
     authorityDigest !== plan.authResource.authorityDigest
-  ) throw new Error("native_target_auth_only_credential_resource_mismatch");
+  )
+    throw new Error("native_target_auth_only_credential_resource_mismatch");
   return authOnlyCredentialContextSchema.parse({
     authority: plan.origin.authority,
     appId: plan.appId,
@@ -213,48 +217,55 @@ export const nativeTargetAuthOnlyCredentialContextForPlan = (input: {
 };
 
 /** Revalidates the retained plan, settled approval, owner and selected profile at every secret access. */
-export const createNativeTargetAuthOnlyCredentialAuthority = (input: {
-  context: AuthOnlyCredentialContext;
-  plan: NativeTargetAuthOnlyPlan;
-  configuration: HostedOperatorSourceConfiguration;
-  environment: Readonly<Record<string, string | undefined>>;
-  artifactContext: OperatorArtifactContext;
-  assertCurrentOwner: (context: OperatorArtifactContext) => Promise<void>;
-  readRetainedPlan: () => Promise<NativeTargetAuthOnlyPlan | undefined>;
-  readApproval: () => Promise<NativeTargetAuthOnlyApproval | null>;
-}) => async (rawContext: AuthOnlyCredentialContext) => {
-  const context = authOnlyCredentialContextSchema.parse(rawContext);
-  if (!isDeepStrictEqual(context, input.context)) throw new Error("native_target_auth_only_credential_context_mismatch");
-  const plan = nativeTargetAuthOnlyPlanSchema.parse(input.plan);
-  const planDigest = nativeTargetAuthOnlyPlanDigest(plan);
-  const expectedContext = nativeTargetAuthOnlyCredentialContextForPlan({
-    plan,
-    configuration: input.configuration,
-    environment: input.environment,
-  });
-  if (
-    !isDeepStrictEqual(context, expectedContext) ||
-    input.artifactContext.target.appId !== plan.appId ||
-    input.artifactContext.target.sessionId !== plan.origin.publicSessionId ||
-    !isDeepStrictEqual(input.artifactContext.authority, plan.origin.authority)
-  ) throw new Error("native_target_auth_only_credential_context_mismatch");
-  await input.assertCurrentOwner(input.artifactContext);
-  const retained = await input.readRetainedPlan();
-  if (retained === undefined || !isDeepStrictEqual(retained, plan)) throw new Error("native_target_auth_only_credential_plan_changed");
-  const approval = nativeTargetAuthOnlyApprovalSchema.parse(await input.readApproval());
-  if (
-    approval.outcome !== "approved" ||
-    approval.planDigest !== planDigest ||
-    approval.sourceDigest !== nativeTargetAuthOnlySchemaEffectDigest(plan, plan.publishedSource) ||
-    approval.publicSessionId !== plan.origin.publicSessionId ||
-    approval.responderPrincipalId !== plan.origin.authority.ownerUserId
-  ) throw new Error("native_target_auth_only_credential_approval_required");
-  await input.assertCurrentOwner(input.artifactContext);
-  return {
-    authorityDigest: expectedContext.profile.authorityDigest,
-    resource: expectedContext.resource,
+export const createNativeTargetAuthOnlyCredentialAuthority =
+  (input: {
+    context: AuthOnlyCredentialContext;
+    plan: NativeTargetAuthOnlyPlan;
+    configuration: HostedOperatorSourceConfiguration;
+    environment: Readonly<Record<string, string | undefined>>;
+    artifactContext: OperatorArtifactContext;
+    assertCurrentOwner: (context: OperatorArtifactContext) => Promise<void>;
+    readRetainedPlan: () => Promise<NativeTargetAuthOnlyPlan | undefined>;
+    readApproval: () => Promise<NativeTargetAuthOnlyApproval | null>;
+  }) =>
+  async (rawContext: AuthOnlyCredentialContext) => {
+    const context = authOnlyCredentialContextSchema.parse(rawContext);
+    if (!isDeepStrictEqual(context, input.context))
+      throw new Error("native_target_auth_only_credential_context_mismatch");
+    const plan = nativeTargetAuthOnlyPlanSchema.parse(input.plan);
+    const planDigest = nativeTargetAuthOnlyPlanDigest(plan);
+    const expectedContext = nativeTargetAuthOnlyCredentialContextForPlan({
+      plan,
+      configuration: input.configuration,
+      environment: input.environment,
+    });
+    if (
+      !isDeepStrictEqual(context, expectedContext) ||
+      input.artifactContext.target.appId !== plan.appId ||
+      input.artifactContext.target.sessionId !== plan.origin.publicSessionId ||
+      !isDeepStrictEqual(input.artifactContext.authority, plan.origin.authority)
+    )
+      throw new Error("native_target_auth_only_credential_context_mismatch");
+    await input.assertCurrentOwner(input.artifactContext);
+    const retained = await input.readRetainedPlan();
+    if (retained === undefined || !isDeepStrictEqual(retained, plan))
+      throw new Error("native_target_auth_only_credential_plan_changed");
+    const approval = nativeTargetAuthOnlyApprovalSchema.parse(await input.readApproval());
+    if (
+      approval.outcome !== "approved" ||
+      approval.planDigest !== planDigest ||
+      approval.sourceDigest !==
+        nativeTargetAuthOnlySchemaEffectDigest(plan, plan.publishedSource) ||
+      approval.publicSessionId !== plan.origin.publicSessionId ||
+      approval.responderPrincipalId !== plan.origin.authority.ownerUserId
+    )
+      throw new Error("native_target_auth_only_credential_approval_required");
+    await input.assertCurrentOwner(input.artifactContext);
+    return {
+      authorityDigest: expectedContext.profile.authorityDigest,
+      resource: expectedContext.resource,
+    };
   };
-};
 
 /** Complete private custody binding for one retained and approved Auth-only plan. */
 export const createNativeTargetAuthOnlyCredentialCustody = (input: {

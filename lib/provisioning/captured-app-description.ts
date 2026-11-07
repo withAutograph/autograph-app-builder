@@ -105,3 +105,5 @@ export const createCapturedAppDescriptionStore = (input: {
     },
   };
 };
+
+export type CapturedAppDescriptionStore = ReturnType<typeof createCapturedAppDescriptionStore>;

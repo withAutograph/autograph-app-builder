@@ -321,17 +321,21 @@ export const recordPublishedOperatorSourceForSession = async (
     const chunkDigest = createHash("sha256").update(content).digest("hex");
     const transferDigest = createHash("sha256").update(source.reviewDigest).digest("hex");
     await binding.assertCurrentOwner(binding.context);
-    await db.insert(prototypeArtifactChunks).values({
-      ...key,
-      transferDigest,
-      content,
-      chunkDigest,
-      createdAt: new Date(),
-    }).onConflictDoNothing();
-    const rows = await db.select().from(prototypeArtifactChunks).where(and(
-      scope,
-      eq(prototypeArtifactChunks.transferDigest, transferDigest),
-    )).limit(1);
+    await db
+      .insert(prototypeArtifactChunks)
+      .values({
+        ...key,
+        transferDigest,
+        content,
+        chunkDigest,
+        createdAt: new Date(),
+      })
+      .onConflictDoNothing();
+    const rows = await db
+      .select()
+      .from(prototypeArtifactChunks)
+      .where(and(scope, eq(prototypeArtifactChunks.transferDigest, transferDigest)))
+      .limit(1);
     await binding.assertCurrentOwner(binding.context);
     const row = rows.at(0);
     if (row === undefined || row.chunkDigest !== chunkDigest || row.content !== content) {
@@ -367,21 +371,61 @@ export const readPublishedStaticAppSourceForSession = async (
   const { createHash } = await import("node:crypto");
   const db = await openArtifactDatabase();
   const scope = and(
-    eq(prototypeArtifactChunks.issuer, hostedTenantAuthoritySchema.parse(binding.context.authority).issuer),
-    eq(prototypeArtifactChunks.audience, hostedTenantAuthoritySchema.parse(binding.context.authority).audience),
-    eq(prototypeArtifactChunks.workspaceId, hostedTenantAuthoritySchema.parse(binding.context.authority).workspaceId),
-    eq(prototypeArtifactChunks.ownerUserId, hostedTenantAuthoritySchema.parse(binding.context.authority).ownerUserId),
+    eq(
+      prototypeArtifactChunks.issuer,
+      hostedTenantAuthoritySchema.parse(binding.context.authority).issuer,
+    ),
+    eq(
+      prototypeArtifactChunks.audience,
+      hostedTenantAuthoritySchema.parse(binding.context.authority).audience,
+    ),
+    eq(
+      prototypeArtifactChunks.workspaceId,
+      hostedTenantAuthoritySchema.parse(binding.context.authority).workspaceId,
+    ),
+    eq(
+      prototypeArtifactChunks.ownerUserId,
+      hostedTenantAuthoritySchema.parse(binding.context.authority).ownerUserId,
+    ),
     eq(prototypeArtifactChunks.sessionId, binding.context.target.sessionId),
-    eq(prototypeArtifactChunks.path, `_protected-operator/static-published-source/${input.appId}/${input.appSpecDigest}`),
+    eq(
+      prototypeArtifactChunks.path,
+      `_protected-operator/static-published-source/${input.appId}/${input.appSpecDigest}`,
+    ),
     eq(prototypeArtifactChunks.chunkIndex, 0),
   );
   await binding.assertCurrentOwner(binding.context);
-  const rows = await db.select().from(prototypeArtifactChunks).where(scope).orderBy(desc(prototypeArtifactChunks.createdAt), desc(prototypeArtifactChunks.transferDigest)).limit(1);
+  const rows = await db
+    .select()
+    .from(prototypeArtifactChunks)
+    .where(scope)
+    .orderBy(desc(prototypeArtifactChunks.createdAt), desc(prototypeArtifactChunks.transferDigest))
+    .limit(1);
   await binding.assertCurrentOwner(binding.context);
   const row = rows.at(0);
-  if (row === undefined || createHash("sha256").update(row.content).digest("hex") !== row.chunkDigest) return undefined;
-  const value = z.object({ version: z.literal(1), appId: z.string(), appSpecDigest: z.string(), descriptionSha256: z.string().regex(/^[a-f0-9]{64}$/u), source: publishedAppSourceSchema }).strict().safeParse(JSON.parse(row.content));
-  if (!value.success || value.data.appId !== input.appId || value.data.appSpecDigest !== input.appSpecDigest || value.data.descriptionSha256 !== createHash("sha256").update(JSON.stringify(description)).digest("hex")) return undefined;
+  if (
+    row === undefined ||
+    createHash("sha256").update(row.content).digest("hex") !== row.chunkDigest
+  )
+    return undefined;
+  const value = z
+    .object({
+      version: z.literal(1),
+      appId: z.string(),
+      appSpecDigest: z.string(),
+      descriptionSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+      source: publishedAppSourceSchema,
+    })
+    .strict()
+    .safeParse(JSON.parse(row.content));
+  if (
+    !value.success ||
+    value.data.appId !== input.appId ||
+    value.data.appSpecDigest !== input.appSpecDigest ||
+    value.data.descriptionSha256 !==
+      createHash("sha256").update(JSON.stringify(description)).digest("hex")
+  )
+    return undefined;
   return value.data.source;
 };
 

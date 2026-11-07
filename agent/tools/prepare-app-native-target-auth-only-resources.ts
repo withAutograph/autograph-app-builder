@@ -1,7 +1,5 @@
 import { defineWorkflowTool } from "eve/tools";
-import {
-  nativeTargetAuthOnlyResourcePreparationInputSchema,
-} from "../../lib/eve/private-native-target-auth-only-resource-approval";
+import { nativeTargetAuthOnlyResourcePreparationInputSchema } from "../../lib/eve/private-native-target-auth-only-resource-approval";
 
 export default defineWorkflowTool({
   availableInSubagents: false,

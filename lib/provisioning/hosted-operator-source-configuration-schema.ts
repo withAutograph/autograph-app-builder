@@ -177,28 +177,32 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
       z.strictObject({
         accessRoles: z.array(generatedAppRoleSchema).min(1),
         /** Private owner/app-scoped initial signup gate; never copied to public tool input. */
-        entryPolicy: z.strictObject({
-          approvedEmail: z.email(),
-          appPath: z.string().regex(/^\/(?!\/)[^?#\\]*$/u),
-        }).optional(),
+        entryPolicy: z
+          .strictObject({
+            approvedEmail: z.email(),
+            appPath: z.string().regex(/^\/(?!\/)[^?#\\]*$/u),
+          })
+          .optional(),
         /** Runtime projection of an owner/session-bound Auth-only journal registration. */
-        registration: z.strictObject({
-          ownerUserId: id,
-          sessionId: id,
-          projectId: id,
-          branch: id,
-          projectSettings: hostedOperatorAppProjectSettingsSchema,
-          planDigest: digest,
-          authResource: z.strictObject({
-            profileId: id,
-            authorityDigest: digest,
-            resourceId: id,
-            database: id,
-            endpointId: id,
-            hostname: id,
-          }),
-          appRole: generatedAppRoleSchema,
-        }).optional(),
+        registration: z
+          .strictObject({
+            ownerUserId: id,
+            sessionId: id,
+            projectId: id,
+            branch: id,
+            projectSettings: hostedOperatorAppProjectSettingsSchema,
+            planDigest: digest,
+            authResource: z.strictObject({
+              profileId: id,
+              authorityDigest: digest,
+              resourceId: id,
+              database: id,
+              endpointId: id,
+              hostname: id,
+            }),
+            appRole: generatedAppRoleSchema,
+          })
+          .optional(),
       }),
     )
     .optional(),

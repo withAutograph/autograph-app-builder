@@ -16,9 +16,15 @@ import type { PrivateNativeTargetApprovalObservationPort } from "./private-nativ
 import type { PrivateHistoryObservation } from "./same-origin-http";
 import { operatorOwnerContextSchema } from "../provisioning/hosted-operator-contract";
 import type { OperatorOwnerContext } from "../provisioning/hosted-operator-contract";
-import { nativeTargetAuthOnlyPlanSchema, nativeTargetAuthOnlyPlanDigest } from "../provisioning/native-target-auth-only-plan-schema";
+import {
+  nativeTargetAuthOnlyPlanSchema,
+  nativeTargetAuthOnlyPlanDigest,
+} from "../provisioning/native-target-auth-only-plan-schema";
 import type { NativeTargetAuthOnlyPlan } from "../provisioning/native-target-auth-only-plan-schema";
-import { nativeTargetAuthOnlyDeliveryPlanSchema, nativeTargetAuthOnlyDeliveryPlanDigest } from "../provisioning/native-target-auth-only-delivery-plan";
+import {
+  nativeTargetAuthOnlyDeliveryPlanSchema,
+  nativeTargetAuthOnlyDeliveryPlanDigest,
+} from "../provisioning/native-target-auth-only-delivery-plan";
 import { nativeTargetAuthOnlyApprovalSchema } from "../provisioning/native-target-auth-only-dispatch";
 import type { NativeTargetAuthOnlyApproval } from "../provisioning/native-target-auth-only-dispatch";
 import type { NativeTargetCurrentOwner } from "../provisioning/native-target-onboarding-store";
@@ -32,8 +38,10 @@ const terminalSchema = nativeTargetAuthOnlyApprovalSchema.pick({
   observedAt: true,
 });
 const unavailable = () => new Error("Auth-only delivery approval is unavailable.");
-export const nativeTargetAuthOnlyDeliveryApprovalAction = "native-target-auth-only-delivery" as const;
-export const nativeTargetAuthOnlyDeliveryApprovalTool = "prepare-app-native-target-auth-only-delivery" as const;
+export const nativeTargetAuthOnlyDeliveryApprovalAction =
+  "native-target-auth-only-delivery" as const;
+export const nativeTargetAuthOnlyDeliveryApprovalTool =
+  "prepare-app-native-target-auth-only-delivery" as const;
 
 export const nativeTargetAuthOnlyDeliveryPreparationInputSchema = z.strictObject({
   appId: nativeTargetAuthOnlyPlanSchema.shape.appId,
@@ -55,7 +63,10 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
   deliveryPlanDigest: string;
   retainedApproval?: NativeTargetAuthOnlyApproval;
   observation?: PrivateNativeTargetApprovalObservationPort;
-  readHistory: (startIndex: number, onEvent: (event: MessageStreamEvent) => void) => Promise<PrivateHistoryObservation>;
+  readHistory: (
+    startIndex: number,
+    onEvent: (event: MessageStreamEvent) => void,
+  ) => Promise<PrivateHistoryObservation>;
   assertOwner: () => Promise<void>;
 }): Promise<NativeTargetAuthOnlyApproval | null> => {
   const owner = structuredClone(input.owner);
@@ -64,7 +75,9 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
   const planDigest = nativeTargetAuthOnlyPlanDigest(plan);
   const bytes = Buffer.from(input.deliveryPlanBytes);
   const deliveryPlanDigest = digest.parse(input.deliveryPlanDigest);
-  const deliveryPlan = nativeTargetAuthOnlyDeliveryPlanSchema.parse(JSON.parse(bytes.toString("utf8")));
+  const deliveryPlan = nativeTargetAuthOnlyDeliveryPlanSchema.parse(
+    JSON.parse(bytes.toString("utf8")),
+  );
   const operationRef = z.uuid().parse(input.operationRef);
   const resourcePlanDigest = digest.parse(input.resourcePlanDigest);
   if (
@@ -84,7 +97,8 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
     deliveryPlan.source.branch !== plan.branch ||
     deliveryPlan.source.gitSha !== plan.publishedSource.gitSha ||
     deliveryPlan.source.repositoryId !== plan.publishedSource.repositoryId
-  ) throw unavailable();
+  )
+    throw unavailable();
 
   const expected = nativeTargetAuthOnlyDeliveryPreparationInputSchema.parse({
     appId: plan.appId,
@@ -94,28 +108,43 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
     deliveryPlanDigest,
     deliveryPlan,
   });
-  const retained = input.retainedApproval === undefined ? undefined : nativeTargetAuthOnlyApprovalSchema.parse(input.retainedApproval);
+  const retained =
+    input.retainedApproval === undefined
+      ? undefined
+      : nativeTargetAuthOnlyApprovalSchema.parse(input.retainedApproval);
   if (
     retained !== undefined &&
-    (retained.planDigest !== deliveryPlanDigest || retained.sourceDigest !== deliveryPlanDigest ||
-      retained.publicSessionId !== plan.origin.publicSessionId || retained.responderPrincipalId !== owner.authority.ownerUserId)
-  ) throw unavailable();
-  const saved = input.observation?.state === undefined
-    ? undefined
-    : privateNativeTargetApprovalObservationSchema.parse(input.observation.state);
+    (retained.planDigest !== deliveryPlanDigest ||
+      retained.sourceDigest !== deliveryPlanDigest ||
+      retained.publicSessionId !== plan.origin.publicSessionId ||
+      retained.responderPrincipalId !== owner.authority.ownerUserId)
+  )
+    throw unavailable();
+  const saved =
+    input.observation?.state === undefined
+      ? undefined
+      : privateNativeTargetApprovalObservationSchema.parse(input.observation.state);
   const terminals = new Map<string, z.infer<typeof terminalSchema>>();
   const assertOwner = input.assertOwner;
   await assertOwner();
   return await readPrivateOperatorApproval({
     owner: historyOwner,
-    ...(input.observation?.save === undefined ? {} : {
-      observation: {
-        ...(saved === undefined ? {} : { state: saved.native }),
-        save: async (native: PrivateOperatorApprovalObservation) => {
-          await input.observation!.save(privateNativeTargetApprovalObservationSchema.parse({ version: 1, native, terminals: [...terminals.values()] }));
-        },
-      },
-    }),
+    ...(input.observation?.save === undefined
+      ? {}
+      : {
+          observation: {
+            ...(saved === undefined ? {} : { state: saved.native }),
+            save: async (native: PrivateOperatorApprovalObservation) => {
+              await input.observation!.save(
+                privateNativeTargetApprovalObservationSchema.parse({
+                  version: 1,
+                  native,
+                  terminals: [...terminals.values()],
+                }),
+              );
+            },
+          },
+        }),
     capture: (state?: PrivateOperatorApprovalCapture) => {
       const current = createPrivateOperatorApprovalCapture({
         request: {
@@ -129,42 +158,73 @@ export const readPrivateNativeTargetAuthOnlyDeliveryApproval = async (input: {
         ...(state === undefined ? {} : { state }),
       });
       for (const terminal of saved?.terminals ?? []) {
-        const entry = current.snapshot().entries.find((candidate) => candidate.requestId === terminal.requestId);
-        if (entry !== undefined && entry.callId === terminal.callId) terminals.set(terminal.requestId, terminalSchema.parse(terminal));
+        const entry = current
+          .snapshot()
+          .entries.find((candidate) => candidate.requestId === terminal.requestId);
+        if (entry !== undefined && entry.callId === terminal.callId)
+          terminals.set(terminal.requestId, terminalSchema.parse(terminal));
       }
       const proofFor = (entry: PrivateOperatorApprovalCapture["entries"][number]) => {
         const terminal = terminals.get(entry.requestId);
-        if (terminal === undefined || terminal.callId !== entry.callId || terminal.responderPrincipalId !== owner.authority.ownerUserId || terminal.outcome !== (entry.cancelled ? "cancelled" : "approved")) throw unavailable();
+        if (
+          terminal === undefined ||
+          terminal.callId !== entry.callId ||
+          terminal.responderPrincipalId !== owner.authority.ownerUserId ||
+          terminal.outcome !== (entry.cancelled ? "cancelled" : "approved")
+        )
+          throw unavailable();
         const proof = nativeTargetAuthOnlyApprovalSchema.parse({
           ...terminal,
           planDigest: deliveryPlanDigest,
           sourceDigest: deliveryPlanDigest,
           publicSessionId: plan.origin.publicSessionId,
         });
-        if (proof.outcome === "approved" && retained !== undefined && !isDeepStrictEqual(proof, retained)) throw unavailable();
+        if (
+          proof.outcome === "approved" &&
+          retained !== undefined &&
+          !isDeepStrictEqual(proof, retained)
+        )
+          throw unavailable();
         return proof;
       };
       return {
         observe(event: MessageStreamEvent) {
           if (event.type === "input.requested") {
             for (const request of event.data.requests) {
-              if (request.kind !== "tool-approval" || request.action.toolName !== nativeTargetAuthOnlyDeliveryApprovalTool) continue;
-              if (nativeTargetAuthOnlyDeliveryPreparationInputSchema.safeParse(request.action.input).success && isDeepStrictEqual(request.action.input, expected)) current.acceptRequest(request.requestId, request.action.callId);
+              if (
+                request.kind !== "tool-approval" ||
+                request.action.toolName !== nativeTargetAuthOnlyDeliveryApprovalTool
+              )
+                continue;
+              if (
+                nativeTargetAuthOnlyDeliveryPreparationInputSchema.safeParse(request.action.input)
+                  .success &&
+                isDeepStrictEqual(request.action.input, expected)
+              )
+                current.acceptRequest(request.requestId, request.action.callId);
             }
           } else if (event.type === "approval.settled") {
-            const entry = current.snapshot().entries.find((candidate) => candidate.requestId === event.data.requestId);
+            const entry = current
+              .snapshot()
+              .entries.find((candidate) => candidate.requestId === event.data.requestId);
             if (entry === undefined) return;
             current.settle(event);
             const previous = terminals.get(entry.requestId);
             const outcome = event.data.outcome === "approved" ? "approved" : "cancelled";
-            if (previous === undefined || (previous.outcome === "approved" && outcome === "cancelled")) {
-              terminals.set(entry.requestId, terminalSchema.parse({
-                requestId: entry.requestId,
-                callId: entry.callId,
-                responderPrincipalId: event.data.responderPrincipalId,
-                outcome,
-                observedAt: event.meta.at,
-              }));
+            if (
+              previous === undefined ||
+              (previous.outcome === "approved" && outcome === "cancelled")
+            ) {
+              terminals.set(
+                entry.requestId,
+                terminalSchema.parse({
+                  requestId: entry.requestId,
+                  callId: entry.callId,
+                  responderPrincipalId: event.data.responderPrincipalId,
+                  outcome,
+                  observedAt: event.meta.at,
+                }),
+              );
             }
           }
         },

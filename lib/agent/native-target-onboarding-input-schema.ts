@@ -2,7 +2,10 @@ import { z } from "zod";
 
 import { nativeTargetOnboardingPlanSchema } from "../provisioning/native-target-onboarding-plan-schema";
 import { nativeTargetProviderAuthorizationSchema } from "../provisioning/native-target-vercel-authorization";
-import { nativeTargetAuthOnlyPlanDigest, nativeTargetAuthOnlyPlanSchema } from "../provisioning/native-target-auth-only-plan-schema";
+import {
+  nativeTargetAuthOnlyPlanDigest,
+  nativeTargetAuthOnlyPlanSchema,
+} from "../provisioning/native-target-auth-only-plan-schema";
 import { nativeTargetAuthOnlyResourcePreparationInputSchema } from "../eve/private-native-target-auth-only-resource-approval";
 
 export const nativeTargetAuthOnlyPlanRequestSchema = z.strictObject({
@@ -23,19 +26,27 @@ export const nativeTargetAuthOnlyPlanResultSchema = z.strictObject({
   planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
 });
 export type NativeTargetAuthOnlyPlanResult = z.infer<typeof nativeTargetAuthOnlyPlanResultSchema>;
-export const nativeTargetAuthOnlyPreparationRequestSchema = z.strictObject({
-  appId: nativeTargetAuthOnlyPlanSchema.shape.appId,
-  operationRef: z.string().min(1),
-  planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-  plan: nativeTargetAuthOnlyPlanSchema,
-}).superRefine((input, context) => {
-  if (
-    input.appId !== input.plan.appId ||
-    input.operationRef !== input.planDigest ||
-    nativeTargetAuthOnlyPlanDigest(input.plan) !== input.planDigest
-  ) context.addIssue({ code: "custom", message: "Auth-only preparation must echo its exact plan digest." });
-});
-export type NativeTargetAuthOnlyPreparationRequest = z.infer<typeof nativeTargetAuthOnlyPreparationRequestSchema>;
+export const nativeTargetAuthOnlyPreparationRequestSchema = z
+  .strictObject({
+    appId: nativeTargetAuthOnlyPlanSchema.shape.appId,
+    operationRef: z.string().min(1),
+    planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+    plan: nativeTargetAuthOnlyPlanSchema,
+  })
+  .superRefine((input, context) => {
+    if (
+      input.appId !== input.plan.appId ||
+      input.operationRef !== input.planDigest ||
+      nativeTargetAuthOnlyPlanDigest(input.plan) !== input.planDigest
+    )
+      context.addIssue({
+        code: "custom",
+        message: "Auth-only preparation must echo its exact plan digest.",
+      });
+  });
+export type NativeTargetAuthOnlyPreparationRequest = z.infer<
+  typeof nativeTargetAuthOnlyPreparationRequestSchema
+>;
 export const nativeTargetAuthOnlyDispatchResultSchema = z.discriminatedUnion("status", [
   z.strictObject({ status: z.literal("created"), projectId: z.string().min(1) }),
   z.strictObject({
@@ -46,10 +57,18 @@ export const nativeTargetAuthOnlyDispatchResultSchema = z.discriminatedUnion("st
   z.strictObject({ status: z.literal("unknown"), projectId: z.string().min(1).optional() }),
   z.strictObject({
     status: z.literal("rejected"),
-    reason: z.enum(["authorization_denied", "collision", "permission_denied", "provider_rejected", "rate_limited"]),
+    reason: z.enum([
+      "authorization_denied",
+      "collision",
+      "permission_denied",
+      "provider_rejected",
+      "rate_limited",
+    ]),
   }),
 ]);
-export type NativeTargetAuthOnlyDispatchResult = z.infer<typeof nativeTargetAuthOnlyDispatchResultSchema>;
+export type NativeTargetAuthOnlyDispatchResult = z.infer<
+  typeof nativeTargetAuthOnlyDispatchResultSchema
+>;
 
 const appId = nativeTargetOnboardingPlanSchema.shape.appId;
 export const nativeTargetPlanRequestSchema = z.strictObject({
