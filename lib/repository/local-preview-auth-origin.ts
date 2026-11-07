@@ -59,10 +59,15 @@ const readOwnedLocalOrigin = async <T>(
   input.signal?.throwIfAborted();
   const file = localRuntimeEnvironmentPath(input.root, input.appId);
   const source = localPreviewAuthOriginReadProgram(file, optionalBrowserOrigin);
-  const result = await input.sandbox.run({
+  const options: Parameters<typeof input.sandbox.run>[0] = {
     command: `node -e ${quote(source)}`,
     workingDirectory: input.root,
-    ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
+  };
+  if (input.signal !== undefined) {
+    options.abortSignal = input.signal;
+  }
+  const result = await input.sandbox.run({
+    ...options,
   });
   input.signal?.throwIfAborted();
   if (result.exitCode !== 0) {
