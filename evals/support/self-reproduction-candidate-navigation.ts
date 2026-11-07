@@ -1,9 +1,34 @@
-import type { Page } from "playwright";
 import type { Observation } from "./self-reproduction-parity";
+
+export interface CandidateNavigationControl {
+  evaluate: (callback: (node: SVGElement | HTMLElement) => boolean) => Promise<boolean>;
+  fill: (value: string) => Promise<void>;
+  first: () => CandidateNavigationControl;
+  focus: () => Promise<void>;
+  inputValue: () => Promise<string>;
+  isVisible: () => Promise<boolean>;
+  press: (key: string) => Promise<void>;
+  waitFor: (options: { state: "visible"; timeout: number }) => Promise<void>;
+}
+
+export interface CandidateNavigationPage {
+  getByRole: (
+    role: "textbox" | "button",
+    options: { exact?: boolean; name: string | RegExp },
+  ) => CandidateNavigationControl;
+  goBack: (options: { waitUntil: "domcontentloaded" }) => Promise<{ ok: () => boolean } | null>;
+  goForward: (options: { waitUntil: "domcontentloaded" }) => Promise<{ ok: () => boolean } | null>;
+  goto: (
+    url: string,
+    options: { waitUntil: "domcontentloaded" },
+  ) => Promise<{ ok: () => boolean } | null>;
+  locator: (selector: string) => { textContent: () => Promise<string | null> };
+  url: () => string;
+}
 
 /** Browser history behavior only: this does not award instant-navigation credit. */
 export const exerciseCandidateNavigation = async (
-  page: Page,
+  page: CandidateNavigationPage,
   baseURL: string,
   capture: (state: string) => Promise<void>,
 ): Promise<Observation> => {
