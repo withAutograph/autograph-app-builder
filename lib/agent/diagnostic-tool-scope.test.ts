@@ -161,8 +161,8 @@ describe("scoped internal diagnostics", () => {
         context,
       );
       expect(result).toMatchObject({
-        status: "no-private-workspace",
         readinessScope: "private-compute-observation",
+        status: "no-private-workspace",
       });
       expect(getSandbox).not.toHaveBeenCalled();
       expect(result).not.toHaveProperty("runtimeResources");

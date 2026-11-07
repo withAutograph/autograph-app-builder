@@ -214,10 +214,10 @@ describe("owned fresh-template draft preparation after review recovery", () => {
         },
       });
       await preparePublishedDraftReconciliation({
-        state,
         ctx,
         pullRequestNumber: 42,
         restoreInitialAppSource: true,
+        state,
       });
       expect(mocks.prepare.mock.calls[0]?.[0]).toMatchObject({
         forceFreshCandidate: true,
@@ -252,13 +252,13 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     const before = structuredClone(mocks.candidate);
     const workflow = structuredClone(mocks.workflow);
     const result = await preparePublishedDraftReconciliation({
-      state: fixture.reviewed,
       ctx,
       pullRequestNumber: 42,
+      state: fixture.reviewed,
     });
     expect(result.root).toBe(before.root);
     expect(mocks.prepare).toHaveBeenCalledOnce();
-    const request = mocks.prepare.mock.calls[0][0];
+    const [[request]] = mocks.prepare.mock.calls;
     expect(request.previousCandidate).toEqual(before);
     expect(request.replayPreviousCandidate).toBe(true);
     expect(request.forceFreshCandidate).toBeUndefined();
@@ -280,21 +280,21 @@ describe("owned fresh-template draft preparation after review recovery", () => {
       created: true,
     }));
     const result = await preparePublishedDraftReconciliation({
-      state: fixture.reviewed,
       ctx,
       pullRequestNumber: 42,
       recovery: "reopen-current-owned-draft",
+      state: fixture.reviewed,
     });
     expect(mocks.prepare.mock.calls[0][0].previousCandidate).toBeUndefined();
     expect(result.preservedWorkspaces).toContainEqual({
       kind: "draft-candidate",
-      root,
       reviewDigest: previous.originalReviewDigest,
+      root,
     });
     expect(mocks.candidate.preservedWorkspaces).toContainEqual({
       kind: "draft-candidate",
-      root,
       reviewDigest: previous.originalReviewDigest,
+      root,
     });
     expect(readFileSync(path.join(root, "candidate.txt"), "utf-8")).toBe(
       "latest unpublished candidate bytes\n",
@@ -327,10 +327,10 @@ describe("owned fresh-template draft preparation after review recovery", () => {
         created: true,
       }));
       const result = await preparePublishedDraftReconciliation({
-        state: fixture.reviewed,
         ctx,
         pullRequestNumber: 42,
         recovery: "reopen-current-owned-draft",
+        state: fixture.reviewed,
       });
       expect(mocks.prepare.mock.calls[0][0].previousCandidate).toBeUndefined();
       expect(result.preservedWorkspaces).not.toContainEqual(
@@ -358,9 +358,9 @@ describe("owned fresh-template draft preparation after review recovery", () => {
       };
       await expect(
         preparePublishedDraftReconciliation({
-          state: fixture.reviewed,
           ctx,
           pullRequestNumber: 42,
+          state: fixture.reviewed,
         }),
       ).rejects.toThrow();
       expect(mocks.prepare).not.toHaveBeenCalled();
@@ -372,7 +372,7 @@ describe("owned fresh-template draft preparation after review recovery", () => {
       mocks.candidate = { ...mocks.candidate, root: "/workspace/replaced" };
     };
     await expect(
-      preparePublishedDraftReconciliation({ state: fixture.reviewed, ctx, pullRequestNumber: 42 }),
+      preparePublishedDraftReconciliation({ ctx, pullRequestNumber: 42, state: fixture.reviewed }),
     ).rejects.toThrow("candidate changed");
     expect(mocks.prepare).not.toHaveBeenCalled();
   });
@@ -385,9 +385,9 @@ describe("owned fresh-template draft preparation after review recovery", () => {
       } as Candidate;
     };
     const result = await preparePublishedDraftReconciliation({
-      state: fixture.reviewed,
       ctx,
       pullRequestNumber: 42,
+      state: fixture.reviewed,
     });
     expect(result.root).toBe(root);
     expect(readFileSync(path.join(result.root, "candidate.txt"), "utf-8")).toBe(
@@ -400,7 +400,7 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     mocks.access = signAccess({ ...unsigned, sessionId: "foreign" });
     expect(mocks.access.digest).not.toBe(digest);
     await expect(
-      preparePublishedDraftReconciliation({ state: fixture.reviewed, ctx, pullRequestNumber: 42 }),
+      preparePublishedDraftReconciliation({ ctx, pullRequestNumber: 42, state: fixture.reviewed }),
     ).rejects.toThrow("another session");
     expect(mocks.prepare).not.toHaveBeenCalled();
   });

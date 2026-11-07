@@ -8,6 +8,7 @@ import {
   sameOperatorSelection,
 } from "../provisioning/hosted-operator-contract";
 import type { HostedRuntimeApprovalEnvelope } from "./prepare-app-hosted-runtime-step";
+import type { assertHostedRuntimeApprovedReference } from "./hosted-runtime-approved-reference";
 import { prepareHostedRuntimeWithOperator } from "./prepare-app-hosted-runtime-step";
 import { preparedRuntimeReferences, preparedRuntimeSelections } from "./prepared-runtime-selection";
 import { resolveHostedRuntimePreparationSelection } from "./hosted-runtime-selection-handoff";
@@ -16,7 +17,12 @@ import retainHostedRuntimeSelectionHook from "../../agent/hooks/retain-hosted-ru
 import { appBuilderWorkflowState } from "./workflow-state";
 
 const mocks = vi.hoisted(() => ({
-  assertReferenceCurrent: vi.fn(),
+  assertReferenceCurrent:
+    vi.fn<
+      (
+        ...args: Parameters<typeof assertHostedRuntimeApprovedReference>
+      ) => undefined | ReturnType<typeof assertHostedRuntimeApprovedReference>
+    >(),
   getOperatorClient: vi.fn(),
   loadApprovedReference: vi.fn(),
   startWorkingPreview: vi.fn(),
@@ -332,7 +338,7 @@ beforeEach(() => {
     input: approvedInput,
     snapshot: approvedSnapshot,
   });
-  mocks.assertReferenceCurrent.mockResolvedValue(undefined);
+  mocks.assertReferenceCurrent.mockResolvedValue();
   mocks.getOperatorClient.mockResolvedValue({
     bindings: vi.fn().mockResolvedValue(nativeBindings()),
     sessionId: publicSessionId,
