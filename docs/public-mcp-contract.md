@@ -151,6 +151,16 @@ reserve recovery, stop or start execution, authorize approval, or settle the
 unknown response; duplicate observations may share diagnostic work. Local
 execution returns `session_recovery_unavailable` for this hosted-only mode.
 
+A recovered execution can fail before emitting its first event. The authenticated
+native stream may report `x-eve-native-recovery-boot-status: failed` only after
+verifying that exact physical recovery entry, its committed activation and the
+absence of a later turn or handoff. Builder accepts this fact only with a matching
+stream identity and a complete empty native tail. It reports `failed` without
+inventing events, changing cursors or clearing retained effects and history.
+Missing or unreadable native metadata never establishes terminal failure. The
+owner can then use ordinary terminal recovery without a `resumeMode`; the native
+collector must still verify the retained checkpoint and original authority.
+
 Failed hosted builds recover from authoritative native checkpoints and their
 actual retained delivery and tool results. Public conversation excerpts do not
 restore private workflow state or authorize a replacement build. Recovery keeps

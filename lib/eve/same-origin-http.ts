@@ -351,6 +351,7 @@ export async function* streamSameOriginEveEvents(input: {
   startIndex?: number;
   readTrace?: HostedReadTrace;
   onNativeTail?: (tailIndex: number) => void;
+  onNativeRecoveryBootFailure?: () => void;
 }): AsyncGenerator<MessageStreamEvent, void, undefined> {
   // Matches the supported SDK's absolute startIndex + follow:false contract: pin this opened durable tail.
   const startIndex = z
@@ -435,6 +436,11 @@ export async function* streamSameOriginEveEvents(input: {
   }
   input.onNativeTail?.(tail);
   if (startIndex === tail + 1) {
+    // The authenticated framework exposes this only for a verified failed recovery entry,
+    // with its committed activation and no later turn or handoff. Empty history alone is not failure.
+    if (tail === -1 && response.headers.get("x-eve-native-recovery-boot-status") === "failed") {
+      input.onNativeRecoveryBootFailure?.();
+    }
     // Provider cancellation is best effort; a stalled cancel must not hold the response.
     // oxlint-disable-next-line promise/prefer-await-to-then -- Cleanup must not delay the reader.
     void response.body.cancel().catch(() => null);
@@ -930,11 +936,15 @@ export async function observeSameOriginEveStream(
     let eventInFlight = false;
     let observationComplete = true;
     let nativeTailIndex: number | undefined;
+    let nativeRecoveryBootFailed = false;
     try {
       for await (const event of streamSameOriginEveEvents({
         ...input,
         onNativeTail: (tail) => {
           nativeTailIndex = tail;
+        },
+        onNativeRecoveryBootFailure: () => {
+          nativeRecoveryBootFailed = true;
         },
         readSignal,
         readTrace,
@@ -1047,6 +1057,10 @@ export async function observeSameOriginEveStream(
       }
       observationComplete = false;
     }
+    if (observationComplete && nativeRecoveryBootFailed) {
+      boundary = "failed";
+      currentTurnId = undefined;
+    }
     let status: EveSessionStatus = boundary;
     if (invalidInput) {
       status = "failed";
@@ -1107,7 +1121,13 @@ async function readInstalledSnapshot(
 }> {
   const events: MessageStreamEvent[] = [];
   const projected: InternalEveEvent[] = [];
-  for await (const event of streamSameOriginEveEvents(input)) {
+  let nativeRecoveryBootFailed = false;
+  for await (const event of streamSameOriginEveEvents({
+    ...input,
+    onNativeRecoveryBootFailure: () => {
+      nativeRecoveryBootFailed = true;
+    },
+  })) {
     events.push(event);
     for (const publicEvent of projectInstalledEveEvent(event, 0)) {
       projected.push({ ...publicEvent, index: projected.length });
@@ -1124,7 +1144,7 @@ async function readInstalledSnapshot(
       events: projected,
       ...(privateInputState === undefined ? {} : { privateInputState }),
       ...(nativeDeliveryState === undefined ? {} : { nativeDeliveryState }),
-      status: deriveInstalledEveStatus(events),
+      status: nativeRecoveryBootFailed ? "failed" : deriveInstalledEveStatus(events),
       ...(prototype === undefined ? {} : { prototype }),
       ...(uiPreview === undefined ? {} : { uiPreview }),
       ...(workingPreview === undefined ? {} : { workingPreview }),
