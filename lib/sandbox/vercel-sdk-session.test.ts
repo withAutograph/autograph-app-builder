@@ -623,16 +623,16 @@ it("kills a running command when renewal fails and leaves no idle renewal", asyn
 it("reapplies configured toolchain environment to commands on a replacement native handle, preserving command overrides", async () => {
   const native = fixture();
   native.runCommand.mockResolvedValue({
-    kill: async () => {},
-    stderr: async () => "",
-    stdout: async () => "",
+    kill: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    stderr: vi.fn<() => Promise<string>>().mockResolvedValue(""),
+    stdout: vi.fn<() => Promise<string>>().mockResolvedValue(""),
     wait: async () => ({ exitCode: 0 }),
   });
   const replacement = fixture();
   replacement.runCommand.mockResolvedValue({
-    kill: async () => {},
-    stderr: async () => "",
-    stdout: async () => "",
+    kill: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    stderr: vi.fn<() => Promise<string>>().mockResolvedValue(""),
+    stdout: vi.fn<() => Promise<string>>().mockResolvedValue(""),
     wait: async () => ({ exitCode: 0 }),
   });
   let active = native;
@@ -671,16 +671,16 @@ it("reapplies configured toolchain environment to commands on a replacement nati
 it("reapplies configured toolchain environment to commands on a replacement native handle, preserving command overrides", async () => {
   const native = fixture();
   native.runCommand.mockResolvedValue({
-    kill: async () => {},
-    stderr: async () => "",
-    stdout: async () => "",
+    kill: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    stderr: vi.fn<() => Promise<string>>().mockResolvedValue(""),
+    stdout: vi.fn<() => Promise<string>>().mockResolvedValue(""),
     wait: async () => ({ exitCode: 0 }),
   });
   const replacement = fixture();
   replacement.runCommand.mockResolvedValue({
-    kill: async () => {},
-    stderr: async () => "",
-    stdout: async () => "",
+    kill: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    stderr: vi.fn<() => Promise<string>>().mockResolvedValue(""),
+    stdout: vi.fn<() => Promise<string>>().mockResolvedValue(""),
     wait: async () => ({ exitCode: 0 }),
   });
   let active = native;
