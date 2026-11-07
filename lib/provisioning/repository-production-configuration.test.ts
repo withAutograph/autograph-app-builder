@@ -3,42 +3,42 @@ import { repositoryProductionConfigurationSchema } from "./repository-production
 
 const workload = {
   audience: "https://vercel.com/team",
+  environment: "production",
   issuer: "https://oidc.vercel.com/team",
   ownerId: "team",
   projectId: "operator",
   subject: "operator-subject",
-  environment: "production",
 };
 const genericWorker = { executablePath: "/worker", sha256: "a".repeat(64) };
 const repository = {
-  workspaceId: "workspace",
-  projectId: "apps",
-  repositoryId: "repo",
-  repositoryFullName: "team/repo",
-  organization: { id: "organization", name: "Organization" },
-  publicOrigin: "https://apps.example",
-  authWorkload: workload,
   authOperatorRole: "auth_operator",
   authResource: {
-    resourceId: "auth",
     database: "auth",
     migratorRole: "auth_migrator",
+    resourceId: "auth",
     runtimeRole: "auth_runtime",
   },
+  authWorkload: workload,
   neon: {
-    endpoint: "ep-production.us-east-1.aws.neon.tech",
-    projectId: "neon-project",
     branchId: "br-production",
+    endpoint: "ep-production.us-east-1.aws.neon.tech",
     endpointId: "ep-production",
     maintenanceDatabase: "neondb",
     maintenanceRole: "maintenance",
+    projectId: "neon-project",
   },
+  organization: { id: "organization", name: "Organization" },
+  projectId: "apps",
+  publicOrigin: "https://apps.example",
+  repositoryFullName: "team/repo",
+  repositoryId: "repo",
+  workspaceId: "workspace",
 };
 const secretConnection = {
-  kind: "deployment-secrets",
-  maintenanceUrlEnvironment: "REPO_MAINTENANCE",
   authOperatorEnvironment: "REPO_AUTH_OPERATOR",
   authRuntimeEnvironment: "REPO_AUTH_RUNTIME",
+  kind: "deployment-secrets",
+  maintenanceUrlEnvironment: "REPO_MAINTENANCE",
 };
 const connect = {
   connector: "neon/production",
@@ -46,34 +46,25 @@ const connect = {
   subject: { id: "owner", issuer: "https://builder.example", type: "user" },
 };
 const base = {
-  version: 1,
   builderWorkload: workload,
   operator: workload,
   sandbox: { image: "operator-image", projectId: "operator", teamId: "team" },
+  vercelCredential: {
+    authority: {
+      audience: "https://builder.example/mcp",
+      issuer: "https://builder.example/api/auth",
+      ownerUserId: "owner",
+      workspaceId: "workspace",
+    },
+    installationId: "vercel-installation",
+  },
+  version: 1,
   workers: {
-    storage: {
-      ...genericWorker,
-      id: "neon-resource-bootstrap-v1",
-      operationScope: "neon-resource-bootstrap-v1",
-      subcommand: "neon-resource-bootstrap",
-    },
-    schema: {
-      ...genericWorker,
-      id: "generated-app-protected-installer-v1",
-      operationScope: "generated-app-release-install-v1",
-      subcommand: "protected-generated-app-install",
-    },
     access: {
       ...genericWorker,
       id: "generated-app-protected-installer-v1",
       operationScope: "generated-app-access-v1",
       subcommand: "protected-generated-app-access",
-    },
-    membership: {
-      ...genericWorker,
-      id: "auth-owned-organization-v1",
-      operationScope: "auth-protected-membership-v1",
-      subcommand: "auth-protected-membership",
     },
     authManagement: {
       ...genericWorker,
@@ -81,15 +72,24 @@ const base = {
       operationScope: "auth-app-access-v1",
       subcommand: "auth-protected-app-access",
     },
-  },
-  vercelCredential: {
-    authority: {
-      issuer: "https://builder.example/api/auth",
-      audience: "https://builder.example/mcp",
-      workspaceId: "workspace",
-      ownerUserId: "owner",
+    membership: {
+      ...genericWorker,
+      id: "auth-owned-organization-v1",
+      operationScope: "auth-protected-membership-v1",
+      subcommand: "auth-protected-membership",
     },
-    installationId: "vercel-installation",
+    schema: {
+      ...genericWorker,
+      id: "generated-app-protected-installer-v1",
+      operationScope: "generated-app-release-install-v1",
+      subcommand: "protected-generated-app-install",
+    },
+    storage: {
+      ...genericWorker,
+      id: "neon-resource-bootstrap-v1",
+      operationScope: "neon-resource-bootstrap-v1",
+      subcommand: "neon-resource-bootstrap",
+    },
   },
 };
 
