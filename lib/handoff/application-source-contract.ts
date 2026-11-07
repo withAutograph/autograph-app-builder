@@ -10,15 +10,22 @@ const compareSourcePath = (left: string, right: string) => {
   return 0;
 };
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const applicationPathPrefix = "apps/";
+const pathSeparator = "/";
+const parentPathSegment = "..";
+const runtimeStateKind = "runtime-state";
+const dependencyCacheKind = "dependency-cache";
 const sourcePath = z
   .string()
   .min(1)
   .refine(
     (value) =>
-      !value.startsWith("/") &&
+      !value.startsWith(pathSeparator) &&
       !value.includes("\\") &&
       !value.includes("\0") &&
-      value.split("/").every((part) => part !== "" && part !== "." && part !== ".."),
+      value
+        .split(pathSeparator)
+        .every((part) => part !== "" && part !== "." && part !== parentPathSegment),
     "An unambiguous repository-relative source path is required",
   );
 const sourceOmissionKindSchema = z.enum(["credential", "runtime-state", "dependency-cache"]);
@@ -61,13 +68,13 @@ export const applicationSourceOmissionReason = (
       ].includes(part),
     )
   ) {
-    return "runtime-state";
+    return runtimeStateKind;
   }
   if (
     parts.some((part) => ["node_modules", ".turbo", ".cache"].includes(part)) ||
     [".next", "coverage", "dist", "build"].includes(parts[0] ?? "")
   ) {
-    return "dependency-cache";
+    return dependencyCacheKind;
   }
   return undefined;
 };
@@ -88,8 +95,8 @@ export const applicationSourceManifestSchema = z
         path: sourcePath,
         reason: z.enum([
           "credential",
-          "runtime-state",
-          "dependency-cache",
+          runtimeStateKind,
+          dependencyCacheKind,
           "symlink",
           "unsupported",
         ]),
@@ -110,7 +117,8 @@ export const applicationSourceManifestSchema = z
           "Credentials, runtime state and dependency caches cannot be imported as app source",
       });
     }
-    if (paths.some((entry) => !entry.startsWith(`apps/${manifest.appId}/`))) {
+    const selectedAppPrefix = `${applicationPathPrefix}${manifest.appId}/`;
+    if (paths.some((entry) => !entry.startsWith(selectedAppPrefix))) {
       context.addIssue({
         code: "custom",
         message: "Source inventory must remain inside its selected app",

@@ -184,12 +184,22 @@ const publicStatus = (stage: NativeTargetOnboardingRow["record"]["stage"]) => {
   }
   return "pending" as const;
 };
-const publicResult = (row: NativeTargetOnboardingRow) => ({
-  ...envelope(row),
-  status: publicStatus(row.record.stage),
-  ...(row.record.stage === "ready"
-    ? { projectId: row.record.registration.observed.projectId }
-    : {}),
+const publicResult = (row: NativeTargetOnboardingRow) => {
+  const result = {
+    ...envelope(row),
+    status: publicStatus(row.record.stage),
+  };
+  if (row.record.stage === "ready") {
+    return { ...result, projectId: row.record.registration.observed.projectId };
+  }
+  return result;
+};
+
+const resourceIdentity = (plan: NativeTargetOnboardingPlan) => ({
+  authority: plan.resourceProfileAuthorityDigest,
+  nativeNeon: plan.nativeNeon,
+  profile: plan.resourceProfileId,
+  resourceId: plan.appDatabase.resourceId,
 });
 
 /** Source provenance is checked at planning; later execution resumes the frozen operation. */
@@ -390,12 +400,6 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
     if (candidate.resourceProfileId !== proposal.resourceProfileId) {
       throw invalid();
     }
-    const resourceIdentity = (plan: NativeTargetOnboardingPlan) => ({
-      authority: plan.resourceProfileAuthorityDigest,
-      nativeNeon: plan.nativeNeon,
-      profile: plan.resourceProfileId,
-      resourceId: plan.appDatabase.resourceId,
-    });
     if (isDeepStrictEqual(resourceIdentity(candidate), resourceIdentity(prior.plan))) {
       return publicResult(retained);
     }
