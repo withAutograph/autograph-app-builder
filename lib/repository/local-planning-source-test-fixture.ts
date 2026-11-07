@@ -6,17 +6,18 @@ import path from "node:path";
 import type { BuilderSandboxSession } from "../sandbox/builder-sandbox";
 import { prepareDevelopmentSandboxWorkspace } from "./supported-template";
 
+const writeFixtureFile = (base: string, file: string, content: string) => {
+  const target = path.join(base, file);
+  mkdirSync(path.dirname(target), { recursive: true });
+  writeFileSync(target, content);
+};
+
 export const localPlanningSourceArchiveFixture = async () => {
   const root = realpathSync(mkdtempSync(path.join(tmpdir(), "owned-archive-source-")));
   const source = path.join(root, "source");
   const workspace = path.join(root, "workspace");
   mkdirSync(source);
   mkdirSync(workspace);
-  const write = (base: string, file: string, content: string) => {
-    const target = path.join(base, file);
-    mkdirSync(path.dirname(target), { recursive: true });
-    writeFileSync(target, content);
-  };
   const git = (...args: string[]) =>
     execFileSync(
       "/usr/bin/git",
@@ -26,12 +27,12 @@ export const localPlanningSourceArchiveFixture = async () => {
   git("init", "--quiet");
   git("config", "user.name", "Fixture");
   git("config", "user.email", "fixture@example.test");
-  write(source, "seed.txt", "shared ancestor\n");
+  writeFixtureFile(source, "seed.txt", "shared ancestor\n");
   git("add", ".");
   git("commit", "--quiet", "-m", "shared ancestor");
-  write(source, ".gitignore", ".app-builder/\nnode_modules/\n.env.local\n");
-  write(source, "shared.txt", "old trusted source\n");
-  write(source, "apps/example/app/page.tsx", "old source app\n");
+  writeFixtureFile(source, ".gitignore", ".app-builder/\nnode_modules/\n.env.local\n");
+  writeFixtureFile(source, "shared.txt", "old trusted source\n");
+  writeFixtureFile(source, "apps/example/app/page.tsx", "old source app\n");
   git("add", ".");
   git("commit", "--quiet", "-m", "original source");
   const translate = (value: string) =>
@@ -105,12 +106,16 @@ export const localPlanningSourceArchiveFixture = async () => {
   };
   const original = await prepareDevelopmentSandboxWorkspace(source, sandbox, "normal-prepare");
   const candidate = path.join(workspace, "repository");
-  write(candidate, "apps/example/app/page.tsx", "saved private app\n");
-  write(candidate, "apps/example/.config/mise/tasks/check", "saved app task\n");
-  write(candidate, "apps/example/schema/release/v1/release.json", "saved immutable release\n");
-  write(candidate, ".config/app-specs/example.md", "saved product\n");
-  write(candidate, ".env.local", "private retained\n");
-  write(candidate, "node_modules/cache", "retained dependency cache\n");
+  writeFixtureFile(candidate, "apps/example/app/page.tsx", "saved private app\n");
+  writeFixtureFile(candidate, "apps/example/.config/mise/tasks/check", "saved app task\n");
+  writeFixtureFile(
+    candidate,
+    "apps/example/schema/release/v1/release.json",
+    "saved immutable release\n",
+  );
+  writeFixtureFile(candidate, ".config/app-specs/example.md", "saved product\n");
+  writeFixtureFile(candidate, ".env.local", "private retained\n");
+  writeFixtureFile(candidate, "node_modules/cache", "retained dependency cache\n");
   return {
     candidate,
     dispose: () => {
@@ -122,6 +127,6 @@ export const localPlanningSourceArchiveFixture = async () => {
     sandbox,
     source,
     workspace,
-    write,
+    write: writeFixtureFile,
   };
 };
