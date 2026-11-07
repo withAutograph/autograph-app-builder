@@ -801,7 +801,7 @@ describe("managed runtime execution through supported SDK ports", () => {
     f.setSession("resumed-physical-session");
     const guard = vi
       .fn<() => Promise<void>>()
-      .mockImplementationOnce(async () => {})
+      .mockResolvedValueOnce()
       .mockRejectedValueOnce(new Error("Owner fence changed"));
     const checkpoint = vi.fn(f.checkpoint);
     await expect(
