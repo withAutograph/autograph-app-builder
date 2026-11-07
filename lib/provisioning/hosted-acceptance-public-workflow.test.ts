@@ -110,8 +110,8 @@ it("uses actual planning and approval workflow tools to recover retained source 
     path.join(source, "apps", context.target.appId, ".config/app-spec.md"),
     "Controlled app contract",
   );
-  // oxlint-disable-next-line typescript/strict-void-return -- Node supplies execFile's stdout/stderr promisification.
-  const exec = promisify(execFile);
+  const promisifyExecFile: (fn: typeof execFile) => typeof execFile.__promisify__ = promisify;
+  const exec = promisifyExecFile(execFile);
   const git = async (...args: string[]) => await exec("git", ["-C", source, ...args]);
   await git("init");
   await git("add", ".");
