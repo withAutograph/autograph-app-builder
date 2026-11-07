@@ -161,10 +161,10 @@ const fixture = () => {
     sessionId: capPlan.selection.sessionId,
   });
   const input: RetainedIntegrationReadScope = {
-    assertCurrent: vi.fn(async () => {}),
+    assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
     authority: {
-      assertCanonicalAppOwner: vi.fn(async () => {}),
-      verifyWorkload: vi.fn(async () => {}),
+      assertCanonicalAppOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      verifyWorkload: vi.fn<() => Promise<void>>().mockResolvedValue(),
     },
     owned: {
       destination: capPlan.project,
