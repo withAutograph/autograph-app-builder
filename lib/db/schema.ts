@@ -1045,7 +1045,7 @@ export const builderProvisioningJournals = pgTable(
     requestDigest: text("request_digest").notNull(),
     requestId: text("request_id").notNull(),
     revision: integer("revision").notNull().default(1),
-    state: text("state").notNull(),
+    state: text("state", { enum: ["pending", "settled"] }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [
