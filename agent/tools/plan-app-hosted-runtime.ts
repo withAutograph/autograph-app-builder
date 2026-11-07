@@ -25,6 +25,15 @@ import type {
   ExportPlanningStage,
 } from "@/lib/provisioning/hosted-operator-consent-diagnostic";
 
+interface BlockedPlan {
+  appId: string;
+  authenticatedBehavior: "unassessed";
+  code: HostedOperatorError["code"];
+  status: "blocked";
+  nextAction?: string;
+  approvedPreviewTarget?: OperatorSelection;
+}
+
 export default defineTool({
   description:
     "Read the protected operator's concrete Preview resource/access plan. For restoration or use of the unchanged prepared published Preview, set releaseIntent to prepared-preview. This selects its exact frozen approved release and matching recorded publication; validating or publishing a newer private capture is not a prerequisite. Preserve that unpublished candidate for later work. Distinguish restoring an existing delivery from repairing app or shared framework software. When an identified shared framework repair must be adopted by an app with its own published draft, use prepare_github_draft_pr_reconciliation to merge the current base into that same owned draft while preserving the app's source and registration. Complete the existing candidate validation, review and approved publication/update flow, then verify appSourceRecording is recorded and plan changed-source delivery without releaseIntent. A Gateway-only refresh of the frozen publication does not adopt that software repair; selecting a plain platform commit can omit the app's registration. Resolve source selection through Builder's supported tools without asking the user for technical references. A browser or provider error alone does not establish a source defect or require a source update. For delivery of changed source, omit releaseIntent, publish the technically validated and reviewed source through the existing separately approved draft publication/update path, and verify appSourceRecording is recorded. For app_source_publication_required during changed-source delivery, inspect_github_draft_pr_reconciliation with kind publication-recovery can discover retained completion context. Copy its returned nextCall through normal approval and exact provider verification to record only an equivalent current release. Listed receipts grant no authority. If no matching context is available, continue normal source-recording recovery in this same session without inventing a publication or republishing an already accepted result. Then plan again. An auth-bootstrap plan intentionally prepares Auth and Gateway before account capture; app installation, access, delivery and routing follow in a renewed full app plan. Continue the returned prerequisite through prepare-app-hosted-runtime with approval for its exact effects, follow its ordinary account sign-in link for the existing account, and resume the same approved preparation to read back capture. Then plan again for the same app/session and release intent to obtain the app delivery and routing effects through their normal approval flow. A first bootstrap-only plan is not a missing app recovery plan, and an app deployment is not required before the initial account connection. Preserve unknown outcomes for reconciliation. Hosted behavior remains unassessed until the delivered app is exercised. For signup, supply the product-approved organization, eligibility and initial app roles in authSignupPolicy; ordinary users are members, never owners. The policy is bound to the selected Auth resource, app and verified public origin and is persisted before signup is offered. Do not restrict ordinary signup to normalActorProgram test participants. For accepted product requirements needing named additional participants, derive normalActorProgram separately. After gateway_delivery_failed, plan again for the same app/session and accepted participant program to select the current trusted Gateway source; submit the returned plan and operation reference to prepare-app-hosted-runtime through its existing approval flow. An identical operation retains its durable approval; changed plans need ordinary approval. Unknown alias or hostname assignment outcomes require reconciliation. For a manual data export, use operation export with the explicitly requested customerId, or customerScope owner-organization when the user chooses their original owner organization. The server resolves that semantic choice from approved historical owner identity into an exact currently approved installed tenant, never the first QA organization. If export_customer_selection_required is returned, ask which organization by its product name; never guess an opaque ID. Keep the raw customerId path for an explicitly selected tenant. In either case, the server freezes the currently prepared app resource and release plus private owner-only destination. Submit its exact request and returned plan to export-app-hosted-data for separate data-export approval. For a stale unexecuted continuity plan, set recoverContinuityIntentId to its saved intent ID and use a fresh idempotencyKey. Builder resolves the current owned checkout and creates a linked successor without changing the old approval; submit the successor request alone to run-app-continuity-tests for its own ordinary approval; Builder resolves the full saved plan server-side. Preserve the original intent on uncertain effects instead. Use browserSelection for a focused app-authored acceptance test that requires managed lifecycle actions; that selection is frozen into the new approval and executed by the managed runner. Keep the full suite nonblocking when the user requested focused acceptance. For the explicitly requested manual continuity exercise, operation continuity resolves the current owned app checkout and prepared runtime. Submit its exact returned four-field request alone to run-app-continuity-tests for separate approval. Builder reloads the canonical plan; do not reconstruct its nested fields. It runs one app-authored suite through an owned managed process, briefly publishes an isolated Gateway target, then closes that runtime and removes only its own configuration rows; it does not redeploy the native app or prove later native continuity. This planning call does not allocate resources or create accounts.",
@@ -41,23 +50,25 @@ export default defineTool({
         return ctx.session.id;
       }
     };
-    const blocked = (code: HostedOperatorError["code"], selection?: OperatorSelection) =>
-      withBuilderDestinationGuidance(
-        withAppPublicationGuidance({
-          appId: input.appId,
-          authenticatedBehavior: "unassessed" as const,
-          code,
-          status: "blocked" as const,
-          ...(code === "export_customer_selection_required"
-            ? {
-                nextAction:
-                  "Name the organization to export. No export was planned or data extracted.",
-              }
-            : {}),
-          ...(selection === undefined ? {} : { approvedPreviewTarget: selection }),
-        }),
+    const blocked = (code: HostedOperatorError["code"], selection?: OperatorSelection) => {
+      const result: BlockedPlan = {
+        appId: input.appId,
+        authenticatedBehavior: "unassessed",
+        code,
+        status: "blocked",
+      };
+      if (code === "export_customer_selection_required") {
+        result.nextAction =
+          "Name the organization to export. No export was planned or data extracted.";
+      }
+      if (selection !== undefined) {
+        result.approvedPreviewTarget = selection;
+      }
+      return withBuilderDestinationGuidance(
+        withAppPublicationGuidance(result),
         destinationSessionId(code),
       );
+    };
     try {
       operator = await hostedOperatorClientForSession(
         ctx.session.auth,
@@ -132,17 +143,17 @@ export default defineTool({
         const selected = await runnableSelectedApp({
           appId: input.appId,
           resolveRoot: async ({ appId, root }) =>
-            await resolveAcceptanceRuntimeRoot({ appId, fallbackRoot: root, sandbox, state, ctx }),
+            await resolveAcceptanceRuntimeRoot({ appId, ctx, fallbackRoot: root, sandbox, state }),
           state,
         });
         continuityStage = "tool_sandbox_identity";
-        const runtime = {
+        const runtime: Parameters<typeof operator.planContinuity>[1] = {
           root: selected.root,
           sandboxId: getBuilderSandboxId(sandbox),
-          ...(input.browserSelection === undefined
-            ? {}
-            : { browserSelection: input.browserSelection }),
         };
+        if (input.browserSelection !== undefined) {
+          runtime.browserSelection = input.browserSelection;
+        }
         continuityStage = "tool_plan_request";
         return await operator.planContinuity(
           selection,
@@ -170,21 +181,21 @@ export default defineTool({
           ctx.abortSignal,
         );
       }
-      const result = await operator.request(
-        {
-          action: "plan",
-          ...(input.authSignupPolicy === undefined
-            ? {}
-            : { authSignupPolicy: input.authSignupPolicy }),
-          ...(input.normalActorProgram === undefined
-            ? {}
-            : { normalActorProgram: input.normalActorProgram }),
-          operation,
-          ...(input.releaseIntent === undefined ? {} : { releaseIntent: input.releaseIntent }),
-          selection,
-        },
-        ctx.abortSignal,
-      );
+      const request: Parameters<typeof operator.request>[0] = {
+        action: "plan",
+        operation,
+        selection,
+      };
+      if (input.authSignupPolicy !== undefined) {
+        request.authSignupPolicy = input.authSignupPolicy;
+      }
+      if (input.normalActorProgram !== undefined) {
+        request.normalActorProgram = input.normalActorProgram;
+      }
+      if (input.releaseIntent !== undefined) {
+        request.releaseIntent = input.releaseIntent;
+      }
+      const result = await operator.request(request, ctx.abortSignal);
       return withBuilderDestinationGuidance(
         withAppPublicationGuidance(result),
         destinationSessionId(result.code),

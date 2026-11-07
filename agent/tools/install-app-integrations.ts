@@ -8,6 +8,19 @@ import { invalidateProductBehaviorEvidence } from "@/lib/agent/product-behavior-
 import { appBuilderWorkflowState, updateExactWorkflow } from "@/lib/agent/workflow-state";
 
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
+type SandboxRunInput = Parameters<SandboxSession["run"]>[0];
+interface IntegrationInstallSuccess {
+  capabilityState: "source-omitted" | "source-installed";
+  command: string;
+  exitCode: 0;
+  files: string[];
+  nextStep: string;
+  providerReadiness: "unverified";
+  providers: z.infer<ReturnType<typeof integrationInstallReceipt>>["providers"];
+  readiness?: z.infer<typeof appIntegrationInstallReadinessSchema>;
+  status: "installed" | "omitted";
+  stderr: string;
+}
 
 export const appIntegrationsInstallCommand = (appId: string): string =>
   `mise //apps/integrations:install ${appIdSchema.parse(appId)}`;
@@ -54,11 +67,12 @@ export const installAppIntegrations = async (input: {
 }) => {
   const command = appIntegrationsInstallCommand(input.appId);
   try {
-    const result = await input.sandbox.run({
+    const commandInput: SandboxRunInput = {
       command,
       workingDirectory: input.root,
-      ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
-    });
+    };
+    if (input.signal !== undefined) commandInput.abortSignal = input.signal;
+    const result = await input.sandbox.run(commandInput);
     const stderr = safeCommandOutput(result.stderr);
     if (result.exitCode !== 0) {
       return {
@@ -75,22 +89,24 @@ export const installAppIntegrations = async (input: {
       };
     }
     const receipt = integrationInstallReceipt(input.appId).parse(JSON.parse(result.stdout));
-    return {
+    const successResult: IntegrationInstallSuccess = {
+      capabilityState: receipt.status === "omitted" ? "source-omitted" : "source-installed",
       command,
       exitCode: 0,
-      status: receipt.status,
-      capabilityState:
-        receipt.status === "omitted" ? ("source-omitted" as const) : ("source-installed" as const),
+      files: receipt.files.map((file) => safeCommandOutput(file)),
       nextStep:
         receipt.status === "omitted"
           ? "Continue normal app validation and delivery planning. Source opt-in is omitted; preserve retained bindings and resources through their existing release reconciliation."
           : "Validate the installed source. Any runtime capability setup and provider effects remain separate approved operations.",
-      files: receipt.files.map((file) => safeCommandOutput(file)),
+      providerReadiness: "unverified",
       providers: receipt.providers,
-      ...(receipt.readiness === undefined ? {} : { readiness: receipt.readiness }),
-      providerReadiness: "unverified" as const,
+      status: receipt.status,
       stderr,
     };
+    if (receipt.readiness !== undefined) {
+      successResult.readiness = receipt.readiness;
+    }
+    return successResult;
   } catch (error) {
     return {
       command,

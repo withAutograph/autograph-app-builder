@@ -31,6 +31,17 @@ import {
 export { appBrowserTestCommand } from "../../lib/agent/app-browser-test-runner";
 
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
+const previewIdentity = (value: NonNullable<ReturnType<typeof workingPreviewState.get>>) =>
+  JSON.stringify([
+    value.commandId,
+    value.providerSessionId,
+    value.sandboxId,
+    value.receipt.appId,
+    value.receipt.url,
+    value.receipt.expiresAt,
+    value.requestDigest,
+    value.priorValidatedArtifact,
+  ]);
 
 // oxlint-disable-next-line eslint/complexity -- Keep explicit prior-preview selection separate from existing hosted and local paths.
 export const runAppBrowserTests = async (input: {
@@ -70,11 +81,11 @@ export const runAppBrowserTests = async (input: {
   const run = async (environment?: Record<string, string>, assertPreview?: () => void) => {
     await priorArtifact?.verifyCurrent();
     assertPreview?.();
-    return await runResolvedAppBrowserTests({
-      ...runInput,
-      runtime,
-      ...(environment ? { privateBrowserEnvironment: environment } : {}),
-    });
+    const testInput: Parameters<typeof runResolvedAppBrowserTests>[0] = { ...runInput, runtime };
+    if (environment !== undefined) {
+      testInput.privateBrowserEnvironment = environment;
+    }
+    return await runResolvedAppBrowserTests(testInput);
   };
   if (priorArtifact !== undefined && execution === undefined) {
     throw new Error("The prior validated artifact requires an owned private preview.");
@@ -83,17 +94,6 @@ export const runAppBrowserTests = async (input: {
     return await run();
   }
   const preview = workingPreviewState.get();
-  const identity = (value: NonNullable<typeof preview>) =>
-    JSON.stringify([
-      value.commandId,
-      value.providerSessionId,
-      value.sandboxId,
-      value.receipt.appId,
-      value.receipt.url,
-      value.receipt.expiresAt,
-      value.requestDigest,
-      value.priorValidatedArtifact,
-    ]);
   try {
     if (
       priorArtifact !== undefined &&
@@ -115,13 +115,13 @@ export const runAppBrowserTests = async (input: {
       }
       return await run();
     }
-    const frozenIdentity = identity(preview);
+    const frozenIdentity = previewIdentity(preview);
     const assertCurrent = () => {
       priorArtifact?.assertCurrent();
       const current = workingPreviewState.get();
       if (
         !current ||
-        identity(current) !== frozenIdentity ||
+        previewIdentity(current) !== frozenIdentity ||
         !hasCurrentProductBehaviorPreview(preview.commandId)
       ) {
         throw new PrivatePreviewBrowserPrerequisiteError();
@@ -175,7 +175,7 @@ export default defineTool({
       (await runnableSelectedApp({
         appId: input.appId,
         resolveRoot: async ({ appId, root }) =>
-          await resolveAcceptanceRuntimeRoot({ appId, fallbackRoot: root, sandbox, state, ctx }),
+          await resolveAcceptanceRuntimeRoot({ appId, ctx, fallbackRoot: root, sandbox, state }),
         state,
       }));
     const { root } = selected;
