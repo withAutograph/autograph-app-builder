@@ -10,6 +10,7 @@ import type {
 import type { RepositoryProductionEffectContext } from "./repository-production-setup";
 
 type Json = z.infer<ReturnType<typeof z.json>>;
+const CREATOR_LINK_KIND = "repository-production-creator-link-v1";
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const linkedCreatorSchema = z.strictObject({
@@ -19,7 +20,7 @@ const linkedCreatorSchema = z.strictObject({
 });
 const frameSchema = z.strictObject({
   version: z.literal(1),
-  kind: z.literal("repository-production-creator-link-v1"),
+  kind: z.literal(CREATOR_LINK_KIND),
   invitationId: z.uuid(),
   scopeDigest: digest,
   sessionId: id,
@@ -112,13 +113,13 @@ export const createRepositoryProductionCreator = (
     const frames: CreatorFrame[] = [];
     for (const value of row.record.workerCheckpoints) {
       if (
-        z.object({ kind: z.literal("repository-production-creator-link-v1") }).safeParse(value)
+        z.object({ kind: z.literal(CREATOR_LINK_KIND) }).safeParse(value)
           .success
       ) {
         frames.push(frameSchema.parse(value));
       }
     }
-    const first = frames[0];
+    const [first] = frames;
     for (const frame of frames) {
       const sameOriginalOwner =
         first === undefined ||
@@ -283,7 +284,7 @@ export const createRepositoryProductionCreator = (
       }
       return;
     }
-    const renewal = frame.renewal;
+    const { renewal } = frame;
     if (
       renewal !== undefined &&
       Date.parse(invitation.expiresAt) !== Date.parse(renewal.expiresAt)
@@ -322,7 +323,7 @@ export const createRepositoryProductionCreator = (
         const linked = await linkedCreator(row);
         frame = frameSchema.parse({
           version: 1,
-          kind: "repository-production-creator-link-v1",
+          kind: CREATOR_LINK_KIND,
           invitationId: repositoryProductionOperationRef(row.record.scope),
           scopeDigest: repositoryProductionDigest(row.record.scope),
           sessionId: row.record.intent.sessionId,

@@ -130,15 +130,15 @@ describe("passive sign-in invitation", () => {
   it("keeps renewal inside Builder for an expired identity invitation", () => {
     const html = renderToStaticMarkup(
       createElement(SessionAppView, {
+        canCallTools: true,
+        canOpenLinks: true,
+        identityInvitations: [{ ...invitation, expiresAt: "2000-01-01T00:00:00Z" }],
+        onOpenLink: async () => {},
+        onRespond: async () => {},
         result: {
           ...result([]),
           appAccessUrl: "https://builder.example.com/builds/session/access",
         },
-        identityInvitations: [{ ...invitation, expiresAt: "2000-01-01T00:00:00Z" }],
-        canCallTools: true,
-        canOpenLinks: true,
-        onOpenLink: async () => {},
-        onRespond: async () => {},
       }),
     );
     expect(html).toContain("https://builder.example.com/builds/session/access");
