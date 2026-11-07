@@ -17,7 +17,7 @@ const source = [
   { content: ":root{--background:#fff;--foreground:#111}", path: "app/globals.css" },
 ];
 
-const unusedPage = vi.mocked({});
+const unusedPage = {};
 
 describe("default framework adapter", () => {
   it("does not infer missing functionality from an incomplete source inventory", async () => {
@@ -51,7 +51,7 @@ describe("default framework adapter", () => {
     "semantic-tokens",
     "suspense",
   ] as const)("does not award %s assertions from structural hints", async (requirement) => {
-    const adapter = createDefaultFrameworkAdapter({
+    const adapter = createDefaultFrameworkAdapter<typeof unusedPage>({
       baseURL: "https://reference",
       files: source,
       side: "reference",
@@ -76,7 +76,7 @@ describe("default framework adapter", () => {
     const browserFixture = vi
       .fn()
       .mockResolvedValue({ artifacts: [], assertions: [], reason: "Exercised request" });
-    const adapter = createDefaultFrameworkAdapter({
+    const adapter = createDefaultFrameworkAdapter<typeof unusedPage>({
       baseURL: "https://candidate",
       browserFixture,
       files: source,
