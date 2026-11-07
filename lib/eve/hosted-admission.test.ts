@@ -72,19 +72,20 @@ async function startTwice(hosted: ReturnType<typeof service>, first = "one", sec
 describe("hosted start capacity", () => {
   it("does not impose App Builder start, subject, or workspace quotas", async () => {
     const store = new InMemoryHostedEveStore();
+    const anySessionId: unknown = expect.any(String);
     const firstUser = service({
       ownerUserId: "user_one",
       status: "working",
       store,
     });
     await expect(startTwice(firstUser)).resolves.toMatchObject({
-      sessionId: expect.any(String),
+      sessionId: anySessionId,
     });
     await expect(
       service({ ownerUserId: "user_two", status: "working", store }).start({
         clientRequestId: "three",
         prompt: "Build in the same workspace",
       }),
-    ).resolves.toMatchObject({ sessionId: expect.any(String) });
+    ).resolves.toMatchObject({ sessionId: anySessionId });
   });
 });
