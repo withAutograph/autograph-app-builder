@@ -206,7 +206,7 @@ describe("prepared provider continuity", () => {
     expect(
       withPreparedGitHubSelection(
         { repository: "acme/stock" },
-        undefined as typeof intent | undefined,
+        undefined,
       ),
     ).toEqual({
       repository: "acme/stock",
