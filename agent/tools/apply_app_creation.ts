@@ -33,11 +33,13 @@ import {
 } from "@/lib/agent/apply-implementation-files";
 import { invalidateProductBehaviorEvidence } from "@/lib/agent/product-behavior-state";
 
+const NOT_APPLICABLE_APPROVAL = "not-applicable";
+
 export default defineTool({
   approval(ctx) {
     if (internalCorrectionRequiresSuccessor(ctx)) {
       discardPendingPrivateApplyApproval(ctx.callId);
-      return "not-applicable";
+      return NOT_APPLICABLE_APPROVAL;
     }
     const current = appBuilderWorkflowState.get();
     if (
@@ -47,11 +49,11 @@ export default defineTool({
     ) {
       discardPendingPrivateApplyApproval(ctx.callId);
       // Only the read-only prerequisite report can execute in this phase.
-      return "not-applicable";
+      return NOT_APPLICABLE_APPROVAL;
     }
     if (ctx.toolInput?.privateCompute !== current.proposal.target.privateCompute?.id) {
       discardPendingPrivateApplyApproval(ctx.callId);
-      return "not-applicable";
+      return NOT_APPLICABLE_APPROVAL;
     }
     return requestPrivateApplyApproval(
       {
@@ -179,7 +181,7 @@ export default defineTool({
       workspaceDigest: current.workspace.workspaceDigest,
     };
     invalidateProductBehaviorEvidence("source-apply");
-    const result = await executeProposalBoundApply({
+    const applyInput: Parameters<typeof executeProposalBoundApply>[0] = {
       appliedByCallId: ctx.callId,
       artifactRevision: current.appSpec.artifactRevision,
       binding,
@@ -191,31 +193,38 @@ export default defineTool({
       ),
       proposal: current.proposal.target,
       sandbox,
-      ...(fixture
-        ? {
-            snapshotter: async (fixtureSandbox, applyRoot) =>
-              inspectFixtureApplyOverlay(fixtureSandbox, applyRoot, current.appSpec.appId),
-          }
-        : {}),
-    });
+    };
+    if (fixture) {
+      applyInput.snapshotter = async (fixtureSandbox, applyRoot) =>
+        inspectFixtureApplyOverlay(fixtureSandbox, applyRoot, current.appSpec.appId);
+    }
+    const result = await executeProposalBoundApply(applyInput);
     if (!result.ok) {
       updateExactWorkflow({
         expected: current,
         operation: "target apply failure recording",
-        transition: () => ({
-          appSpec: current.appSpec,
-          applyFailure: result.receipt,
-          artifacts: current.artifacts,
-          dependencyReceipt: current.dependencyReceipt,
-          ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-          identityReceipt: current.identityReceipt,
-          phase: "apply_failed",
-          preparedByCallId: current.preparedByCallId,
-          proposal: current.proposal,
-          sourceReceipt: current.sourceReceipt,
-          version: APP_BUILDER_WORKFLOW_VERSION,
-          workspace: current.workspace,
-        }),
+        transition: () => {
+          const failed = {
+            appSpec: current.appSpec,
+            applyFailure: result.receipt,
+            artifacts: current.artifacts,
+            dependencyReceipt: current.dependencyReceipt,
+          };
+          const withSource =
+            current.githubSource === undefined
+              ? failed
+              : { ...failed, githubSource: current.githubSource };
+          return {
+            ...withSource,
+            identityReceipt: current.identityReceipt,
+            phase: "apply_failed",
+            preparedByCallId: current.preparedByCallId,
+            proposal: current.proposal,
+            sourceReceipt: current.sourceReceipt,
+            version: APP_BUILDER_WORKFLOW_VERSION,
+            workspace: current.workspace,
+          };
+        },
       });
       const command = result.receipt.failedCommand ?? result.receipt.command.name;
       const diagnostics = [result.receipt.output?.stderr, result.receipt.output?.stdout]
@@ -233,27 +242,39 @@ export default defineTool({
         repair =
           " No safe command diagnostic was captured; inspect the named command in the isolated checkout before changing app files.";
       }
-      throw new Error(
-        `Builder failed to run ${command} (exit ${result.receipt.command.exitCode}, ${result.receipt.commandFailureKind ?? "unknown"})${result.receipt.missingDependency === undefined ? "" : ` while resolving ${result.receipt.missingDependency}`}.${diagnostics === "" ? "" : ` Diagnostic:\n${diagnostics}`}${repair}`,
-      );
+      const failureSummary = `Builder failed to run ${command} (exit ${result.receipt.command.exitCode}, ${result.receipt.commandFailureKind ?? "unknown"})`;
+      const dependencyDetail =
+        result.receipt.missingDependency === undefined
+          ? ""
+          : ` while resolving ${result.receipt.missingDependency}`;
+      const diagnosticDetail = diagnostics === "" ? "" : ` Diagnostic:\n${diagnostics}`;
+      throw new Error(`${failureSummary}${dependencyDetail}.${diagnosticDetail}${repair}`);
     }
     updateExactWorkflow({
       expected: current,
       operation: "target apply success recording",
-      transition: () => ({
-        appSpec: current.appSpec,
-        applyReceipt: result.receipt,
-        artifacts: current.artifacts,
-        dependencyReceipt: current.dependencyReceipt,
-        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-        identityReceipt: current.identityReceipt,
-        phase: "applied",
-        preparedByCallId: current.preparedByCallId,
-        proposal: current.proposal,
-        sourceReceipt: current.sourceReceipt,
-        version: APP_BUILDER_WORKFLOW_VERSION,
-        workspace: current.workspace,
-      }),
+      transition: () => {
+        const applied = {
+          appSpec: current.appSpec,
+          applyReceipt: result.receipt,
+          artifacts: current.artifacts,
+          dependencyReceipt: current.dependencyReceipt,
+        };
+        const withSource =
+          current.githubSource === undefined
+            ? applied
+            : { ...applied, githubSource: current.githubSource };
+        return {
+          ...withSource,
+          identityReceipt: current.identityReceipt,
+          phase: "applied",
+          preparedByCallId: current.preparedByCallId,
+          proposal: current.proposal,
+          sourceReceipt: current.sourceReceipt,
+          version: APP_BUILDER_WORKFLOW_VERSION,
+          workspace: current.workspace,
+        };
+      },
     });
     return {
       appId: current.proposal.target.contract.appId,
