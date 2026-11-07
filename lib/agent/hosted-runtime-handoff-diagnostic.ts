@@ -132,32 +132,32 @@ export const reportHostedRuntimeHandoffDiagnostic = (
       case "owner_selection_read": {
         const state = referenceState.safeParse(input.referenceState);
         if (state.success) {
-          console.info(
-            JSON.stringify({
-              event,
-              referenceState: state.data,
-              stage: "owner_selection_read",
-              ...(input.selectionPresent === undefined
-                ? {}
-                : { selectionPresent: diagnosticBoolean.parse(input.selectionPresent) }),
-            }),
-          );
+          const base = {
+            event,
+            referenceState: state.data,
+            stage: "owner_selection_read" as const,
+          };
+          const diagnostic =
+            input.selectionPresent === undefined
+              ? base
+              : { ...base, selectionPresent: diagnosticBoolean.parse(input.selectionPresent) };
+          console.info(JSON.stringify(diagnostic));
         }
         break;
       }
       case "native_preview_candidate": {
-        console.info(
-          JSON.stringify({
-            acceptedAppIdPresent: diagnosticBoolean.parse(input.acceptedAppIdPresent),
-            event,
-            inputAppIdPresent: diagnosticBoolean.parse(input.inputAppIdPresent),
-            lookupAttempted: diagnosticBoolean.parse(input.lookupAttempted),
-            stage: "native_preview_candidate",
-            ...(input.appIdMatches === undefined
-              ? {}
-              : { appIdMatches: diagnosticBoolean.parse(input.appIdMatches) }),
-          }),
-        );
+        const base = {
+          acceptedAppIdPresent: diagnosticBoolean.parse(input.acceptedAppIdPresent),
+          event,
+          inputAppIdPresent: diagnosticBoolean.parse(input.inputAppIdPresent),
+          lookupAttempted: diagnosticBoolean.parse(input.lookupAttempted),
+          stage: "native_preview_candidate" as const,
+        };
+        const diagnostic =
+          input.appIdMatches === undefined
+            ? base
+            : { ...base, appIdMatches: diagnosticBoolean.parse(input.appIdMatches) };
+        console.info(JSON.stringify(diagnostic));
         break;
       }
       default: {
