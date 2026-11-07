@@ -204,6 +204,12 @@ runtime discriminated unions and rebound to the exact principal, kind, client
 request ID, request digest, state, and session before they grant any authority.
 Unknown dispositions and mismatched store responses fail closed.
 
+An activated idle recovery publishes its durable `session.waiting` event before
+parking for the next user message. Its checkpoint and waiting steps receive only
+their serializable input; workflow port objects remain outside the step receiver.
+This preserves the recovered session, continuation token and approval history
+without starting a model turn or another app lifecycle.
+
 ### Recovery of approved publication readback
 
 An interrupted native turn can retain a human-approved `reconcile_github_draft_pr`

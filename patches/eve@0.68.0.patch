@@ -3173,10 +3173,10 @@ index 0000000000000000000000000000000000000000..8de8b1d09168a337aeff7acc357757c4
 +}): Promise<{ inbox: SessionInboxHandle; session: SessionBoot } | undefined>;
 diff --git a/dist/src/execution/session/terminal-recovery-boot.js b/dist/src/execution/session/terminal-recovery-boot.js
 new file mode 100644
-index 0000000000000000000000000000000000000000..56c38449f0053a6049c3d4623ca0a2bad9ac27fd
+index 0000000000000000000000000000000000000000..f2f622394cca9c04e4a8803a6cdb5257046b6931
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery-boot.js
-@@ -0,0 +1,149 @@
+@@ -0,0 +1,150 @@
 +import { decodeSessionInboxPayload } from "#execution/session-inbox/protocol.js";
 +import { activeTurnId } from "#harness/active-turn-id.js";
 +import { createHook, getWorkflowMetadata, getWritable } from "#compiled/@workflow/core/index.js";
@@ -3313,7 +3313,8 @@ index 0000000000000000000000000000000000000000..56c38449f0053a6049c3d4623ca0a2ba
 +      },
 +    };
 +    if (boot.session.awaitFirstMessage) {
-+      await ports.emitIdleWaiting({
++      const emitIdleWaiting = ports.emitIdleWaiting;
++      await emitIdleWaiting({
 +        continuationToken: checkpoint.sessionState.continuationToken,
 +        sessionWritable: boot.session.sessionWritable,
 +      });

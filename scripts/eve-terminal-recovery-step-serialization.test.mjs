@@ -146,3 +146,85 @@ it("serializes the actual terminal boot validation step without its function-bea
   assert.deepEqual(decoded.args, [{ checkpoint }]);
   assert.deepEqual(f.calls, []);
 });
+
+it("serializes the idle waiting step after activation without capturing recovery ports", async () => {
+  const queue = new Map();
+  const { promise: queued, resolve: queuedStep } = Promise.withResolvers();
+  const waitingStep = createUseStepForFixture({
+    generateUlid: () => "idle-waiting-correlation",
+    invocationsQueue: queue,
+    eventsConsumer: { subscribe: queuedStep },
+    promiseQueue: Promise.resolve(),
+  })(
+    "step//eve/execution/session/terminal-recovery-waiting-step.js//emitTerminalRecoveryWaitingStep",
+  );
+  const { promise: activation, resolve: activate } = Promise.withResolvers();
+  const { promise: listening, resolve: listen } = Promise.withResolvers();
+  const calls = [];
+  // Workflow's getWritable carries this stream identity through its serializer.
+  // A synthetic native stream avoids starting a provider World in this fixture.
+  const writable = new WritableStream();
+  Object.defineProperty(writable, Symbol.for("WORKFLOW_STREAM_NAME"), {
+    value: "idle-waiting-stream",
+  });
+  const ports = {
+    createHook() {
+      calls.push("activation-hook");
+      listen();
+      return Object.assign(activation, {
+        getConflict: () => Promise.resolve(),
+        dispose() {
+          // The queued durable step keeps this fixture suspended before disposal.
+        },
+      });
+    },
+    createSessionInbox: () => ({
+      claimSessionHooks: () => Promise.resolve(),
+      onInterrupt: () => () => {
+        // No external interrupts are registered by this synthetic inbox.
+      },
+      drain: () => [],
+      restore() {
+        // This idle checkpoint has no retained inbox messages.
+      },
+      dispose: () => Promise.resolve(),
+    }),
+    getWorkflowMetadata: () => ({ workflowRunId: "idle-owner" }),
+    getWritable: () => writable,
+    validateCheckpoint: () => Promise.resolve(),
+    emitIdleWaiting: waitingStep,
+  };
+  const suspended = bootTerminalRecoveryOwnerWithPorts(
+    {
+      kind: "terminal-recovery",
+      checkpoint,
+      descriptor,
+      provenance: { ...provenance, resumePhase: "await-input" },
+      activationToken: "idle-activation",
+      ownerDeploymentId: "fixture-deployment",
+    },
+    ports,
+  );
+  assert.ok(suspended instanceof Promise);
+  await listening;
+  assert.equal(queue.size, 0);
+  activate({
+    kind: "activate-terminal-recovery",
+    operationId: descriptor.operationId,
+    ownerRunId: "idle-owner",
+  });
+  await queued;
+  assert.equal(queue.size, 1);
+  const [step] = queue.values();
+  assert.equal(step.stepName, waitingStep.stepId);
+  const input = { args: step.args, closureVars: step.closureVars, thisVal: step.thisVal };
+  await dehydrateStepArguments(input, "idle-owner", undefined);
+  assert.equal(input.thisVal, undefined);
+  assert.deepEqual(step.args, [
+    {
+      continuationToken: checkpoint.sessionState.continuationToken,
+      sessionWritable: writable,
+    },
+  ]);
+  assert.deepEqual(calls, ["activation-hook"]);
+});
