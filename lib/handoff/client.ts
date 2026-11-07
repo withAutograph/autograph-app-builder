@@ -48,26 +48,27 @@ export function buildAppHandoffUrl(destination: HandoffDestination, handoffId: s
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function buildCursorInstallUrl(mcpUrl: string, ready: boolean) {
-  if (!ready) {
-    return;
+  let result: string | undefined;
+  if (ready) {
+    const url = new URL(mcpUrl);
+    if (
+      (url.protocol !== "https:" &&
+        !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) ||
+      url.pathname !== "/mcp"
+    ) {
+      throw new Error("mcp-url-invalid");
+    }
+    if (url.username || url.password || url.search || url.hash) {
+      throw new Error("mcp-url-invalid");
+    }
+    const config = JSON.stringify({
+      auth: { CLIENT_ID: "autograph-cursor-desktop" },
+      url: url.href,
+    });
+    const encoded = btoa(
+      Array.from(new TextEncoder().encode(config), (byte) => String.fromCodePoint(byte)).join(""),
+    );
+    result = `cursor://anysphere.cursor-deeplink/mcp/install?name=Autograph&config=${encodeURIComponent(encoded)}`;
   }
-  const url = new URL(mcpUrl);
-  if (
-    (url.protocol !== "https:" &&
-      !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) ||
-    url.pathname !== "/mcp"
-  ) {
-    throw new Error("mcp-url-invalid");
-  }
-  if (url.username || url.password || url.search || url.hash) {
-    throw new Error("mcp-url-invalid");
-  }
-  const config = JSON.stringify({
-    auth: { CLIENT_ID: "autograph-cursor-desktop" },
-    url: url.href,
-  });
-  const encoded = btoa(
-    Array.from(new TextEncoder().encode(config), (byte) => String.fromCodePoint(byte)).join(""),
-  );
-  return `cursor://anysphere.cursor-deeplink/mcp/install?name=Autograph&config=${encodeURIComponent(encoded)}`;
+  return result;
 }
