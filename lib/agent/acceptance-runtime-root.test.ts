@@ -29,7 +29,7 @@ describe("acceptance workspace recovery", () => {
     const describeRelease = vi.fn(async (root: string) =>
       root === "/missing" ? undefined : root === "/old" ? "v1" : "v3",
     );
-    const recover = vi.fn(async () => "/separate-recovered");
+    const recover = vi.fn<() => Promise<string>>().mockResolvedValue("/separate-recovered");
     await expect(
       resolveCompatibleAcceptanceRoot({
         describe: describeRelease,
