@@ -27,7 +27,7 @@ const request = () =>
     method: "POST",
   });
 const fixture = () => {
-  const limit = vi.fn(async () => []);
+  const limit = vi.fn(() => Promise.resolve([]));
   const select = vi.fn(() => ({ from: () => ({ where: () => ({ limit }) }) }));
   // SAFETY: This test supplies only the exact read-only Drizzle query chain consumed by the readiness reader; no write/effect method exists.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- The deliberately partial read-only database fixture exercises the real HTTP prerequisite path.
