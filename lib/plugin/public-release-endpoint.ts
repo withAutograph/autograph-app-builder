@@ -7,15 +7,14 @@ const isLoopbackOrUnspecifiedIpv4 = (host: string) => {
   return octets[0] === 127 || octets.every((octet) => octet === 0);
 };
 
-const mappedIpv4 = (host: string) => {
+const mappedIpv4 = (host: string): string | undefined => {
   const match = /^::ffff:(?<high>[0-9a-f]{1,4}):(?<low>[0-9a-f]{1,4})$/u.exec(host);
-  if (!match) {
-    return;
+  if (match) {
+    const high = Number.parseInt(match[1], 16);
+    const low = Number.parseInt(match[2], 16);
+    return `${Math.floor(high / 256)}.${high % 256}.${Math.floor(low / 256)}.${low % 256}`;
   }
-  const high = Number.parseInt(match[1], 16);
-  const low = Number.parseInt(match[2], 16);
-  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-  return `${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`;
+  return undefined;
 };
 
 export const isReservedPublicReleaseHostname = (hostname: string) => {
@@ -32,7 +31,7 @@ export const isReservedPublicReleaseHostname = (hostname: string) => {
       return true;
     }
     const mapped = mappedIpv4(host);
-    if (mapped && isLoopbackOrUnspecifiedIpv4(mapped)) {
+    if (mapped !== undefined && mapped !== "" && isLoopbackOrUnspecifiedIpv4(mapped)) {
       return true;
     }
   }
