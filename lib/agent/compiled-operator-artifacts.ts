@@ -501,8 +501,8 @@ export const publishCompiledOperatorArtifactsForSession = async (
           await import("../provisioning/captured-app-description");
         database ??= openArtifactDatabase();
         const descriptions = createCapturedAppDescriptionStore({
-          database: await database,
           assertCurrentOwner,
+          database: await database,
         });
         await descriptions.record(context, input.appSpecDigest, input.callId, description);
       }
