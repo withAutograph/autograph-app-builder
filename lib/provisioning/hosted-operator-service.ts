@@ -1961,6 +1961,18 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
             "native-target-approval-read",
             "native-target-approval-candidate",
             "native-target-auth-only-prepare",
+            "native-target-auth-only-approval-read",
+            "native-target-auth-only-resource-approval-read",
+            "native-target-auth-only-resources",
+            "native-target-auth-only-delivery-plan",
+            "native-target-auth-only-delivery-approval-read",
+            "native-target-auth-only-delivery",
+            "native-target-auth-only-entry-plan",
+            "native-target-auth-only-entry-approval-read",
+            "native-target-auth-only-entry",
+            "native-target-auth-only-final-routing-plan",
+            "native-target-auth-only-final-routing-approval-read",
+            "native-target-auth-only-final-routing",
           ]),
         })
         .safeParse(body);

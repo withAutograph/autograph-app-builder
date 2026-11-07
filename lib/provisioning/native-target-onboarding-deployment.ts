@@ -63,6 +63,7 @@ import type {
 } from "./native-target-onboarding-contract";
 import {
   createNativeTargetOnboardingService,
+  isNativeTargetOnboardingServiceRequest,
   NativeTargetExistingConfiguredTargetError,
 } from "./native-target-onboarding-service";
 import { createPostgresNativeTargetOnboardingStore } from "./native-target-onboarding-store";
@@ -180,6 +181,11 @@ const isPreparedFinalRoutingResult = (
   value: unknown,
 ): value is z.infer<typeof nativeTargetAuthOnlyFinalRoutingResultSchema> =>
   nativeTargetAuthOnlyFinalRoutingResultSchema.safeParse(value).success;
+const authOnlyEntryActions = new Set([
+  "native-target-auth-only-entry-plan",
+  "native-target-auth-only-entry-approval-read",
+  "native-target-auth-only-entry",
+]);
 const authOnlyDeliveryActions = new Set([
   "native-target-auth-only-delivery-plan",
   "native-target-auth-only-delivery-approval-read",
@@ -205,6 +211,18 @@ type NativeTargetAuthOnlyDeliveryRequest = NativeTargetRequest & {
     deliveryPlanDigest?: string;
   };
 };
+type NativeTargetAuthOnlyEntryRequest = Extract<
+  NativeTargetRequest,
+  {
+    action:
+      | "native-target-auth-only-entry-plan"
+      | "native-target-auth-only-entry-approval-read"
+      | "native-target-auth-only-entry";
+  }
+>;
+const isNativeTargetAuthOnlyEntryRequest = (
+  request: NativeTargetRequest,
+): request is NativeTargetAuthOnlyEntryRequest => authOnlyEntryActions.has(request.action);
 const isNativeTargetAuthOnlyDeliveryRequest = (
   request: NativeTargetRequest,
 ): request is NativeTargetAuthOnlyDeliveryRequest => authOnlyDeliveryActions.has(request.action);
@@ -1098,16 +1116,7 @@ export const createNativeTargetOnboardingDeployment = (input: {
     });
     return { entry, readHistory };
   };
-  type EntryRequest = Extract<
-    NativeTargetTransportRequest,
-    {
-      action:
-        | "native-target-auth-only-entry-plan"
-        | "native-target-auth-only-entry-approval-read"
-        | "native-target-auth-only-entry";
-    }
-  >;
-  const handleEntry = async (request: Request, rawInput: EntryRequest) => {
+  const handleEntry = async (request: Request, rawInput: NativeTargetAuthOnlyEntryRequest) => {
     await input.owner.verifyWorkload(request);
     const currentOwner = await authorize(request, rawInput);
     const proposal = rawInput.input;
@@ -3120,11 +3129,7 @@ export const createNativeTargetOnboardingDeployment = (input: {
     );
   };
   return async (request: Request, rawInput: NativeTargetRequest): Promise<Response> => {
-    if (
-      rawInput.action === "native-target-auth-only-entry-plan" ||
-      rawInput.action === "native-target-auth-only-entry-approval-read" ||
-      rawInput.action === "native-target-auth-only-entry"
-    ) {
+    if (isNativeTargetAuthOnlyEntryRequest(rawInput)) {
       return await handleEntry(request, rawInput);
     }
     if (isNativeTargetAuthOnlyDeliveryRequest(rawInput)) {
@@ -3136,8 +3141,11 @@ export const createNativeTargetOnboardingDeployment = (input: {
     if (authOnlyResourceActions.has(rawInput.action)) {
       return await handleAuthOnlyResources(request, rawInput);
     }
-    if (rawInput.action !== "native-target-auth-only-plan") {
+    if (isNativeTargetOnboardingServiceRequest(rawInput)) {
       return await nativeTargetService(request, rawInput);
+    }
+    if (rawInput.action !== "native-target-auth-only-plan") {
+      throw mismatch();
     }
     const authRequest = nativeTargetAuthOnlyPlanRequestSchema.parse(rawInput);
     await input.owner.verifyWorkload(request);
