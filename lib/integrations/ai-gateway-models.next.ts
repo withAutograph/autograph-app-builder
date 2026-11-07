@@ -24,5 +24,5 @@ async function cachedGatewayModels() {
 // Force is a server-side retry bypass, not a new cache key or public mutation.
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function loadNextGatewayModels(input?: { force?: boolean }) {
-  return input?.force ? await loadGatewayModels() : await cachedGatewayModels();
+  return (input?.force ?? false) ? await loadGatewayModels() : await cachedGatewayModels();
 }
