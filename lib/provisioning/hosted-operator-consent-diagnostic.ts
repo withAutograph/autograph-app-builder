@@ -403,10 +403,11 @@ export const projectAuthStartupDiagnostic = (value: unknown): AuthStartupDiagnos
     }
     const code: unknown = Object.getOwnPropertyDescriptor(value, "domain_code")?.value;
     const parsedCode = authStartupDomainCode.safeParse(code);
-    return {
-      stage: parsedStage.data,
-      ...(parsedCode.success ? { domain_code: parsedCode.data } : {}),
-    };
+    const diagnostic: AuthStartupDiagnostic = { stage: parsedStage.data };
+    if (parsedCode.success) {
+      diagnostic.domain_code = parsedCode.data;
+    }
+    return diagnostic;
   } catch {
     return undefined;
   }
@@ -474,11 +475,14 @@ export const projectResourceReadbackDiagnostic = (
     const parsedReason = resourceReadbackReason.safeParse(reason);
     const sqlStateClass: unknown = Object.getOwnPropertyDescriptor(value, "sqlStateClass")?.value;
     const parsedClass = resourceReadbackSqlStateClass.safeParse(sqlStateClass);
-    return {
-      stage: parsedStage.data,
-      ...(parsedReason.success ? { reason: parsedReason.data } : {}),
-      ...(parsedClass.success ? { sqlStateClass: parsedClass.data } : {}),
-    };
+    const diagnostic: ResourceReadbackDiagnostic = { stage: parsedStage.data };
+    if (parsedReason.success) {
+      diagnostic.reason = parsedReason.data;
+    }
+    if (parsedClass.success) {
+      diagnostic.sqlStateClass = parsedClass.data;
+    }
+    return diagnostic;
   } catch {
     return undefined;
   }
@@ -518,11 +522,17 @@ const operatorExecutionFailure = operatorPlanningFailure
       failure.workerFailure === "readback_unknown" && failure.mode === "inspect"
         ? projectResourceReadbackDiagnostic(resourceReadback)
         : undefined;
-    return {
-      ...failure,
-      ...(projected === undefined ? {} : { authStartup: projected }),
-      ...(readback === undefined ? {} : { resourceReadback: readback }),
-    };
+    const result: typeof failure & {
+      authStartup?: typeof projected;
+      resourceReadback?: typeof readback;
+    } = { ...failure };
+    if (projected !== undefined) {
+      result.authStartup = projected;
+    }
+    if (readback !== undefined) {
+      result.resourceReadback = readback;
+    }
+    return result;
   });
 export type OperatorExecutionFailure = z.infer<typeof operatorExecutionFailure>;
 
