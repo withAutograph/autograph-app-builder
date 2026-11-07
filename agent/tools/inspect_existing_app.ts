@@ -19,6 +19,8 @@ import {
   serializedPayloadBytes,
 } from "@/lib/eve/payload-envelope";
 
+const CURRENT_PROPOSAL_SOURCE = "current-proposal" as const;
+
 // The source checkout is writable. An initial clone manifest cannot describe
 // files added or removed during an existing-app session.
 type AppSourceFileRunner = Pick<SandboxSession, "run">;
@@ -33,6 +35,11 @@ interface SourceInspectionContinuation {
   digest: string;
   offsetBytes: number;
   path: string;
+}
+
+interface SourceInspectionFilePage {
+  continuation?: SourceInspectionContinuation;
+  file: SourceInspectionFile;
 }
 
 interface SourceInspectionListing {
@@ -94,7 +101,7 @@ const sourceInspectionListing = function sourceInspectionListing(
   availablePaths: string[],
   pathIndex: number,
   contentRequested: boolean,
-): { listing: SourceInspectionListing; nextPathIndex: number } {
+) {
   if (contentRequested) {
     return {
       listing: {
@@ -144,14 +151,16 @@ const readSourceFilePage = async function readSourceFilePage(
   try {
     chunk = largestUtf8PayloadChunk({
       content,
-      makePayload: (chunkContent, nextOffsetBytes) =>
-        sourceInspectionEvent({
+      makePayload: (chunkContent, nextOffsetBytes) => {
+        const payload: SourceInspectionOutput = {
           ...payloadBase,
           files: [...files, { content: chunkContent, digest, offsetBytes, path }],
-          ...(nextOffsetBytes < Buffer.byteLength(content, "utf-8")
-            ? { continuation: { digest, offsetBytes: nextOffsetBytes, path } }
-            : {}),
-        }),
+        };
+        if (nextOffsetBytes < Buffer.byteLength(content, "utf-8")) {
+          payload.continuation = { digest, offsetBytes: nextOffsetBytes, path };
+        }
+        return sourceInspectionEvent(payload);
+      },
       offsetBytes,
     });
   } catch (error) {
@@ -164,12 +173,13 @@ const readSourceFilePage = async function readSourceFilePage(
     }
     throw error;
   }
-  return {
+  const response: SourceInspectionFilePage = {
     file: { content: chunk.content, digest, offsetBytes, path },
-    ...(chunk.nextOffsetBytes < Buffer.byteLength(content, "utf-8")
-      ? { continuation: { digest, offsetBytes: chunk.nextOffsetBytes, path } }
-      : {}),
   };
+  if (chunk.nextOffsetBytes < Buffer.byteLength(content, "utf-8")) {
+    response.continuation = { digest, offsetBytes: chunk.nextOffsetBytes, path };
+  }
+  return response;
 };
 
 type AppBuilderState = ReturnType<typeof appBuilderWorkflowState.get>;
@@ -222,23 +232,20 @@ const listAvailableSourcePaths = async function listAvailableSourcePaths(
     return await listCurrentAppSourcePaths(sandbox, appId);
   }
   const manifestSource = await sandbox.readTextFile({ path: ".app-builder/source-files.json" });
-  let manifest: unknown = [];
+  let entries: unknown[] = [];
   try {
-    manifest = manifestSource === null ? [] : JSON.parse(manifestSource);
-  } catch {
-    manifest = [];
-  }
-  const entries = Array.isArray(manifest) ? manifest : [];
-  const allowedPaths = entries.flatMap((candidate): string[] => {
-    if (
-      typeof candidate === "object" &&
-      candidate !== null &&
-      "path" in candidate &&
-      typeof candidate.path === "string"
-    ) {
-      return [candidate.path];
+    const parsed = z
+      .array(z.unknown())
+      .safeParse(manifestSource === null ? [] : JSON.parse(manifestSource));
+    if (parsed.success) {
+      entries = parsed.data;
     }
-    return [];
+  } catch {
+    entries = [];
+  }
+  const allowedPaths = entries.flatMap((candidate): string[] => {
+    const parsed = z.object({ path: z.string() }).safeParse(candidate);
+    return parsed.success ? [parsed.data.path] : [];
   });
   return [...new Set(allowedPaths)]
     .filter((path) => path.startsWith(prefix))
@@ -314,14 +321,21 @@ export const buildSourceInspectionOutput = async function buildSourceInspectionO
       break;
     }
   }
-  const response: SourceInspectionOutput = {
+  const base = {
     appId,
     ...listing,
-    ...(nextPathIndex < availablePaths.length ? { nextPathIndex } : {}),
-    files,
-    ...(missingPaths.length === 0 ? {} : { missingPaths }),
-    ...(continuation === undefined ? {} : { continuation }),
   };
+  const indexed = nextPathIndex < availablePaths.length ? { ...base, nextPathIndex } : base;
+  const response: SourceInspectionOutput = {
+    ...indexed,
+    files,
+  };
+  if (missingPaths.length > 0) {
+    response.missingPaths = missingPaths;
+  }
+  if (continuation !== undefined) {
+    response.continuation = continuation;
+  }
   if (serializedPayloadBytes(sourceInspectionEvent(response)) > EVE_MAX_PAYLOAD_BYTES) {
     throw new Error(
       "The requested source inspection metadata exceeds Eve's provider transport envelope. Request fewer paths in one call, then continue with the returned file digest and byte offset.",
@@ -349,7 +363,7 @@ export default defineDynamic({
           },
           ctx,
         ) {
-          if (source === "current-proposal") {
+          if (source === CURRENT_PROPOSAL_SOURCE) {
             return inspectCurrentProposalSource(
               {
                 appId,
@@ -434,10 +448,13 @@ export default defineDynamic({
             offsetBytes: z.number().int().nonnegative().optional(),
             pathIndex: z.number().int().nonnegative().default(0),
             paths: z.array(z.string().min(1)).default([]),
-            source: z.enum(["applied", "current-proposal"]).optional(),
+            source: z.enum(["applied", CURRENT_PROPOSAL_SOURCE]).optional(),
           })
           .superRefine((input, context) => {
-            if (input.source !== "current-proposal" && input.expectedProposalDigest !== undefined) {
+            if (
+              input.source !== CURRENT_PROPOSAL_SOURCE &&
+              input.expectedProposalDigest !== undefined
+            ) {
               context.addIssue({
                 code: "custom",
                 message: "Only a current-proposal read accepts expectedProposalDigest.",
