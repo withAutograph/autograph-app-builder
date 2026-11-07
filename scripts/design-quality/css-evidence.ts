@@ -19,6 +19,9 @@ const normal = (value: string) => value.trim();
 const key = (selector: string, property: string, value: string) =>
   `${normal(selector)}\u0000${property}\u0000${normal(value)}`;
 
+const nextQuote = (quote: string, char: string, previous: string | undefined) =>
+  char === quote && previous !== "\\" ? undefined : quote;
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalSelector(value: string) {
   let output = "";
@@ -26,34 +29,28 @@ function canonicalSelector(value: string) {
   let quote: string | undefined;
   for (let index = 0; index < value.length; index += 1) {
     const char = value.charAt(index);
-    if (quote) {
+    if (quote !== undefined) {
       output += char;
-      if (char === quote && value[index - 1] !== "\\") {
-        quote = undefined;
-      }
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      if (pendingSpace && output) {
+      quote = nextQuote(quote, char, value[index - 1]);
+    } else if (char === '"' || char === "'") {
+      if (pendingSpace && output.length > 0) {
         output += " ";
       }
       pendingSpace = false;
       quote = char;
       output += char;
-      continue;
-    }
-    if (/\s/u.test(char)) {
+    } else if (/\s/u.test(char)) {
       pendingSpace = Boolean(output);
-      continue;
-    }
-    if (pendingSpace) {
-      const previous = output.at(-1);
-      if (previous && !/[>+~([,:=]/u.test(previous) && !/[>+~),:=]/u.test(char)) {
-        output += " ";
+    } else {
+      if (pendingSpace) {
+        const previous = output.at(-1);
+        if (previous !== undefined && !/[>+~([,:=]/u.test(previous) && !/[>+~),:=]/u.test(char)) {
+          output += " ";
+        }
       }
+      pendingSpace = false;
+      output += char;
     }
-    pendingSpace = false;
-    output += char;
   }
   return output.trim();
 }
@@ -100,12 +97,12 @@ export function collectCssRuleEvidence(files: CssSourceFile[]): CssRuleEvidence[
       const declarations =
         rule.nodes?.filter((node): node is Declaration => node.type === "decl") ?? [];
       const signature = ruleSignature(rule.selector, declarations);
-      if (!signature) {
+      if (signature === undefined || signature === "") {
         return;
       }
       for (const declaration of declarations) {
         const start = declaration.source?.start;
-        if (!start) {
+        if (start === undefined) {
           continue;
         }
         evidence.push({
@@ -121,18 +118,14 @@ export function collectCssRuleEvidence(files: CssSourceFile[]): CssRuleEvidence[
   return evidence;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function generatedCssRule(
+const matchingGeneratedCssRule = (
   generated: CssRuleEvidence[],
   shared: CssRuleEvidence[],
-  selector: string | undefined,
+  selector: string,
   property: string,
-  value: string | undefined,
+  value: string,
   declarations: { name: string; value: string; important?: boolean }[],
-) {
-  if (!selector || value === undefined) {
-    return;
-  }
+) => {
   const tuple = key(selector, property, value);
   const matchingGenerated = generated.filter(
     (rule) => key(rule.selector, rule.property, rule.value) === tuple,
@@ -145,11 +138,28 @@ export function generatedCssRule(
       value: declaration.value,
     })),
   );
-  const loaded = actual ? matchingGenerated.filter((rule) => rule.ruleSignature === actual) : [];
+  const loaded =
+    actual === undefined || actual === ""
+      ? []
+      : matchingGenerated.filter((rule) => rule.ruleSignature === actual);
   const matchingShared = shared.filter(
     (rule) => key(rule.selector, rule.property, rule.value) === tuple,
   );
-  return loaded.length === 1 && matchingGenerated.length === 1 && !matchingShared.length
+  return loaded.length === 1 && matchingGenerated.length === 1 && matchingShared.length === 0
     ? loaded[0]
     : undefined;
+};
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function generatedCssRule(
+  generated: CssRuleEvidence[],
+  shared: CssRuleEvidence[],
+  selector: string | undefined,
+  property: string,
+  value: string | undefined,
+  declarations: { name: string; value: string; important?: boolean }[],
+) {
+  return selector === undefined || selector === "" || value === undefined
+    ? undefined
+    : matchingGeneratedCssRule(generated, shared, selector, property, value, declarations);
 }
