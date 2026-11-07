@@ -216,7 +216,7 @@ export const resolvePublicRealmEnrollment = async (input: {
       .where(and(ownerPredicate(authority), eq(builderProvisioningJournals.requestId, requestId)))
       .limit(1);
     await input.assertCurrentOwner();
-    const row = rows[0];
+    const [row] = rows;
     if (row === undefined) {
       // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing enrollment metadata is an explicit optional result, not an activated realm.
       return undefined;
