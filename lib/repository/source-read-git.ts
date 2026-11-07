@@ -1,16 +1,19 @@
 import { existsSync } from "node:fs";
 import { captureProcessStdout, streamProcessStdout } from "./captured-process-output";
 
+const CONFIG_FLAG = "-c";
+const SYSTEM_GIT = "/usr/bin/git";
+
 export const git = function git(path: string, args: string[]): string {
-  const executable = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
+  const executable = existsSync(SYSTEM_GIT) ? SYSTEM_GIT : "/bin/git";
   return captureProcessStdout(
     executable,
     [
-      "-c",
+      CONFIG_FLAG,
       "core.hooksPath=/dev/null",
-      "-c",
+      CONFIG_FLAG,
       "core.fsmonitor=false",
-      "-c",
+      CONFIG_FLAG,
       "core.attributesfile=/dev/null",
       "-C",
       path,
@@ -38,11 +41,11 @@ export const git = function git(path: string, args: string[]): string {
 
 export const gitByteInvocation = (path: string, args: string[]) => ({
   args: [
-    "-c",
+    CONFIG_FLAG,
     "core.hooksPath=/dev/null",
-    "-c",
+    CONFIG_FLAG,
     "core.fsmonitor=false",
-    "-c",
+    CONFIG_FLAG,
     "core.attributesfile=/dev/null",
     "-c",
     "credential.helper=",
@@ -52,7 +55,7 @@ export const gitByteInvocation = (path: string, args: string[]) => ({
     path,
     ...args,
   ],
-  command: existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git",
+  command: existsSync(SYSTEM_GIT) ? SYSTEM_GIT : "/bin/git",
   options: {
     env: {
       GIT_ATTR_NOSYSTEM: "1",
