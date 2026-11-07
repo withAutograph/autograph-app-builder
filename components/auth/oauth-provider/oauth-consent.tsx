@@ -217,12 +217,19 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
         <Button
           disabled={!canRespond}
           variant="outline"
-          onClick={() => consent.mutate({ accept: false })}
+          onClick={() => {
+            consent.mutate({ accept: false });
+          }}
         >
           {consent.isPending && consent.variables?.accept === false ? <Spinner /> : null}
           {localization.cancel}
         </Button>
-        <Button disabled={!canRespond} onClick={() => consent.mutate({ accept: true })}>
+        <Button
+          disabled={!canRespond}
+          onClick={() => {
+            consent.mutate({ accept: true });
+          }}
+        >
           {consent.isPending && consent.variables?.accept ? <Spinner /> : null}
           {localization.allow}
         </Button>
