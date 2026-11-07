@@ -11,7 +11,7 @@ export function passkeyErrorCode(value: unknown): string | undefined {
     return undefined;
   }
 
-  const envelope = value as PasskeyErrorEnvelope;
+  const envelope: PasskeyErrorEnvelope = value;
   if (typeof envelope.code === "string") {
     return envelope.code;
   }
@@ -19,7 +19,8 @@ export function passkeyErrorCode(value: unknown): string | undefined {
     return undefined;
   }
 
-  const nestedCode = (envelope.error as PasskeyErrorEnvelope).code;
+  const nestedEnvelope: PasskeyErrorEnvelope = envelope.error;
+  const nestedCode = nestedEnvelope.code;
   return typeof nestedCode === "string" ? nestedCode : undefined;
 }
 
