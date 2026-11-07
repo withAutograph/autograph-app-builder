@@ -15,8 +15,8 @@ import { localSourcePrerequisiteResponse } from "./local-source-prerequisite-res
 const mocks = vi.hoisted(() => ({
   captureDigest: vi.fn(() => "9".repeat(64)),
   dispose: vi.fn(),
-  history: vi.fn(async () => {}),
-  project: vi.fn(async () => {}),
+  history: vi.fn<() => Promise<void>>().mockResolvedValue(),
+  project: vi.fn<() => Promise<void>>().mockResolvedValue(),
   reconcile: vi.fn(),
 }));
 vi.mock("./local-source-transport-history", () => ({
