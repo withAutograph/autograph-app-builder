@@ -61,13 +61,15 @@ export default defineTool({
       sessionId: ctx.session.id,
     });
     const ownedDraftRecovery = ownedPublishedDraftRecovery(workflow);
-    const result = {
-      ...(applicationSourceImport === undefined ? {} : { applicationSourceImport }),
+    const importedSource = applicationSourceImport === undefined ? {} : { applicationSourceImport };
+    const sourceResult = {
+      ...importedSource,
       phase: state.phase,
       receipt: state.receipt,
       version: state.version,
-      ...(ownedDraftRecovery === null ? {} : { ownedDraftRecovery }),
     };
+    const result =
+      ownedDraftRecovery === null ? sourceResult : { ...sourceResult, ownedDraftRecovery };
     if (githubSource === undefined) {
       return result;
     }
