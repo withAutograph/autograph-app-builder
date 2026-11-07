@@ -259,7 +259,7 @@ describe("deployment Browser preview route", () => {
   });
 
   it("recovers the exact authenticated saved build before reading its artifact", async () => {
-    const resume = vi.fn<ResumeRealmContinuation>().mockImplementation(() => Promise.resolve());
+    const resume = vi.fn<ResumeRealmContinuation>().mockResolvedValue();
     const fixture = ownedFixture({ resumeRealmContinuation: resume });
     const response = await fixture.handler(fixture.request, {
       digest,
@@ -277,7 +277,7 @@ describe("deployment Browser preview route", () => {
   });
 
   it("does not recover another account's saved build", async () => {
-    const resume = vi.fn<ResumeRealmContinuation>().mockImplementation(() => Promise.resolve());
+    const resume = vi.fn<ResumeRealmContinuation>().mockResolvedValue();
     const fixture = ownedFixture({ resumeRealmContinuation: resume });
     providers.auth.mockResolvedValue({ user: { id: "other-owner" } });
     const response = await fixture.handler(fixture.request, {

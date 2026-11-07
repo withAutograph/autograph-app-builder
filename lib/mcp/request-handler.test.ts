@@ -695,8 +695,7 @@ describe("request-scoped MCP service selection", () => {
   it("allows public tool discovery before OAuth but protects tool calls", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const verifier = vi.fn(async () => claims());
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const membership = vi.fn(async () => true);
+    const membership = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
     const hostedRuntime = runtime();
     hostedRuntime.verifier = { verify: verifier };
     hostedRuntime.membership = { isMember: membership };

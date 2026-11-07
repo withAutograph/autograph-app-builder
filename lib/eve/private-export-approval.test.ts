@@ -245,7 +245,7 @@ describe("approval history binding and cancellation", () => {
         prefix.observe(settled());
         prefix.proveComplete();
       }
-      const save = vi.fn(() => Promise.resolve());
+      const save = vi.fn<() => Promise<void>>().mockResolvedValue();
       const history = vi.fn((startIndex: number, onEvent: (event: MessageStreamEvent) => void) => {
         expect(startIndex).toBe(0);
         onEvent(settled());
@@ -532,7 +532,7 @@ it("rechecks a quiet native tail without rewriting unchanged approval progress",
     checkpoint = structuredClone(value);
     return Promise.resolve();
   });
-  const assertOwner = vi.fn(() => Promise.resolve());
+  const assertOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
   const readHistory = vi.fn(() =>
     Promise.resolve({ nextNativeIndex: 0, nativeTailIndex: -1, complete: true }),
   );

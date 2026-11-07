@@ -577,7 +577,7 @@ describe("prepared handoff session continuity", () => {
         };
       }),
     });
-    const beforeRead = vi.fn(async () => {});
+    const beforeRead = vi.fn<() => Promise<void>>().mockResolvedValue();
     const createService = () =>
       createHostedEveSessionService({
         beforeRead,
