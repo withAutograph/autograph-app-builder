@@ -16,6 +16,8 @@ import { hasTestCapability } from "@/lib/testing/test-capability";
 import { isHostedVercelRuntime } from "@/lib/sandbox/backend";
 import { inspectSourceReceipt } from "@/lib/repository/source-receipt";
 
+const freshTemplateSourceKind = "fresh-template" as const;
+
 const retainedSourceReceipt = (
   source: SourceWorkflowState,
   workflow: AppBuilderWorkflowState,
@@ -47,7 +49,7 @@ export default defineTool({
         : await developmentSourceReceipt(sourceKind, path);
     if (
       receipt === undefined &&
-      sourceKind === "fresh-template" &&
+      sourceKind === freshTemplateSourceKind &&
       !(hasTestCapability("simulated-target") && path !== undefined)
     ) {
       receipt = await acquireCanonicalArrustedTemplate({
@@ -84,7 +86,7 @@ export default defineTool({
   inputSchema: z
     .object({
       path: z.string().min(1).optional(),
-      sourceKind: z.enum(["existing-repository", "fresh-template"]),
+      sourceKind: z.enum(["existing-repository", freshTemplateSourceKind]),
     })
     .superRefine((value, context) => {
       if (
@@ -99,7 +101,7 @@ export default defineTool({
         });
       }
       if (
-        value.sourceKind === "fresh-template" &&
+        value.sourceKind === freshTemplateSourceKind &&
         value.path !== undefined &&
         !hasTestCapability("simulated-target")
       ) {
