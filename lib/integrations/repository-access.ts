@@ -163,7 +163,7 @@ export interface GitHubRepositoryAccessProvider {
     operation: "resolve-existing-source";
     requestedPermissions: z.infer<typeof readPermissionsSchema>;
   }) => Promise<unknown>;
-  inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown | undefined>;
+  inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown>;
   inspectTargetAccess?: GitHubTargetAccessProvider["inspectTargetAccess"];
 }
 
