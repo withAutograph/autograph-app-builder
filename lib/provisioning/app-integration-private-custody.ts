@@ -13,6 +13,7 @@ import type { VercelTokenKeyringConfig } from "../integrations/vercel-installati
 import { integrationCapabilityResourceSchema } from "./app-integration-capability-contract";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const custodyKind = "app-integration-private-custody-v1";
 export const integrationPrivateAppScopeSchema = z.strictObject({
   appId: z.string().min(1),
   authority: hostedTenantAuthoritySchema,
@@ -49,7 +50,7 @@ const sealedSchema = z.strictObject({
   tokenTag: z.string().min(1),
 });
 const recordSchema = z.strictObject({
-  kind: z.literal("app-integration-private-custody-v1"),
+  kind: z.literal(custodyKind),
   plaintextSha256: digest,
   scope: scopeSchema,
   sealed: sealedSchema,
@@ -59,9 +60,7 @@ export type IntegrationPrivateJson = z.infer<typeof jsonSchema>;
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const unavailable = () => new Error("app_integration_private_custody_unavailable");
 const identity = (scope: IntegrationPrivateScope) => {
-  const sha256 = hash(
-    JSON.stringify(["app-integration-private-custody-v1", scopeSchema.parse(scope)]),
-  );
+  const sha256 = hash(JSON.stringify([custodyKind, scopeSchema.parse(scope)]));
   const reference = `${sha256.slice(0, 8)}-${sha256.slice(8, 12)}-5${sha256.slice(13, 16)}-a${sha256.slice(17, 20)}-${sha256.slice(20, 32)}`;
   return { reference, sha256 };
 };
@@ -138,13 +137,13 @@ export const createAppIntegrationPrivateCustody = (input: {
       const key = identity(scope);
       const plaintext = JSON.stringify(jsonSchema.parse(prepare()));
       const record = recordSchema.parse({
-        kind: "app-integration-private-custody-v1",
+        kind: custodyKind,
         plaintextSha256: hash(plaintext),
         scope,
         sealed: {
           ...encryptVercelToken({
             associatedData: JSON.stringify({
-              purpose: "app-integration-private-custody-v1",
+              purpose: custodyKind,
               ...key,
             }),
             key: input.keyring.tokenKey,

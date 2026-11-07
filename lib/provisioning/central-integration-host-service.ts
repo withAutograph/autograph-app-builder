@@ -32,6 +32,8 @@ import type {
 import type { PublicReleaseInvocation } from "./public-release-handler";
 
 type Plan = CentralHostSetupPlan | CentralHostCallerPlan;
+const centralHostStateChanged = "central_host_state_changed";
+const centralIntegrationHostSetupKind = "central-integration-host-setup-v1";
 export const centralHostSelectionSchema = z.strictObject({
   operationRef: z.uuid(),
   planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
@@ -162,7 +164,7 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
     const next = await ports.store.compareAndSet(row, centralHostRecordSchema.parse(record));
     await authorize(invocation, row.record.plan);
     if (next === undefined) {
-      throw new Error("central_host_state_changed");
+      throw new Error(centralHostStateChanged);
     }
     return next;
   };
@@ -178,7 +180,7 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
     if ((row.record.approvalReceipts?.length ?? 0) === 0) {
       throw fail();
     }
-    if (row.record.plan.kind === "central-integration-host-setup-v1") {
+    if (row.record.plan.kind === centralIntegrationHostSetupKind) {
       const native = row.record.nativeDeployment;
       if (native?.status === "conflict") {
         throw new Error("central_host_native_deployment_conflict");
@@ -245,7 +247,7 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
       const plan = await ports.resolvePlan(invocation, request);
       await authorize(invocation, plan);
       if (
-        (request.kind === "setup") !== (plan.kind === "central-integration-host-setup-v1") ||
+        (request.kind === "setup") !== (plan.kind === centralIntegrationHostSetupKind) ||
         request.appId !== plan.selection.initiatingAppId
       ) {
         throw fail();
@@ -354,7 +356,7 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
           const bindingState = async (key: string) => {
             await assertCurrent();
             if (
-              row.record.plan.kind !== "central-integration-host-setup-v1" ||
+              row.record.plan.kind !== centralIntegrationHostSetupKind ||
               !row.record.plan.environment.some((entry) => entry.key === key) ||
               effect !== "bind-central-preview-runtime"
             ) {
@@ -385,7 +387,7 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
               },
               read: async () => {
                 await assertCurrent();
-                return row.record.plan.kind === "central-integration-host-setup-v1"
+                return row.record.plan.kind === centralIntegrationHostSetupKind
                   ? Object.fromEntries(
                       row.record.plan.environment.map((entry) => [
                         entry.key,

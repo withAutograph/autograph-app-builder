@@ -6,6 +6,7 @@ import { z } from "zod";
 // authority. Parsing worker metadata never authorizes an export or a download.
 const id = z.string().min(1);
 const uuid = z.uuid();
+const releaseAppMismatchMessage = "Export release belongs to another app";
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const count = z.string().regex(/^(?:0|[1-9][0-9]*)$/u);
 const decimalTotal = (values: string[]) =>
@@ -14,6 +15,7 @@ const decimalTotal = (values: string[]) =>
     : undefined;
 const index = z.number().int().nonnegative().refine(Number.isSafeInteger);
 const uuidPart = "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}";
+const publicCustomerTablesSelection = "public-app-customer-tables-v1";
 const artifactPattern = new RegExp(
   `^_protected-operator/artifacts/tenant-export/(${uuidPart})/(${uuidPart})/(data|manifest)/([a-f0-9]{64})$`,
   "u",
@@ -68,13 +70,13 @@ export const tenantExportWorkerInputSchema = z
     release: tenantExportReleaseSchema,
     resource: tenantExportResourceSchema,
     scope: tenantExportScopeSchema,
-    selection: z.literal("public-app-customer-tables-v1"),
+    selection: z.literal(publicCustomerTablesSelection),
     snapshotId: uuid,
     version: z.literal(1),
   })
 
   .refine((value) => value.release.manifestRef.split("/")[3] === value.scope.appId, {
-    message: "Export release belongs to another app",
+    message: releaseAppMismatchMessage,
   });
 // Only the trusted executor later supplies the app-migrator connection in its
 // command-scoped environment. It is absent from JSON, argv and this contract.
@@ -153,7 +155,7 @@ export const tenantExportArtifactManifestSchema = z
 
   .superRefine((value, ctx) => {
     if (value.release.manifestRef.split("/")[3] !== value.scope.appId) {
-      ctx.addIssue({ code: "custom", message: "Export release belongs to another app" });
+      ctx.addIssue({ code: "custom", message: releaseAppMismatchMessage });
     }
     if (new Set(value.files.map((file) => file.name)).size !== value.files.length) {
       ctx.addIssue({ code: "custom", message: "Export member identity repeats" });
@@ -259,7 +261,7 @@ export const hostedTenantExportPlanSchema = z
     release: tenantExportReleaseSchema,
     resource: tenantExportResourceSchema,
     scope: tenantExportScopeSchema,
-    selection: z.literal("public-app-customer-tables-v1"),
+    selection: z.literal(publicCustomerTablesSelection),
     target: targetSchema,
     version: z.literal(1),
   })
@@ -275,7 +277,7 @@ export const hostedTenantExportPlanSchema = z
       ctx.addIssue({ code: "custom", message: "Export target scope differs" });
     }
     if (value.release.manifestRef.split("/")[3] !== value.scope.appId) {
-      ctx.addIssue({ code: "custom", message: "Export release belongs to another app" });
+      ctx.addIssue({ code: "custom", message: releaseAppMismatchMessage });
     }
     if (
       value.destination.artifactPrefix !==
