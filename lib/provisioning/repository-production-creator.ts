@@ -112,10 +112,7 @@ export const createRepositoryProductionCreator = (
   const frameFor = (row: RepositoryProductionRow): CreatorFrame | undefined => {
     const frames: CreatorFrame[] = [];
     for (const value of row.record.workerCheckpoints) {
-      if (
-        z.object({ kind: z.literal(CREATOR_LINK_KIND) }).safeParse(value)
-          .success
-      ) {
+      if (z.object({ kind: z.literal(CREATOR_LINK_KIND) }).safeParse(value).success) {
         frames.push(frameSchema.parse(value));
       }
     }
