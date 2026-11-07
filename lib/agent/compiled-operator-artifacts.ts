@@ -43,17 +43,21 @@ import type {
 import { describeSelectedApp } from "../repository/app-description";
 import type { AppDescription } from "../repository/app-description";
 
+const compiledArtifactWorkspacePrefix = "/workspace/";
+const compiledArtifactRepositoryPrefix = "repository/";
+const notRequiredStatus = "not-required" as const;
+
 /** Validates an internal approved root before adapting the fixed repository-relative capture API. */
 export const compiledArtifactSandboxRelativePath = (root: string): string => {
   if (
     root.includes("\\") ||
     root.includes("\0") ||
     path.posix.normalize(root) !== root ||
-    !root.startsWith("/workspace/")
+    !root.startsWith(compiledArtifactWorkspacePrefix)
   ) {
     throw operatorArtifactUnavailable();
   }
-  const relative = root.slice("/workspace/".length);
+  const relative = root.slice(compiledArtifactWorkspacePrefix.length);
   if (relative.length === 0) {
     throw operatorArtifactUnavailable();
   }
@@ -178,7 +182,7 @@ const resolveCompiledArtifactSession = async (
         workspaceId: state.workspace.workspaceId,
       };
     } else {
-      privateApplyScope = completion.compilation.privateApplyScope;
+      ({ privateApplyScope } = completion.compilation);
     }
     assertCurrentOwner = async (current) => {
       assertCompilation();
@@ -217,10 +221,8 @@ const resolveCompiledArtifactSession = async (
     throw operatorArtifactUnavailable();
   }
   await assertCurrentOwner(context);
-  const captureAuthority = {
-    context,
-    ...(privateApplyScope === undefined ? {} : { privateApplyScope }),
-  };
+  const captureAuthority =
+    privateApplyScope === undefined ? { context } : { context, privateApplyScope };
   return { assertCurrentOwner, captureAuthority, context, localAuthority };
 };
 
@@ -265,7 +267,7 @@ export const recordPublishedOperatorSourceForSession = async (
   { status: "not-required" } | { status: "recorded"; selection: CompiledOperatorReleaseSelection }
 > => {
   if (input.backendKind === "static") {
-    return { status: "not-required" };
+    return { status: notRequiredStatus };
   }
   const binding = await resolveCompiledArtifactSession(input);
   const storage = await openCompiledArtifactStorage(binding);
@@ -345,7 +347,7 @@ export const recordPublishedReconciliationSourceForSession = async (input: {
     await binding.assertCurrentOwner(binding.context);
     const { release } = completion.compilation;
     if (release.status === "not-required") {
-      return { status: "not-required" as const };
+      return { status: notRequiredStatus };
     }
     const storage = await openCompiledArtifactStorage(binding);
     const retained = await readExactCompiledOperatorRelease({
@@ -507,9 +509,9 @@ export const publishCompiledOperatorArtifactsForSession = async (
       return {
         compilation: {
           ...binding.captureAuthority,
-          release: { status: "not-required" as const },
+          release: { status: notRequiredStatus },
         } satisfies ReconciliationCompilation,
-        status: "not-required" as const,
+        status: notRequiredStatus,
       };
     }
     observe({ outcome: "started", stage: "storage" });
@@ -527,14 +529,14 @@ export const publishCompiledOperatorArtifactsForSession = async (
       description,
       source: {
         readBinaryFile: async (request) => {
-          if (!request.path.startsWith("repository/")) {
+          if (!request.path.startsWith(compiledArtifactRepositoryPrefix)) {
             throw operatorArtifactUnavailable();
           }
           await assertCurrentOwner(context);
           return await input.sandbox.readBinaryFile({
             ...request,
             abortSignal: input.signal,
-            path: `${relativeRoot}/${request.path.slice("repository/".length)}`,
+            path: `${relativeRoot}/${request.path.slice(compiledArtifactRepositoryPrefix.length)}`,
           });
         },
       },

@@ -105,23 +105,27 @@ export const runAppBrowserTests = async (input: {
       runtime?.browserTestEntryPath === undefined
         ? undefined
         : browserEntryPathSchema.parse(runtime.browserTestEntryPath);
-    const browserEnvironment = {
-      ...(runtime?.browserTestBaseUrl === undefined
-        ? {}
-        : { APP_TEST_BASE_URL: runtime.browserTestBaseUrl }),
-      ...(entryPath === undefined ? {} : { APP_TEST_ENTRY_PATH: entryPath }),
-    };
+    const browserEnvironment: Record<string, string> = {};
+    if (runtime?.browserTestBaseUrl !== undefined) {
+      browserEnvironment.APP_TEST_BASE_URL = runtime.browserTestBaseUrl;
+    }
+    if (entryPath !== undefined) {
+      browserEnvironment.APP_TEST_ENTRY_PATH = entryPath;
+    }
     const runTask = async () => {
       if (runtime) {
-        return await runtime.runTask({
+        const taskOptions: Parameters<typeof runtime.runTask>[0] = {
           signal: input.signal,
           task: "test-e2e",
-          ...(selection === undefined ? {} : { browserSelection: selection }),
-          ...input.continuation,
-          ...(Object.keys(browserEnvironment).length === 0
-            ? {}
-            : { environment: browserEnvironment }),
-        });
+        };
+        if (selection !== undefined) {
+          taskOptions.browserSelection = selection;
+        }
+        const continuedOptions = { ...taskOptions, ...input.continuation };
+        if (Object.keys(browserEnvironment).length > 0) {
+          continuedOptions.environment = browserEnvironment;
+        }
+        return await runtime.runTask(continuedOptions);
       }
       const privateCommand =
         selection === undefined
