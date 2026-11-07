@@ -30,6 +30,15 @@ const fixture = () => {
   let row: PublicReleaseRow | undefined;
   const store: PublicReleaseStore = {
     // oxlint-disable-next-line eslint/require-await -- Durable store test double.
+    async compareAndSet(previous, record: PublicReleaseRecord) {
+      if (!row || row.revision !== previous.revision) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- A stale CAS explicitly returns no row under the storage port.
+        return undefined;
+      }
+      row = { ...row, record: structuredClone(record), revision: row.revision + 1 };
+      return structuredClone(row);
+    },
+    // oxlint-disable-next-line eslint/require-await -- Durable store test double.
     async read(owner, operationRef) {
       return row &&
         owner.ownerUserId === row.record.plan.authority.ownerUserId &&
@@ -44,15 +53,6 @@ const fixture = () => {
         record: initialPublicReleaseRecord(selected),
         revision: 1,
       };
-      return structuredClone(row);
-    },
-    // oxlint-disable-next-line eslint/require-await -- Durable store test double.
-    async compareAndSet(previous, record: PublicReleaseRecord) {
-      if (!row || row.revision !== previous.revision) {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- A stale CAS explicitly returns no row under the storage port.
-        return undefined;
-      }
-      row = { ...row, record: structuredClone(record), revision: row.revision + 1 };
       return structuredClone(row);
     },
   };
