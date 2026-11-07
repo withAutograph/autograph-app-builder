@@ -5,16 +5,15 @@ import { z } from "zod";
 import { hostedIdentifierSchema } from "../eve/hosted-auth";
 
 const sha256Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
-const instantSchema = z.string().datetime({ offset: true });
+const instantSchema = z.iso.datetime({ offset: true });
 
 export const hostedTenantAuthoritySchema = z
-  .object({
-    audience: z.string().url().startsWith("https://"),
-    issuer: z.string().url().startsWith("https://"),
+  .strictObject({
+    audience: z.url().startsWith("https://"),
+    issuer: z.url().startsWith("https://"),
     ownerUserId: hostedIdentifierSchema,
     workspaceId: hostedIdentifierSchema,
   })
-  .strict()
   .superRefine((authority, context) => {
     const issuer = new URL(authority.issuer);
     const audience = new URL(authority.audience);
@@ -59,24 +58,18 @@ const requestBase = {
   version: z.literal(1),
 };
 
-const seedPlanSchema = z.object({ ...requestBase, action: z.literal("membership.seed") }).strict();
-const revokePlanSchema = z
-  .object({ ...requestBase, action: z.literal("membership.revoke") })
-  .strict();
-const retentionPlanSchema = z
-  .object({
-    ...requestBase,
-    action: z.literal("retention.apply"),
-    deleteBefore: instantSchema,
-  })
-  .strict();
-const deletePlanSchema = z
-  .object({
-    ...requestBase,
-    action: z.literal("tenant.delete"),
-    membershipRevokedBefore: instantSchema,
-  })
-  .strict();
+const seedPlanSchema = z.strictObject({ ...requestBase, action: z.literal("membership.seed") });
+const revokePlanSchema = z.strictObject({ ...requestBase, action: z.literal("membership.revoke") });
+const retentionPlanSchema = z.strictObject({
+  ...requestBase,
+  action: z.literal("retention.apply"),
+  deleteBefore: instantSchema,
+});
+const deletePlanSchema = z.strictObject({
+  ...requestBase,
+  action: z.literal("tenant.delete"),
+  membershipRevokedBefore: instantSchema,
+});
 
 export const hostedAdminPlanRequestSchema = z.discriminatedUnion("action", [
   seedPlanSchema,
@@ -88,43 +81,37 @@ export const hostedAdminPlanRequestSchema = z.discriminatedUnion("action", [
 export type HostedAdminPlanRequest = z.infer<typeof hostedAdminPlanRequestSchema>;
 
 export const hostedAdminApplyRequestSchema = z.discriminatedUnion("action", [
-  seedPlanSchema.extend({ confirmationDigest: sha256Schema }).strict(),
-  revokePlanSchema.extend({ confirmationDigest: sha256Schema }).strict(),
-  retentionPlanSchema.extend({ confirmationDigest: sha256Schema }).strict(),
-  deletePlanSchema.extend({ confirmationDigest: sha256Schema }).strict(),
+  seedPlanSchema.extend({ confirmationDigest: sha256Schema }),
+  revokePlanSchema.extend({ confirmationDigest: sha256Schema }),
+  retentionPlanSchema.extend({ confirmationDigest: sha256Schema }),
+  deletePlanSchema.extend({ confirmationDigest: sha256Schema }),
 ]);
 
 export type HostedAdminApplyRequest = z.infer<typeof hostedAdminApplyRequestSchema>;
 
-const effectsSchema = z
-  .object({
-    authorizationStateRowsDeleted: z.number().int().min(0),
-    integrationRowsDeleted: z.number().int().min(0),
-    membershipRowsAffected: z.number().int().min(0),
-    membershipRowsDeleted: z.number().int().min(0),
-    operationRowsDeleted: z.number().int().min(0),
-    sessionRowsDeleted: z.number().int().min(0),
-  })
-  .strict();
+const effectsSchema = z.strictObject({
+  authorizationStateRowsDeleted: z.number().int().min(0),
+  integrationRowsDeleted: z.number().int().min(0),
+  membershipRowsAffected: z.number().int().min(0),
+  membershipRowsDeleted: z.number().int().min(0),
+  operationRowsDeleted: z.number().int().min(0),
+  sessionRowsDeleted: z.number().int().min(0),
+});
 
-export const hostedAdminReceiptSchema = z
-  .object({
-    action: z.enum(["membership.seed", "membership.revoke", "retention.apply", "tenant.delete"]),
-    appliedAt: instantSchema,
-    authorityDigest: sha256Schema,
-    database: z
-      .object({
-        dialect: z.literal("postgresql"),
-        maxConnections: z.literal(1),
-        secretTransport: z.literal("task-scoped-stdin"),
-      })
-      .strict(),
-    effects: effectsSchema,
-    requestDigest: sha256Schema,
-    status: z.enum(["applied", "no-op"]),
-    version: z.literal(1),
-  })
-  .strict();
+export const hostedAdminReceiptSchema = z.strictObject({
+  action: z.enum(["membership.seed", "membership.revoke", "retention.apply", "tenant.delete"]),
+  appliedAt: instantSchema,
+  authorityDigest: sha256Schema,
+  database: z.strictObject({
+    dialect: z.literal("postgresql"),
+    maxConnections: z.literal(1),
+    secretTransport: z.literal("task-scoped-stdin"),
+  }),
+  effects: effectsSchema,
+  requestDigest: sha256Schema,
+  status: z.enum(["applied", "no-op"]),
+  version: z.literal(1),
+});
 
 export type HostedAdminReceipt = z.infer<typeof hostedAdminReceiptSchema>;
 

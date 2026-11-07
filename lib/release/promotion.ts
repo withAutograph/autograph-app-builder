@@ -32,104 +32,84 @@ const localImageTag = z
   .string()
   .regex(/^ghcr[.]io\/withautograph\/autograph-app-builder-sandbox:candidate-[0-9a-f]{16}$/u);
 
-const proofSchema = z
-  .object({
-    browserPreview: z.literal(true),
-    eval: z.union([
-      z.literal("sandbox-reviewed-change-set"),
-      z.literal("sandbox-existing-iteration"),
-    ]),
-    outputSha256: hash,
-    publicationAttempted: z.literal(false),
-    terminalPhase: z.literal("reviewed"),
-  })
-  .strict();
+const proofSchema = z.strictObject({
+  browserPreview: z.literal(true),
+  eval: z.union([
+    z.literal("sandbox-reviewed-change-set"),
+    z.literal("sandbox-existing-iteration"),
+  ]),
+  outputSha256: hash,
+  publicationAttempted: z.literal(false),
+  terminalPhase: z.literal("reviewed"),
+});
 
-const promotionReceiptUnsignedSchema = z
-  .object({
-    arrusted: z.object({ clean: z.literal(true), commit: gitObject, tree: gitObject }).strict(),
-    bindings: z
-      .object({
-        deployment: z.literal("production"),
-        endpoint: z.literal("deployed"),
-        execution: z.literal("release"),
-        marketplace: z.literal("release"),
-        oauth: z.literal("hosted"),
-      })
-      .strict(),
-    builder: z
-      .object({
-        clean: z.literal(true),
-        commit: gitObject,
-        repository: z.literal("https://github.com/withAutograph/autograph-app-builder"),
-        tree: gitObject,
-      })
-      .strict(),
-    deployment: z
-      .object({
-        outputTreeSha256: hash,
-        projectBindingSha256: hash,
-        root: safePath,
-      })
-      .strict(),
-    endpoint: z.string().url().startsWith("https://").endsWith("/mcp"),
-    format: z.literal("autograph-release-promotion-v1"),
-    image: z
-      .object({
-        archive: safePath,
-        archiveSha256: hash,
-        localTag: localImageTag,
-        manifestDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
-        publicationTag: imageTag,
-        reference: exactImageReference,
-      })
-      .strict(),
-    package: z
-      .object({
-        archive: safePath,
-        archiveSha256: hash,
-        checksums: safePath,
-        checksumsSha256: hash,
-        marketplaceArchive: safePath,
-        marketplaceArchiveSha256: hash,
-        receipt: safePath,
-        receiptSha256: hash,
-        root: safePath,
-        version: z.string().min(1),
-      })
-      .strict(),
-    platform: z
-      .object({
-        closureSha256: hash,
-        dockerfileSha256: hash,
-        image: z.literal(IMAGE_PLATFORM),
-        sanitizedSourceEntriesSha256: hash,
-        sanitizedSourceEntryCount: z.number().int().positive(),
-      })
-      .strict(),
-    proofs: z
-      .object({
-        create: proofSchema.extend({
-          eval: z.literal("sandbox-reviewed-change-set"),
-        }),
-        iteration: proofSchema.extend({
-          eval: z.literal("sandbox-existing-iteration"),
-        }),
-      })
-      .strict(),
-    tools: z.tuple([
-      z.literal("autograph_start"),
-      z.literal("autograph_get"),
-      z.literal("autograph_send"),
-      z.literal("autograph_respond"),
-      z.literal("autograph_cancel"),
-    ]),
-  })
-  .strict();
+const promotionReceiptUnsignedSchema = z.strictObject({
+  arrusted: z.strictObject({ clean: z.literal(true), commit: gitObject, tree: gitObject }),
+  bindings: z.strictObject({
+    deployment: z.literal("production"),
+    endpoint: z.literal("deployed"),
+    execution: z.literal("release"),
+    marketplace: z.literal("release"),
+    oauth: z.literal("hosted"),
+  }),
+  builder: z.strictObject({
+    clean: z.literal(true),
+    commit: gitObject,
+    repository: z.literal("https://github.com/withAutograph/autograph-app-builder"),
+    tree: gitObject,
+  }),
+  deployment: z.strictObject({
+    outputTreeSha256: hash,
+    projectBindingSha256: hash,
+    root: safePath,
+  }),
+  endpoint: z.url().startsWith("https://").endsWith("/mcp"),
+  format: z.literal("autograph-release-promotion-v1"),
+  image: z.strictObject({
+    archive: safePath,
+    archiveSha256: hash,
+    localTag: localImageTag,
+    manifestDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
+    publicationTag: imageTag,
+    reference: exactImageReference,
+  }),
+  package: z.strictObject({
+    archive: safePath,
+    archiveSha256: hash,
+    checksums: safePath,
+    checksumsSha256: hash,
+    marketplaceArchive: safePath,
+    marketplaceArchiveSha256: hash,
+    receipt: safePath,
+    receiptSha256: hash,
+    root: safePath,
+    version: z.string().min(1),
+  }),
+  platform: z.strictObject({
+    closureSha256: hash,
+    dockerfileSha256: hash,
+    image: z.literal(IMAGE_PLATFORM),
+    sanitizedSourceEntriesSha256: hash,
+    sanitizedSourceEntryCount: z.number().int().positive(),
+  }),
+  proofs: z.strictObject({
+    create: proofSchema.extend({
+      eval: z.literal("sandbox-reviewed-change-set"),
+    }),
+    iteration: proofSchema.extend({
+      eval: z.literal("sandbox-existing-iteration"),
+    }),
+  }),
+  tools: z.tuple([
+    z.literal("autograph_start"),
+    z.literal("autograph_get"),
+    z.literal("autograph_send"),
+    z.literal("autograph_respond"),
+    z.literal("autograph_cancel"),
+  ]),
+});
 
-export const promotionReceiptSchema = promotionReceiptUnsignedSchema
-  .extend({ digest: hash })
-  .strict();
+export const promotionReceiptSchema = promotionReceiptUnsignedSchema.extend({ digest: hash });
 
 export type PromotionReceipt = z.infer<typeof promotionReceiptSchema>;
 export type PromotionReceiptUnsigned = z.infer<typeof promotionReceiptUnsignedSchema>;
