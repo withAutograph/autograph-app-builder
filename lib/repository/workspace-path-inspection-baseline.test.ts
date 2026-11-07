@@ -17,7 +17,7 @@ vi.mock("./app-baseline", () => ({
 it("retains canonical baseline archive omissions when a directory is addressed through an inside-root alias", async () => {
   const path = "/workspace/repository/schema-alias";
   const sandbox = {
-    readTextFile: vi.fn(async () => null),
+    readTextFile: vi.fn().mockResolvedValue(null),
     run: vi.fn(async () => ({
       exitCode: 0,
       stderr: "",
