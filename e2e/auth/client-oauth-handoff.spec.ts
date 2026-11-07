@@ -104,7 +104,23 @@ test("web login and both emulated connections survive Cursor consent, token refr
   test.setTimeout(180_000);
   await finishOAuth(page, "GitHub");
   await page.goto("/");
-  const browserSession = await currentSession(page);
+  // Navigation can finish before a transient session read succeeds. Observe
+  // a fresh authenticated response instead of treating one unavailable read
+  // as a lost login. Only a boolean reaches failure artifacts.
+  let browserSession: Awaited<ReturnType<typeof currentSession>> = null;
+  await expect
+    .poll(
+      async () => {
+        browserSession = await currentSession(page);
+        return (
+          browserSession?.user?.email === "dev@autograph.local" &&
+          typeof browserSession?.user?.id === "string" &&
+          typeof browserSession?.session?.activeOrganizationId === "string"
+        );
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   const ownerUserId = browserSession?.user?.id;
   const organizationId = browserSession?.session?.activeOrganizationId;
   expect(typeof ownerUserId).toBe("string");
