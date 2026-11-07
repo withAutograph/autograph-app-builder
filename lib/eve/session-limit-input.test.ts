@@ -438,8 +438,7 @@ describe("typed framework session usage continuation", () => {
       fetchImplementation,
       onEvent: vi.fn(),
       sessionId: "native",
-      // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous native transport contract in this provider-free fixture.
-      workloadIdentity: { token: vi.fn(async () => "synthetic-oidc") },
+      workloadIdentity: { token: vi.fn().mockResolvedValue("synthetic-oidc") },
     };
     const first = await observeSameOriginEveStream(common);
     expect(first.nativeObservationState.privateInputState?.pending[0]?.requests[0]?.kind).toBe(
@@ -534,7 +533,6 @@ describe("typed framework session usage continuation", () => {
       principal,
       sessionId: fixture.sessionId,
     });
-    // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous SDK contract in this bounded fixture.
     fixture.adapter.sendAccepted = vi.fn(async () => {});
     await fixture.create().cancel({ sessionId: fixture.sessionId, turnId: "old-turn" });
     expect(fixture.respond).toHaveBeenCalledOnce();
@@ -733,8 +731,7 @@ describe("typed framework session usage continuation", () => {
     const common = {
       config: { baseUrl: "https://builder.example.test", timeoutMs: 1000 },
       fetchImplementation,
-      // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous SDK contract in this bounded fixture.
-      workloadIdentity: { token: async () => "synthetic-oidc" },
+      workloadIdentity: { token: vi.fn().mockResolvedValue("synthetic-oidc") },
     };
     const initial = await observeSameOriginEveStream({
       ...common,
