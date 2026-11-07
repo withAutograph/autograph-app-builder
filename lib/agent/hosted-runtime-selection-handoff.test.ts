@@ -332,7 +332,7 @@ beforeEach(() => {
     input: approvedInput,
     snapshot: approvedSnapshot,
   });
-  mocks.assertReferenceCurrent.mockImplementation(() => Promise.resolve());
+  mocks.assertReferenceCurrent.mockResolvedValue(undefined);
   mocks.getOperatorClient.mockResolvedValue({
     bindings: vi.fn().mockResolvedValue(nativeBindings()),
     sessionId: publicSessionId,
