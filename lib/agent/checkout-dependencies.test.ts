@@ -472,7 +472,7 @@ describe("saved validation dependency recovery", () => {
       onAttempt: vi.fn((attempt: DependencyAttemptResult) => {
         attempts.push(attempt);
       }),
-      prepareInstall: vi.fn(async () => {}),
+      prepareInstall: vi.fn<() => Promise<void>>().mockResolvedValue(),
     };
   };
 
