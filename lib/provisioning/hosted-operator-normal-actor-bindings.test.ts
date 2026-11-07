@@ -614,7 +614,7 @@ const publicBoundFixture = async () => {
   const readCandidates = vi.fn(async () => [
     { record, requestDigest: record.planDigest, requestId: publicReleaseOperationRef(publicPlan) },
   ]);
-  const assertApproved = vi.fn(async () => {});
+  const assertApproved = vi.fn<() => Promise<void>>().mockResolvedValue();
   const observe = vi.fn(async () => ({ ...observation }));
   f.deps.publicRuntimeBinding = async (input) =>
     await readVerifiedPublicRuntimeBinding({

@@ -70,7 +70,7 @@ const fixture = (change?: (typeof mutations)[number]) => {
   return {
     http,
     input: {
-      assertCurrent: vi.fn(async () => {}),
+      assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
       attachment,
       fetch: http,
       now: () => seconds * 1000,
