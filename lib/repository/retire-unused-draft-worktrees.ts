@@ -2,6 +2,8 @@ import path from "node:path";
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
+const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
+
 const countSchema = z.number().int().nonnegative();
 const decimalSchema = z.string().regex(/^\d+$/u);
 const capacitySnapshotSchema = z.strictObject({
@@ -314,7 +316,6 @@ export const retireUnusedDraftWorktrees = async (input: {
   workspaceRoot?: string;
   signal?: AbortSignal;
 }): Promise<DraftWorktreeRetirementAdvisory> => {
-  const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
   try {
     const result = await input.sandbox.run({
       abortSignal: input.signal,
