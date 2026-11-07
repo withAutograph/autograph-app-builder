@@ -43,18 +43,19 @@ function memoryStore(): BuilderProvisionJournalStore {
     async compareAndSet(input) {
       const id = key(input.authority, input.requestId);
       const current = rows.get(id);
-      if (!current || current.revision !== input.expectedRevision) {
-        return;
+      let result: BuilderProvisionJournalRow | undefined;
+      if (current && current.revision === input.expectedRevision) {
+        const next = {
+          ...current,
+          record: structuredClone(input.record),
+          revision: current.revision + 1,
+          state: input.record.response.status,
+          updatedAt: input.now,
+        };
+        rows.set(id, next);
+        result = structuredClone(next);
       }
-      const next = {
-        ...current,
-        record: structuredClone(input.record),
-        revision: current.revision + 1,
-        state: input.record.response.status,
-        updatedAt: input.now,
-      };
-      rows.set(id, next);
-      return structuredClone(next);
+      return result;
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async read(input) {
@@ -101,24 +102,6 @@ describe("builder provisioning journal", () => {
     // SAFETY: This exercises only the selected Vercel branch; no GitHub dependency is read.
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- Only selected Vercel adapters are exercised; unused GitHub dependencies are intentionally absent in this branch fixture.
     const dependencies = {
-      journal: store,
-      // oxlint-disable-next-line eslint/require-await -- Promise-returning credential test double.
-      // oxlint-disable-next-line eslint/require-await -- Promise-returning credential test double.
-      readVercelCredential: async () => ({
-        binding: {
-          active: true,
-          displayName: "Owner",
-          installationId: "icfg_202",
-          plan: "pro",
-          scopeId: "team_1",
-          scopeType: "team",
-          slug: "owner",
-          updatedAt: new Date(),
-        },
-        token: secret,
-      }),
-      // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
-      // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
       fetch: async (_url: string, init?: RequestInit) => {
         if (init?.method === "POST") {
           postCount += 1;
@@ -137,6 +120,20 @@ describe("builder provisioning journal", () => {
           ? Response.json({}, { status: 404 })
           : Response.json({ id: "unproven" });
       },
+      journal: store,
+      readVercelCredential: async () => ({
+        binding: {
+          active: true,
+          displayName: "Owner",
+          installationId: "icfg_202",
+          plan: "pro",
+          scopeId: "team_1",
+          scopeType: "team",
+          slug: "owner",
+          updatedAt: new Date(),
+        },
+        token: secret,
+      }),
     } as unknown as BuilderProvisioningDependencies;
     const result = await executeBuilderProvisioning({
       authority,
@@ -228,10 +225,10 @@ describe("builder provisioning journal", () => {
     };
     const result = await executeBuilderProvisioning({
       authority,
-      request: selected,
       // SAFETY: The fixture provides the real in-memory journal and only terminal token/fetch ports used by this Vercel-only request; GitHub effects are unreachable.
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Deliberately bounded terminal-port fixture; runtime schemas and journal replay checks remain real.
       dependencies: dependencies as never,
+      request: selected,
     });
     expect(result.vercel).toMatchObject({
       code: "provider_permission_denied",
@@ -244,10 +241,10 @@ describe("builder provisioning journal", () => {
     });
     const retry = await executeBuilderProvisioning({
       authority,
-      request: selected,
       // SAFETY: The fixture provides the real in-memory journal and only terminal token/fetch ports used by this Vercel-only request; GitHub effects are unreachable.
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Deliberately bounded terminal-port fixture; runtime schemas and journal replay checks remain real.
       dependencies: dependencies as never,
+      request: selected,
     });
     expect(retry.vercel).toMatchObject({ code: "reconciliation_uncertain", status: "failed" });
     const projection = await readBuilderProvisioning({
@@ -320,10 +317,7 @@ describe("builder provisioning journal", () => {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async compareAndSet(input) {
         collisions += 1;
-        if (collisions <= 9) {
-          return;
-        }
-        return await underlying.compareAndSet(input);
+        return collisions <= 9 ? undefined : await underlying.compareAndSet(input);
       },
     };
     const updated = await updateBuilderProvisionJournal({
