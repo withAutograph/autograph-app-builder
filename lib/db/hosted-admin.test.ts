@@ -28,7 +28,7 @@ function request(value: RequestInput): HostedAdminPlanRequest {
     requestedAt: new Date(now).toISOString(),
     version: 1,
     ...value,
-  } as HostedAdminPlanRequest;
+  };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
