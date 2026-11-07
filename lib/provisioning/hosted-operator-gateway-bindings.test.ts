@@ -235,9 +235,9 @@ const fixture = (
   let protectionReadbackTransform:
     | ((value: z.infer<typeof z.json>) => z.infer<typeof z.json>)
     | undefined;
-  const assertCurrent = vi.fn(async () => {});
-  const assertCurrentObservation = vi.fn(async () => {});
-  const assertCanonicalOwner = vi.fn(async () => {});
+  const assertCurrent = vi.fn<() => Promise<void>>().mockResolvedValue();
+  const assertCurrentObservation = vi.fn<() => Promise<void>>().mockResolvedValue();
+  const assertCanonicalOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
   const checkpointGatewayEnvironment = vi.fn(
     async (next: readonly ManagedOperatorEnvironmentRow[]) => {
       journal = structuredClone([...next]);
@@ -247,7 +247,7 @@ const fixture = (
   input = {
     assertCurrent,
     authority,
-    checkpoint: vi.fn(async () => {}),
+    checkpoint: vi.fn<() => Promise<void>>().mockResolvedValue(),
     checkpointGatewayEnvironment,
     effect: plan.effects.find((effect) => effect.kind === "gateway-bindings")!,
     deliveryCandidates: [
@@ -364,7 +364,7 @@ const fixture = (
     },
     token: "fixture-owner-oauth",
   }));
-  const assertAuthorized = vi.fn(async () => {});
+  const assertAuthorized = vi.fn<() => Promise<void>>().mockResolvedValue();
   const readAuthRuntimeUrl = vi.fn(async () => privateAuthUrl);
   let canonicalRows: CanonicalGatewayEnvironmentRow[] = [];
   const readCanonicalGatewayRows = vi.fn(async () => ({
@@ -2522,7 +2522,7 @@ it("reports a post-response authorization failure as authority, retaining succes
 
 it("keeps the original post-response guard when an advisory status getter throws", async () => {
   const f = fixture();
-  const postResponseGuard = vi.fn(async () => {});
+  const postResponseGuard = vi.fn<() => Promise<void>>().mockResolvedValue();
   const response = Response.json({ envs: [] });
   Object.defineProperty(response, "status", {
     get() {
@@ -2804,7 +2804,7 @@ it.each(["malformed", "oversized", "stream_error", "body_getter"] as const)(
         },
       });
     }
-    const postResponseGuard = vi.fn(async () => {});
+    const postResponseGuard = vi.fn<() => Promise<void>>().mockResolvedValue();
     f.fetcher.mockImplementationOnce(async () => {
       f.assertCurrent.mockImplementation(postResponseGuard);
       return response;
