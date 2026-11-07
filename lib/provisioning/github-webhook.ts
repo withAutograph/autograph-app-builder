@@ -25,15 +25,15 @@ function verify(input: { body: Uint8Array; signature: string; secret: string }) 
 const installationEvent = z
   .object({
     action: z.enum(["deleted", "suspend", "unsuspend"]),
-    installation: z.object({ id: z.number().int().positive() }).passthrough(),
+    installation: z.object({ id: z.number().int().positive() }).loose(),
   })
-  .passthrough();
+  .loose();
 const authorizationEvent = z
   .object({
     action: z.literal("revoked"),
-    sender: z.object({ id: z.number().int().positive() }).passthrough(),
+    sender: z.object({ id: z.number().int().positive() }).loose(),
   })
-  .passthrough();
+  .loose();
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGitHubProvisioningWebhookHandler(input: {

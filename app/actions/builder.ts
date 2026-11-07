@@ -20,44 +20,38 @@ import {
 } from "@/lib/handoff/source-upload-deployment";
 import { deriveBuilderAppId } from "@/lib/provisioning/names";
 
-const resolvedHandoffContinuationInputSchema = z
-  .object({
-    creationRequestId: z.string().uuid(),
-    form: z
-      .object({
-        appName: z.string().trim().min(1).max(120),
-        sourceCandidate: sourceCandidateReferenceSchema.optional(),
-        brief: z.string().trim().min(1).max(32_000),
-        buildDestination: z.enum(["web", "codex", "cursor"]),
-        connections: z.array(z.string().trim().min(1).max(100)).max(50),
-        githubInstallationId: z
-          .string()
-          .regex(/^[1-9][0-9]*$/u)
-          .optional(),
-        modelId: z.string().min(1).max(100),
-        privateRepository: z.boolean(),
-        repository: z
-          .string()
-          .trim()
-          .min(1)
-          .max(100)
-          .regex(/^[A-Za-z0-9._-]+$/u),
-        vercelInstallationId: z.string().min(1).max(256).optional(),
-      })
-      .strict(),
-    provisioningEnabled: z.boolean(),
-    requestId: z.string().uuid(),
-    retryProvider: z.enum(["github", "vercel"]).optional(),
-    version: z.literal(1),
-  })
-  .strict();
+const resolvedHandoffContinuationInputSchema = z.strictObject({
+  creationRequestId: z.uuid(),
+  form: z.strictObject({
+    appName: z.string().trim().min(1).max(120),
+    sourceCandidate: sourceCandidateReferenceSchema.optional(),
+    brief: z.string().trim().min(1).max(32_000),
+    buildDestination: z.enum(["web", "codex", "cursor"]),
+    connections: z.array(z.string().trim().min(1).max(100)).max(50),
+    githubInstallationId: z
+      .string()
+      .regex(/^[1-9][0-9]*$/u)
+      .optional(),
+    modelId: z.string().min(1).max(100),
+    privateRepository: z.boolean(),
+    repository: z
+      .string()
+      .trim()
+      .min(1)
+      .max(100)
+      .regex(/^[A-Za-z0-9._-]+$/u),
+    vercelInstallationId: z.string().min(1).max(256).optional(),
+  }),
+  provisioningEnabled: z.boolean(),
+  requestId: z.uuid(),
+  retryProvider: z.enum(["github", "vercel"]).optional(),
+  version: z.literal(1),
+});
 
 const handoffContinuationInputSchema = resolvedHandoffContinuationInputSchema
   .omit({ form: true })
   .extend({
-    draftCheckpoint: z
-      .object({ draftId: z.string().uuid(), revision: z.number().int().positive() })
-      .strict(),
+    draftCheckpoint: z.strictObject({ draftId: z.uuid(), revision: z.number().int().positive() }),
   });
 
 export type BuilderHandoffContinuationInput = z.infer<typeof handoffContinuationInputSchema>;
@@ -71,12 +65,10 @@ export type BuilderHandoffContinuationState =
     }
   | { status: "error" };
 
-const handoffProvisioningContinuationInputSchema = z
-  .object({
-    handoffId: z.string().uuid(),
-    retryProvider: z.enum(["github", "vercel"]).optional(),
-  })
-  .strict();
+const handoffProvisioningContinuationInputSchema = z.strictObject({
+  handoffId: z.uuid(),
+  retryProvider: z.enum(["github", "vercel"]).optional(),
+});
 
 export type HandoffProvisioningContinuationState = { status: "updated" } | { status: "error" };
 

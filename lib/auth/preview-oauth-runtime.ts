@@ -50,14 +50,14 @@ const databaseUrlSchema = z
 
 const vercelUserInfoSchema = z
   .object({
-    email: z.string().email().max(320),
+    email: z.email().max(320),
     email_verified: z.literal(true),
     name: z.string().min(1).max(512).optional(),
-    picture: z.string().url().max(2048).nullable().optional(),
+    picture: z.url().max(2048).nullable().optional(),
     preferred_username: z.string().min(1).max(512).optional(),
     sub: z.string().min(1).max(512),
   })
-  .passthrough();
+  .loose();
 
 const vercelUserInfoEndpoint = "https://api.vercel.com/login/oauth/userinfo";
 const githubUserInfoEndpoint = "https://api.github.com/user";
@@ -65,22 +65,22 @@ const githubEmailsEndpoint = "https://api.github.com/user/emails";
 
 const githubProfileSchema = z
   .object({
-    avatar_url: z.string().url().max(2048).nullable().optional(),
+    avatar_url: z.url().max(2048).nullable().optional(),
     id: z.union([z.string().min(1), z.number().int().positive()]),
     login: z.string().min(1).max(256),
     name: z.string().min(1).max(512).nullable().optional(),
   })
-  .passthrough();
+  .loose();
 
 const githubEmailsSchema = z
   .array(
     z
       .object({
-        email: z.string().email().max(320),
+        email: z.email().max(320),
         primary: z.boolean(),
         verified: z.boolean(),
       })
-      .passthrough(),
+      .loose(),
   )
   .max(100);
 
@@ -308,7 +308,7 @@ export async function fetchVerifiedVercelUserInfo(
 }
 
 const previewOAuthRuntimeConfigSchema = z
-  .object({
+  .strictObject({
     databaseUrl: databaseUrlSchema,
     environment: z.union([
       hostedDeploymentEnvironmentSchema,
@@ -328,16 +328,16 @@ const previewOAuthRuntimeConfigSchema = z
       .refine((value) => !/[\0\r\n]/u.test(value))
       .optional(),
     hostedAdapter: z.enum(["0", "1"]),
-    issuer: z.string().url(),
+    issuer: z.url(),
     localDevelopmentEmulation: z.literal(true).optional(),
     passkeyOnboarding: z.custom<PasskeyOnboardingConfig>().nullable(),
-    resource: z.string().url(),
+    resource: z.url(),
     secret: z
       .string()
       .min(32)
       .max(512)
       .refine((value) => !/[\0\r\n]/u.test(value)),
-    trustedOrigins: z.array(z.string().url()).min(1).max(3).optional(),
+    trustedOrigins: z.array(z.url()).min(1).max(3).optional(),
     vercelClientId: z
       .string()
       .min(1)
@@ -351,7 +351,6 @@ const previewOAuthRuntimeConfigSchema = z
       .refine((value) => !/[\0\r\n]/u.test(value))
       .optional(),
   })
-  .strict()
   .superRefine((config, context) => {
     const issuer = new URL(config.issuer);
     const resource = new URL(config.resource);

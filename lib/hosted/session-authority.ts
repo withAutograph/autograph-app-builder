@@ -9,33 +9,27 @@ import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { hostedIdentifierSchema, hostedPrincipalSchema } from "../eve/hosted-auth";
 import type { HostedPrincipal } from "../eve/hosted-auth";
 
-const forwardedAttributesSchema = z
-  .object({
-    "autograph:source-handoff-id": z.string().uuid().optional(),
-    "eve:forwarded-by": hostedIdentifierSchema.optional(),
-    "mcp:audience": z.string().url().startsWith("https://"),
-    "mcp:scopes": z.array(z.string().min(1).max(100)).min(1).max(50),
-    "mcp:workspace-id": z.string().min(1).max(200),
-  })
-  .strict();
+const forwardedAttributesSchema = z.strictObject({
+  "autograph:source-handoff-id": z.string().uuid().optional(),
+  "eve:forwarded-by": hostedIdentifierSchema.optional(),
+  "mcp:audience": z.string().url().startsWith("https://"),
+  "mcp:scopes": z.array(z.string().min(1).max(100)).min(1).max(50),
+  "mcp:workspace-id": z.string().min(1).max(200),
+});
 
-const forwardedHostedAuthSchema = z
-  .object({
-    attributes: forwardedAttributesSchema,
-    authenticator: z.literal("mcp-oauth-jwks"),
-    issuer: z.string().url().startsWith("https://"),
-    principalId: z.string().min(1).max(200),
-    principalType: z.literal("user"),
-    subject: z.string().min(1).max(200),
-  })
-  .strict();
+const forwardedHostedAuthSchema = z.strictObject({
+  attributes: forwardedAttributesSchema,
+  authenticator: z.literal("mcp-oauth-jwks"),
+  issuer: z.string().url().startsWith("https://"),
+  principalId: z.string().min(1).max(200),
+  principalType: z.literal("user"),
+  subject: z.string().min(1).max(200),
+});
 
-const forwardedSessionAuthSchema = z
-  .object({
-    current: forwardedHostedAuthSchema,
-    initiator: forwardedHostedAuthSchema,
-  })
-  .strict();
+const forwardedSessionAuthSchema = z.strictObject({
+  current: forwardedHostedAuthSchema,
+  initiator: forwardedHostedAuthSchema,
+});
 
 export interface RealmContinuationSessionAuthorityOptions {
   realmContinuation: {
