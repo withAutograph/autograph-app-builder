@@ -161,11 +161,13 @@ describe("readReference", () => {
       ],
     });
     expect(result.attributes[0]).toMatchObject({ verdict: "unassessed" });
+    const numberMatcher: unknown = expect.any(Number);
+    const messageMatcher: unknown = expect.stringMatching(/possibly .*undefined/iu);
     expect(result.implementationDiagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          code: expect.any(Number),
-          message: expect.stringMatching(/possibly .*undefined/iu),
+          code: numberMatcher,
+          message: messageMatcher,
         }),
       ]),
     );
