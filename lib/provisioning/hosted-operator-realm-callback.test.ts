@@ -106,7 +106,7 @@ const fixture = async (ownerSessionId = "original-public-session") => {
         _observed: { nonceSha256: string; proofRef: string; proofSha256: string },
       ) => {},
     ),
-    assertCurrent: vi.fn(async () => {}),
+    assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
     authenticate: vi.fn<RealmIdentityCallbackPorts["authenticate"]>(async () => context),
     builderOrigin: "https://builder.example",
     consume: vi.fn(async () => {
