@@ -10,7 +10,9 @@ export const hostedRuntimePostgresOptions = {
   idle_timeout: 20,
   max: 5,
   max_lifetime: 300,
-  onnotice: () => [][0],
+  onnotice: () => {
+    // Server notices are intentionally not emitted by the runtime connection.
+  },
   prepare: false,
 } as const;
 
@@ -24,7 +26,9 @@ export const hostedTaskPostgresOptions = {
   idle_timeout: 5,
   max: 1,
   max_lifetime: 60,
-  onnotice: () => [][0],
+  onnotice: () => {
+    // Server notices are intentionally not emitted by task connections.
+  },
   prepare: false,
 } as const;
 
