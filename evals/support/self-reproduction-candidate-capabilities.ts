@@ -6,21 +6,13 @@ interface Credentials {
   projectId: string;
 }
 
-interface CandidateCapabilities {
+/** Caller owns project/expiry validation; this never reads the parent environment. */
+export const candidateCapabilities = (
+  credentials?: Credentials,
+): {
   environment: Record<string, string>;
   receipt: { modelGateway: string; childSandbox: string; persistence: string };
-}
-
-type CandidateEvidence =
-  | string
-  | number
-  | boolean
-  | null
-  | CandidateEvidence[]
-  | { [key: string]: CandidateEvidence };
-
-/** Caller owns project/expiry validation; this never reads the parent environment. */
-export const candidateCapabilities = (credentials?: Credentials): CandidateCapabilities => ({
+} => ({
   environment: credentials
     ? {
         VERCEL_OIDC_TOKEN: credentials.token,
@@ -36,14 +28,8 @@ export const candidateCapabilities = (credentials?: Credentials): CandidateCapab
 });
 
 /** Redact complete diagnostics before serialization, including bare credential values. */
-export const redactCandidateEvidence = (
-  value: CandidateEvidence,
-  secrets: readonly string[],
-): CandidateEvidence => {
-  const redact = (item: CandidateEvidence): CandidateEvidence => {
-    if (item === null || item === true || item === false || Number.isFinite(item)) {
-      return item;
-    }
+export const redactCandidateEvidence = <T>(value: T, secrets: readonly string[]): T => {
+  const redact = (item: unknown): unknown => {
     if (typeof item === "string") {
       let text = item;
       for (const secret of secrets) {
@@ -54,12 +40,12 @@ export const redactCandidateEvidence = (
       return text;
     }
     if (Array.isArray(item)) {
-      return item.map((entry: unknown) => redact(entry as CandidateEvidence));
+      return item.map(redact);
     }
-    return Object.fromEntries(
-      Object.entries(item).map(([key, entry]) => [key, redact(entry as CandidateEvidence)]),
-    );
+    if (item && typeof item === "object") {
+      return Object.fromEntries(Object.entries(item).map(([key, entry]) => [key, redact(entry)]));
+    }
+    return item;
   };
-  const sanitized = sanitizeEvidence(redact(value));
-  return redact(sanitized);
+  return sanitizeEvidence(redact(value)) as T;
 };
