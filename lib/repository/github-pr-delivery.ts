@@ -265,7 +265,7 @@ const checkReadyRun = async (
     : [];
   // GitHub lists newest runs first. An unresolved association for the newest
   // plausible run is pending instead of qualifying an older successful run.
-  const run = candidates[0];
+  const [run] = candidates;
   if (run === undefined || !runMatchesPull(run, pull, windows)) {
     return { checks: "pending", readyAt };
   }
@@ -318,10 +318,10 @@ export const createGitHubPrDeliveryProvider = (
       draft: pull.draft,
       headSha: pull.head.sha,
       state,
-      ...(pull.merged && pull.merge_commit_sha !== null
-        ? { mergeCommitSha: pull.merge_commit_sha }
-        : {}),
     };
+    if (pull.merged && pull.merge_commit_sha !== null) {
+      result.mergeCommitSha = pull.merge_commit_sha;
+    }
     if (
       state !== "closed" &&
       !pull.draft &&

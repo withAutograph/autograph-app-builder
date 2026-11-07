@@ -12,6 +12,7 @@ export const applicationSourceRegistrationSchema = z.strictObject({
   proposedBytes: z.string(),
 });
 const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
+const repositoryRoot = "/workspace/repository";
 
 /** Invoke the acquired platform's pure planner; no uploaded app module is imported. */
 export const planApplicationSourceRegistration = async (sandbox: SandboxSession, appId: string) => {
@@ -23,7 +24,7 @@ export const planApplicationSourceRegistration = async (sandbox: SandboxSession,
   const source = `import {readFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {planMicrofrontendRegistration} from './packages/platform-microfrontends/src/policy/config-registration.ts';const bytes=readFileSync('microfrontends.json','utf8'); console.log(JSON.stringify(planMicrofrontendRegistration(bytes,{projectName:${JSON.stringify(appId)},packageName:${JSON.stringify(packageName)},routes:${JSON.stringify(routes)},expectedDigest:createHash('sha256').update(bytes).digest('hex')})));`;
   let result = await sandbox.run({
     command: `bun -e ${quote(source)}`,
-    workingDirectory: "/workspace/repository",
+    workingDirectory: repositoryRoot,
   });
   if (
     result.exitCode !== 0 &&
@@ -34,14 +35,14 @@ export const planApplicationSourceRegistration = async (sandbox: SandboxSession,
     await setBuilderSandboxNetworkPolicy(sandbox, "allow-all");
     const dependencies = await sandbox.run({
       command: "bun install --ignore-scripts --filter @autograph/platform-microfrontends",
-      workingDirectory: "/workspace/repository",
+      workingDirectory: repositoryRoot,
     });
     if (dependencies.exitCode !== 0) {
       throw new Error("The platform registration planner dependencies are unavailable.");
     }
     result = await sandbox.run({
       command: `bun -e ${quote(source)}`,
-      workingDirectory: "/workspace/repository",
+      workingDirectory: repositoryRoot,
     });
   }
   if (result.exitCode !== 0) {
