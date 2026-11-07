@@ -17,6 +17,9 @@ const chartCompositions = new Set([
   "StackedTimelineChart",
   "WaterfallChart",
 ]);
+const dependencyInstallationFailedMessage = "Dependency installation failed.";
+const previewCompilerFailedMessage = "The preview compiler failed.";
+const repositoryWorkspacePath = "/workspace/repository";
 
 /** Compile the submitted interface against the actual checkout, not substitutes. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -31,7 +34,10 @@ export function uiPreviewRendererFiles(input: UiPreviewInput) {
 bootstrapAgCharts({ allowMissingLicense: true });`
     : "";
   const imports = input.manifest.screens
-    .map((screen, index) => `import Screen${index} from ${JSON.stringify(`./${screen.entry}`)};`)
+    .map((screen, index) => {
+      const screenImport = JSON.stringify(`./${screen.entry}`);
+      return `import Screen${index} from ${screenImport};`;
+    })
     .join("\n");
   const routes = input.manifest.screens
     .map((screen, index) => `${JSON.stringify(screen.route)}: Screen${index}`)
@@ -121,7 +127,7 @@ export async function renderUiPreview(
   const compile = () =>
     sandbox.run({
       command: `bun ${bundle.root}/render.mts`,
-      workingDirectory: "/workspace/repository",
+      workingDirectory: repositoryWorkspacePath,
     });
   let result = await compile();
   if (
@@ -129,18 +135,18 @@ export async function renderUiPreview(
     /could not resolve|cannot find (?:module|package)/iu.test(`${result.stderr}\n${result.stdout}`)
   ) {
     const installation = await sandbox.run({
-      command: workspaceBinInstallCommand("/workspace/repository", false),
-      workingDirectory: "/workspace/repository",
+      command: workspaceBinInstallCommand(repositoryWorkspacePath, false),
+      workingDirectory: repositoryWorkspacePath,
     });
     if (installation.exitCode !== 0) {
       throw new Error(
-        installation.stderr || installation.stdout || "Dependency installation failed.",
+        installation.stderr || installation.stdout || dependencyInstallationFailedMessage,
       );
     }
     result = await compile();
   }
   if (result.exitCode !== 0) {
-    throw new Error(result.stderr || result.stdout || "The preview compiler failed.");
+    throw new Error(result.stderr || result.stdout || previewCompilerFailedMessage);
   }
   const html = await sandbox.readTextFile({
     path: `/workspace/repository/${bundle.root}/index.html`,

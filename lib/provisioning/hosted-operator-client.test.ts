@@ -40,13 +40,15 @@ describe("operator Auth identity input results", () => {
     "authorization_required",
     undefined,
   ] as const)("preserves a blocked operator result code (%s)", async (code) => {
-    const result = clientFor({
+    const baseResponse = {
       appId: selection.appId,
       authenticatedBehavior: "unassessed",
       operationRef,
       status: "blocked",
-      ...(code === undefined ? {} : { code }),
-    }).authIdentityInput(request);
+    };
+    const response: typeof baseResponse & { code?: typeof code } = baseResponse;
+    if (code !== undefined) response.code = code;
+    const result = clientFor(response).authIdentityInput(request);
     await expect(result).rejects.toBeInstanceOf(HostedOperatorError);
     await expect(result).rejects.toMatchObject({ code: code ?? "operator_unavailable" });
   });
@@ -235,12 +237,15 @@ describe("closed outbound operator action diagnostics", () => {
         operationRef,
         status: "pending",
       };
-      const requestPayload = {
+      const baseRequestPayload = {
         action,
         operationRef,
         selection,
-        ...(action === "execute" ? { callId: "private-call", planDigest: "a".repeat(64) } : {}),
       };
+      const requestPayload =
+        action === "execute"
+          ? { ...baseRequestPayload, callId: "private-call", planDigest: "a".repeat(64) }
+          : baseRequestPayload;
       const transport = vi.fn<typeof fetch>(async (_url, init) => {
         const body = z.string().parse(init?.body);
         expect(JSON.parse(body)).toEqual(requestPayload);
