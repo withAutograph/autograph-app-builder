@@ -16,6 +16,12 @@ const profileSchema = z.strictObject({
   id: z.string().min(1),
 });
 
+const unavailable = () => new Error("Protected operator resource profile is unavailable.");
+const capability = (worker: { operationScope: string; subcommand: string } | undefined) =>
+  worker === undefined
+    ? undefined
+    : { operationScope: worker.operationScope, subcommand: worker.subcommand };
+
 /** Select only a deployment-owned profile bound to the authenticated canonical app owner. */
 export const resolveNativeTargetResourceProfile = (input: {
   base: HostedOperatorSourceConfiguration;
@@ -27,7 +33,6 @@ export const resolveNativeTargetResourceProfile = (input: {
   if (input.resourceProfileId === undefined) {
     return input.base;
   }
-  const unavailable = () => new Error("Protected operator resource profile is unavailable.");
   try {
     const authority = hostedTenantAuthoritySchema.parse(input.authority);
     const text = (input.environment ?? process.env).PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES;
@@ -39,7 +44,7 @@ export const resolveNativeTargetResourceProfile = (input: {
     if (selected.length !== 1) {
       throw unavailable();
     }
-    const profile = selected[0];
+    const [profile] = selected;
     if (
       profile === undefined ||
       profile.appId !== input.appId ||
@@ -77,10 +82,6 @@ export const nativeTargetResourceProfileAuthorityDigest = (
   input: HostedOperatorSourceConfiguration,
 ): string => {
   const config = validateHostedOperatorSourceConfiguration(input);
-  const capability = (worker: { operationScope: string; subcommand: string } | undefined) =>
-    worker === undefined
-      ? undefined
-      : { operationScope: worker.operationScope, subcommand: worker.subcommand };
   const authority = {
     authDatabase: config.authDatabase,
     builderCallbackOrigin: config.builderCallbackOrigin,

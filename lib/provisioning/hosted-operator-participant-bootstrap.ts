@@ -333,13 +333,14 @@ const inspectParticipantBootstrap = (
       inspectParticipantBootstrapPreparation(desired, record).gatewayPrepared,
   ].every(Boolean);
   const candidate = gateway?.candidate ?? deliveredGatewayCandidate(operator);
-  return sameScope && candidate !== undefined
-    ? completedParticipantBootstrapSchema.parse({
-        auth,
-        candidate,
-        ...(gateway === undefined ? {} : { gateway: gateway.completion }),
-      })
-    : undefined;
+  if (!sameScope || candidate === undefined) {
+    return undefined;
+  }
+  const completed = { auth, candidate };
+  if (gateway === undefined) {
+    return completedParticipantBootstrapSchema.parse(completed);
+  }
+  return completedParticipantBootstrapSchema.parse({ ...completed, gateway: gateway.completion });
 };
 
 /** Preserve the original pending/reserved handoff contract for existing consumers. */
