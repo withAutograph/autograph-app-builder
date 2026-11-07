@@ -96,7 +96,7 @@ function dependencies(input?: {
       installations,
       membership,
       publicationStores,
-      readPreparedHandoff: vi.fn(() => Promise.resolve(undefined as undefined)),
+      readPreparedHandoff: vi.fn(() => Promise.resolve(undefined)),
     },
     installationStore,
     installations,

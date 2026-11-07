@@ -66,13 +66,13 @@ const hooks = vi.hoisted(() => {
     },
     release: { status: "not-required" },
   };
+  const completions: DraftReconciliationCompletion[] = [];
   return {
     sandbox: vi.fn(),
     assertApproval: vi.fn(),
     assertOwner: vi.fn<() => Promise<void>>(),
     applied: vi.fn(),
-    // SAFETY: The closed test fixture supplies only trusted completion metadata consumed by this tool.
-    completions: [] as DraftReconciliationCompletion[],
+    completions,
     content: vi.fn(),
     inspect: vi.fn(),
     record: vi.fn(),

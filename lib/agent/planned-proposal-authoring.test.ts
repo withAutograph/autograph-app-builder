@@ -202,9 +202,7 @@ describe("declined current-proposal drafting observation", () => {
         requestPrivateApplyApproval({ ...scope(current), proposalDigest: "other" }, "pending");
       }
       const owner =
-        mode === "foreign"
-          ? ({ ...ctx(), session: { ...ctx().session, id: "foreign" } } as HookContext)
-          : ctx();
+        mode === "foreign" ? { ...ctx(), session: { ...ctx().session, id: "foreign" } } : ctx();
       request(owner);
       if (mode !== "granted") {
         observePlannedAuthoringInspection(inspection(current, owner), owner);

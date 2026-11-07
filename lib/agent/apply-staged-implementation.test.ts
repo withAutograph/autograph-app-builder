@@ -4,11 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import applyAppCreation from "../../agent/tools/apply_app_creation";
 
-const mocks = vi.hoisted(() => ({
-  current: {} as Record<string, unknown>,
-  execute: vi.fn(),
-  wrap: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+  const current: Record<string, unknown> = {};
+  return {
+    current,
+    execute: vi.fn(),
+    wrap: vi.fn(),
+  };
+});
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 
 vi.mock("eve/context", () => ({
