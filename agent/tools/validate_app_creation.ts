@@ -260,18 +260,38 @@ export const createAppValidationTool = (
       const priorPublishedGitHubDraftProposalDigest =
         current.publishedGitHubDraftProposalDigest ??
         (current.phase === "reviewed" ? current.githubDraftProposal?.proposal.digest : undefined);
-      let base = {
+      interface ValidationBasePrefix {
+        appSpec: typeof current.appSpec;
+        applyReceipt: typeof current.applyReceipt;
+        artifacts: typeof current.artifacts;
+        publishedGitHubDraftProposalDigest?: typeof priorPublishedGitHubDraftProposalDigest;
+        dependencyReceipt: typeof current.dependencyReceipt;
+        checkoutDependencyAttempts?: typeof current.checkoutDependencyAttempts;
+        githubSource?: typeof current.githubSource;
+      }
+      const initial = {
         appSpec: current.appSpec,
         applyReceipt: current.applyReceipt,
         artifacts: current.artifacts,
-        ...(priorPublishedGitHubDraftProposalDigest === undefined
-          ? {}
-          : { publishedGitHubDraftProposalDigest: priorPublishedGitHubDraftProposalDigest }),
+      };
+      const withPublishedDraft =
+        priorPublishedGitHubDraftProposalDigest === undefined
+          ? initial
+          : { ...initial, publishedGitHubDraftProposalDigest: priorPublishedGitHubDraftProposalDigest };
+      const withDependencies = {
+        ...withPublishedDraft,
         dependencyReceipt: current.dependencyReceipt,
-        ...(current.checkoutDependencyAttempts === undefined
-          ? {}
-          : { checkoutDependencyAttempts: current.checkoutDependencyAttempts }),
-        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+      };
+      const withAttempts =
+        current.checkoutDependencyAttempts === undefined
+          ? withDependencies
+          : { ...withDependencies, checkoutDependencyAttempts: current.checkoutDependencyAttempts };
+      const withGitHubSource: ValidationBasePrefix =
+        current.githubSource === undefined
+          ? withAttempts
+          : { ...withAttempts, githubSource: current.githubSource };
+      let base = {
+        ...withGitHubSource,
         identityReceipt: current.identityReceipt,
         preparedByCallId: current.preparedByCallId,
         proposal: current.proposal,
