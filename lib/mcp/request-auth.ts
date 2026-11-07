@@ -7,14 +7,13 @@ import type { VerifiedHostedClaims } from "../eve/hosted-auth";
 const strongAlgorithmSchema = z.enum(["RS256", "PS256", "ES256", "EdDSA"]);
 
 export const hostedMcpAuthConfigSchema = z
-  .object({
+  .strictObject({
     algorithm: strongAlgorithmSchema,
     audience: z.string().url().startsWith("https://"),
     issuer: z.string().url().startsWith("https://"),
     jwksUrl: z.string().url().startsWith("https://"),
     resourceUrl: z.string().url().startsWith("https://"),
   })
-  .strict()
   .superRefine((config, context) => {
     for (const [field, value] of [
       ["issuer", config.issuer],

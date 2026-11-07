@@ -18,13 +18,11 @@ const repositoryRoot = nodePath.resolve(import.meta.dirname, "..");
 // APP_BUILDER_G2_MODEL_EVAL=1 APP_BUILDER_G2_MODEL_ID=provider/model mise exec -- node node_modules/vitest/vitest.mjs run evals/g2-provider-brief-first-attempt.model.test.ts --config evals/g2-model.vitest.config.mts
 const productBrief = `Build an internal release-readiness workspace for product and engineering leads. It reads pull-request and check status from GitHub and deployment status from Vercel, then shows one release queue with the current commit, blocking checks, preview status, production status, and a human-owned readiness decision. Version one is read-only: it must not merge, deploy, promote, retry, or change provider configuration. Use a tenant-scoped authenticated workspace. The reviewed prototype is prototype/release-readiness/index.html and includes a queue, a selected-release detail panel, loading and empty states, stale-data warnings, provider-error states, and evidence timestamps.`;
 
-const recordPrototypeArtifactInput = z
-  .object({
-    content: z.string().min(1),
-    mediaType: z.literal("text/markdown"),
-    path: z.literal("prototype/release-readiness/app-spec.md"),
-  })
-  .strict();
+const recordPrototypeArtifactInput = z.strictObject({
+  content: z.string().min(1),
+  mediaType: z.literal("text/markdown"),
+  path: z.literal("prototype/release-readiness/app-spec.md"),
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function productionAppSpecInstructions(): Promise<string> {

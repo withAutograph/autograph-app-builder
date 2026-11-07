@@ -5,12 +5,11 @@ export const hostedDeploymentEnvironmentSchema = z.enum(["preview", "production"
 export type HostedDeploymentEnvironment = z.infer<typeof hostedDeploymentEnvironmentSchema>;
 
 const hostedDeploymentEnvironmentBindingSchema = z
-  .object({
+  .strictObject({
     configuredEnvironment: hostedDeploymentEnvironmentSchema,
     hostedAdapter: z.literal("1"),
     vercelEnvironment: hostedDeploymentEnvironmentSchema,
   })
-  .strict()
   .superRefine((binding, context) => {
     if (binding.vercelEnvironment !== binding.configuredEnvironment) {
       context.addIssue({

@@ -24,12 +24,10 @@ const previewDigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 
 const unprivilegedPortSchema = z.coerce.number().int().min(1024).max(65_535);
 
-const previewRouteInputSchema = z
-  .object({
-    digest: previewDigestSchema,
-    sessionId: previewSessionIdSchema,
-  })
-  .strict();
+const previewRouteInputSchema = z.strictObject({
+  digest: previewDigestSchema,
+  sessionId: previewSessionIdSchema,
+});
 
 type Environment = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
