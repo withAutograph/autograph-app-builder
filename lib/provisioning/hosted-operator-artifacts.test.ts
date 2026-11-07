@@ -151,7 +151,7 @@ const seedGeneratedEnvelope = (
     .digest("hex");
   const content = JSON.stringify({
     appId: "spend-review",
-    ...(capturedDescription === undefined ? {} : { description: capturedDescription }),
+    description: capturedDescription,
     files: Object.fromEntries(
       Object.entries(f.files).map(([name, bytes]) => [name, bytes.toString("base64")]),
     ),
