@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { vercelProvisionDiagnosticSchema } from "./contracts";
+import { vercelProvisionDiagnosticSchema } from "./contracts-schema";
 
 export const githubReleaseHttpCodeSchema = z.enum([
   "bad_credentials",
