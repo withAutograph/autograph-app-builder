@@ -355,7 +355,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         // Invalid acceptance output has no repair diagnostic.
       }
     })();
-    if (
+    const hasRepairDiagnostic =
       latestAcceptance?.isError === true &&
       repairDiagnostic?.code === "app_spec_invalid" &&
       repairDiagnostic.issues?.some(
@@ -363,10 +363,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           code === "build_ready_intent" ||
           code === "missing_heading" ||
           code === "build_handoff_format",
-      ) === true &&
-      appSpecArtifacts.length === 1 &&
-      acceptanceResults.length === 1
-    ) {
+      ) === true;
+    if (hasRepairDiagnostic && appSpecArtifacts.length === 1 && acceptanceResults.length === 1) {
       return {
         toolCalls: [
           {
@@ -395,10 +393,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       acceptanceResults.length < appSpecArtifacts.length &&
       currentAppSpec?.digest !== undefined &&
       currentAppSpec.revision !== undefined;
+    const hasPendingSourceIdentity =
+      hasPendingAppSpec && workspace?.sourceSha !== undefined && workspace.sourceTree !== undefined;
     if (
-      hasPendingAppSpec &&
-      workspace?.sourceSha !== undefined &&
-      workspace.sourceTree !== undefined &&
+      hasPendingSourceIdentity &&
       workspace.eligibilityDigest !== undefined &&
       workspace.workspaceDigest !== undefined
     ) {
@@ -541,11 +539,14 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         }
       | undefined;
     const adapterDisabled = status?.enabled === false && status.adapterConfigured === false;
-    return adapterDisabled &&
-      status.genericShellAuthority === false &&
-      status.liveGitHubCallsAvailable === false
-      ? `GitHub publication is fail-closed: ${status.reason ?? "no typed adapter is configured."}`
-      : "GitHub publication status did not prove the required fail-closed boundary.";
+    if (
+      !adapterDisabled ||
+      status.genericShellAuthority !== false ||
+      status.liveGitHubCallsAvailable !== false
+    ) {
+      return "GitHub publication status did not prove the required fail-closed boundary.";
+    }
+    return `GitHub publication is fail-closed: ${status.reason ?? "no typed adapter is configured."}`;
   }
   if (message.includes("report artifact workflow status")) {
     const result = toolResults.at(-1);

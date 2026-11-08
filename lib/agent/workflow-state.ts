@@ -528,7 +528,13 @@ export const assertCurrentGitHubDraftProposal = (input: {
     binding === undefined ||
     proposal === undefined ||
     proposal.digest !== input.expectedProposalDigest ||
-    proposal.reviewDigest !== input.reviewDigest ||
+    proposal.reviewDigest !== input.reviewDigest
+  ) {
+    throw new Error(
+      "The draft pull-request proposal is not the exact proposal sealed for this reviewed workflow.",
+    );
+  }
+  if (
     proposal.changeSetDigest !== input.changeSetDigest ||
     binding.sourceReceiptDigest !== input.sourceReceiptDigest ||
     !draftProposalDestinationMatches({ ...input, binding })

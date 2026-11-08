@@ -107,6 +107,21 @@ const matchesRequest = (record: HostedRuntimeJournalRecord, plan: HostedOperator
   );
 };
 
+const matchesReadyDelivery = (
+  candidate: OperatorDeploymentCandidate,
+  operator: HostedOperatorRecordBase,
+  delivery: NonNullable<HostedOperatorPlan["delivery"]>,
+): boolean => {
+  if (candidate.readyState !== "READY" || candidate.operationRef !== operator.operationRef) {
+    return false;
+  }
+  return (
+    candidate.projectId === delivery.projectId &&
+    candidate.branch === delivery.branch &&
+    candidate.repoId === delivery.repoId
+  );
+};
+
 const ownedReadyCandidate = (
   candidates: readonly OperatorDeploymentCandidate[] | undefined,
   deploymentId: string,
@@ -117,11 +132,7 @@ const ownedReadyCandidate = (
   const candidate = matches?.length === 1 ? matches[0] : undefined;
   return candidate !== undefined &&
     delivery !== undefined &&
-    candidate.readyState === "READY" &&
-    candidate.operationRef === operator.operationRef &&
-    candidate.projectId === delivery.projectId &&
-    candidate.branch === delivery.branch &&
-    candidate.repoId === delivery.repoId
+    matchesReadyDelivery(candidate, operator, delivery)
     ? candidate
     : undefined;
 };
