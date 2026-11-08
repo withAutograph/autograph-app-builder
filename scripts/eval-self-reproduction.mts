@@ -149,7 +149,7 @@ const runConfiguredPairedCaptures = async () => {
     (values["reference-url"] && values["candidate-url"]
       ? join(root, "evals/self-reproduction/default-capture-adapter.ts")
       : undefined);
-  if (!adapterFile) {
+  if (adapterFile === undefined || adapterFile === null || adapterFile === "") {
     return;
   }
   if (!values["reference-url"] || !values["candidate-url"]) {

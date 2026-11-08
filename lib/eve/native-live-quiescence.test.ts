@@ -149,7 +149,7 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
     authorize: vi.fn(() =>
       currentOwner ? Promise.resolve() : Promise.reject(new Error("owner revoked")),
     ),
-    authorizeActivation: vi.fn(() => Promise.resolve()),
+    authorizeActivation: vi.fn<TerminalRecoveryPorts["authorizeActivation"]>().mockResolvedValue(),
     readReceipt: vi.fn(() => Promise.resolve(receipt)),
     commitReceipt: vi.fn<TerminalRecoveryPorts["commitReceipt"]>((input) => {
       receipt = input.recoveryBinding;
@@ -223,7 +223,7 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
             metadata: Promise.resolve({ recoveryBinding: ready }),
           }),
     ),
-    resumeHook: vi.fn(() => Promise.resolve()),
+    resumeHook: vi.fn<() => Promise<void>>().mockResolvedValue(),
     isHookNotFound: (error) => error instanceof Error && error.message === "not found",
     now: () => 1,
     wait: () => Promise.resolve(),
@@ -552,7 +552,9 @@ describe("live native execution transfer", () => {
   it("does not adopt an execution stopped by a different operation", async () => {
     const f = fixture();
     f.setNativeStatus("cancelled");
-    f.dependencies.readStopReceipt = vi.fn(() => Promise.resolve(false));
+    f.dependencies.readStopReceipt = vi
+      .fn<NonNullable<TerminalRecoveryDependencies["readStopReceipt"]>>()
+      .mockResolvedValue(false);
     expect(await f.run()).toMatchObject({ kind: "unavailable", reason: "source-stop-not-owned" });
     expect(f.start).not.toHaveBeenCalled();
   });
