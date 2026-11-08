@@ -1028,9 +1028,9 @@ const resolveParticipantPlan = async (
       ? []
       : [
           {
+            description: signupEffectDescription(base),
             id: AUTH_SIGNUP_POLICY,
             kind: "auth-signup-policy" as const,
-            description: signupEffectDescription(base),
           },
         ]),
     {
@@ -1040,12 +1040,12 @@ const resolveParticipantPlan = async (
       kind: "access",
     },
     {
-      id: "bindings",
-      kind: "bindings",
       description:
         appTrustedSources === undefined
           ? "Bind app-owned runtime URL and public verification context."
           : "Bind app-owned runtime URL and public verification context, and allow the configured Gateway Preview to reach this app Preview.",
+      id: "bindings",
+      kind: "bindings",
     },
     {
       description:
@@ -1291,9 +1291,9 @@ export const resolveFullPlan = async (
   }
   if (signupPolicy !== undefined) {
     effects.push({
+      description: signupEffectDescription(base),
       id: AUTH_SIGNUP_POLICY,
       kind: AUTH_SIGNUP_POLICY,
-      description: signupEffectDescription(base),
     });
   }
   effects.push(
@@ -1472,10 +1472,12 @@ export const composeHostedOperatorDependencies = (
       if (!input.readyReplacement) {
         throw new HostedOperatorError(RECONCILIATION_REQUIRED);
       }
+      const { readCredential } = controlPlane;
+      const { assertCurrent } = input;
       await createReadyReplacementNativeReader({
+        assertCurrent,
         context: input,
-        readCredential: controlPlane.readCredential,
-        assertCurrent: input.assertCurrent,
+        readCredential,
       }).verify(input.plan, input.readyReplacement);
     },
     assertAuthorized: controlPlane.assertAuthorized,
@@ -1496,10 +1498,12 @@ export const composeHostedOperatorDependencies = (
       ) {
         return "unknown";
       }
+      const { readCredential } = controlPlane;
+      const { assertCurrent } = input;
       return await createReadyReplacementNativeReader({
+        assertCurrent,
         context: input,
-        readCredential: controlPlane.readCredential,
-        assertCurrent: input.assertCurrent,
+        readCredential,
       }).aliasWriteAuthority(input.plan, selected.deploymentId);
     },
     beforeCreate: async (input) => {
@@ -1509,10 +1513,12 @@ export const composeHostedOperatorDependencies = (
       if (!input.readyReplacement) {
         throw new HostedOperatorError(RECONCILIATION_REQUIRED);
       }
+      const { readCredential } = controlPlane;
+      const { assertCurrent } = input;
       await createReadyReplacementNativeReader({
+        assertCurrent,
         context: input,
-        readCredential: controlPlane.readCredential,
-        assertCurrent: input.assertCurrent,
+        readCredential,
       }).verify(input.plan, input.readyReplacement);
     },
     assertAuthorized: controlPlane.assertAuthorized,

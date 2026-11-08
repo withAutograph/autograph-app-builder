@@ -151,12 +151,15 @@ const observe = (
 export const createRepositoryProductionWorkers = (deps: RepositoryProductionWorkerDependencies) => {
   const privateCredentials = (row: RepositoryProductionRow) => {
     try {
+      const sealed = sealedSchema.parse(row.record.privateState);
+      const config = deps.keyring;
+      const credentialAssociatedData = associatedData(row);
       return credentialsSchema.parse(
         JSON.parse(
           decryptVersionedVercelToken({
-            ...sealedSchema.parse(row.record.privateState),
-            config: deps.keyring,
-            associatedData: associatedData(row),
+            ...sealed,
+            associatedData: credentialAssociatedData,
+            config,
           }),
         ),
       );

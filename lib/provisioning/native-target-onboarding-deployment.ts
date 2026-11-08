@@ -176,7 +176,8 @@ export const createNativeTargetApprovalCheckpoint = (
     if (row.requestDigest !== planDigest || parsed.planDigest !== planDigest) {
       throw mismatch();
     }
-    expected = { revision: row.revision, observation: structuredClone(parsed.observation) };
+    const revision = row.revision;
+    expected = { observation: structuredClone(parsed.observation), revision };
     return parsed.observation;
   };
   const assertObservationBinding = (parsed: PrivateNativeTargetApprovalObservation) => {
@@ -230,7 +231,8 @@ export const createNativeTargetApprovalCheckpoint = (
     if (stored.planDigest !== planDigest || !isDeepStrictEqual(stored.observation, parsed)) {
       throw unavailable();
     }
-    expected = { revision: inserted.revision, observation: structuredClone(parsed) };
+    const revision = inserted.revision;
+    expected = { observation: structuredClone(parsed), revision };
   };
   const assertForwardObservation = (
     previous: PrivateNativeTargetApprovalObservation,
@@ -291,9 +293,10 @@ export const createNativeTargetApprovalCheckpoint = (
       throw unavailable();
     }
     if ((expected?.revision ?? 0) <= expectedSnapshot.revision) {
+      const revision = expectedSnapshot.revision + 1;
       expected = {
-        revision: expectedSnapshot.revision + 1,
         observation: structuredClone(parsed),
+        revision,
       };
     }
   };

@@ -366,13 +366,17 @@ export const createPublicReleaseDeployment = (input: {
               await base(current);
               await heldFence?.();
             },
-            readCredential: () =>
-              readActiveVercelInstallationToken({
-                database: input.database,
+            readCredential: () => {
+              const { database } = input;
+              const { authority } = owner;
+              const { installationId } = project;
+              return readActiveVercelInstallationToken({
+                authority,
                 config: keyring,
-                authority: owner.authority,
-                installationId: project.installationId,
-              }),
+                database,
+                installationId,
+              });
+            },
             fetch: input.fetch,
           })({
             projectId: project.projectId,
@@ -587,13 +591,17 @@ export const createPublicReleaseDeployment = (input: {
         assertProjectKeys: (keys) => {
           assertOwnedAppProductionEnvironment(plan, keys);
         },
-        readCredential: () =>
-          readActiveVercelInstallationToken({
-            database: input.database,
+        readCredential: () => {
+          const { database } = input;
+          const { authority } = current;
+          const { installationId } = plan.project;
+          return readActiveVercelInstallationToken({
+            authority,
             config: keyring,
-            authority: current.authority,
-            installationId: plan.project.installationId,
-          }),
+            database,
+            installationId,
+          });
+        },
         fetch: input.fetch,
       })({
         projectId: plan.project.projectId,
@@ -663,11 +671,14 @@ export const createPublicReleaseDeployment = (input: {
       assertCurrent: check,
       readCredential: async (current, plan) => {
         await base(current, plan);
+        const { database } = input;
+        const { authority } = current;
+        const { installationId } = plan.project;
         return await readActiveVercelInstallationToken({
-          database: input.database,
+          authority,
           config: keyring,
-          authority: current.authority,
-          installationId: plan.project.installationId,
+          database,
+          installationId,
         });
       },
       readRuntimeBindings: async (current, plan) =>
@@ -745,13 +756,17 @@ export const createPublicReleaseDeployment = (input: {
         }
         const activation = await createPublicReleaseVercelActiveDeploymentSnapshot({
           assertCurrent: () => base(current),
-          readCredential: () =>
-            readActiveVercelInstallationToken({
-              database: input.database,
+          readCredential: () => {
+            const { database } = input;
+            const { authority } = owner;
+            const { installationId } = project;
+            return readActiveVercelInstallationToken({
+              authority,
               config: keyring,
-              authority: owner.authority,
-              installationId: project.installationId,
-            }),
+              database,
+              installationId,
+            });
+          },
           fetch: input.fetch,
         })({
           projectId: project.projectId,
@@ -932,13 +947,17 @@ export const createPublicReleaseDeployment = (input: {
           assertProjectKeys: (keys) => {
             assertOwnedAppProductionEnvironment(candidate, keys);
           },
-          readCredential: () =>
-            readActiveVercelInstallationToken({
-              database: input.database,
+          readCredential: () => {
+            const { database } = input;
+            const { authority } = owner;
+            const { installationId } = project;
+            return readActiveVercelInstallationToken({
+              authority,
               config: keyring,
-              authority: owner.authority,
-              installationId: project.installationId,
-            }),
+              database,
+              installationId,
+            });
+          },
           fetch: input.fetch,
         })({
           projectId: project.projectId,

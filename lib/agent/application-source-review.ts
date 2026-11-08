@@ -676,15 +676,23 @@ const restoreReviewRound = (
     continuation === undefined
       ? emptySourceReviewInvocation()
       : { ...continuation.invocation, freshUsage: { ...continuation.invocation.freshUsage } };
+  const findings = new Map(continuation?.findings);
+  const runtimeChecks = new Set(continuation?.runtimeChecks);
+  const references = new Map(continuation?.references);
+  const reusableReads = new Map(continuation?.reusableReads);
+  const completionRequested = continuation?.completionRequested === true;
+  const invalidEvidence = continuation?.invalidEvidence === true;
+  const evidenceFailed = continuation?.evidenceFailed === true;
+  const outputRejected = continuation?.outputRejected === true;
   const state: ReviewState = {
-    findings: new Map(continuation?.findings),
-    runtimeChecks: new Set(continuation?.runtimeChecks),
-    references: new Map(continuation?.references),
-    reusableReads: new Map(continuation?.reusableReads),
-    completionRequested: continuation?.completionRequested === true,
-    invalidEvidence: continuation?.invalidEvidence === true,
-    evidenceFailed: continuation?.evidenceFailed === true,
-    outputRejected: continuation?.outputRejected === true,
+    completionRequested,
+    evidenceFailed,
+    findings,
+    invalidEvidence,
+    outputRejected,
+    references,
+    reusableReads,
+    runtimeChecks,
   };
   const initial = {
     requirements: evidence.requirements,
@@ -695,14 +703,10 @@ const restoreReviewRound = (
   const messages: ModelMessage[] = continuation?.messages ?? [
     { role: "user", content: JSON.stringify(initial) },
   ];
-  return {
-    invocation,
-    state,
-    messages,
-    requestOrdinal: continuation?.requestOrdinal ?? 0,
-    stepNumber: continuation?.stepNumber ?? 0,
-    lastRecovery: continuation?.lastRecovery,
-  };
+  const requestOrdinal = continuation?.requestOrdinal ?? 0;
+  const stepNumber = continuation?.stepNumber ?? 0;
+  const lastRecovery = continuation?.lastRecovery;
+  return { invocation, lastRecovery, messages, requestOrdinal, state, stepNumber };
 };
 
 type ReviewRoundStep = Pick<StepResult<ReturnType<typeof reviewTools>>, "toolCalls" | "content">;
@@ -961,14 +965,16 @@ const preserveVerifiedFindings = async (
   const hasPrior =
     prior !== undefined && (prior.findings.length > 0 || prior.runtimeChecks.length > 0);
   const hasCurrent = context.state.findings.size > 0 || context.state.runtimeChecks.size > 0;
-  const combined = hasPrior
-    ? {
-        ...context.state,
-        findings: new Map([...prior.findings, ...context.state.findings]),
-        runtimeChecks: new Set([...prior.runtimeChecks, ...context.state.runtimeChecks]),
-        references: new Map([...prior.references, ...context.state.references]),
-      }
-    : context.state;
+  let combined: ReviewState;
+  if (hasPrior) {
+    const current = { ...context.state };
+    const findings = new Map([...prior.findings, ...context.state.findings]);
+    const runtimeChecks = new Set([...prior.runtimeChecks, ...context.state.runtimeChecks]);
+    const references = new Map([...prior.references, ...context.state.references]);
+    combined = { ...current, findings, references, runtimeChecks };
+  } else {
+    combined = context.state;
+  }
   const attribution = hasPrior && !hasCurrent ? prior.reviewer : context.reviewer;
   const partial = assessmentFor(
     context.input,
@@ -1255,15 +1261,14 @@ export const assessApplicationSourceRound = async (
       return await completedReview();
     }
     const settled = await settleIncompleteReviewRound({
-      input,
-      state,
-      contextRejected,
+      blocked,
       canContinue: canContinueReviewRound(result?.finalStep),
+      contextRejected,
       currentMessages,
+      finish,
+      input,
       lastRecovery,
       readRedactions,
-      finish,
-      blocked,
       recover: (recovery) => {
         lastRecovery = recovery;
         state.outputRejected = false;
@@ -1271,6 +1276,7 @@ export const assessApplicationSourceRound = async (
         messages = [{ role: "user", content: recovery }];
         invocation.splits += 1;
       },
+      state,
     });
     return await settleReviewWithFallback(
       settled,
