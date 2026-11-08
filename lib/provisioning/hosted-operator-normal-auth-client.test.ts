@@ -445,28 +445,28 @@ describe("normal Auth rate limit recovery", () => {
       return await Promise.resolve(response);
     };
     const options = {
-      origin,
+      assertApprovedEffect: async (operation: string) => {
+        permissions.push(operation);
+        await Promise.resolve();
+      },
       fetch: typedFetch,
       now: () => currentTime,
+      origin,
       wait: async (delayMs: number, signal: AbortSignal) => {
         expect(signal).toBe(attempts[0]?.signal);
         waits.push(delayMs);
         currentTime += delayMs;
         await Promise.resolve();
       },
-      assertApprovedEffect: async (operation: string) => {
-        permissions.push(operation);
-        await Promise.resolve();
-      },
     };
     return {
-      options,
-      attempts,
-      waits,
-      permissions,
       advance: (ms: number) => {
         currentTime += ms;
       },
+      attempts,
+      options,
+      permissions,
+      waits,
     };
   };
   const successfulAccount = () => Response.json({ user: session().user });

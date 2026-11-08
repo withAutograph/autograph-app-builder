@@ -262,8 +262,6 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
         : null,
     ),
     store: {
-      read: async () => structuredClone(row),
-      reserve: async () => structuredClone(row),
       compareAndSet: async (input) => {
         if (input.expectedRevision !== row.revision) {
           // oxlint-disable-next-line unicorn/no-useless-undefined -- A lost journal CAS returns no row.
@@ -275,6 +273,8 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
         };
         return structuredClone(row);
       },
+      read: async () => structuredClone(row),
+      reserve: async () => structuredClone(row),
       reserveFenceGeneration: vi.fn(async () => {
         throw new Error("Planning cannot claim an effect fence");
       }),
@@ -306,7 +306,7 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
       return operatorPublicResultSchema.parse(await response.json());
     },
   };
-  return { deps, client, originalPlan, original, identityLink, row: () => row };
+  return { client, deps, identityLink, original, originalPlan, row: () => row };
 };
 
 describe("participant proposal identity continuity", () => {
@@ -495,13 +495,13 @@ describe("consumed proof after Gateway selection advances", () => {
       operationRef: "00000000-0000-4000-8000-000000000002",
     };
     return {
-      before,
       after: {
         ...before,
         operationRef: next.operationRef,
         gatewayDeliveryCandidates: [previous, next],
         deliveredGatewayDeploymentId: next.deploymentId,
       },
+      before,
     };
   };
 

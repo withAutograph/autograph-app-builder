@@ -233,11 +233,11 @@ const fixture = () => {
     }),
   );
   const run = createHostedOperatorRealmIdentityWait({
-    store,
-    config: { tokenKey: key, tokenKeyVersion: "wait-v1" },
     assertAuthorized,
-    observe,
+    config: { tokenKey: key, tokenKeyVersion: "wait-v1" },
     now: () => clock,
+    observe,
+    store,
   });
   const link = requireFixture(row.record.operator?.identityLink);
   const url = new URL("/api/auth/platform/operator-link", link.browserOrigin);
@@ -275,19 +275,19 @@ const fixture = () => {
     });
   };
   return {
-    run,
-    registration,
-    read,
-    compareAndSet,
     assertAuthorized,
-    observe,
-    store,
-    mutate,
+    compareAndSet,
     consume,
+    mutate,
+    observe,
+    read,
+    registration,
     row: () => structuredClone(row),
+    run,
     setTime: (time: string) => {
       clock = Date.parse(time);
     },
+    store,
   };
 };
 

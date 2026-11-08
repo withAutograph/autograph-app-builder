@@ -265,7 +265,7 @@ const phaseFixture = (participants = false) => {
     record.status = "participants-prepared";
   }
   const row = { record: hostedRuntimeJournalRecordSchema.parse(record), revision: 2 };
-  return { row, input: { plan: operator.plan, privateState: record.privateState } };
+  return { input: { plan: operator.plan, privateState: record.privateState }, row };
 };
 
 describe("read-only completed resource binding phase", () => {

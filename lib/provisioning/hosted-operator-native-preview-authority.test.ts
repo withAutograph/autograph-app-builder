@@ -276,8 +276,8 @@ const fixture = () => {
         nativeStore,
         now: () => now,
       }),
-    controlPlane,
     canonicalOwner,
+    controlPlane,
     duringGet: (run: () => void) => {
       duringGet = run;
     },
@@ -319,7 +319,7 @@ describe("native Preview canonical planning owner", () => {
       scope,
       fetch: f.fetcher,
     });
-    return { ...f, assertPlanningAuthorized, assertCanonicalOwner, reader };
+    return { ...f, assertCanonicalOwner, assertPlanningAuthorized, reader };
   };
 
   it("refreshes canonical ownership and the active installation on every metadata guard without HTTP", async () => {
@@ -502,10 +502,10 @@ describe("concrete native Preview owner and approval callbacks", () => {
           },
           readCredential: f.controlPlane.readCredential,
         },
-        fetch: fetcher,
         diagnosticSink: (event) => {
           diagnostics.push(event);
         },
+        fetch: fetcher,
         nativeStore,
         scope,
       });
@@ -550,10 +550,10 @@ describe("concrete native Preview owner and approval callbacks", () => {
         },
         readCredential: f.controlPlane.readCredential,
       },
-      fetch: fetcher,
       diagnosticSink: () => {
         throw new Error("sink unavailable");
       },
+      fetch: fetcher,
       nativeStore,
       scope,
     });
@@ -578,10 +578,10 @@ describe("concrete native Preview owner and approval callbacks", () => {
         },
         readCredential: f.controlPlane.readCredential,
       },
-      fetch: fetcher,
       diagnosticSink: (event) => {
         diagnostics.push(event);
       },
+      fetch: fetcher,
       nativeStore,
       scope,
     });
@@ -928,7 +928,7 @@ describe("approved native credential observation authority", () => {
     if (assertApprovedOwner === undefined) {
       throw new Error("Actual observation callbacks required by fixture");
     }
-    return { ...f, callbacks, assertApprovedOwner, assertCurrentObservation };
+    return { ...f, assertApprovedOwner, assertCurrentObservation, callbacks };
   };
 
   it("rechecks the original approved effect and active installation without provider calls or caching", async () => {

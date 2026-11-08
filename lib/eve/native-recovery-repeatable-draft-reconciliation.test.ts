@@ -211,6 +211,11 @@ const fixture = () => {
     "autograph-app-builder.draft-reconciliation-completions.v1": [completion],
   };
   return {
+    call,
+    candidate,
+    completion,
+    context,
+    history,
     input: {
       descriptor: {
         logicalSessionId: "logical",
@@ -230,16 +235,11 @@ const fixture = () => {
         nativeEvents,
       },
     },
-    context,
-    candidate,
-    completion,
-    call,
-    request,
     nativeEvents,
-    history,
+    publicationInstallation,
+    request,
     settlement,
     sourceInstallation,
-    publicationInstallation,
   };
 };
 
