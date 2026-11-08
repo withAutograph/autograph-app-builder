@@ -70,7 +70,7 @@ await new Promise<void>((resolve, reject) => {
   listener.listen(0, "127.0.0.1", resolve);
 });
 const address = z.object({ port: z.number().int().positive() }).parse(listener.address());
-const port = address.port;
+const { port } = address;
 await new Promise<void>((resolve, reject) => {
   listener.close((error) => {
     if (error !== undefined) {

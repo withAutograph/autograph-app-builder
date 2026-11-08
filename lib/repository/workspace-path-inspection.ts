@@ -11,6 +11,7 @@ import {
 import type { NativeActionResultMetadata } from "../eve/payload-envelope";
 
 export const WORKSPACE_REPOSITORY_ROOT = "/workspace/repository";
+const workspaceDirectoryKind = "workspace-directory";
 export const isWorkspaceDescendant = (input: string): boolean =>
   input.startsWith(`${WORKSPACE_REPOSITORY_ROOT}/`);
 export const normalizedWorkspacePath = (input: string): string => {
@@ -28,7 +29,7 @@ const entrySchema = z.strictObject({
 });
 const resultSchema = z.discriminatedUnion("kind", [
   z.strictObject({
-    kind: z.literal("workspace-directory"),
+    kind: z.literal(workspaceDirectoryKind),
     path: z.string(),
     resolvedPath: z.string(),
     entries: z.array(entrySchema),
@@ -102,7 +103,7 @@ export const inspectWorkspacePath = async (input: {
     throw new Error("The requested archive is outside the selected app baseline.");
   }
   const base = {
-    kind: "workspace-directory",
+    kind: workspaceDirectoryKind,
     path: selected,
     entries: [],
     continuation: { directoryOffset: Number.MAX_SAFE_INTEGER },
@@ -141,7 +142,7 @@ export const inspectWorkspacePath = async (input: {
       throw new Error("The requested archive is outside the selected app baseline.");
     }
   }
-  if (result.kind === "workspace-directory") {
+  if (result.kind === workspaceDirectoryKind) {
     const canonicalEntryPath = (entry: z.infer<typeof entrySchema>) =>
       path.posix.join(result.resolvedPath, path.posix.relative(result.path, entry.path));
     const allowed = new Set(
