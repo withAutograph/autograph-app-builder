@@ -76,10 +76,10 @@ const descriptor: TerminalRecoveryDescriptor = {
   },
 };
 const actor = {
-  authenticator: "fixture",
-  principalType: "user",
-  principalId: "owner",
   attributes: {},
+  authenticator: "fixture",
+  principalId: "owner",
+  principalType: "user",
 };
 const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending-approval") => {
   const selectedDescriptor: TerminalRecoveryDescriptor = {
@@ -103,23 +103,23 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
   } as PrivateNativeRecoveryCandidate;
   const session: HarnessSession = batches.appendPendingInputBatch({
     session: {
-      sessionId: "logical",
-      continuationToken: "continuation",
-      history: [],
       agent: { dynamicModel: true, system: "", tools: [] },
       compaction: { recentWindowSize: 1, threshold: 1000 },
+      continuationToken: "continuation",
+      history: [],
+      sessionId: "logical",
     },
     requests: [
       {
-        kind: "tool-approval",
-        requestId: "pending",
-        prompt: "Approve target",
         action: {
-          kind: "tool-call",
-          toolName: "prepare-app-native-target",
           callId: "pending-call",
           input: {},
+          kind: "tool-call",
+          toolName: "prepare-app-native-target",
         },
+        kind: "tool-approval",
+        prompt: "Approve target",
+        requestId: "pending",
       },
     ],
     responseAuthRequiredRequestIds: ["pending"],
@@ -127,7 +127,7 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
   });
   let before = durable.createDurableSessionState({ session });
   let after = durable.createDurableSessionState({
-    session: { ...session, history: [{ role: "assistant", content: "retained late result" }] },
+    session: { ...session, history: [{ content: "retained late result", role: "assistant" }] },
   });
   const provenance = {
     version: 1 as const,

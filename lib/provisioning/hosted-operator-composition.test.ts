@@ -425,10 +425,10 @@ const publicationFixture = (binding: { repoId?: string; gitSha?: string } = {}) 
     Awaited<ReturnType<typeof createHostedOperatorControlPlane>>["readCurrentPlanningOwner"]
   >(() => Promise.resolve({ session: structuredClone(planningSession), target: context.target }));
   const controlPlane = {
+    assertPlanningAuthorized: unexpectedPort,
     readCapturedRealmIdentity,
     readCapturedRealmIdentityProof,
     readCurrentPlanningOwner,
-    assertPlanningAuthorized: unexpectedPort,
   };
   const verifiedIdentity = vi.spyOn(realmIdentity, "readVerifiedRealmAccess").mockResolvedValue({
     claims: realmIdentity.realmLinkClaimsSchema.parse({
@@ -466,9 +466,9 @@ const publicationFixture = (binding: { repoId?: string; gitSha?: string } = {}) 
   return {
     configuration,
     controlPlane,
+    planningSession,
     readCapturedRealmIdentity,
     readCapturedRealmIdentityProof,
-    planningSession,
     unexpectedPort,
     verifiedIdentity,
   };
@@ -937,7 +937,7 @@ describe("configured owner-authorized Preview target metadata", () => {
       consentOwner,
       controlPlane,
     );
-    return { ...f, order, consentOwner, controlPlane, resolve };
+    return { ...f, consentOwner, controlPlane, order, resolve };
   };
   const identity = { appId: context.target.appId, sessionId: context.target.sessionId };
 
@@ -3720,7 +3720,7 @@ describe("retained approved Auth binding selection", () => {
       pendingEffectId: appPlan.effects.find((effect) => effect.kind === "delivery")!.id,
       pendingEffectAttempt: { id: "00000000-0000-4000-8000-000000000003" },
     };
-    return { row: { record, revision: 5 }, originalPlan };
+    return { originalPlan, row: { record, revision: 5 } };
   };
 
   it("reads exact completed retained Auth while an unrelated app delivery awaits reconciliation", async () => {
@@ -3896,7 +3896,7 @@ it.each(["reconcile", "execute"] as const)(
           });
           return result;
         };
-        return { ...adapter, reconcile: observe, deliver: observe };
+        return { ...adapter, deliver: observe, reconcile: observe };
       },
     );
     const dependencies = composeHostedOperatorDependencies(f.configuration, {
@@ -4047,7 +4047,7 @@ describe("approved historical organization inspection", () => {
       },
     }));
     const readMembershipInspectionPlan = vi.fn(async () =>
-      historical ? { plan: prior, effect } : undefined,
+      historical ? { effect, plan: prior } : undefined,
     );
     const assertMembershipCapture = vi.fn(async (current: HostedOperatorEffectContext) => {
       await current.assertCurrent();
@@ -4068,15 +4068,15 @@ describe("approved historical organization inspection", () => {
       controlPlane as unknown as Parameters<typeof composeHostedOperatorDependencies>[1],
     );
     return {
-      f,
-      input,
-      prior,
-      inspect,
-      execute,
-      readResourceBindings,
-      readMembershipInspectionPlan,
       assertMembershipCapture,
       dependencies,
+      execute,
+      f,
+      input,
+      inspect,
+      prior,
+      readMembershipInspectionPlan,
+      readResourceBindings,
     };
   };
 

@@ -111,10 +111,10 @@ const ready = (appId = "new-app"): NativeTargetReadyRegistration => {
   const time = "2026-10-21T15:00:00.000Z";
   const attemptId = "11111111-1111-4111-8111-111111111111";
   const projectSettings = {
+    buildCommand: "bun run build",
     framework: "nextjs" as const,
     rootDirectory: `apps/${appId}`,
     sourceFilesOutsideRootDirectory: true,
-    buildCommand: "bun run build",
   };
   const result: NativeTargetReadyRegistration = {
     kind: "native-target-onboarding",
@@ -154,7 +154,7 @@ const ready = (appId = "new-app"): NativeTargetReadyRegistration => {
         nativeStore: configuration().nativeNeon.configuration.nativeStore,
         scope: configuration().nativeNeon.scope,
       },
-      cost: { ownership: "current-owner", description: "Approved native target" },
+      cost: { description: "Approved native target", ownership: "current-owner" },
       retention: { policy: "retain" },
       conflictPolicy: "stop-on-conflict",
     },
@@ -493,10 +493,10 @@ describe("normal single-project destination resolution", () => {
     const f = setup();
     const config = standard();
     const readStandardDestination = vi.fn().mockResolvedValue({
-      projectId: config.gateway.projectId,
-      teamId: config.teamId,
       installationId: "installation",
       name: "apps-sibling",
+      projectId: config.gateway.projectId,
+      teamId: config.teamId,
     });
     const resolve = createNativeTargetConfigurationResolver({
       configuration: config,
@@ -519,10 +519,10 @@ describe("normal single-project destination resolution", () => {
         await Promise.resolve({
           ...f.resources,
           readStandardDestination: vi.fn().mockResolvedValue({
-            projectId: "new-standard-project",
-            teamId: "team",
             installationId: "installation",
             name: "apps-sibling",
+            projectId: "new-standard-project",
+            teamId: "team",
           }),
         }),
     });
@@ -1053,10 +1053,10 @@ describe("normal single-project destination resolution", () => {
     const f = setup();
     const config = standard();
     const readStandardDestination = vi.fn().mockResolvedValue({
-      projectId: config.gateway.projectId,
-      teamId: config.teamId,
       installationId: "installation",
       name: "apps-sibling",
+      projectId: config.gateway.projectId,
+      teamId: config.teamId,
     });
     const resolve = createNativeTargetConfigurationResolver({
       configuration: config,
@@ -1079,10 +1079,10 @@ describe("normal single-project destination resolution", () => {
         await Promise.resolve({
           ...f.resources,
           readStandardDestination: vi.fn().mockResolvedValue({
-            projectId: "new-standard-project",
-            teamId: "team",
             installationId: "installation",
             name: "apps-sibling",
+            projectId: "new-standard-project",
+            teamId: "team",
           }),
         }),
     });

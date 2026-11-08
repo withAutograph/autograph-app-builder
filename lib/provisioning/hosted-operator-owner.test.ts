@@ -368,10 +368,10 @@ const readyNativeHandoffTarget = (): NativeTargetReadyRegistration => {
   const at = "2026-10-21T15:00:00.000Z";
   const attemptId = "11111111-1111-4111-8111-111111111111";
   const projectSettings = {
+    buildCommand: "bun run build",
     framework: "nextjs" as const,
     rootDirectory: "apps/vendor-onboarding",
     sourceFilesOutsideRootDirectory: true,
-    buildCommand: "bun run build",
   };
   const plan = {
     version: 1 as const,
@@ -1299,11 +1299,11 @@ const recoveredOwnerFixture = async (kind: "direct" | "handoff" = "direct") => {
       ...descriptor,
       ownerRunId: `${childId}-physical`,
       provenance: {
+        checkpointVersion: 1 as const,
         kind: "failed-turn-input" as const,
-        sourceStepId: "step",
         sourceEventId: "event",
         sourceSlot: 1,
-        checkpointVersion: 1 as const,
+        sourceStepId: "step",
       },
     };
     const operation = {
@@ -2305,10 +2305,10 @@ describe("hosted operator owner authority", () => {
       origin: "https://apps.example.test",
       actors: [
         {
+          account: "capture-existing" as const,
           actorKey: "owner",
           email: "owner@example.test",
           name: "Owner",
-          account: "capture-existing" as const,
         },
       ],
       organizations: [],
@@ -3021,9 +3021,9 @@ describe("Realm delegation at operator effect boundaries", () => {
   const service = readRealmContinuationServiceIdentity({
     EVE_HOSTED_ADAPTER: "1",
     EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
-    VERCEL_ENV: "preview",
     EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
     EVE_HOSTED_VERCEL_TEAM_SLUG: "withautograph",
+    VERCEL_ENV: "preview",
   });
   const operationRef = "a5c2b20f-0c08-49a8-a34f-cce64c72cc8c";
   const setup = (expired = false) => {
@@ -3724,7 +3724,7 @@ describe("attached direct-session standard destination", () => {
             name: "apps-vendor-onboarding",
             framework: "services",
             rootDirectory: ".",
-            ...(revision ? { link: { type: "github", repoId: 200 } } : {}),
+            ...(revision ? { link: { repoId: 200, type: "github" } } : {}),
           }),
         ),
     );
@@ -3816,8 +3816,8 @@ describe("attached direct-session standard destination", () => {
     },
   );
   it.each([
-    { type: "github", repoId: 201 },
-    { type: "gitlab", repoId: 200 },
+    { repoId: 201, type: "github" },
+    { repoId: 200, type: "gitlab" },
   ])(
     "refuses live provider linkage drift before returning the recovered destination",
     async (link) => {
