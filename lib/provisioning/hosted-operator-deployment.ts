@@ -694,6 +694,29 @@ interface HostedOperatorPublicRuntimePort {
   readPublicRuntimeBinding?: ProtectedHostedOperatorDependencies["publicRuntimeBinding"];
 }
 
+const exportPreparationObserver = (diagnostic?: {
+  onPlanStage: ExportPlanningStageObserver;
+  setup: boolean;
+}) => {
+  const stages =
+    diagnostic?.setup === true
+      ? ({
+          owner: "setup_owner_authorization",
+          journal: "setup_journal_read",
+          phase: "setup_phase_validation",
+          approval: "setup_approval_authorization",
+        } as const)
+      : ({
+          owner: "prepared_owner_authorization",
+          journal: "prepared_journal_read",
+          phase: "prepared_phase_validation",
+          approval: "prepared_approval_authorization",
+        } as const);
+  return (key: keyof typeof stages) => {
+    advanceExportPlanningStage(diagnostic?.onPlanStage, stages[key]);
+  };
+};
+
 export const createHostedOperatorControlPlane = async (input: {
   request?: Request;
   environment?: Readonly<Record<string, string | undefined>>;
@@ -3223,28 +3246,6 @@ export const createHostedOperatorControlPlane = async (input: {
           onclose: onConnectionClosed,
         }),
     });
-    const exportPreparationObserver = (diagnostic?: {
-      onPlanStage: ExportPlanningStageObserver;
-      setup: boolean;
-    }) => {
-      const stages =
-        diagnostic?.setup === true
-          ? ({
-              owner: "setup_owner_authorization",
-              journal: "setup_journal_read",
-              phase: "setup_phase_validation",
-              approval: "setup_approval_authorization",
-            } as const)
-          : ({
-              owner: "prepared_owner_authorization",
-              journal: "prepared_journal_read",
-              phase: "prepared_phase_validation",
-              approval: "prepared_approval_authorization",
-            } as const);
-      return (key: keyof typeof stages) => {
-        advanceExportPlanningStage(diagnostic?.onPlanStage, stages[key]);
-      };
-    };
     const preparedForExport = async (
       context: HostedOperatorContext,
       catchUpApproval = false,

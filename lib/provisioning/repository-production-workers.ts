@@ -370,7 +370,14 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       );
     }
     await assertCurrent(context);
-    return await (deps.runWorker ?? runRepositoryProductionFileSpool)(deps.profile.sandbox, {
+    const runWorker = deps.runWorker ?? runRepositoryProductionFileSpool;
+    const { sandbox } = deps.profile;
+    type WorkerInput = Parameters<typeof runRepositoryProductionFileSpool>[1];
+    const workerPrefix: Pick<
+      WorkerInput,
+      "operation" | "worker" | "context" | "startupFiles" | "directDatabaseUrl"
+    > &
+      Partial<Pick<WorkerInput, "resourceCredentialBytes" | "generatedRelease">> = {
       operation,
       worker,
       context: workerContext,
@@ -381,24 +388,28 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
           : operation === "membership"
             ? connections.authOperator
             : urls.appMigrator,
-      ...(operation === "storage" ? { resourceCredentialBytes } : {}),
-      ...(operation === "schema" || operation === "access"
-        ? { generatedRelease: await deps.readGeneratedRelease(row) }
-        : {}),
+    };
+    if (operation === "storage") {
+      workerPrefix.resourceCredentialBytes = resourceCredentialBytes;
+    }
+    if (operation === "schema" || operation === "access") {
+      workerPrefix.generatedRelease = await deps.readGeneratedRelease(row);
+    }
+    const workerInput: WorkerInput = {
+      ...workerPrefix,
       readOnly,
       runId: readOnly
         ? randomUUID()
         : (row.record.effects[context.effect].attemptId ?? randomUUID()),
       signal: deps.signal,
       assertCurrent: context.assertCurrent,
-      ...(readOnly
-        ? {}
-        : {
-            recordCheckpoint: async (frame) => {
-              await context.checkpoint(z.json().parse(frame));
-            },
-          }),
-    });
+    };
+    if (!readOnly) {
+      workerInput.recordCheckpoint = async (frame) => {
+        await context.checkpoint(z.json().parse(frame));
+      };
+    }
+    return await runWorker(sandbox, workerInput);
   };
   const observe = (
     value: Awaited<ReturnType<typeof runRepositoryProductionFileSpool>>,

@@ -357,9 +357,9 @@ export async function prepareHostedRuntimeStep(
         isOperatorError: (error): error is HostedOperatorErrorType =>
           error instanceof contract.HostedOperatorError,
         isTransportUnknown: clientModule.isHostedOperatorTransportUnknown,
-        sameSelection: (left, right) => contract.sameOperatorSelection(left, right),
         onFailure: (failureStage, error) =>
           diagnostic?.reportRuntimePreparationFailure(ctx.session.id, failureStage, error),
+        sameSelection: (left, right) => contract.sameOperatorSelection(left, right),
       },
     );
   } catch (error) {

@@ -97,7 +97,7 @@ export const createOwnedAppResourceCustody = (deps: {
       )
       .limit(1);
     await deps.assertCurrentOwner(context);
-    const row = rows[0];
+    const [row] = rows;
     if (row === undefined) {
       return { identity };
     }

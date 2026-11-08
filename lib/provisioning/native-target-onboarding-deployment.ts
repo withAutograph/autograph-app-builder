@@ -167,7 +167,7 @@ export const createNativeTargetApprovalCheckpoint = (
       .from(builderProvisioningJournals)
       .where(predicate)
       .limit(1);
-    const row = rows[0];
+    const [row] = rows;
     if (row === undefined) {
       expected = null;
       return undefined;
@@ -220,7 +220,7 @@ export const createNativeTargetApprovalCheckpoint = (
       .from(builderProvisioningJournals)
       .where(predicate)
       .limit(1);
-    const inserted = rows[0];
+    const [inserted] = rows;
     if (inserted === undefined || inserted.requestDigest !== planDigest) {
       throw mismatch();
     }
