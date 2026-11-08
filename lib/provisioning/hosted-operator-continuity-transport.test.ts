@@ -137,12 +137,12 @@ const ownerContext = {
 };
 const logicalRuntime = { sandboxId: "sandbox", root: "/owned/source" };
 const workloadPolicy = {
-  issuer: "https://oidc.vercel.com/fixture-team",
   audience: "https://vercel.com/fixture-team",
-  subject: "owner:fixture-team:project:builder:environment:production",
+  environment: "production" as const,
+  issuer: "https://oidc.vercel.com/fixture-team",
   ownerId: "team",
   projectId: "prj_builder",
-  environment: "production" as const,
+  subject: "owner:fixture-team:project:builder:environment:production",
 };
 const signing = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const publicJwk = {
@@ -536,9 +536,9 @@ const setup = () => {
   const clientFor = (hint = ownerContext) =>
     createHostedOperatorClient({
       endpoint: "https://operator.fixture.test",
+      fetch: transport,
       ownerContext: hint,
       sessionId: target.sessionId,
-      fetch: transport,
       token: async () => {
         const token = faults.invalidToken ? "invalid-signature" : await signedWorkload();
         tokens.push(token);
@@ -779,9 +779,9 @@ it("rejects a continuity response belonging to a different requested intent or o
   const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(planned));
   const client = createHostedOperatorClient({
     endpoint: "https://operator.fixture.test",
+    fetch: fetcher,
     ownerContext,
     sessionId: target.sessionId,
-    fetch: fetcher,
     token: async () => "controlled-workload",
   });
   await expect(client.readContinuity(randomUUID())).rejects.toMatchObject({

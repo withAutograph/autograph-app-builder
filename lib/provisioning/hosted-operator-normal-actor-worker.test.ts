@@ -289,10 +289,10 @@ const fixture = () => {
   // Dispatch unit fixtures exercise this adapter; the real launcher's protocol tests cover Sandbox frames separately.
   const configuration: NormalActorOrganizationWorkerDependencies["configuration"] = {
     operator: {
-      origin: "https://operator.example.test",
-      projectId: "prj_operator",
       deploymentId: "dpl_operator",
       environment: "preview",
+      origin: "https://operator.example.test",
+      projectId: "prj_operator",
     },
     teamId: "team",
     sandbox: {
