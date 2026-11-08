@@ -72,7 +72,7 @@ export const readVerifiedPublicRuntimeBinding = async (input: {
   }
   const row = rows[0];
   const record: PublicReleaseRecord = publicReleaseRecordSchema.parse(row.record);
-  const plan = record.plan;
+  const { plan } = record;
   if (
     row.requestId !== publicReleaseOperationRef(plan) ||
     row.requestDigest !== publicReleasePlanDigest(plan) ||

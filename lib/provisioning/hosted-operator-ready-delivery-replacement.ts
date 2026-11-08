@@ -149,7 +149,7 @@ export const resolveReadyDeliveryReplacementPredecessor = (
     ),
   ];
   for (const origin of origins) {
-    const operator = origin.operator;
+    const { operator } = origin;
     if (
       operator.operationRef !== named.operationRef ||
       operator.planDigest !== named.planDigest ||

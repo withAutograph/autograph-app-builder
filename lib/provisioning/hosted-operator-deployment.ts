@@ -3340,7 +3340,7 @@ export const createHostedOperatorControlPlane = async (input: {
         undefined,
         onPlanStage === undefined ? undefined : { onPlanStage, setup: false },
       );
-      const plan = operator.plan;
+      const { plan } = operator;
       advanceExportPlanningStage(onPlanStage, "customer_authorization");
       assertTenantExportCustomer(plan, customerId);
       advanceExportPlanningStage(onPlanStage, "release_selection");

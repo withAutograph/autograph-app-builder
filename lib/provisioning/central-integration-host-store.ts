@@ -45,7 +45,7 @@ export const centralHostRecordSchema = z
     observation: centralHostReadyReceiptSchema.optional(),
   })
   .superRefine((record, ctx) => {
-    const plan = record.plan;
+    const { plan } = record;
     const attempts = record.attempts ?? {};
     if (record.attempts !== undefined) {
       const firstUnfinished = plan.effects.findIndex(

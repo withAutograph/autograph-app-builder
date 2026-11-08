@@ -1168,7 +1168,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       reference: string,
     ): Promise<NormalActorCapturedPayload | undefined> {
       const result = await read(context);
-      let preparation = result.preparation;
+      let { preparation } = result;
       if (preparation?.captures.some((entry) => entry.reference === reference) !== true) {
         preparation = result.row.record.participantPreparationHistory
           ?.map((entry) => entry.preparation)

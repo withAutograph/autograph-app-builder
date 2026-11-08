@@ -152,7 +152,7 @@ export const createHostedManagedRuntimeProjection = (deps: {
     parseContinuityPlanForOwner(record.plan, context);
     const { gateway, preparedPlan } = record.plan;
     const delivery = preparedPlan.gatewayDelivery;
-    const publicGateway = preparedPlan.publicGateway;
+    const { publicGateway } = preparedPlan;
     if (publicGateway === undefined || delivery === undefined) {
       throw mismatch();
     }

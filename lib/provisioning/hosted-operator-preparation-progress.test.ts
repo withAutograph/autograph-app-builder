@@ -88,7 +88,7 @@ describe("recorded preparation progress", () => {
 
   it("reports complete receipts separately from pending markers", () => {
     const record = fixture();
-    const operator = record.operator;
+    const { operator } = record;
     operator.receipts = operator.plan.effects.map((effect) => ({
       effectId: effect.id,
       observedAt: new Date(now).toISOString(),

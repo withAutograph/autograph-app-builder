@@ -331,7 +331,7 @@ export const createTenantExportArtifacts = (dependencies: {
     }): Promise<TenantExportCompletion> {
       const worker = tenantExportWorkerInputSchema.parse(input.worker);
       assertScope(input.context, worker);
-      const assertCurrent = input.assertCurrent;
+      const { assertCurrent } = input;
       await assertCurrent();
       const existing = await inspect({ ...input, worker });
       if (existing.status === "unknown") {

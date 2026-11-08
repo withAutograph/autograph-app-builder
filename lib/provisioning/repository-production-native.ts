@@ -102,7 +102,7 @@ export const assertNoConflictingProductionSetup = (input: {
   ) {
     return;
   }
-  const command = input.command;
+  const { command } = input;
   if (command?.action === retrySetupAction || command?.action === "renew-sign-in") {
     return;
   }

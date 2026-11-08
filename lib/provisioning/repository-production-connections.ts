@@ -136,7 +136,7 @@ export const createRepositoryProductionConnectionReader =
       await assertCurrent();
       return url;
     };
-    const connection = input.connection;
+    const { connection } = input;
     if ("kind" in connection) {
       const environment = input.environment ?? process.env;
       const bound = (name: string, database: string, role: string, target: ConnectionTarget) => {

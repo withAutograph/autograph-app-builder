@@ -85,7 +85,7 @@ export const resolveNativeTargetEffectiveConfiguration = async <Invocation>(inpu
   ) {
     throw new HostedOperatorError("resource_mismatch");
   }
-  const observed = registration.observed;
+  const { observed } = registration;
   const targetMatches = [
     ready.appId === input.appId,
     plan.appId === input.appId,

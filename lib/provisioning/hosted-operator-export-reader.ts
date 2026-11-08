@@ -133,7 +133,7 @@ export const createTenantExportReader =
       ) {
         return unavailable();
       }
-      const manifest = inspection.manifest;
+      const { manifest } = inspection;
       const name = input.member?.at(0);
       if (name === undefined) {
         const path = `/api/hosted-operator/exports/${exportId}`;

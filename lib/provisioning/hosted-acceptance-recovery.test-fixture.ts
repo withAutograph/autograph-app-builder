@@ -377,7 +377,7 @@ export const installManagedAcceptanceSuite = (
           // The browser terminal and principal verifier are controlled ports; child,
           // loopback forwarding, capability IPC and process replacement are real.
           await assertCurrent();
-          const current = record.current;
+          const { current } = record;
           if (!current) {
             throw new Error("Managed runtime identity is missing");
           }

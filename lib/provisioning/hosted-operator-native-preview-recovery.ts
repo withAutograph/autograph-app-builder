@@ -99,7 +99,7 @@ export const createNativePreviewRecoveryPlan = (
     { operator: current },
     ...(current.retainedRenewalOperations ?? []).toReversed(),
   ]) {
-    const operator = origin.operator;
+    const { operator } = origin;
     const candidates = (operator.deliveryCandidates ?? []).filter(
       (value) => value.readyState === "READY",
     );

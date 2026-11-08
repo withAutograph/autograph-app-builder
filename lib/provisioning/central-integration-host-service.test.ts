@@ -31,7 +31,7 @@ import { retainCentralNativeDeploymentReceipt } from "./central-integration-depl
 
 const id = "11111111-1111-4111-a111-111111111111";
 const receiptFor = (context: CentralHostEffectContext): CentralEffectReceipt => {
-  const plan = context.plan;
+  const { plan } = context;
   if (plan.kind === "central-integration-host-caller-v1") {
     return {
       effect: "authorize-app-central-caller",

@@ -926,7 +926,7 @@ describe("retained actual normal actor journal", () => {
       organizationProofs: [next.record],
       supersededOrganizationProofs: [old.record],
     });
-    const writes = value.writes;
+    const { writes } = value;
     expect(await value.journal.prepareOrganizationProof(context, nextInput)).toEqual(next);
     expect(value.writes).toBe(writes);
     const proofSha256 = "e".repeat(64);
@@ -1019,7 +1019,7 @@ describe("retained actual normal actor journal", () => {
       }
     }
     const before = structuredClone(value.row);
-    const writes = value.writes;
+    const { writes } = value;
     let selected: Parameters<typeof value.journal.prepareOrganizationProof>[1] = nextInput;
     if (change === "missing-guard") {
       selected = { ...nextInput, assertBootstrapCurrent: undefined };

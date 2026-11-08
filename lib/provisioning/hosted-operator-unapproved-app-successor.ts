@@ -35,7 +35,7 @@ export const inspectUnapprovedAppSuccessor = (
   if (record === undefined || operator === undefined || account === undefined) {
     return undefined;
   }
-  const plan = operator.plan;
+  const { plan } = operator;
   const accountPlan: HostedOperatorPlan = account.accountPlan;
   if (
     [

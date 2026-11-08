@@ -144,7 +144,7 @@ export const resolvePublicRealmEnrollment = async (input: {
     .parse(input.originalSetup);
   const authority = hostedTenantAuthoritySchema.parse(input.owner.authority);
   const resource = publicRealmResourceSchema.parse(input.authResource);
-  const configuration = input.configuration;
+  const { configuration } = input;
   const workload = sender.parse(
     z.object({ standardRuntime: z.object({ publicRealmWorkload: sender }) }).parse(configuration)
       .standardRuntime.publicRealmWorkload,
