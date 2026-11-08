@@ -672,11 +672,6 @@ export default defineConfig({
       rules: { "typescript/only-throw-error": "off" },
     },
     {
-      // Preserve existing callback and abort behavior pending contract review.
-      files: [additionalAuthFieldPath, sharedLintFile15, sharedLintFile3],
-      rules: { "typescript/no-misused-promises": "off" },
-    },
-    {
       // Existing findings awaiting behavior-preserving contract changes.
       files: [
         "lib/auth/postgres-organization-user-authority.ts",

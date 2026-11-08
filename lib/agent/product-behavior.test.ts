@@ -8,7 +8,8 @@ const run = async (
 ) => {
   let stored: unknown;
   const requests: { path: string; cookie?: string; body: string }[] = [];
-  const server = http.createServer(async (request, response) => {
+  let requestFailure: { reason: unknown } | undefined;
+  const handleRequest = async (request: http.IncomingMessage, response: http.ServerResponse) => {
     let body = "";
     for await (const chunk of request) {
       body += chunk;
@@ -41,6 +42,17 @@ const run = async (
           : { value: mode === "wrong" ? "wrong" : stored },
       ),
     );
+  };
+  const server = http.createServer((request, response) => {
+    const serve = async () => {
+      try {
+        await handleRequest(request, response);
+      } catch (error) {
+        requestFailure = { reason: error };
+        response.destroy();
+      }
+    };
+    void serve();
   });
   // oxlint-disable-next-line promise/avoid-new -- Adapt Node server listen callback.
   await new Promise<void>((resolve) => {
@@ -73,6 +85,9 @@ const run = async (
         writePath: "/record",
       },
     });
+    if (requestFailure !== undefined) {
+      throw requestFailure.reason;
+    }
     return { requests, result };
   } finally {
     server.closeAllConnections();

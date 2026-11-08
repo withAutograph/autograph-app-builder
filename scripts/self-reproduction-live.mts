@@ -204,12 +204,25 @@ const main = async () => {
   development.once("close", () => {
     controller.abort();
   });
-  development.stdout.on("data", async (chunk: Buffer) => {
-    await appendFile(transcriptPath, String(chunk));
-  });
-  development.stderr.on("data", async (chunk: Buffer) => {
-    await appendFile(transcriptPath, String(chunk));
-  });
+  const pendingTranscriptWrites = new Set<Promise<void>>();
+  let transcriptFailure: { error: unknown } | undefined;
+  const appendDevelopmentOutput = (chunk: Buffer) => {
+    const pending = appendFile(transcriptPath, String(chunk));
+    pendingTranscriptWrites.add(pending);
+    const observe = async () => {
+      try {
+        await pending;
+      } catch (error) {
+        transcriptFailure ??= { error };
+        controller.abort();
+      } finally {
+        pendingTranscriptWrites.delete(pending);
+      }
+    };
+    void observe();
+  };
+  development.stdout.on("data", appendDevelopmentOutput);
+  development.stderr.on("data", appendDevelopmentOutput);
   const stop = () => {
     controller.abort();
     if (development.pid !== undefined) {
@@ -224,6 +237,7 @@ const main = async () => {
   };
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
+  let executionFailure: { error: unknown } | undefined;
   try {
     await waitForEve(url, controller.signal);
     let invocation = await run(
@@ -256,18 +270,23 @@ const main = async () => {
     );
     if (invocation.timedOut) {
       process.exitCode = 75;
-      return;
-    }
-    if (invocation.code !== 0) {
+    } else if (invocation.code !== 0) {
       throw new Error(`Live Eve invocation exited ${invocation.code ?? "without a status"}.`);
     }
+  } catch (error) {
+    executionFailure = { error };
   } finally {
     stop();
-    if (development.exitCode === null) {
-      await developmentExited;
-    }
+    await developmentExited;
     process.off("SIGINT", stop);
     process.off("SIGTERM", stop);
+    await Promise.allSettled(pendingTranscriptWrites);
+  }
+  if (transcriptFailure !== undefined) {
+    throw transcriptFailure.error;
+  }
+  if (executionFailure !== undefined) {
+    throw executionFailure.error;
   }
 };
 

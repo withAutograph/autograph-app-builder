@@ -87,12 +87,16 @@ const CopyButton = function CopyButton({
   });
 
   const handleCopy = async function handleCopy() {
-    const value = getValue();
-    if (value === undefined || value === null || value === "") {
-      return;
-    }
+    try {
+      const value = getValue();
+      if (value === undefined || value === null || value === "") {
+        return;
+      }
 
-    await copy(value);
+      await copy(value);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
   };
 
   return (
@@ -103,7 +107,9 @@ const CopyButton = function CopyButton({
       title={
         copied ? localization.settings.copiedToClipboard : localization.settings.copyToClipboard
       }
-      onClick={handleCopy}
+      onClick={() => {
+        void handleCopy();
+      }}
       disabled={isDisabled}
     >
       {copied ? <Check /> : <Copy />}
