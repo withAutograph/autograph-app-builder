@@ -7,14 +7,22 @@ import { SubmissionRejectedBeforeDispatchError } from "../eve/hosted-service";
 import type { HostedOperatorContext } from "./hosted-operator-service";
 
 const authority = {
-  issuer: "https://identity.example.test",
   audience: "eve-hosted",
+  issuer: "https://identity.example.test",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
 const principal = { ...authority, scopes: ["autograph:session"] };
 const context = (): HostedOperatorContext => ({
   authority,
+  ownerContext: {
+    adapterGeneration: 1,
+    adapterSessionId: "wrun_1",
+    authority,
+    kind: "direct",
+    principal,
+    sessionId: "public-session",
+  },
   target: {
     appId: "fixture",
     branch: "preview",
@@ -25,20 +33,12 @@ const context = (): HostedOperatorContext => ({
     scopeType: "team",
     sessionId: "public-session",
   },
-  ownerContext: {
-    kind: "direct",
-    adapterGeneration: 1,
-    adapterSessionId: "wrun_1",
-    authority,
-    principal,
-    sessionId: "public-session",
-  },
 });
 const observation = {
-  principal,
   adapterSessionId: "wrun_1",
-  sessionId: "public-session",
   onEvent: () => {},
+  principal,
+  sessionId: "public-session",
 };
 const stream = () =>
   new Response(
@@ -136,8 +136,8 @@ describe("request-owned approval observation", () => {
     f.fetchImplementation.mockImplementation(() =>
       Promise.resolve(
         new Response(null, {
-          status: 302,
           headers: { location: "https://foreign.example.test/stream" },
+          status: 302,
         }),
       ),
     );
@@ -157,10 +157,10 @@ describe("Builder approval stream credential boundary", () => {
   ])("does not forward stream credentials to %s", async (url) => {
     const raw = vi.fn<typeof fetch>(() => Promise.resolve(stream()));
     const guarded = createBuilderApprovalStreamFetch({
-      origin: "https://builder.example.test",
       adapterSessionId: "wrun_1",
-      signal: new AbortController().signal,
       fetchImplementation: raw,
+      origin: "https://builder.example.test",
+      signal: new AbortController().signal,
     });
     await expect(
       guarded(url, { headers: { authorization: "Bearer builder-token" } }),
@@ -173,21 +173,21 @@ describe("Builder approval stream credential boundary", () => {
     const deadline = new AbortController();
     const raw = vi.fn<typeof fetch>(() => Promise.resolve(stream()));
     const guarded = createBuilderApprovalStreamFetch({
-      origin: "https://builder.example.test",
       adapterSessionId: "wrun_1",
-      signal: requestAbort.signal,
       fetchImplementation: raw,
+      origin: "https://builder.example.test",
+      signal: requestAbort.signal,
     });
     const request = new Request("https://builder.example.test/eve/v1/session/wrun_1/stream", {
       headers: { inherited: "request" },
     });
     const headers = new Headers({ authorization: "Bearer builder-token", custom: "unchanged" });
     await guarded(request, {
-      method: "POST",
       body: "payload",
       headers,
-      signal: deadline.signal,
+      method: "POST",
       redirect: "follow",
+      signal: deadline.signal,
     });
     expect(raw.mock.calls[0]?.[0]).toBe(request);
     const init = raw.mock.calls[0]?.[1];
@@ -214,11 +214,11 @@ describe("native approval history reads", () => {
     const events: string[] = [];
     const first = await f.observer.privateHistoryForContext({ ...owned })({
       ...observation,
-      startIndex: 0,
       onEvent: (event) => {
         events.push(event.type);
         deadline.abort();
       },
+      startIndex: 0,
     });
     expect(first).toEqual({ complete: false, nativeTailIndex: 1, nextNativeIndex: 1 });
     const tail = new Response(`${JSON.stringify({ data: {}, type: "session.waiting" })}\n`, {
@@ -227,10 +227,10 @@ describe("native approval history reads", () => {
     f.fetchImplementation.mockResolvedValueOnce(tail);
     const next = await f.observer.privateHistoryForContext(owned)({
       ...observation,
-      startIndex: first.nextNativeIndex,
       onEvent: (event) => {
         events.push(event.type);
       },
+      startIndex: first.nextNativeIndex,
     });
     expect(next).toEqual({ complete: true, nativeTailIndex: 1, nextNativeIndex: 2 });
     expect(events).toEqual(["session.started", "session.waiting"]);
@@ -249,10 +249,10 @@ describe("native approval history reads", () => {
     await expect(
       f.observer.privateHistoryForContext(context())({
         ...observation,
-        startIndex: 0,
         onEvent: () => {
           throw failure;
         },
+        startIndex: 0,
       }),
     ).rejects.toBe(failure);
     const denied = setup(false);
