@@ -198,7 +198,7 @@ export function safeToolError(
     code = "already_continuing";
     message = "This app is already continuing in another place. Try again shortly.";
   } else if (localRecoveryUnavailable) {
-    code = localSessionRecoveryError.code;
+    ({ code } = localSessionRecoveryError);
     message =
       "Builder couldn’t recover this local session. Keep the original session open and contact your administrator before trying again.";
   } else if (recoveryUnavailable) {

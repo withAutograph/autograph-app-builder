@@ -244,7 +244,7 @@ export const createAppAccessManagementService = (deps: AppAccessManagementDepend
     if (!saved || saved.record.command.action !== "invite" || saved.record.state !== "applied") {
       throw new AppAccessError("app_access_denied");
     }
-    const scope = saved.record.scope;
+    const { scope } = saved.record;
     const owner = {
       appId: scope.appId,
       sessionId: saved.record.ownerContext.sessionId,
@@ -265,7 +265,7 @@ export const createAppAccessManagementService = (deps: AppAccessManagementDepend
         await deps.assertAuthorized(owner, scope, true);
       };
       await assertCurrent();
-      const command = found.record.command;
+      const { command } = found.record;
       const invitation = await deps.readVerifiedInvitation(scope, invitationId, {
         operationRef: invitationId,
         createdAt: row.record.createdAt,
