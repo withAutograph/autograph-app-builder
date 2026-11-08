@@ -803,7 +803,7 @@ export function useBuilderController({
       }
     };
     const timer = setInterval(() => {
-      checkForServerDraft();
+      void checkForServerDraft();
     }, 10_000);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
@@ -841,7 +841,7 @@ export function useBuilderController({
     if (actionMutationVersion !== undefined) {
       localActionMutationVersions.current.delete(durableDraftRevision);
     }
-    applyAuthoritativeDraft({
+    void applyAuthoritativeDraft({
       draftId: durableDraftId,
       record: { draft: initialDraft, version: 1 },
       revision: durableDraftRevision,

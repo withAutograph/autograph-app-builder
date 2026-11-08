@@ -148,7 +148,7 @@ export function waitForDevelopmentRuntimeChange(input: {
         clearTimeout(debounce);
       }
       debounce = setTimeout(() => {
-        check();
+        void check();
       }, input.debounceMs ?? 150);
     };
     if (input.signal?.aborted) {

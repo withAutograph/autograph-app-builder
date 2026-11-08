@@ -931,7 +931,7 @@ const acquireLease = async (
     clearTimeout(timeout);
     reject(terminal ?? new Error("Fresh bootstrap is already leased."));
   };
-  monitorExit();
+  void monitorExit();
   await ready;
   let released = false;
   return {
@@ -1043,7 +1043,7 @@ const quiesceAbandonedLease = async (
     const detail = stderr.trim() === "" ? "." : `: ${stderr.trim()}`;
     reject(new Error(`Lease quiescence failed${detail}`));
   };
-  monitorExit();
+  void monitorExit();
   await ready;
   let released = false;
   return {
@@ -2351,7 +2351,7 @@ const atomicPublish = async (
 };
 
 const removeVerifiedSwappedEmptyDirectory = async (
-  capability: FreshBootstrapCapability,
+  _capability: FreshBootstrapCapability,
   proposal: FreshBootstrapProposal,
 ): Promise<void> => {
   if (proposal.destinationPrestate.kind !== emptyDirectory) {

@@ -33,7 +33,9 @@ const preview: Preview = {
   afterEach: ({ canvasElement, title }) => {
     if (!usesCreateAppShell(title)) return;
 
-    expect(canvasElement.querySelector("[data-create-app-story-environment]")).toBeInTheDocument();
+    void expect(
+      canvasElement.querySelector("[data-create-app-story-environment]"),
+    ).toBeInTheDocument();
   },
   decorators: [
     (Story, context) => (

@@ -168,7 +168,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
           document.visibilityState === "visible"
         ) {
           timer = setTimeout(() => {
-            refresh();
+            void refresh();
           }, 5000);
         }
       }
@@ -176,11 +176,11 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     const visibilityChanged = () => {
       stop();
       if (document.visibilityState === "visible") {
-        refresh();
+        void refresh();
       }
     };
     document.addEventListener("visibilitychange", visibilityChanged);
-    refresh();
+    void refresh();
     return () => {
       disposed = true;
       clearTimeout(timer);

@@ -83,8 +83,9 @@ export async function isCursorClientReady(database: Reader, resource: string): P
     .from(oauthResource)
     .where(and(eq(oauthResource.identifier, resource), eq(oauthResource.disabled, false)))
     .limit(1);
-  return Boolean(
-    target && previewOAuthScopes.every((scope) => target.allowedScopes?.includes(scope) ?? false),
+  return (
+    target !== undefined &&
+    previewOAuthScopes.every((scope) => target.allowedScopes?.includes(scope) ?? false)
   );
 }
 

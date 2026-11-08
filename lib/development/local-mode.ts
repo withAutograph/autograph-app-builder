@@ -505,7 +505,7 @@ export const waitForDevelopmentSourceChange = (input: {
       clearTimeout(debounce);
     }
     debounce = setTimeout(() => {
-      check();
+      void check();
     }, delay);
   };
   if (input.signal?.aborted) {

@@ -26,7 +26,8 @@ if (sourceValue === undefined || sourceValue === "") {
 if (
   destinationValue === undefined ||
   destinationValue === "" ||
-  !["vscode", "cursor", "codex"].includes(client ?? "")
+  client === undefined ||
+  !["vscode", "cursor", "codex"].includes(client)
 ) {
   throw new Error(
     "Usage: --client vscode|cursor|codex --source RELEASE_ROOT --destination DIRECTORY",
@@ -46,7 +47,7 @@ await validateAgentPluginPackage({
   release: true,
   repositoryRoot: path.resolve("."),
 });
-const clientRoot = path.join(destination, client as string);
+const clientRoot = path.join(destination, client);
 try {
   await lstat(clientRoot);
   throw new Error(`Client install already exists: ${clientRoot}`);

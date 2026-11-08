@@ -427,7 +427,7 @@ export const createGitHubAppHttpProvider = (input: {
       }
       return {
         body: response.data,
-        requestId: requestId(String(response.headers["x-github-request-id"] ?? "github")),
+        requestId: requestId(response.headers["x-github-request-id"] ?? "github"),
         status: response.status,
       };
     } catch (error) {

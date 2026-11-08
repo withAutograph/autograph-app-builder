@@ -249,7 +249,7 @@ const propsForExport = (
 export const readReference = async (arrustedRoot: string): Promise<Reference> => {
   const modules: Reference["modules"] = {};
   const limitations: string[] = [];
-  const entryPoints = await aliasEntryPoints(arrustedRoot, limitations);
+  const entryPoints = aliasEntryPoints(arrustedRoot, limitations);
   const manifests = await walk(arrustedRoot);
   for (const manifest of manifests) {
     let pkg: PackageJson;

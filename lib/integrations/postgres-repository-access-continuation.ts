@@ -72,7 +72,7 @@ function record(
     createdAt: row.createdAt,
     expiresAt: row.expiresAt,
     repository: {
-      fullName: `${String(row.repositoryOwner)}/${String(row.repositoryName)}`,
+      fullName: `${row.repositoryOwner}/${row.repositoryName}`,
       name: row.repositoryName,
       owner: row.repositoryOwner,
     },
