@@ -92,9 +92,10 @@ describe("preview stylesheet provenance", () => {
       from: "/reference/theme.css",
       map: { annotation: true, inline: true, sourcesContent: true },
     });
-    const sourceMap = output.css.match(
-      /sourceMappingURL=data:application\/json[^,]*,(?<sourceMap>[^*]+?)\s*\*\//u,
-    )?.[1];
+    const sourceMap =
+      /sourceMappingURL=data:application\/json[^,]*,(?<sourceMap>[^*]+?)\s*\*\//u.exec(
+        output.css,
+      )?.[1];
     expect(sourceMap).toBeDefined();
     if (sourceMap === undefined) {
       throw new Error("Inline source map is missing");

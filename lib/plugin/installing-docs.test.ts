@@ -16,7 +16,7 @@ const verifiedReleaseInstall = {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function firstShellBlock(documentation: string, heading: string) {
   const section = documentation.slice(documentation.indexOf(heading));
-  const match = section.match(/```sh\n(?<shell>[\s\S]*?)\n```/u);
+  const match = /```sh\n(?<shell>[\s\S]*?)\n```/u.exec(section);
   if (!match) {
     throw new Error(`${heading} has no shell block.`);
   }
