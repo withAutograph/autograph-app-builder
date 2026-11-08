@@ -389,8 +389,6 @@ describe("native externally managed policy recovery integration", () => {
         target: f.record.request,
       };
       const store: HostedRuntimeJournalStore = {
-        read: async () => structuredClone(row),
-        reserve: async () => structuredClone(row),
         compareAndSet: async (input) => {
           if (input.expectedRevision !== row.revision) {
             return undefined;
@@ -401,6 +399,8 @@ describe("native externally managed policy recovery integration", () => {
           };
           return structuredClone(row);
         },
+        read: async () => structuredClone(row),
+        reserve: async () => structuredClone(row),
         reserveFenceGeneration: async () => {
           requireFixtureValue(row.record.operator, "journal operator").fenceGeneration = 1;
           row.revision++;
@@ -1197,8 +1197,8 @@ describe("native externally managed policy recovery integration", () => {
           const provenance = retentionRenewalDeliveryProvenance(row.record);
           expect(provenance).toContainEqual(
             expect.objectContaining({
-              planDigest: uncertain.planDigest,
               pendingEffectAttempt: uncertain.pendingEffectAttempt,
+              planDigest: uncertain.planDigest,
             }),
           );
           const resumed = await readOperatorResponse(
@@ -1407,8 +1407,8 @@ describe("explicit READY delivery replacement", () => {
     candidate.access[0].roles = ["editor", "reviewer"];
     candidate.effects = candidate.effects.map((effect) => ({
       ...effect,
-      id: `renamed-${effect.id}`,
       description: "Changed product intent",
+      id: `renamed-${effect.id}`,
     }));
     expect(isReadyDeliveryReplacementSuccessor(record, candidate, now)).toBe(true);
   });

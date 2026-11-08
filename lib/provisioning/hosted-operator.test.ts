@@ -541,7 +541,7 @@ const completedOwnerBootstrap = async (normalActors = false) => {
       operator: { ...current.record.operator, identityLink },
     }),
   };
-  return { f, request, identityLink };
+  return { f, identityLink, request };
 };
 
 describe("legacy owner bootstrap public readiness", () => {
@@ -1224,10 +1224,10 @@ describe("protected hosted operator boundary", () => {
     const before = structuredClone(f.row);
     const second = await f.client.request(request);
     expect(second).toMatchObject({
-      status: "planned",
       operationRef: first.operationRef,
-      planDigest: first.planDigest,
       plan: first.plan,
+      planDigest: first.planDigest,
+      status: "planned",
     });
     expect(f.deps.plan).toHaveBeenCalledTimes(1);
     expect(f.row).toEqual(before);
@@ -1352,9 +1352,9 @@ describe("protected hosted operator boundary", () => {
     };
     const first = await f.client.request(request);
     expect(await f.client.request(request)).toMatchObject({
-      status: "planned",
-      planDigest: first.planDigest,
       operationRef: first.operationRef,
+      planDigest: first.planDigest,
+      status: "planned",
     });
     expect(f.deps.plan).toHaveBeenCalledTimes(1);
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
@@ -2810,16 +2810,16 @@ describe("idle installer source successor planning", () => {
     });
     const failed = structuredClone(requireRow());
     expect(failed.record).toMatchObject({
-      privateState,
       accountPreparation,
       executionObservation: {
-        state: "settled",
-        operationRef: originalRequest.operationRef,
-        planDigest: originalRequest.planDigest,
-        callId: originalRequest.callId,
         approvalId: "durable-human-decision",
+        callId: originalRequest.callId,
+        operationRef: originalRequest.operationRef,
         outcome: { code: "resource_mismatch", status: "blocked" },
+        planDigest: originalRequest.planDigest,
+        state: "settled",
       },
+      privateState,
     });
     expect(failed.record.leaseId).toBeUndefined();
     expect(failed.record.leaseExpiresAt).toBeUndefined();
@@ -2859,9 +2859,9 @@ describe("idle installer source successor planning", () => {
       installer: { ...oldPlan.installer, sha256: "e".repeat(64) },
     });
     expect(requireRow().record).toMatchObject({
-      privateState,
       accountPreparation,
       approvedByCallId: "operator:unapproved-plan",
+      privateState,
     });
     expect(requireRow().record.operator?.approvalId).toBeUndefined();
     expect(requireRow().record.operator?.fenceGeneration).toBe(
@@ -3964,7 +3964,7 @@ describe("closed prepare final verification diagnostics", () => {
           )
         ).json(),
       );
-    return { f, execute };
+    return { execute, f };
   };
 
   it("reports the original physical authority error after ten receipts before verifier entry", async () => {
@@ -4389,7 +4389,7 @@ describe("completed owned Gateway binding convergence", () => {
         outcome === "retryable" || outcome === "absent" || outcome === "orphan";
       expect(observedDelivery).toBe(!bindingNeedsExecution);
       if (!bindingNeedsExecution) {
-        expect(pendingAtDelivery).toEqual({ id: pendingId, attempt: pending });
+        expect(pendingAtDelivery).toEqual({ attempt: pending, id: pendingId });
       }
       expect(f.deps.executeEffect).toHaveBeenCalledTimes(executeCalls);
       if (outcome === "matching") {

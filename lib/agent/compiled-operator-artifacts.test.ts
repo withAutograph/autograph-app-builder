@@ -246,10 +246,10 @@ describe("owned compiled artifact workflow hook", () => {
     reviewDigest: "e".repeat(64),
   };
   const historicalLookup = {
-    repositoryId: historicalSource.repositoryId,
     branch: historicalSource.branch,
     gitSha: historicalSource.gitSha,
     gitTree: historicalSource.gitTree,
+    repositoryId: historicalSource.repositoryId,
   };
 
   it("reads historical publication under the current approved app and original owner session", async () => {
@@ -1208,7 +1208,7 @@ describe("owned compiled artifact workflow hook", () => {
     const bindingRequest = { action: "bindings" as const, operationRef, selection };
     await expect(client.bindings(bindingRequest)).resolves.toMatchObject({
       operationRef,
-      proof: { releaseId: release.releaseId, artifactHash: release.schemaSha256 },
+      proof: { artifactHash: release.schemaSha256, releaseId: release.releaseId },
     });
     await store.recordPrivateApprovalReceipts({
       principal,

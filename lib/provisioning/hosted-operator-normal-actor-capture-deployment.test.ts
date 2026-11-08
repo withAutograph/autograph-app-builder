@@ -276,7 +276,7 @@ const fixture = () => {
   const noOp = vi.fn(async () => {
     await Promise.resolve();
   });
-  const capture = { context, preparation, actorKey: "owner", organizationId: undefined, link };
+  const capture = { actorKey: "owner", context, link, organizationId: undefined, preparation };
   const readPending = vi.fn(async () => await Promise.resolve(capture));
   const readStaging = vi.fn(
     async () =>
@@ -296,12 +296,12 @@ const fixture = () => {
         assertAccountApproval: noOp,
         assertMutationAuthority: noOp,
         store: {
-          read: async () => {
+          compareAndSet: async () => {
             await Promise.resolve();
             // oxlint-disable-next-line unicorn/no-useless-undefined -- The actual journal port distinguishes an absent row or lost CAS from a void result.
             return undefined;
           },
-          compareAndSet: async () => {
+          read: async () => {
             await Promise.resolve();
             // oxlint-disable-next-line unicorn/no-useless-undefined -- The actual journal port distinguishes an absent row or lost CAS from a void result.
             return undefined;
@@ -341,7 +341,7 @@ const fixture = () => {
         fetch: authFetch,
       }),
   );
-  return { resources, readPending, readStaging, noOp, normalTransport, authFetch };
+  return { authFetch, noOp, normalTransport, readPending, readStaging, resources };
 };
 
 describe("native normal capture deployment assembly", () => {
@@ -366,19 +366,19 @@ describe("native normal capture deployment assembly", () => {
     >(async (incoming, options) => await jwtVerify(incoming, keys.publicKey, options));
     const ports = createNormalActorCaptureDeploymentPorts(f.resources, { verifyNativeToken });
     expect(await ports.verifySender(token, ports.sender)).toEqual({
-      iss: sender.issuer,
       aud: sender.audience,
+      environment: sender.environment,
+      iss: sender.issuer,
       owner_id: sender.ownerId,
       project_id: sender.projectId,
-      environment: sender.environment,
       sub: sender.subject,
     });
     expect(verifyNativeToken).toHaveBeenCalledWith(token, {
       audience: sender.audience,
+      environment: sender.environment,
       issuer: sender.issuer,
       ownerId: sender.ownerId,
       projectId: sender.projectId,
-      environment: sender.environment,
       subject: sender.subject,
     });
     const wrongSubject = await new SignJWT({
@@ -431,11 +431,11 @@ describe("native normal capture deployment assembly", () => {
     expect(remote).toHaveBeenCalledTimes(2);
     await pending.assertCurrent();
     f.readPending.mockResolvedValueOnce({
-      context,
-      preparation,
       actorKey: "different",
-      organizationId: undefined,
+      context,
       link,
+      organizationId: undefined,
+      preparation,
     });
     await expect(pending.assertCurrent()).rejects.toThrow(
       "realm_browser_session_capture_unavailable",

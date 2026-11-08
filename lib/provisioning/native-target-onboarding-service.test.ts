@@ -242,28 +242,28 @@ const fixture = (workloadAuthorized = true, selectedPlan = plan) => {
     return nativeTargetTransportResponseSchemas["native-target-plan"].parse(await response.json());
   };
   return {
-    authorize,
-    dependencies,
-    store,
-    readCapturedRelease,
-    resolvePlan,
     approvals,
-    common,
-    createProject,
-    events,
-    planOnce,
-    proposal,
-    prepared,
-    send,
     approve: () => {
       approved = true;
     },
+    authorize,
     changeOwner: () => {
       currentOwner = { ...currentOwner, adapterGeneration: 2 };
     },
+    common,
     configureExistingTarget: () => {
       existingConfiguredTarget = true;
     },
+    createProject,
+    dependencies,
+    events,
+    planOnce,
+    prepared,
+    proposal,
+    readCapturedRelease,
+    resolvePlan,
+    send,
+    store,
   };
 };
 

@@ -352,8 +352,8 @@ const fixture = (captureExisting = false, selectedProgram = program) => {
         return "absent";
       }
       const client = createHostedOperatorNormalAuthClient({
-        origin: actualProgram.origin,
         fetch: localFetch,
+        origin: actualProgram.origin,
         storageState: candidate.storageState,
       });
       try {
@@ -579,8 +579,6 @@ describe("normal actor operations", () => {
       "fixture_capture_required",
     );
     const capturedClient = createHostedOperatorNormalAuthClient({
-      origin: program.origin,
-      fetch: async (url, init) => await f.auth.handler(new Request(url, init)),
       assertApprovedEffect: async () => {
         await authorizeCurrent({
           ...context,
@@ -588,6 +586,8 @@ describe("normal actor operations", () => {
           operationRef: currentOperator().operationRef,
         });
       },
+      fetch: async (url, init) => await f.auth.handler(new Request(url, init)),
+      origin: program.origin,
     });
     await capturedClient.signUp({
       email: requireFixture(originalProgram.actors[0]).email,
@@ -907,9 +907,9 @@ describe("normal actor operations", () => {
         "fixture_capture_required",
       );
       const client = createHostedOperatorNormalAuthClient({
-        origin: capturedProgram.origin,
         assertApprovedEffect: f.effect.assertCurrent,
         fetch: async (url, init) => await f.auth.handler(new Request(url, init)),
+        origin: capturedProgram.origin,
       });
       await client.signUp({
         email: "owner@example.com",
@@ -1120,10 +1120,10 @@ describe("normal actor operations", () => {
       throw new Error("fixture_missing_context");
     }
     const normal = createHostedOperatorNormalAuthClient({
-      origin: program.origin,
-      fetch: f.localFetch,
-      storageState: ownerContext.storageState,
       assertApprovedEffect: f.effect.assertCurrent,
+      fetch: f.localFetch,
+      origin: program.origin,
+      storageState: ownerContext.storageState,
     });
     await normal.setActiveOrganization({ organizationId: "org-two" });
     const beforeStaleVerify = f.requests.length;
@@ -1195,9 +1195,9 @@ describe("normal actor operations", () => {
         "fixture_capture_required",
       );
       const client = createHostedOperatorNormalAuthClient({
-        origin: capturedProgram.origin,
         assertApprovedEffect: f.effect.assertCurrent,
         fetch: async (url, init) => await f.auth.handler(new Request(url, init)),
+        origin: capturedProgram.origin,
       });
       await client.signUp({ email: "owner@example.com", name: "Owner", password: randomUUID() });
       const session = await client.getSession();
@@ -1345,10 +1345,10 @@ describe("safe save-wrapper observation outside journal CAS", () => {
       const state = await f.operations.prepareNormalActorAccounts(f.effect);
       expect(state.actors.every((actor) => actor.signup === "complete")).toBe(true);
       return {
-        fullService,
-        fullJournal,
-        observations,
         checkpoints,
+        fullJournal,
+        fullService,
+        observations,
         paths: f.requests.map((request) => new URL(request.url).pathname),
       };
     };
