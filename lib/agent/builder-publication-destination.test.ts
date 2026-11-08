@@ -75,15 +75,15 @@ const fixture = (withoutDestination = false) => {
         ReturnType<Parameters<typeof createBuilderPublicationDestinationReader>[0]["readSelection"]>
       >;
       const selected: Pick<Selection, "authority" | "appId" | "publicSessionId" | "destination"> = {
-        authority,
         appId: "saved-app",
+        authority,
         publicSessionId: "saved-public-session",
       };
       if (!withoutDestination) {
         selected.destination = {
           appId: "saved-app",
-          requestId: request.requestId,
           requestDigest: digest,
+          requestId: request.requestId,
         };
       }
       return {

@@ -4,35 +4,35 @@ import { createRealmIdentityHandoffSenderVerifier } from "./hosted-operator-real
 import { publicRealmEnrollmentSchema } from "./public-realm-enrollment";
 
 const enrollment = publicRealmEnrollmentSchema.parse({
-  version: 1,
-  kind: "public-isolated-realm-v1",
-  enrollmentRef: "11111111-1111-4111-a111-111111111111",
   appId: "invoice-app",
-  ownerSessionId: "owner-session",
   authority: {
-    issuer: "https://builder.example/api/auth",
     audience: "https://builder.example/mcp",
+    issuer: "https://builder.example/api/auth",
     ownerUserId: "owner",
     workspaceId: "workspace",
   },
+  enrollmentRef: "11111111-1111-4111-a111-111111111111",
+  kind: "public-isolated-realm-v1",
+  ownerSessionId: "owner-session",
+  project: { environment: "production", ownerId: "team_owned", projectId: "prj_app" },
   publicOrigin: "https://app.example",
-  project: { projectId: "prj_app", ownerId: "team_owned", environment: "production" },
-  sourceBootstrap: {
-    operationRef: "22222222-2222-4222-a222-222222222222",
-    planDigest: "b".repeat(64),
-    authResourceId: "auth-owned",
-  },
   resource: {
-    version: 1,
+    database: "auth_owned",
     environment: "preview",
     hostname: "ep-isolated.neon.tech",
-    port: 5432,
-    database: "auth_owned",
-    schema: "public",
-    runtimeRole: "auth_runtime",
     migratorRole: "auth_migrator",
-    neon: { projectId: "neon-owned", branchId: "br-owned" },
+    neon: { branchId: "br-owned", projectId: "neon-owned" },
+    port: 5432,
+    runtimeRole: "auth_runtime",
+    schema: "public",
+    version: 1,
   },
+  sourceBootstrap: {
+    authResourceId: "auth-owned",
+    operationRef: "22222222-2222-4222-a222-222222222222",
+    planDigest: "b".repeat(64),
+  },
+  version: 1,
 });
 const sender = {
   audience: "https://vercel.com/owned",
@@ -44,11 +44,11 @@ const sender = {
   subject: "owner:owned:project:app:environment:production",
 };
 const payload = {
-  iss: sender.issuer,
   aud: sender.audience,
+  environment: sender.environment,
+  iss: sender.issuer,
   owner_id: sender.ownerId,
   project_id: sender.projectId,
-  environment: sender.environment,
   sub: sender.subject,
 };
 const request = new Request("https://builder.example/api/hosted-operator/realm-identity", {
