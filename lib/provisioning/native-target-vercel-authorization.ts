@@ -111,8 +111,8 @@ export const inspectNativeTargetVercelAuthorization = async (input: {
     );
     url.searchParams.set("teamId", input.expectedTeamId);
     const response = await input.fetch(url, {
-      method: "GET",
       headers: { authorization: `Bearer ${token}` },
+      method: "GET",
       redirect: "error",
       signal: input.signal,
     });

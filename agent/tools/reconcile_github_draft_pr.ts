@@ -57,10 +57,11 @@ export default defineTool({
           "Resume this exact approved repair through update_github_draft_pr; it records its retained repair release.",
         );
       }
+      const { expectedProposalDigest, approvalReceipt } = input;
       return await updatePublishedDraftRepair({
+        approvalReceipt,
         ctx,
-        expectedProposalDigest: input.expectedProposalDigest,
-        approvalReceipt: input.approvalReceipt,
+        expectedProposalDigest,
       });
     }
 
@@ -143,8 +144,8 @@ export default defineTool({
     });
     const inspected = await runtime.inspectAppliedExistingDraftReconciliation({
       proposal,
-      review,
       recovery,
+      review,
     });
     const finish = async (
       publication: Parameters<typeof recordPublishedReconciliationForSession>[0]["publication"],
@@ -258,8 +259,8 @@ export default defineTool({
     const publication = await runtime.reconcileExistingDraft({
       contentSource,
       proposal,
-      review,
       recovery,
+      review,
     });
     updateExactDraftReconciliation({
       expected: candidate,

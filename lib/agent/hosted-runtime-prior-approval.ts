@@ -291,7 +291,7 @@ export const readHostedRuntimePriorApproval = async (
       hostedOperatorCallbackExecution(ctx.session),
     ));
   const store = await openHostedRuntimeApprovalStore();
-  return await createHostedRuntimePriorApprovalReader({ store, now: Date.now, ...options })(
+  return await createHostedRuntimePriorApprovalReader({ now: Date.now, store, ...options })(
     input,
     ctx,
     operator,
@@ -309,9 +309,9 @@ const readApprovalCaptureSeed = async (
   }
   try {
     const { currentSession: session } = await readHostedOperatorCallbackOwner({
-      store,
-      owner,
       execution,
+      owner,
+      store,
     });
     const ref = session.checkpointRef;
     if (ref === undefined) {
@@ -344,7 +344,7 @@ const readApprovalCaptureSeed = async (
     const capture = privateHostedApprovalCaptureStateSchema.safeParse(
       page.metadata.privateApprovalCaptureState,
     );
-    await readHostedOperatorCallbackOwner({ store, owner, execution });
+    await readHostedOperatorCallbackOwner({ execution, owner, store });
     if (!native.success || !capture.success) {
       return null;
     }
@@ -484,6 +484,6 @@ export const captureHostedRuntimeExecutionApproval = async (ctx: Context, operat
 };
 
 export const readHostedRuntimeExecutionApproval = createHostedRuntimeExecutionApprovalReader({
-  readPrior: readHostedRuntimePriorApproval,
   capture: captureHostedRuntimeExecutionApproval,
+  readPrior: readHostedRuntimePriorApproval,
 });

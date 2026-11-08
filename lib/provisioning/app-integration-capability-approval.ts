@@ -71,7 +71,9 @@ export const createAppIntegrationCapabilityApprovalCheckpoint = (input: {
     if (row.requestDigest !== digest || record.planDigest !== digest) {
       throw unavailable();
     }
-    expected = { revision: row.revision, observation: record.observation };
+    const { revision } = row;
+    const { observation } = record;
+    expected = { observation, revision };
     return structuredClone(record.observation);
   };
   // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Bound intent, adapter cursor, monotone settlements and CAS are one atomic checkpoint guard.
@@ -171,11 +173,14 @@ export const createAppIntegrationCapabilityApprovalAuthority =
   }) =>
   async (plan: AppIntegrationCapabilityPlan, callId: string) => {
     await input.assertCurrentOwner();
+    const { database } = input;
+    const { owner: checkpointOwner } = input;
+    const { assertCurrentOwner } = input;
     const checkpoint = createAppIntegrationCapabilityApprovalCheckpoint({
-      database: input.database,
+      assertCurrentOwner,
+      database,
+      owner: checkpointOwner,
       plan,
-      owner: input.owner,
-      assertCurrentOwner: input.assertCurrentOwner,
     });
     const state = await checkpoint.read();
     const transportInput: Parameters<typeof createNativeTargetApprovalHistoryTransport>[0] = {
@@ -210,20 +215,23 @@ export const createAppIntegrationCapabilityApprovalAuthority =
     if (state !== undefined) {
       observationState.state = state;
     }
+    const observation = { ...observationState, save: checkpoint.save };
+    const readHistory: Parameters<
+      typeof readPrivateAppIntegrationCapabilityApproval
+    >[0]["readHistory"] = async (startIndex, onEvent) => {
+      const { principal } = input.owner;
+      const { adapterSessionId } = input.owner;
+      const { sessionId } = input.owner;
+      return await observe({ adapterSessionId, onEvent, principal, sessionId, startIndex });
+    };
+    const { assertCurrentOwner: assertOwner } = input;
     const approval = await readPrivateAppIntegrationCapabilityApproval({
-      plan,
+      assertOwner,
       callId,
+      observation,
       owner,
-      observation: { ...observationState, save: checkpoint.save },
-      readHistory: async (startIndex, onEvent) =>
-        await observe({
-          principal: input.owner.principal,
-          adapterSessionId: input.owner.adapterSessionId,
-          sessionId: input.owner.sessionId,
-          startIndex,
-          onEvent,
-        }),
-      assertOwner: input.assertCurrentOwner,
+      plan,
+      readHistory,
     });
     await input.assertCurrentOwner();
     if (approval === null) {
