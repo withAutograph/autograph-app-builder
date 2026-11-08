@@ -194,15 +194,12 @@ test("a sign-in challenge failure stays local without invoking WebAuthn", async 
   let credentialRequests = 0;
   await page.addInitScript(() => {
     const { credentials } = navigator;
-    Object.defineProperty(navigator, "credentials", {
+    Object.defineProperty(credentials, "get", {
       configurable: true,
-      value: {
-        ...credentials,
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-        get: async () => {
-          window.dispatchEvent(new Event("e2e-credential-request"));
-          return null;
-        },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
+      value: async () => {
+        window.dispatchEvent(new Event("e2e-credential-request"));
+        return null;
       },
     });
   });
@@ -241,14 +238,11 @@ for (const exceptionName of ["NotSupportedError", "SecurityError"] as const) {
     let verificationRequests = 0;
     await page.addInitScript((name) => {
       const { credentials } = navigator;
-      Object.defineProperty(navigator, "credentials", {
+      Object.defineProperty(credentials, "get", {
         configurable: true,
-        value: {
-          ...credentials,
-          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-          get: async () => {
-            throw new DOMException("WebAuthn unavailable", name);
-          },
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
+        value: async () => {
+          throw new DOMException("WebAuthn unavailable", name);
         },
       });
     }, exceptionName);
@@ -478,14 +472,11 @@ test("permanent Sign Up link preserves the callback after missing credentials", 
 test("an interrupted passkey ceremony keeps the permanent Sign Up link", async ({ page }) => {
   await page.addInitScript(() => {
     const { credentials } = navigator;
-    Object.defineProperty(navigator, "credentials", {
+    Object.defineProperty(credentials, "get", {
       configurable: true,
-      value: {
-        ...credentials,
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-        get: async () => {
-          throw new DOMException("The operation was cancelled.", "NotAllowedError");
-        },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
+      value: async () => {
+        throw new DOMException("The operation was cancelled.", "NotAllowedError");
       },
     });
   });
@@ -509,14 +500,11 @@ test("an interrupted passkey ceremony keeps the permanent Sign Up link", async (
 test("cancelled passkey registration stays on Sign Up without partial state", async ({ page }) => {
   await page.addInitScript(() => {
     const { credentials } = navigator;
-    Object.defineProperty(navigator, "credentials", {
+    Object.defineProperty(credentials, "create", {
       configurable: true,
-      value: {
-        ...credentials,
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-        create: async () => {
-          throw new DOMException("The operation was cancelled.", "NotAllowedError");
-        },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
+      value: async () => {
+        throw new DOMException("The operation was cancelled.", "NotAllowedError");
       },
     });
   });

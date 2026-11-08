@@ -95,11 +95,11 @@ function clientImportGraph(files: SourceFile[]) {
       .filter((dependencyPath): dependencyPath is string => dependencyPath !== undefined);
     dependencies.set(file.path, imports);
   }
-  const routeRoots = files
-    .filter((file) =>
-      /(?:^|\/)app\/(?:.*\/)?(?:page|layout|template)\.[cm]?[jt]sx?$/u.test(file.path),
-    )
-    .map((file) => file.path);
+  const routeRoots = files.flatMap((file) =>
+    /(?:^|\/)app\/(?:.*\/)?(?:page|layout|template)\.[cm]?[jt]sx?$/u.test(file.path)
+      ? [file.path]
+      : [],
+  );
   const clientRouteRoots = routeRoots.filter((routePath) =>
     /^\s*["']use client["']/mu.test(byPath.get(routePath)?.content ?? ""),
   );
@@ -308,14 +308,18 @@ export function frameworkRequirements(
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function prioritizedGaps(requirements: Requirement[]) {
-  return requirements
-    .filter((requirement) => requirement.status === "failed" || requirement.status === "blocked")
-    .map((requirement) => ({
-      priority:
-        requirement.id.includes("independent") || requirement.id.includes("durable")
-          ? "high"
-          : "medium",
-      ...requirement,
-      confirmed: requirement.status === "failed",
-    }));
+  return requirements.flatMap((requirement) =>
+    requirement.status === "failed" || requirement.status === "blocked"
+      ? [
+          {
+            priority:
+              requirement.id.includes("independent") || requirement.id.includes("durable")
+                ? "high"
+                : "medium",
+            ...requirement,
+            confirmed: requirement.status === "failed",
+          },
+        ]
+      : [],
+  );
 }

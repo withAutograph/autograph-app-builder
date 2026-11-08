@@ -1610,9 +1610,12 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
   }
   const previousByPath = new Map(previousFiles.map((file) => [file.path, file]));
   const currentByPath = new Map(sourceFiles.map((file) => [file.path, file]));
-  const deletedPaths = previousFiles
-    .filter((file) => !currentByPath.has(file.path))
-    .map((file) => file.path);
+  const deletedPaths: string[] = [];
+  for (const file of previousFiles) {
+    if (!currentByPath.has(file.path)) {
+      deletedPaths.push(file.path);
+    }
+  }
   const changedFiles = sourceFiles.filter((file) => {
     const previous = previousByPath.get(file.path);
     return previous === undefined || previous.sha256 !== file.sha256 || previous.mode !== file.mode;

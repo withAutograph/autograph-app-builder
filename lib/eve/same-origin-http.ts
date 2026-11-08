@@ -1944,9 +1944,9 @@ export function createSameOriginEveTransport(input: {
         const pending =
           marker?.decision === "stop"
             ? marker.responses.map((response) => response.requestId)
-            : nativeObservationState.pendingRequests
-                .filter((item) => item.kind !== "authorization")
-                .map((item) => item.requestId);
+            : nativeObservationState.pendingRequests.flatMap((item) =>
+                item.kind === "authorization" ? [] : [item.requestId],
+              );
         if (
           nativeObservationState.adapterSessionId !== request.adapterSessionId ||
           pending.length !== request.responses.length ||

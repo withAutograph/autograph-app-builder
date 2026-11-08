@@ -153,17 +153,17 @@ export function waitForDevelopmentRuntimeChange(input: {
     };
     if (input.signal?.aborted) {
       finish(false);
-      return promise;
+    } else {
+      input.signal?.addEventListener("abort", handlers.aborted, { once: true });
+      try {
+        watcher = watch(input.repositoryRoot, { recursive: true }, schedule);
+        watcher.once("error", schedule);
+      } catch {
+        // The bounded audit remains the fail-closed watcher fallback.
+      }
+      audit = setInterval(schedule, input.auditMs ?? 30_000);
+      schedule();
     }
-    input.signal?.addEventListener("abort", handlers.aborted, { once: true });
-    try {
-      watcher = watch(input.repositoryRoot, { recursive: true }, schedule);
-      watcher.once("error", schedule);
-    } catch {
-      // The bounded audit remains the fail-closed watcher fallback.
-    }
-    audit = setInterval(schedule, input.auditMs ?? 30_000);
-    schedule();
   }
   return promise;
 }

@@ -510,22 +510,23 @@ export const waitForDevelopmentSourceChange = (input: {
   };
   if (input.signal?.aborted) {
     finish(false);
-    return promise;
+  } else {
+    input.signal?.addEventListener("abort", handlers.aborted, { once: true });
+    try {
+      watcher = watch(input.sourceRoot, { recursive: true }, () => {
+        schedule(input.debounceMs ?? 150);
+      });
+    } catch {
+      finish(true);
+    }
+    if (watcher !== undefined) {
+      watcher.once("error", () => {
+        finish(true);
+      });
+      timers.audit = setInterval(schedule, input.auditMs ?? 30_000);
+      schedule();
+    }
   }
-  input.signal?.addEventListener("abort", handlers.aborted, { once: true });
-  try {
-    watcher = watch(input.sourceRoot, { recursive: true }, () => {
-      schedule(input.debounceMs ?? 150);
-    });
-  } catch {
-    finish(true);
-    return promise;
-  }
-  watcher.once("error", () => {
-    finish(true);
-  });
-  timers.audit = setInterval(schedule, input.auditMs ?? 30_000);
-  schedule();
   return promise;
 };
 

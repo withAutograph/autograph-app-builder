@@ -570,12 +570,17 @@ export async function provisionGitHubRepository(input: {
       throw new TypeError(INVALID_RESPONSE);
     }
     const observed = completeEntries
-      .filter((entry) => record(entry) && entry.type === "blob")
-      .map((entry) => ({
-        mode: stringProperty(entry, "mode"),
-        path: stringProperty(entry, "path"),
-        sha: stringProperty(entry, "sha"),
-      }))
+      .flatMap((entry) =>
+        record(entry) && entry.type === "blob"
+          ? [
+              {
+                mode: stringProperty(entry, "mode"),
+                path: stringProperty(entry, "path"),
+                sha: stringProperty(entry, "sha"),
+              },
+            ]
+          : [],
+      )
       .toSorted((left, right) => left.path.localeCompare(right.path));
     const expected = input.source.files
       .map((file) => ({

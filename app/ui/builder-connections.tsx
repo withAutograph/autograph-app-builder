@@ -111,27 +111,28 @@ export function ConnectionsSection({
         ) : null}
       </label>
       <div className={styles.connectionGrid}>
-        {available
-          .filter((name) => !selectedNames.has(name))
-          .map((name) => {
-            const comingSoon = comingSoonConnections.has(name);
-            if (comingSoon && !comingSoonEnabled) {
-              return null;
-            }
-            return (
-              <button
-                type="button"
-                key={name}
-                aria-label={comingSoon ? `${name} coming soon` : `Add ${name}`}
-                disabled={comingSoon}
-                onClick={() => onAdd(name)}
-              >
-                <ConnectionIcon kind={connectionKind.get(name)} name={name} />
-                {name}
-                {comingSoon ? <span className={styles.comingSoon}>Coming soon</span> : null}
-              </button>
-            );
-          })}
+        {available.flatMap((name) => {
+          if (selectedNames.has(name)) {
+            return [];
+          }
+          const comingSoon = comingSoonConnections.has(name);
+          if (comingSoon && !comingSoonEnabled) {
+            return [null];
+          }
+          return [
+            <button
+              type="button"
+              key={name}
+              aria-label={comingSoon ? `${name} coming soon` : `Add ${name}`}
+              disabled={comingSoon}
+              onClick={() => onAdd(name)}
+            >
+              <ConnectionIcon kind={connectionKind.get(name)} name={name} />
+              {name}
+              {comingSoon ? <span className={styles.comingSoon}>Coming soon</span> : null}
+            </button>,
+          ];
+        })}
       </div>
       {!showMore && !search ? (
         <button className={styles.showAll} type="button" onClick={onShowMore}>

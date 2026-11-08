@@ -41,15 +41,18 @@ export async function loadGatewayModels(input?: {
     }
     const parsed = responseSchema.parse(await response.json());
     const entries = parsed.data
-      .filter((model) => model.type === "language" && model.owned_by === "openai")
-      .map((model) =>
-        builderModelSchema.parse({
-          capabilities: model.tags,
-          id: model.id,
-          name: model.name,
-          provider: model.owned_by,
-          zdr: model.zdr,
-        }),
+      .flatMap((model) =>
+        model.type === "language" && model.owned_by === "openai"
+          ? [
+              builderModelSchema.parse({
+                capabilities: model.tags,
+                id: model.id,
+                name: model.name,
+                provider: model.owned_by,
+                zdr: model.zdr,
+              }),
+            ]
+          : [],
       )
       .toSorted((left, right) => left.name.localeCompare(right.name));
     if (entries.length === 0) {

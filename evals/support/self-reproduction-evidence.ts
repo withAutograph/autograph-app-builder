@@ -212,8 +212,9 @@ export function candidateExportFromEvidence(
       const [appRoot] = appRoots;
       const prefix = `${appRoot}/`;
       return validated
-        .filter((file) => file.path.startsWith(prefix))
-        .map((file) => ({ ...file, path: file.path.slice(prefix.length) }))
+        .flatMap((file) =>
+          file.path.startsWith(prefix) ? [{ ...file, path: file.path.slice(prefix.length) }] : [],
+        )
         .toSorted((left, right) => left.path.localeCompare(right.path));
     }
     return validated.toSorted((left, right) => left.path.localeCompare(right.path));

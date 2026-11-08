@@ -1886,19 +1886,21 @@ export const projectInstalledEveEvents = (
   events: readonly MessageStreamEvent[],
 ): PublicEveEvent[] => {
   let operation: string | undefined;
-  return events
-    .flatMap((event) => {
-      if (event.type === actionsRequestedEvent) {
-        const requested = event.data.actions.filter((action) => action.kind === "tool-call");
-        operation = requested.at(-1)?.toolName ?? operation;
-      }
-      return projectInstalledEveEvent(event, 0, operation);
-    })
-    .flatMap((event) => {
-      const projected = toPublicEvent(event);
-      return projected === null ? [] : [projected];
-    })
-    .map((event, index) => ({ ...event, index }));
+  const internalEvents = events.flatMap((event) => {
+    if (event.type === actionsRequestedEvent) {
+      const requested = event.data.actions.filter((action) => action.kind === "tool-call");
+      operation = requested.at(-1)?.toolName ?? operation;
+    }
+    return projectInstalledEveEvent(event, 0, operation);
+  });
+  const publicEvents: PublicEveEvent[] = [];
+  for (const event of internalEvents) {
+    const projected = toPublicEvent(event);
+    if (projected !== null) {
+      publicEvents.push({ ...projected, index: publicEvents.length });
+    }
+  }
+  return publicEvents;
 };
 
 /** Allowlist an internal event. Unknown, reasoning, and raw tool events are dropped. */

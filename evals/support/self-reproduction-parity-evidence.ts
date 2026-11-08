@@ -14,7 +14,7 @@ import type { Observation, ParityEvidence } from "./self-reproduction-parity";
 const side = z.enum(sides);
 const requirementId = z.enum(requirements.map((row) => row.id));
 const runtimeRequirementIds = new Set<string>(
-  requirements.filter((row) => row.kind !== "capture").map((row) => row.id),
+  requirements.flatMap((row) => (row.kind === "capture" ? [] : [row.id])),
 );
 
 export const runtimeReceiptSchema = z

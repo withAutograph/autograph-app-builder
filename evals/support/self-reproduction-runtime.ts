@@ -57,26 +57,29 @@ const runtimeFailureObservations = (input: {
       ? infrastructureUnavailable
       : "missing-functionality";
   const artifact = input.artifact ?? "candidate-runtime.json";
-  return requirements
-    .filter(
-      (requirement) =>
-        (input.kind === "capture"
-          ? requirement.kind === "capture"
-          : requirement.kind !== "capture") &&
-        requirement.id !== "anonymous-entry" &&
-        input.existingRequirementIds?.has(requirement.id) !== true,
-    )
-    .map((requirement) => ({
-      artifacts: [artifact],
-      assertions: [],
-      disposition,
-      method: "none",
-      reason:
-        disposition === "missing-functionality"
-          ? `Candidate runtime prerequisite failed: ${input.receipt.reason}`
-          : `Candidate runtime infrastructure was unavailable: ${input.receipt.reason}`,
-      requirementId: requirement.id,
-    }));
+  const observationFor = (requirement: (typeof requirements)[number]) => ({
+    artifacts: [artifact],
+    assertions: [],
+    disposition,
+    method: "none",
+    reason:
+      disposition === "missing-functionality"
+        ? `Candidate runtime prerequisite failed: ${input.receipt.reason}`
+        : `Candidate runtime infrastructure was unavailable: ${input.receipt.reason}`,
+    requirementId: requirement.id,
+  });
+  return requirements.flatMap((requirement) => {
+    const matchingKind =
+      input.kind === "capture" ? requirement.kind === "capture" : requirement.kind !== "capture";
+    if (
+      !matchingKind ||
+      requirement.id === "anonymous-entry" ||
+      input.existingRequirementIds?.has(requirement.id) === true
+    ) {
+      return [];
+    }
+    return [observationFor(requirement)];
+  });
 };
 
 /** Returns evaluator-owned fallback evidence accepted by the runtime receipt schema. */

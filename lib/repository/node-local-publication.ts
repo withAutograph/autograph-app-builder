@@ -600,9 +600,10 @@ export const inspectLocalPublicationDestination =
     const dirty = await Promise.all(parsed.map((entry) => dirtyEntry(canonicalPath, entry)));
     const indexPaths = [
       ...new Set(
-        parsed
-          .flatMap((entry) => [entry.path, entry.originalPath])
-          .filter((path): path is string => path !== undefined),
+        parsed.flatMap((entry) => {
+          const { path, originalPath } = entry;
+          return originalPath === undefined ? [path] : [path, originalPath];
+        }),
       ),
     ].toSorted(compareOverlayPaths);
     const index = await Promise.all(

@@ -181,12 +181,14 @@ export const writePreviewObservationReport = async (
     )
     .join("");
   const figures = sanitized.viewports
-    .filter((item) => Boolean(item.screenshot))
-    .map(
-      (item) =>
-        `<figure><figcaption>${escapeHtml(item.viewport.name)}</figcaption><img src="${escapeHtml(
-          item.screenshot ?? "",
-        )}" alt="Preview"></figure>`,
+    .flatMap((item) =>
+      item.screenshot
+        ? [
+            `<figure><figcaption>${escapeHtml(item.viewport.name)}</figcaption><img src="${escapeHtml(
+              item.screenshot ?? "",
+            )}" alt="Preview"></figure>`,
+          ]
+        : [],
     )
     .join("");
   await writeFile(

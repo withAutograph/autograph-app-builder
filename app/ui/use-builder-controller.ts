@@ -100,13 +100,9 @@ export function useBuilderController({
     label: scope.accountLogin,
     value: scope.installationId,
   }));
-  const allModelOptions = integrations.models.entries
-    .filter((model) => model.id === preferredModelId)
-    .map((model) => ({
-      detail: model.id,
-      label: model.name,
-      value: model.id,
-    }));
+  const allModelOptions = integrations.models.entries.flatMap((model) =>
+    model.id === preferredModelId ? [{ detail: model.id, label: model.name, value: model.id }] : [],
+  );
   const defaultModel = allModelOptions[0]?.value ?? "";
   const effectiveInitialBrief = initialBrief.trim() ? initialBrief : defaultBrief;
   const initialAppName =

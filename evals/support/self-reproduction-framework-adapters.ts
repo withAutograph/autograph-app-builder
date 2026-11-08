@@ -8,20 +8,20 @@ interface SourceFile {
 
 /** Structural hints guide a reviewer; they do not establish framework behavior. */
 const structuralHints = (files: readonly SourceFile[]) => ({
-  appRouterEntries: files
-    .filter((file) => /(?:^|\/)app\/(?:page|layout)\.[cm]?[jt]sx?$/u.test(file.path))
-    .map((file) => file.path),
-  clientDirectiveFiles: files
-    .filter((file) => /^\s*["']use client["']/u.test(file.content))
-    .map((file) => file.path),
-  serverDirectiveFiles: files
-    .filter((file) => /["']use server["']/u.test(file.content))
-    .map((file) => file.path),
-  suspenseCandidateFiles: files
-    .filter(
-      (file) => /Suspense/u.test(file.content) || /(?:^|\/)loading\.[cm]?[jt]sx?$/u.test(file.path),
-    )
-    .map((file) => file.path),
+  appRouterEntries: files.flatMap((file) =>
+    /(?:^|\/)app\/(?:page|layout)\.[cm]?[jt]sx?$/u.test(file.path) ? [file.path] : [],
+  ),
+  clientDirectiveFiles: files.flatMap((file) =>
+    /^\s*["']use client["']/u.test(file.content) ? [file.path] : [],
+  ),
+  serverDirectiveFiles: files.flatMap((file) =>
+    /["']use server["']/u.test(file.content) ? [file.path] : [],
+  ),
+  suspenseCandidateFiles: files.flatMap((file) =>
+    /Suspense/u.test(file.content) || /(?:^|\/)loading\.[cm]?[jt]sx?$/u.test(file.path)
+      ? [file.path]
+      : [],
+  ),
 });
 
 /**

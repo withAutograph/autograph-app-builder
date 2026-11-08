@@ -562,12 +562,12 @@ export function completeBuildReadyPrototypeAppSpec(input: {
   appId: string;
 }): PrototypeArtifact | undefined {
   const prefix = `prototype/${input.appId}/`;
-  const byPath = new Map(
-    input.artifacts
-      .filter((artifact) => artifact.path.startsWith(prefix))
-      .filter((artifact) => artifact.transfer === undefined)
-      .map((artifact) => [artifact.path, artifact]),
-  );
+  const byPath = new Map<string, StoredPrototypeArtifact>();
+  for (const artifact of input.artifacts) {
+    if (artifact.path.startsWith(prefix) && artifact.transfer === undefined) {
+      byPath.set(artifact.path, artifact);
+    }
+  }
   const appSpec = byPath.get(`${prefix}app-spec.md`);
   if (
     appSpec === undefined ||

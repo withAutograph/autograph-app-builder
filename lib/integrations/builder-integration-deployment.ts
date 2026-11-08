@@ -95,14 +95,19 @@ export async function loadBuilderIntegrationState(
         githubStore.list?.(authority),
         githubStore.read(authority),
       ]);
-      const scopes = mergeHostedGitHubInstallationBindings(githubBindings, legacy)
-        .filter((binding) => binding.active)
-        .map((binding) => ({
-          accountLogin: binding.accountLogin,
-          accountType: binding.accountType,
-          installationId: binding.installationId,
-          status: "connected" as const,
-        }));
+      const scopes = mergeHostedGitHubInstallationBindings(githubBindings, legacy).flatMap(
+        (binding) =>
+          binding.active
+            ? [
+                {
+                  accountLogin: binding.accountLogin,
+                  accountType: binding.accountType,
+                  installationId: binding.installationId,
+                  status: "connected" as const,
+                },
+              ]
+            : [],
+      );
       return { scopes, status: scopes.length ? "connected" : "disconnected" };
     } catch {
       return unavailable(CONFIGURATION_UNAVAILABLE);
@@ -116,15 +121,19 @@ export async function loadBuilderIntegrationState(
         config,
         database,
       }).list(authority);
-      const scopes = bindings
-        .filter((binding) => binding.active)
-        .map((binding) => ({
-          displayName: binding.displayName,
-          installationId: binding.installationId,
-          plan: binding.plan,
-          slug: binding.slug,
-          status: "connected" as const,
-        }));
+      const scopes = bindings.flatMap((binding) =>
+        binding.active
+          ? [
+              {
+                displayName: binding.displayName,
+                installationId: binding.installationId,
+                plan: binding.plan,
+                slug: binding.slug,
+                status: "connected" as const,
+              },
+            ]
+          : [],
+      );
       return { scopes, status: scopes.length ? "connected" : "disconnected" };
     } catch {
       return unavailable(CONFIGURATION_UNAVAILABLE);

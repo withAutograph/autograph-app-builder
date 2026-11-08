@@ -206,12 +206,11 @@ export async function classifyGitHubRepositoryAccess(input: {
     : undefined;
   const listed = (await input.installations.list?.(authority)) ?? [];
   const legacy = await input.installations.read(authority);
-  const active = mergeHostedGitHubInstallationBindings(listed, legacy)
-    .filter((binding) => binding.active)
-    .filter(
-      (binding) =>
-        selectedInstallationId === undefined || binding.installationId === selectedInstallationId,
-    );
+  const active = mergeHostedGitHubInstallationBindings(listed, legacy).filter(
+    (binding) =>
+      binding.active &&
+      (selectedInstallationId === undefined || binding.installationId === selectedInstallationId),
+  );
   const publicScopes = active.map(scope);
   if (active.length === 0) {
     const anyActive = mergeHostedGitHubInstallationBindings(listed, legacy).some(

@@ -1164,10 +1164,13 @@ const inspectLiveTemplateDependencyIdentity = async function inspectLiveTemplate
   if (files.size !== entries.length) {
     throw new Error("The prepared source manifest is invalid.");
   }
-  const dependencyInputPaths = entries
-    .map(({ path }) => path)
-    .filter(isLiveTemplateDependencyInputPath)
-    .toSorted();
+  const dependencyInputPaths: string[] = [];
+  for (const { path } of entries) {
+    if (isLiveTemplateDependencyInputPath(path)) {
+      dependencyInputPaths.push(path);
+    }
+  }
+  dependencyInputPaths.sort();
   const dependencyInputs = liveTemplateDependencyInputsSchema.parse(
     Object.fromEntries(
       await Promise.all(
