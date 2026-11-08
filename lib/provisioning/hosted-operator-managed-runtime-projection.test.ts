@@ -455,7 +455,9 @@ const fixture = () => {
     checkpoints,
     faults,
     capabilities,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     publish: () => publisher.publish(context, record, capabilities, assertCurrent, save),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     revoke: () =>
       publisher.revoke(context, record, assertCurrent, async (environmentRows) => {
         await save({ environmentRows });

@@ -82,6 +82,7 @@ export const openBuilderSessionDestination = async (
   headers: Headers,
   environment: NodeJS.ProcessEnv = process.env,
 ) => {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   const readOwner = () => ensurePreviewOAuthDeploymentSessionOrganization({ environment, headers });
   const owner = await readOwner();
   if (owner === null || owner === undefined) {
@@ -161,6 +162,7 @@ export const openBuilderSessionDestination = async (
           throw new Error("This build's destination changed. Refresh before choosing a domain.");
         }
       };
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       const readCredential = (input: { installationId: string }) =>
         readActiveVercelInstallationToken({
           authority,
@@ -194,6 +196,7 @@ export const openBuilderSessionDestination = async (
           return await readStandardBuilderPublicOrigins({
             assertCurrent,
             destination: target.scope,
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
             readCredential: () =>
               readCredential({
                 installationId: target.scope.installationId,
@@ -210,6 +213,7 @@ export const openBuilderSessionDestination = async (
     authority,
     sessions,
     service: {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       select: (
         input: Parameters<ReturnType<typeof createBuilderSessionDestinationService>["select"]>[0],
       ) =>

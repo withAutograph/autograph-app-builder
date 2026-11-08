@@ -38,6 +38,7 @@ const hook = createReleaseSandboxComputeHook({
 
 // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The hook fixture supplies only the session and sandbox operations under test.; Preserve the existing type assertion at this boundary.
 const context = {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   getSandbox: () => Promise.resolve({ id: "sandbox", stop: mocks.stop }),
   session: { auth: {}, id: "session" },
 } as unknown as HookContext;
@@ -62,6 +63,7 @@ describe.each([false, true])("preview completion lifecycle hosted=%s", (hosted) 
     };
     mocks.provider.mockResolvedValue({
       currentSession: () => ({ sessionId: "provider-session" }),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       getCommand: () => Promise.resolve({ exitCode: null }),
       status: "running",
     });
@@ -100,6 +102,7 @@ describe.each([false, true])("preview completion lifecycle hosted=%s", (hosted) 
   it("releases a stopped preview command", async () => {
     mocks.provider.mockResolvedValue({
       currentSession: () => ({ sessionId: "provider-session" }),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       getCommand: () => Promise.resolve({ exitCode: 0 }),
       status: "running",
     });

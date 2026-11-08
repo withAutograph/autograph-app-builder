@@ -82,7 +82,7 @@ export interface StarterSource {
 
 const git = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
 
-// oxlint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve the existing promise and synchronous exception behavior. Preserve function declaration hoisting and initialization timing.
 function restrictedGit(args: string[], askpass?: { credentialFile: string; askpassFile: string }) {
   // oxlint-disable-next-line promise/avoid-new -- Spawn completion is reported through child process events.
   return new Promise<{ stdout: string }>((resolve, reject) => {

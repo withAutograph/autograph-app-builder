@@ -57,8 +57,11 @@ const nativeFixture = () => ({
     kill: vi.fn(async () => {
       await Promise.resolve();
     }),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     stderr: () => Promise.resolve(""),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     stdout: () => Promise.resolve("/home/vercel\n"),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     wait: () => Promise.resolve({ exitCode: 0 }),
   }),
   status: "running",
@@ -92,12 +95,14 @@ const seedStorage = (
   initial: readonly (readonly [string, Buffer])[],
 ) => {
   const files = new Map(initial);
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   native.fs.lstat.mockImplementation((destination: string) =>
     files.has(destination)
       ? Promise.resolve({})
       : Promise.reject(Object.assign(new Error("not found"), { code: "ENOENT" })),
   );
   native.writeFiles.mockImplementation(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     (values: readonly { content: Uint8Array; path: string }[]) => {
       for (const file of values) {
         files.set(file.path, Buffer.from(file.content));
@@ -203,7 +208,9 @@ describe("Builder Vercel provider", () => {
           callId: "approved-resume",
         },
         {
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           read: () => Promise.resolve(configured),
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           resume: () => Promise.resolve(active),
           readActivation: async () => {
             checkpoint = await journal.read();
@@ -231,6 +238,7 @@ describe("Builder Vercel provider", () => {
     authority.mockReset();
     drives.getOrCreate
       .mockReset()
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       .mockImplementation((options: { name: string }) =>
         Promise.resolve(driveFixture(options.name)),
       );
@@ -409,8 +417,11 @@ describe("Builder Vercel provider", () => {
     const provider = createBuilderVercelProvider();
     const artifact = await provider.prepare({
       files: {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         list: () => Promise.resolve([]),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         read: () => Promise.resolve(Buffer.alloc(0)),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         readText: () => Promise.resolve(""),
       },
       host: {
@@ -904,6 +915,7 @@ describe("Builder Vercel provider", () => {
         message: `A sandbox with the name '${startedSandboxName}' already exists for this project. Use GET /sandboxes/:name to resume it or delete it first.`,
       }),
     );
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     sdk.get.mockImplementation((options) => {
       // The SDK rejects a projectId without matching teamId and token before
       // consulting OIDC; both recovery lookups must use project-scoped OIDC.

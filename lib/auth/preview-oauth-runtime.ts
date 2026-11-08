@@ -648,6 +648,7 @@ export function createPreviewOAuthServer(input: {
           clientId: localGithubClientId,
           clientSecret: localGithubClientSecret,
           disableSignUp: false,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           getToken: (data) =>
             exchangeLocalEmulatedOAuthCode({
               clientId: localGithubClientId,
@@ -706,6 +707,7 @@ export function createPreviewOAuthServer(input: {
           clientId: localVercelClientId,
           clientSecret: localVercelClientSecret,
           disableSignUp: false,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           getToken: (data) =>
             exchangeLocalEmulatedOAuthCode({
               clientId: localVercelClientId,

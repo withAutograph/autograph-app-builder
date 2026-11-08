@@ -175,6 +175,7 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
     reportReadStage = false,
   ) => {
     await deps.assertOwner(context);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     const readRecord = () => deps.store.read({ authority: context.authority, intentId });
     const record = reportReadStage
       ? await approvalStage("canonical_read", readRecord)
@@ -211,6 +212,7 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
     return {
       ...initial,
       save: async (state) => {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         await approvalStage("journal", () =>
           update(record, (value) => ({ ...value, approvalObservation: state })),
         );
@@ -371,6 +373,7 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
     },
     async approval(context: HostedOperatorContext, request: HostedContinuityRequest) {
       const intentId = z.uuid().parse(request.planRef.split("/").at(-1));
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       let record = await approvalStage("canonical_read", () => read(context, intentId));
       parseContinuityRequestForPlan(request, record.plan);
       if (request.idempotencyKey !== record.idempotencyKey) {
@@ -380,11 +383,14 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
       if (record.approval !== undefined) {
         return { approved: true };
       }
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       await approvalStage("setup", () => deps.assertSetup(context, record.plan));
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       const receipt = await approvalStage("native_history", () =>
         deps.readApproval(context, request, undefined, approvalObservation(record)),
       );
       if (receipt === null) {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         record = await approvalStage("journal", () => read(context, intentId));
         await assertRecovery(context, record);
         const cancelled = record.approvalObservation?.capture.entries.some(

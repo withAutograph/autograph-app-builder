@@ -310,6 +310,7 @@ const fixture = () => {
         },
       },
       assertPlanningAuthorized: noOp,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       resolveRealmIdentityCallbackOwnerContext: vi.fn(() =>
         Promise.reject(new Error("unexpected public route")),
       ),

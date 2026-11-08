@@ -21,6 +21,7 @@ const listen = async (server: Server): Promise<number> => {
   return address.port;
 };
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const close = (server: Server): Promise<void> =>
   // oxlint-disable-next-line promise/avoid-new -- Adapt the Node server close callback.
   new Promise((resolve, reject) => {
@@ -41,6 +42,7 @@ const unusedPort = async (): Promise<number> => {
   return port;
 };
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const call = (port: number, path: string, headers: IncomingHttpHeaders = {}, method = "GET") =>
   // oxlint-disable-next-line promise/avoid-new -- Collect an actual Node HTTP response.
   new Promise<{ status: number; headers: IncomingHttpHeaders; body: string }>((resolve, reject) => {

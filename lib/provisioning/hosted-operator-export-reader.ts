@@ -119,6 +119,7 @@ export const createTenantExportReader =
         target: { appId: record.target.appId, sessionId: record.target.sessionId },
       };
       parseHostedTenantExportPlanForOwner(record.plan, { authority, target: context.target });
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       const assertCurrent = () => ports.assertCurrentOwner(context);
       await assertCurrent();
       const worker = workerFor(record);

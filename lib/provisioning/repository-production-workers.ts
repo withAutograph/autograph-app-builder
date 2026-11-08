@@ -135,7 +135,9 @@ export interface RepositoryProductionWorkerDependencies {
 }
 const associatedData = (row: RepositoryProductionRow) =>
   `repository-production-credentials-v1:${repositoryProductionOperationRef(row.record.scope)}:${repositoryProductionDigest(row.record.scope)}`;
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
 const assertCurrent = (context: RepositoryProductionEffectContext) =>
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   observeRepositoryProductionPhase("worker_authority", "authorization_unavailable", () =>
     context.assertCurrent(),
   );
@@ -586,6 +588,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       return observe(await run(context, "access", true, access));
     },
     invokeAuthManagement,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     reservePrivateState: (row: RepositoryProductionRow) =>
       Promise.resolve({
         ...encryptVercelToken({

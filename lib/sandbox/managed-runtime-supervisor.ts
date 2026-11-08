@@ -152,6 +152,7 @@ export const createManagedOwnedChildLauncher = (input: {
       return exit;
     };
     let termination: Promise<ManagedChildExit> | undefined;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     const terminate = () => {
       termination ??= (async () => {
         signalGroup("SIGTERM");

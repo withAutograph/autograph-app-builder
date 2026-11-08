@@ -447,6 +447,7 @@ export const createHostedManagedRuntimeProjection = (deps: {
         fenceGeneration: io.record.fence,
         workerCheckpoints: [],
         assertCurrent: io.guard,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         checkpoint: () => Promise.reject(mismatch()),
         deliveryCandidates: io.record.deliveryCandidates,
         checkpointDelivery: async (candidates) => {
@@ -526,7 +527,9 @@ export const createHostedManagedRuntimeProjection = (deps: {
     }
   };
   return {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     publish: (...args) => safe(() => implementation.publish(...args)),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     revoke: (...args) => safe(() => implementation.revoke(...args)),
   };
 };

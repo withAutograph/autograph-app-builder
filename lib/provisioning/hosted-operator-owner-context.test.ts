@@ -902,6 +902,7 @@ describe("approval history for recovered public grant authority", () => {
           },
         },
       ];
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       const fetchImplementation = vi.fn<typeof fetch>(() =>
         Promise.resolve(
           new Response(`${nativeEvents.map((event) => JSON.stringify(event)).join("\n")}\n`, {
@@ -919,6 +920,7 @@ describe("approval history for recovered public grant authority", () => {
         builderOrigin: "https://builder.example",
         fetchImplementation,
         verifyReadAuthority: f.verifyReadAuthority,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         workloadIdentity: { token: () => Promise.resolve("controlled-workload") },
       });
       const seen: string[] = [];

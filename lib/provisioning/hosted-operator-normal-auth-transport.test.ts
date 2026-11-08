@@ -157,6 +157,7 @@ describe("private Realm readback native transport", () => {
     const result = await readManagedRuntimePublicProfile({
       appId: context.target.appId,
       publicOrigin: origin,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       readPublicJwks: (url) => reader(context, url),
     });
     expect(result.keys).toEqual([key]);

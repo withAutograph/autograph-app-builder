@@ -415,6 +415,7 @@ const developmentEntries = async (sourceRoot: string) => {
     entries.push(
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       ...(await Promise.all(
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         paths.slice(offset, offset + 32).map((path) => sourceEntry(sourceRoot, path)),
       )),
     );
@@ -445,6 +446,7 @@ export const fingerprintDevelopmentSource = async (sourceRoot: string) => {
   return fingerprintEntries(await developmentEntries(sourceRoot));
 };
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
 export const waitForDevelopmentSourceChange = (input: {
   sourceRoot: string;
   expectedFingerprint: string;

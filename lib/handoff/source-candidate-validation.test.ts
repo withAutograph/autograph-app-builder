@@ -48,11 +48,13 @@ const intent = builderHandoffIntentSchema.parse({
 it("checks the exact owner before and after completed artifact I/O", async () => {
   const observed: string[] = [];
   const validate = createOwnedSourceCandidateValidator({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     isActiveMember: (current) => {
       expect(current).toEqual(authority);
       observed.push("membership");
       return Promise.resolve(true);
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     readCompleted: (selection) => {
       expect(selection).toEqual({ authority, reference: intent.sourceCandidate });
       observed.push("artifact");
@@ -66,7 +68,9 @@ it("checks the exact owner before and after completed artifact I/O", async () =>
 it("denies acknowledgment when membership is revoked during artifact read", async () => {
   let active = true;
   const validate = createOwnedSourceCandidateValidator({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     isActiveMember: () => Promise.resolve(active),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     readCompleted: () => {
       active = false;
       return Promise.resolve(verified.artifact);
@@ -79,6 +83,7 @@ it("does not read source for an inactive member", async () => {
   let reads = 0;
   const validate = createOwnedSourceCandidateValidator({
     isActiveMember: vi.fn<() => Promise<boolean>>().mockResolvedValue(false),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     readCompleted: () => {
       reads += 1;
       return Promise.resolve(verified.artifact);

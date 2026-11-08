@@ -39,8 +39,10 @@ function storage() {
   };
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   const selectFrom = (table: unknown) => ({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     where: () => {
       const result = Promise.resolve(rowsFor(table));
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       return Object.assign(result, { limit: () => result });
     },
   });

@@ -129,11 +129,13 @@ export const createAppAccessManagementService = (deps: AppAccessManagementDepend
     const app = await observeRepositoryProductionPhase(
       "access_scope_resolve",
       "binding_unavailable",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       () => deps.resolve(owner),
     );
     await deps.assertAuthorized(owner, app.scope, false);
     const people = app.canManage
-      ? await observeRepositoryProductionPhase("access_people", "binding_unavailable", () =>
+      ? // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
+        await observeRepositoryProductionPhase("access_people", "binding_unavailable", () =>
           deps.readPeople(app.scope, cursor),
         )
       : { members: [], invitations: [] };
@@ -298,6 +300,7 @@ export const createAppAccessManagementService = (deps: AppAccessManagementDepend
         operationRef: invitationId,
         createdAt: row.record.createdAt,
         assertCurrent,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         checkpoint: () => Promise.reject(new AppAccessError("app_access_unknown")),
         readCheckpoints: () => row.record.workerCheckpoints,
       });

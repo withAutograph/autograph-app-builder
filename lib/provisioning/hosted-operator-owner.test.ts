@@ -738,8 +738,10 @@ const retainedProjectSettingsApprovalFixture = () => {
     version: 1,
   });
   const journal: Pick<HostedRuntimeJournalStore, "read"> = {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     read: vi.fn(() => Promise.resolve({ record, revision: 2 })),
   };
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const observe = vi.fn(() =>
     Promise.resolve({
       artifactProjectionRequiresLegacyReadback: false,
@@ -915,8 +917,10 @@ const retainedRenewalApprovalFixture = () => {
     },
   });
   const journal: Pick<HostedRuntimeJournalStore, "read"> = {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     read: vi.fn(() => Promise.resolve({ record, revision: 3 })),
   };
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const observe = vi.fn(() =>
     Promise.resolve({
       artifactProjectionRequiresLegacyReadback: false,
@@ -2582,6 +2586,7 @@ describe("hosted operator owner authority", () => {
       undefined,
       readyNativeHandoffTarget(),
     );
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     fixture.fetch.mockImplementation(() =>
       Promise.resolve(
         Response.json({ accountId: "team_1", id: "prj_native", name: "vendor-onboarding" }),
@@ -3428,6 +3433,7 @@ describe("hosted operator Sandbox ownership", () => {
 });
 
 describe("normal Builder destination authority", () => {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const read = (f: ReturnType<typeof makeFixture>, owner: OperatorOwnerContext = ownerContext) =>
     readStandardBuilderDestination(
       { ...f, apiOrigin: "https://vercel.example", workloadPolicy },
@@ -3711,6 +3717,7 @@ describe("attached direct-session standard destination", () => {
     }
 
     const readProvisioning = vi.fn(async () => await Promise.resolve(row));
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const read = () =>
       readStandardBuilderDestination(
         {
@@ -3851,6 +3858,7 @@ describe("attached direct-session standard destination", () => {
 });
 
 describe("normal Builder destination authority", () => {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const read = (f: ReturnType<typeof makeFixture>, owner: OperatorOwnerContext = ownerContext) =>
     readStandardBuilderDestination(
       { ...f, apiOrigin: "https://vercel.example", workloadPolicy },

@@ -787,7 +787,8 @@ export const createGitHubAppInstallationAuthorization = (input: {
     return emulatorBase;
   };
   const providerFetch: Fetch = input.emulation
-    ? (resource, init) => {
+    ? // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
+      (resource, init) => {
         let resourceUrl: string;
         // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         if (typeof resource === "string") {

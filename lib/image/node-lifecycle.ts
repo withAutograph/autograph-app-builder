@@ -1794,6 +1794,7 @@ const proveSandboxImageUnlocked = function proveSandboxImageUnlocked(
   );
 };
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
 const locked = <T>(approval: LifecycleApproval, operation: () => T) =>
   withLifecycleLock(approval.stateRoot, () => {
     assertLifecycleStateScope(approval);
@@ -1801,21 +1802,31 @@ const locked = <T>(approval: LifecycleApproval, operation: () => T) =>
     return operation();
   });
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
 export const verifyImageSources = (approval: LifecycleApproval) =>
   locked(approval, () => verifyImageSourcesUnlocked(approval));
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
 export const buildImage = (approval: LifecycleApproval) =>
   locked(approval, () => buildImageUnlocked(approval));
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
 export const inspectLocalImage = (approval: LifecycleApproval) =>
   locked(approval, () => inspectLocalImageUnlocked(approval));
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
 export const loginGhcr = (approval: LifecycleApproval, username: string) =>
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   locked(approval, () => loginGhcrUnlocked(approval, username));
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
 export const pushImage = (approval: LifecycleApproval) =>
   locked(approval, () => pushImageUnlocked(approval));
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
 export const inspectRemoteImage = (approval: LifecycleApproval) =>
   locked(approval, () => inspectRemoteImageUnlocked(approval));
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
 export const preloadImage = (approval: LifecycleApproval, digestReferenceInput: string) =>
   locked(approval, () => preloadImageUnlocked(approval, digestReferenceInput));
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
 export const prepareProofRuntime = (approval: LifecycleApproval) =>
   locked(approval, () => prepareProofRuntimeUnlocked(approval));
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
 export const proveSandboxImage = (approval: LifecycleApproval, digestReferenceInput: string) =>
   locked(approval, () => proveSandboxImageUnlocked(approval, digestReferenceInput));

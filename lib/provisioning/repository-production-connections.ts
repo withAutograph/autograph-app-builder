@@ -64,7 +64,9 @@ export const createRepositoryProductionConnectionReader =
       getToken,
       readIdentity: readSqlIdentity,
     };
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     const assertCurrent = () =>
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       observeRepositoryProductionPhase("connection_authority", "authorization_unavailable", () =>
         input.assertCurrent(),
       );
@@ -72,12 +74,14 @@ export const createRepositoryProductionConnectionReader =
     const oidcToken = await observeRepositoryProductionPhase(
       "workload_oidc_acquire",
       "workload_unavailable",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       () =>
         io.getOidc({
           project: input.connection.operator.projectId,
           team: input.connection.operator.ownerId,
         }),
     );
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     await observeRepositoryProductionPhase("workload_oidc_verify", "workload_unavailable", () =>
       io.verifyOidc(oidcToken, input.connection.operator),
     );
@@ -198,6 +202,7 @@ export const createRepositoryProductionConnectionReader =
       const token = await observeRepositoryProductionPhase(
         "provider_token",
         "provider_unavailable",
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         () =>
           io.getToken(
             connection.connector,

@@ -1011,6 +1011,7 @@ wait
     try {
       await withFakeGhEnvironmentAsync(scenario.fixture, async () => {
         scenario.seedReceipts();
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         const receipt = await withImageLifecycleTestProvenance(scenario.exact, () =>
           preloadImage(scenario.approval, scenario.reference),
         );
@@ -1093,6 +1094,7 @@ wait
             .split("\n")
             .filter((line) => line.startsWith("auth token ")).length;
           try {
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
             await withImageLifecycleTestProvenance(scenario.exact, () =>
               preloadImage(scenario.approval, scenario.reference),
             );

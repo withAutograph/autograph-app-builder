@@ -315,7 +315,9 @@ const assertTransition = (
 export const createInMemoryNativeTargetOnboardingStore = (): NativeTargetOnboardingStore => {
   const rows = new Map<string, NativeTargetOnboardingRow>();
   return {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     read: (key) => Promise.resolve(structuredClone(rows.get(identity(key)))),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     reserve(input) {
       const requestId = identity(input);
       const existing = rows.get(requestId);
@@ -335,6 +337,7 @@ export const createInMemoryNativeTargetOnboardingStore = (): NativeTargetOnboard
       rows.set(requestId, structuredClone(row));
       return Promise.resolve(structuredClone(row));
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     compareAndSet(input) {
       const requestId = identity(input);
       const current = rows.get(requestId);

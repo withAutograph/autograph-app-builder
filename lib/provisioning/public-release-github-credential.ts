@@ -105,7 +105,9 @@ export const createPublicReleaseGitHubCredentialReader = (
   },
 ): PublicReleaseGitHubDependencies["readCredential"] => {
   const read = createOwnerScopedGitHubRepositoryCredentialReader(input);
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   return (invocation, plan) =>
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     read(invocation, plan.source, () => input.assertCurrent(invocation, plan));
 };
 

@@ -184,6 +184,7 @@ const fixture = (persistent = true) => {
     resolveCurrent,
     read,
     currentSubject,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     resolve: () => createRepositoryProductionManagementResolver(deps)(owner),
     getRow: () => {
       if (row === undefined) {

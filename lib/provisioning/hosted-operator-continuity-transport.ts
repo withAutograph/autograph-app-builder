@@ -150,6 +150,7 @@ export const createContinuityDispatcher =
       } else {
         const intentId =
           "intentId" in parsed ? parsed.intentId : z.uuid().parse(parsed.planRef.split("/").at(-1));
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         const readSaved = () =>
           dependencies.store.read({ authority: parsed.ownerContext.authority, intentId });
         const saved =

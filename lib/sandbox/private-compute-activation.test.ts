@@ -47,11 +47,13 @@ const fixture = () => {
       return vcpus * 2048;
     },
     currentSession: () => ({ vcpus: sessionVcpus, memory: sessionVcpus * 2048 }),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     stop: () => {
       effects.push("stop");
       status = "stopped";
       return Promise.resolve(globalThis.undefined);
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     update: (input) => {
       effects.push("update");
       if (uncertainUpdate) {
@@ -62,14 +64,18 @@ const fixture = () => {
     },
   };
   const ports = {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     read: () => Promise.resolve(native),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     resume: () => {
       effects.push("resume");
       status = "running";
       sessionVcpus = vcpus;
       return Promise.resolve(native);
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     readActivation: () => Promise.resolve(record),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     writeActivation: (value: PrivateComputeActivation) => {
       record = value;
       return Promise.resolve();

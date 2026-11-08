@@ -664,6 +664,7 @@ const createRetainedAppScopeObservationReader =
 export const createRetainedAppInstallationScopeReader = (deps: RetainedAppScopeDependencies) =>
   createRetainedAppScopeObservationReader({
     ...deps,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     observeScopes: (_context, _plan, scopes) => Promise.resolve([...scopes]),
   });
 
@@ -904,6 +905,7 @@ export const createHostedOperatorControlPlane = async (input: {
       },
       workloadIdentity: operatorIdentity,
     });
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     const readApproval = (
       context: Parameters<ReturnType<typeof createHostedOperatorReadApproval>>[0],
     ) =>
@@ -1760,8 +1762,10 @@ export const createHostedOperatorControlPlane = async (input: {
     const controlPlane = {
       ...installationPlanning,
       readApprovedPlan,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       registerOwnerRealmIdentityWait: (...args: Parameters<typeof realmIdentityWait.register>) =>
         realmIdentityWait.register(...args),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       acknowledgeOwnerRealmIdentityWait: (
         ...args: Parameters<typeof realmIdentityWait.acknowledge>
       ) => realmIdentityWait.acknowledge(...args),
@@ -2671,6 +2675,7 @@ export const createHostedOperatorControlPlane = async (input: {
         }
         return { active: false, rows };
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       reserveRealmIdentityLink: (linkInput: RealmIdentityLinkInput) =>
         reserveRealmIdentityLink(linkInput),
       async resolveRealmIdentityCallbackOwnerContext(selector: {
@@ -3650,6 +3655,7 @@ export const createHostedOperatorControlPlane = async (input: {
         // canonical accessor only within this planning call; live owner checks do not use it.
         let approvalSession: ReturnType<typeof eve.getSession> | undefined;
         const approvalStore = {
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           getSession: (principal: Parameters<typeof eve.getSession>[0], sessionId: string) => {
             if (
               !samePrincipal(principal, preparedOwner.principal) ||
@@ -3885,9 +3891,11 @@ export const createHostedOperatorControlPlane = async (input: {
           throw new HostedOperatorError("protected_operator_required");
         }
         const [{ current, operator }] = await Promise.all([
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           observeContinuityPlanningStage(context.target.sessionId, "prepared_runtime", () =>
             preparedForContinuity(context, true),
           ),
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           observeContinuityPlanningStage(context.target.sessionId, "sandbox_authorization", () =>
             assertSelectedSandbox(context, runtime),
           ),
@@ -3896,6 +3904,7 @@ export const createHostedOperatorControlPlane = async (input: {
         const selectedSandbox = await observeContinuityPlanningStage(
           context.target.sessionId,
           "sandbox_resume",
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           () => getContinuitySandbox(context, runtime),
           undefined,
           continuityWorkloads.get(context)?.signal,
@@ -3903,6 +3912,7 @@ export const createHostedOperatorControlPlane = async (input: {
         const observedPorts = await observeContinuityPlanningStage(
           context.target.sessionId,
           "port_observation",
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           () => observeManagedRuntimePorts(selectedSandbox),
         );
         if (operator.approvalId === undefined) {
@@ -4027,6 +4037,7 @@ export const createHostedOperatorControlPlane = async (input: {
           "assertAuthorized" | "readInstallationScopes"
         > = { assertAuthorized: owner.assertAuthorized };
         if (readInstallationScopes !== undefined) {
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           readbackAuthority.readInstallationScopes = (contextInput) =>
             readInstallationScopes(contextInput, contextInput.plan);
         }

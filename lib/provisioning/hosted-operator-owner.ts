@@ -1045,6 +1045,7 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
   return {
     verifyWorkload,
     assertArtifactAuthorized,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     readStandardDestination: (context: HostedOperatorAppOwnerContext) =>
       readStandardBuilderDestination(deps, context),
     assertCanonicalAppOwner,

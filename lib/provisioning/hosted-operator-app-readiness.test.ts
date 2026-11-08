@@ -217,8 +217,10 @@ it.each([
   } else if (stage === "runtime_credential") {
     f.deps.readRuntimeUrl.mockRejectedValueOnce(error);
   } else if (stage === "runtime_identity") {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     f.reader.readIdentity = () => Promise.reject(error);
   } else {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     f.reader.readOrganization = (_scope, observeStage) => {
       observeStage?.(stage);
       return Promise.reject(error);

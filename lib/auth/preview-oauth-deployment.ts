@@ -134,7 +134,7 @@ export function getPreviewOAuthDeploymentOrigin(
   return getPreviewOAuthDeploymentRuntime(environment).origin;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve the existing promise and synchronous exception behavior. Preserve function declaration hoisting and initialization timing.
 export function getPreviewOAuthDeploymentSession(input: {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
   headers: Headers;
@@ -226,7 +226,7 @@ export async function ensurePreviewSessionOrganization(input: {
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve the existing promise and synchronous exception behavior. Preserve function declaration hoisting and initialization timing.
 export function ensurePreviewOAuthDeploymentSessionOrganization(input: {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
   headers: Headers;
@@ -307,6 +307,7 @@ export function createPreviewOAuthWellKnownHandler(input: {
   getAuth?: PreviewOAuthAuthProvider;
 }) {
   const requestHandler = createPreviewOAuthRequestHandler(input);
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   return (request: Request) => {
     const url = new URL(request.url);
     url.pathname = "/api/auth/.well-known/oauth-authorization-server";

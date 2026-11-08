@@ -349,6 +349,7 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
     }
   });
   let closing: Promise<void> | undefined;
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   const shutdown = () => {
     closing ??= new Promise<void>((resolve, reject) => {
       // oxlint-disable-next-line promise/prefer-await-to-callbacks -- Node server close acknowledgement is retained once and awaited by every owner close call.

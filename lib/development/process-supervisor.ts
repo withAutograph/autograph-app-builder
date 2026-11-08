@@ -45,7 +45,7 @@ export function createDevelopmentShutdown(target: SignalTarget = process): Devel
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve the existing promise and synchronous exception behavior. Preserve function declaration hoisting and initialization timing.
 export function waitForDevelopmentShutdown(signal: AbortSignal, exitCode: () => number) {
   if (signal.aborted) {
     return Promise.resolve({ code: exitCode(), kind: "stop" as const });
@@ -54,7 +54,7 @@ export function waitForDevelopmentShutdown(signal: AbortSignal, exitCode: () => 
   return once(signal, "abort").then(() => ({ code: exitCode(), kind: "stop" as const }));
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve the existing promise and synchronous exception behavior. Preserve function declaration hoisting and initialization timing.
 export function developmentChildExit(child: DevelopmentChild) {
   if (child.exitCode !== null) {
     return Promise.resolve(child.exitCode);

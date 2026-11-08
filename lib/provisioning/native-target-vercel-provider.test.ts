@@ -43,14 +43,17 @@ const json = (value: MockPayload, status = 200): Response => Response.json(value
 
 const fixture = () => {
   const order: string[] = [];
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const authorizeAttempt = vi.fn(() => {
     order.push("journal");
     return Promise.resolve();
   });
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const acceptProjectId = vi.fn((_projectId: string) => {
     order.push("receipt");
     return Promise.resolve();
   });
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const request = vi.fn<typeof fetch>((_url, options) => {
     order.push(options?.method ?? "GET");
     return Promise.resolve(
@@ -171,6 +174,7 @@ describe("native target Vercel project provider", () => {
       JSON.stringify(
         await createNativeTargetVercelProject({
           ...f.input,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           authorizeAttempt: () => Promise.reject(new Error("already dispatched")),
         }),
       ),
@@ -181,6 +185,7 @@ describe("native target Vercel project provider", () => {
     "uses the create API contract and independently checks outside-root access (%s)",
     async (outsideRoot) => {
       const f = fixture();
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       f.request.mockImplementation((_url, options) => {
         if (options?.method === "POST") {
           const body = z.looseObject({}).parse(JSON.parse(z.string().parse(options.body)));

@@ -123,8 +123,11 @@ const fixture = () => {
           return {
             exitCode: 0,
             kill: vi.fn().mockResolvedValue(null),
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
             stderr: () => Promise.resolve(""),
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
             stdout: () => Promise.resolve("/home/vercel\n"),
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
             wait: () => Promise.resolve({ exitCode: 0 }),
           };
         }
@@ -173,6 +176,7 @@ fs.renameSync(process.argv[1],process.argv[2]);`;
     ...native,
     runCommand: vi.fn().mockImplementation(native.runCommand),
   } satisfies VercelSdkSessionNative;
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   drives.getOrCreate.mockImplementation((options: { name: string }) =>
     Promise.resolve({
       driveId: "source-drive",

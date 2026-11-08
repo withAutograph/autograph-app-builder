@@ -53,7 +53,9 @@ export function createPreviewEmulateHandler(input: {
   let persistenceRevision = 0;
   const emulateHandler = createEmulateHandler({
     persistence: {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       load: () => persistence.load(),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       save(state) {
         persistenceRevision += 1;
         pendingPersistence = persistence.save(state);

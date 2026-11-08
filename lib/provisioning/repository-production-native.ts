@@ -187,6 +187,7 @@ export const createRepositoryProductionNativeHandler =
         ? AbortSignal.timeout(20 * 60 * 1000)
         : request.signal;
     let deferredCleanup = false;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     const dispose = () => client.end({ timeout: 5 });
     try {
       const sessions = createPostgresHostedEveStore(database);
@@ -216,6 +217,7 @@ export const createRepositoryProductionNativeHandler =
         string,
         RepositoryProductionManagementSubject<RepositoryProductionRepository>
       >();
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       const readSession = (owner: RepositoryProductionRequestOwner) =>
         readCanonicalAppOwnerSession(ownerDeps, {
           authority: owner.ownerContext.authority,
@@ -482,6 +484,7 @@ export const createRepositoryProductionNativeHandler =
           builderOrigin,
           authRealm: realm(scope),
           signal: effectSignal,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           readCreator: (row) => creator.readCreator(row),
           readGeneratedRelease: async (row) => {
             if (row.record.intent.storage.kind !== "postgres") {
@@ -513,6 +516,7 @@ export const createRepositoryProductionNativeHandler =
               }).readGeneratedRelease(artifactContext, selection)
             ).files;
           },
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           readConnections: (context) =>
             createRepositoryProductionConnectionReader({
               connection: {
@@ -532,8 +536,10 @@ export const createRepositoryProductionNativeHandler =
             teamId: configuration.operator.ownerId,
           }),
           frontendAccess: {
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
             apply: () =>
               Promise.reject(new Error("repository_production_managed_identity_required")),
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
             reconcile: () =>
               Promise.reject(new Error("repository_production_managed_identity_required")),
           },
@@ -547,6 +553,7 @@ export const createRepositoryProductionNativeHandler =
         assertCurrent: async () => {
           await (await current(row.record.scope)).assertCurrentOwner();
         },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         checkpoint: () => Promise.reject(new Error("read_only")),
       });
       const authRequest = async (
@@ -576,9 +583,11 @@ export const createRepositoryProductionNativeHandler =
             store,
             assertAuthorized,
             ...workers(scope),
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
             prepareCreatorIdentity: (context) => creator.prepare(context),
             reconcileAppAccessUpgrade: createRepositoryProductionAccessUpgrader({
               execute: async (context, command) => {
+                // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
                 await managementFor(() => context.assertCurrent(), command, true).execute(
                   (await current(scope)).owner,
                   command,
@@ -591,6 +600,7 @@ export const createRepositoryProductionNativeHandler =
             }),
             reconcileCreatorRoles: createRepositoryProductionRoleUpdater({
               execute: async (context, command) => {
+                // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
                 await managementFor(() => context.assertCurrent(), command, true).execute(
                   (await current(scope)).owner,
                   command,
@@ -688,9 +698,12 @@ export const createRepositoryProductionNativeHandler =
           const record = repositoryProductionRecordSchema.parse(rows[0].record);
           return await store.read(record.scope);
         },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         readInvitation: (row, id) =>
           authRequest(readContext(row), { action: "read", invitationId: id }, true),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         invokeAuth: (context, operation) => authRequest(context, operation, false),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         assertAuthorized: (row) => assertAuthorized(row.record.scope, row.record.intent),
         withCompletionLease: async (row, run) =>
           await withLease(row.record.scope, run, row.record.intent, true),
@@ -822,6 +835,7 @@ export const createRepositoryProductionNativeHandler =
             }
           },
           retrySetup: async (scope, effect) => {
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
             await setup(scope, () => effect.assertCurrent()).prepare(
               scope,
               (await current(scope)).intent,
@@ -873,6 +887,7 @@ export const createRepositoryProductionNativeHandler =
               {
                 row,
                 effect: creatorAccessEffect,
+                // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
                 assertCurrent: () => effect.assertCurrent(),
                 checkpoint: async (value) => {
                   const currentRow = await store.read(scope);
@@ -974,6 +989,7 @@ export const createRepositoryProductionNativeHandler =
             callId: approvedByCallId,
             owner: owner.ownerContext,
             assertOwner: found.assertCurrentOwner,
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
             readHistory: (startIndex, onEvent) =>
               defined(transport.observePrivateHistory)({
                 principal: owner.ownerContext.principal,

@@ -540,6 +540,7 @@ const useIdentityInvitationTime = (invitations: PublicIdentityInvitation[]) => {
   return now;
 };
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
 const invitationOrOutcome = (invitations: ReactNode[], outcome: ReactNode) =>
   invitations.length > 0 ? <main className="mcpApp shell">{invitations}</main> : outcome;
 
@@ -585,7 +586,7 @@ const sessionAccessControls = (input: {
   return controls;
 };
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve the existing promise and synchronous exception behavior. Preserve function declaration hoisting and initialization timing.
 export function SessionAppView({
   canCallTools,
   canOpenLinks,

@@ -87,9 +87,14 @@ describe("Preview OAuth activation contract", () => {
           "rotate",
           "configure-client-credentials-scopes",
         ] as const
-      ).map((action) =>
-        expect(options.clientPrivileges?.({ action, headers: new Headers() })).resolves.toBe(false),
-      ),
+      )
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
+        .map((action) =>
+          expect(options.clientPrivileges?.({ action, headers: new Headers() })).resolves.toBe(
+            false,
+          ),
+        ),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       ...(["create", "read", "update", "delete", "list", "link", "unlink"] as const).map((action) =>
         expect(options.resourcePrivileges?.({ action, headers: new Headers() })).resolves.toBe(
           false,

@@ -65,6 +65,7 @@ cc --version`,
 export function createHostedRuntimeInstaller() {
   const installs = new Map<string, Promise<void>>();
 
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   return (sandbox: Pick<SandboxSession, "run"> & { readonly id: string }) => {
     const existing = installs.get(sandbox.id);
     if (existing !== undefined) {

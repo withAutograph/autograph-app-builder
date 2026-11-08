@@ -24,7 +24,9 @@ it("uploads multiple bounded chunks, reconciles unknown completion and retains i
   };
   const rows = new Map<string, string>();
   const store = createImmutableSourceArtifactStore({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     get: (key) => Promise.resolve(rows.get(JSON.stringify(key))),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     put: (key, value) => {
       const id = JSON.stringify(key);
       if (rows.has(id) && rows.get(id) !== value) {
@@ -46,6 +48,7 @@ it("uploads multiple bounded chunks, reconciles unknown completion and retains i
     file: new File([JSON.stringify(artifact)], "app-source.json"),
     uploadIdForDigest: () => id,
     ports: {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       begin: (header) => store.begin({ authority, header }),
       put: async (input) => {
         writes += 1;
@@ -55,6 +58,7 @@ it("uploads multiple bounded chunks, reconciles unknown completion and retains i
         await store.complete({ authority, reference });
         throw new Error("response lost after durable completion");
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       status: (reference) => store.status({ authority, reference }),
     },
   });

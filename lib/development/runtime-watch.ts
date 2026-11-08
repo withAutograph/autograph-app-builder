@@ -80,7 +80,7 @@ export async function fingerprintDevelopmentRuntime(repositoryRoot: string): Pro
   return hash.digest("hex");
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve the existing promise and synchronous exception behavior. Preserve function declaration hoisting and initialization timing.
 export function waitForDevelopmentRuntimeChange(input: {
   repositoryRoot: string;
   expectedFingerprint: string;

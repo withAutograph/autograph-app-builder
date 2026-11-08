@@ -680,6 +680,7 @@ export const startWorkingPreview = async (input: {
     await provider.fs.writeFile(configurationPath, access.configuration, { signal });
     await waitForPreview({
       ...waitOptions,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       check: (observe, readinessSignal) =>
         openApp({
           fetch: input.fetch ?? fetch,

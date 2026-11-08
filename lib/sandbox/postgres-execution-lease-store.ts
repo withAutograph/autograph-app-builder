@@ -202,6 +202,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
     });
   },
 
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   claimExpired(input) {
     return database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
@@ -245,6 +246,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
     });
   },
 
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   heartbeat(input) {
     return database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
@@ -275,6 +277,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
     });
   },
 
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   release(input) {
     return database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
@@ -310,6 +313,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
     });
   },
 
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   releaseCurrent(input) {
     return database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
@@ -351,6 +355,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
     });
   },
 
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   settleRecovery(input) {
     return database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);

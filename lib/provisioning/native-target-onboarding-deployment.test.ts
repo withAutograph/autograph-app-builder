@@ -110,11 +110,13 @@ describe("native target deployment-owned resource selection", () => {
     const fakeDatabase = {
       select: () => ({
         from: () => ({
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           where: () => ({ limit: () => Promise.resolve(row === undefined ? [] : [row]) }),
         }),
       }),
       insert: () => ({
         values: (value: Row) => ({
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           onConflictDoNothing: () => {
             // These are the actual builder_provisioning_journal CHECK constraints.
             expect(value.requestId).toMatch(
@@ -131,6 +133,7 @@ describe("native target deployment-owned resource selection", () => {
       update: () => ({
         set: (value: Partial<Row>) => ({
           where: () => ({
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
             returning: () => {
               if (row === undefined) {
                 throw new Error("Approval checkpoint update requires a prior insert.");
@@ -212,7 +215,9 @@ describe("native target approval history carrier", () => {
       appId: "requests-app",
       owner,
       workload: { authorization: "Bearer verified-builder-token", signal: controller.signal },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       assertCanonicalAppOwner: () => Promise.resolve(),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       fetch: (resource, init) => {
         const requested = resource instanceof Request ? resource.url : resource;
         const url = requested instanceof URL ? requested.href : requested;
@@ -253,6 +258,7 @@ describe("native target approval history carrier", () => {
         appId: "requests-app",
         owner,
         workload: { authorization: null, signal: controller.signal },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         assertCanonicalAppOwner: () => Promise.resolve(),
       }),
     ).toThrow();

@@ -28,6 +28,7 @@ const incoming = () =>
 describe("app access Server Action boundary", () => {
   it("passes the authenticated request to the existing owner-resolving service and retains request identity", async () => {
     const requests: Request[] = [];
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const handle = vi.fn((request: Request) => {
       requests.push(request);
       return Promise.resolve(Response.json(snapshot));
@@ -42,6 +43,7 @@ describe("app access Server Action boundary", () => {
   });
 
   it("rejects injected authority and foreign origins before dispatch", async () => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const handle = vi.fn(() => Promise.resolve(Response.json(snapshot)));
     const action = createAppAccessAction({ handle, origin: "https://builder.example" });
     const forged = { ...input, ownerUserId: "other-owner" };
@@ -54,6 +56,7 @@ describe("app access Server Action boundary", () => {
   });
 
   it("returns safe uncertainty without retrying an unacknowledged write", async () => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const handle = vi.fn(() => Promise.reject(new Error("secret provider detail")));
     const action = createAppAccessAction({ handle, origin: "https://builder.example" });
     const result = await action(input, incoming());
@@ -81,6 +84,7 @@ describe("app access Server Action boundary", () => {
 
   it("does not present a different saved session as successful", async () => {
     const action = createAppAccessAction({
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       handle: () => Promise.resolve(Response.json({ ...snapshot, sessionId: "other-session" })),
       origin: "https://builder.example",
     });

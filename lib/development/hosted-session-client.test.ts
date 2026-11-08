@@ -8,6 +8,7 @@ import { connectHostedSession, hostedSessionTools } from "./hosted-session-clien
 
 const owned: string[] = [];
 afterEach(async () => {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   await Promise.all(owned.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
 const fixture = async (mode = "normal") => {

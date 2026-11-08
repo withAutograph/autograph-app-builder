@@ -346,6 +346,7 @@ const setup = () => {
     get row() {
       return row;
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     run: () => restorePendingAccountPreparation(ports, context, input, accountPlan, () => now),
   };
 };

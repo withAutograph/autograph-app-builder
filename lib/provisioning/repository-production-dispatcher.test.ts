@@ -100,6 +100,7 @@ const fixture = () => {
       completeInvitation: vi.fn(async () => "ready" as const),
     },
   };
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const send = (
     body: z.infer<ReturnType<typeof z.json>>,
     token = "builder",
@@ -429,6 +430,7 @@ describe("protected repository Production dispatcher", () => {
     const work = Promise.withResolvers<"ready">();
     const retain = vi.fn<(task: Promise<void>) => void>();
     const dispose = vi.fn(async () => {});
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     vi.mocked(f.deps.management.completeInvitation).mockImplementation(() =>
       observeRepositoryProductionCompletion(work.promise, retain, dispose, 5),
     );

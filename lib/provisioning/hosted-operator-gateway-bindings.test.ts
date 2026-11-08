@@ -2448,6 +2448,7 @@ it.each(["sync", "async"] as const)(
     const control = fixture();
     const expected = await control.writer.bind(control.input);
     const f = fixture();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     f.diagnostics.mockImplementation(() => {
       if (kind === "sync") {
         throw new Error(privateAuthUrl);

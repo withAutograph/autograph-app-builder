@@ -134,6 +134,7 @@ export function createBuilderProvisioningDependencies(
     database,
   });
   const dependencies: Parameters<typeof executeBuilderProvisioning>[0]["dependencies"] = {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     deactivateVercelInstallation: (installationId, now) =>
       vercelInstallations.deactivate(installationId, now),
     githubConfig: readGitHubProvisioningEnvironment(environment),
@@ -143,6 +144,7 @@ export function createBuilderProvisioningDependencies(
     }),
     githubInstallations: createPostgresHostedGitHubInstallationStore(database),
     journal: createPostgresBuilderProvisionJournalStore(database),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     readVercelCredential: ({ authority, installationId }) =>
       readActiveVercelInstallationToken({
         authority,

@@ -27,6 +27,7 @@ const request = () =>
     method: "POST",
   });
 const fixture = () => {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const limit = vi.fn(() => Promise.resolve([]));
   const select = vi.fn(() => ({ from: () => ({ where: () => ({ limit }) }) }));
   // SAFETY: This test supplies only the exact read-only Drizzle query chain consumed by the readiness reader; no write/effect method exists.
@@ -37,6 +38,7 @@ const fixture = () => {
     assertCanonicalAppOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
     readStandardDestination: vi.fn<
       Parameters<typeof createPublicReleaseDeployment>[0]["owner"]["readStandardDestination"]
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     >(() => Promise.resolve({ ...plan.project })),
   };
   return { handler: createPublicReleaseDeployment({ database, owner }), owner, select };

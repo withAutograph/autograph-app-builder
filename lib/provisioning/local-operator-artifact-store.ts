@@ -214,8 +214,10 @@ const scanFrames = async <Frame extends { callDigest: string; sequence: string }
   return { frames, latest, matched, selected };
 };
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
 const scanSelections = (directory: string, callDigest?: string, includeHistory = false) =>
   scanFrames(directory, selectionFrameSchema, callDigest, includeHistory);
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
 const scanDestinations = (directory: string, callDigest?: string, includeHistory = false) =>
   scanFrames(
     directory,

@@ -22,6 +22,7 @@ const fixture = (response: Response = Response.json(metadata())) => {
     readInstallationToken,
     signal: controller.signal,
   };
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   return { controller, fetch, input, run: () => inspectNativeTargetVercelAuthorization(input) };
 };
 

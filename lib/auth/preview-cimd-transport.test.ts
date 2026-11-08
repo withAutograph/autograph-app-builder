@@ -15,7 +15,7 @@ const publicAddresses: LookupAddress[] = [
   { address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 },
 ];
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve this test double's existing promise and synchronous behavior. Preserve function declaration hoisting and initialization timing.
 function runLookup(options: LookupOptions) {
   const lookup = new EventTarget();
   let lookupAddress: string | LookupAddress[] | undefined;
@@ -160,6 +160,7 @@ describe("Preview CIMD transport", () => {
     const requestHttps = vi.fn();
     const fetchMetadata = createPreviewCimdTransport({
       requestHttps,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       resolveHostname: vi.fn(() => Promise.withResolvers<LookupAddress[]>().promise),
       timeoutSignal,
     });
@@ -179,6 +180,7 @@ describe("Preview CIMD transport", () => {
     const requestHttps = vi.fn();
     const fetchMetadata = createPreviewCimdTransport({
       requestHttps,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       resolveHostname: vi.fn(() => Promise.withResolvers<LookupAddress[]>().promise),
     });
 

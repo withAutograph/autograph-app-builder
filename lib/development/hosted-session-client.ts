@@ -164,6 +164,7 @@ export const connectHostedSession = async (input: {
       failPending();
     }
   });
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   const rpc = (method: string, params: JSONValue) =>
     new Promise<JSONValue | undefined>((resolve, reject) => {
       if (closed || terminated || child.exitCode !== null || child.killed) {
@@ -222,6 +223,7 @@ export const connectHostedSession = async (input: {
     await rm(directory, { recursive: true, force: true });
   };
   let closing: Promise<void> | undefined;
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   const close = () => {
     closing ??= closeChild();
     return closing;

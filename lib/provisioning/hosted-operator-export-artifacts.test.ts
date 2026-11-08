@@ -231,6 +231,7 @@ test("same-attempt completion is reconciled before reading source, including los
       worker: wire.worker,
     }),
   ).rejects.toThrow();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   data.source.readManifest = vi.fn(() => Promise.reject(new Error("must not reread")));
   const completion = await f.artifacts.publish({
     assertCurrent: f.current,

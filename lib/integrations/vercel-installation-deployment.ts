@@ -68,11 +68,12 @@ function deployment(environment: NodeJS.ProcessEnv | Record<string, string | und
       config,
       emulation,
       fetch: emulation
-        ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+        ? // oxlint-disable-next-line typescript/promise-function-async, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing promise and synchronous exception behavior. Preserve the existing type assertion at this boundary.
           (resource, init) => providerEmulationFetch(resource as string | URL, init, emulation)
         : undefined,
       installations,
       membership: {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         isActiveMember: (authority) => membership.isActiveMember(authority),
       },
       states: createPostgresVercelAuthorizationStateStore(database),

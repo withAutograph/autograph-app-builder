@@ -592,6 +592,7 @@ export const createPublicReleaseVercelBindingSnapshot =
     fetch?: typeof fetch;
   }) =>
   async (scope: PublicReleaseVercelBindingSnapshotScope) => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     const check = () => assertSnapshotCurrent(scope.signal, deps.assertCurrent);
     const read = async (route: string) => {
       await check();
@@ -703,6 +704,7 @@ export const createPublicReleaseVercelActiveDeploymentSnapshot =
       productionBranch: string;
     },
   ): Promise<{ priorActiveDeploymentId: string | null }> => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     const check = () => assertSnapshotCurrent(scope.signal, deps.assertCurrent);
     await check();
     const credential = await deps.readCredential();

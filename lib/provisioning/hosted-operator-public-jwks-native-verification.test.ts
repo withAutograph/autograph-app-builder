@@ -153,6 +153,7 @@ describe("public profile with the actual native OIDC signature and claim verifie
     const profile = readManagedRuntimePublicProfile({
       appId: "orchard",
       publicOrigin: origin,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       readPublicJwks: (url) => reader(context, url),
     });
     if (variant === "valid") {

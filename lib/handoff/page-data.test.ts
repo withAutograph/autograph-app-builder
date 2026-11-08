@@ -40,8 +40,10 @@ const dependencies: BuilderHandoffPageDependencies = {
   // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous Cursor client loader contract.
   loadCursorClient: async () => ({ isCursorClientReady: mocks.cursorReady }),
 };
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const getBuilderHandoffPageData = (input: Parameters<typeof getPageData>[0]) =>
   getPageData(input, dependencies);
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const findAuthenticatedPendingBuilderHandoff = (input: Parameters<typeof findPending>[0]) =>
   findPending(input, dependencies);
 const getBuilderHandoffStatusDeploymentHandler = (

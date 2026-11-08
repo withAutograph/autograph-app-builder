@@ -104,6 +104,7 @@ const fixture = () => {
   let current = structuredClone(owner);
   let receipt: NativeTargetOnboardingApproval | null = null;
   const assertPlanOrigin = vi.fn(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     (_owner: NativeTargetCurrentOwner, candidate: NativeTargetOnboardingPlan) => {
       if (candidate.origin.release.artifactRef !== "artifact-original") {
         throw new Error("captured-release-mismatch");
@@ -115,6 +116,7 @@ const fixture = () => {
     store,
     now: () => new Date(time),
     assertPlanOrigin,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     authorize: (_inv: string, appId: string) => {
       if (
         appId !== "requests-app" ||
@@ -124,8 +126,10 @@ const fixture = () => {
       }
       return Promise.resolve(structuredClone(current));
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     readApproval: () => Promise.resolve(receipt),
   });
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const read = () => store.read({ appId: "requests-app", authority });
   return {
     approve: (

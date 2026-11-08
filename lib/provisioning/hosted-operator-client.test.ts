@@ -113,21 +113,25 @@ describe("closed outbound operator action diagnostics", () => {
   it.each([
     [
       "plan",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       (client: ReturnType<typeof createHostedOperatorClient>) =>
         client.request({ action: "plan", operation: "prepare", selection }),
     ],
     [
       "bindings",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       (client: ReturnType<typeof createHostedOperatorClient>) =>
         client.bindings({ action: "bindings", selection, operationRef }),
     ],
     [
       "auth-identity-input",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       (client: ReturnType<typeof createHostedOperatorClient>) =>
         client.authIdentityInput({ action: "auth-identity-input", selection, operationRef }),
     ],
     [
       "neon-authorization",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       (client: ReturnType<typeof createHostedOperatorClient>) =>
         client.neonAuthorization({
           action: "neon-authorization",
@@ -137,6 +141,7 @@ describe("closed outbound operator action diagnostics", () => {
     ],
     [
       "resolve-preview-target",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       (client: ReturnType<typeof createHostedOperatorClient>) =>
         client.resolvePreviewTarget({
           action: "resolve-preview-target",

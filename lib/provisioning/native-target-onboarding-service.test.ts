@@ -124,6 +124,7 @@ const fixture = (workloadAuthorized = true, selectedPlan = plan) => {
   let existingConfiguredTarget = false;
   let currentOwner = structuredClone(current);
   const events: string[] = [];
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const authorize = vi.fn(() => Promise.resolve(structuredClone(currentOwner)));
   const createProject = vi.fn(
     async (input: {
@@ -148,11 +149,13 @@ const fixture = (workloadAuthorized = true, selectedPlan = plan) => {
   const approvals: { authorization: string | null; signal: AbortSignal }[] = [];
   const dependencies: NativeTargetOnboardingServiceDependencies = {
     store,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     verifyWorkload: () => {
       events.push("workload");
       return workloadAuthorized ? Promise.resolve() : Promise.reject(new Error("unauthorized"));
     },
     authorize,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     readCapturedRelease: () =>
       Promise.resolve({
         release: fixturePlan.origin.release,
@@ -178,10 +181,12 @@ const fixture = (workloadAuthorized = true, selectedPlan = plan) => {
           },
         },
       }),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     resolvePlan: () =>
       existingConfiguredTarget
         ? Promise.reject(new NativeTargetExistingConfiguredTargetError())
         : Promise.resolve(fixturePlan),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     readApproval: (_owner, _record, _callId, workload) => {
       approvals.push(workload);
       return Promise.resolve(
@@ -337,6 +342,7 @@ describe("protected native target onboarding service", () => {
 
   it("discards authorization observations if current owner changes during the GET", async () => {
     const { f, create, retained } = await permissionRejected();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     f.dependencies.inspectProviderAuthorization = () => {
       f.changeOwner();
       return Promise.resolve({ status: "observed", statusCode: 200 });
@@ -349,6 +355,7 @@ describe("protected native target onboarding service", () => {
   it("does not return advisory evidence after caller cancellation", async () => {
     const { f, create, retained } = await permissionRejected();
     const controller = new AbortController();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     f.dependencies.inspectProviderAuthorization = () => {
       controller.abort(new Error("cancelled"));
       return Promise.resolve({ failure: "cancelled", status: "unavailable" });
@@ -369,7 +376,9 @@ describe("protected native target onboarding service", () => {
   it("discards observations when cancellation arrives during the final owner recheck", async () => {
     const { f, create, retained } = await permissionRejected();
     const controller = new AbortController();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     f.dependencies.inspectProviderAuthorization = () => {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       f.authorize.mockImplementation(() => {
         controller.abort(new Error("cancelled during owner recheck"));
         return Promise.resolve(structuredClone(current));
@@ -544,6 +553,7 @@ describe("protected retained native resource selection", () => {
     const f = fixture();
     const original = await f.planOnce();
     f.readCapturedRelease.mockClear();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     f.resolvePlan.mockImplementation((_owner, proposal, source) => {
       expect(proposal.resourceProfileId).toBe("isolated-development");
       expect(source.appSpecDigest).toBe(plan.origin.appSpecDigest);
@@ -717,6 +727,7 @@ describe("exact native preparation invocation approval", () => {
             await f.authorize();
           },
           historyOwner: owner.historyOwner,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           readHistory: (startIndex, onEvent) => {
             for (const event of history.slice(startIndex)) {
               onEvent(event);
@@ -804,6 +815,7 @@ describe("retired attempt preparation with immutable initial approval", () => {
             await f.authorize();
           },
           historyOwner: owner.historyOwner,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           readHistory: (start, observe) => {
             for (const event of history.slice(start)) {
               observe(event);
@@ -819,6 +831,7 @@ describe("retired attempt preparation with immutable initial approval", () => {
       };
       const registry = createNativeTargetOnboardingRegistry({
         store: f.store,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         authorize: () => f.authorize(),
         assertPlanOrigin: async () => {},
         readApproval: async (_owner, record) =>
@@ -1028,6 +1041,7 @@ describe("side-effect-free approval peek with an incomplete durable tail", () =>
           },
           historyOwner: owner.historyOwner,
           observation: {
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
             save: (next) => {
               writes += 1;
               saved = next;
@@ -1035,6 +1049,7 @@ describe("side-effect-free approval peek with an incomplete durable tail", () =>
             },
             state: saved,
           },
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           readHistory: (start, onEvent) => {
             for (const event of history.slice(start)) {
               onEvent(event);
@@ -1121,6 +1136,7 @@ describe("side-effect-free approval peek with an incomplete durable tail", () =>
     const abort = new AbortController();
     const cancelled = new Error("caller cancelled");
     abort.abort(cancelled);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     f.dependencies.readApproval = () => Promise.reject(new HostedSessionReadTimeoutError());
     await expect(
       f.send(
@@ -1137,6 +1153,7 @@ describe("side-effect-free approval peek with an incomplete durable tail", () =>
   it("keeps owner and exact registry checks outside the incomplete-history fallback", async () => {
     const f = fixture();
     const planned = await f.planOnce();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const read = vi.fn(() => Promise.reject(new HostedSessionReadTimeoutError()));
     f.dependencies.readApproval = read;
     await expect(

@@ -210,7 +210,9 @@ export async function executeBuilderProvisioning(input: {
             fetch: input.dependencies.fetch,
             installation,
             now,
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
             persistAbsent: (candidate) => persist("absent", candidate),
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
             persistCandidate: (candidate) => persist("candidate", candidate),
             persistedAbsentCandidates: current.record.operations.github.absentCandidates,
             persistedCandidates: current.record.operations.github.candidates,
@@ -263,7 +265,9 @@ export async function executeBuilderProvisioning(input: {
           github: current.record.response.github,
           githubSelected: request.providers.githubInstallationId !== undefined,
           installation: credential.binding,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           persistAbsent: (candidate) => persist("absent", candidate),
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
           persistCandidate: (candidate) => persist("candidate", candidate),
           persistedAbsentCandidates: current.record.operations.vercel.absentCandidates,
           persistedCandidates: current.record.operations.vercel.candidates,

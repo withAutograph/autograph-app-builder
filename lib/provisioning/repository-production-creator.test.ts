@@ -381,6 +381,7 @@ describe("Production creator continuation", () => {
       reservePrivateState: async () => {
         throw new Error("must retain credentials");
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       prepareCreatorIdentity: (context) => h.bridge.prepare(context),
       readCreatorIdentity: async (row) => {
         const proof = await h.bridge.readCreator(row);

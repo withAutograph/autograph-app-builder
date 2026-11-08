@@ -92,7 +92,7 @@ describe("development MCP readiness", () => {
     const requestedWaits: number[] = [];
     let elapsedMs = 0;
     const now = vi.spyOn(Date, "now").mockImplementation(() => elapsedMs);
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+    // oxlint-disable-next-line typescript/promise-function-async, anti-slop/no-unknown-parameters -- Preserve this test double's existing promise and synchronous behavior. Preserve the existing unknown input contract.
     const deterministicDelay = (ms: number, value?: unknown) => {
       requestedWaits.push(ms);
       elapsedMs += ms;
@@ -138,7 +138,7 @@ describe("development MCP readiness", () => {
     let elapsedMs = 0;
     const requestedWaits: number[] = [];
     const now = vi.spyOn(Date, "now").mockImplementation(() => elapsedMs);
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+    // oxlint-disable-next-line typescript/promise-function-async, anti-slop/no-unknown-parameters -- Preserve this test double's existing promise and synchronous behavior. Preserve the existing unknown input contract.
     const deterministicDelay = (ms: number, value?: unknown) => {
       requestedWaits.push(ms);
       elapsedMs += ms;
