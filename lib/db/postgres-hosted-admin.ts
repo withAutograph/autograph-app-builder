@@ -127,6 +127,7 @@ async function deleteExpired(
     )
     .returning({ operationId: agentOperations.operationId });
 
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep administrative transaction operations in their established order.
   const sessions = await transaction
     .delete(agentSessions)
     .where(
@@ -203,6 +204,7 @@ async function deleteExpired(
     .returning({
       stateDigest: githubInstallationAuthorizationStates.stateDigest,
     });
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep administrative transaction operations in their established order.
   const vercelStates = await transaction
     .delete(vercelInstallationAuthorizationStates)
     .where(
@@ -218,6 +220,7 @@ async function deleteExpired(
     .delete(builderProvisioningJournals)
     .where(provisioningJournalRetentionPredicate(input))
     .returning({ requestId: builderProvisioningJournals.requestId });
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep administrative transaction operations in their established order.
   const githubCredentials = await transaction
     .delete(hostedGitHubUserCredentials)
     .where(
@@ -267,6 +270,7 @@ export function createPostgresHostedAdminStore(database: Database): HostedAdminS
           .delete(agentOperations)
           .where(operationTenantPredicate(authority))
           .returning({ operationId: agentOperations.operationId });
+        // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep administrative transaction operations in their established order.
         const sessions = await transaction
           .delete(agentSessions)
           .where(sessionTenantPredicate(authority))
@@ -283,6 +287,7 @@ export function createPostgresHostedAdminStore(database: Database): HostedAdminS
           .returning({
             installationId: hostedGitHubInstallations.installationId,
           });
+        // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep administrative transaction operations in their established order.
         const githubBindings = await transaction
           .delete(hostedGitHubInstallationBindings)
           .where(integrationTenantPredicate(hostedGitHubInstallationBindings, authority))
@@ -295,6 +300,7 @@ export function createPostgresHostedAdminStore(database: Database): HostedAdminS
           .returning({
             providerUserId: hostedGitHubUserCredentials.providerUserId,
           });
+        // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep administrative transaction operations in their established order.
         const provisioningJournals = await transaction
           .delete(builderProvisioningJournals)
           .where(
@@ -310,6 +316,7 @@ export function createPostgresHostedAdminStore(database: Database): HostedAdminS
           .returning({
             installationId: hostedVercelInstallations.installationId,
           });
+        // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep administrative transaction operations in their established order.
         const githubStates = await transaction
           .delete(githubInstallationAuthorizationStates)
           .where(integrationTenantPredicate(githubInstallationAuthorizationStates, authority))
@@ -322,6 +329,7 @@ export function createPostgresHostedAdminStore(database: Database): HostedAdminS
           .returning({
             stateDigest: vercelInstallationAuthorizationStates.stateDigest,
           });
+        // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep administrative transaction operations in their established order.
         const memberships = await transaction
           .delete(hostedWorkspaceMemberships)
           .where(membershipPredicate(authority))

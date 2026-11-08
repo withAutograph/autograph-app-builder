@@ -35,7 +35,7 @@ async function makeDevelopmentWorkAreaWritable(
       if (preserveRuntime && (entry === ".eve" || entry === "node_modules")) {
         continue;
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Update each work-area entry in order.
       await makeDevelopmentWorkAreaWritable(nodePath.join(path, entry), preserveRuntime);
     }
     return;

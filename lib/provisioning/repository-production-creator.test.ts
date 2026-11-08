@@ -89,7 +89,9 @@ const harness = (
       effect: "creator-access",
       assertCurrent: assertAuthorized,
       checkpoint: async (value) => {
-        if (revision !== row.revision) throw new Error("concurrent journal update");
+        if (revision !== row.revision) {
+          throw new Error("concurrent journal update");
+        }
         row = {
           ...row,
           revision: row.revision + 1,
@@ -104,11 +106,15 @@ const harness = (
       _row: RepositoryProductionRow,
       run: (assertCurrent: () => Promise<void>) => Promise<T>,
     ) => {
-      if (completionBusy) throw new Error("completion busy");
+      if (completionBusy) {
+        throw new Error("completion busy");
+      }
       completionHeld = true;
       try {
         return await run(async () => {
-          if (!completionHeld) throw new Error("completion lease lost");
+          if (!completionHeld) {
+            throw new Error("completion lease lost");
+          }
           completionFenceChecks += 1;
           await assertAuthorized();
         });
@@ -184,7 +190,9 @@ const harness = (
     readCurrent: async () => row,
     readInvitation: async (saved) => {
       invitationReads += 1;
-      if (unknownRead) throw new Error("unavailable Auth read");
+      if (unknownRead) {
+        throw new Error("unavailable Auth read");
+      }
       return saved.operationRef === row.operationRef
         ? invitation
         : (options.candidates?.find(
@@ -211,7 +219,9 @@ const harness = (
     },
     row: () => row,
     compareAndSet: async (before: RepositoryProductionRow, record: RepositoryProductionRecord) => {
-      if (before.revision !== row.revision) return;
+      if (before.revision !== row.revision) {
+        return;
+      }
       row = { ...row, revision: row.revision + 1, record: structuredClone(record) };
       return structuredClone(row);
     },
@@ -376,7 +386,9 @@ describe("Production creator continuation", () => {
         throw new Error("must wait for the real Auth session");
       },
       reconcile: async ({ effect }) => {
-        if (effect !== "allocate-storage") throw new Error("must not query uninstalled schema");
+        if (effect !== "allocate-storage") {
+          throw new Error("must not query uninstalled schema");
+        }
         return { state: "applied", receipt: { retained: true } };
       },
     });
@@ -415,7 +427,9 @@ describe("Production creator continuation", () => {
         },
         update: async (before, record) => {
           const id = record.command.clientRequestId;
-          if (rows.get(id)?.revision !== before.revision) return;
+          if (rows.get(id)?.revision !== before.revision) {
+            return;
+          }
           const saved = { record, revision: before.revision + 1 };
           rows.set(id, saved);
           return saved;
@@ -424,7 +438,9 @@ describe("Production creator continuation", () => {
         findInvitation: async () => undefined,
       },
       execute: async (_scope, command, effect) => {
-        if (command.action !== "choose-creator-account") throw new Error("unexpected action");
+        if (command.action !== "choose-creator-account") {
+          throw new Error("unexpected action");
+        }
         await h.bridge.chooseRecipient(
           { ...h.context(), assertCurrent: effect.assertCurrent },
           command.email,
@@ -541,10 +557,18 @@ describe("Production creator continuation", () => {
     async (state) => {
       const h = harness();
       await h.bridge.prepare(h.context());
-      if (state !== "invitation") h.absentLegacy();
-      if (state === "actor") h.bindActor();
-      if (state === "grant") h.completeCreator();
-      if (state === "unknown") h.unknownRead();
+      if (state !== "invitation") {
+        h.absentLegacy();
+      }
+      if (state === "actor") {
+        h.bindActor();
+      }
+      if (state === "grant") {
+        h.completeCreator();
+      }
+      if (state === "unknown") {
+        h.unknownRead();
+      }
       const before = structuredClone(h.row());
       await expect(
         h.bridge.chooseRecipient(h.context(), "other@example.com", randomUUID()),

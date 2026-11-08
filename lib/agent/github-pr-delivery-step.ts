@@ -141,6 +141,7 @@ export async function approveGitHubPrDelivery(
   "use step";
   // oxlint-disable-next-line react-doctor/async-parallel -- Preserve module initialization and failure order before approval.
   const { appBuilderWorkflowState } = await import("./workflow-state");
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep publication and approval operations in their established order.
   const { draftReconciliationState } = await import("./draft-reconciliation-state");
   const { resolveGitHubPrDeliverySubject } = await import("./github-pr-delivery-subject");
   // Eve binds this approval to the invoking session and this exact tool call.

@@ -112,6 +112,7 @@ export function preparedProviderFixture(input: {
   const vercelToken = () => `mock_server_vercel_token_${credentialRevision}`;
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   const githubHttp = vi.fn<typeof fetch>(async (request, init) => {
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
     const url = new URL(String(request));
     expect(url.origin).toBe("https://api.github.com");
     const headers = new Headers(init?.headers);
@@ -121,6 +122,7 @@ export function preparedProviderFixture(input: {
       expect(headers.get("authorization")).toMatch(/^bearer ey/iu);
       if (url.pathname.endsWith("/access_tokens")) {
         expect(init?.method).toBe("POST");
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
         const body = JSON.parse(String(init?.body));
         expect(Object.values(body.permissions).every((permission) => permission === "read")).toBe(
           true,
@@ -168,6 +170,7 @@ export function preparedProviderFixture(input: {
   });
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   const vercelHttp = vi.fn<typeof fetch>(async (request, init) => {
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
     expect(String(request)).toBe(
       "https://api.vercel.com/v9/projects/prj_prepared?teamId=team_prepared",
     );

@@ -159,11 +159,15 @@ export const completeRepositoryProductionInvitation = async (input: {
 }): Promise<RepositoryProductionCompletion> => {
   try {
     const result = await input.creator();
-    if (result !== "not-owned") return result;
+    if (result !== "not-owned") {
+      return result;
+    }
     await input.invitee();
     return "ready";
   } catch (error) {
-    if (error instanceof PhysicalResourceLeaseBusyError) return "pending";
+    if (error instanceof PhysicalResourceLeaseBusyError) {
+      return "pending";
+    }
     throw error;
   }
 };
@@ -315,8 +319,9 @@ export const createRepositoryProductionNativeHandler =
                 },
         };
         const existing = await store.read(scope);
-        if (existing?.record.intent.creatorEmail !== undefined)
+        if (existing?.record.intent.creatorEmail !== undefined) {
           intent.creatorEmail = existing.record.intent.creatorEmail;
+        }
         const result = {
           assertCurrentOwner,
           capture,
@@ -823,7 +828,9 @@ export const createRepositoryProductionNativeHandler =
           },
           chooseCreatorAccount: async (scope, email, effect) => {
             const row = await store.read(scope);
-            if (!row) throw new Error("repository_production_setup_required");
+            if (!row) {
+              throw new Error("repository_production_setup_required");
+            }
             try {
               await creator.chooseRecipient(
                 {
@@ -848,8 +855,9 @@ export const createRepositoryProductionNativeHandler =
                 effect.operationRef,
               );
             } catch (error) {
-              if (error instanceof RepositoryProductionCreatorRecipientLockedError)
+              if (error instanceof RepositoryProductionCreatorRecipientLockedError) {
                 return "rejected";
+              }
               throw error;
             }
             await setup(scope, effect.assertCurrent).prepare(scope, row.record.intent);
@@ -887,12 +895,15 @@ export const createRepositoryProductionNativeHandler =
         found: Awaited<ReturnType<typeof resolve>>,
         creatorEmail?: string,
       ) => {
-        if (creatorEmail === undefined) return;
+        if (creatorEmail === undefined) {
+          return;
+        }
         const saved = await store.read(found.scope);
         const status = saved ? await creator.describe(saved) : undefined;
         // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Only explicit account-choice permission permits changing the creator recipient.
-        if (status && status.email !== creatorEmail && status.canChooseAccount !== true)
+        if (status && status.email !== creatorEmail && status.canChooseAccount !== true) {
           throw new Error("repository_production_creator_recipient_locked");
+        }
         found.intent = { ...found.intent, creatorEmail };
       };
       const handler = createRepositoryProductionHandler({

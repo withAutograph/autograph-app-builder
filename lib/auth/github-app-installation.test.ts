@@ -158,6 +158,7 @@ function successfulFetch(
 ) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   return vi.fn<typeof fetch>(async (resource, init) => {
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
     const url = String(resource);
     seen.push({ init, url });
     if (url === "https://github.com/login/oauth/access_token") {
@@ -275,10 +276,12 @@ describe("public GitHub App installation authorization", () => {
       "https://api.github.com/user",
       "https://api.github.com/user/installations?per_page=100&page=1",
     ]);
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
     expect(JSON.parse(String(requests[0]?.init?.body))).toMatchObject({
       client_secret: config.clientSecret,
       code_verifier: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/u),
     });
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve header coercion in the credential-leak assertion.
     expect(String(requests[1]?.init?.headers)).not.toContain("github-user-token-sentinel-value");
   });
 
@@ -315,6 +318,7 @@ describe("public GitHub App installation authorization", () => {
     const requests: string[] = [];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (resource) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = String(resource);
       requests.push(url);
       if (url.endsWith("/login/oauth/access_token")) {
@@ -907,7 +911,9 @@ describe("public GitHub App installation authorization", () => {
     const fallback = successfulFetch(requests);
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (resource, init) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       if (String(resource).includes("access_token")) {
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
         requests.push({ init, url: String(resource) });
         return Response.json({
           access_token: "github-user-token-sentinel-value",
@@ -983,6 +989,7 @@ describe("public GitHub App installation authorization", () => {
   it("requires selected, active, exact-app installation identity", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (resource) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = String(resource);
       if (url.includes("access_token")) {
         return Response.json({

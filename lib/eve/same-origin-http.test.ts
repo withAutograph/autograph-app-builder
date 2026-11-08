@@ -698,6 +698,7 @@ describe("same-origin canonical Eve transport", () => {
     const timeout = vi.spyOn(AbortSignal, "timeout");
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning fetch test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       String(url).includes("/stream?") ? stream() : accepted(),
     );
     const transport = createSameOriginEveTransport({
@@ -726,9 +727,11 @@ describe("same-origin canonical Eve transport", () => {
     const bodies: unknown[] = [];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       if (String(url).includes("/stream?")) {
         return stream();
       }
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
       bodies.push(JSON.parse(String(init?.body)));
       return accepted();
     });
@@ -797,7 +800,9 @@ describe("same-origin canonical Eve transport", () => {
     };
     // oxlint-disable-next-line eslint/require-await -- The transport test double follows fetch's async contract.
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       if (String(url).endsWith("/eve/v1/session")) {
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
         expect(JSON.parse(String(init?.body))).toMatchObject({
           operationId: recovery.operationId,
           recovery,
@@ -823,6 +828,7 @@ describe("same-origin canonical Eve transport", () => {
     await expect(
       transport.activateRecovery?.({ operationId: recovery.operationId, principal, recovery }),
     ).resolves.toEqual(recoveryBinding);
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
     expect(JSON.parse(String(fetchImplementation.mock.calls[1]?.[1]?.body))).toMatchObject({
       recovery,
       recoveryPhase: "activate",
@@ -836,6 +842,7 @@ describe("same-origin canonical Eve transport", () => {
         principal,
       }),
     ).resolves.toBeUndefined();
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
     expect(fetchImplementation.mock.calls.map(([url]) => String(url))).toEqual([
       "https://builder.example.test/eve/v1/session",
       "https://builder.example.test/eve/v1/session",
@@ -926,9 +933,11 @@ describe("same-origin canonical Eve transport", () => {
       expect(init?.redirect).toBe("manual");
       expect(headers.get("authorization")).toBe("Bearer project-oidc-token");
       expect(headers.get("x-vercel-trusted-oidc-idp-token")).toBe("project-oidc-token");
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       if (String(url).includes("/stream?")) {
         return stream();
       }
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
       const body: unknown = JSON.parse(String(init?.body));
       expect(body).toMatchObject({
         forwardedPrincipal: {
@@ -980,6 +989,7 @@ describe("same-origin canonical Eve transport", () => {
     const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
     // oxlint-disable-next-line eslint/require-await -- The fetch double follows the async fetch contract.
     const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       String(url).includes("/stream?") ? stream([]) : accepted("wrun_1", false),
     );
     try {
@@ -1000,6 +1010,7 @@ describe("same-origin canonical Eve transport", () => {
       controller.abort();
       await rejected;
       expect(
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
         fetchImplementation.mock.calls.filter(([url]) => String(url).endsWith("/eve/v1/session")),
       ).toHaveLength(1);
     } finally {
@@ -1028,6 +1039,7 @@ describe("same-origin canonical Eve transport", () => {
     );
     // oxlint-disable-next-line eslint/require-await -- The fetch double follows the async fetch contract.
     const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       String(url).includes("/stream?") ? startup : accepted("wrun_1", false),
     );
     await expect(
@@ -1047,7 +1059,9 @@ describe("same-origin canonical Eve transport", () => {
     let retry = false;
     // oxlint-disable-next-line eslint/require-await -- The fetch double follows the async fetch contract.
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       if (String(url).endsWith("/eve/v1/session")) {
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
         createBodies.push(JSON.parse(String(init?.body)));
         return accepted(retry ? "wrun_owner" : "wrun_loser", false);
       }
@@ -1199,6 +1213,7 @@ describe("same-origin canonical Eve transport", () => {
     try {
       // oxlint-disable-next-line eslint/require-await -- Preserve the fetch promise contract in this test double.
       const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
         String(url).includes("/stream?") ? stream(pendingApprovalEvents("approval_1")) : accepted(),
       );
       const transport = createSameOriginEveTransport({
@@ -1226,9 +1241,11 @@ describe("same-origin canonical Eve transport", () => {
     const bodies: unknown[] = [];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       if (String(url).includes("/stream?")) {
         return stream();
       }
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
       bodies.push(JSON.parse(String(init?.body)));
       return accepted();
     });
@@ -1289,6 +1306,7 @@ describe("same-origin canonical Eve transport", () => {
     let streamReads = 0;
     // oxlint-disable-next-line eslint/require-await -- Preserve the fetch promise contract.
     const fetchImplementation = vi.fn<typeof fetch>(async (url) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       if (String(url).includes("/stream?")) {
         streamReads += 1;
         return stream(streamReads === 1 ? pending : settled);
@@ -1344,10 +1362,12 @@ describe("same-origin canonical Eve transport", () => {
     let streamReads = 0;
     // oxlint-disable-next-line eslint/require-await -- Preserve the fetch promise contract.
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       if (String(url).includes("/stream?")) {
         streamReads += 1;
         return stream(streamReads < 3 ? pending : settled);
       }
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
       expect(JSON.parse(String(init?.body))).toMatchObject({
         inputResponses: [{ optionId: "cancel", requestId }],
       });
@@ -1391,7 +1411,9 @@ describe("same-origin canonical Eve transport", () => {
     let streamReads = 0;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       if (String(url).endsWith("/cancel")) {
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
         expect(JSON.parse(String(init?.body))).toEqual({ turnId: "turn_1" });
         return Response.json(
           { ok: true, sessionId: "wrun_1", status: "accepted" },
@@ -1420,7 +1442,9 @@ describe("same-origin canonical Eve transport", () => {
     let streamReads = 0;
     // oxlint-disable-next-line eslint/require-await -- Preserve the fetch promise contract.
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       if (String(url).endsWith("/cancel")) {
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
         expect(JSON.parse(String(init?.body))).toEqual({ turnId: "turn_1" });
         return Response.json(
           { ok: true, sessionId: "wrun_1", status: "accepted" },
@@ -1429,6 +1453,7 @@ describe("same-origin canonical Eve transport", () => {
       }
       streamReads += 1;
       const events = streamReads === 1 ? active : settled;
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const start = Number(new URL(String(url)).searchParams.get("startIndex"));
       return streamFromIndex(events, start);
     });
@@ -1451,9 +1476,11 @@ describe("same-origin canonical Eve transport", () => {
       const active = [{ data: { turnId: "turn_1" }, type: "step.started" }];
       // oxlint-disable-next-line eslint/require-await -- Preserve the fetch promise contract.
       const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
         String(url).endsWith("/cancel")
           ? Response.json({ ok: true, sessionId: "wrun_1", status: "accepted" }, { status: 202 })
-          : streamFromIndex(active, Number(new URL(String(url)).searchParams.get("startIndex"))),
+          : // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
+            streamFromIndex(active, Number(new URL(String(url)).searchParams.get("startIndex"))),
       );
       const transport = createSameOriginEveTransport({
         config,
@@ -1489,6 +1516,7 @@ describe("same-origin canonical Eve transport", () => {
     let streamReads = 0;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       if (String(url).endsWith("/cancel")) {
         return Response.json(
           { ok: true, sessionId: "wrun_1", status: "accepted" },
@@ -1543,6 +1571,7 @@ describe("same-origin canonical Eve transport", () => {
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const noActiveFetch = vi.fn<typeof fetch>(async (url) =>
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       String(url).endsWith("/cancel")
         ? Response.json({ ok: true, status: "no_active_turn" })
         : stream(waiting),
@@ -1559,6 +1588,7 @@ describe("same-origin canonical Eve transport", () => {
   it("rejects inconsistent canonical cancellation replies", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       String(url).endsWith("/cancel")
         ? Response.json({ ok: true, status: "no_active_turn" }, { status: 202 })
         : stream([{ data: { turnId: "turn_1" }, type: "step.started" }]),
@@ -2218,6 +2248,7 @@ describe("explicit cold-read catch-up frontier", () => {
     ];
     const resumed = await observeSameOriginEveStream({
       ...catchupInput(async (url) => {
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
         expect(String(url)).toContain("startIndex=1&includeTailIndex=1");
         return await Promise.resolve(
           pinnedResponse(`${rest.map((event) => JSON.stringify(event)).join("\n")}\n`, 2),
@@ -2347,6 +2378,7 @@ describe("response settlement from owner-checked complete native preflight", () 
         postCount += 1;
         return accepted();
       }
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const next = Number(new URL(String(url)).searchParams.get("startIndex"));
       paths.push(next);
       const event = deltas[paths.length - 1];
@@ -2447,8 +2479,10 @@ it.each(["turn.cancelled", "turn.completed", "turn.failed"] as const)(
     let settlementReads = 0;
     // oxlint-disable-next-line eslint/require-await -- Preserve the terminal fetch contract.
     const fetchImplementation = vi.fn<typeof fetch>(async (request, init) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = new URL(String(request));
       if (url.pathname.endsWith("/cancel")) {
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
         expect(JSON.parse(String(init?.body))).toEqual({ turnId: "turn_1" });
         cancelledPosted = true;
         return Response.json(
@@ -2533,6 +2567,7 @@ it.each(["changed-turn", "no-active-turn"] as const)(
       }),
     ).rejects.toBeInstanceOf(SubmissionRejectedBeforeDispatchError);
     expect(fetchImplementation).toHaveBeenCalledOnce();
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
     expect(String(fetchImplementation.mock.calls[0]?.[0])).toContain("startIndex=1");
   },
 );
@@ -2544,6 +2579,7 @@ it("does not treat a newer turn's waiting boundary as settlement of the original
   const starts: number[] = [];
   // oxlint-disable-next-line eslint/require-await -- Preserve the terminal stream fetch contract.
   const fetchImplementation = vi.fn<typeof fetch>(async (request) => {
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
     const url = new URL(String(request));
     if (url.pathname.endsWith("/cancel")) {
       posted = true;
@@ -2582,6 +2618,7 @@ it("does not treat a newer turn's waiting boundary as settlement of the original
   expect(starts).toEqual([1, 1, 2]);
   expect(fetchImplementation).toHaveBeenCalledTimes(4);
   expect(
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
     fetchImplementation.mock.calls.filter(([request]) => String(request).endsWith("/cancel")),
   ).toHaveLength(1);
 });
@@ -2594,6 +2631,7 @@ it.each(["preguard", "accepted-settlement"] as const)(
     const readFailure = new Error("Canonical Eve durable-tail read failed");
     // oxlint-disable-next-line eslint/require-await -- Terminal fetch preserves the native HTTP boundary.
     const fetchImplementation = vi.fn<typeof fetch>(async (request) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       if (String(request).endsWith("/cancel")) {
         posted = true;
         return Response.json(
@@ -2626,6 +2664,7 @@ it.each(["preguard", "accepted-settlement"] as const)(
       );
     }
     expect(
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       fetchImplementation.mock.calls.filter(([request]) => String(request).endsWith("/cancel")),
     ).toHaveLength(stage === "preguard" ? 0 : 1);
     expect(fetchImplementation).toHaveBeenCalledTimes(stage === "preguard" ? 1 : 3);

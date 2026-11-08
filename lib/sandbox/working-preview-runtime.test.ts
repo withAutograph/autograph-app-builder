@@ -183,6 +183,7 @@ describe("shared working preview startup", () => {
         });
       }
       const fetcher = vi.fn<typeof fetch>((url) => {
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
         if (String(url).includes("/__autograph_preview_launch")) {
           return Promise.resolve(launchResponse());
         }
@@ -219,15 +220,14 @@ describe("shared working preview startup", () => {
       }
       return Promise.reject(Object.assign(new Error("missing"), { code: "ENOENT" }));
     });
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockImplementation((url) =>
-        Promise.resolve(
-          String(url).includes("/__autograph_preview_launch")
-            ? launchResponse()
-            : new Response("<main>Ready</main>", { headers: { "content-type": "text/html" } }),
-        ),
-      );
+    const fetcher = vi.fn<typeof fetch>().mockImplementation((url) =>
+      Promise.resolve(
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
+        String(url).includes("/__autograph_preview_launch")
+          ? launchResponse()
+          : new Response("<main>Ready</main>", { headers: { "content-type": "text/html" } }),
+      ),
+    );
     const result = await startWorkingPreview({ ...options, fetch: fetcher, probeTimeoutMs: 20 });
     expect(result.receipt.status).toBe("ready");
     expect(reads).toBe(2);
@@ -237,15 +237,14 @@ describe("shared working preview startup", () => {
 
   it("replaces a retained preview whose provider command no longer exists", async () => {
     const { options, provider } = setup();
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockImplementation((url) =>
-        Promise.resolve(
-          String(url).includes("/__autograph_preview_launch")
-            ? launchResponse()
-            : new Response("<main>Ready</main>", { headers: { "content-type": "text/html" } }),
-        ),
-      );
+    const fetcher = vi.fn<typeof fetch>().mockImplementation((url) =>
+      Promise.resolve(
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
+        String(url).includes("/__autograph_preview_launch")
+          ? launchResponse()
+          : new Response("<main>Ready</main>", { headers: { "content-type": "text/html" } }),
+      ),
+    );
     const previous = await startWorkingPreview({ ...options, fetch: fetcher });
     const missingCommand = new APIError(new Response("", { status: 404 }), {
       message: "command not found or has exited",
@@ -401,6 +400,7 @@ describe("safe interrupted startup diagnostics", () => {
     const { options } = setup();
     const fetcher = vi.fn<typeof fetch>((url) =>
       Promise.resolve(
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
         String(url).includes("/__autograph_preview_launch")
           ? launchResponse()
           : new Response("secret-response-body", {

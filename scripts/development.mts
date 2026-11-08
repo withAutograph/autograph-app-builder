@@ -117,6 +117,7 @@ function nextEnvironment(input: {
     NEXT_TELEMETRY_DISABLED: "1",
     NODE_ENV: "development" as const,
     PATH: `${nodePath.dirname(requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"))}:/usr/bin:/bin`,
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Preserve the inherited temporary directory and existing system fallback for the development child.
     TMPDIR: process.env.TMPDIR ?? "/tmp",
     TZ: process.env.TZ ?? "UTC",
     // Next's env loader preserves explicitly supplied values. Empty values

@@ -236,6 +236,7 @@ describe("prepared provider continuity", () => {
       authority,
       installationId: "icfg_1",
     });
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve fetch-argument conversion in this assertion.
     expect(request.mock.calls[0]?.[0].toString()).toBe(
       "https://api.vercel.com/v9/projects/prj_1?teamId=team_1",
     );
@@ -379,6 +380,7 @@ describe("prepared provider continuity", () => {
         readCredential: async () => credential,
       }),
     ).toMatchObject({ status: "ready" });
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve fetch-argument conversion in this assertion.
     expect(request.mock.calls[0]?.[0].toString()).toBe(
       "https://preview.vercel.app/api/emulate/vercel/v2/teams/team_1",
     );

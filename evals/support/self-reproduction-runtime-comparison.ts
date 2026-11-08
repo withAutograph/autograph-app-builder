@@ -70,7 +70,7 @@ export const runSandboxRuntimeComparison = async (input: {
   }
   for (const path of artifactPaths) {
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve partial artifacts individually
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Read each artifact in order while retaining partial results.
       const content = await input.session.readBinaryFile({ path: `${directory}/${path}` });
       if (content === null) {
         throw new Error("Evaluator artifact file is missing.");

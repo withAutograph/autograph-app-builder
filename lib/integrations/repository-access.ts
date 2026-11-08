@@ -232,7 +232,7 @@ export async function classifyGitHubRepositoryAccess(input: {
   let providerFailures = 0;
   for (const binding of active) {
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Inspect provider bindings in order.
       const provider = await input.providerFactory({
         authority,
         installation: binding,

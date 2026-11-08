@@ -63,6 +63,7 @@ const run = async (
     throw new Error("Missing server address");
   }
   const transport: typeof fetch = (url, options) => {
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
     const target = new URL(String(url));
     expect(target.origin).toBe("https://preview.test");
     expect(options?.redirect).toBe("manual");
@@ -232,6 +233,7 @@ it("validates the complete streamed read even when an early marker matches", asy
         );
       }
       if (options?.method === "POST") {
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
         const submitted: unknown = JSON.parse(String(options.body));
         if (typeof submitted !== "object" || submitted === null || !("value" in submitted)) {
           throw new Error("Invalid test request");

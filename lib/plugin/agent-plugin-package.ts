@@ -384,7 +384,7 @@ export const validateAgentPluginPackage = async ({
   const schemaRoot = path.resolve(repositoryRoot, "schemas/agent-plugins", SPEC_VERSION);
   const schemaDocuments: Record<string, JsonObject> = {};
   for (const [name, digest] of Object.entries(SCHEMA_DIGESTS)) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Read and verify schema documents in order.
     const bytes = await readFile(path.resolve(schemaRoot, name));
     const actual = createHash("sha256").update(bytes).digest("hex");
     if (actual !== digest) {
@@ -394,6 +394,7 @@ export const validateAgentPluginPackage = async ({
   }
 
   const plugin = await readJson(path.resolve(resolvedPluginRoot, PLUGIN_MANIFEST_FILENAME));
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep these operations in their established order.
   const mcp = await readJson(path.resolve(resolvedPluginRoot, "mcp.json"));
   const ajv = new Ajv2020({ allErrors: true, strict: false });
   const validatePlugin = ajv.compile<ValidatedPluginManifest>(

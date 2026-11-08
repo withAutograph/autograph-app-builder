@@ -141,6 +141,7 @@ export const createSemanticCaptureAdapter = (baseURL: string, side: "reference" 
         page.getByRole("button", { name: /build|create|continue|get started|retry|try again/iu }),
         page.getByRole("link", { name: /build|create|continue|get started|retry|try again/iu }),
       ]);
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep capture and workflow observations in their established order.
       const before = await signature(page);
       await capture();
       await recovery?.click();

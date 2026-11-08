@@ -66,6 +66,7 @@ function run(script: string, reportOnly = false) {
         HOME: process.env.HOME,
         NODE_ENV: "test",
         PATH: process.env.PATH,
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Forward the test environment temporary directory to the evaluator subprocess.
         TMPDIR: process.env.TMPDIR,
       },
       timeout: 30_000,
@@ -252,6 +253,7 @@ it("rejects default generation before creating output or launching setup", () =>
         HOME: process.env.HOME,
         NODE_ENV: "production",
         PATH: process.env.PATH,
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Forward the test environment temporary directory to the evaluator subprocess.
         TMPDIR: process.env.TMPDIR,
       },
       timeout: 30_000,

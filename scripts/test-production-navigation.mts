@@ -36,6 +36,7 @@ const environment: NodeJS.ProcessEnv = {
   NEXT_TELEMETRY_DISABLED: "1",
   NODE_ENV: "production",
   PATH: process.env.PATH,
+  // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Forward the temporary directory to the isolated navigation subprocess.
   TMPDIR: process.env.TMPDIR,
 };
 const scratch = await mkdtemp(path.join(tmpdir(), "autograph-navigation-"));

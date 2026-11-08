@@ -40,7 +40,9 @@ describe("trusted Node launcher", () => {
   it("forwards explicit assembled-test paths without admitting unrelated ambient credentials", () => {
     const environment: NodeJS.ProcessEnv = {
       ...process.env,
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise trusted launcher environment and argument handling.
       ARRUSTED_MANAGED_RUNTIME_TEST_ROOT: "/private/tmp/controlled-arrusted",
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise trusted launcher environment and argument handling.
       BUN_BINARY: "/private/tmp/controlled-bun",
       UNRELATED_AMBIENT_CREDENTIAL: "must-not-be-forwarded",
     };
@@ -487,6 +489,7 @@ describe("trusted Node launcher", () => {
       REPOSITORY_LOCAL_ROOTS: "ambient-must-not-authorize",
     };
     delete environment.NODE_OPTIONS;
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise trusted launcher environment and argument handling.
     const missing = spawnSync(localStart, ["/tmp/state", "/tmp/output"], {
       cwd: repositoryRoot,
       encoding: "utf-8",
@@ -496,6 +499,7 @@ describe("trusted Node launcher", () => {
     expect(missing.stdout).not.toContain("ambient-must-not-authorize");
     expect(missing.stderr).not.toContain("ambient-must-not-authorize");
 
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise trusted launcher environment and argument handling.
     const relative = spawnSync(localStart, ["/tmp/state", "/tmp/output", "relative/source"], {
       cwd: repositoryRoot,
       encoding: "utf-8",

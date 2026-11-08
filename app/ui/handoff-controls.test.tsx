@@ -308,6 +308,7 @@ describe("durable handoff controls", () => {
     const retry = renewal.action.mock.calls[1]?.[1] as { creationRequestId?: string };
     expect(first).toMatchObject({ handoffId: id });
     expect(first.creationRequestId).toBe(retry.creationRequestId);
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
     expect(request.mock.calls.every(([url]) => !String(url).includes("provision"))).toBe(true);
     expect(navigation.replace).toHaveBeenCalledWith(`/handoff/${renewedId}`);
     expect(open).not.toHaveBeenCalled();

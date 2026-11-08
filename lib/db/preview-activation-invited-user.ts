@@ -28,6 +28,7 @@ export const createInvitedUserProvisioner =
           password: string | null;
         }[]
       >`select id, issuer, account_id, provider_id, user_id, password from account where id = ${accountId} or (issuer = 'local:oauth:github' and account_id = ${input.githubAccountId}) for update`;
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep activation reads and operations in their established order.
       const memberships = await transaction<
         {
           active: boolean;

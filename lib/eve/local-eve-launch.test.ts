@@ -261,6 +261,7 @@ describe("closed local Eve launch", () => {
     ["static Vercel token", { VERCEL_TOKEN: "nope" }],
     ["static AI Gateway key", { AI_GATEWAY_API_KEY: "nope" }],
     ["Microsandbox image", { APP_BUILDER_SANDBOX_IMAGE: "latest" }],
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture value exercises sandbox environment filtering.
     ["Microsandbox home", { MSB_HOME: "/tmp/msb" }],
     ["wrong backend", { APP_BUILDER_SANDBOX_PROVIDER: "microsandbox" }],
     ["state recovery", { WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "1" }],

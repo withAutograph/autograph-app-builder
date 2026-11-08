@@ -456,7 +456,7 @@ export function SignUp({
 
       if (field.validate) {
         try {
-          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+          // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Validate fields in order and preserve the first failure.
           await field.validate(value);
         } catch (error) {
           toast.error(error instanceof Error ? error.message : String(error));

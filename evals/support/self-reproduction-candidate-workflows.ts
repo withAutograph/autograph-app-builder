@@ -159,6 +159,7 @@ export const exerciseCandidateBrowserWorkflows = async (
       await page.waitForLoadState("networkidle");
       await page.reload({ waitUntil: "networkidle" });
       const nameValue = await name.inputValue();
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep capture and workflow observations in their established order.
       const briefValue = await brief.inputValue();
       let draftDurability: boolean | null;
       if (

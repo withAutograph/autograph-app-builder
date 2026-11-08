@@ -440,7 +440,8 @@ export const createGitHubAppHttpProvider = (input: {
           body: record(response) ? response.data : undefined,
           requestId: requestId(
             record(response) && record(response.headers)
-              ? String(response.headers["x-github-request-id"] ?? "github")
+              ? // oxlint-disable-next-line typescript/no-base-to-string -- Preserve coercion of a provider-supplied request identifier.
+                String(response.headers["x-github-request-id"] ?? "github")
               : "github",
           ),
           status,
@@ -1692,6 +1693,7 @@ export const createGitHubAppHttpProvider = (input: {
     inspectHistoricalAppSource,
     async inspectInstallation({ requestedPermissions }) {
       const identity = await installation();
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep provider identity, authorization and API operations in their established order.
       const selectedRepositoryIds = await selectedRepositories(requestedPermissions);
       return {
         ...identity,
@@ -1741,6 +1743,7 @@ export const createGitHubAppHttpProvider = (input: {
         throw new Error("github-target-permissions-mismatch");
       }
       const identity = await installation();
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep provider identity, authorization and API operations in their established order.
       const accessToken = await token(requestedPermissions, [repositoryId]);
       const response = await github({
         authorization: accessToken,
@@ -2077,6 +2080,7 @@ export const createGitHubAppHttpProvider = (input: {
         method: "POST",
         path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/git/commits`,
       });
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep provider identity, authorization and API operations in their established order.
       const reference = await github({
         authorization: accessToken,
         expected: [200],
@@ -2217,6 +2221,7 @@ export const createGitHubAppHttpProvider = (input: {
         method: "POST",
         path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/git/commits`,
       });
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep provider identity, authorization and API operations in their established order.
       const reference = await github({
         authorization: accessToken,
         expected: [200],

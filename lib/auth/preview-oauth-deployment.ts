@@ -50,7 +50,8 @@ function getPreviewOAuthDeploymentRuntime(
         ? error.issues
             .map((issue) =>
               typeof issue === "object" && issue !== null && "path" in issue
-                ? String((issue as { path: unknown[] }).path[0] ?? "unknown")
+                ? // oxlint-disable-next-line typescript/no-base-to-string -- Preserve string coercion of arbitrary validation-path values.
+                  String((issue as { path: unknown[] }).path[0] ?? "unknown")
                 : "unknown",
             )
             .join(",")

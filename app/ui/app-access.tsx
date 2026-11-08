@@ -240,8 +240,11 @@ const CreatorAccountForm = ({
       className="space-y-3"
       onSubmit={(event) => {
         event.preventDefault();
-        if (disabled) return;
+        if (disabled) {
+          return;
+        }
         const selected = new FormData(event.currentTarget).get("email");
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve FormData value coercion before trimming the submitted email.
         onAction({ action: "choose-creator-account", email: String(selected ?? "").trim() });
       }}
     >

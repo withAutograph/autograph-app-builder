@@ -351,6 +351,7 @@ describe("public self-reproduction driver", () => {
     const output = mkdtempSync(path.join(tmpdir(), "public-start-recovery-"));
     const current = state();
     globalThis.fetch = async (_url, options) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
       const body = rpcRequestSchema.parse(JSON.parse(String(options?.body)));
       const result =
         body.method === "initialize"
@@ -437,6 +438,7 @@ describe("public self-reproduction driver", () => {
     const original = globalThis.fetch;
     const messages: { method: string }[] = [];
     globalThis.fetch = async (_url, options) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
       const body = rpcRequestSchema.parse(JSON.parse(String(options?.body)));
       messages.push(body);
       return new Response(
@@ -479,6 +481,7 @@ describe("public self-reproduction driver", () => {
     const headers: Headers[] = [];
     globalThis.fetch = async (_url, options) => {
       headers.push(new Headers(options?.headers));
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
       const body = rpcRequestSchema.parse(JSON.parse(String(options?.body)));
       return new Response(
         body.method === "notifications/initialized"
@@ -528,6 +531,7 @@ describe("public self-reproduction driver", () => {
     const records: unknown[] = [];
     const methods: string[] = [];
     globalThis.fetch = async (_url, options) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
       methods.push(rpcRequestSchema.parse(JSON.parse(String(options?.body))).method);
       return new Response(`Do not record ${token}`, { status: 401 });
     };

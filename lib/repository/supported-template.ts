@@ -719,6 +719,7 @@ export const resolveAllowedRepository = async function resolveAllowedRepository(
   input: string,
 ): Promise<string> {
   const candidate = await realpath(nodePath.resolve(input));
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep source and filesystem observations in their established order.
   const roots = await Promise.all(allowedRoots().map((root) => realpath(root)));
   if (!roots.some((root) => within(root, candidate))) {
     throw new Error("The repository path is outside REPOSITORY_LOCAL_ROOTS.");
@@ -900,7 +901,7 @@ const developmentWorkingTreeArchive = async function developmentWorkingTreeArchi
     const transfer = sandbox.writeFile({ content: archiveStream, path: sandboxSourceArchivePath });
     for (const path of paths) {
       if (!archiveProcess.stdin.write(`${path}\0`)) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Respect tar stdin backpressure.
+        // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Process the archive or source entries in order.
         await once(archiveProcess.stdin, "drain");
       }
     }
@@ -1056,6 +1057,7 @@ const readVerifiedPreparedSandboxBaseline = async function readVerifiedPreparedS
   record: PreparedSandboxWorkspace,
 ): Promise<PreparedSourceFile[]> {
   const files = await readPreparedSandboxSourceManifest(sandbox, record);
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep source and filesystem observations in their established order.
   const checksums = await sandbox.readTextFile({
     path: sandboxSourceChecksumsPath,
   });
@@ -1075,7 +1077,7 @@ const verifyPreparedSandboxFiles = async (
   }
   if (fixtureSandboxEnabled()) {
     for (const file of files) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Process the archive or source entries in order.
       const content = await sandbox.readBinaryFile({
         path: `repository/${file.path}`,
       });
@@ -1430,7 +1432,7 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
   }
   const sourceFiles: PreparedSourceFile[] = [];
   for (const entry of treeEntries) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Hash one source blob at a time.
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Process the archive or source entries in order.
     const fileDigest = await digestProcessStdout("git", [
       "-C",
       eligibility.sourcePath,

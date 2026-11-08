@@ -58,7 +58,7 @@ export function UserProfile({ className }: UserProfileProps) {
 
       if (field.validate) {
         try {
-          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+          // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Validate fields in order and preserve the first failure.
           await field.validate(value);
         } catch (error) {
           toast.error(error instanceof Error ? error.message : String(error));
@@ -159,6 +159,7 @@ export function UserProfile({ className }: UserProfileProps) {
               // Re-mount when the session value loads so the field's
               // uncontrolled `defaultValue` reflects the latest data.
               const key = `${field.name}:${
+                // oxlint-disable-next-line typescript/no-base-to-string -- Preserve coercion of arbitrary session field values in the remount key.
                 value instanceof Date ? value.toISOString() : String(value ?? "")
               }`;
 

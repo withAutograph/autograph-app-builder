@@ -195,7 +195,9 @@ describe("Builder-owned Production setup", () => {
     f.setIdentity(false);
     await f.service.prepare(scope, intent);
     const saved = f.read();
-    if (!saved) throw new Error("missing saved setup");
+    if (!saved) {
+      throw new Error("missing saved setup");
+    }
     const resource = structuredClone(saved.record.resource);
     const credentials = structuredClone(saved.record.privateState);
     saved.record.effects["install-schema"] = {
@@ -361,7 +363,9 @@ describe("Builder-owned Production setup", () => {
     f.setIdentity(false);
     await f.service.prepare(scope, intent);
     const current = f.read();
-    if (current === undefined) throw new Error("Setup fixture is missing");
+    if (current === undefined) {
+      throw new Error("Setup fixture is missing");
+    }
     await f.ports.store.compareAndSet(current, {
       ...current.record,
       effects: {

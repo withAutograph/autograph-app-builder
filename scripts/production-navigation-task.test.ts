@@ -30,6 +30,7 @@ printf '%s\\n' "$*" >> "$MISE_TEST_LOG"
       [
         path.resolve(import.meta.dirname, "../.config/mise/tasks/test/production-navigation"),
         "--json-report",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture report path exercises navigation task arguments.
         "/tmp/navigation.json",
       ],
       {

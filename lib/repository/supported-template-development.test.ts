@@ -93,6 +93,7 @@ describe("development Sandbox workspace verification", () => {
             exitCode: 0,
             stderr: "",
             stdout: JSON.stringify({
+              // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises repository configuration.
               realRepository: "/tmp/repository",
               realWorkspace: "/workspace",
               repositoryInput: "/workspace/repository",

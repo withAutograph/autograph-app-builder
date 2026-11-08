@@ -1494,6 +1494,7 @@ export const deriveFreshBootstrapProposal = async (input: {
     expected: input.expectedPrestate,
     protectedPaths,
   });
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep bootstrap identity and source observations in their established order.
   const files = await exactResultTree({
     capability,
     readOverlayFile: input.readOverlayFile,
@@ -1875,7 +1876,7 @@ const assertRawGitAuthority = async (
     nodePath.resolve(gitDirectory, "shallow"),
   ]) {
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Inspect repository paths in order.
       await lstat(forbidden);
       throw new Error("The fresh repository contains forbidden Git authority.");
     } catch (error: unknown) {
@@ -2045,7 +2046,7 @@ const rawWorktreeManifest = async (
         throw new Error("The fresh repository contains an unsafe raw nodePath.");
       }
       const absolute = nodePath.resolve(root, path);
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Inspect repository paths in order.
       const state = await lstat(absolute);
       if (
         state.isSymbolicLink() ||
@@ -2115,10 +2116,12 @@ const assertExactRepository = async (
   const gitDirectory = nodePath.resolve(root, ".git");
   await assertRawGitAuthority(proposal, root);
   const destinationIdentity = await identity(root);
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep bootstrap identity and source observations in their established order.
   const gitDirectoryIdentity = await identity(gitDirectory);
   const ref = `refs/heads/${proposal.repositoryIdentity.initialBranch}`;
   // oxlint-disable-next-line react-doctor/async-parallel -- Read the manifest before resolving Git identities.
   const rawManifest = await rawWorktreeManifest(root, proposal, options.allowClaimMarker === true);
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep bootstrap identity and source observations in their established order.
   const absoluteGitDirectory = await realpath(
     git(capability, root, ["rev-parse", gitAbsolutePathFormat, "--git-dir"]).trim(),
   );
@@ -2161,7 +2164,7 @@ const assertExactRepository = async (
       if (!entry.isDirectory()) {
         throw new Error("The fresh repository contains unexpected packed or object authority.");
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Inspect repository paths in order.
       const entries = await readdir(nodePath.resolve(objectDirectory, entry.name));
       if (entries.length !== 0) {
         throw new Error("The fresh repository contains unexpected packed or object authority.");
@@ -2206,7 +2209,7 @@ const assertExactRepository = async (
     nodePath.resolve(gitDirectory, "refs", "replace"),
   ]) {
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Inspect repository paths in order.
       await lstat(forbidden);
       throw new Error("The final repository contains forbidden Git authority.");
     } catch (error: unknown) {

@@ -869,6 +869,7 @@ const saveReport = async () => {
           ? "Candidate source is available; behavioral parity observations have not run."
           : (candidate.reason ?? "Candidate output is unavailable."),
       sourceRevision: String(
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve string coercion of the observed revision value.
         (candidate.revision as { commit?: unknown } | undefined)?.commit ?? "generated-export",
       ),
     },
@@ -879,6 +880,7 @@ const saveReport = async () => {
         ? "Reference source is available; behavioral parity observations have not run."
         : "Reference source is unavailable.",
       sourceRevision: String(
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve string coercion of the observed revision value.
         (revisions.builder as { commit?: unknown } | undefined)?.commit ?? "unavailable",
       ),
     },

@@ -44,6 +44,7 @@ printf 'launcher %s\\n' "$*" >> "$ENTRYPOINT_TEST_LOG"
 it.each([
   [],
   ["--live-model"],
+  // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise public entrypoint argument handling.
   ["--arrusted-root", "/tmp/template", "--output-dir", "/tmp/evidence"],
   ["--candidate-runtime"],
   ["--reference-runtime", "--reference-navigation"],
@@ -62,6 +63,7 @@ it.each(["--help", "-h"])("shows %s without resolving tools or refreshing identi
 });
 
 it("runs report-only comparison without an OIDC refresh", () => {
+  // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise public entrypoint argument handling.
   const result = invoke(["--report-only", "--candidate-root", "/tmp/candidate"]);
   expect(result.status, result.stderr).toBe(0);
   expect(result.calls).toContain("mise which node");
@@ -83,6 +85,7 @@ it("launches only the public driver without provisioning infrastructure", () => 
     "--endpoint",
     "http://127.0.0.1:64613/mcp",
     "--output-dir",
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise public entrypoint argument handling.
     "/tmp/evidence",
   ]);
   expect(result.status, result.stderr).toBe(0);
@@ -92,13 +95,16 @@ it("launches only the public driver without provisioning infrastructure", () => 
 });
 
 it.each([
+  // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise public entrypoint argument handling.
   ["--brief-file", "/tmp/brief.md"],
+  // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise public entrypoint argument handling.
   ["--start-file", "/tmp/start.json"],
 ])("forwards the supplied public input %j without private setup", (...input) => {
   const result = invoke([
     "--endpoint",
     "https://builder.example.test/mcp",
     "--output-dir",
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise public entrypoint argument handling.
     "/tmp/evidence",
     ...input,
   ]);

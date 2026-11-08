@@ -5,21 +5,14 @@ import jsPlugins, { jsPluginSettings } from "ultracite/oxlint/js-plugins";
 import next from "ultracite/oxlint/next";
 import nextJsPlugins from "ultracite/oxlint/next/js-plugins";
 
-const productionCreatorTestPath = "lib/provisioning/repository-production-creator.test.ts";
-
 const handoffControlsPath = "app/ui/handoff-controls.tsx";
 
-const productionSetupTestPath = "lib/provisioning/repository-production-setup.test.ts";
-
-const referenceLifecyclePath = "evals/support/self-reproduction-reference-lifecycle.ts";
 const nodeFreshBootstrapPath = "lib/repository/node-fresh-bootstrap.ts";
 const nodeLocalPublicationPath = "lib/repository/node-local-publication.ts";
 const postgresExecutionLeasePath = "lib/sandbox/postgres-execution-lease-store.ts";
 
 const additionalAuthFieldPath = "components/auth/additional-field.tsx";
 
-const sharedLintFile1 = "evals/support/self-reproduction-reference-runtime.ts";
-const sharedLintFile2 = "lib/repository/supported-template.ts";
 const sharedLintFile4 = "scripts/test-capability-preload.mjs";
 
 const sharedLintFile5 = "app/ui/builder-connections.tsx";
@@ -42,7 +35,6 @@ const sharedLintFile20 = "lib/repository/dependency-cache.test.ts";
 const sharedLintFile21 = "lib/repository/node-branch-worktree-publication.ts";
 
 const sharedLintFile23 = "e2e/auth/client-oauth-handoff.spec.ts";
-const sharedLintFile24 = "lib/agent/deployment-repository-access-runtime.test.ts";
 const sharedLintFile25 = "lib/auth/preview-oauth-deployment.ts";
 const sharedLintFile26 = "lib/eve/hosted-service.ts";
 const sharedLintFile27 = "lib/eve/public-events.ts";
@@ -50,7 +42,6 @@ const sharedLintFile28 = "lib/eve/same-origin-http.ts";
 const sharedLintFile29 = "lib/image/node-lifecycle.ts";
 const sharedLintFile30 = "scripts/design-quality/archive.mts";
 const sharedLintFile31 = "scripts/design-quality/source.ts";
-const sharedLintFile32 = "scripts/trusted-node-launcher.test.ts";
 
 export default defineConfig({
   extends: [core, next, jsPlugins, nextJsPlugins, antiSlop],
@@ -208,63 +199,6 @@ export default defineConfig({
     {
       // Existing findings awaiting a focused migration.
       files: [
-        "evals/self-reproduction/workflow-adapter.test.ts",
-        "evals/support/self-reproduction-navigation-command.test.ts",
-        "evals/support/self-reproduction-reference-capture-fixture.test.ts",
-        "evals/support/self-reproduction-reference-runtime.test.ts",
-        "evals/support/self-reproduction-template-source.test.ts",
-        "lib/development/local-mode.test.ts",
-        "lib/eve/local-eve-launch.test.ts",
-        "lib/eve/local-vercel-oidc.test.ts",
-        sharedLintFile19,
-        "lib/release/promotion.test.ts",
-        "lib/repository/supported-template-development.test.ts",
-        "scripts/design-quality/archive-path.test.ts",
-        "scripts/design-quality/browser-fixture.test.ts",
-        "scripts/development.mts",
-        "scripts/eval-self-reproduction.test.ts",
-        "scripts/production-navigation-task.test.ts",
-        "scripts/self-reproduction-public-entrypoint.test.ts",
-        "scripts/test-production-navigation.mts",
-        sharedLintFile32,
-      ],
-      rules: { "sonarjs/publicly-writable-directories": "off" },
-    },
-    {
-      // Existing findings awaiting a focused migration.
-      files: [
-        "app/ui/app-access.tsx",
-        "app/ui/handoff-controls.test.tsx",
-        "components/auth/settings/account/user-profile.tsx",
-        sharedLintFile24,
-        "lib/agent/prepared-provider-context.test.ts",
-        sharedLintFile15,
-        "lib/auth/github-app-installation.test.ts",
-        sharedLintFile25,
-        "lib/auth/preview-oauth-runtime.test.ts",
-        "lib/development/mcp-readiness.test.ts",
-        "lib/eve/same-origin-http.test.ts",
-        "lib/integrations/provider-connection-return.ts",
-        "lib/integrations/vercel-installation.test.ts",
-        "lib/mcp/handoff-oauth.test.ts",
-        "lib/mcp/handoff-provider-test-harness.ts",
-        sharedLintFile9,
-        "lib/provisioning/starter-source.test.ts",
-        "lib/provisioning/vercel-provider.test.ts",
-        "lib/repository/arrusted-template-reader.test.ts",
-        "lib/repository/github-app-http-provider.test.ts",
-        "lib/repository/github-app-http-provider.ts",
-        "lib/sandbox/working-preview-runtime.test.ts",
-        "mdx-components.tsx",
-        sharedLintFile13,
-        "scripts/hosted-portable-proof.test.ts",
-        "scripts/self-reproduction-public-driver.test.ts",
-      ],
-      rules: { "typescript/no-base-to-string": "off" },
-    },
-    {
-      // Existing findings awaiting a focused migration.
-      files: [
         ".config/mise/scripts/repository/image-lifecycle.ts",
         "agent/tools/inspect_existing_app.ts",
         sharedLintFile5,
@@ -316,58 +250,6 @@ export default defineConfig({
       rules: { "typescript/no-unsafe-argument": "off" },
     },
     {
-      // Preserve existing sequential operation ordering.
-      files: [
-        "components/auth/settings/account/user-profile.tsx",
-        sharedLintFile14,
-        "evals/support/self-reproduction-runtime-comparison.ts",
-        "evals/support/self-reproduction-supplementary.ts",
-        "lib/agent/deployment-repository-access-runtime.ts",
-        "lib/development/application-root.ts",
-        sharedLintFile17,
-        "lib/integrations/repository-access.ts",
-        "lib/plugin/agent-plugin-package.ts",
-        "lib/provisioning/hosted-operator-ready-replacement-native.ts",
-        "lib/release/promotion.ts",
-        sharedLintFile11,
-        sharedLintFile21,
-        nodeFreshBootstrapPath,
-        nodeLocalPublicationPath,
-        "lib/repository/sandbox-filesystem.ts",
-        sharedLintFile2,
-        "lib/repository/target-apply.ts",
-        "lib/repository/target-planning.ts",
-        postgresExecutionLeasePath,
-      ],
-      rules: { "react-doctor/async-await-in-loop": "off" },
-    },
-    {
-      // Preserve existing sequential operation ordering.
-      files: [
-        "evals/self-reproduction/default-capture-adapter.ts",
-        sharedLintFile7,
-        referenceLifecyclePath,
-        sharedLintFile1,
-        "lib/agent/github-pr-delivery-step.ts",
-        "lib/agent/github-publication-runtime.ts",
-        "lib/db/better-auth-membership-readiness-cli.mts",
-        "lib/db/hosted-storage-readiness-cli.mts",
-        "lib/db/postgres-hosted-admin.ts",
-        "lib/db/preview-activation-cli.mts",
-        "lib/db/preview-activation-invited-user.ts",
-        sharedLintFile16,
-        sharedLintFile18,
-        "lib/plugin/agent-plugin-package.ts",
-        "lib/repository/github-app-http-provider.ts",
-        sharedLintFile21,
-        nodeFreshBootstrapPath,
-        nodeLocalPublicationPath,
-        sharedLintFile2,
-        postgresExecutionLeasePath,
-      ],
-      rules: { "react-doctor/server-sequential-independent-await": "off" },
-    },
-    {
       // Preserve documented test and tool invocation paths.
       files: [
         "evals/g2-model.vitest.config.mts",
@@ -375,21 +257,6 @@ export default defineConfig({
         "evals/product-quality/product-quality.visual.playwright.ts",
       ],
       rules: { "github/filenames-match-regex": "off" },
-    },
-    {
-      // These files are owned by concurrent work and retain their existing findings.
-      files: [
-        "app/ui/app-access.tsx",
-        "app/ui/app-access.test.tsx",
-        "lib/app-access/management.ts",
-        "lib/app-access/native-management.ts",
-        "lib/eve/private-repository-production-approval.test.ts",
-        "lib/provisioning/repository-production-creator.ts",
-        productionCreatorTestPath,
-        "lib/provisioning/repository-production-native.ts",
-        productionSetupTestPath,
-      ],
-      rules: { "eslint/curly": "off" },
     },
     {
       // Existing assertions awaiting behavior-preserving type boundaries.

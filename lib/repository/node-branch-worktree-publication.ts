@@ -1164,7 +1164,7 @@ const assertOwnedPartialWorktree = async (
     }
     const adminPath = pathResolve(worktreeAdminRoot, entry.name);
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Inspect worktree paths in order.
       const linkedPathContents = await readFile(pathResolve(adminPath, "gitdir"), "utf-8");
       const linkedPath = linkedPathContents.trim();
       if (pathResolve(linkedPath) === pathResolve(proposal.worktreePath, ".git")) {
@@ -1519,6 +1519,7 @@ const inspectBranchPublicationSource = async (input: {
     stat(canonicalPath),
     stat(gitDirectoryPath),
   ]);
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep repository observations and publication steps in their established order.
   const indexPathValue = await git(canonicalPath, [
     "rev-parse",
     gitAbsolutePathFormat,
@@ -1533,7 +1534,7 @@ const inspectBranchPublicationSource = async (input: {
   );
   const statusEntries: { path: string; state: FileState }[] = [];
   for (const path of paths) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- bound concurrent file reads for large repositories.
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Inspect worktree paths in order.
     statusEntries.push({ path, state: await fileState(pathResolve(canonicalPath, path)) });
   }
   for (const change of input.review.changes) {
@@ -1581,6 +1582,7 @@ export const deriveBranchWorktreePublicationProposal = async (input: {
   const source = await inspectBranchPublicationSource(input);
   const root = publicationRoot();
   const rootState = await lstat(root);
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep repository observations and publication steps in their established order.
   const commonGitDirectoryValue = await git(source.canonicalPath, [
     "rev-parse",
     gitAbsolutePathFormat,
@@ -1851,6 +1853,7 @@ const worktreeSnapshot = async (proposal: BranchWorktreePublicationProposal) => 
   ]);
   const gitDirectoryPath = await realpath(gitDirectoryValue.trim());
   const gitDirectoryStat = await stat(gitDirectoryPath);
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep repository observations and publication steps in their established order.
   const indexPathValue = await git(root, [
     "rev-parse",
     gitAbsolutePathFormat,
@@ -1859,6 +1862,7 @@ const worktreeSnapshot = async (proposal: BranchWorktreePublicationProposal) => 
   ]);
   const indexPath = indexPathValue.trim();
   const statusDigest = await digestWorktreeStates(worktreeFileStates(proposal));
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep repository observations and publication steps in their established order.
   const [headShaValue, headTreeValue, headReferenceValue, remoteValue] = await Promise.all([
     git(root, ["rev-parse", "HEAD"]),
     git(root, ["rev-parse", "HEAD^{tree}"]),
@@ -1888,6 +1892,7 @@ const worktreeSnapshot = async (proposal: BranchWorktreePublicationProposal) => 
 
 const verifyWorktreeIdentity = async (proposal: BranchWorktreePublicationProposal) => {
   const snapshot = await worktreeSnapshot(proposal);
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep repository observations and publication steps in their established order.
   const sourceBranchSha = await git(proposal.sourcePath, [
     "rev-parse",
     `refs/heads/${proposal.branchName}`,

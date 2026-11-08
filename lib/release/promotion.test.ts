@@ -222,6 +222,7 @@ describe("release promotion contract", () => {
     expect(() =>
       sealPromotionReceipt({
         ...unsigned(),
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture archive path exercises release promotion handling.
         package: { ...unsigned().package, archive: "/tmp/release.tar.gz" },
       }),
     ).toThrow();

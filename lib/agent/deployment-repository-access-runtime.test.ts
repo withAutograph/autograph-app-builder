@@ -509,6 +509,7 @@ describe("deployment repository access authorization", () => {
         sessionId: "ses_one",
       }),
     ).resolves.toBe(1);
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve fetch-argument conversion in this assertion.
     expect(fetchImplementation.mock.calls[0]?.[0]?.toString()).toBe(
       `${callbackUrl}?provider=github&status=connected`,
     );

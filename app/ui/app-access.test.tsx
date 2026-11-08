@@ -82,7 +82,9 @@ const chooseCreatorEmail = async (container: HTMLElement, value: string) => {
     'form[aria-label="Choose your app account"]',
   );
   const email = form?.querySelector<HTMLInputElement>('input[type="email"]');
-  if (!form || !email) throw new Error("Expected the app account choice form");
+  if (!form || !email) {
+    throw new Error("Expected the app account choice form");
+  }
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(email, value);
     email.dispatchEvent(new Event("input", { bubbles: true }));
@@ -217,7 +219,9 @@ describe("Builder app access", () => {
     );
     continuation.mockImplementation(async (_previous, input) => {
       requests.push(z.object({ command: appAccessCommandSchema }).parse(input).command);
-      if (requests.length === 1) throw new TypeError("Connection interrupted");
+      if (requests.length === 1) {
+        throw new TypeError("Connection interrupted");
+      }
       return {
         status: "ready",
         snapshot: {

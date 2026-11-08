@@ -522,6 +522,7 @@ async function readApprovedKeyringToken(username: string): Promise<Buffer> {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function verifyNamespace(username: string): Promise<void> {
   const user = await runBoundedGh(["api", "/user", "--jq", ".login"]);
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep GitHub identity and membership queries in their established order.
   const membership = await runBoundedGh([
     "api",
     `/user/memberships/orgs/${githubOrganization}`,

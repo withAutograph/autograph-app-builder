@@ -199,6 +199,7 @@ function createStore(sql: Sql): PreviewActivationStore {
       const beforeResource = await sql<
         { count: number }[]
       >`select count(*)::integer as count from oauth_resource where identifier = ${input.resource}`;
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep activation reads and operations in their established order.
       const beforeJwks = await sql<
         { count: number }[]
       >`select count(*)::integer as count from jwks`;
@@ -238,6 +239,7 @@ function createStore(sql: Sql): PreviewActivationStore {
       const metadata = await auth.handler(
         new Request(`${input.issuer}/.well-known/oauth-authorization-server`),
       );
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep activation reads and operations in their established order.
       const keys = await auth.handler(new Request(`${input.issuer}/jwks`));
       if (metadata.status !== 200 || keys.status !== 200) {
         throw new Error("OAuth resource or JWKS initialization failed closed.");
@@ -245,6 +247,7 @@ function createStore(sql: Sql): PreviewActivationStore {
       const afterResource = await sql<
         { count: number }[]
       >`select count(*)::integer as count from oauth_resource where identifier = ${input.resource}`;
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep activation reads and operations in their established order.
       const afterJwks = await sql<{ count: number }[]>`select count(*)::integer as count from jwks`;
       if (afterResource[0]?.count !== 1 || (afterJwks[0]?.count ?? 0) < 1) {
         throw new Error("OAuth resource or JWKS initialization readback failed.");

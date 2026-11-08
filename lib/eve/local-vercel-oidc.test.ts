@@ -244,6 +244,7 @@ describe("installed Eve command identity", () => {
   });
 
   it.each([
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture symlink target exercises external-link rejection.
     ["absolute link", "/tmp/external-eve"],
     ["parent traversal", "../external-eve"],
   ])("rejects an %s", (_name, target) => {

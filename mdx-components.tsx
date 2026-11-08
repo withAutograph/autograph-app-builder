@@ -3,6 +3,7 @@ import type { ComponentProps, ReactNode } from "react";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function headingId(children: ReactNode) {
+  // oxlint-disable-next-line typescript/no-base-to-string -- Preserve React child coercion when deriving the heading identifier.
   return String(children)
     .toLowerCase()
     .replaceAll(/[^a-z0-9]+/gu, "-")

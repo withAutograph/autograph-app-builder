@@ -60,6 +60,7 @@ describe("immutable Arrusted starter source", () => {
     const value = fixture();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (url) =>
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       String(url) === value.manifestUrl
         ? new Response(value.manifestBytes)
         : new Response(value.archive),
@@ -138,6 +139,7 @@ describe("immutable Arrusted starter source", () => {
     const controller = new AbortController();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning fetch test double
     const request = vi.fn<typeof fetch>(async (url) =>
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       String(url) === value.manifestUrl
         ? new Response(value.manifestBytes)
         : new Response(value.archive),

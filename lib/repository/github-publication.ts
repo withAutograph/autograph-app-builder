@@ -1021,7 +1021,7 @@ export async function readExactGitHubPublicationContent(input: {
     }
     let observed: Awaited<ReturnType<typeof input.source.readFile>>;
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Read proposed source changes in order.
       observed = await input.source.readFile(change.path);
     } catch {
       throw new Error("The approved publication content source failed.");

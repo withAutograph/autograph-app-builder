@@ -62,7 +62,7 @@ export async function fingerprintDevelopmentRuntime(repositoryRoot: string): Pro
   for (const path of await runtimePaths(repositoryRoot)) {
     let content: Buffer;
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Read source files in order and preserve failure handling.
       content = await readFile(nodePath.join(repositoryRoot, path));
     } catch (error) {
       // A file may disappear between Git's listing and the read while a live

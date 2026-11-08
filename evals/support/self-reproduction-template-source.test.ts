@@ -37,11 +37,13 @@ describe("self-contained template source", () => {
       .mockResolvedValueOnce("https://user:secret@github.com/example/template.git");
     const result = await prepareSelfReproductionTemplateSource({
       outputDirectory: "/unused",
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises user checkout selection.
       providedCheckout: "/tmp/user checkout",
       runGit,
     });
     expect(runGit.mock.calls.map(([args]) => args[0])).toEqual(["rev-parse", "remote"]);
     expect(result.remote).toBe("https://github.com/example/template.git");
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises user checkout selection.
     expect(result.sourcePath).toBe("/tmp/user checkout");
   });
   it("surfaces actual clone failure without continuing to revision inspection", async () => {

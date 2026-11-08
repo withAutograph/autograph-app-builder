@@ -646,6 +646,7 @@ export function composeGitHubPublicationRuntime(input: {
     reconciledHeadSha?: string,
   ) => {
     const proposal = await proposals.read(proposalDigest);
+    // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep publication and approval operations in their established order.
     const receipt = await receipts.read(proposalDigest);
     if (
       proposal?.intendedOutcome !== DRAFT_PUBLICATION_OUTCOME ||
@@ -1567,6 +1568,7 @@ export function composeGitHubPublicationRuntime(input: {
         ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
         repositoryId: request.githubSource.repository.repositoryId,
       });
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep publication and approval operations in their established order.
       const installation = await adapter.inspectInstallation(draftPublicationOperation);
       return await sealExistingDraftUpdate({
         adapter: draftUpdateAdapter,
@@ -1666,6 +1668,7 @@ export function composeGitHubPublicationRuntime(input: {
         ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
         repositoryId: request.githubSource.repository.repositoryId,
       });
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep publication and approval operations in their established order.
       const installation = await adapter.inspectInstallation(draftPublicationOperation);
       return await sealExistingDraftReconciliation({
         adapter: draftReconciliationAdapter,

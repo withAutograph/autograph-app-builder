@@ -104,9 +104,11 @@ const targetFiles = Object.fromEntries(
 const provenance = () =>
   createExactImageProvenance({
     arrustedIgnored: "",
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
     arrustedRoot: "/tmp/exact-arrusted",
     arrustedStatus: "",
     builderIgnored: "",
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
     builderRoot: "/tmp/exact-builder",
     builderStatus: "",
     dockerfileSha256,
@@ -117,6 +119,7 @@ const provenance = () =>
     observedArrustedTree: ARRUSTED_IMAGE_TARGET_TREE,
     observedBuilderCommit: builderCommit,
     observedBuilderTree: builderTree,
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
     stateRoot: "/tmp/exact-image-state",
     targetFiles,
   });
@@ -1128,6 +1131,7 @@ wait
 
   it("constructs exact standalone build, inspection, preload, and proof commands", () => {
     const exact = provenance();
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
     expect(imageBuildCommand(exact, "/tmp/sanitized-arrusted")).toEqual({
       args: [
         "build",
@@ -1142,6 +1146,7 @@ wait
         "--tag",
         exact.image.tag,
         "--load",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         "/tmp/exact-builder",
       ],
       program: "docker-buildx",
@@ -1170,6 +1175,7 @@ wait
       args: ["list", "--depth", "Infinity", "--json"],
       program: "pnpm",
     });
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
     expect(sandboxProofCommand(reference, "/tmp/exact-arrusted")).toEqual({
       args: [
         "--import",
@@ -1180,6 +1186,7 @@ wait
         "--gate-a-image",
         reference,
         "--gate-a-source-root",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         "/tmp/exact-arrusted",
         "sandbox-identity-planning",
         "--strict",
@@ -1261,9 +1268,11 @@ wait
     expect(() =>
       createExactImageProvenance({
         arrustedIgnored: "",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         arrustedRoot: "/tmp/exact-arrusted",
         arrustedStatus: "",
         builderIgnored: "",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         builderRoot: "/tmp/exact-builder",
         builderStatus: "",
         dockerfileSha256,
@@ -1274,6 +1283,7 @@ wait
         observedArrustedTree: ARRUSTED_IMAGE_TARGET_TREE,
         observedBuilderCommit: builderCommit,
         observedBuilderTree: builderTree,
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         stateRoot: "/tmp/exact-image-state",
         targetFiles,
       }),
@@ -1281,9 +1291,11 @@ wait
     expect(() =>
       createExactImageProvenance({
         arrustedIgnored: "",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         arrustedRoot: "/tmp/exact-arrusted",
         arrustedStatus: "",
         builderIgnored: "",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         builderRoot: "/tmp/exact-builder",
         builderStatus: "?? drift",
         dockerfileSha256,
@@ -1294,6 +1306,7 @@ wait
         observedArrustedTree: ARRUSTED_IMAGE_TARGET_TREE,
         observedBuilderCommit: builderCommit,
         observedBuilderTree: builderTree,
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         stateRoot: "/tmp/exact-image-state",
         targetFiles,
       }),
@@ -1301,9 +1314,11 @@ wait
     expect(() =>
       createExactImageProvenance({
         arrustedIgnored: "",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         arrustedRoot: "/tmp/exact-arrusted",
         arrustedStatus: "",
         builderIgnored: "node_modules/eve/index.js",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         builderRoot: "/tmp/exact-builder",
         builderStatus: "",
         dockerfileSha256,
@@ -1314,6 +1329,7 @@ wait
         observedArrustedTree: ARRUSTED_IMAGE_TARGET_TREE,
         observedBuilderCommit: builderCommit,
         observedBuilderTree: builderTree,
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         stateRoot: "/tmp/exact-image-state",
         targetFiles,
       }),
@@ -1322,6 +1338,7 @@ wait
       assertStandaloneGitMetadata(false, "Builder");
     }).toThrow("standalone checkout");
     expect(() => {
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
       assertCanonicalRoot("/tmp/link", "/private/tmp/real", "Source");
     }).toThrow("no-link path");
     expect(() => {

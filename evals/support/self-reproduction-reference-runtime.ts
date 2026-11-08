@@ -117,6 +117,7 @@ export const startSelfReproductionReferenceRuntime = async (input: {
   assertExternalReferenceRoot(input.sourceRoot, fixtureRoot);
   // oxlint-disable-next-line react-doctor/async-parallel -- Preserve the sequence of port selection and failures.
   const appPort = await availablePort();
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep capture and workflow observations in their established order.
   const databasePort = await availablePort();
   let emulatorPort = await availablePort();
   for (;;) {

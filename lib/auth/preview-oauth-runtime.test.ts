@@ -87,6 +87,7 @@ describe("Preview OAuth runtime configuration", () => {
   it("uses GitHub's verified primary email when the public profile omits email", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       if (String(url) === "https://api.github.com/user") {
         return Response.json({
           avatar_url: "https://avatars.example.test/user.png",
@@ -125,6 +126,7 @@ describe("Preview OAuth runtime configuration", () => {
   it("rejects GitHub identities without a verified email", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       String(url) === "https://api.github.com/user"
         ? Response.json({ id: 123, login: "autograph-user" })
         : Response.json([{ email: "user@example.com", primary: true, verified: false }]),

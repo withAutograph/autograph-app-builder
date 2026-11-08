@@ -39,6 +39,7 @@ it("requires an owner-scoped durable readback and records no session credentials
   await prepareReferenceCaptureFixture(
     page,
     {
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture root exercises reference capture path handling.
       fixtureRoot: "/tmp/isolated-reference",
       recordReceipt,
       referenceUrl: "https://localhost:3001",
@@ -67,6 +68,7 @@ it("records a blocker and rejects when emulated authentication fails", async () 
     prepareReferenceCaptureFixture(
       page,
       {
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture root exercises reference capture path handling.
         fixtureRoot: "/tmp/isolated-reference",
         recordReceipt,
         referenceUrl: "https://localhost:3001",
@@ -104,6 +106,7 @@ it("captures three restored contexts without waiting for a new write acknowledge
     await prepareReferenceCaptureFixture(
       viewportPage,
       {
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture root exercises reference capture path handling.
         fixtureRoot: "/tmp/isolated-reference",
         recordReceipt,
         referenceUrl: "https://localhost:3001",

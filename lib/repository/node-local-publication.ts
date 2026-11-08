@@ -587,6 +587,7 @@ export const inspectLocalPublicationDestination =
       lstat(canonicalPath),
       lstat(gitDirectoryPath),
     ]);
+    // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep repository observations and publication steps in their established order.
     const indexPath = await gitOwnedPath(canonicalPath, "index");
     const indexState = await fileState(indexPath);
     if (indexState.kind !== "regular" || indexState.digest === undefined) {
@@ -1036,7 +1037,7 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
       if (change === undefined) {
         throw new Error(`Missing approved change for ${path}.`);
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Run mutation hooks in execution order.
       await input.hooks?.beforeMutation?.(change.path, index);
     }
     await input.hooks?.beforeGitApply?.();
@@ -1065,7 +1066,7 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
     await input.hooks?.afterGitApply?.();
     for (let index = 0; index < input.proposal.executionPaths.length; index += 1) {
       const path = input.proposal.executionPaths[index];
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Run mutation hooks in execution order.
       await input.hooks?.afterMutation?.(path, index);
     }
     for (const change of input.proposal.changes) {

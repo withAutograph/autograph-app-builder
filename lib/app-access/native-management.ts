@@ -480,8 +480,9 @@ export const createRepositoryProductionManagement = (
           return result;
         }
       } else if (command.action === "choose-creator-account") {
-        if ((await deps.chooseCreatorAccount(scope, command.email, effect)) === "rejected")
+        if ((await deps.chooseCreatorAccount(scope, command.email, effect)) === "rejected") {
           return "rejected";
+        }
       } else if (command.action === "retry-setup") {
         await deps.retrySetup(scope, effect);
       } else {

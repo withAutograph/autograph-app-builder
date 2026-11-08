@@ -240,6 +240,7 @@ function providerFetch(input?: {
   const calls: { url: string; init: RequestInit; body: unknown }[] = [];
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const implementation: typeof fetch = async (request, init = {}) => {
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
     const url = String(request);
     let body: unknown;
     if (typeof init.body === "string") {
@@ -320,6 +321,7 @@ function historicalProviderFetch(input?: {
   const calls: { method: string; url: string; body: unknown }[] = [];
   // oxlint-disable-next-line eslint/complexity, eslint/require-await -- Keep this fake HTTP router next to its call log.
   const implementation: typeof fetch = async (request, init = {}) => {
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
     const url = String(request);
     const method = init.method ?? "GET";
     const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
@@ -387,6 +389,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const calls: { url: string; body: unknown; method: string }[] = [];
     // oxlint-disable-next-line eslint/require-await -- mocked HTTP transport
     const provider = createProvider(async (request, init = {}) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = String(request);
       const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
       calls.push({ body, method: init.method ?? "GET", url });
@@ -895,10 +898,12 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       const head = "a".repeat(40);
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const request: typeof fetch = async (input, init) => {
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
         const url = new URL(String(input));
         if (url.pathname === "/app/installations/456/access_tokens") {
           const body = z
             .looseObject({ permissions: z.unknown() })
+            // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
             .parse(JSON.parse(String(init?.body)));
           tokenRequests.push(body);
           return json(
@@ -929,6 +934,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
           expect(new Headers(init?.headers).get("authorization")).toBe(
             "token ghs_delivery_scoped_installation_token",
           );
+          // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
           expect(JSON.parse(String(init?.body))).toMatchObject({
             variables: { id: "PR_node" },
           });
@@ -975,6 +981,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const mock = providerFetch();
     const head = "a".repeat(40);
     const request: typeof fetch = async (input, init) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = new URL(String(input));
       if (url.pathname === "/repositories/100") {
         return json(historicalRepository(100));
@@ -1071,11 +1078,13 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const calls: string[] = [];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const implementation: typeof fetch = async (request, init = {}) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = String(request);
       calls.push(url);
       if (url.endsWith("/app/installations/456/access_tokens")) {
         const body = z
           .looseObject({ permissions: z.record(z.string(), z.string()) })
+          // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
           .parse(JSON.parse(String(init.body)));
         return json(
           {
@@ -1130,6 +1139,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       },
       // oxlint-disable-next-line eslint/require-await -- this callback implements fetch with synchronous fixtures.
       fetch: async (request, init = {}) => {
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
         const url = String(request);
         if (url.endsWith("/repositories/100")) {
           return json({
@@ -1178,6 +1188,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       },
       // oxlint-disable-next-line eslint/require-await -- this callback implements fetch with synchronous fixtures.
       fetch: async (request, init = {}) => {
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
         const url = String(request);
         if (url.endsWith("/repositories/100")) {
           return json({
@@ -1215,10 +1226,12 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const filePath = "apps/demo/limited.tsx";
     // oxlint-disable-next-line eslint/require-await -- this callback implements fetch with synchronous fixtures.
     const provider = createProvider(async (request, init = {}) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = String(request);
       if (url.endsWith("/app/installations/456/access_tokens")) {
         const body = z
           .looseObject({ permissions: z.record(z.string(), z.string()) })
+          // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
           .parse(JSON.parse(String(init.body)));
         return json(
           { permissions: body.permissions, token: "ghs_operation_scoped_token_value" },
@@ -1277,11 +1290,13 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       let treeDepth = 0;
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const implementation: typeof fetch = async (request, init = {}) => {
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
         const url = String(request);
         calls.push({ method: init.method ?? "GET", url });
         if (url.endsWith("/app/installations/456/access_tokens")) {
           const body = z
             .looseObject({ permissions: z.record(z.string(), z.string()) })
+            // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
             .parse(JSON.parse(String(init.body)));
           return json(
             { permissions: body.permissions, token: "ghs_operation_scoped_installation_token" },
@@ -1366,6 +1381,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const beforeMode = changedFile.before.mode;
     // oxlint-disable-next-line eslint/complexity, eslint/require-await -- one focused HTTP test double
     const implementation: typeof fetch = async (request, init = {}) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = String(request);
       const method = init.method ?? "GET";
       const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
@@ -1463,12 +1479,14 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const branchPaths = content.approvedPaths.toReversed();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const implementation: typeof fetch = async (request, init = {}) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = String(request);
       calls.push(url);
       const method = init.method ?? "GET";
       if (url.endsWith("/app/installations/456/access_tokens")) {
         const body = z
           .looseObject({ permissions: z.record(z.string(), z.string()) })
+          // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
           .parse(JSON.parse(String(init.body)));
         return json(
           { permissions: body.permissions, token: "ghs_operation_scoped_installation_token" },
@@ -1549,6 +1567,7 @@ describe("existing draft publication origin", () => {
     const headBranch = overrides.headBranch ?? branch;
     // oxlint-disable-next-line eslint/complexity, eslint/require-await -- Controlled provider responses exercise the actual ownership inspection.
     const implementation: typeof fetch = async (request, init = {}) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = String(request);
       if (url.endsWith("/app")) {
         return json({ id: overrides.appId ?? 123, slug: "autograph-app-builder" });
@@ -1556,6 +1575,7 @@ describe("existing draft publication origin", () => {
       if (url.endsWith("/app/installations/456/access_tokens")) {
         const tokenRequest = z
           .looseObject({ permissions: z.unknown() })
+          // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
           .parse(JSON.parse(String(init.body)));
         return json(
           {
@@ -1715,6 +1735,7 @@ describe("existing draft update provider", () => {
     const calls: { url: string; body: unknown }[] = [];
     // oxlint-disable-next-line eslint/complexity, eslint/require-await, sonarjs/cognitive-complexity -- focused GitHub HTTP double
     const implementation: typeof fetch = async (request, init = {}) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = String(request);
       const method = init.method ?? "GET";
       const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
@@ -1894,6 +1915,7 @@ describe("existing draft reconciliation provider", () => {
     let liveMessage = `Reconcile draft pull request #1500 with main\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`;
     // oxlint-disable-next-line eslint/complexity, eslint/require-await, sonarjs/cognitive-complexity -- focused GitHub HTTP double
     const implementation: typeof fetch = async (request, init = {}) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = String(request);
       const method = init.method ?? "GET";
       const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;

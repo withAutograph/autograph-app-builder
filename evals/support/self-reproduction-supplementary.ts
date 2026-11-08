@@ -203,6 +203,7 @@ export const writeSupplementaryAssessment = async (input: {
         })),
         method: SOURCE_REVIEW,
       });
+      // oxlint-disable-next-line react-doctor/async-await-in-loop -- Rebase each review result before recording it.
       const source = await rebase(normalized, reviewRoot, SOURCE_REVIEW);
       const index = evidence[side].observations.findIndex(
         (entry) => entry.requirementId === source.requirementId,

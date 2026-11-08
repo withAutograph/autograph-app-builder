@@ -10,9 +10,11 @@ import {
 
 it("rejects an in-source runtime", () => {
   expect(() => {
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise source and reference root isolation.
     assertExternalReferenceRoot("/tmp/source", "/tmp/source/runtime");
   }).toThrow();
   expect(() => {
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise source and reference root isolation.
     assertExternalReferenceRoot("/tmp/source", "/tmp/external");
   }).not.toThrow();
 });

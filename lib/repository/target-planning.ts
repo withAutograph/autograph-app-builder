@@ -610,7 +610,7 @@ export const executeTargetIdentityAndPlanning = async (input: {
         throw new Error("An existing-app change path is not allowed.");
       }
       seen.add(requested.path);
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Read each requested path in order.
       const before = await input.sandbox.readBinaryFile({
         path: `repository/${requested.path}`,
       });

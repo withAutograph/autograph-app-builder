@@ -535,6 +535,7 @@ export const createDevelopmentSnapshot = async (input: {
   runRoot: string;
 }): Promise<DevelopmentSnapshot> => {
   const sourceRoot = await canonicalOwnedDirectory(input.sourceRoot, ARRUSTED_CHECKOUT_DESCRIPTION);
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep these operations in their established order.
   const runRoot = await canonicalOwnedDirectory(input.runRoot, "Development run root");
   const root = join(runRoot, "source");
   await mkdir(root, { mode: 0o700 });

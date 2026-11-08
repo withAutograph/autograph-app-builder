@@ -31,6 +31,7 @@ it("prepares the authenticated fixture before measurement or screenshots", async
   });
   await expect(
     capturePreview({
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture output path exercises browser capture setup and failure handling.
       output: "/tmp/fixture-test",
       preparePage,
       scenarios: [],
@@ -45,6 +46,7 @@ it("does not measure or capture an anonymous fallback after fixture failure", as
   browser.page.evaluate.mockClear();
   await expect(
     capturePreview({
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture output path exercises browser capture setup and failure handling.
       output: "/tmp/fixture-test",
       preparePage: () => Promise.reject(new Error("auth unavailable")),
       scenarios: [],
