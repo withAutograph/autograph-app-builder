@@ -3171,7 +3171,7 @@ export const composeHostedOperatorDependencies = (
           candidate.deploymentId === operator.deliveredGatewayDeploymentId &&
           candidate.readyState === "READY",
       );
-      const deploymentBoundary = input.plan.deploymentBoundary;
+      const { deploymentBoundary } = input.plan;
       if (
         input.plan.runtimePreparation === undefined &&
         (app === undefined || gateway === undefined || deploymentBoundary === undefined)

@@ -719,7 +719,7 @@ const validateResourcePreparation = (
   ctx: z.RefinementCtx,
 ) => {
   if (plan.existingResources !== undefined) {
-    const target = plan.existingResources.source.target;
+    const { target } = plan.existingResources.source;
     if (
       ![
         plan.runtimePreparation === SINGLE_PROJECT_RESOURCES,
@@ -739,7 +739,7 @@ const validateResourcePreparation = (
   }
 
   if (plan.existingResources !== undefined) {
-    const target = plan.existingResources.source.target;
+    const { target } = plan.existingResources.source;
     if (
       ![
         plan.runtimePreparation === SINGLE_PROJECT_RESOURCES,

@@ -151,7 +151,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
     }
   };
   const appConnections = (row: RepositoryProductionRow) => {
-    const resource = row.record.resource;
+    const { resource } = row.record;
     if (!resource) {
       throw new Error("repository_production_storage_unavailable");
     }

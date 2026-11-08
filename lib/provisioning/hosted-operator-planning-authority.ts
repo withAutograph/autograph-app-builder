@@ -40,7 +40,7 @@ const readPreparedPreviewJournal = async (
   }
   const { plan } = operator;
   const { delivery } = plan;
-  const artifactRef = plan.release.artifactRef;
+  const { artifactRef } = plan.release;
   if (delivery === undefined || delivery.gitSha === undefined || artifactRef === undefined) {
     reportOperatorPlanningMismatch(context.target.sessionId, "prepared_preview_journal", {
       delivery_missing: delivery === undefined,

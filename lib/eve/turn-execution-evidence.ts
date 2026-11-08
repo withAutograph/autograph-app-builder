@@ -171,7 +171,7 @@ const recordResult = (
   event: NativeEvent<"action.result">,
   index: number,
 ) => {
-  const result = event.data.result;
+  const { result } = event.data;
   if (result.kind !== "tool-result") {
     return;
   }

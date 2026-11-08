@@ -47,7 +47,7 @@ export const observeAppIntegrationPublicRelease = async (input: {
     await input.assertCurrent();
     const now = input.now ?? Date.now;
     const issuedAt = Math.floor(now() / 1000);
-    const capability = input.attachment.capability;
+    const { capability } = input.attachment;
     const challenge = {
       version: 1,
       purpose: "app-integration-readiness",

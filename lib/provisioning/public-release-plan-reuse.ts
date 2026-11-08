@@ -101,7 +101,7 @@ export const readPublicReleasePlanHistory = async (input: {
   candidate: PublicReleasePlan;
   assertCurrentOwner: () => Promise<void>;
 }) => {
-  const authority = input.candidate.authority;
+  const { authority } = input.candidate;
   const records: PublicReleaseRecord[] = [];
   let cursor: string | undefined;
   /* oxlint-disable eslint/no-await-in-loop -- Each owner-checked page depends on the preceding immutable request-ID cursor. */

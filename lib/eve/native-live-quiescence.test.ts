@@ -226,7 +226,7 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
     resumeHook: vi.fn<() => Promise<void>>().mockResolvedValue(),
     isHookNotFound: (error) => error instanceof Error && error.message === "not found",
     now: () => 1,
-    wait: () => Promise.resolve(),
+    wait: vi.fn<TerminalRecoveryDependencies["wait"]>().mockResolvedValue(),
   };
   // readCandidate's payload is inspected only after terminal reconciliation; retain its exact origin contract.
   dependencies.readCandidate = vi.fn<TerminalRecoveryDependencies["readCandidate"]>(() => ({
@@ -1407,7 +1407,13 @@ it("retains the canonical unknown operation and source fence after a partial nat
     principal,
     store,
     transport: adapter,
-    assertNativeRecoveryOwner: () => Promise.resolve(),
+    assertNativeRecoveryOwner: vi
+      .fn<
+        NonNullable<
+          Parameters<typeof createHostedEveSessionService>[0]["assertNativeRecoveryOwner"]
+        >
+      >()
+      .mockResolvedValue(),
   });
   const first = await service.start({ clientRequestId: "initial", prompt: "Build isolated app" });
   const originalResponse = hostedOperationRecordSchema.parse({

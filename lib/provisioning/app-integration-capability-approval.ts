@@ -44,7 +44,7 @@ export const createAppIntegrationCapabilityApprovalCheckpoint = (input: {
     )
     .digest("hex");
   const requestId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
-  const authority = input.plan.authority;
+  const { authority } = input.plan;
   const predicate = and(
     eq(builderProvisioningJournals.issuer, authority.issuer),
     eq(builderProvisioningJournals.audience, authority.audience),

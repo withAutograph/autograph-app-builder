@@ -144,7 +144,7 @@ export const sendDeliveryObservationDiagnostic = (input: {
   nativeRead?: NativeSendReadObservation;
 }): SendDeliveryObservationDiagnostic => {
   const turns = input.proof?.turns ?? [];
-  const deliveryId = input.delivery.deliveryId;
+  const { deliveryId } = input.delivery;
   const matches = turns.filter((turn) => turn.deliveryIds.includes(deliveryId));
   const observation: SendDeliveryObservationDiagnostic = {
     ackObserved: true,
