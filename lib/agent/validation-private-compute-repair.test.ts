@@ -86,9 +86,9 @@ describe("explicit reviewed compute task validation repair", () => {
       const state = fixture();
       const repair = prepareValidationPrivateComputeRepair(
         {
-          state,
           files: [{ content: recipe, path: task }],
           sessionId: scope.sessionId,
+          state,
         },
         installPolicy,
       );
@@ -96,10 +96,10 @@ describe("explicit reviewed compute task validation repair", () => {
       const sandbox = createSandbox();
       await repair?.applyPolicy(sandbox);
       expect(installPolicy).toHaveBeenCalledWith({
-        sandbox,
-        profile: state.proposal.target.privateCompute,
-        applyRoot: state.applyReceipt.applyRoot,
         abortSignal: undefined,
+        applyRoot: state.applyReceipt.applyRoot,
+        profile: state.proposal.target.privateCompute,
+        sandbox,
       });
     });
   });
@@ -118,9 +118,9 @@ describe("explicit reviewed compute task validation repair", () => {
       delete state.proposal.target.privateCompute;
       expect(
         prepareValidationPrivateComputeRepair({
-          state,
           files: [{ content: recipe, path: task }],
           sessionId: "foreign",
+          state,
         }),
       ).toBeUndefined();
     });
@@ -270,9 +270,9 @@ describe("explicit reviewed compute task validation repair", () => {
         const path = state.proposal.target.privateCompute?.checkPolicy.path ?? task;
         expect(() =>
           prepareValidationPrivateComputeRepair({
-            state,
             files: [{ content: recipe, path }],
             sessionId: scope.sessionId,
+            state,
           }),
         ).toThrow("another app");
       });

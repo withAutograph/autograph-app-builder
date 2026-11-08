@@ -17,10 +17,10 @@ describe("acceptance workspace recovery", () => {
     const recover = vi.fn();
     await expect(
       resolveCompatibleAcceptanceRoot({
-        roots: ["/candidate-with-edits", "/old"],
-        releaseId: "v3",
         describe: async (root) => (root.includes("candidate") ? "v3" : "v1"),
         recover,
+        releaseId: "v3",
+        roots: ["/candidate-with-edits", "/old"],
       }),
     ).resolves.toBe("/candidate-with-edits");
     expect(recover).not.toHaveBeenCalled();
@@ -32,10 +32,10 @@ describe("acceptance workspace recovery", () => {
     const recover = vi.fn<() => Promise<string>>().mockResolvedValue("/separate-recovered");
     await expect(
       resolveCompatibleAcceptanceRoot({
-        roots: ["/missing", "/old"],
-        releaseId: "v3",
         describe: describeRelease,
         recover,
+        releaseId: "v3",
+        roots: ["/missing", "/old"],
       }),
     ).resolves.toBe("/separate-recovered");
     expect(recover).toHaveBeenCalledOnce();
@@ -48,30 +48,28 @@ describe("acceptance workspace recovery", () => {
   it("keeps an actual recovery failure visible", async () => {
     await expect(
       resolveCompatibleAcceptanceRoot({
-        roots: ["/old"],
-        releaseId: "v3",
         describe: async () => "v1",
         recover: async () => {
           throw new Error("repository access expired");
         },
+        releaseId: "v3",
+        roots: ["/old"],
       }),
     ).rejects.toThrow("repository access expired");
   });
   it("does not restore credentials into a recovered checkout that cannot describe the installed release", async () => {
     await expect(
       resolveCompatibleAcceptanceRoot({
-        roots: [],
-        releaseId: "v3",
         describe: async () => "v2",
         recover: async () => "/recovered",
+        releaseId: "v3",
+        roots: [],
       }),
     ).rejects.toThrow("installed release");
   });
   it("reports an actual dependency failure from the recovered command instead of a release mismatch", async () => {
     await expect(
       resolveCompatibleAcceptanceRoot({
-        roots: ["/expired"],
-        releaseId: "v3",
         describe: async (root) => {
           throw new Error(
             root === "/expired"
@@ -80,6 +78,8 @@ describe("acceptance workspace recovery", () => {
           );
         },
         recover: async () => "/recovered",
+        releaseId: "v3",
+        roots: ["/expired"],
       }),
     ).rejects.toThrow("app:describe: Cannot find package @platform/schema");
   });
@@ -88,14 +88,14 @@ describe("acceptance workspace recovery", () => {
     const recover = vi.fn();
     await expect(
       resolveCompatibleAcceptanceRoot({
-        roots: ["/retained"],
-        releaseId: "v3",
-        signal: controller.signal,
         describe: async () => {
           controller.abort(new Error("cancelled"));
           throw new Error("aborted command");
         },
         recover,
+        releaseId: "v3",
+        roots: ["/retained"],
+        signal: controller.signal,
       }),
     ).rejects.toThrow("cancelled");
     expect(recover).not.toHaveBeenCalled();
@@ -201,11 +201,11 @@ describe("acceptance workspace recovery", () => {
       await writeFile(path.join(recoveredRoot, "release"), "v3");
       await expect(
         attachAvailableAcceptanceDependencies({
-          sandbox,
-          roots: [missingRoot],
           recoveredRoot,
-          workspaceRoot: workspace,
+          roots: [missingRoot],
+          sandbox,
           signal,
+          workspaceRoot: workspace,
         }),
       ).resolves.toBeUndefined();
       expect(await readFile(path.join(recoveredRoot, "release"), "utf-8")).toBe("v3");
@@ -215,11 +215,11 @@ describe("acceptance workspace recovery", () => {
       await mkdir(packageRoot, { recursive: true });
       await writeFile(path.join(packageRoot, "index.js"), "export const retained = true;");
       await attachAvailableAcceptanceDependencies({
-        sandbox,
-        roots: [missingRoot, retainedRoot],
         recoveredRoot,
-        workspaceRoot: workspace,
+        roots: [missingRoot, retainedRoot],
+        sandbox,
         signal,
+        workspaceRoot: workspace,
       });
       expect(
         await readFile(path.join(recoveredRoot, "node_modules/fixture-package/index.js"), "utf-8"),

@@ -100,16 +100,16 @@ const fixture = () => {
     git(candidate, "fetch", "--quiet", "--no-write-fetch-head", bundle, capture.snapshotSha);
   };
   return {
-    source,
     candidate,
-    originalSha,
-    git,
-    write,
-    run,
-    importCapture,
     dispose: () => {
-      rmSync(directory, { recursive: true, force: true });
+      rmSync(directory, { force: true, recursive: true });
     },
+    git,
+    importCapture,
+    originalSha,
+    run,
+    source,
+    write,
   };
 };
 
@@ -280,7 +280,7 @@ describe("retained dirty planning baseline", () => {
       initial.dispose();
       const stateRoot = path.join(path.dirname(f.source), "retained");
       const snapshot = path.join(stateRoot, "runs", "run-ABC123", "source");
-      mkdirSync(path.dirname(snapshot), { recursive: true, mode: 0o700 });
+      mkdirSync(path.dirname(snapshot), { mode: 0o700, recursive: true });
       execFileSync("/usr/bin/git", ["clone", "--quiet", f.source, snapshot]);
       chmodSync(snapshot, 0o700);
       chmodSync(path.join(snapshot, ".git"), 0o700);
@@ -302,7 +302,7 @@ describe("retained dirty planning baseline", () => {
       expect(baseline.sourceSha).toBe(retainedSha);
       expect(baseline.sourceSha).not.toBe(f.originalSha);
       const artifact = path.join(stateRoot, "source-baselines", f.originalSha, expected);
-      mkdirSync(artifact, { recursive: true, mode: 0o700 });
+      mkdirSync(artifact, { mode: 0o700, recursive: true });
       const artifactGit = path.join(artifact, "source.git");
       execFileSync("/usr/bin/git", ["clone", "--bare", "--quiet", snapshot, artifactGit]);
       chmodSync(artifactGit, 0o700);
@@ -370,7 +370,7 @@ describe("retained dirty planning baseline", () => {
       initial.dispose();
       const stateRoot = path.join(path.dirname(f.source), "retained");
       const snapshot = path.join(stateRoot, "runs", "run-ABC123", "source");
-      mkdirSync(path.dirname(snapshot), { recursive: true, mode: 0o700 });
+      mkdirSync(path.dirname(snapshot), { mode: 0o700, recursive: true });
       execFileSync("/usr/bin/git", ["clone", "--quiet", f.source, snapshot]);
       chmodSync(snapshot, 0o700);
       chmodSync(path.join(snapshot, ".git"), 0o700);
@@ -513,7 +513,7 @@ describe("retained dirty planning baseline", () => {
         writeFileSync(file, Buffer.from(await new Response(content).arrayBuffer()));
       },
       removePath: ({ path: name, recursive, force }) => {
-        rmSync(localPath(name), { recursive, force });
+        rmSync(localPath(name), { force, recursive });
         return Promise.resolve();
       },
     };

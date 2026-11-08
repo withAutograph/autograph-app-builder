@@ -245,11 +245,11 @@ describe("Builder SDK session I/O", () => {
     const output = Buffer.from("x".repeat(100_000));
     native.runCommand.mockResolvedValue({
       kill,
-      wait,
       async *logs() {
         yield { data: output.toString(), stream: "stdout" };
         yield { data: "diagnostic", stream: "stderr" };
       },
+      wait,
     });
     const process = await createVercelSdkSession(native).spawn({
       command: "bun dev",
@@ -373,11 +373,11 @@ describe("Builder SDK session I/O", () => {
     const fail = new Error("SDK log transport disconnected");
     native.runCommand.mockResolvedValue({
       kill,
-      wait: async () => ({ exitCode: 0 }),
       async *logs() {
         yield { data: "partial JSON", stream: "stdout" };
         throw fail;
       },
+      wait: async () => ({ exitCode: 0 }),
     });
     const process = await createVercelSdkSession(native).spawn({ command: "catalog-plan" });
     let capturedPrefix = "";
@@ -435,10 +435,10 @@ describe("Builder SDK session I/O", () => {
     const kill = vi.fn().mockResolvedValue(null);
     native.runCommand.mockResolvedValue({
       kill,
-      wait: async () => ({ exitCode: 0 }),
       async *logs() {
         yield { data: "unread output", stream: "stdout" };
       },
+      wait: async () => ({ exitCode: 0 }),
     });
     const process = await createVercelSdkSession(native).spawn({ command: "catalog-plan" });
     await process.stdout.cancel(new Error("output consumer abandoned"));
@@ -453,11 +453,11 @@ describe("Builder SDK session I/O", () => {
     const tail = Promise.withResolvers<boolean>();
     native.runCommand.mockResolvedValue({
       kill: vi.fn().mockResolvedValue(null),
-      wait: async () => ({ exitCode: 0 }),
       async *logs() {
         await tail.promise;
         yield { data: "late tail", stream: "stdout" };
       },
+      wait: async () => ({ exitCode: 0 }),
     });
     try {
       const process = await createVercelSdkSession(native, () => native, authorize).spawn({
@@ -624,17 +624,17 @@ it("kills a running command when renewal fails and leaves no idle renewal", asyn
 it("reapplies configured toolchain environment to commands on a replacement native handle, preserving command overrides", async () => {
   const native = fixture();
   native.runCommand.mockResolvedValue({
-    stdout: async () => "",
-    stderr: async () => "",
-    wait: async () => ({ exitCode: 0 }),
     kill: async () => {},
+    stderr: async () => "",
+    stdout: async () => "",
+    wait: async () => ({ exitCode: 0 }),
   });
   const replacement = fixture();
   replacement.runCommand.mockResolvedValue({
-    stdout: async () => "",
-    stderr: async () => "",
-    wait: async () => ({ exitCode: 0 }),
     kill: async () => {},
+    stderr: async () => "",
+    stdout: async () => "",
+    wait: async () => ({ exitCode: 0 }),
   });
   let active = native;
   const session = createVercelSdkSession(native, () => active, undefined, {
@@ -672,17 +672,17 @@ it("reapplies configured toolchain environment to commands on a replacement nati
 it("reapplies configured toolchain environment to commands on a replacement native handle, preserving command overrides", async () => {
   const native = fixture();
   native.runCommand.mockResolvedValue({
-    stdout: async () => "",
-    stderr: async () => "",
-    wait: async () => ({ exitCode: 0 }),
     kill: async () => {},
+    stderr: async () => "",
+    stdout: async () => "",
+    wait: async () => ({ exitCode: 0 }),
   });
   const replacement = fixture();
   replacement.runCommand.mockResolvedValue({
-    stdout: async () => "",
-    stderr: async () => "",
-    wait: async () => ({ exitCode: 0 }),
     kill: async () => {},
+    stderr: async () => "",
+    stdout: async () => "",
+    wait: async () => ({ exitCode: 0 }),
   });
   let active = native;
   const session = createVercelSdkSession(native, () => active, undefined, {

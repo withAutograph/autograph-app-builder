@@ -73,7 +73,7 @@ const fixture = async () => {
       updatedAtEpochMs: 1,
     },
   });
-  await store.recordPreapprovalAuthoringDecision({ principal, sessionId: "public", decision });
+  await store.recordPreapprovalAuthoringDecision({ decision, principal, sessionId: "public" });
   const sendAccepted = vi.fn<NonNullable<HostedEveTransport["sendAccepted"]>>(async () => {});
   const observe = vi.fn(async () => ({ status: "waiting", pendingRequests: [] }));
   return {

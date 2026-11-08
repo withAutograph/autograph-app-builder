@@ -115,7 +115,7 @@ const fixture = () => {
   const base = configuration();
   const selected = selectedConfig();
   const profile = { id: "isolated", authority, appId: "new-app", configuration: selected };
-  return { base, selected, profile };
+  return { base, profile, selected };
 };
 const resolve = (
   profile: object[],

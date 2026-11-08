@@ -61,7 +61,7 @@ const settlement = (
 });
 describe("private public-release consent", () => {
   it("requires the exact current call and does not reuse an earlier approval", () => {
-    const capture = createPrivatePublicReleaseApprovalCapture({ plan, callId: "current-call" });
+    const capture = createPrivatePublicReleaseApprovalCapture({ callId: "current-call", plan });
     capture.observe(request("old-call", "old-request"));
     capture.observe(settlement("approved", "old-request"));
     capture.observe(request());
@@ -70,7 +70,7 @@ describe("private public-release consent", () => {
     expect(capture.read()).toEqual({ approvalId: "request", approvedByCallId: "current-call" });
   });
   it("rejects changed runtime hashes, foreign consent and earlier cancellation", () => {
-    const capture = createPrivatePublicReleaseApprovalCapture({ plan, callId: "current-call" });
+    const capture = createPrivatePublicReleaseApprovalCapture({ callId: "current-call", plan });
     const changed = { ...plan, environment: [{ key: "APP_DATABASE_URL", sha256: "f".repeat(64) }] };
     capture.observe(
       request("current-call", "changed", {
@@ -84,7 +84,7 @@ describe("private public-release consent", () => {
     capture.observe(request());
     capture.observe(settlement("approved", "request", "foreign"));
     expect(capture.read()).toBeNull();
-    const cancelled = createPrivatePublicReleaseApprovalCapture({ plan, callId: "current-call" });
+    const cancelled = createPrivatePublicReleaseApprovalCapture({ callId: "current-call", plan });
     cancelled.observe(request("old-call", "old-request"));
     cancelled.observe(settlement("cancelled", "old-request"));
     cancelled.observe(request());

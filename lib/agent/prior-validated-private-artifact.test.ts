@@ -294,6 +294,6 @@ it("rejects source symlinks in strict overlay verification before accepting a di
     expect(denied.stdout).toBe("");
     expect(denied.stderr).toContain("Applied overlay contains an unsupported source entry.");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { force: true, recursive: true });
   }
 });
