@@ -531,20 +531,20 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
       const { runTask } = prepared;
       const managed = {
         ...prepared,
-        runTask: async (input: Parameters<typeof runTask>[0]) =>
-          await runTask({
-            ...input,
-            ...(record.plan.runtime.browserSelection === undefined
-              ? {}
-              : {
-                  browserSelection: record.plan.runtime.browserSelection,
-                  frozenBrowserSelection: true,
-                }),
+        runTask: async (input: Parameters<typeof runTask>[0]) => {
+          const taskInput: Parameters<typeof runTask>[0] = { ...input };
+          if (record.plan.runtime.browserSelection !== undefined) {
+            taskInput.browserSelection = record.plan.runtime.browserSelection;
+            taskInput.frozenBrowserSelection = true;
+          }
+          return await runTask({
+            ...taskInput,
             environment: { ...input.environment, ...privateEnvironment },
             commandId: record.suiteCommandId,
             commandCheckpoint: checkpoint,
             allowDispatch,
-          }),
+          });
+        },
       };
       const result = await runAppBrowserTests({
         appId: record.plan.target.appId,

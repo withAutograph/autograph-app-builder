@@ -121,14 +121,18 @@ export const prepareAppLocalPreview = async (input: {
         .regex(/^(?:http:\/\/localhost:3000|https:\/\/[a-z0-9-]+\.vercel\.run)$/u)
         .parse(input.expectedPreviousAuthOrigin);
     }
+    const { sandbox } = input;
+    const options: Parameters<typeof runSandboxCommandWithExcerpt>[0]["options"] = {
+      command,
+      env,
+      workingDirectory: input.root,
+    };
+    if (input.signal !== undefined) {
+      options.abortSignal = input.signal;
+    }
     const result = await runSandboxCommandWithExcerpt({
-      sandbox: input.sandbox,
-      options: {
-        command,
-        env,
-        workingDirectory: input.root,
-        ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
-      },
+      sandbox,
+      options,
       sanitize: safeOutput,
     });
     const stdout = safeOutput(result.stdout);

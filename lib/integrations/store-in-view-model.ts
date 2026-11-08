@@ -112,9 +112,15 @@ export function githubStoreInViewModel(input: {
 export function githubRepositoryAccessViewModel(
   access: GitHubRepositoryAccess,
 ): GitHubStoreInViewModel {
+  const selection: Pick<
+    Parameters<typeof githubStoreInViewModel>[0],
+    "action" | "desiredRepository"
+  > = { action: access.action };
+  if (access.repository !== undefined) {
+    selection.desiredRepository = access.repository.fullName;
+  }
   return githubStoreInViewModel({
-    action: access.action,
-    ...(access.repository === undefined ? {} : { desiredRepository: access.repository.fullName }),
+    ...selection,
     scopes: access.scopes.map((scope) => ({
       detail: scope.accountType,
       id: scope.installationId,

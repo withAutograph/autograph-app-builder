@@ -4676,33 +4676,32 @@ export function createHostedEveSessionService(input: {
         const terminal = ["completed", "failed", "cancelled"].includes(existing.status);
         const interrupted = existing.status === "working" && existing.resumability === "checkpoint";
         if (terminal || interrupted || executionTransfer) {
-          const recoverySource =
-            retainedRecovery ??
-            (existing.status === "failed" || executionTransfer
-              ? {
-                  version: 1 as const,
-                  sourcePublicSessionId: existing.sessionId,
-                  sourceOwnerRunId: existing.adapterSessionId,
-                  sourceAdapterGeneration: existing.adapterGeneration,
-                  logicalSessionId:
-                    existing.nativeRecoveryBinding?.logicalSessionId ?? existing.adapterSessionId,
-                  originalAuthoritySessionId:
-                    existing.nativeRecoveryBinding?.originalAuthoritySessionId ??
-                    existing.sessionId,
-                  parentCancellationRevision: existing.cancellationRevision ?? 0,
-                  ...(executionTransfer && existing.checkpointDigest !== undefined
-                    ? {
-                        executionTransfer: {
-                          kind: transferKind,
-                          sourceCheckpointDigest: existing.checkpointDigest,
-                        },
-                      }
-                    : {}),
-                  ...(existing.sourceHandoffId === undefined
-                    ? {}
-                    : { sourceHandoffId: existing.sourceHandoffId }),
-                }
-              : undefined);
+          let recoverySource:
+            | Omit<NonNullable<typeof retainedRecovery>, "operationId">
+            | undefined = retainedRecovery;
+          if (recoverySource === undefined && (existing.status === "failed" || executionTransfer)) {
+            const source: Omit<NonNullable<typeof retainedRecovery>, "operationId"> = {
+              version: 1,
+              sourcePublicSessionId: existing.sessionId,
+              sourceOwnerRunId: existing.adapterSessionId,
+              sourceAdapterGeneration: existing.adapterGeneration,
+              logicalSessionId:
+                existing.nativeRecoveryBinding?.logicalSessionId ?? existing.adapterSessionId,
+              originalAuthoritySessionId:
+                existing.nativeRecoveryBinding?.originalAuthoritySessionId ?? existing.sessionId,
+              parentCancellationRevision: existing.cancellationRevision ?? 0,
+            };
+            if (executionTransfer && existing.checkpointDigest !== undefined) {
+              source.executionTransfer = {
+                kind: transferKind,
+                sourceCheckpointDigest: existing.checkpointDigest,
+              };
+            }
+            if (existing.sourceHandoffId !== undefined) {
+              source.sourceHandoffId = existing.sourceHandoffId;
+            }
+            recoverySource = source;
+          }
           if (recoverySource !== undefined) {
             await (input.assertNativeRecoveryOwner ?? assertHostedBuildDecisionOwner)(existing);
           }

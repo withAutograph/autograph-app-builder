@@ -288,19 +288,29 @@ export const parseSourceReceiptEvidence = (value: unknown): SourceReceiptEvidenc
   return value as unknown as SourceReceiptEvidence;
 };
 
-export const sourceReceiptEvidence = (receipt: SourceReceipt): SourceReceiptEvidence =>
-  parseSourceReceiptEvidence({
+export const sourceReceiptEvidence = (receipt: SourceReceipt): SourceReceiptEvidence => {
+  const prefix: Pick<
+    SourceReceiptEvidenceBase,
+    "adapter" | "contractDigest" | "digest" | "eligibilityDigest"
+  > &
+    Partial<Pick<ClonedSourceReceiptEvidence, "provenance">> = {
     adapter: receipt.adapter,
     contractDigest: receipt.contractDigest,
     digest: receipt.digest,
     eligibilityDigest: receipt.eligibilityDigest,
-    ...(receipt.version === SOURCE_RECEIPT_VERSION ? { provenance: receipt.provenance } : {}),
+  };
+  if (receipt.version === SOURCE_RECEIPT_VERSION) {
+    prefix.provenance = receipt.provenance;
+  }
+  return parseSourceReceiptEvidence({
+    ...prefix,
     releaseEnabled: receipt.releaseEnabled,
     sourceKind: receipt.sourceKind,
     sourceSha: receipt.sourceSha,
     sourceTree: receipt.sourceTree,
     version: receipt.version,
   });
+};
 
 export const parseSourceReceipt = (value: unknown): SourceReceipt => {
   if (

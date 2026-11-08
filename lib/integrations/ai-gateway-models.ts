@@ -58,12 +58,14 @@ export async function loadGatewayModels(input?: {
     const defaultModelId = entries.some((entry) => entry.id === activeBuilderModelId)
       ? activeBuilderModelId
       : undefined;
-    const value: ModelState = {
+    const available: Pick<ModelState, "cached" | "entries" | "defaultModelId"> = {
       cached: false,
       entries,
-      ...(defaultModelId ? { defaultModelId } : {}),
-      status: "ready",
     };
+    if (defaultModelId) {
+      available.defaultModelId = defaultModelId;
+    }
+    const value: ModelState = { ...available, status: "ready" };
     lastKnownGood = value;
     return value;
   } catch {
