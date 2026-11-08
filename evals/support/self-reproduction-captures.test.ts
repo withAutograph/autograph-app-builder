@@ -13,6 +13,7 @@ import type { CaptureAdapter, CapturePage } from "./self-reproduction-captures";
 import { requirements } from "./self-reproduction-parity";
 
 const launchBrowser = vi.hoisted(() => vi.fn());
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled playwright dependency used by this test.
 vi.mock("playwright", () => ({ chromium: { launch: launchBrowser } }));
 
 describe("paired capture orchestration", () => {

@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { importPreparedApplicationSource } from "@/lib/agent/application-source-import";
 import { applicationSourceImportState } from "@/lib/agent/application-source-import-state";
 import { defineTool } from "eve/tools";

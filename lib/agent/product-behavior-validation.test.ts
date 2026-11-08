@@ -56,25 +56,34 @@ const mocks = vi.hoisted(() => {
   };
 });
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../repository/development-source dependency used by this test.
 vi.mock(import("../repository/development-source"), async (importOriginal) => ({
   ...(await importOriginal()),
   canAutoSelectDevelopmentSource: mocks.canReadHostSource,
   developmentSourceReceipt: mocks.hostSource,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./compiled-operator-artifacts dependency used by this test.
 vi.mock("./compiled-operator-artifacts", () => ({
   publishCompiledOperatorArtifactsForSession: mocks.publish,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../repository/app-description dependency used by this test.
 vi.mock(import("../repository/app-description"), async (importOriginal) => ({
   ...(await importOriginal()),
   describeSelectedApp: mocks.describe,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../../agent/tools/run-app-browser-tests dependency used by this test.
 vi.mock("../../agent/tools/run-app-browser-tests", () => ({ runAppBrowserTests: mocks.browser }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./review-applied-product-source dependency used by this test.
 vi.mock("./review-applied-product-source", () => ({ reviewAppliedProductSource: mocks.review }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../../agent/tools/prepare-app-local-preview dependency used by this test.
 vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
   prepareValidationLocalData: mocks.prepare,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./prepared-runtime-execution dependency used by this test.
 vi.mock("./prepared-runtime-execution", () => ({ resolvePreparedRuntimeExecution: mocks.runtime }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled eve/tools dependency used by this test.
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./workflow-state dependency used by this test.
 vi.mock("./workflow-state", () => ({
   APP_BUILDER_WORKFLOW_VERSION: 1,
   assertExactWorkflowState: (latest: unknown, expected: unknown) => {
@@ -87,19 +96,25 @@ vi.mock("./workflow-state", () => ({
     update: mocks.state.update,
   },
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./product-behavior-state dependency used by this test.
 vi.mock("./product-behavior-state", () => ({
   currentProductBehaviorEvidence: () => [],
   invalidateProductBehaviorEvidence: mocks.clear,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../repository/target-validation dependency used by this test.
 vi.mock("../repository/target-validation", () => ({
   createTargetValidationAttempt: mocks.attempt,
   executeProposalBoundValidation: mocks.execute,
   fixtureValidationCommandExecutor: vi.fn(),
+  // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous validation shard fixture.
   readTargetValidationTestShards: async () => [],
   sandboxValidationCommandExecutor: vi.fn(),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../testing/test-capability dependency used by this test.
 vi.mock("../testing/test-capability", () => ({ hasTestCapability: () => false }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/lib/mcp/hosted-route dependency used by this test.
 vi.mock("@/lib/mcp/hosted-route", () => ({ openHostedPostgresDatabase: vi.fn(() => ({})) }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/lib/repository/postgres-validation-log-store dependency used by this test.
 vi.mock("@/lib/repository/postgres-validation-log-store", () => ({
   createPostgresValidationLogStore: vi.fn(() => mocks.logStore),
 }));
@@ -163,6 +178,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     );
     await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate-retained-application",
+      // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
       getSandbox: async () => ({ id: "owned-applied-sandbox" }),
       session: { id: "session" },
     } as never);
@@ -248,6 +264,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     try {
       await validateAppCreation.execute({ implementationFiles: [], runBrowserTests: true }, {
         callId: "validate_phases",
+        // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
         getSandbox: async () => ({ id: "private-sandbox" }),
         session: { auth: { credential: "private-credential" }, id: "private-session" },
       } as never);
@@ -319,6 +336,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate_static",
+      // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
       getSandbox: async () => ({ id: "private-sandbox" }),
       session: { auth: {}, id: "private-session" },
     } as never);
@@ -361,6 +379,7 @@ describe("behavior evidence invalidation during validation repair", () => {
         await expect(
           validateAppCreation.execute({ implementationFiles: [], runBrowserTests: true }, {
             callId: "validate_failure",
+            // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
             getSandbox: async () => ({ id: "private-sandbox" }),
             session: { auth: {}, id: "private-session" },
           } as never),
@@ -442,6 +461,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       );
       const context = {
         callId: "validate_local",
+        // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
         getSandbox: async () => ({ id: "validation-sandbox" }),
         session: { auth: null, id: "actual-local-session" },
       };
@@ -537,6 +557,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     });
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate_build",
+      // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
       getSandbox: async () => ({ id: "validation-sandbox" }),
       session: { auth: {}, id: "session" },
     } as never);
@@ -566,6 +587,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       { implementationFiles: [], runBrowserTests: true },
       {
         callId: "validate_before_auth",
+        // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
         getSandbox: async () => ({ id: "validation-sandbox" }),
         session: { auth: {}, id: "session" },
       } as never,
@@ -602,6 +624,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     mocks.publish.mockRejectedValueOnce(new Error("private storage failure"));
     const context = {
       callId: "validate_retry",
+      // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
       getSandbox: async () => ({ id: "validation-sandbox" }),
       session: { auth: {}, id: "adapter" },
     };
@@ -632,6 +655,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     mocks.state.current = { ...workflow("validated"), phase: "applied" };
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
+      // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
       getSandbox: async () => ({ id: "validation-sandbox" }),
       session: { auth: {}, id: "session" },
     } as never);
@@ -651,6 +675,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     });
     await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
+      // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
       getSandbox: async () => ({ id: "validation-sandbox" }),
       session: { auth: {}, id: "session" },
     } as never);
@@ -661,6 +686,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     mocks.review.mockResolvedValue({ findings: [], reviewCompleted: true, status: "passed" });
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
+      // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
       getSandbox: async () => ({ id: "validation-sandbox" }),
       session: { auth: {}, id: "session" },
     } as never);
@@ -685,6 +711,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       mocks.execute.mockResolvedValue({ ok: false, receipt });
       const result = await validateAppCreation.execute({ implementationFiles: [] }, {
         callId: "validate_current",
+        // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
         getSandbox: async () => ({ id: "validation-sandbox" }),
         session: { auth: {}, id: "session" },
       } as never);
@@ -713,6 +740,7 @@ describe("behavior evidence invalidation during validation repair", () => {
         { implementationFiles: [], runBrowserTests: true },
         {
           callId: "validate",
+          // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
           getSandbox: async () => ({ id: "validation-sandbox" }),
           session: { auth: {}, id: "session" },
         } as never,
@@ -736,6 +764,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     mocks.prepare.mockRejectedValueOnce(new Error("Checked release differs from CUE"));
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
+      // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
       getSandbox: async () => ({ id: "validation-sandbox" }),
       session: { auth: {}, id: "session" },
     } as never);
@@ -754,6 +783,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       const writeTextFile = vi.fn();
       const result = await validateAppCreation.execute({ implementationFiles }, {
         callId: "repair",
+        // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
         getSandbox: async () => ({ id: "validation-sandbox", writeTextFile }),
         session: { auth: {}, id: "session" },
       } as never);
@@ -770,6 +800,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     await expect(
       validateAppCreation.execute({ implementationFiles }, {
         callId: "repair",
+        // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
         getSandbox: async () => ({ id: "validation-sandbox", writeTextFile }),
         session: { auth: {}, id: "session" },
       } as never),
@@ -789,6 +820,7 @@ describe("behavior evidence invalidation during validation repair", () => {
         },
         {
           callId: "repair",
+          // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
           getSandbox: async () => ({ id: "validation-sandbox", writeTextFile }),
           session: { auth: {}, id: "session" },
         } as never,
@@ -808,6 +840,7 @@ describe("behavior evidence invalidation during validation repair", () => {
         .mockRejectedValueOnce(new Error("second write failed"));
       const context = {
         callId: "repair",
+        // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
         getSandbox: async () => ({ id: "validation-sandbox", writeTextFile }),
         session: { auth: {}, id: "session" },
       } as never;
@@ -851,6 +884,7 @@ describe("behavior evidence invalidation during validation repair", () => {
         },
       };
       mocks.state.current = saved;
+      // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
       const getSandbox = vi.fn(async () => ({ id: "validation-sandbox" }));
       // SAFETY: The existing faithful validation ports own all effects in this product-tool regression.
       const result = await validateAppCreation.execute({ implementationFiles: [] }, {
@@ -878,6 +912,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     // SAFETY: The existing faithful validation ports own all effects in this product-tool regression.
     const result = await validateAppCreation.execute({ implementationFiles }, {
       callId: "explicit-repair",
+      // oxlint-disable-next-line eslint/require-await -- Return a fresh sandbox fixture through the async port.
       getSandbox: async () => ({ id: "validation-sandbox", writeTextFile }),
       session: { id: "session", auth: {} },
     } as never);

@@ -104,15 +104,19 @@ const draftFetch = vi.hoisted(() =>
   }),
 );
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled next/navigation dependency used by this test.
 vi.mock("next/navigation", () => ({
   useRouter: () => navigation,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/app/actions/builder dependency used by this test.
 vi.mock("@/app/actions/builder", () => builderActions);
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/app/actions/builder-drafts dependency used by this test.
 vi.mock("@/app/actions/builder-drafts", () => ({
   loadActiveBuilderDraft: builderActions.loadActiveBuilderDraft,
   saveActiveBuilderDraft: builderActions.saveActiveBuilderDraft,
 }));
 vi.stubGlobal("fetch", draftFetch);
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../../components/auth/user/user-button dependency used by this test.
 vi.mock("../../components/auth/user/user-button", () => ({
   UserButton: () => <button aria-label="Account">Account</button>,
 }));

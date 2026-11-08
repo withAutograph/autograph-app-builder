@@ -37,6 +37,7 @@ const dependencies: BuilderHandoffPageDependencies = {
     reserve: vi.fn<BuilderHandoffStore["reserve"]>(),
     bindSession: vi.fn<BuilderHandoffStore["bindSession"]>(),
   }),
+  // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous Cursor client loader contract.
   loadCursorClient: async () => ({ isCursorClientReady: mocks.cursorReady }),
 };
 const getBuilderHandoffPageData = (input: Parameters<typeof getPageData>[0]) =>

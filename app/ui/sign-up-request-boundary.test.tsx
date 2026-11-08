@@ -7,13 +7,19 @@ const dependencies = vi.hoisted(() => ({
   headers: vi.fn(() => Promise.resolve(new Headers())),
   session: vi.fn(() => Promise.resolve(null)),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled next/server dependency used by this test.
 vi.mock("next/server", () => ({ connection: dependencies.connection }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled next/headers dependency used by this test.
 vi.mock("next/headers", () => ({ headers: dependencies.headers }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled next/navigation dependency used by this test.
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 // oxlint-disable-next-line sonarjs/function-name -- This mock or harness is named as the React component it represents.
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/components/auth/sign-up dependency used by this test.
 vi.mock("@/components/auth/sign-up", () => ({ SignUp: () => null }));
 // oxlint-disable-next-line sonarjs/function-name -- This mock or harness is named as the React component it represents.
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/components/auth/auth-continuity dependency used by this test.
 vi.mock("@/components/auth/auth-continuity", () => ({ AuthContinuity: () => null }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/lib/auth/preview-oauth-deployment dependency used by this test.
 vi.mock("@/lib/auth/preview-oauth-deployment", () => ({
   getPreviewOAuthDeploymentOrigin: () => "https://builder.example",
   getPreviewOAuthDeploymentSession: dependencies.session,

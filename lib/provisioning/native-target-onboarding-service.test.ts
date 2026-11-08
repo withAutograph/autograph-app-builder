@@ -199,6 +199,7 @@ const fixture = (workloadAuthorized = true, selectedPlan = plan) => {
       );
     },
     createProject,
+    // oxlint-disable-next-line eslint/require-await -- Preserve asynchronous project observation behavior.
     observeProject: async () => ({
       projectId: "project-id",
       reason: "provider_unavailable" as const,

@@ -1,3 +1,4 @@
+/* oxlint-disable github/filenames-match-regex, unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { Sandbox } from "@vercel/sandbox";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { readPrivateComputeProviderState } from "@/lib/sandbox/private-compute-resume";

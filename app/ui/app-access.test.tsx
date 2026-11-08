@@ -217,6 +217,7 @@ describe("Builder app access", () => {
       "fetch",
       vi.fn(() => Promise.resolve(Response.json(missingInvitation))),
     );
+    // oxlint-disable-next-line eslint/require-await -- Keep interrupted continuation as a rejected promise.
     continuation.mockImplementation(async (_previous, input) => {
       requests.push(z.object({ command: appAccessCommandSchema }).parse(input).command);
       if (requests.length === 1) {

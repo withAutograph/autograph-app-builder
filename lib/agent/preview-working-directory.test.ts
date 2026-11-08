@@ -39,12 +39,15 @@ const mocks = vi.hoisted(() => {
     workflowState,
   };
 });
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled eve/tools dependency used by this test.
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./product-behavior-state dependency used by this test.
 vi.mock("./product-behavior-state", () => ({
   bindProductBehaviorPreview: mocks.bind,
   currentProductBehaviorGeneration: () => 3,
   invalidateProductBehaviorPreview: mocks.invalidate,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./workflow-state dependency used by this test.
 vi.mock("./workflow-state", () => ({
   appBuilderWorkflowState: {
     get: () => mocks.workflowState,
@@ -53,25 +56,33 @@ vi.mock("./workflow-state", () => ({
     },
   },
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./working-preview-state dependency used by this test.
 vi.mock("./working-preview-state", () => ({
   workingPreviewAttemptState: { get: () => null, update: vi.fn() },
   workingPreviewState: { get: () => null, update: mocks.previewStateUpdate },
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../sandbox/deployment-execution-lease dependency used by this test.
 vi.mock("../sandbox/deployment-execution-lease", () => ({
   assertHostedSandboxCommandAuthority: vi.fn(),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../sandbox/vercel-preview-provider dependency used by this test.
 vi.mock("../sandbox/vercel-preview-provider", () => ({ getVercelPreviewProvider: vi.fn() }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../sandbox/working-preview-runtime dependency used by this test.
 vi.mock("../sandbox/working-preview-runtime", () => ({ startWorkingPreview: mocks.start }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./prepared-runtime-execution dependency used by this test.
 vi.mock("./prepared-runtime-execution", () => ({
   resolvePreparedRuntimeExecution: mocks.runtime,
   resolveProtectedRuntimeBindings: mocks.nativeBindings,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./checkout-dependencies dependency used by this test.
 vi.mock("./checkout-dependencies", () => ({
   ensureCheckoutDependencies: mocks.dependencies,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./prior-validated-private-artifact dependency used by this test.
 vi.mock("./prior-validated-private-artifact", () => ({
   priorValidatedPrivateArtifact: mocks.prior,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../../agent/tools/prepare-app-local-preview dependency used by this test.
 vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
   appDeclaresLocalSetup: async ({
     appId,

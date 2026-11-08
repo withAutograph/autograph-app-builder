@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 /* oxlint-disable eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Read and page requested repository files in their caller-visible order. */
 import { defineTool } from "eve/tools";
 import type { SandboxSession } from "eve/sandbox";

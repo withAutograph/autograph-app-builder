@@ -32,6 +32,7 @@ test.beforeEach(async () => {
   await resetApplicationState();
 });
 let callbackServer: Server | undefined;
+// oxlint-disable-next-line eslint/require-await -- Keep teardown failures as asynchronous rejections.
 test.afterEach(async () => {
   const server = callbackServer;
   callbackServer = undefined;

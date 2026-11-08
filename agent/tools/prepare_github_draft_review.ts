@@ -1,3 +1,4 @@
+/* oxlint-disable github/filenames-match-regex, unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { parseRepositoryReference } from "@/lib/integrations/repository-access";
 import { defineTool } from "eve/tools";
 import { z } from "zod";

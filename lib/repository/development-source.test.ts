@@ -8,6 +8,7 @@ import type { SourceKind } from "./source-receipt";
 
 const inspectSourceReceipt = vi.hoisted(() => vi.fn());
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./source-receipt dependency used by this test.
 vi.mock("./source-receipt", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   inspectSourceReceipt,

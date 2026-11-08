@@ -6,7 +6,9 @@ import { AuthConfiguration, RouteProviders } from "./route-providers";
 
 const { passkeysFlag } = vi.hoisted(() => ({ passkeysFlag: vi.fn() }));
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/lib/feature-flags dependency used by this test.
 vi.mock("@/lib/feature-flags", () => ({ passkeysFlag }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/components/providers dependency used by this test.
 vi.mock("@/components/providers", () => ({
   AuthRouteProvider: ({
     children,

@@ -1,3 +1,4 @@
+/* oxlint-disable github/filenames-match-regex, unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { internalCorrectionRequiresSuccessor } from "@/lib/agent/preapproval-authoring-runtime";
 import { applyApprovedPrivateComputeProfile } from "@/lib/sandbox/private-compute-activation";
 import { PRIVATE_COMPUTE_PROFILE_ID } from "@/lib/sandbox/private-compute-profile";

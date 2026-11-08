@@ -491,6 +491,7 @@ test("failed tool results, observed metadata and foreign/incomplete history cann
         {
           environment,
           readAuthority: () => Promise.resolve({ kind: "local", ownerUid: 1, stateRoot }),
+          // oxlint-disable-next-line eslint/require-await -- Preserve asynchronous source snapshot fixture behavior.
           snapshot: async () => ({
             events: [],
             session: { sessionId: "saved-session", streamIndex: 2 },
@@ -533,6 +534,7 @@ test("failed tool results, observed metadata and foreign/incomplete history cann
             reads += 1;
             return Promise.resolve({ kind: "local", ownerUid: reads, stateRoot });
           },
+          // oxlint-disable-next-line eslint/require-await -- Preserve asynchronous source snapshot fixture behavior.
           snapshot: async () => ({
             events: [],
             session: { sessionId: "saved-session", streamIndex: 0 },

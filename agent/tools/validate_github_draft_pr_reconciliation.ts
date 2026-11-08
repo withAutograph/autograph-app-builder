@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { currentDraftCandidateSource } from "@/lib/agent/published-draft-repair";

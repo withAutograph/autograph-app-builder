@@ -16,7 +16,9 @@ import type { HandoffControlData } from "./handoff-controls";
 
 const navigation = vi.hoisted(() => ({ refresh: vi.fn(), replace: vi.fn() }));
 const renewal = vi.hoisted(() => ({ action: vi.fn() }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled next/navigation dependency used by this test.
 vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/app/actions/handoff-renewal dependency used by this test.
 vi.mock("@/app/actions/handoff-renewal", () => ({
   renewBuilderHandoff: renewal.action,
 }));

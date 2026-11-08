@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 // oxlint-disable github/filenames-match-regex -- Eve discovers this tool by its snake_case name.
 import { defineTool } from "eve/tools";
 import { z } from "zod";

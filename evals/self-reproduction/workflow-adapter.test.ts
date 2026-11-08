@@ -2,9 +2,12 @@ import { readFile } from "node:fs/promises";
 import { createWorkflowAdapters } from "./workflow-adapter";
 import { describe, expect, it, vi } from "vitest";
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled node:fs/promises dependency used by this test.
 vi.mock("node:fs/promises", () => ({ readFile: vi.fn().mockResolvedValue("a".repeat(32)) }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled flags dependency used by this test.
 vi.mock("flags", () => ({ encryptOverrides: vi.fn().mockResolvedValue("synthetic-override") }));
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../../e2e/support/harness dependency used by this test.
 vi.mock("../../e2e/support/harness", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   // oxlint-disable-next-line unicorn/no-useless-undefined -- Vitest requires the resolved-value argument.

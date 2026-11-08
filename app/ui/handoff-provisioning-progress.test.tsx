@@ -14,7 +14,9 @@ const actions = vi.hoisted(() => ({
   continue: vi.fn(async () => ({ status: "updated" as const })),
 }));
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled next/navigation dependency used by this test.
 vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/app/actions/builder dependency used by this test.
 vi.mock("@/app/actions/builder", () => ({
   continueHandoffProvisioning: actions.continue,
 }));

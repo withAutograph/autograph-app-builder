@@ -5,10 +5,12 @@ import { BuilderFormContent } from "./builder-form-content";
 
 // These are RSC client references in production. Test the independently
 // renderable server structure without hydrating a draft or auth provider.
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./builder-source-upload dependency used by this test.
 vi.mock("./builder-source-upload", () => ({
   BuilderSourceUpload: () => <input aria-label="App source artifact" type="file" />,
 }));
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./builder-form-islands dependency used by this test.
 vi.mock("./builder-form-islands", () => ({
   BuilderAppDetails: () => <input aria-label="App Name" />,
   BuilderConnections: () => <button type="button">Add a connection</button>,

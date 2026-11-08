@@ -32,6 +32,7 @@ const input = {
   version: 1 as const,
 };
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/lib/handoff/source-upload-deployment dependency used by this test.
 vi.mock("@/lib/handoff/source-upload-deployment", async (importOriginal) => {
   const actual = await importOriginal<{
     readAuthenticatedSourceUploadContext: typeof readAuthenticatedSourceUploadContext;
@@ -40,6 +41,7 @@ vi.mock("@/lib/handoff/source-upload-deployment", async (importOriginal) => {
   return { ...actual, readAuthenticatedSourceUploadContext: vi.fn() };
 });
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/lib/builder-drafts/deployment dependency used by this test.
 vi.mock("@/lib/builder-drafts/deployment", () => ({
   getAuthenticatedBuilderDraftContext: vi.fn(),
 }));
@@ -67,12 +69,16 @@ beforeEach(() => {
   });
 });
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled next/cache dependency used by this test.
 vi.mock("next/cache", () => ({ refresh: vi.fn() }));
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled next/headers dependency used by this test.
 vi.mock("next/headers", () => ({ headers: vi.fn(async () => new Headers()) }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/lib/auth/preview-oauth-runtime dependency used by this test.
 vi.mock("@/lib/auth/preview-oauth-runtime", () => ({
   readPreviewOAuthRuntimeConfig: vi.fn(() => ({ issuer: "https://app.test" })),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/lib/provisioning/deployment dependency used by this test.
 vi.mock("@/lib/provisioning/deployment", () => ({
   getBuilderProvisioningDeploymentHandler: vi.fn(() => async (request: Request) => {
     const requestInput = (await request.json()) as { deploymentAccess?: string; operation: string };
@@ -130,6 +136,7 @@ vi.mock("@/lib/provisioning/deployment", () => ({
     });
   }),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/lib/handoff/deployment dependency used by this test.
 vi.mock("@/lib/handoff/deployment", () => ({
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   getBuilderHandoffDeploymentHandler: vi.fn(() => async () => {

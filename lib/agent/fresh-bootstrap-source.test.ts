@@ -15,10 +15,12 @@ const mocks = vi.hoisted(() => ({
   readPreparedSandboxSourceManifest: vi.fn(),
 }));
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../repository/arrusted-template dependency used by this test.
 vi.mock("../repository/arrusted-template", () => ({
   inspectSourceBoundSandboxWorkspace: mocks.inspectSourceBoundSandboxWorkspace,
 }));
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../repository/supported-template dependency used by this test.
 vi.mock("../repository/supported-template", () => ({
   readPreparedSandboxSourceManifest: mocks.readPreparedSandboxSourceManifest,
 }));

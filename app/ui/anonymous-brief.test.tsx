@@ -11,6 +11,7 @@ import { AnonymousBrief } from "./anonymous-brief";
 import { AnonymousBuilder } from "./anonymous-builder";
 
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled next/navigation dependency used by this test.
 vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
 
 const requireElement = (element: Element | null | undefined): HTMLElement => {

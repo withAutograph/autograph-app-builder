@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { implementationArchitectureDiagnostics } from "./apply-implementation-files";
 import { stageImplementationFiles } from "./staged-implementation";
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled eve/context dependency used by this test.
 vi.mock("eve/context", () => ({
   defineState: (_name: string, initial: () => unknown) => {
     let state = initial();

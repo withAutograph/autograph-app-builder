@@ -11,6 +11,7 @@ const browser = vi.hoisted(() => {
   const close = vi.fn<() => Promise<void>>().mockResolvedValue();
   return { close, page };
 });
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled playwright dependency used by this test.
 vi.mock("playwright", () => ({
   chromium: {
     launch: async () => ({

@@ -16,6 +16,7 @@ const harness = {
   waitForBuilderReady: vi.fn<() => Promise<void>>().mockResolvedValue(),
 };
 const loadHarness = vi.fn<() => Promise<typeof harness>>().mockResolvedValue(harness);
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled postgres dependency used by this test.
 vi.mock("postgres", () => ({ default: () => Object.assign(fixture.query, { end: fixture.end }) }));
 const page = {
   getByLabel: (name: string) => ({

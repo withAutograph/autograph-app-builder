@@ -104,6 +104,7 @@ const transport = function transport(overrides: Partial<HostedEveTransport> = {}
       await input.onAccepted?.("fixture-delivery");
       return deliveredSnapshot();
     }),
+    // oxlint-disable-next-line eslint/require-await -- Preserve asynchronous hosted transport fixture behavior.
     start: vi.fn(async () => ({ adapterSessionId: "eve_1", snapshot })),
   };
   return { ...base, ...overrides };

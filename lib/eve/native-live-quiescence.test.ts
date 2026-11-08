@@ -1263,6 +1263,7 @@ describe("owned running-lineage execution transfer", () => {
   });
   it("refuses an inbox owned outside the reconstructed verified lineage", async () => {
     const f = twoOwners();
+    // oxlint-disable-next-line eslint/require-await -- Preserve asynchronous native recovery fixture behavior.
     f.dependencies.readLogicalInboxOwner = async () => ({
       logicalSessionId: "logical",
       runId: "unverified-owner",
@@ -1279,6 +1280,7 @@ describe("owned running-lineage execution transfer", () => {
 it("uses server-default bulk pagination and exhausts all step pages", async () => {
   const pages: unknown[] = [];
   const world = {
+    // oxlint-disable-next-line eslint/require-await -- Preserve asynchronous native recovery fixture behavior.
     runs: { get: async () => ({ runId: "old-native", status: "running" }) },
     steps: {
       list: (input: { pagination?: { cursor?: string; limit?: number } }) => {
@@ -1400,6 +1402,7 @@ it("retains the canonical unknown operation and source fence after a partial nat
             snapshot: { events: [], status: "input_required" },
           })
         : nativeTransport.start(input),
+    // oxlint-disable-next-line eslint/require-await -- Preserve asynchronous native recovery fixture behavior.
     get: async () => ({ events: [], status: "input_required" }),
     send: vi.fn(),
     respond: vi.fn(),
@@ -1614,6 +1617,7 @@ it("refuses another operation's ready hook before stopping any owner", async () 
 });
 it("does not accept a caller-supplied parked owner without its exact native ready hook", async () => {
   const f = fixture();
+  // oxlint-disable-next-line eslint/require-await -- Preserve asynchronous native recovery fixture behavior.
   f.dependencies.readLogicalInboxOwner = async () => ({
     logicalSessionId: "logical",
     runId: "forged-ready",

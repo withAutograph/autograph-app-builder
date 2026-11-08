@@ -12,6 +12,7 @@ import type {
 } from "./working-preview-ownership";
 
 const ownership = vi.hoisted(() => ({ current: null as Partial<PreviewAttempt> | null }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./working-preview-ownership dependency used by this test.
 vi.mock("./working-preview-ownership", async (importOriginal) => {
   const actual = await importOriginal<{
     previewOwnershipOperation: typeof previewOwnershipOperation;

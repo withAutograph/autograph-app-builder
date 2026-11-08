@@ -32,19 +32,25 @@ const mocks = vi.hoisted(() => ({
   },
   workspace: { workspaceId: "sandbox", workspacePath: "/workspace/repository" },
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled eve/tools dependency used by this test.
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./source-bound-sandbox dependency used by this test.
 vi.mock("./source-bound-sandbox", () => ({
   getSourceBoundSandbox: async (ctx: { getSandbox: () => Promise<{ id: string }> }) =>
     await ctx.getSandbox(),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../../agent/tools/source_status dependency used by this test.
 vi.mock("../../agent/tools/source_status", () => ({ default: { execute: mocks.acquire } }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./source-state dependency used by this test.
 vi.mock("./source-state", () => ({ sourceWorkflowState: { get: () => mocks.source } }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./repository-access-state dependency used by this test.
 vi.mock("./repository-access-state", async (importOriginal) => {
   const original = await importOriginal<{
     repositoryAccessReceiptSchema: typeof repositoryAccessReceiptSchema;
   }>();
   return { ...original, repositoryAccessReceiptState: { get: mocks.repositoryAccess } };
 });
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./workflow-state dependency used by this test.
 vi.mock("./workflow-state", () => ({
   APP_BUILDER_WORKFLOW_VERSION: 17,
   appBuilderWorkflowState: { get: () => mocks.workflow },
@@ -52,18 +58,23 @@ vi.mock("./workflow-state", () => ({
   updateExactWorkflow: mocks.update,
   workflowWorkspace: () => {},
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../repository/development-source dependency used by this test.
 vi.mock("../repository/development-source", () => ({
   canAutoSelectDevelopmentSource: () => false,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../repository/github-publication dependency used by this test.
 vi.mock("../repository/github-publication", () => ({
   assertExactImmutableGitHubSourceReceipt: vi.fn(),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../repository/source-receipt dependency used by this test.
 vi.mock("../repository/source-receipt", () => ({ SOURCE_RECEIPT_VERSION: 4 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../repository/supported-template dependency used by this test.
 vi.mock("../repository/supported-template", () => ({
   prepareDevelopmentSandboxWorkspace: vi.fn(),
   prepareSupportedSandboxWorkspace: vi.fn(),
   readPreparedSandboxWorkspaceRecord: () => Promise.resolve(mocks.workspace),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../repository/sandbox-github-source dependency used by this test.
 vi.mock("../repository/sandbox-github-source", () => ({
   inspectGitHubSourceSandboxWorkspace: mocks.inspectGitHub,
 }));
