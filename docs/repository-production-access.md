@@ -44,9 +44,13 @@ worker receives credentials. Connection values and driver error details stay
 private. This path does not reuse a synthetic Preview connector or credential.
 Internal failure diagnostics distinguish authority, workload OIDC, each connection
 binding and SQL identity, encrypted credential decoding and Sandbox creation.
-They retain only fixed phase/code labels, allowlisted SQLSTATEs and numeric HTTP
-status. They never include connection values, exception text or causes, and
-cannot change authorization, retries, journal reconciliation or public responses.
+Setup preparation (including the physical lease and reconciliation) and the final
+access projection have separate failure phases. Diagnostics retain only fixed
+phase/code/reason labels, allowlisted SQLSTATEs and numeric HTTP status. Reasons
+classify exact known setup/lease failures and schema-invalid results through own
+data properties; arbitrary text, inherited values, accessors and causes are never
+serialized. Diagnostics cannot change exceptions, authorization, retries, journal
+reconciliation or public responses.
 
 Production requires an explicit `authOperatorRole` distinct from the Auth schema
 owner (`authResource.migratorRole`) and runtime role. Its restricted permissions
