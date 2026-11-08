@@ -229,8 +229,10 @@ const membershipInspectionFixture = () => {
     version: 2,
   });
   const eve: Pick<HostedEveStore, "getSession" | "recordPrivateApprovalReceipts"> = {
-    getSession: vi.fn(() => Promise.resolve(session)),
-    recordPrivateApprovalReceipts: vi.fn(() => Promise.resolve()),
+    getSession: vi.fn<HostedEveStore["getSession"]>().mockResolvedValue(session),
+    recordPrivateApprovalReceipts: vi
+      .fn<NonNullable<HostedEveStore["recordPrivateApprovalReceipts"]>>()
+      .mockResolvedValue(),
   };
   const observe = vi.fn(() =>
     Promise.resolve({
@@ -341,8 +343,8 @@ const approvedInspectionFixture = () => {
     authority: f.context.authority,
     ownerContext: f.context.ownerContext,
     target: f.context.target,
-    assertCurrent: vi.fn(() => Promise.resolve()),
-    checkpoint: vi.fn(() => Promise.resolve()),
+    assertCurrent: vi.fn<HostedOperatorEffectContext["assertCurrent"]>().mockResolvedValue(),
+    checkpoint: vi.fn<HostedOperatorEffectContext["checkpoint"]>().mockResolvedValue(),
     effect,
     fenceGeneration: operator.fenceGeneration ?? 7,
     leaseId: "3e38466d-46fd-4277-a9f7-432e13447354",
@@ -567,7 +569,9 @@ describe("approved retained membership inspection", () => {
   it("propagates a current owner authorization failure without classifying it as an old approval denial", async () => {
     const f = selectedInspectionFixture();
     const failure = new HostedOperatorError("authorization_required");
-    f.context.assertCurrent = vi.fn(() => Promise.reject(failure));
+    f.context.assertCurrent = vi
+      .fn<HostedOperatorEffectContext["assertCurrent"]>()
+      .mockRejectedValue(failure);
     await expect(
       readApprovedRetainedMembershipInspections({
         effect: f.context,
@@ -661,7 +665,9 @@ describe("approved retained membership inspection", () => {
   it("checks the live execution lease before looking up historical approval", async () => {
     const f = approvedInspectionFixture();
     const failure = new Error("Current execution lease was revoked");
-    f.context.assertCurrent = vi.fn(() => Promise.reject(failure));
+    f.context.assertCurrent = vi
+      .fn<HostedOperatorEffectContext["assertCurrent"]>()
+      .mockRejectedValue(failure);
     await expect(
       readApprovedRetainedMembershipInspection({
         effect: f.context,
