@@ -49,12 +49,14 @@ const fixture = () => {
   };
   const deps = {
     async getHook() {
-      return { runId: receipt.ownerRunId, metadata: Promise.resolve({ recoveryBinding: receipt }) };
+      const runId = receipt.ownerRunId;
+      const metadata = Promise.resolve({ recoveryBinding: receipt });
+      return { metadata, runId };
     },
+    isHookNotFound: HookNotFoundError.is,
     async resumeHook() {
       state.resumes += 1;
     },
-    isHookNotFound: HookNotFoundError.is,
   };
   const input = {
     auth: { authenticator: canary, principalType: "user", principalId: canary },
@@ -139,10 +141,10 @@ test("metadata decryption errors never expose their message or private context",
   const f = fixture();
   const failure = new RuntimeDecryptionError(canary, { context: { private: canary } });
   f.deps.getHook = async () => ({
-    runId: f.receipt.ownerRunId,
     get metadata() {
       return Promise.reject(failure);
     },
+    runId: f.receipt.ownerRunId,
   });
   assert.deepEqual(await captureFailure(f, failure, "hook_metadata"), {
     errorClass: "RuntimeDecryptionError",
@@ -153,10 +155,11 @@ test("metadata decryption errors never expose their message or private context",
 });
 test("a changed hook binding retains the existing receipt comparison rejection", async () => {
   const f = fixture();
-  f.deps.getHook = async () => ({
-    runId: `${canary}-other`,
-    metadata: Promise.resolve({ recoveryBinding: f.receipt }),
-  });
+  f.deps.getHook = async () => {
+    const runId = `${canary}-other`;
+    const metadata = Promise.resolve({ recoveryBinding: f.receipt });
+    return { metadata, runId };
+  };
   await captureFailure(f, undefined, "hook_validate");
   assert.equal(f.state.resumes, 0);
 });
@@ -268,10 +271,11 @@ test("actual missing hooks and already-consumed resume hooks retain successful n
       recoveryBinding: f.receipt,
     });
     assert.equal(f.state.resumes, 0);
-    f.deps.getHook = async () => ({
-      runId: f.receipt.ownerRunId,
-      metadata: Promise.resolve({ recoveryBinding: f.receipt }),
-    });
+    f.deps.getHook = async () => {
+      const runId = f.receipt.ownerRunId;
+      const metadata = Promise.resolve({ recoveryBinding: f.receipt });
+      return { metadata, runId };
+    };
     f.deps.resumeHook = async () => {
       f.state.resumes += 1;
       throw new HookNotFoundError(canary);

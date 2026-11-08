@@ -59,7 +59,7 @@ const terminalReceiptLifecycle = async (reconciliationKind) => {
     collect: async ({ binding, authorizeOwner }) => {
       await authorizeOwner(binding);
       collectedOwners.push(binding);
-      return { kind: "candidate", candidate: frontier };
+      return { candidate: frontier, kind: "candidate" };
     },
     readCandidate: (candidate) => {
       assert.equal(candidate, frontier);

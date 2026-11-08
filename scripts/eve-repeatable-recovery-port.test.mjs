@@ -48,10 +48,10 @@ const fixture = () => {
   };
   const state = {
     calls: [],
-    receipt: undefined,
-    hook: undefined,
     denied: false,
+    hook: undefined,
     options: undefined,
+    receipt: undefined,
   };
   const ports = {
     async authorize() {
@@ -77,7 +77,7 @@ const fixture = () => {
     async collect({ binding, authorizeOwner }) {
       state.calls.push("collect");
       await authorizeOwner(binding);
-      return { kind: "candidate", candidate: payload };
+      return { candidate: payload, kind: "candidate" };
     },
     async getHook() {
       if (state.hook === undefined) {

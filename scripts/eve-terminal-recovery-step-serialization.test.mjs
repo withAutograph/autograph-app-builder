@@ -74,13 +74,13 @@ const provenance = {
 const fixture = () => {
   const queue = new Map();
   const context = {
-    generateUlid: () => "synthetic-correlation",
-    invocationsQueue: queue,
     eventsConsumer: {
       subscribe() {
         /* No event delivered: the real proxy remains suspended. */
       },
     },
+    generateUlid: () => "synthetic-correlation",
+    invocationsQueue: queue,
     promiseQueue: Promise.resolve(),
   };
   const validateCheckpoint = createUseStepForFixture(context)(
@@ -155,9 +155,9 @@ it("serializes the idle waiting step after activation without capturing recovery
   const queue = new Map();
   const { promise: queued, resolve: queuedStep } = Promise.withResolvers();
   const waitingStep = createUseStepForFixture({
+    eventsConsumer: { subscribe: queuedStep },
     generateUlid: () => "idle-waiting-correlation",
     invocationsQueue: queue,
-    eventsConsumer: { subscribe: queuedStep },
     promiseQueue: Promise.resolve(),
   })(
     "step//eve/execution/session/terminal-recovery-waiting-step.js//emitTerminalRecoveryWaitingStep",
@@ -184,14 +184,14 @@ it("serializes the idle waiting step after activation without capturing recovery
     },
     createSessionInbox: () => ({
       claimSessionHooks: () => Promise.resolve(),
+      dispose: () => Promise.resolve(),
+      drain: () => [],
       onInterrupt: () => () => {
         // No external interrupts are registered by this synthetic inbox.
       },
-      drain: () => [],
       restore() {
         // This idle checkpoint has no retained inbox messages.
       },
-      dispose: () => Promise.resolve(),
     }),
     getWorkflowMetadata: () => ({ workflowRunId: IDLE_OWNER_RUN_ID }),
     getWritable: () => writable,

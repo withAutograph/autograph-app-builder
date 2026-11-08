@@ -56,8 +56,8 @@ const fixture = () => {
   const seen = { bindings: [], reads: [], tokens: [] };
   let currentRejection = null;
   let hook = {
-    runId: holderOwnerRunId,
     metadata: Promise.resolve({ sessionId: descriptor.logicalSessionId }),
+    runId: holderOwnerRunId,
   };
   let entry = {
     kind: TERMINAL_RECOVERY_KIND,
@@ -105,7 +105,7 @@ const fixture = () => {
       seen.reads.push(runId);
       assert.equal(runId, holderOwnerRunId);
       await onRead();
-      return { runId, status: "failed", entry };
+      return { entry, runId, status: "failed" };
     },
     record(summary) {
       summaries.push(summary);
@@ -113,15 +113,15 @@ const fixture = () => {
   };
   const input = {
     auth,
-    descriptor,
-    receipt,
-    ports,
     authorizeCurrent() {
       if (currentRejection !== null) {
         throw new Error(`current-${currentRejection}-canary`);
       }
       return Promise.resolve();
     },
+    descriptor,
+    ports,
+    receipt,
   };
   return {
     auth,
@@ -131,26 +131,26 @@ const fixture = () => {
     holderDescriptor,
     holderOwnerRunId,
     input,
-    receipt,
-    seen,
-    summaries,
-    token,
     observe: async () => await observeRecoveryInboxHolder(input, deps),
+    receipt,
+    rejectCurrent: (reason) => {
+      currentRejection = reason;
+    },
+    seen,
     setEntry: (next) => {
       entry = next;
     },
     setHook: (next) => {
       hook = next;
     },
-    setOnRead: (effect) => {
-      onRead = effect;
-    },
     setOnBinding: (effect) => {
       onBinding = effect;
     },
-    rejectCurrent: (reason) => {
-      currentRejection = reason;
+    setOnRead: (effect) => {
+      onRead = effect;
     },
+    summaries,
+    token,
   };
 };
 
@@ -237,7 +237,7 @@ it("does not hydrate a holder whose hook metadata lacks the exact logical sessio
   await Promise.all(
     [{}, { sessionId: "foreign-logical" }].map(async (metadata) => {
       const f = fixture();
-      f.setHook({ runId: f.holderOwnerRunId, metadata: Promise.resolve(metadata) });
+      f.setHook({ metadata: Promise.resolve(metadata), runId: f.holderOwnerRunId });
       await f.observe();
       assert.deepEqual(f.seen.reads, []);
       assert.deepEqual(f.seen.bindings, []);
@@ -282,8 +282,8 @@ it("suppresses stale facts when the logical inbox changes owner during inspectio
   const f = fixture();
   f.setOnRead(() => {
     f.setHook({
-      runId: "new-physical-owner",
       metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
+      runId: "new-physical-owner",
     });
   });
   await assert.rejects(f.observe(), /owner changed/u);
@@ -305,8 +305,8 @@ it("a missing holder stays read only and cannot emit stale absence after a new c
       throw new Error(HOOK_NOT_FOUND_MESSAGE);
     }
     return Promise.resolve({
-      runId: changed.holderOwnerRunId,
       metadata: Promise.resolve({ sessionId: changed.descriptor.logicalSessionId }),
+      runId: changed.holderOwnerRunId,
     });
   };
   await assert.rejects(changed.observe(), /owner changed/u);
