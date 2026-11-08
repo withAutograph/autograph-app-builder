@@ -983,8 +983,8 @@ describe("recovered child private hosted approval authority", () => {
         ? f.metadata().coldReadProgress?.privateApprovalCaptureState
         : f.metadata().privateApprovalCaptureState;
       expect(pending).toMatchObject({
-        sessionId: f.originalId,
         pendingRequests: [{ requestId: "recovered_setup" }],
+        sessionId: f.originalId,
       });
       expect(f.writes).toEqual([]);
       const result = await f.service().get({ sessionId: f.childId, cursor: 0, limit: 10 });

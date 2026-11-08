@@ -37,25 +37,25 @@ const plan = nativeTargetOnboardingPlanSchema.parse({
     adapterGeneration: 1,
     appSpecDigest: "a".repeat(64),
     release: {
-      id: "release-original",
       artifactRef: "artifact-original",
+      id: "release-original",
       manifestSha256: "b".repeat(64),
       schemaSha256: "c".repeat(64),
     },
   },
   project: {
-    protection: {
-      oidcTokenConfig: { enabled: true, issuerMode: "team" },
-      ssoProtection: { deploymentType: "all" },
-    },
-    name: "requests-app",
-    teamId: "team_fixture",
     installationId: "install_fixture",
+    name: "requests-app",
     projectSettings: {
       framework: "nextjs",
       rootDirectory: "apps/requests",
       sourceFilesOutsideRootDirectory: true,
     },
+    protection: {
+      oidcTokenConfig: { enabled: true, issuerMode: "team" },
+      ssoProtection: { deploymentType: "all" },
+    },
+    teamId: "team_fixture",
   },
   branch: "main",
   appDatabase: {
@@ -82,10 +82,10 @@ const plan = nativeTargetOnboardingPlanSchema.parse({
     },
   },
   worker: {
-    id: "generic-installer",
     executablePath: "/trusted/generic-worker",
-    sha256: "d".repeat(64),
+    id: "generic-installer",
     operationScope: "generated-app-release-install-v1",
+    sha256: "d".repeat(64),
     subcommand: "protected-generated-app-install",
   },
   cost: { description: "Separate app target", ownership: "current-owner" },

@@ -128,10 +128,10 @@ describe("fixed tenant export Sandbox transport", () => {
     await executor.run(fixture.worker, locator, credential, assertCurrent, checkpoint);
     expect(sdk.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        ports: [],
-        persistent: false,
-        networkPolicy: "allow-all",
         env: {},
+        networkPolicy: "allow-all",
+        persistent: false,
+        ports: [],
       }),
     );
     const actual = runCommand.mock.calls.at(-1)?.[0];

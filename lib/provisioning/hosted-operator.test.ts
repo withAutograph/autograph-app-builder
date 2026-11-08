@@ -2585,12 +2585,12 @@ describe("closed operator access response diagnostics", () => {
         expect(log.mock.calls).toContainEqual([
           "[builder:hosted-neon-consent]",
           expect.objectContaining({
+            accessClass: status === 200 ? "ok" : "other_failed",
             boundary: "builder",
-            stage: "operator_request",
+            httpStatus: status,
             operatorAction: "plan",
             outcome: status === 200 ? "verified" : "setup_unavailable",
-            accessClass: status === 200 ? "ok" : "other_failed",
-            httpStatus: status,
+            stage: "operator_request",
           }),
         ]);
       } finally {

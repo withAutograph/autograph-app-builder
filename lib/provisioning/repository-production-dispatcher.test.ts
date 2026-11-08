@@ -116,7 +116,7 @@ describe("protected repository Production dispatcher", () => {
     const f = fixture();
     const response = await f.send({ version: 1, ...owner, action: "plan" });
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ version: 1, plan: { scope, intent } });
+    expect(await response.json()).toMatchObject({ plan: { intent, scope }, version: 1 });
     expect(f.prepared).not.toHaveBeenCalled();
     expect(
       (await f.send({ version: 1, ...owner, action: "prepare", approvedByCallId: "invented" }))

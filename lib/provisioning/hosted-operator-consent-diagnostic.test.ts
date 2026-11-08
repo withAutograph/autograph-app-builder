@@ -665,8 +665,8 @@ describe("private operator planning stage observer", () => {
     );
     expect(run).toHaveBeenCalledOnce();
     expect(sink.mock.calls[0]?.[0].planningFailure).toEqual({
-      stage: "plan_journal_update",
       errorClass: "validation_error",
+      stage: "plan_journal_update",
       validationInvariants: [label],
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
@@ -989,13 +989,13 @@ describe("operator planning mismatch diagnostics", () => {
     );
     expect(sink).toHaveBeenCalledOnce();
     expect(sink.mock.calls[0]?.[0]).toMatchObject({
-      event: "builder.hosted_neon_consent",
-      sessionIdHash: `sha256:${createHash("sha256").update(secret).digest("hex")}`,
       boundary: "operator",
-      phase: "inline",
-      stage: "operator_request",
+      event: "builder.hosted_neon_consent",
       outcome: "setup_unavailable",
+      phase: "inline",
       planningMismatch: { boundary },
+      sessionIdHash: `sha256:${createHash("sha256").update(secret).digest("hex")}`,
+      stage: "operator_request",
     });
     expect(new Set(sink.mock.calls[0]?.[0].planningMismatch?.fields)).toEqual(new Set(fields));
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
@@ -2056,7 +2056,7 @@ describe("closed export planning diagnostics", () => {
     reportExportPlanningFailure(secret, stage, new Error(secret), sink);
     expect(sink.mock.calls[0]?.[0]).toMatchObject({
       boundary: "builder",
-      exportPlanningFailure: { stage, errorClass: "unexpected" },
+      exportPlanningFailure: { errorClass: "unexpected", stage },
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
@@ -2083,12 +2083,12 @@ describe("closed export planning diagnostics", () => {
     expect(sink).toHaveBeenCalledOnce();
     expect(sink.mock.calls[0]?.[0]).toEqual({
       boundary: "operator",
-      phase: "inline",
-      stage: "operator_request",
-      outcome: "setup_unavailable",
       event: "builder.hosted_neon_consent",
+      exportPlanningFailure: { errorClass, stage: "setup_match_resource" },
+      outcome: "setup_unavailable",
+      phase: "inline",
       sessionIdHash: `sha256:${createHash("sha256").update(secret).digest("hex")}`,
-      exportPlanningFailure: { stage: "setup_match_resource", errorClass },
+      stage: "operator_request",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });

@@ -45,18 +45,18 @@ describe("verified actor diagnostic projection", () => {
     hooks.verify.mockResolvedValueOnce(projection);
     const result = await read(request);
     expect(result).toEqual({
-      requestCorrelation: "not_established",
       actors: [
         {
-          actorKey: "owner",
           account: "capture-existing",
-          email: "owner@example.test",
           actorId: "actor",
-          organizationId: "org",
-          membershipRole: "owner",
+          actorKey: "owner",
           appRoles: ["requester"],
+          email: "owner@example.test",
+          membershipRole: "owner",
+          organizationId: "org",
         },
       ],
+      requestCorrelation: "not_established",
     });
     expect(JSON.stringify(result)).not.toContain("secret cookie");
     expect(hooks.verify).toHaveBeenCalledWith(request);

@@ -605,7 +605,7 @@ it("uses generic Preview managed rows for the observed production branch without
     }
     if (init?.method === "POST") {
       expect(JSON.parse(z.string().parse(init.body))).toMatchObject([
-        { target: ["preview"], comment: ownerComment },
+        { comment: ownerComment, target: ["preview"] },
       ]);
       expect(
         z.array(z.record(z.string(), z.json())).parse(JSON.parse(z.string().parse(init.body)))[0],

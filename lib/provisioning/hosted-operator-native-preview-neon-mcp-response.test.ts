@@ -121,7 +121,7 @@ describe("private Neon MCP connection response", () => {
     reportOperatorNeonMcpFailure("private-owner-session", "tool_request", error, sink);
     expect(sink).toHaveBeenCalledWith(
       expect.objectContaining({
-        neonMcpFailure: { phase: "tool_request", sdkCode: -32_601, httpStatus: 403 },
+        neonMcpFailure: { httpStatus: 403, phase: "tool_request", sdkCode: -32_601 },
       }),
     );
     const logged = JSON.stringify(sink.mock.calls);

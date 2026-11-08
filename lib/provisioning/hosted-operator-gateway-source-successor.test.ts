@@ -1217,7 +1217,7 @@ describe("pending native app project settings repair", () => {
       },
       effects: [
         ...plan.effects,
-        { id: "delivery", kind: "delivery", description: "Deploy accepted app source" },
+        { description: "Deploy accepted app source", id: "delivery", kind: "delivery" },
       ],
     });
     f.deps.plan = async () => originalPlan;
@@ -1395,7 +1395,7 @@ describe("pending native app project settings repair", () => {
       },
       effects: [
         ...plan.effects,
-        { id: "delivery", kind: "delivery", description: "Deploy accepted app source" },
+        { description: "Deploy accepted app source", id: "delivery", kind: "delivery" },
       ],
     });
     f.deps.plan = async () => originalPlan;

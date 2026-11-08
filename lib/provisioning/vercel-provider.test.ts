@@ -87,9 +87,9 @@ describe("Vercel project provisioning", () => {
       expect(writes).toHaveLength(1);
       expect(writes[0]).toMatchObject({
         framework: "services",
+        oidcTokenConfig: { enabled: true, issuerMode: "team" },
         rootDirectory: ".",
         ssoProtection: { deploymentType: "prod_deployment_urls_and_all_previews" },
-        oidcTokenConfig: { enabled: true, issuerMode: "team" },
       });
       expect(request.mock.calls.every(([, init]) => init?.method !== "PATCH")).toBe(true);
     },
@@ -126,9 +126,9 @@ describe("Vercel project provisioning", () => {
       token: "secret",
     });
     expect(result).toMatchObject({
-      status: "failed",
       code: "provider_permission_denied",
       providerDiagnostic: diagnostic,
+      status: "failed",
     });
     expect(JSON.stringify(result)).not.toContain("secret");
     expect(request.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
@@ -180,9 +180,9 @@ describe("Vercel project provisioning", () => {
       expect(writes).toHaveLength(1);
       expect(writes[0]).toMatchObject({
         framework: "services",
+        oidcTokenConfig: { enabled: true, issuerMode: "team" },
         rootDirectory: ".",
         ssoProtection: { deploymentType: "prod_deployment_urls_and_all_previews" },
-        oidcTokenConfig: { enabled: true, issuerMode: "team" },
       });
       expect(request.mock.calls.every(([, init]) => init?.method !== "PATCH")).toBe(true);
     },
@@ -222,9 +222,9 @@ describe("Vercel project provisioning", () => {
       token: "secret",
     });
     expect(result).toMatchObject({
-      status: "failed",
       code: "provider_permission_denied",
       providerDiagnostic: diagnostic,
+      status: "failed",
     });
     expect(JSON.stringify(result)).not.toContain("secret");
     expect(request.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
