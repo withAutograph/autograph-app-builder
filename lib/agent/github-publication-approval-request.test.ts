@@ -155,26 +155,26 @@ const setup = (input: PublicationInput) => {
             controller.enqueue({ type: "stream-start", warnings: [] });
             if (requestedNow) {
               controller.enqueue({
-                type: "tool-call",
+                input: JSON.stringify(input),
                 toolCallId: context.callId,
                 toolName: "publish_github_draft_pr",
-                input: JSON.stringify(input),
+                type: "tool-call",
               });
             } else {
-              controller.enqueue({ type: "text-start", id: "reply" });
+              controller.enqueue({ id: "reply", type: "text-start" });
               controller.enqueue({
-                type: "text-delta",
-                id: "reply",
                 delta: "Publication response received.",
+                id: "reply",
+                type: "text-delta",
               });
-              controller.enqueue({ type: "text-end", id: "reply" });
+              controller.enqueue({ id: "reply", type: "text-end" });
             }
             controller.enqueue({
+              finishReason: { raw: "stop", unified: requestedNow ? "tool-calls" : "stop" },
               type: "finish",
-              finishReason: { unified: requestedNow ? "tool-calls" : "stop", raw: "stop" },
               usage: {
-                inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
-                outputTokens: { total: 5, text: 5, reasoning: 0 },
+                inputTokens: { cacheRead: 0, cacheWrite: 0, noCache: 10, total: 10 },
+                outputTokens: { reasoning: 0, text: 5, total: 5 },
               },
             });
             controller.close();
@@ -187,9 +187,6 @@ const setup = (input: PublicationInput) => {
     [
       "publish_github_draft_pr",
       {
-        name: "publish_github_draft_pr",
-        description: publishTool.description,
-        inputSchema,
         approval: (approvalContext) =>
           approval({
             ...approvalContext,
@@ -200,36 +197,39 @@ const setup = (input: PublicationInput) => {
               })
               .parse(approvalContext.toolInput),
           }),
+        description: publishTool.description,
         execute: (value: PublicationInput) => publishTool.execute(value, toolContext),
+        inputSchema,
+        name: "publish_github_draft_pr",
       },
     ],
   ]);
   const run = createToolLoopHarness({
-    tools,
     capabilities: { requestInput: true },
-    resolveModel: () => Promise.resolve(model),
     handleEvent: (event) => {
       events.push(event);
       return Promise.resolve();
     },
+    resolveModel: () => Promise.resolve(model),
+    tools,
   });
   const container = new ContextContainer();
   container.set(SessionKey, {
+    auth: { current: null, initiator: null },
     sessionId: context.session.id,
     turn: { id: "publication-turn", sequence: 1 },
-    auth: { current: null, initiator: null },
   });
   const initial: HarnessSession = {
-    sessionId: context.session.id,
-    continuationToken: "same-saved-turn",
     agent: {
+      modelReference: { id: "synthetic" },
       system: "Request approval for the reviewed publication.",
       tools: [],
-      modelReference: { id: "synthetic" },
     },
     compaction: { recentWindowSize: 10, threshold: 1_000_000 },
-    state: {},
+    continuationToken: "same-saved-turn",
     history: [],
+    sessionId: context.session.id,
+    state: {},
   };
   return {
     events,
@@ -253,7 +253,7 @@ describe("native draft publication approval", () => {
     "requests consent before publication and handles %s",
     async (decision) => {
       const proposal = z
-        .object({ digest: z.string(), approvalReceipt: approvalReceiptSchema })
+        .object({ approvalReceipt: approvalReceiptSchema, digest: z.string() })
         .parse(
           await sealTool.execute(
             {
@@ -287,7 +287,7 @@ describe("native draft publication approval", () => {
       }
       await h.run(pending.session, {
         inputResponses: [
-          { requestId: request.requestId, optionId: decision === "cancel" ? "cancel" : "approve" },
+          { optionId: decision === "cancel" ? "cancel" : "approve", requestId: request.requestId },
         ],
       });
       if (decision === "approve") {

@@ -33,9 +33,9 @@ const fixture = () => {
   const selection = {
     appId: "reports",
     branch: "review",
+    environment: "preview" as const,
     projectId: "project-reports",
     sessionId: "session-reports",
-    environment: "preview" as const,
   };
   const plan = hostedOperatorPlanSchema.parse({
     access: [],

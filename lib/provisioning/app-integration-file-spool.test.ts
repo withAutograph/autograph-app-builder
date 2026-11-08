@@ -8,10 +8,10 @@ import type { ProtectedInstallContextWire } from "./hosted-operator-sandbox-laun
 const runId = "11111111-1111-4111-a111-111111111111";
 const sha = "a".repeat(64);
 const worker = {
-  id: "app-integration-bootstrap-v1",
-  sha256: sha,
-  operationScope: "app-integration-bootstrap-v1",
   executablePath: "/worker/integration",
+  id: "app-integration-bootstrap-v1",
+  operationScope: "app-integration-bootstrap-v1",
+  sha256: sha,
   subcommand: "integration-control-schema-readback",
 } as const;
 const context: ProtectedInstallContextWire = {
@@ -172,7 +172,6 @@ const fixture = (
       }
       return {
         kill: vi.fn(async () => {}),
-        wait: async () => ({ exitCode: 0 }),
         logs: async function* logs() {
           for (const [kind, frameId] of [
             ["protected_installer_lifecycle_ready", 1],
@@ -192,6 +191,7 @@ const fixture = (
             };
           }
         },
+        wait: async () => ({ exitCode: 0 }),
       };
     }),
   };
