@@ -357,8 +357,8 @@ test("private IPC requires its own capability, rejects arbitrary lifecycle input
     expect(
       managedLifecycleCommandSchema.safeParse({
         commandId: randomUUID(),
-        operation: "start-same-environment",
         env: { ARBITRARY: "value" },
+        operation: "start-same-environment",
       }).success,
     ).toBe(false);
     f.owner.abort();

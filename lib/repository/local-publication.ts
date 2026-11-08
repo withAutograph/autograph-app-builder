@@ -506,7 +506,11 @@ export const assertCanonicalLocalPublicationJournal = (journal: LocalPublication
     journal.uncertainPaths.some((path) => applied.has(path)) ||
     [...uncertain].some(
       (path) => journal.rolledBackPaths.includes(path) || journal.conflictedPaths.includes(path),
-    ) ||
+    )
+  ) {
+    throw new Error(noncanonicalFailureReceiptMessage);
+  }
+  if (
     !canonicalPartition ||
     journal.recoveryRequired !== expectedRecovery ||
     journal.reason !== (expectedRecovery ? "rollback-conflict" : "mutation-failed")

@@ -163,10 +163,11 @@ export function parseGitHubPublicationJournalRow(input: unknown): GitHubMutation
     row.proposalDigest !== receipt.proposalDigest ||
     row.receiptDigest !== receipt.digest ||
     row.idempotencyKey !== receipt.idempotencyKey ||
-    row.kind !== receipt.kind ||
-    row.status !== receipt.status ||
-    row.createdAt.getTime() > row.updatedAt.getTime()
+    row.kind !== receipt.kind
   ) {
+    throw new Error("GitHub publication journal row is not canonically bound.");
+  }
+  if (row.status !== receipt.status || row.createdAt.getTime() > row.updatedAt.getTime()) {
     throw new Error("GitHub publication journal row is not canonically bound.");
   }
   return receipt;

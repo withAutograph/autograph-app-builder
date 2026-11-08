@@ -136,23 +136,19 @@ const configSchema = z
   .superRefine((value, context) => {
     const issuer = new URL(value.issuer);
     const resource = new URL(value.resource);
-    if (
-      issuer.pathname !== "/api/auth" ||
-      issuer.search ||
-      issuer.hash ||
-      issuer.username ||
-      issuer.password
-    ) {
+    const invalidIssuerLocation =
+      issuer.pathname !== "/api/auth" || issuer.search !== "" || issuer.hash !== "";
+    if (invalidIssuerLocation || issuer.username || issuer.password) {
       context.addIssue({
         code: "custom",
         message: "GitHub installation issuer must be exact /api/auth.",
         path: ["issuer"],
       });
     }
+    const invalidResourceLocation =
+      resource.pathname !== "/mcp" || resource.search !== "" || resource.hash !== "";
     if (
-      resource.pathname !== "/mcp" ||
-      resource.search ||
-      resource.hash ||
+      invalidResourceLocation ||
       resource.username ||
       resource.password ||
       resource.origin !== issuer.origin

@@ -100,13 +100,17 @@ export function readPasskeyOnboardingConfig(
       }
     } else {
       const canonical = new URL(options.previewCanonicalOrigin);
-      if (
+      const invalidCanonicalLocation =
         environment.APP_BUILDER_PREVIEW_PROVIDER_EMULATION !== "1" ||
         canonical.protocol !== "https:" ||
-        canonical.pathname !== "/" ||
-        canonical.search ||
-        canonical.hash ||
-        canonical.username ||
+        canonical.pathname !== "/";
+      const invalidCanonicalMetadata =
+        invalidCanonicalLocation ||
+        canonical.search !== "" ||
+        canonical.hash !== "" ||
+        canonical.username !== "";
+      if (
+        invalidCanonicalMetadata ||
         canonical.password ||
         canonical.origin !== origin ||
         environment.VERCEL_BRANCH_URL?.trim() !== canonical.hostname

@@ -17,13 +17,13 @@ const profile = () =>
       afterSha256: "b".repeat(64),
     },
     limits: {
-      version: 1,
+      limited: false,
+      maxVcpus: 8,
+      observedAt: "2026-11-03T12:00:00.000Z",
+      plan: "pro",
       projectId: "prj_private",
       teamId: "team_private",
-      plan: "pro",
-      maxVcpus: 8,
-      limited: false,
-      observedAt: "2026-11-03T12:00:00.000Z",
+      version: 1,
     },
   });
 const fixture = () => {

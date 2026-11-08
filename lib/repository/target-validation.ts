@@ -186,10 +186,11 @@ export const validationOutputExcerpt = (
       const isRepairLine = repairLinePattern.test(line);
       const isFormatterSummary = formatterFailureSummaryPattern.test(line);
       const filename = formatterTimingLinePattern.exec(line)?.groups?.filename?.trim();
-      const isFormatterFileTiming =
-        hasFormatterFailure &&
-        filename !== undefined &&
-        (filename.includes("/") || filename.includes("\\") || /\.[^.\s]+$/u.test(filename));
+      let isFormatterFileTiming = false;
+      if (hasFormatterFailure && filename !== undefined) {
+        isFormatterFileTiming =
+          filename.includes("/") || filename.includes("\\") || /\.[^.\s]+$/u.test(filename);
+      }
       if (!isRepairLine && !isFormatterSummary && !isFormatterFileTiming) {
         continue;
       }

@@ -53,12 +53,15 @@ export const readProductionNavigationRuntimeConfig = function readProductionNavi
   }
   if (
     environment.APP_BUILDER_LOCAL_AUTH_EMULATION === "1" ||
-    environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION ||
-    environment.APP_BUILDER_PREVIEW_PROVIDER_EMULATION
+    Boolean(environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION) ||
+    Boolean(environment.APP_BUILDER_PREVIEW_PROVIDER_EMULATION)
   ) {
     throw new Error("Production navigation uses real sessions, not provider or passkey emulation.");
   }
-  if (environment.APP_BUILDER_PROVIDER_EMULATION || environment.APP_BUILDER_PASSKEY_TEST_MODE) {
+  if (
+    Boolean(environment.APP_BUILDER_PROVIDER_EMULATION) ||
+    Boolean(environment.APP_BUILDER_PASSKEY_TEST_MODE)
+  ) {
     throw new Error("Production navigation uses real sessions, not provider or passkey emulation.");
   }
   const config = environmentSchema.parse(environment);

@@ -273,9 +273,11 @@ export async function provisionGitHubRepository(input: {
       !record(permissions) ||
       Object.keys(permissions).toSorted().join(",") !== "administration,contents,metadata" ||
       permissions.administration !== "write" ||
-      permissions.contents !== "write" ||
-      permissions.metadata !== "read"
+      permissions.contents !== "write"
     ) {
+      throw new Error(INVALID_RESPONSE);
+    }
+    if (permissions.metadata !== "read") {
       throw new Error(INVALID_RESPONSE);
     }
     return token;
@@ -287,15 +289,20 @@ export async function provisionGitHubRepository(input: {
       installation_id: Number(input.installation.installationId),
     });
     const account = property(data, "account");
+    const inactiveInstallation = "installation-inactive";
     if (
       decimalProperty(data, "id") !== input.installation.installationId ||
       decimalProperty(account, "id") !== input.installation.accountId ||
-      stringProperty(account, "login") !== input.installation.accountLogin ||
+      stringProperty(account, "login") !== input.installation.accountLogin
+    ) {
+      throw new Error(inactiveInstallation);
+    }
+    if (
       stringProperty(account, "type") !== input.installation.accountType ||
       !["all", "selected"].includes(stringProperty(data, "repository_selection")) ||
       property(data, "suspended_at") !== null
     ) {
-      throw new Error("installation-inactive");
+      throw new Error(inactiveInstallation);
     }
   }
 

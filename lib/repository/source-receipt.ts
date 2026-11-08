@@ -148,7 +148,11 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
     value.sourcePath !== "/workspace/repository" ||
     !isGitObjectId(value.sourceSha) ||
     !isGitObjectId(value.sourceTree) ||
-    !Array.isArray(value.dirtyPaths) ||
+    !Array.isArray(value.dirtyPaths)
+  ) {
+    throw new Error(invalidCanonicalCloneInspectionMessage);
+  }
+  if (
     value.dirtyPaths.some((path) => typeof path !== "string") ||
     !isRecord(value.contents) ||
     !Array.isArray(value.contract)
@@ -327,8 +331,10 @@ export const sourceReceiptEvidence = (receipt: SourceReceipt): SourceReceiptEvid
 };
 
 export const parseSourceReceipt = (value: unknown): SourceReceipt => {
+  if (!isRecord(value)) {
+    throw new Error("Source receipt has an unsupported schema.");
+  }
   if (
-    !isRecord(value) ||
     (value.version === LEGACY_SOURCE_RECEIPT_VERSION &&
       !hasExactKeys(value, legacySourceReceiptKeys)) ||
     (value.version === SOURCE_RECEIPT_VERSION && !hasExactKeys(value, clonedSourceReceiptKeys))
