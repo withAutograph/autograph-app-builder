@@ -2,6 +2,8 @@
 import { createHash } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import { runRepositoryProductionFileSpool } from "./hosted-operator-sandbox-launcher";
+import { HostedOperatorError } from "./hosted-operator-contract";
+import { capture, receipt } from "./operator-worker-source-capture.test-fixture";
 import type {
   ProtectedInstallerWorkerDescriptor,
   ResourceBootstrapContextWire,
@@ -125,4 +127,146 @@ it("identifies an existing transport scope refusal without dispatch or private c
   expect(output).not.toContain(context.resource.hostname);
   expect(output).not.toContain(context.resource.database);
   expect(output).not.toContain("private");
+});
+
+const pinnedTransport = (pinMatches = true) => {
+  const catalog = structuredClone(receipt);
+  catalog.workers.resources = {
+    ...catalog.workers.resources,
+    path: "resource",
+    sha256: worker.sha256,
+  };
+  const catalogBytes = Buffer.from(JSON.stringify(catalog));
+  const request = input();
+  request.worker = {
+    ...worker,
+    sourceCapture: {
+      ...capture,
+      catalogPath: "/worker/catalog.json",
+      catalogSha256: createHash("sha256").update(catalogBytes).digest("hex"),
+      family: "resources",
+    },
+  };
+  let catalogRead = false;
+  const command = {
+    kill: vi.fn(async () => {}),
+    async *logs() {
+      yield { stream: "stdout", data: "private protocol body\n" };
+    },
+    wait: vi.fn(async () => ({ exitCode: 0 })),
+  };
+  const sandbox = {
+    delete: vi.fn(async () => {}),
+    extendTimeout: vi.fn(async () => {}),
+    fs: {
+      mkdir: vi.fn(async () => {}),
+      readFile: vi.fn(async () => {
+        catalogRead = true;
+        return catalogBytes;
+      }),
+      rm: vi.fn(async () => {}),
+    },
+    runCommand: vi.fn(async ({ detached }: { detached?: boolean }) =>
+      detached
+        ? command
+        : {
+            exitCode: 0,
+            stdout: async () =>
+              `${pinMatches ? worker.sha256 : "0".repeat(64)}  /worker/resource\n`,
+          },
+    ),
+    writeFiles: vi.fn(async () => {}),
+  };
+  // SAFETY: The real transport consumes only these controlled SDK filesystem/process ports.
+  const createSandbox = vi.fn(async () => sandbox as never);
+  return { catalogRead: () => catalogRead, command, createSandbox, request, sandbox };
+};
+
+it("retains the actual pin-refusal stage after deleting the owned Sandbox", async () => {
+  const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const f = pinnedTransport(false);
+  await expect(
+    runRepositoryProductionFileSpool(configuration, f.request, {
+      createSandbox: f.createSandbox,
+    }),
+  ).rejects.toMatchObject({ code: "resource_mismatch" });
+  expect(f.sandbox.delete).toHaveBeenCalledOnce();
+  expect(f.sandbox.writeFiles).not.toHaveBeenCalled();
+  expect(f.request.recordCheckpoint).not.toHaveBeenCalled();
+  const events = log.mock.calls.map(([entry]) => JSON.parse(String(entry)));
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      launcherStage: "worker_pin",
+      operatorCode: "resource_mismatch",
+      requestAborted: false,
+    }),
+  );
+  const output = JSON.stringify(log.mock.calls);
+  expect(output).not.toContain(f.request.directDatabaseUrl);
+  expect(output).not.toContain(context.resource.database);
+  expect(output).not.toContain(f.request.worker.executablePath);
+  expect(output).not.toContain(privateCredentials.toString());
+});
+
+it("reports a real protocol rejection without exposing the malformed worker output", async () => {
+  const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const f = pinnedTransport();
+  await expect(
+    runRepositoryProductionFileSpool(configuration, f.request, {
+      createSandbox: f.createSandbox,
+    }),
+  ).rejects.toMatchObject({ code: "resource_mismatch" });
+  expect(f.command.kill).toHaveBeenCalledOnce();
+  expect(f.sandbox.delete).toHaveBeenCalledOnce();
+  expect(f.request.recordCheckpoint).not.toHaveBeenCalled();
+  const events = log.mock.calls.map(([entry]) => JSON.parse(String(entry)));
+  expect(events).toContainEqual(expect.objectContaining({ launcherStage: "worker_protocol" }));
+  const output = JSON.stringify(log.mock.calls);
+  expect(output).not.toContain("private protocol body");
+  expect(output).not.toContain("postgresql:");
+  expect(output).not.toContain(context.resource.database);
+  expect(output).not.toContain(privateCredentials.toString());
+});
+
+it("preserves late authority rejection, cancellation and cleanup even when logging fails", async () => {
+  const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const f = pinnedTransport();
+  const controller = new AbortController();
+  f.request.signal = controller.signal;
+  const original = new HostedOperatorError("authorization_required", {
+    cause: new Error("private authority cause"),
+  });
+  f.request.assertCurrent.mockImplementation(async () => {
+    if (f.catalogRead()) {
+      controller.abort();
+      throw original;
+    }
+  });
+  await expect(
+    runRepositoryProductionFileSpool(configuration, f.request, {
+      createSandbox: f.createSandbox,
+    }),
+  ).rejects.toBe(original);
+  expect(f.sandbox.delete).toHaveBeenCalledOnce();
+  expect(f.request.recordCheckpoint).not.toHaveBeenCalled();
+  const events = log.mock.calls.map(([entry]) => JSON.parse(String(entry)));
+  expect(events).toContainEqual(
+    expect.objectContaining({ launcherStage: "spool_setup", requestAborted: true }),
+  );
+  expect(JSON.stringify(log.mock.calls)).not.toContain("private authority cause");
+  log.mockImplementation(() => {
+    throw new Error("observer unavailable");
+  });
+  const retry = pinnedTransport();
+  retry.request.assertCurrent.mockImplementation(async () => {
+    if (retry.catalogRead()) {
+      throw original;
+    }
+  });
+  await expect(
+    runRepositoryProductionFileSpool(configuration, retry.request, {
+      createSandbox: retry.createSandbox,
+    }),
+  ).rejects.toBe(original);
+  expect(retry.sandbox.delete).toHaveBeenCalledOnce();
 });

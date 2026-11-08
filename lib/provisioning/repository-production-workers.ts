@@ -335,19 +335,32 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
     const resourceCredentialBytes = Buffer.from(JSON.stringify(privateCredentials(row)));
     let workerContext: ProtectedInstallContextWire | ResourceBootstrapContextWire = common;
     if (operation === "storage") {
-      const { schema: _schema, ...baseResource } = common.resource;
-      void _schema;
+      // The fixed resource worker canonicalizes this wire order before hashing
+      // its first authority frame; preserve the same bytes without changing any binding.
       workerContext = {
-        ...common,
         kind: "neon_resource_bootstrap",
+        version: common.version,
+        operation: common.operation,
+        app_id: common.app_id,
         resource: {
-          ...baseResource,
           scope: "app_database",
+          resource_id: common.resource.resource_id,
+          environment: common.resource.environment,
+          hostname: common.resource.hostname,
+          port: common.resource.port,
+          database: common.resource.database,
+          migrator_role: common.resource.migrator_role,
+          runtime_role: common.resource.runtime_role,
           maintenance_database: deps.profile.neon.maintenanceDatabase,
           bootstrap_role: deps.profile.neon.maintenanceRole,
+          provider_project_id: common.resource.provider_project_id,
+          provider_branch_id: common.resource.provider_branch_id,
           provider_endpoint_id: deps.profile.neon.endpointId,
           credentials_sha256: sha256(resourceCredentialBytes),
         },
+        release: common.release,
+        installer: common.installer,
+        tenant_targets: common.tenant_targets,
       };
     }
     const startupFiles: Record<string, Buffer> = {};

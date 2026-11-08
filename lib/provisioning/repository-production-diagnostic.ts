@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { operatorPublicResultSchema } from "./hosted-operator-contract";
+import { operatorExecutionStage } from "./hosted-operator-consent-diagnostic";
+import type { OperatorExecutionStage } from "./hosted-operator-consent-diagnostic";
 
 const failureSchema = z.strictObject({
   event: z.literal("builder.repository_production_failure"),
@@ -47,6 +49,7 @@ const failureSchema = z.strictObject({
     ])
     .optional(),
   requestAborted: z.boolean().optional(),
+  launcherStage: operatorExecutionStage.optional(),
   reason: z
     .enum([
       "approval_required",
@@ -153,6 +156,7 @@ export const reportRepositoryProductionFailure = (
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Only own data descriptors are projected into the closed diagnostic schema.
   error?: unknown,
   signal?: AbortSignal,
+  launcherStage?: OperatorExecutionStage,
 ): void => {
   try {
     const message = z.string().safeParse(ownData(error, "message"));
@@ -176,6 +180,7 @@ export const reportRepositoryProductionFailure = (
           ...(operatorCode.success ? { operatorCode: operatorCode.data } : {}),
           ...(httpStatus?.success ? { httpStatus: httpStatus.data } : {}),
           ...(signal === undefined ? {} : { requestAborted: signal.aborted }),
+          ...(launcherStage === undefined ? {} : { launcherStage }),
         }),
       ),
     );

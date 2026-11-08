@@ -310,7 +310,7 @@ const runtimeIdentityFailure = z.strictObject({
 });
 export type OperatorRuntimeIdentityFailure = z.infer<typeof runtimeIdentityFailure>;
 
-const operatorExecutionStage = z.enum([
+export const operatorExecutionStage = z.enum([
   "owner_authorization",
   "journal_read",
   "provider_authorization",

@@ -123,10 +123,19 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Optimize the edit loop for feedback speed. Do not automatically run tests,
   broad checks, fresh installs, full walkthroughs, artifact builds, release
   proofs, or publication after each edit or restart.
-- During implementation, run only a focused check needed to diagnose or verify
-  a concrete repair. Once the local behavior is ready, run one final local
-  acceptance pass. Let exact-head CI provide broad deterministic verification
-  unless paths conflict or CI reports a specific defect.
+- Reproduce concrete failures locally when feasible, using the real
+  serialization or command path and controlled test-owned fixtures. Make the
+  smallest functional repair with focused regressions before a shared deployment;
+  preserve credential, tenant-isolation, approval and cancellation boundaries.
+- Once related changes are integrated and ready, run applicable local validation
+  once. Reuse unchanged evidence; repeat checks only for changed behavior, a
+  failure or an unresolved concern. Let exact-head CI provide broad deterministic
+  verification.
+- Use hosted runs for actual provider credentials and bindings, deployment, and
+  authenticated acceptance. When a local reproduction is impractical or the
+  failure is hosted-only, state the evidence gap and use a targeted diagnostic
+  deployment. Exhaustive local proof is not a prerequisite or a new per-app gate.
+  Follow the [repair and release loop](docs/local-development-lifecycle.md#repair-and-release-loop).
 - Fresh Codex installation and exact-five discovery are milestone or acceptance
   checks, not normal edit-loop steps. Use direct local tools and the fast create
   and existing-app fixtures while iterating.

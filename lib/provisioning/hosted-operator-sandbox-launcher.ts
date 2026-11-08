@@ -2464,34 +2464,49 @@ export const runRepositoryProductionFileSpool = async (
   await observeRepositoryProductionPhase("worker_authority", "authorization_unavailable", () =>
     input.assertCurrent(),
   );
-  return await runPinnedFileSpoolTransport(
-    configuration,
-    createSandbox,
-    {
-      directDatabaseUrl: input.directDatabaseUrl,
-      readbackOnly: input.readOnly ? true : undefined,
-      fenceGeneration: context.operation.fence_generation,
-      signal: input.signal,
-      startupFiles: input.startupFiles,
-      repositoryProduction: true,
-    },
-    { stage: "sandbox_create", mode: input.readOnly ? "inspect" : "execute" },
-    {
-      context,
-      contextDigest: sha256(bytes),
-      worker,
-      runId: workerRunIdSchema.parse(input.runId),
-      assertCurrent,
-      allowedResources: new Set([context.resource.resource_id]),
-      allowedTenants: new Set(context.tenant_targets),
-      recordCheckpoint: input.recordCheckpoint,
-      resources: input.operation === "storage",
-      resourceCredentialBytes: input.resourceCredentialBytes,
-      access: input.operation === "access",
-      membership: input.operation === "membership",
-      installReadback: input.operation === "schema" && input.readOnly,
-      generatedMetadata,
-      generatedFiles,
-    },
-  );
+  const execution: LauncherExecution = {
+    stage: "sandbox_create",
+    mode: input.readOnly ? "inspect" : "execute",
+  };
+  try {
+    return await runPinnedFileSpoolTransport(
+      configuration,
+      createSandbox,
+      {
+        directDatabaseUrl: input.directDatabaseUrl,
+        readbackOnly: input.readOnly ? true : undefined,
+        fenceGeneration: context.operation.fence_generation,
+        signal: input.signal,
+        startupFiles: input.startupFiles,
+        repositoryProduction: true,
+      },
+      execution,
+      {
+        context,
+        contextDigest: sha256(bytes),
+        worker,
+        runId: workerRunIdSchema.parse(input.runId),
+        assertCurrent,
+        allowedResources: new Set([context.resource.resource_id]),
+        allowedTenants: new Set(context.tenant_targets),
+        recordCheckpoint: input.recordCheckpoint,
+        resources: input.operation === "storage",
+        resourceCredentialBytes: input.resourceCredentialBytes,
+        access: input.operation === "access",
+        membership: input.operation === "membership",
+        installReadback: input.operation === "schema" && input.readOnly,
+        generatedMetadata,
+        generatedFiles,
+      },
+    );
+  } catch (error) {
+    reportRepositoryProductionFailure(
+      "setup_prepare",
+      "setup_unavailable",
+      error,
+      input.signal,
+      execution.stage,
+    );
+    throw error;
+  }
 };
