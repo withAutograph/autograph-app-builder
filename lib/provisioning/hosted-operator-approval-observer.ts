@@ -69,7 +69,7 @@ export const createHostedOperatorApprovalObserver = (input: {
       // Transport parsing/owner authorization produces this object per request.
       // Context spreads retain it; another request cannot inherit it through IDs.
       if (context.ownerContext !== undefined) {
-        capabilities.set(context.ownerContext, { token: token(), signal });
+        capabilities.set(context.ownerContext, { signal, token: token() });
       }
     },
     privateHistoryForContext(context: HostedOperatorContext): ObservePrivateHistory {

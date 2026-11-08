@@ -244,14 +244,18 @@ export const reconcileLocalPlanningSource = async (
   const outcome = reconciliationOutcome.parse(JSON.parse(reconciled.stdout));
   const { generation } = capture;
   input.assertCurrent();
+  const { callId } = input;
+  const { sourcePath } = generation;
+  const { sourceSha } = input.receipt;
+  const { generation: sourceTree, eligibilityDigest, workspaceDigest } = generation;
   const workspace = await recordPreparedSandboxWorkspace({
+    callId,
+    eligibilityDigest,
     sandbox,
-    callId: input.callId,
-    sourcePath: generation.sourcePath,
-    sourceSha: input.receipt.sourceSha,
-    sourceTree: generation.generation,
-    eligibilityDigest: generation.eligibilityDigest,
-    workspaceDigest: generation.workspaceDigest,
+    sourcePath,
+    sourceSha,
+    sourceTree,
+    workspaceDigest,
   });
   input.assertCurrent();
   await sandbox.writeTextFile({

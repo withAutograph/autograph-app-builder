@@ -179,7 +179,7 @@ export default defineTool({
         appId: input.appId,
         state,
         resolveRoot: async ({ appId, root }) =>
-          await resolveAcceptanceRuntimeRoot({ appId, fallbackRoot: root, sandbox, state, ctx }),
+          await resolveAcceptanceRuntimeRoot({ appId, ctx, fallbackRoot: root, sandbox, state }),
       }));
     const { root } = selected;
     return await runAppBrowserTests({
