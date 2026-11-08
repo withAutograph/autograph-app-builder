@@ -353,7 +353,7 @@ const approvedInspectionFixture = () => {
     workerCheckpoints: [],
   };
   const readApproval = vi.fn(f.readApproval);
-  const readCurrentRecord = vi.fn(() => Promise.resolve(f.record));
+  const readCurrentRecord = vi.fn<() => Promise<typeof f.record>>().mockResolvedValue(f.record);
   return { ...f, context, readApproval, readCurrentRecord };
 };
 
