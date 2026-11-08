@@ -1,3 +1,4 @@
+/* oxlint-disable github/filenames-match-regex -- Preserve the documented visual Playwright invocation path. */
 import { createServer } from "node:http";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -48,6 +49,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   if (prototypeServer) {
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     await promisify(prototypeServer.close.bind(prototypeServer))();
   }
 });

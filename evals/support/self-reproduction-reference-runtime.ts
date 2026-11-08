@@ -37,9 +37,11 @@ export const snapshotReferenceSource = async (
 ): Promise<void> => {
   assertExternalReferenceRoot(sourceRoot, fixtureRoot);
   const filesDeferred = Promise.withResolvers<string[]>();
+  // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
   const child = spawn("git", ["ls-files", "-z"], { cwd: sourceRoot });
   {
     const chunks: Buffer[] = [];
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
     child.on("error", filesDeferred.reject);
     child.on("close", (code) => {
@@ -101,6 +103,7 @@ const probe = (url: string): Promise<boolean> => {
     request.on("error", () => {
       deferred.resolve(false);
     });
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     request.on("timeout", () => request.destroy());
   }
   return deferred.promise;
@@ -114,7 +117,9 @@ export const startSelfReproductionReferenceRuntime = async (input: {
 }): Promise<{ receipt: ReferenceRuntimeReceipt; stop: () => Promise<void> }> => {
   const fixtureRoot = path.join(path.resolve(input.runtimeRoot), `reference-${randomUUID()}`);
   assertExternalReferenceRoot(input.sourceRoot, fixtureRoot);
+  // oxlint-disable-next-line react-doctor/async-parallel -- Preserve the sequence of port selection and failures.
   const appPort = await availablePort();
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep capture and workflow observations in their established order.
   const databasePort = await availablePort();
   let emulatorPort = await availablePort();
   for (;;) {
@@ -184,6 +189,7 @@ export const startSelfReproductionReferenceRuntime = async (input: {
       }
     }
     if (server) {
+      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       await run(["run", "auth-e2e:reset"], "reference-cleanup").catch(() => {
         // Cleanup is best effort after stopping the isolated server.
       });
@@ -214,6 +220,7 @@ export const startSelfReproductionReferenceRuntime = async (input: {
     });
     server.stdout?.pipe(output, { end: false });
     server.stderr?.pipe(output, { end: false });
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     server.on("close", () => output.end());
     const deadline = Date.now() + (input.startupTimeoutMs ?? 300_000);
     while (Date.now() < deadline) {

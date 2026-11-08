@@ -41,6 +41,7 @@ export interface PublicState {
   startRequestSha256?: string;
 }
 export interface PublicTransport {
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns -- Preserve untrusted transport arguments and results.
   call: (name: string, args: Record<string, unknown>) => Promise<unknown>;
 }
 
@@ -54,6 +55,7 @@ export const originalPublicStart = (state: PublicState): PublicStartInput =>
 export const parsePublicStartFile = (contents: string): PublicStartInput =>
   eveStartInputSchema.parse(JSON.parse(contents));
 
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve untrusted observation values while redacting URLs.
 const redactObservationUrls = (entry: unknown): unknown => {
   if (typeof entry === "string") {
     return entry.replaceAll(/https?:\/\/[^\s"'<>`]+/giu, (value) => {
@@ -76,6 +78,7 @@ const redactObservationUrls = (entry: unknown): unknown => {
 };
 
 /** Public artifacts retain URL origins only; opaque capabilities can live in paths or queries. */
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve the untrusted observation's shape.
 export const sanitizePublicObservation = (value: unknown): unknown =>
   redactObservationUrls(sanitizeEvidence(value));
 
@@ -94,6 +97,7 @@ export const recordPublicObservation = (outputDir: string, record: unknown) => {
 };
 
 interface WorkingAppObservation {
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   availability: "reported_ready" | "expired" | "unavailable" | "unassessed";
   reason: string;
   expiresAt?: string;
@@ -171,6 +175,7 @@ export const validatePublicEndpoint = (endpoint: string) => {
   return url;
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve untrusted transport values while redacting tokens.
 const redactTransportToken = (value: unknown, bearerToken: string | undefined): unknown => {
   if (bearerToken === undefined) {
     return value;
@@ -235,6 +240,7 @@ export const makePublicTransport = async (
     method: string,
     params: unknown,
     notification = false,
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve the untrusted RPC response until its caller narrows it.
   ): Promise<unknown> => {
     sequence += 1;
     const id = sequence;
@@ -311,6 +317,7 @@ export const makePublicTransport = async (
     }
     return envelope.result;
   };
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve the untrusted RPC response until its caller narrows it.
   const rpc = async (method: string, params: unknown, notification = false): Promise<unknown> => {
     try {
       return await performRpc(method, params, notification);

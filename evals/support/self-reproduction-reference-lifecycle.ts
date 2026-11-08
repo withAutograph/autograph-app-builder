@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Pass the complete database schema to Drizzle.
 import * as schema from "../../lib/db/schema";
 import { hostedEveOperationScopes } from "../../lib/eve/hosted-auth";
 import type { HostedPrincipal } from "../../lib/eve/hosted-auth";
@@ -93,6 +94,7 @@ export const exerciseReferenceLifecycle = async (input: {
     prompt: "Controlled pending reference operation",
   });
   const cancelled = await service().cancel({ sessionId: cancellation.sessionId });
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep capture and workflow observations in their established order.
   const persistedCancel = await input.store.getSession(input.principal, cancellation.sessionId);
   const reopenedCancel = await service().get({
     cursor: 0,
@@ -109,6 +111,7 @@ export const exerciseReferenceLifecycle = async (input: {
     limit: 100,
     sessionId: cancellation.sessionId,
   });
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep capture and workflow observations in their established order.
   const recovery = await service().start({
     clientRequestId: randomUUID(),
     prompt: "Controlled interrupted reference operation",
@@ -119,7 +122,9 @@ export const exerciseReferenceLifecycle = async (input: {
     message: "Continue controlled operation",
     sessionId: recovery.sessionId,
   };
+  // oxlint-disable-next-line react-doctor/async-parallel -- The repeated send must follow the first to exercise replay.
   const first = await service().send(request);
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep capture and workflow observations in their established order.
   const repeated = await service().send(request);
   const persistedResult = await input.store.getSession(input.principal, recovery.sessionId);
   return {

@@ -155,6 +155,7 @@ export function createPreviewUserManagementLifecycle(authority: PreviewOrganizat
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     beforeUserCreate: async (
+      // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
       user: PreviewVerifiedUser & Record<string, unknown>,
       context: { path?: string } | null,
     ) => {

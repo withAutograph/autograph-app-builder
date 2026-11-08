@@ -3,7 +3,7 @@ import { readProviderEmulation } from "@/lib/integrations/local-provider-emulati
 
 import { completeAuthorization } from "../completion";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line sonarjs/function-name, eslint/func-style -- Next.js discovers this named HTTP method export. Preserve function declaration hoisting and initialization timing.
 export async function GET(
   _request: Request,
   context: { params: Promise<{ provider: string; approval: string }> },

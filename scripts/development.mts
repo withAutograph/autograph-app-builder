@@ -117,6 +117,7 @@ function nextEnvironment(input: {
     NEXT_TELEMETRY_DISABLED: "1",
     NODE_ENV: "development" as const,
     PATH: `${nodePath.dirname(requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"))}:/usr/bin:/bin`,
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Preserve the inherited temporary directory and existing system fallback for the development child.
     TMPDIR: process.env.TMPDIR ?? "/tmp",
     TZ: process.env.TZ ?? "UTC",
     // Next's env loader preserves explicitly supplied values. Empty values
@@ -312,6 +313,7 @@ async function runEveCycle(input: {
     })();
     // This derived promise is an input to the shared race below.
     // oxlint-disable-next-line promise/prefer-await-to-then
+    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
     const eveExited = developmentChildExit(eve).then((code) => ({
       code,
       kind: "eve-exit" as const,
@@ -323,6 +325,7 @@ async function runEveCycle(input: {
           endpoint: packageResult.receipt.endpoint,
           fetcher: input.web?.fetcher,
           signal: watchers.signal,
+          // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
         }).then(() => ({ code: 0, kind: "ready" as const })),
         eveExited,
         input.nextExited,
@@ -445,12 +448,14 @@ try {
   );
   // This derived promise is an input to the shared race below.
   // oxlint-disable-next-line promise/prefer-await-to-then
+  // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
   const nextProcessExited = developmentChildExit(next).then((code) => ({
     code,
     kind: "next-exit" as const,
   }));
   // Both owned services participate in the same supervisor exit race.
   // oxlint-disable-next-line promise/prefer-await-to-then -- Preserve a live process exit handle.
+  // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
   const webExited = web?.exited.then((code) => ({ code, kind: "web-exit" as const }));
   const nextExited =
     webExited === undefined ? nextProcessExited : Promise.race([nextProcessExited, webExited]);

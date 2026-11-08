@@ -39,6 +39,7 @@ function databaseFixture(rows: unknown[]) {
     set: vi.fn(),
     update: vi.fn(),
     values: vi.fn(),
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- The database fixture accepts the observed query result shape.
     where: vi.fn<(condition: SQL) => unknown>(),
   };
   for (const key of [
@@ -54,6 +55,7 @@ function databaseFixture(rows: unknown[]) {
     query[key].mockReturnValue(query);
   }
   return {
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The SQL fixture implements only the authorization-store operations under test.
     database: query as unknown as Parameters<typeof createPostgresVercelAuthorizationStateStore>[0],
     query,
   };

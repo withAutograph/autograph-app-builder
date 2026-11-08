@@ -48,6 +48,7 @@ export function UserProfile({ className }: UserProfileProps) {
     const formData = new FormData(e.currentTarget);
     const name = formData.get("name") as string;
 
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
     const additionalFieldValues: Record<string, unknown> = {};
 
     for (const field of additionalFields ?? []) {
@@ -58,7 +59,7 @@ export function UserProfile({ className }: UserProfileProps) {
 
       if (field.validate) {
         try {
-          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+          // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Validate fields in order and preserve the first failure.
           await field.validate(value);
         } catch (error) {
           toast.error(error instanceof Error ? error.message : String(error));
@@ -154,11 +155,13 @@ export function UserProfile({ className }: UserProfileProps) {
                 );
               }
 
+              // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
               const value = (session.user as Record<string, unknown>)[field.name];
 
               // Re-mount when the session value loads so the field's
               // uncontrolled `defaultValue` reflects the latest data.
               const key = `${field.name}:${
+                // oxlint-disable-next-line typescript/no-base-to-string -- Preserve coercion of arbitrary session field values in the remount key.
                 value instanceof Date ? value.toISOString() : String(value ?? "")
               }`;
 

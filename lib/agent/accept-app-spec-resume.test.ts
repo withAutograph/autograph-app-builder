@@ -15,7 +15,9 @@ vi.mock("./approved-build-continuation-runtime", () => ({
 const responsePrompt = z.object({
   productAcceptance: z.object({ implementationPrompt: z.string() }),
 });
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled eve/tools dependency used by this test.
 vi.mock("eve/tools", () => ({ defineTool: <T>(value: T) => value }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled eve/context dependency used by this test.
 vi.mock("eve/context", () => ({
   defineState: (_name: string, initial: () => AppBuilderWorkflowState) => {
     let state = initial();
@@ -27,6 +29,7 @@ vi.mock("eve/context", () => ({
     };
   },
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./prepare-app-creation dependency used by this test.
 vi.mock("./prepare-app-creation", () => ({ prepareAppCreation: mocks.prepare }));
 
 const legacyContent = BUILD_READY_APP_SPEC.replace(
@@ -164,6 +167,7 @@ describe("accepted AppSpec resume", () => {
       const current = appBuilderWorkflowState.get();
       appBuilderWorkflowState.update(
         () =>
+          // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The workflow fixture retains only fields observed by this acceptance scenario.
           ({
             ...current,
             phase: "planned",

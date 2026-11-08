@@ -30,6 +30,7 @@ describe("hosted GitHub installation binding", () => {
     const plan = planHostedGitHubInstallation(request);
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const bind = vi.fn<Parameters<typeof bindHostedGitHubInstallation>[0]["store"]["bind"]>(
+      // oxlint-disable-next-line eslint/require-await -- Preserve asynchronous store binding behavior.
       async ({ binding, now }) => ({
         ...binding,
         active: true,

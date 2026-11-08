@@ -198,6 +198,7 @@ export type TargetApplyFailureReceipt = ApplyResultBase &
   (
     | (ObservedApplyResult & {
         reason:
+          // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
           | "command-failed"
           | "output-limit"
           | "invalid-receipt"
@@ -215,6 +216,7 @@ export type TargetApplyFailureReceipt = ApplyResultBase &
     status: "partial-failure";
     recoveryRequired: true;
     commandFailureKind?:
+      // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
       | "timeout"
       | "permission-denied"
       | "missing-command-or-file"
@@ -719,7 +721,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
         }
       }
       for (const change of proposal.iteration.changes) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Apply each path change in order.
         await (change.after === undefined
           ? sandbox.removePath({ force: true, path: `${relativeRoot}/${change.path}` })
           : sandbox.writeTextFile({
@@ -871,7 +873,7 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
     const relativeRoot = applyRoot.replace(/^\/workspace\//u, "");
     if ("operation" in proposal) {
       for (const change of proposal.iteration.changes) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Apply each path change in order.
         await (change.after === undefined
           ? sandbox.removePath({ force: true, path: `${relativeRoot}/${change.path}` })
           : sandbox.writeTextFile({
@@ -983,7 +985,7 @@ export async function executeProposalBoundApply(input: {
     try {
       for (const root of input.dependencyLayout.roots) {
         const target = `repository/${root.path}`;
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Apply each path change in order.
         await input.sandbox.removePath({
           force: true,
           path: target,

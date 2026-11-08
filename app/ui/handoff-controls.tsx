@@ -26,6 +26,7 @@ export type { HandoffControlData } from "@/app/actions/handoff-renewal";
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function readStatus(value: HandoffControlData, handoffId: string): HandoffControlData {
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     value.version !== 1 ||
     value.handoffId !== handoffId ||
     !["prepared", "continued", "expired"].includes(value.status) ||
@@ -170,6 +171,7 @@ const subscribeToHandoffStatus = (
       if (!response.ok) {
         throw new Error("handoff-status-unavailable");
       }
+      // oxlint-disable-next-line typescript/no-unsafe-argument -- Pass the response body to the existing status parser.
       const next = readStatus(await response.json(), handoffId);
       if (request.signal.aborted || disposed) {
         return;
@@ -227,7 +229,9 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
   const [notice, setNotice] = useState("");
   const [launchNotice, setLaunchNotice] = useState("");
   const [copyNotice, setCopyNotice] = useState("");
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- React requires an initial value for this optional request ref.
   const renewalRequest = useRef<{ handoffId: string; id: string } | undefined>(undefined);
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- React requires an initial value for this optional reconciliation ref.
   const reconciledRenewal = useRef<HandoffRenewalActionState | undefined>(undefined);
   const runRenewalAction = useCallback(
     async (
@@ -243,6 +247,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     },
     [],
   );
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- The renewal action explicitly starts without a result.
   const [renewal, dispatchRenewal, renewalPending] = useActionState(runRenewalAction, undefined);
   const subscribeHandoff = useCallback(
     (listener: () => void) => {
@@ -312,6 +317,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     }
     dispatchHandoffView({ type: "renewal", result: renewal, currentHandoffId: data.handoffId });
     if (renewal.status === "renewed" && renewal.handoff.handoffId !== data.handoffId) {
+      // oxlint-disable-next-line react-doctor/nextjs-no-client-side-redirect -- Follow the replacement handoff only after renewal succeeds.
       router.replace(`/handoff/${encodeURIComponent(renewal.handoff.handoffId)}`);
     }
   }, [data.handoffId, destination, renewal, renewalPending, router]);

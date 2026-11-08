@@ -181,6 +181,7 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
         physicalLeaseReleased = true;
       }
     },
+    // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous operator port contract.
     reconcile: async () => ({ status: "absent" }),
     executeEffect,
     verify: () =>
@@ -192,6 +193,7 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
         manifestSha256: plan.release.sha256,
         authenticatedBehavior: "unassessed",
       }),
+    // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous operator port contract.
     bindings: async () => ({}),
   };
   const handler = createProtectedHostedOperatorHandler(deps);

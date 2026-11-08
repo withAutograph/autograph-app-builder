@@ -35,6 +35,7 @@ import { releaseEndpoint, TOOL_NAMES } from "./portable-release";
 const VERCEL_PROJECT_BINDING_PATH = ".vercel/project.json";
 const VERCEL_OUTPUT_PATH = ".vercel/output";
 
+// oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
 const execFileAsync = promisify(execFile);
 const repositoryRoot = await realpath(path.resolve("."));
 

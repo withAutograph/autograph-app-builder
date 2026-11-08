@@ -52,6 +52,7 @@ export const ARRUSTED_COMPONENT_COMPOSITION_MANIFEST = `${JSON.stringify(
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function fixtureGit(root: string, args: string[]): void {
   execFileSync(
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
     "git",
     [
       "-c",

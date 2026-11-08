@@ -1,5 +1,6 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Pass the complete database schema to Drizzle.
 import * as schema from "../db/schema";
 import { readPrivateDatabaseUrl } from "../db/private-database-url";
 import { hostedTaskPostgresOptions } from "../db/postgres-connection-policy";

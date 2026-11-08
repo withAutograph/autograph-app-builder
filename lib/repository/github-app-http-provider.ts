@@ -158,6 +158,7 @@ export interface GitHubAppHttpProvider
   inspectExistingDraft: (
     input: ExistingDraftInspectionRequest,
   ) => Promise<ExistingDraftObservation>;
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep provider data untrusted until its consumer validates it.
   inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown>;
   inspectHistoricalAppSource: (input: {
     repositoryId: string;
@@ -183,9 +184,11 @@ interface PermissionSnapshot {
 
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep provider data untrusted until its consumer validates it.
 const property = (value: unknown, key: string): unknown => {
   if (!record(value) || !(key in value)) {
     throw new TypeError(invalidResponseMessage);
@@ -440,7 +443,8 @@ export const createGitHubAppHttpProvider = (input: {
           body: record(response) ? response.data : undefined,
           requestId: requestId(
             record(response) && record(response.headers)
-              ? String(response.headers["x-github-request-id"] ?? "github")
+              ? // oxlint-disable-next-line typescript/no-base-to-string -- Preserve coercion of a provider-supplied request identifier.
+                String(response.headers["x-github-request-id"] ?? "github")
               : "github",
           ),
           status,
@@ -1692,6 +1696,7 @@ export const createGitHubAppHttpProvider = (input: {
     inspectHistoricalAppSource,
     async inspectInstallation({ requestedPermissions }) {
       const identity = await installation();
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep provider identity, authorization and API operations in their established order.
       const selectedRepositoryIds = await selectedRepositories(requestedPermissions);
       return {
         ...identity,
@@ -1741,6 +1746,7 @@ export const createGitHubAppHttpProvider = (input: {
         throw new Error("github-target-permissions-mismatch");
       }
       const identity = await installation();
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep provider identity, authorization and API operations in their established order.
       const accessToken = await token(requestedPermissions, [repositoryId]);
       const response = await github({
         authorization: accessToken,
@@ -2077,6 +2083,7 @@ export const createGitHubAppHttpProvider = (input: {
         method: "POST",
         path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/git/commits`,
       });
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep provider identity, authorization and API operations in their established order.
       const reference = await github({
         authorization: accessToken,
         expected: [200],
@@ -2217,6 +2224,7 @@ export const createGitHubAppHttpProvider = (input: {
         method: "POST",
         path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/git/commits`,
       });
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep provider identity, authorization and API operations in their established order.
       const reference = await github({
         authorization: accessToken,
         expected: [200],

@@ -32,7 +32,10 @@ export function ModelControls({
           type="checkbox"
           name="zdr"
           checked={zdrOnly}
-          onChange={(event) => onZdrChange(event.target.checked)}
+          onChange={(event) =>
+            // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+            onZdrChange(event.target.checked)
+          }
         />{" "}
         Zero Data Retention
         <InfoTooltip>

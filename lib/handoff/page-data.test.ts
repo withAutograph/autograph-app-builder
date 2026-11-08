@@ -37,6 +37,7 @@ const dependencies: BuilderHandoffPageDependencies = {
     reserve: vi.fn<BuilderHandoffStore["reserve"]>(),
     bindSession: vi.fn<BuilderHandoffStore["bindSession"]>(),
   }),
+  // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous Cursor client loader contract.
   loadCursorClient: async () => ({ isCursorClientReady: mocks.cursorReady }),
 };
 const getBuilderHandoffPageData = (input: Parameters<typeof getPageData>[0]) =>
@@ -92,6 +93,7 @@ describe("owner-only handoff browser data", () => {
       user: { id: authority.ownerUserId },
     });
     mocks.cursorReady.mockReset().mockResolvedValue(false);
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Model an absent pending handoff with an undefined result.
     mocks.findLatestPending.mockReset().mockResolvedValue(undefined);
     mocks.read.mockReset().mockImplementation(
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -127,6 +129,7 @@ describe("owner-only handoff browser data", () => {
   });
 
   it("returns undefined without login before reading any handoff or checking Cursor readiness", async () => {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Exercise the missing-session input.
     mocks.session.mockResolvedValue(undefined);
     expect(await getBuilderHandoffPageData(pageInput)).toBeUndefined();
     expect(mocks.read).not.toHaveBeenCalled();
@@ -151,6 +154,7 @@ describe("owner-only handoff browser data", () => {
   });
 
   it("does not expose pending handoffs without an authenticated authority", async () => {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Exercise missing authentication for pending handoffs.
     mocks.session.mockResolvedValue(undefined);
     await expect(
       findAuthenticatedPendingBuilderHandoff({
@@ -213,6 +217,7 @@ describe("owner-only handoff browser data", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     const data = await response.json();
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
     expect(data.status).toBe("continued");
     expect(JSON.stringify(data)).not.toMatch(/sessionId|private-engine-id|redeemedAt/u);
   });

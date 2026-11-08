@@ -16,6 +16,7 @@ const harness = {
   waitForBuilderReady: vi.fn<() => Promise<void>>().mockResolvedValue(),
 };
 const loadHarness = vi.fn<() => Promise<typeof harness>>().mockResolvedValue(harness);
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled postgres dependency used by this test.
 vi.mock("postgres", () => ({ default: () => Object.assign(fixture.query, { end: fixture.end }) }));
 const page = {
   getByLabel: (name: string) => ({
@@ -39,6 +40,7 @@ it("requires an owner-scoped durable readback and records no session credentials
   await prepareReferenceCaptureFixture(
     page,
     {
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture root exercises reference capture path handling.
       fixtureRoot: "/tmp/isolated-reference",
       recordReceipt,
       referenceUrl: "https://localhost:3001",
@@ -67,6 +69,7 @@ it("records a blocker and rejects when emulated authentication fails", async () 
     prepareReferenceCaptureFixture(
       page,
       {
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture root exercises reference capture path handling.
         fixtureRoot: "/tmp/isolated-reference",
         recordReceipt,
         referenceUrl: "https://localhost:3001",
@@ -104,6 +107,7 @@ it("captures three restored contexts without waiting for a new write acknowledge
     await prepareReferenceCaptureFixture(
       viewportPage,
       {
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture root exercises reference capture path handling.
         fixtureRoot: "/tmp/isolated-reference",
         recordReceipt,
         referenceUrl: "https://localhost:3001",

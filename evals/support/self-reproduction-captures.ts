@@ -220,6 +220,7 @@ export async function captureParity<TPage extends CapturePage>(input: {
           };
         } finally {
           // Preserve the case receipt if the browser disconnected during cleanup.
+          // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
           await context?.close().catch(() => {
             // Cleanup errors are intentionally ignored.
           });

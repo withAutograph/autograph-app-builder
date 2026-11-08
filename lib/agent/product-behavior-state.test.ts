@@ -13,6 +13,7 @@ import {
 } from "./product-behavior-state";
 import type { ProductBehaviorEvidence } from "./product-behavior-state";
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled eve/context dependency used by this test.
 vi.mock("eve/context", () => ({
   defineState: <T>(_name: string, initial: () => T) => {
     let value = initial();

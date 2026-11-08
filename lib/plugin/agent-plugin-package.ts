@@ -38,6 +38,7 @@ const CREDENTIAL_HEADER =
 const SECRET_LIKE_HEADER_VALUE =
   /(?:\$\{|\{\{|\}\}|(?:^|\s)(?:bearer|basic)\s|(?:api[-_ ]?key|secret|password|credential|private[-_ ]?key)\s*[:=]|-----BEGIN [A-Z ]+PRIVATE KEY-----|^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$)/iu;
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 type JsonObject = Record<string, unknown>;
 
 interface ValidatedPluginManifest {
@@ -57,6 +58,7 @@ interface ValidatedMcpManifest {
   >;
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep package JSON unknown until the consumer parses it.
 const readJson = async (filePath: string): Promise<unknown> => {
   const value: unknown = JSON.parse(await readFile(filePath, "utf-8"));
   return value;
@@ -234,6 +236,7 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
         .join("; ")}`,
     );
   }
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   const frontmatter = document.toJS({ maxAliasCount: 0 }) as Record<string, unknown>;
   const unknownFields = Object.keys(frontmatter).filter(
     (field) => !SKILL_FRONTMATTER_FIELDS.has(field),
@@ -384,7 +387,7 @@ export const validateAgentPluginPackage = async ({
   const schemaRoot = path.resolve(repositoryRoot, "schemas/agent-plugins", SPEC_VERSION);
   const schemaDocuments: Record<string, JsonObject> = {};
   for (const [name, digest] of Object.entries(SCHEMA_DIGESTS)) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Read and verify schema documents in order.
     const bytes = await readFile(path.resolve(schemaRoot, name));
     const actual = createHash("sha256").update(bytes).digest("hex");
     if (actual !== digest) {
@@ -394,6 +397,7 @@ export const validateAgentPluginPackage = async ({
   }
 
   const plugin = await readJson(path.resolve(resolvedPluginRoot, PLUGIN_MANIFEST_FILENAME));
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep these operations in their established order.
   const mcp = await readJson(path.resolve(resolvedPluginRoot, "mcp.json"));
   const ajv = new Ajv2020({ allErrors: true, strict: false });
   const validatePlugin = ajv.compile<ValidatedPluginManifest>(

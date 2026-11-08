@@ -9,7 +9,9 @@ import { describe, expect, it, vi } from "vitest";
 import { createPinnedPreviewLookup, createPreviewCimdTransport } from "./preview-cimd-transport";
 
 const publicAddresses: LookupAddress[] = [
+  // oxlint-disable-next-line sonarjs/no-hardcoded-ip -- Public IPv4 fixture verifies pinned DNS.
   { address: "93.184.216.34", family: 4 },
+  // oxlint-disable-next-line sonarjs/no-hardcoded-ip -- Public IPv6 fixture verifies pinned DNS.
   { address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 },
 ];
 
@@ -32,6 +34,7 @@ function runLookup(options: LookupOptions) {
       lookup.dispatchEvent(new Event("result"));
     },
   );
+  // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
   return result.then(() => {
     if (lookupError) {
       throw lookupError;
@@ -45,6 +48,7 @@ function runLookup(options: LookupOptions) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requestFixture(input: { lookupOptions: LookupOptions; responseStatus?: number }) {
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared shape for values assigned later.
   const observed: { options?: RequestOptions; url?: URL } = {};
   const requestHttps = vi.fn(
     (url: URL, options: RequestOptions, responseListener: (response: IncomingMessage) => void) => {
@@ -137,6 +141,7 @@ describe("Preview CIMD transport", () => {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       resolveHostname: vi.fn(async () => [
         publicAddresses[0],
+        // oxlint-disable-next-line sonarjs/no-hardcoded-ip -- Reject the link-local metadata address.
         { address: "169.254.169.254", family: 4 },
       ]),
     });

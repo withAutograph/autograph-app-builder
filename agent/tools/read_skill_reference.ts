@@ -1,3 +1,4 @@
+/* oxlint-disable github/filenames-match-regex, unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { HOSTED_MANAGED_SKILL_CONTENTS } from "@/lib/sandbox/hosted-managed-seeds.generated";

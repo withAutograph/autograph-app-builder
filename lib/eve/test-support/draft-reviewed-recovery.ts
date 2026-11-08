@@ -427,6 +427,7 @@ export const freshFixture = async () => {
     ...unsigned,
     digest: createHash("sha256").update(JSON.stringify(unsigned)).digest("hex"),
   };
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep this helper scoped to its fixture or invocation.
   const unavailable = async (): Promise<never> => {
     throw new Error("Unexpected provider effect");
   };

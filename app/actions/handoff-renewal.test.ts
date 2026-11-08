@@ -11,12 +11,16 @@ const deployment = vi.hoisted(() => ({
 }));
 const cache = vi.hoisted(() => ({ refresh: vi.fn() }));
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled next/cache dependency used by this test.
 vi.mock("next/cache", () => cache);
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled next/headers dependency used by this test.
 vi.mock("next/headers", () => ({ headers: vi.fn(async () => new Headers({ cookie: "session" })) }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/lib/auth/preview-oauth-runtime dependency used by this test.
 vi.mock("@/lib/auth/preview-oauth-runtime", () => ({
   readPreviewOAuthRuntimeConfig: vi.fn(() => ({ issuer: "https://builder.example" })),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/lib/handoff/deployment dependency used by this test.
 vi.mock("@/lib/handoff/deployment", () => ({
   getBuilderHandoffPageData: deployment.pageData,
   getBuilderHandoffRenewDeploymentHandler: deployment.renew,

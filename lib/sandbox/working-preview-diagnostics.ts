@@ -44,6 +44,7 @@ export const workingPreviewDiagnosticExcerpt = (content: string | null): string 
   if (typeof parsed !== "object" || parsed === null) {
     return "";
   }
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   const fields = parsed as Record<string, unknown>;
   const output = [fields.message, fields.stderr, fields.stdout]
     .filter((value): value is string => typeof value === "string")

@@ -3,6 +3,7 @@ import { hostedOperatorSourceConfigurationSchema } from "./hosted-operator-sourc
 import { matchesExternalTrustedSources } from "./hosted-operator-host-protection";
 
 // Parser tests never open the private provider/control-plane factory.
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./hosted-operator-deployment dependency used by this test.
 vi.mock("./hosted-operator-deployment", () => ({ createHostedOperatorControlPlane: vi.fn() }));
 
 const application = () => ({

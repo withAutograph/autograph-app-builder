@@ -1,3 +1,4 @@
+/* oxlint-disable github/filenames-match-regex, unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { always } from "eve/tools/approval";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
@@ -42,8 +43,10 @@ export default defineTool({
       readOverlayFile: (path) =>
         ctx
           .getSandbox()
+          // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
           .then((sandbox) => sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` })),
       readOverlayFileStream: (path) =>
+        // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
         ctx.getSandbox().then((sandbox) => sandbox.readFile({ path: `${relativeRoot}/${path}` })),
       recoveredByCallId: ctx.callId,
       review: workflow.reviewReceipt,

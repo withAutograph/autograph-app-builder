@@ -5,6 +5,7 @@ const vendorOnboardingId = "vendor-onboarding";
 
 export interface ProductQualityScenario {
   id:
+    // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
     | "vendor-onboarding"
     | "material-product-ambiguity"
     | "explicit-preference"
@@ -112,6 +113,7 @@ export function evaluateConversationQuality(input: {
     hardFailures.push("Conversation used forbidden public vocabulary.");
   }
   for (const expected of input.scenario.expected.replyIncludes) {
+    // oxlint-disable-next-line react-doctor/js-set-map-lookups -- This is a substring check, not set membership.
     if (!input.reply.includes(expected)) {
       hardFailures.push(`Reply omitted required product outcome: ${expected}.`);
     }
@@ -133,6 +135,7 @@ export function evaluateConversationQuality(input: {
     score: {
       productFacing: messages.every(isProductFacing),
       productive: input.scenario.expected.replyIncludes.every((expected) =>
+        // oxlint-disable-next-line react-doctor/js-set-map-lookups -- This is a substring check, not set membership.
         input.reply.includes(expected),
       ),
       structured: hardFailures.every(
@@ -181,6 +184,7 @@ export function evaluatePrototypeQuality(input: {
     "Prototype contains unfinished placeholder content.",
   );
   for (const text of prototype.requiredText) {
+    // oxlint-disable-next-line react-doctor/js-set-map-lookups -- This is a substring check, not set membership.
     requireCondition(input.html.includes(text), `Prototype omitted ${text}.`);
   }
   const appSpecResult = validateBuildReadyAppSpec(input.appSpec);

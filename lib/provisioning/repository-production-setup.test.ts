@@ -117,6 +117,7 @@ const fixture = () => {
     },
     withLease: async (_scope, run) => {
       const previous = lock;
+      // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
       let release = () => {};
       lock = new Promise<void>((resolve) => {
         release = resolve;
@@ -194,7 +195,9 @@ describe("Builder-owned Production setup", () => {
     f.setIdentity(false);
     await f.service.prepare(scope, intent);
     const saved = f.read();
-    if (!saved) throw new Error("missing saved setup");
+    if (!saved) {
+      throw new Error("missing saved setup");
+    }
     const resource = structuredClone(saved.record.resource);
     const credentials = structuredClone(saved.record.privateState);
     saved.record.effects["install-schema"] = {
@@ -360,7 +363,9 @@ describe("Builder-owned Production setup", () => {
     f.setIdentity(false);
     await f.service.prepare(scope, intent);
     const current = f.read();
-    if (current === undefined) throw new Error("Setup fixture is missing");
+    if (current === undefined) {
+      throw new Error("Setup fixture is missing");
+    }
     await f.ports.store.compareAndSet(current, {
       ...current.record,
       effects: {
@@ -408,7 +413,9 @@ describe("Builder-owned Production setup", () => {
 
   it("stops before initial schema work if authority is revoked during identity setup", async () => {
     const f = fixture();
-    f.ports.prepareCreatorIdentity = async () => f.revoke();
+    f.ports.prepareCreatorIdentity = async () => {
+      f.revoke();
+    };
     await expect(f.service.prepare(scope, intent)).rejects.toThrow("not authorized");
     expect(f.calls).toEqual(["credentials", "allocate-storage"]);
     expect(f.read()?.record.creatorActorId).toBeUndefined();

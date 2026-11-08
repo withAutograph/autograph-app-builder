@@ -78,6 +78,7 @@ export function parseLifecycleArguments(
   if (username !== undefined) {
     result.username = username;
   }
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared return contract for all supported results.
   return result;
 }
 

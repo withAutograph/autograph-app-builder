@@ -10,7 +10,7 @@ import {
   workspaceOnboardingRedirect,
 } from "@/lib/auth/workspace-onboarding";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line sonarjs/function-name, eslint/func-style -- React components use PascalCase names for JSX and diagnostics. Preserve function declaration hoisting and initialization timing.
 async function RedirectAccountVisitor() {
   const requestHeaders = await headers();
   const { origin } = new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:3000/api/auth");

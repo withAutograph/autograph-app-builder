@@ -2,9 +2,12 @@ import { readFile } from "node:fs/promises";
 import { createWorkflowAdapters } from "./workflow-adapter";
 import { describe, expect, it, vi } from "vitest";
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled node:fs/promises dependency used by this test.
 vi.mock("node:fs/promises", () => ({ readFile: vi.fn().mockResolvedValue("a".repeat(32)) }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled flags dependency used by this test.
 vi.mock("flags", () => ({ encryptOverrides: vi.fn().mockResolvedValue("synthetic-override") }));
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../../e2e/support/harness dependency used by this test.
 vi.mock("../../e2e/support/harness", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   // oxlint-disable-next-line unicorn/no-useless-undefined -- Vitest requires the resolved-value argument.
@@ -13,12 +16,14 @@ vi.mock("../../e2e/support/harness", async (importOriginal) => ({
 
 describe("self-reproduction default workflow adapter", () => {
   it("is self-contained and omits sides whose runtime URL is unavailable", () => {
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises workflow adapter configuration.
     expect(createWorkflowAdapters({ outputRoot: "/tmp/evidence" })).toEqual({});
   });
 
   it("binds each supplied runtime to evaluator-owned adapters", () => {
     const adapters = createWorkflowAdapters({
       candidateUrl: "http://127.0.0.1:4173",
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises workflow adapter configuration.
       outputRoot: "/tmp/evidence",
       referenceUrl: "https://localhost:3001",
     });
@@ -28,6 +33,7 @@ describe("self-reproduction default workflow adapter", () => {
 
   it("classifies an absent reference fixture as not-run rather than missing product functionality", async () => {
     const { reference } = createWorkflowAdapters({
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises workflow adapter configuration.
       outputRoot: "/tmp/evidence",
       referenceUrl: "https://localhost:3001",
     });
@@ -44,6 +50,7 @@ describe("candidate workflow evidence boundaries", () => {
   it("preserves the microfrontend base path when opening the candidate", async () => {
     const { candidate } = createWorkflowAdapters({
       candidateUrl: "https://candidate.example/replica/",
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises workflow adapter configuration.
       outputRoot: "/tmp/evidence",
     });
     const goto = vi
@@ -60,6 +67,7 @@ describe("candidate workflow evidence boundaries", () => {
     async (workflow) => {
       const { candidate } = createWorkflowAdapters({
         candidateUrl: "https://candidate.example/replica/",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises workflow adapter configuration.
         outputRoot: "/tmp/evidence",
       });
       const goto = vi.fn<(url: string) => Promise<{ ok: () => boolean } | null>>();
@@ -73,6 +81,7 @@ describe("candidate workflow evidence boundaries", () => {
 
   it("prepares the real reference authentication fixture without pre-crediting assertions", async () => {
     const { reference } = createWorkflowAdapters({
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises workflow adapter configuration.
       outputRoot: "/tmp/evidence",
       referenceUrl: "https://localhost:3001",
     });
@@ -85,6 +94,7 @@ describe("candidate workflow evidence boundaries", () => {
 it("blocks authentication when the evaluator passkey fixture cannot be configured", async () => {
   vi.mocked(readFile).mockRejectedValueOnce(new Error("fixture unavailable"));
   const { reference } = createWorkflowAdapters({
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises workflow adapter configuration.
     outputRoot: "/tmp/evidence",
     referenceUrl: "https://localhost:3001",
   });
@@ -96,16 +106,20 @@ it("blocks authentication when the evaluator passkey fixture cannot be configure
 
 it("reads the isolated reference fixture flag secret", async () => {
   const { reference } = createWorkflowAdapters({
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises workflow adapter configuration.
     outputRoot: "/tmp/evidence",
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises workflow adapter configuration.
     referenceFixtureRoot: "/tmp/isolated-reference",
     referenceUrl: "https://localhost:3001",
   });
   await reference?.prepare({}, "authentication");
+  // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises workflow adapter configuration.
   expect(readFile).toHaveBeenCalledWith("/tmp/isolated-reference/.emulate/flags-secret", "utf-8");
 });
 
 it("binds the real reference provider denial and replay fixture", async () => {
   const { reference } = createWorkflowAdapters({
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises workflow adapter configuration.
     outputRoot: "/tmp/evidence",
     referenceUrl: "https://localhost:3001",
   });

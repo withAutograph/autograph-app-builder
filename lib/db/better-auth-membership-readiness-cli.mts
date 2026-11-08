@@ -20,6 +20,7 @@ try {
     const mode = await transaction<{ transactionReadOnly: string }[]>`
       SELECT current_setting('transaction_read_only') AS "transactionReadOnly"
     `;
+    // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep readiness queries in their established transaction order.
     const activeLegacyRows = await transaction<
       {
         issuer: string;
@@ -63,6 +64,7 @@ try {
       )
       ORDER BY issuer, audience, "workspaceId", "userId"
     `;
+    // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep readiness queries in their established transaction order.
     const [counts] = await transaction<
       {
         inactiveLegacyCount: number;

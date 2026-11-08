@@ -47,6 +47,7 @@ describe("preview runtime initialization", () => {
 
     // Supply imports at the execution boundary; exercise the generated entry's
     // initialization and routing, without mounting a DOM or calling providers.
+    // oxlint-disable-next-line sonarjs/code-eval -- Execute the generated preview entry against controlled fixtures.
     runInNewContext(entry.replaceAll(/^import .*;\n/gmu, ""), {
       React: { createElement: (component: unknown) => component },
       Screen0: overview,

@@ -247,6 +247,7 @@ const waitForPreview = async (input: {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Observe the existing supervisor without collecting output.
       const supervisor = await input.provider
         .getCommand(input.commandId, { signal: probeSignal() })
+        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
         .catch((error: unknown) => {
           input.signal.throwIfAborted();
           if (isMissingPreviewCommand(error)) {
@@ -281,6 +282,7 @@ const waitForPreview = async (input: {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Read the same attempt's startup diagnostics.
       const failure = await input.provider.fs
         .readFile(input.failurePath, { encoding: "utf-8", signal: diagnosticSignal })
+        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
         .catch((error: unknown) => {
           input.signal.throwIfAborted();
           if (diagnosticSignal.aborted) {
@@ -308,6 +310,7 @@ const waitForPreview = async (input: {
 };
 
 type StoppablePreviewCommand = Pick<Command, "exitCode" | "kill"> & {
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- The command wait port preserves the provider's unspecified result.
   wait: (...args: Parameters<Command["wait"]>) => Promise<unknown>;
 };
 
@@ -475,6 +478,7 @@ const cleanupPreviewAttempt = async (input: {
     provider,
     { kind: "read" },
     AbortSignal.timeout(5000),
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
   ).catch(() => null);
   const sameAttempt =
     current?.attemptId === attempt.attemptId &&
@@ -648,6 +652,7 @@ export const startWorkingPreview = async (input: {
         const ready =
           (await provider.fs
             .readFile(readyPath, { encoding: "utf-8", signal: readinessSignal })
+            // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
             .catch(missingRuntimeFile)) === "ready";
         observe(ready ? "Listener ready" : "Listener readiness marker absent");
         return ready;

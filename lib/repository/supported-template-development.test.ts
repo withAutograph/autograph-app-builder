@@ -93,6 +93,7 @@ describe("development Sandbox workspace verification", () => {
             exitCode: 0,
             stderr: "",
             stdout: JSON.stringify({
+              // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises repository configuration.
               realRepository: "/tmp/repository",
               realWorkspace: "/workspace",
               repositoryInput: "/workspace/repository",
@@ -126,11 +127,17 @@ describe("development Sandbox workspace refresh", () => {
     roots.push(source);
     writeFileSync(path.join(source, "changed.txt"), "before");
     writeFileSync(path.join(source, "deleted.txt"), "delete me");
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", ["init", "--quiet"], { cwd: source });
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: source });
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", ["config", "user.name", "Test"], { cwd: source });
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", ["config", "commit.gpgsign", "false"], { cwd: source });
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", ["add", "."], { cwd: source });
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", ["commit", "--quiet", "-m", "fixture"], { cwd: source });
 
     const files = new Map<string, string | Buffer>();
@@ -258,13 +265,19 @@ const legacyWorkspaceFixture = () => {
   );
   writeFileSync(path.join(source, "scripts/check.cjs"), 'process.stdout.write("checked");');
   writeFileSync(path.join(source, "app.txt"), "original");
+  // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
   execFileSync("git", ["init", "--quiet"], { cwd: source });
+  // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
   execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: source });
+  // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
   execFileSync("git", ["config", "user.name", "Test"], { cwd: source });
+  // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
   execFileSync("git", ["-c", "commit.gpgsign=false", "add", "."], { cwd: source });
+  // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
   execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "fixture"], {
     cwd: source,
   });
+  // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
   const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: source, encoding: "utf-8" }).trim();
   const files = new Map<string, Buffer>();
   const sandbox = createSandbox({
@@ -424,12 +437,15 @@ describe("legacy writable Sandbox workspace", () => {
     const fixture = legacyWorkspaceFixture();
     mkdirSync(path.join(fixture.source, ".github/workflows"), { recursive: true });
     writeFileSync(path.join(fixture.source, ".github/workflows/cd.yml"), "jobs: {}\n");
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", ["add", "."], { cwd: fixture.source });
     execFileSync(
+      // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
       "git",
       ["-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "release policy"],
       { cwd: fixture.source },
     );
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     const sha = execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: fixture.source,
       encoding: "utf-8",

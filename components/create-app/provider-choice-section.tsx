@@ -13,7 +13,7 @@ export interface ProviderChoice<Provider extends string> {
   provider: Provider;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line sonarjs/function-name, eslint/func-style -- React components use PascalCase names for JSX and diagnostics. Preserve function declaration hoisting and initialization timing.
 export function ProviderChoiceSection<Provider extends string>({
   bare = false,
   children,
@@ -59,7 +59,10 @@ export function ProviderChoiceSection<Provider extends string>({
               value={option.provider}
               badge={option.available ? undefined : "Coming soon"}
               icon={<Icon size={18} aria-hidden="true" />}
-              onChange={() => onChange(option.provider)}
+              onChange={() =>
+                // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+                onChange(option.provider)
+              }
             >
               {option.name}
             </ChoiceCard>

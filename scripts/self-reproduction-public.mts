@@ -133,6 +133,7 @@ if (state.originalStart.prompt !== undefined) {
 }
 if (!state.sourceRevision) {
   try {
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
     state.sourceRevision = execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: repo,
       encoding: "utf-8",

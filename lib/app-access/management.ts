@@ -109,8 +109,9 @@ export interface AppAccessManagementDependencies {
 
 const normalizeCommand = (command: AppAccessCommand): AppAccessCommand => {
   const parsed = appAccessCommandSchema.parse(command);
-  if (parsed.action === "choose-creator-account")
+  if (parsed.action === "choose-creator-account") {
     return { ...parsed, email: parsed.email.toLowerCase() };
+  }
   return "roles" in parsed ? { ...parsed, roles: [...new Set(parsed.roles)].toSorted() } : parsed;
 };
 

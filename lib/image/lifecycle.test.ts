@@ -104,9 +104,11 @@ const targetFiles = Object.fromEntries(
 const provenance = () =>
   createExactImageProvenance({
     arrustedIgnored: "",
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
     arrustedRoot: "/tmp/exact-arrusted",
     arrustedStatus: "",
     builderIgnored: "",
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
     builderRoot: "/tmp/exact-builder",
     builderStatus: "",
     dockerfileSha256,
@@ -117,6 +119,7 @@ const provenance = () =>
     observedArrustedTree: ARRUSTED_IMAGE_TARGET_TREE,
     observedBuilderCommit: builderCommit,
     observedBuilderTree: builderTree,
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
     stateRoot: "/tmp/exact-image-state",
     targetFiles,
   });
@@ -391,12 +394,8 @@ const createSyntheticGithubToken = () => `github_pat_${randomUUID().replaceAll("
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function installPreloadFixture(
   variant:
-    | "current"
-    | "missing"
-    | "stale"
-    | "provenance-mismatch"
-    | "identity-mismatch"
-    | "state-drift",
+    // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
+    "current" | "missing" | "stale" | "provenance-mismatch" | "identity-mismatch" | "state-drift",
 ) {
   const root = realpathSync(
     mkdtempSync(nodePath.join(tmpdir(), `app-builder-preload-${variant}-`)),
@@ -1128,6 +1127,7 @@ wait
 
   it("constructs exact standalone build, inspection, preload, and proof commands", () => {
     const exact = provenance();
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
     expect(imageBuildCommand(exact, "/tmp/sanitized-arrusted")).toEqual({
       args: [
         "build",
@@ -1142,6 +1142,7 @@ wait
         "--tag",
         exact.image.tag,
         "--load",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         "/tmp/exact-builder",
       ],
       program: "docker-buildx",
@@ -1170,6 +1171,7 @@ wait
       args: ["list", "--depth", "Infinity", "--json"],
       program: "pnpm",
     });
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
     expect(sandboxProofCommand(reference, "/tmp/exact-arrusted")).toEqual({
       args: [
         "--import",
@@ -1180,6 +1182,7 @@ wait
         "--gate-a-image",
         reference,
         "--gate-a-source-root",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         "/tmp/exact-arrusted",
         "sandbox-identity-planning",
         "--strict",
@@ -1261,9 +1264,11 @@ wait
     expect(() =>
       createExactImageProvenance({
         arrustedIgnored: "",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         arrustedRoot: "/tmp/exact-arrusted",
         arrustedStatus: "",
         builderIgnored: "",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         builderRoot: "/tmp/exact-builder",
         builderStatus: "",
         dockerfileSha256,
@@ -1274,6 +1279,7 @@ wait
         observedArrustedTree: ARRUSTED_IMAGE_TARGET_TREE,
         observedBuilderCommit: builderCommit,
         observedBuilderTree: builderTree,
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         stateRoot: "/tmp/exact-image-state",
         targetFiles,
       }),
@@ -1281,9 +1287,11 @@ wait
     expect(() =>
       createExactImageProvenance({
         arrustedIgnored: "",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         arrustedRoot: "/tmp/exact-arrusted",
         arrustedStatus: "",
         builderIgnored: "",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         builderRoot: "/tmp/exact-builder",
         builderStatus: "?? drift",
         dockerfileSha256,
@@ -1294,6 +1302,7 @@ wait
         observedArrustedTree: ARRUSTED_IMAGE_TARGET_TREE,
         observedBuilderCommit: builderCommit,
         observedBuilderTree: builderTree,
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         stateRoot: "/tmp/exact-image-state",
         targetFiles,
       }),
@@ -1301,9 +1310,11 @@ wait
     expect(() =>
       createExactImageProvenance({
         arrustedIgnored: "",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         arrustedRoot: "/tmp/exact-arrusted",
         arrustedStatus: "",
         builderIgnored: "node_modules/eve/index.js",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         builderRoot: "/tmp/exact-builder",
         builderStatus: "",
         dockerfileSha256,
@@ -1314,6 +1325,7 @@ wait
         observedArrustedTree: ARRUSTED_IMAGE_TARGET_TREE,
         observedBuilderCommit: builderCommit,
         observedBuilderTree: builderTree,
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
         stateRoot: "/tmp/exact-image-state",
         targetFiles,
       }),
@@ -1322,6 +1334,7 @@ wait
       assertStandaloneGitMetadata(false, "Builder");
     }).toThrow("standalone checkout");
     expect(() => {
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture paths exercise image lifecycle command and root handling.
       assertCanonicalRoot("/tmp/link", "/private/tmp/real", "Source");
     }).toThrow("no-link path");
     expect(() => {
@@ -1351,16 +1364,22 @@ wait
     const source = nodePath.join(root, "source");
     const destination = nodePath.join(root, "sanitized");
     mkdirSync(source, { mode: 0o700 });
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", ["init", "--quiet", source]);
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", ["-C", source, "config", "user.name", "Fixture"]);
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", ["-C", source, "config", "user.email", "fixture@example.com"]);
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", ["-C", source, "config", "credential.helper", "super-secret-helper"]);
     writeFileSync(nodePath.join(source, "tracked.txt"), "tracked bytes\n");
     mkdirSync(nodePath.join(source, "nested", "deeper"), { recursive: true });
     writeFileSync(nodePath.join(source, "nested", "deeper", "payload.txt"), "nested bytes\n");
     writeFileSync(nodePath.join(source, "nested", "run.sh"), "#!/bin/sh\nexit 0\n");
     chmodSync(nodePath.join(source, "nested", "run.sh"), 0o755);
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", ["-C", source, "add", "tracked.txt", "nested"]);
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     execFileSync("git", [
       "-C",
       source,
@@ -1371,9 +1390,11 @@ wait
       "-m",
       "fixture",
     ]);
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     const commit = execFileSync("git", ["-C", source, "rev-parse", "HEAD"], {
       encoding: "utf-8",
     }).trim();
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
     const tree = execFileSync("git", ["-C", source, "rev-parse", "HEAD^{tree}"], {
       encoding: "utf-8",
     }).trim();
@@ -1381,6 +1402,7 @@ wait
     const orderedPaths = ["nested/deeper/payload.txt", "nested/run.sh", "tracked.txt"] as const;
     const modes = ["100644", "100755", "100644"] as const;
     const expectedRecords = orderedPaths.map((path, index) => {
+      // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This fixture invokes the environment-provided git executable.
       const objectId = execFileSync("git", ["-C", source, "hash-object", "--", path], {
         encoding: "utf-8",
       }).trim();
@@ -1499,7 +1521,9 @@ wait
       { stdio: ["ignore", "pipe", "inherit"] },
     );
     const output = await Promise.race([
+      // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
       once(child.stdout, "data").then(([chunk]) => z.instanceof(Buffer).parse(chunk).toString()),
+      // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
       delay(3000).then(() => {
         throw new Error("Timed out waiting for lifecycle crash fixture.");
       }),

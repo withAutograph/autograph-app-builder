@@ -19,6 +19,7 @@ export type ProposalWorkflowState = Extract<
   AppBuilderWorkflowState,
   {
     phase:
+      // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
       | "planned"
       | "apply_failed"
       | "applied"
@@ -215,6 +216,7 @@ export async function inspectTargetExecutionReadiness(input: {
           environment,
           input.state.workspace,
           shouldPreferLiveTemplateDependencies(input.state.sourceReceipt.version, environment),
+          // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
         ).catch(() => globalThis.undefined)
       : undefined;
   const resolvedInput: Parameters<typeof resolveTargetExecutionEnvironment>[0] = {

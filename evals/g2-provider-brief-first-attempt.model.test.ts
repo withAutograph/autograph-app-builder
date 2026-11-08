@@ -1,3 +1,4 @@
+/* oxlint-disable github/filenames-match-regex -- Preserve the documented model-evaluation test invocation path. */
 import { readFile } from "node:fs/promises";
 import nodePath from "node:path";
 

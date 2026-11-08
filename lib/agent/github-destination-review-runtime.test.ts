@@ -61,6 +61,7 @@ interface DestinationReviewToolPorts {
 const toolPorts = vi.hoisted((): DestinationReviewToolPorts => ({}));
 // Only hosted/session/Sandbox ports are controlled; the tool, destination runtime,
 // canonical journals, path selection and review invalidation below remain real.
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./workflow-state dependency used by this test.
 vi.mock("./workflow-state", async (original) => {
   const actual = await original<typeof WorkflowStateModule>();
   return {
@@ -80,19 +81,25 @@ vi.mock("./workflow-state", async (original) => {
     },
   };
 });
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./existing-app-repair-planning dependency used by this test.
 vi.mock("./existing-app-repair-planning", async (original) => ({
   ...(await original<typeof RepairPlanningModule>()),
   priorOwnedAppDraftPublication: () => toolPorts.prior,
   priorResumedBuildDraftProposal: vi.fn(),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./deployment-github-publication-runtime dependency used by this test.
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: () => toolPorts.runtime,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./github-publication-destination dependency used by this test.
 vi.mock("./github-publication-destination", () => ({
   resolvePublicationTargetForTool: () => ({ kind: "ready", target: toolPorts.target }),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./app-baseline-state dependency used by this test.
 vi.mock("./app-baseline-state", () => ({ appBaselineState: { get: vi.fn() } }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./draft-reconciliation-state dependency used by this test.
 vi.mock("./draft-reconciliation-state", () => ({ draftReconciliationState: { get: () => null } }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../../agent/tools/change_set_status dependency used by this test.
 vi.mock("../../agent/tools/change_set_status", async (original) => ({
   ...(await original<typeof ChangeSetStatusModule>()),
   observeNormalizedChangeSet: () => ({

@@ -6,6 +6,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import type { Sql } from "postgres";
 
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Pass the complete database schema to Drizzle.
 import * as databaseSchema from "./schema";
 import {
   assertRuntimeRoleReadback,
@@ -22,7 +23,7 @@ import { createPreviewOAuthServer } from "../auth/preview-oauth-runtime";
 
 const MAX_REQUEST_BYTES = 64 * 1024;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// eslint-disable-next-line eslint/func-style, anti-slop/no-unknown-returns -- Keep private request JSON unknown until it is validated. Preserve function declaration hoisting and initialization timing.
 async function readPrivateRequest(path: string): Promise<unknown> {
   if (!nodePath.isAbsolute(path)) {
     throw new Error("Activation request path must be absolute.");
@@ -81,6 +82,7 @@ function createStore(sql: Sql): PreviewActivationStore {
         await configureLoginRole(sql, "create", input.roleName, input.password);
       } else if (
         existing.length !== 1 ||
+        // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Require an explicitly login-capable existing role.
         existing[0]?.rolcanlogin !== true ||
         existing[0]?.membership_count !== 0
       ) {
@@ -197,6 +199,7 @@ function createStore(sql: Sql): PreviewActivationStore {
       const beforeResource = await sql<
         { count: number }[]
       >`select count(*)::integer as count from oauth_resource where identifier = ${input.resource}`;
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep activation reads and operations in their established order.
       const beforeJwks = await sql<
         { count: number }[]
       >`select count(*)::integer as count from jwks`;
@@ -224,6 +227,7 @@ function createStore(sql: Sql): PreviewActivationStore {
         membership: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
           activeWorkspaceForUser() {
+            // oxlint-disable-next-line unicorn/no-useless-undefined -- Preserve the adapter contract for a missing active workspace.
             return Promise.resolve(undefined);
           },
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
@@ -235,6 +239,7 @@ function createStore(sql: Sql): PreviewActivationStore {
       const metadata = await auth.handler(
         new Request(`${input.issuer}/.well-known/oauth-authorization-server`),
       );
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep activation reads and operations in their established order.
       const keys = await auth.handler(new Request(`${input.issuer}/jwks`));
       if (metadata.status !== 200 || keys.status !== 200) {
         throw new Error("OAuth resource or JWKS initialization failed closed.");
@@ -242,6 +247,7 @@ function createStore(sql: Sql): PreviewActivationStore {
       const afterResource = await sql<
         { count: number }[]
       >`select count(*)::integer as count from oauth_resource where identifier = ${input.resource}`;
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep activation reads and operations in their established order.
       const afterJwks = await sql<{ count: number }[]>`select count(*)::integer as count from jwks`;
       if (afterResource[0]?.count !== 1 || (afterJwks[0]?.count ?? 0) < 1) {
         throw new Error("OAuth resource or JWKS initialization readback failed.");

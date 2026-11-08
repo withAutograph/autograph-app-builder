@@ -72,6 +72,7 @@ export type BranchWorktreePublicationSuccessReceipt = TerminalFields & {
 export type BranchWorktreePublicationFailureReceipt = TerminalFields & {
   status: "failed";
   reason:
+    // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
     | "precondition-failed"
     | "collision"
     | "creation-partial"

@@ -24,6 +24,7 @@ export async function relayBoundedFrames(options: {
     let settled = false;
     let sourceEnded = false;
     let waitingForDrain = false;
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared shape for values assigned later.
     const callbacks: { processBuffered?: () => void } = {};
     const fail = (error: Error) => {
       if (settled) {

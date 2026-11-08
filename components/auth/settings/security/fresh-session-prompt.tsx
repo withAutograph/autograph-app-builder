@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-member-access -- Preserve the existing untyped input and rendering boundary. */
 "use client";
 
 import { isTwoFactorRedirect } from "@better-auth-ui/core/plugins/two-factor";
@@ -80,6 +81,7 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
         ) : (
           <Button
             onClick={() =>
+              // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
               auth.navigate({
                 to: `${auth.basePaths.auth}/${auth.viewPaths.auth.signIn}`,
               })

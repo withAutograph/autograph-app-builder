@@ -193,6 +193,7 @@ export interface GitHubTargetAccessProvider {
     operation: "resolve-existing-source" | "publish-draft-pull-request";
     repositoryId: string;
     requestedPermissions: RequestedPermissions;
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
   }) => Promise<unknown>;
 }
 
@@ -236,57 +237,73 @@ export interface GitHubAppInstallationProvider {
   inspectDestinationFiles?: (input: {
     repository: GitHubRepositoryObservation;
     paths: readonly string[];
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
   }) => Promise<unknown>;
   readDestinationFile?: (input: {
     repository: GitHubRepositoryObservation;
     path: string;
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
   }) => Promise<unknown>;
   inspectHistoricalAppSource?: (input: {
     repositoryId: string;
     owner: string;
     name: string;
     source: HistoricalAppSourceSelector;
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
   }) => Promise<unknown>;
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
   inspectExistingDraft: (input: ExistingDraftInspectionRequest) => Promise<unknown>;
   updateExistingDraft: (
     proposal: ExistingDraftUpdateProposal,
     content: GitHubDraftPullRequestContent,
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
   ) => Promise<unknown>;
   inspectAppliedDraftUpdate: (
     proposal: ExistingDraftUpdateProposal,
     content: GitHubDraftPullRequestContent,
     observed: ExistingDraftObservation,
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
   ) => Promise<unknown>;
   inspectAppliedDraftRepair?: (
     proposal: ExistingDraftUpdateProposal,
     resolvedTree: string,
     observed: ExistingDraftObservation,
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
   ) => Promise<unknown>;
   reconcileExistingDraft: (
     proposal: ExistingDraftReconciliationProposal,
     content: ReconciliationContent,
     recovery?: OwnedDraftInspectionRecovery,
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
   ) => Promise<unknown>;
   inspectAppliedDraftReconciliation: (
     proposal: ExistingDraftReconciliationProposal,
     observed: ExistingDraftObservation,
     recovery?: OwnedDraftInspectionRecovery,
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
   ) => Promise<unknown>;
   inspectInstallation: (input: {
     operation: GitHubOperation;
     requestedPermissions: RequestedPermissions;
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
   }) => Promise<unknown>;
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
   inspectRepository: (input: { repositoryId: string; ref: string }) => Promise<unknown>;
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
   inspectDestination: (input: { owner: string; name: string }) => Promise<unknown>;
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
   inspectFreshRepositoryOutcome: (proposal: FreshRepositoryProposal) => Promise<unknown>;
   createPrivateFreshHistoryRepository: (
     proposal: FreshRepositoryProposal,
     content: GitHubFreshRepositoryContent,
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
   ) => Promise<unknown>;
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
   inspectDraftPublication: (proposal: DraftPullRequestProposal) => Promise<unknown>;
   publishDraftPullRequest: (
     proposal: DraftPullRequestProposal,
     content: GitHubDraftPullRequestContent,
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
   ) => Promise<unknown>;
 }
 
@@ -330,8 +347,10 @@ const safeProviderRecovery = (status: number | undefined): string => {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function sanitizedProviderCall(
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
   operation: () => Promise<unknown>,
   action: string,
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
 ): Promise<unknown> {
   try {
     return await operation();
@@ -439,6 +458,7 @@ export function createGitHubAppPublicationAdapter(
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function observationFor(
     operation: GitHubOperation,
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep GitHub provider responses untrusted until operation-specific parsing.
     snapshotOperation: () => Promise<unknown>,
     action: string,
   ) {

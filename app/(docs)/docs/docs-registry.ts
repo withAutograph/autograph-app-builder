@@ -4,6 +4,7 @@ export interface DocsTableOfContentsItem {
 }
 
 export interface DocsDocument {
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   slug: "overview" | "install-autograph" | "connect-access" | "create-an-app" | "troubleshooting";
   title: string;
   description: string;

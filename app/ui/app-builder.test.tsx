@@ -10,7 +10,9 @@ import { appNameFromBrief, repositoryNameFromAppName } from "./builder-defaults"
 import { AnonymousBuilder } from "./anonymous-builder";
 import { AuthenticatedBuilder as AppBuilderComponent } from "./authenticated-builder";
 import { Header } from "./builder-shell";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy on the live module export in this test.
 import * as draftOutbox from "./builder-draft-outbox";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy on the live module export in this test.
 import * as draftAutosave from "./use-builder-draft-autosave";
 import styles from "./app-builder.module.css";
 import type { BuilderDraftPageData } from "../../lib/builder-drafts/contracts";
@@ -102,15 +104,19 @@ const draftFetch = vi.hoisted(() =>
   }),
 );
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled next/navigation dependency used by this test.
 vi.mock("next/navigation", () => ({
   useRouter: () => navigation,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/app/actions/builder dependency used by this test.
 vi.mock("@/app/actions/builder", () => builderActions);
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/app/actions/builder-drafts dependency used by this test.
 vi.mock("@/app/actions/builder-drafts", () => ({
   loadActiveBuilderDraft: builderActions.loadActiveBuilderDraft,
   saveActiveBuilderDraft: builderActions.saveActiveBuilderDraft,
 }));
 vi.stubGlobal("fetch", draftFetch);
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../../components/auth/user/user-button dependency used by this test.
 vi.mock("../../components/auth/user/user-button", () => ({
   UserButton: () => <button aria-label="Account">Account</button>,
 }));
@@ -1081,6 +1087,7 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => {
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- Resolve the typed delayed read with its missing value.
       delayedRead.resolve(undefined);
     });
     expect(requireElement(view.querySelector<HTMLInputElement>("#app-name")).value).toBe(

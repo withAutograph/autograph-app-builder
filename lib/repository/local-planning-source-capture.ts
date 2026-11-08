@@ -364,6 +364,7 @@ export const captureLocalPlanningSource = async (
       }
       git(["read-tree", baseSha]);
       let complete = true;
+      // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Check each omitted source path before treating the capture as complete.
       for (const name of omitted) {
         const absolute = selectedLocalSourcePath(snapshot, name);
         if (!existsSync(absolute)) {
@@ -488,6 +489,7 @@ export const captureLocalPlanningSource = async (
       // Only the closed launcher's owner-only retained run roots are candidates.
       // Read committed snapshot objects, never mutable snapshot or app bytes.
       if (retainedRunsRoot !== undefined) {
+        // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Inspect retained run snapshots and skip unrelated entries.
         for (const entry of readdirSync(retainedRunsRoot, { withFileTypes: true })) {
           if (!entry.isDirectory() || !/^run-[a-zA-Z0-9]+$/u.test(entry.name)) {
             continue;

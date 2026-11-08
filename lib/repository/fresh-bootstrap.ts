@@ -147,6 +147,7 @@ export type FreshBootstrapSuccessReceipt = TerminalBase & {
 export type FreshBootstrapFailureReceipt = TerminalBase & {
   status: "failed";
   reason:
+    // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
     | "precondition-failed"
     | "collision"
     | "materialization-partial"
@@ -177,6 +178,7 @@ export type FreshBootstrapLayout =
     };
 
 const sha1Object = (kind: "blob" | "tree" | "commit", bytes: Uint8Array) =>
+  // oxlint-disable-next-line sonarjs/hashing -- Git object IDs use SHA-1 for this repository format.
   createHash("sha1")
     .update(Buffer.from(`${kind} ${bytes.byteLength}\0`))
     .update(bytes)
@@ -399,6 +401,7 @@ export const createFreshBootstrapProposal = (input: {
 };
 
 const canonicalProposal = (proposal: FreshBootstrapProposal) => {
+  // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/no-unsafe-dictionary-type -- Keep the existing broader shape used by this operation.; Preserve the existing open-ended value contract.
   const unsigned = { ...proposal } as Record<string, unknown>;
   delete unsigned.digest;
   return unsigned;
@@ -415,6 +418,7 @@ const hasExactKeys = <Value extends object>(
 const pathIdentityKeys = ["path", "device", "inode", "uid", "mode", "nlink"] as const;
 const executableIdentityKeys = [...pathIdentityKeys, "sha256"] as const;
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const isRecord = <Value>(value: Value): value is Value & Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -591,6 +595,7 @@ export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapPropos
     !proposal.exactTree.every((file) => hasExactKeys(file, ["path", "mode", "blob"])) ||
     proposal.version !== FRESH_BOOTSTRAP_VERSION ||
     proposal.githubOutcome !== "unavailable" ||
+    // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Reject missing or malformed release flags in bootstrap proposals.
     proposal.releaseEnabled !== false
   ) {
     throw new Error(invalidProposal);
@@ -702,6 +707,7 @@ const assertExactFreshBootstrapLayout = (layout: FreshBootstrapLayout): void => 
 
 export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJournal): void => {
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     !isRecord(journal) ||
     (journal.status !== "pending" &&
       journal.status !== "failed" &&
@@ -784,6 +790,7 @@ export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJour
   }
   const { digest, ...unsigned } = journal;
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     !hasExactKeys(journal, expectedKeys) ||
     !/^[0-9a-f]{64}$/u.test(journal.leaseMarkerDigest) ||
     (journal.recoveryOfDigest === undefined) !==
@@ -794,8 +801,10 @@ export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJour
     ((journal.status === "pending" || journal.status === "failed") &&
       (journal.stageCreated !== (journal.layout.phase !== "intent") ||
         journal.destinationPublished !== (journal.layout.phase === "published"))) ||
+    // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- A failed journal must explicitly require recovery.
     (journal.status === "failed" && journal.recoveryRequired !== true) ||
     (journal.status === "succeeded" &&
+      // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- A successful journal must explicitly indicate recovery is unnecessary.
       (journal.recoveryRequired !== false ||
         journal.commitCount !== 1 ||
         (journal.destinationPrestate.kind === emptyDirectoryKind) !==

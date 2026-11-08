@@ -49,6 +49,7 @@ export const sanitizePreviewEvidence = (value: string) =>
       }
     });
 
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve arbitrary observation values during redaction.
 const sanitizeValue = (value: unknown): unknown => {
   if (typeof value === "string") {
     return sanitizePreviewEvidence(value);
@@ -64,6 +65,7 @@ const sanitizeValue = (value: unknown): unknown => {
   return value;
 };
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -92,6 +94,7 @@ export const loadWorkingPreview = async (
   nowMs = Date.now(),
 ): Promise<
   | { provenance: PreviewSourceProvenance; receipt: PreviewReceipt; status: "ready" }
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   | { reason: string; status: "expired" | "missing" | "missing-final" | "invalid" }
 > => {
   let state: unknown;

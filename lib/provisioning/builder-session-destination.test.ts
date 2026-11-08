@@ -259,6 +259,7 @@ describe("saved-session destination selection", () => {
 
 it("rechecks the saved epoch after real credential I/O before the Vercel POST", async () => {
   const f = await fixture();
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
   const never = async (): Promise<never> => {
     await Promise.resolve();
     throw new Error("Unexpected unused GitHub adapter");

@@ -89,6 +89,7 @@ const firstVisible = async (locators: Locator[]) => {
       await locator
         .first()
         .isVisible()
+        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
         .catch(() => false)
     ) {
       return locator.first();
@@ -117,6 +118,7 @@ const semanticCandidateAdapter = (
       await docs.click();
       const content = page.locator("main, article").first();
       const readable =
+        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
         (await content.isVisible().catch(() => false)) &&
         ((await content.textContent()) ?? "").trim().length > 0 &&
         (await page.locator("body").textContent()) !== initialContent;
@@ -252,6 +254,7 @@ const referenceAdapter = (
         const statusPath = `/api/builder/handoffs/${handoffId}`;
         const ownerResponse = await restored.request.get(statusPath);
         const ownerBody = await ownerResponse.json();
+        // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
         const ownerCanRead = ownerResponse.ok() && ownerBody.status === "prepared";
         const signedOutResponse = await page.request.get(statusPath);
         const stranger = await freshPage();
@@ -277,7 +280,9 @@ const referenceAdapter = (
           otherUserDenied =
             isDistinctUser &&
             response.status() === 404 &&
+            // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
             body.error === "handoff_unavailable" &&
+            // oxlint-disable-next-line typescript/no-unsafe-argument -- Inspect the existing handoff response body.
             Object.keys(body).length === 1;
         } finally {
           await authenticator.dispose();

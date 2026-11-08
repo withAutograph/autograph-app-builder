@@ -242,8 +242,11 @@ export async function verifyPortableProofArtifact(input: {
   }
   const codexManifest = JSON.parse(Buffer.from(codexManifestBytes).toString("utf-8"));
   if (
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
     codexManifest.name !== receipt.name ||
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
     codexManifest.version !== receipt.version ||
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
     codexManifest.mcpServers !== "./.mcp.json"
   ) {
     throw new Error(
@@ -252,7 +255,9 @@ export async function verifyPortableProofArtifact(input: {
   }
   const codexMarketplaceAssetPaths: string[] = [];
   for (const reference of new Set([
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
     codexManifest.interface?.composerIcon,
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
     codexManifest.interface?.logo,
   ])) {
     if (

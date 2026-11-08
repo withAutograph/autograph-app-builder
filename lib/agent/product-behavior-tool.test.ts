@@ -24,7 +24,9 @@ const mocks = vi.hoisted(() => ({
   readback: vi.fn(),
 }));
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./product-behavior dependency used by this test.
 vi.mock("./product-behavior", () => ({ executeProductReadback: mocks.readback }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./working-preview-state dependency used by this test.
 vi.mock("./working-preview-state", () => ({
   hasLiveWorkingPreview: mocks.hasLive,
   workingPreviewState: { get: () => mocks.preview },

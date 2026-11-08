@@ -621,7 +621,7 @@ export function createRepositoryAccessRuntime(input: {
         if (candidate.record.selectedInstallationId) {
           accessRequest.selectedInstallationId = candidate.record.selectedInstallationId;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Classify candidates in order before choosing access.
         const access = await classify(accessRequest);
         if (access.status !== "ready") {
           continue;

@@ -139,6 +139,7 @@ function installationStore(
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     list: vi.fn(async () => bindings),
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Model an installation lookup with no record.
     read: vi.fn<HostedGitHubInstallationStore["read"]>().mockResolvedValue(undefined),
   };
 }
@@ -508,6 +509,7 @@ describe("deployment repository access authorization", () => {
         sessionId: "ses_one",
       }),
     ).resolves.toBe(1);
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve fetch-argument conversion in this assertion.
     expect(fetchImplementation.mock.calls[0]?.[0]?.toString()).toBe(
       `${callbackUrl}?provider=github&status=connected`,
     );

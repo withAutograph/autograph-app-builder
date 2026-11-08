@@ -153,6 +153,7 @@ export function createPostgresPreviewOrganizationAuthority(
         `);
         const providerIdentity =
           resultRows(accountsResult).length > 0 &&
+          // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Grant provider identity only for an explicitly verified email.
           user.email_verified === true &&
           user.email.trim().toLowerCase() === user.email;
         let passkeyIdentity = false;

@@ -8,6 +8,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { eq } from "drizzle-orm";
 
 import { cursorClientId, setupCursorClient } from "../../lib/auth/cursor-client";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Pass the complete database schema to Drizzle.
 import * as schema from "../../lib/db/schema";
 
 import {
@@ -488,8 +489,11 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
   );
   expect(response.ok()).toBe(true);
   const saved = await response.json();
+  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
   expect(saved.status).toBe("prepared");
+  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
   expect(saved.intent.appName).toBe("Support Console");
+  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
   expect(saved.intent.repository.requestedName).toBe("support-console");
   await page.getByRole("button", { exact: true, name: "Open in Codex" }).click();
   await page.getByRole("button", { exact: true, name: "Copy prompt" }).click();

@@ -38,9 +38,11 @@ beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
   setArguments("--database-url-fd", "0");
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- The typed mock explicitly resolves to undefined.
   mocks.sqlEnd.mockResolvedValue(undefined);
   mocks.postgres.mockReturnValue(sql);
   mocks.drizzle.mockReturnValue(migrationDb);
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- The typed migration mock explicitly resolves to undefined.
   mocks.migrate.mockResolvedValue(undefined);
   configureSyntheticFd(directUrl);
   // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the real CLI entrypoint while isolating its network driver.

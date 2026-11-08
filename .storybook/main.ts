@@ -17,6 +17,7 @@ async function resolveFlagForStorybook(flag: {
   }
   try {
     return (
+      // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Enable a Storybook feature only when the flag returns explicit true.
       (await flag.run({
         identify: {},
         request: new Request("https://storybook.local"),

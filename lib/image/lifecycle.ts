@@ -348,6 +348,7 @@ interface ImageInspect {
   Architecture?: unknown;
   Os?: unknown;
   RepoTags?: unknown;
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   Config?: { Labels?: Record<string, unknown> };
   RootFS?: { Layers?: unknown };
   Descriptor?: {
@@ -361,6 +362,7 @@ interface ImageInspect {
 const hasExactKeys = <Value extends object, Key extends string>(
   value: Value,
   expected: readonly Key[],
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 ): value is Value & Record<Key, unknown> => {
   const actual = Object.keys(value).toSorted();
   const wanted = [...expected].toSorted();
@@ -400,6 +402,7 @@ export const parseLocalImageInspection = (
   }
   const descriptor = image.Descriptor;
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     typeof descriptor !== "object" ||
     descriptor === null ||
     !hasExactKeys(descriptor, ["digest", "mediaType", "platform", "size"]) ||
@@ -425,6 +428,7 @@ export const parseLocalImageInspection = (
   ) {
     throw new Error("Local image inspection did not return exact rootfs layers.");
   }
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared return contract for all supported results.
   return {
     imageId: image.Id,
     platform: IMAGE_PLATFORM,
@@ -477,6 +481,7 @@ interface RemoteManifest {
 interface RemoteImage {
   architecture?: unknown;
   os?: unknown;
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   config?: { Labels?: Record<string, unknown> };
   rootfs?: { diff_ids?: unknown };
 }
@@ -511,6 +516,7 @@ export const parseRemoteIndexDescriptor = (
   ) {
     throw new Error("Remote registry did not return the exact OCI image index descriptor.");
   }
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared return contract for all supported results.
   return {
     indexDigest: descriptor.digest,
     indexReference: exactDigestReference(`${IMAGE_REPOSITORY}@${descriptor.digest}`),
@@ -531,6 +537,7 @@ export const parseRemoteIndexInspection = (
   indexRaw: string,
   localImageId: string,
 ): RemoteIndexSelection => {
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Preserve the existing parameter contract at this call.
   if (!isExactDigest(localImageId)) {
     throw new Error("Local image identity is not an exact digest.");
   }
@@ -540,6 +547,7 @@ export const parseRemoteIndexInspection = (
     throw new Error("Remote registry inspection did not return an exact manifest digest.");
   }
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     !hasExactKeys(descriptor, ["digest", "manifests", "mediaType", "schemaVersion", "size"]) ||
     descriptor.schemaVersion !== 2 ||
     descriptor.mediaType !== ociIndexMediaType ||
@@ -567,6 +575,7 @@ export const parseRemoteIndexInspection = (
     (entry) => entry.platform?.os === "unknown" && entry.platform.architecture === "unknown",
   );
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     platformEntry === undefined ||
     attestationEntry === undefined ||
     !hasExactKeys(platformEntry, ["digest", "mediaType", "platform", "size"]) ||
@@ -579,6 +588,7 @@ export const parseRemoteIndexInspection = (
   }
   const { annotations } = attestationEntry;
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     !hasExactKeys(attestationEntry, ["annotations", "digest", "mediaType", "platform", "size"]) ||
     !hasExactKeys(attestationEntry.platform ?? {}, ["architecture", "os"]) ||
     attestationEntry.mediaType !== ociManifestMediaType ||
@@ -640,6 +650,7 @@ export const parseRemoteImageInspection = (
   const { config } = manifest;
   const { layers } = manifest;
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     !hasExactKeys(manifest, ["config", "layers", "mediaType", "schemaVersion"]) ||
     manifest.schemaVersion !== 2 ||
     manifest.mediaType !== ociManifestMediaType ||
@@ -693,6 +704,7 @@ export const parseRemoteImageInspection = (
   ) {
     throw new Error("Remote image rootfs identity does not match the inspected local image.");
   }
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared return contract for all supported results.
   return {
     attestationManifestDigest: selection.attestationManifestDigest,
     attestationPolicy: "descriptor-bound-not-trusted",

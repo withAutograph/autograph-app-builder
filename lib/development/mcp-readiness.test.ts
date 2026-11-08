@@ -27,6 +27,7 @@ describe("development MCP readiness", () => {
     const methods: string[] = [];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
       const request = requestSchema.parse(JSON.parse(String(init?.body)));
       methods.push(request.method);
       if (request.method === "initialize") {
@@ -54,6 +55,7 @@ describe("development MCP readiness", () => {
     let attempt = 0;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
       const request = requestSchema.parse(JSON.parse(String(init?.body)));
       const firstAttempt = attempt === 0;
       attempt += 1;
@@ -103,6 +105,7 @@ describe("development MCP readiness", () => {
     }
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
       const request = requestSchema.parse(JSON.parse(String(init?.body)));
       if (request.method === "initialize") {
         initializeTimes.push(Date.now());
@@ -159,6 +162,7 @@ describe("development MCP readiness", () => {
     const names = [...TOOL_NAMES.toReversed(), "development_inspect"];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
       const request = requestSchema.parse(JSON.parse(String(init?.body)));
       if (request.method === "initialize") {
         return response({ id: request.id, jsonrpc: "2.0", result: {} }, 200, "dev-3");

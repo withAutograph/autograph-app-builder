@@ -1,3 +1,4 @@
+/* oxlint-disable github/filenames-match-regex, unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { inspectCurrentProposalSource } from "@/lib/agent/proposed-source-inspection";
 import { defineDynamic, defineTool } from "eve/tools";
 import { createHash } from "node:crypto";
@@ -103,6 +104,7 @@ const sourceInspectionListing = function sourceInspectionListing(
   contentRequested: boolean,
 ): { listing: SourceInspectionListing; nextPathIndex: number } {
   if (contentRequested) {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared return contract for all supported results.
     return {
       listing: {
         availablePathCount: availablePaths.length,
@@ -113,6 +115,7 @@ const sourceInspectionListing = function sourceInspectionListing(
     };
   }
   const { nextPathIndex, pathPage } = listSourcePathPage(appId, availablePaths, pathIndex);
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared return contract for all supported results.
   return { listing: { availablePaths: pathPage }, nextPathIndex };
 };
 
@@ -232,10 +235,12 @@ const listAvailableSourcePaths = async function listAvailableSourcePaths(
     return await listCurrentAppSourcePaths(sandbox, appId);
   }
   const manifestSource = await sandbox.readTextFile({ path: ".app-builder/source-files.json" });
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the value unknown until its existing parsing step.
   let manifest: unknown = [];
   try {
     manifest = manifestSource === null ? [] : JSON.parse(manifestSource);
   } catch {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the value unknown until its existing parsing step.
     manifest = [];
   }
   const entries: unknown[] = Array.isArray(manifest) ? manifest : [];

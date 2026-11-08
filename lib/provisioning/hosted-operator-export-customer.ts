@@ -98,6 +98,7 @@ export const resolveExportOwnerOrganization = async (input: {
   const candidates = ownerWitnesses(await input.readCurrentRecord(), input.context, input.prepared);
   const seen = new Set<string>();
   const organizations = new Set<string>();
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Verify customer witnesses while detecting distinct organizations.
   for (const candidate of candidates) {
     const identity = witnessIdentity(candidate);
     // Selection is by organization; one fully verified witness establishes it.

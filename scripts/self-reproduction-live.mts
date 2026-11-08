@@ -65,10 +65,13 @@ const run = async (
   const timer = setTimeout(() => {
     timedOut = true;
     child.kill("SIGTERM");
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     forceStop = setTimeout(() => child.kill("SIGKILL"), 5000);
   }, options.timeoutMs ?? 0);
   timer.unref();
+  // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
   child.stdout.on("data", (chunk: Buffer) => (stdout += String(chunk)));
+  // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
   child.stderr.on("data", (chunk: Buffer) => (stderr += String(chunk)));
   if (options.input) {
     child.stdin.end(options.input);
@@ -76,6 +79,7 @@ const run = async (
     child.stdin.end();
   }
   const closed = once(child, "close");
+  // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
   const [code] = await closed.catch((error: unknown) => {
     spawnError = error instanceof Error ? error : new Error(String(error));
     return [null];
@@ -174,6 +178,7 @@ const main = async () => {
   const evePort = await availableDistinctLoopbackPort(nextPort, configuredEvePort);
   const url = `http://127.0.0.1:${evePort}`;
   const development = spawn(
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided mise executable.
     "mise",
     [
       "run",

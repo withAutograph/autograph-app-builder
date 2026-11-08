@@ -174,12 +174,22 @@ describe("Production setup consent", () => {
     "cancelled",
   ])("rejects changed or unauthorised %s", (variation) => {
     const changedScope = { ...scope };
-    if (variation === "organization") changedScope.organizationId = "other";
+    if (variation === "organization") {
+      changedScope.organizationId = "other";
+    }
     const changedIntent: RepositoryProductionIntent = { ...intent };
-    if (variation === "recipient") changedIntent.creatorEmail = "app@example.com";
-    if (variation === "role") changedIntent.creatorRoles = ["admin"];
-    if (variation === "session") changedIntent.sessionId = "other";
-    if (variation === "storage") changedIntent.storage = { kind: "none" };
+    if (variation === "recipient") {
+      changedIntent.creatorEmail = "app@example.com";
+    }
+    if (variation === "role") {
+      changedIntent.creatorRoles = ["admin"];
+    }
+    if (variation === "session") {
+      changedIntent.sessionId = "other";
+    }
+    if (variation === "storage") {
+      changedIntent.storage = { kind: "none" };
+    }
     if (variation === "schema" && intent.storage.kind === "postgres") {
       changedIntent.storage = { ...intent.storage, manifestSha256: "c".repeat(64) };
     }

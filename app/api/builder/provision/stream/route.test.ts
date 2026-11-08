@@ -7,6 +7,7 @@ const deployment = vi.hoisted(() => ({
   handler: vi.fn(),
 }));
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/lib/provisioning/deployment dependency used by this test.
 vi.mock("@/lib/provisioning/deployment", () => ({
   getBuilderProvisioningDeploymentHandler: vi.fn(() => deployment.handler),
 }));

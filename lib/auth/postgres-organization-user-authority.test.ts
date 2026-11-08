@@ -30,7 +30,7 @@ function createDatabase(results: unknown[]) {
     return results.shift();
   });
   // Drizzle's transaction fixture intentionally models its callback API.
-  // oxlint-disable-next-line promise/prefer-await-to-callbacks, eslint/require-await -- preserve callback and Promise-returning test contract
+  // oxlint-disable-next-line promise/prefer-await-to-callbacks, eslint/require-await, anti-slop/no-unknown-returns -- The transaction fixture preserves arbitrary callback results. preserve callback and Promise-returning test contract
   const transaction = vi.fn(async (callback: (database: { execute: typeof execute }) => unknown) =>
     // oxlint-disable-next-line promise/prefer-await-to-callbacks
     callback({ execute }),

@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { askQuestion } from "eve/tools/ask_question";
 import { defineWorkflowTool } from "eve/tools";
 

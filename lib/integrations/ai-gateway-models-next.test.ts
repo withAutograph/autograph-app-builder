@@ -3,8 +3,11 @@ import { cacheLife, cacheTag } from "next/cache";
 import { loadGatewayModels } from "./ai-gateway-models";
 import { loadNextGatewayModels } from "./ai-gateway-models.next";
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled server-only dependency used by this test.
 vi.mock("server-only", () => ({}));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled next/cache dependency used by this test.
 vi.mock("next/cache", () => ({ cacheLife: vi.fn(), cacheTag: vi.fn() }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./ai-gateway-models dependency used by this test.
 vi.mock("./ai-gateway-models", () => ({ loadGatewayModels: vi.fn() }));
 
 beforeEach(() => vi.clearAllMocks());

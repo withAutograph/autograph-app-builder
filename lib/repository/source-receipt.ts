@@ -125,9 +125,11 @@ export type CanonicalTemplateSnapshot = Omit<SupportedTemplateSnapshot, "sourceS
 const isGitObjectId = (value: unknown): value is string =>
   typeof value === "string" && (/^[0-9a-f]{40}$/u.test(value) || /^[0-9a-f]{64}$/u.test(value));
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const hasExactKeys = (value: Record<string, unknown>, expected: readonly string[]): boolean =>
   Object.keys(value).toSorted().join("\0") === [...expected].toSorted().join("\0");
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -300,10 +302,12 @@ export const parseSourceReceiptEvidence = (value: unknown): SourceReceiptEvidenc
   ) {
     throw new Error("Source receipt evidence is invalid.");
   }
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Retain the existing receipt boundary before checking the stored digest.
   const { digest, ...unsigned } = value as unknown as SourceReceiptEvidence;
   if (digest !== sourceReceiptDigest(unsigned)) {
     throw new Error("Source receipt evidence digest is invalid.");
   }
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Return the same receipt value after the existing digest check.
   return value as unknown as SourceReceiptEvidence;
 };
 

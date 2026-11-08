@@ -8,8 +8,9 @@ export const evidencePrefix = "SELF_REPRODUCTION_EVIDENCE ";
 // Apply to structured receipts and native diagnostics before persistence. Never
 // serialize the runtime environment or session continuation credentials.
 export function sanitizeEvidence(value: string): string;
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve arbitrary evidence values while redacting them.
 export function sanitizeEvidence(value: unknown): unknown;
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// eslint-disable-next-line eslint/func-style, anti-slop/no-unknown-returns -- Preserve arbitrary evidence values while redacting them. Preserve function declaration hoisting and initialization timing.
 export function sanitizeEvidence(value: unknown): unknown {
   if (typeof value === "string") {
     return value
@@ -51,7 +52,7 @@ export function digest(content: string) {
   return createHash("sha256").update(content).digest("hex");
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// eslint-disable-next-line eslint/func-style, anti-slop/no-unsafe-dictionary-type -- Preserve function declaration hoisting and initialization timing.; Preserve the existing open-ended value contract.
 export function evidenceCompletion(exitCode: number | null, records: Record<string, unknown>[]) {
   if (exitCode !== 0) {
     return { reason: "Native eval failed or was interrupted.", status: "failed" };
@@ -76,6 +77,7 @@ export function evidenceCompletion(exitCode: number | null, records: Record<stri
 export function evidenceSink(
   logPath: string,
   transcriptPath: string,
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   records: Record<string, unknown>[],
 ) {
   let pending = "";
@@ -89,6 +91,7 @@ export function evidenceSink(
     try {
       const record = sanitizeEvidence(
         JSON.parse(raw.slice(start + evidencePrefix.length)),
+        // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
       ) as Record<string, unknown>;
       if (
         !record ||
@@ -126,13 +129,16 @@ export type CandidateExportFile = Readonly<{ path: string; content: string }>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function changeSetStatusOutput(
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   record: Record<string, unknown>,
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 ): Record<string, unknown> | undefined {
   const event = record.event as
     | {
         type?: unknown;
         data?: {
           toolName?: unknown;
+          // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
           result?: { toolName?: unknown; output?: unknown } | Record<string, unknown>;
         };
       }
@@ -144,7 +150,8 @@ function changeSetStatusOutput(
   if (resultToolName === "change-set-status" || resultToolName === "change_set_status") {
     const { output } = event.data.result;
     return typeof output === "object" && output !== null && !Array.isArray(output)
-      ? (output as Record<string, unknown>)
+      ? // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+        (output as Record<string, unknown>)
       : undefined;
   }
   const { toolName } = event.data;
@@ -155,6 +162,7 @@ function changeSetStatusOutput(
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function candidateExportProvenanceFromEvidence(
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   records: readonly Record<string, unknown>[],
 ): "native reviewed change-set-status export" | "native unreviewed validation-failed export" {
   for (const record of records.toReversed()) {
@@ -170,6 +178,7 @@ export function candidateExportProvenanceFromEvidence(
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function candidateExportFromEvidence(
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   records: readonly Record<string, unknown>[],
 ): CandidateExportFile[] | undefined {
   for (const record of records.toReversed()) {

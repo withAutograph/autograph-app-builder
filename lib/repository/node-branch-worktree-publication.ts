@@ -81,6 +81,7 @@ export interface BranchWorktreePublicationFaultHooks {
 }
 
 interface FileState {
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   kind: "absent" | "regular" | "directory" | "symlink" | "special";
   mode?: string;
   digest?: string;
@@ -503,6 +504,7 @@ const journalPath = (identity: string): string =>
 const assertContainedNoLinkPath = async (
   candidate: string,
   options: {
+    // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
     leaf?: "directory" | "regular" | "absent-or-directory" | "absent-or-regular";
   } = {},
 ): Promise<void> => {
@@ -567,6 +569,7 @@ const assertContainedNoLinkPath = async (
       throw new Error("The builder-owned publication directory is not owner-only.");
     }
     if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       isLeaf &&
       (options.leaf === "regular" || options.leaf === absentOrRegular) &&
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -802,6 +805,7 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
   };
   // This derived promise intentionally races the terminal lease signal.
   // oxlint-disable-next-line promise/prefer-await-to-then
+  // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
   const lost = terminalPromise.then(() => {
     throw lockLostError();
   });
@@ -879,6 +883,7 @@ const createInitialJournal = async (
     await link(candidate, path);
     await syncDirectory(dirname(path), true);
   } finally {
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await unlink(candidate).catch(() => null);
     await syncDirectory(dirname(path), true);
   }
@@ -1164,7 +1169,7 @@ const assertOwnedPartialWorktree = async (
     }
     const adminPath = pathResolve(worktreeAdminRoot, entry.name);
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Inspect worktree paths in order.
       const linkedPathContents = await readFile(pathResolve(adminPath, "gitdir"), "utf-8");
       const linkedPath = linkedPathContents.trim();
       if (pathResolve(linkedPath) === pathResolve(proposal.worktreePath, ".git")) {
@@ -1188,6 +1193,7 @@ const assertOwnedPartialWorktree = async (
   };
   const visit = async (directory: string, prefix: string): Promise<void> => {
     const entries = await readdir(directory, { withFileTypes: true });
+    // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Traverse worktree entries in deterministic path order.
     for (const entry of entries.toSorted((left, right) =>
       compareOverlayPaths(
         `${left.name}${left.isDirectory() ? "/" : ""}`,
@@ -1408,6 +1414,7 @@ const materializeAtomically = async (
     await rename(temporary, target);
     await syncDirectory(dirname(target));
   } finally {
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await unlink(temporary).catch(() => null);
   }
 };
@@ -1464,6 +1471,7 @@ const ensureExactBaseMaterialization = async (
   await git(proposal.worktreePath, ["read-tree", proposal.baseSha]);
   lock.assertHeld();
   const changes = new Map(proposal.changes.map((change) => [change.path, change]));
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Apply changes against ordered tree entries under the lock.
   for await (const entry of exactTreeEntries(proposal.sourcePath, proposal.baseSha)) {
     lock.assertHeld();
     const change = changes.get(entry.path);
@@ -1519,6 +1527,7 @@ const inspectBranchPublicationSource = async (input: {
     stat(canonicalPath),
     stat(gitDirectoryPath),
   ]);
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep repository observations and publication steps in their established order.
   const indexPathValue = await git(canonicalPath, [
     "rev-parse",
     gitAbsolutePathFormat,
@@ -1533,7 +1542,7 @@ const inspectBranchPublicationSource = async (input: {
   );
   const statusEntries: { path: string; state: FileState }[] = [];
   for (const path of paths) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- bound concurrent file reads for large repositories.
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Inspect worktree paths in order.
     statusEntries.push({ path, state: await fileState(pathResolve(canonicalPath, path)) });
   }
   for (const change of input.review.changes) {
@@ -1581,6 +1590,7 @@ export const deriveBranchWorktreePublicationProposal = async (input: {
   const source = await inspectBranchPublicationSource(input);
   const root = publicationRoot();
   const rootState = await lstat(root);
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep repository observations and publication steps in their established order.
   const commonGitDirectoryValue = await git(source.canonicalPath, [
     "rev-parse",
     gitAbsolutePathFormat,
@@ -1691,6 +1701,7 @@ export const writeVerifiedOverlayStream = async (input: {
       throw new Error(`The immutable apply overlay is stale for ${input.path}.`);
     }
   } finally {
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await reader.cancel().catch(() => null);
     reader.releaseLock();
   }
@@ -1730,6 +1741,7 @@ const writePostimageStream = async (input: {
     await rename(temporary, target);
     await syncDirectory(dirname(target));
   } finally {
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await unlink(temporary).catch(() => null);
   }
 };
@@ -1851,6 +1863,7 @@ const worktreeSnapshot = async (proposal: BranchWorktreePublicationProposal) => 
   ]);
   const gitDirectoryPath = await realpath(gitDirectoryValue.trim());
   const gitDirectoryStat = await stat(gitDirectoryPath);
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep repository observations and publication steps in their established order.
   const indexPathValue = await git(root, [
     "rev-parse",
     gitAbsolutePathFormat,
@@ -1859,6 +1872,7 @@ const worktreeSnapshot = async (proposal: BranchWorktreePublicationProposal) => 
   ]);
   const indexPath = indexPathValue.trim();
   const statusDigest = await digestWorktreeStates(worktreeFileStates(proposal));
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep repository observations and publication steps in their established order.
   const [headShaValue, headTreeValue, headReferenceValue, remoteValue] = await Promise.all([
     git(root, ["rev-parse", "HEAD"]),
     git(root, ["rev-parse", "HEAD^{tree}"]),
@@ -1888,6 +1902,7 @@ const worktreeSnapshot = async (proposal: BranchWorktreePublicationProposal) => 
 
 const verifyWorktreeIdentity = async (proposal: BranchWorktreePublicationProposal) => {
   const snapshot = await worktreeSnapshot(proposal);
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep repository observations and publication steps in their established order.
   const sourceBranchSha = await git(proposal.sourcePath, [
     "rev-parse",
     `refs/heads/${proposal.branchName}`,

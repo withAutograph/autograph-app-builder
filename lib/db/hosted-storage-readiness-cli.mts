@@ -24,6 +24,7 @@ try {
     const mode = await transaction<{ transactionReadOnly: string }[]>`
       SELECT current_setting('transaction_read_only') AS "transactionReadOnly"
     `;
+    // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep readiness queries in their established transaction order.
     const migrations = await transaction<{ hash: string; createdAt: string }[]>`
       SELECT hash, created_at::text AS "createdAt"
       FROM drizzle.__drizzle_migrations
@@ -53,6 +54,7 @@ try {
         AND NOT attribute.attisdropped
       ORDER BY relation.relname, attribute.attname
     `;
+    // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep readiness queries in their established transaction order.
     const indexes = await transaction<{ table: string; name: string }[]>`
       SELECT tablename AS "table", indexname AS "name"
       FROM pg_catalog.pg_indexes

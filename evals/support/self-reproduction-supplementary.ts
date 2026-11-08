@@ -168,7 +168,9 @@ export const writeSupplementaryAssessment = async (input: {
   const originalReport = JSON.parse(
     await readFile(nodePath.join(parityRoot, REPORT_FILE), "utf-8"),
   );
+  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
   for (const capture of originalReport.captures ?? []) {
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
     for (const path of capture.files ?? []) {
       if (typeof path === "string") {
         await copy(parityRoot, path, "original");
@@ -203,6 +205,7 @@ export const writeSupplementaryAssessment = async (input: {
         })),
         method: SOURCE_REVIEW,
       });
+      // oxlint-disable-next-line react-doctor/async-await-in-loop -- Rebase each review result before recording it.
       const source = await rebase(normalized, reviewRoot, SOURCE_REVIEW);
       const index = evidence[side].observations.findIndex(
         (entry) => entry.requirementId === source.requirementId,
@@ -227,10 +230,13 @@ export const writeSupplementaryAssessment = async (input: {
     const captureMetadata = JSON.parse(
       await readFile(nodePath.join(captureRoot, "capture-provenance.json"), "utf-8"),
     );
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
     for (const capture of captureMetadata.captures ?? []) {
+      // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-argument -- Preserve the existing capture metadata path handling.
       const artifact = safeRelative(nodePath.relative(captureRoot, await realpath(capture.path)));
       const reference = await copy(captureRoot, artifact, "reference-captures");
       const viewport = String(
+        // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
         capture.viewport?.name ?? capture.name ?? nodePath.basename(artifact, ".png"),
       ).replace(/-0$/u, "");
       const candidate = `original/candidate-browser/${viewport}/root.png`;
@@ -238,8 +244,10 @@ export const writeSupplementaryAssessment = async (input: {
         screenshotPairs.push({
           candidate,
           qualification:
+            // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
             typeof captureMetadata.comparisonQualification === "string"
-              ? captureMetadata.comparisonQualification
+              ? // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
+                captureMetadata.comparisonQualification
               : "Anonymous reference entry versus candidate default screen; these are not equivalent authenticated or workflow states.",
           reference,
           viewport,

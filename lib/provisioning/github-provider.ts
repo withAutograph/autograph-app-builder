@@ -47,7 +47,7 @@ interface JsonResponse {
   body: unknown;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// eslint-disable-next-line eslint/func-style, anti-slop/no-unsafe-dictionary-type -- Preserve function declaration hoisting and initialization timing.; Preserve the existing open-ended value contract.
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -105,6 +105,7 @@ function retryAfterMilliseconds(headers: unknown, now: number): number | undefin
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function gitBlobSha(bytes: Uint8Array) {
+  // oxlint-disable-next-line sonarjs/hashing -- Git blob object IDs use SHA-1 for this repository format.
   return createHash("sha1").update(`blob ${bytes.byteLength}\0`).update(bytes).digest("hex");
 }
 
@@ -632,6 +633,7 @@ export async function provisionGitHubRepository(input: {
     try {
       let uncertainWrite = false;
       for (const candidate of input.persistedCandidates) {
+        // oxlint-disable-next-line react-doctor/js-set-map-lookups -- Re-read candidates after each awaited reconciliation.
         if (input.persistedAbsentCandidates.includes(candidate)) {
           uncertainWrite = true;
           // oxlint-disable-next-line eslint/no-await-in-loop -- Inspect all prior candidates before permitting a new write.

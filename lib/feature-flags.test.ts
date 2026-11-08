@@ -56,6 +56,7 @@ describe("Vercel feature flags", () => {
     vi.resetModules();
     const decide = vi.fn().mockResolvedValue(true);
     const createVercelAdapter = vi.fn(() => () => ({ decide }));
+    // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @flags-sdk/vercel dependency used by this test.
     vi.doMock("@flags-sdk/vercel", () => ({ createVercelAdapter }));
 
     const { builderConnectionsFlag: delayedFlag } = await import("./feature-flags");

@@ -182,6 +182,7 @@ export const validationOutputExcerpt = (
   const sanitize = (value: string) => {
     const lines = value.split("\n");
     const retained = new Set<number>();
+    // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Classify diagnostic lines without duplicating formatter evidence.
     for (const [index, line] of lines.entries()) {
       const isRepairLine = repairLinePattern.test(line);
       const isFormatterSummary = formatterFailureSummaryPattern.test(line);
@@ -330,6 +331,7 @@ export const compilerDiagnostics = (output: string): TargetValidationDiagnostic[
     seen.add(key);
     return true;
   };
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Parse diagnostic lines in order and retain compiler context.
   for (const sourceLine of output
     .replaceAll(new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
     .split("\n")) {
@@ -359,6 +361,7 @@ export const compilerDiagnostics = (output: string): TargetValidationDiagnostic[
       }
       continue;
     }
+    // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Stop at the first matching compiler diagnostic pattern.
     for (const pattern of compilerDiagnosticPatterns) {
       const match = pattern.exec(sourceLine);
       if (match === null) {

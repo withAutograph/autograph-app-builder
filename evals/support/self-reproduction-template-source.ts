@@ -4,6 +4,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { ARRUSTED_TEMPLATE_REPOSITORY } from "../../lib/repository/source-receipt";
 
+// oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
 const execute = promisify(execFile);
 type Git = (args: string[], cwd?: string) => Promise<string>;
 const git: Git = async (args, cwd) => {

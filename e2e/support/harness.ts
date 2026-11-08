@@ -244,9 +244,8 @@ export async function advanceProviderConnectionToApproval(page: Page, provider: 
   const descriptor = providerDescriptor(provider);
   await page.getByRole("button", { name: descriptor.installationButton }).click();
   await expect(page).toHaveURL(new RegExp(`/local-connections/${descriptor.slug}`, "u"));
-  for (const scope of descriptor.seededScopes)
-  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-  {
+  for (const scope of descriptor.seededScopes) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Check each scope before advancing to approval.
     await expect(page.getByText(scope, { exact: true })).toBeVisible();
   }
 }
@@ -255,9 +254,8 @@ export async function advanceProviderConnectionToApproval(page: Page, provider: 
 export async function selectProviderIdentity(page: Page, provider: EmulatedProvider) {
   const descriptor = providerDescriptor(provider);
   await expect(page.getByText("Autograph Developer")).toBeVisible();
-  for (const scope of descriptor.seededScopes)
-  // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-  {
+  for (const scope of descriptor.seededScopes) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Check each scope before choosing an identity.
     await expect(page.getByText(scope, { exact: true })).toBeVisible();
   }
   const directGitHubAuthorization =
@@ -350,6 +348,7 @@ export async function installBrowserBoundaries(
       if (value !== "about:blank") {
         state.opened.push(value);
       }
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The emulator provides the window operations used by the browser handoff.
       return {
         close() {
           // The emulated window has no resources to close.

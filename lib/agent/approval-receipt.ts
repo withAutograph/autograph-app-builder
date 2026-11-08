@@ -503,6 +503,7 @@ const operatorRetentionSummary = (plan: HostedOperatorPlan) => {
 };
 
 const validatedHostedOperatorApprovalPlan = (
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   record: Record<string, unknown>,
   toolName: string,
 ): HostedOperatorPlan | undefined => {
@@ -527,6 +528,7 @@ const validatedHostedOperatorApprovalPlan = (
 };
 
 const operatorApprovalDescription = (
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   record: Record<string, unknown>,
   toolName: string,
 ): string | undefined => {
@@ -662,6 +664,7 @@ const nativeTargetApprovalDescription = (input: unknown): string | undefined => 
     "This does not deploy the app or activate Production.",
   ].join("\n\n");
 };
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const isApprovalInputRecord = (input: unknown): input is Record<string, unknown> =>
   typeof input === "object" && input !== null && !Array.isArray(input);
 
@@ -733,7 +736,8 @@ function otherPublicApprovalDescription(input: unknown, toolName?: string): stri
       typeof record.changeSet === "object" &&
       record.changeSet !== null &&
       !Array.isArray(record.changeSet)
-        ? (record.changeSet as Record<string, unknown>)
+        ? // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+          (record.changeSet as Record<string, unknown>)
         : undefined;
     const parsed = z
       .strictObject({
@@ -770,6 +774,7 @@ export const publicApprovalDescription = (
 export function approvalRequestDecision(input: {
   phase: "appspec" | "change_set";
   toolName: "accept_app_spec" | "accept_change_set";
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   toolInput: Record<string, unknown>;
   githubSource: GitHubApprovalSource | undefined;
   subjectDigest: string;

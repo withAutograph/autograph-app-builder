@@ -36,6 +36,7 @@ const compareAssetNames = (left: unknown, right: unknown) => {
   }
   return 0;
 };
+// oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
 const execFileAsync = promisify(execFile);
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -167,6 +168,7 @@ async function removePublicationTree(root: string) {
       await chmod(path, 0o600);
     }
   }
+  // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
   await makeWritable(root).catch((error: unknown) => {
     if (
       typeof error !== "object" ||

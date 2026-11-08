@@ -193,6 +193,7 @@ it("retains the actual pin-refusal stage after deleting the owned Sandbox", asyn
   expect(f.sandbox.delete).toHaveBeenCalledOnce();
   expect(f.sandbox.writeFiles).not.toHaveBeenCalled();
   expect(f.request.recordCheckpoint).not.toHaveBeenCalled();
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep parsed diagnostic JSON unknown until the test inspects it.
   const events = log.mock.calls.map(([entry]): unknown => JSON.parse(String(entry)));
   expect(events).toContainEqual(
     expect.objectContaining({
@@ -219,6 +220,7 @@ it("reports a real protocol rejection without exposing the malformed worker outp
   expect(f.command.kill).toHaveBeenCalledOnce();
   expect(f.sandbox.delete).toHaveBeenCalledOnce();
   expect(f.request.recordCheckpoint).not.toHaveBeenCalled();
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep parsed diagnostic JSON unknown until the test inspects it.
   const events = log.mock.calls.map(([entry]): unknown => JSON.parse(String(entry)));
   expect(events).toContainEqual(expect.objectContaining({ launcherStage: "worker_protocol" }));
   const output = JSON.stringify(log.mock.calls);
@@ -249,6 +251,7 @@ it("preserves late authority rejection, cancellation and cleanup even when loggi
   ).rejects.toBe(original);
   expect(f.sandbox.delete).toHaveBeenCalledOnce();
   expect(f.request.recordCheckpoint).not.toHaveBeenCalled();
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep parsed diagnostic JSON unknown until the test inspects it.
   const events = log.mock.calls.map(([entry]): unknown => JSON.parse(String(entry)));
   expect(events).toContainEqual(
     expect.objectContaining({ launcherStage: "spool_setup", requestAborted: true }),

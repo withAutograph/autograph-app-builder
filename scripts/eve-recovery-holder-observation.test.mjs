@@ -67,7 +67,9 @@ const fixture = () => {
       sessionState: { sessionId: descriptor.logicalSessionId },
     },
   };
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep this helper scoped to its fixture or invocation.
   let onRead = () => Promise.resolve();
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep this helper scoped to its fixture or invocation.
   let onBinding = () => Promise.resolve();
   const facts = {
     committedChildMatches: false,

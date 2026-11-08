@@ -460,6 +460,7 @@ const bytesDigest = (value: Uint8Array) => createHash("sha256").update(value).di
 
 // Boundary equality should ignore object property insertion order. Digest
 // construction remains schema-ordered through the existing digest().
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -628,12 +629,14 @@ function canonicalPathsOrEmpty(paths: readonly string[]): readonly string[] {
 function releaseGateAbsent(repository: GitHubRepositoryObservation): boolean {
   return (
     repository.releaseGate.name === REPOSITORY_RELEASE_GATE &&
+    // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Only an explicit false proves the release gate is absent.
     repository.releaseGate.configured === false
   );
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assertCanonicalReview(review: ReviewedChangeSetReceipt): void {
+  // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/no-unsafe-dictionary-type -- Keep the existing broader shape used by this operation.; Preserve the existing open-ended value contract.
   const changeSet = { ...review } as Record<string, unknown>;
   delete changeSet.changeSetDigest;
   delete changeSet.reviewedByCallId;
@@ -1020,7 +1023,7 @@ export async function readExactGitHubPublicationContent(input: {
     }
     let observed: Awaited<ReturnType<typeof input.source.readFile>>;
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Read proposed source changes in order.
       observed = await input.source.readFile(change.path);
     } catch {
       throw new Error("The approved publication content source failed.");
@@ -1083,6 +1086,7 @@ function assertReviewedBinding(
   parseSourceReceiptEvidence(source);
   assertCanonicalReview(review);
   const sourceMismatch =
+    // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Reject missing or malformed release flags in the source receipt.
     source.releaseEnabled !== false ||
     source.digest !== review.sourceReceiptDigest ||
     source.sourceSha !== review.sourceSha;
@@ -1504,6 +1508,7 @@ export function assertExactFreshRepositoryProposal(proposal: FreshRepositoryProp
     proposal.idempotencyKey !== expectedKey;
   const invalidRelease = () =>
     proposal.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
+    // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Require the proposal to explicitly record an absent release gate.
     proposal.releaseGate.configured !== false ||
     invalidOutcome();
   if (invalidDestination || invalidSource() || invalidEvidence() || invalidRelease()) {
@@ -1642,6 +1647,7 @@ export function assertExactDraftPullRequestProposal(proposal: DraftPullRequestPr
   ) {
     throw new Error(invalidDraftProposalMessage);
   }
+  // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Require an explicitly draft pull request in the approved proposal.
   if (!safeBranch(proposal.branchName) || proposal.draft !== true) {
     throw new Error(invalidDraftProposalMessage);
   }
@@ -1749,6 +1755,7 @@ function assertDraftReadBack(
       throw new Error("Absent branch read-back schema is not closed.");
     }
   } else if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     !exactKeys(readBack.branch, [
       "status",
       "branchName",
@@ -1773,6 +1780,7 @@ function assertDraftReadBack(
       throw new Error("Absent pull-request read-back schema is not closed.");
     }
   } else if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     !exactKeys(readBack.pullRequest, [
       "status",
       "pullRequestId",
@@ -1790,6 +1798,7 @@ function assertDraftReadBack(
     !isDecimal(readBack.pullRequest.pullRequestId) ||
     !Number.isSafeInteger(readBack.pullRequest.pullRequestNumber) ||
     readBack.pullRequest.pullRequestNumber < 1 ||
+    // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Require the provider read-back to explicitly identify a draft pull request.
     readBack.pullRequest.draft !== true ||
     readBack.pullRequest.headRepositoryId !== proposal.repositoryId ||
     readBack.pullRequest.headBranch !== proposal.branchName ||
@@ -1881,6 +1890,7 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
     if (
       (value.failureCode !== PROVIDER_REJECTED && value.failureCode !== "postcondition-failed") ||
       !/^[a-z][a-z0-9-]{0,63}$/u.test(value.providerCode) ||
+      // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Require an explicit recovery flag in a failure receipt.
       value.recoveryRequired !== true
     ) {
       throw new Error("GitHub failure receipt is invalid.");
@@ -1890,8 +1900,10 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
       !isDigest(value.providerReadBackDigest) ||
       !isDigest(value.installationIdentityDigest) ||
       (value.kind === FRESH_REPOSITORY_KIND
-        ? value.releaseGateAbsent !== true
-        : value.releaseGateUnchanged !== true)
+        ? // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Require explicit evidence that the fresh repository lacks a release gate.
+          value.releaseGateAbsent !== true
+        : // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Require explicit evidence that the existing release gate is unchanged.
+          value.releaseGateUnchanged !== true)
     ) {
       throw new Error("GitHub success receipt read-back binding is invalid.");
     }
@@ -1900,6 +1912,7 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
       const invalidFreshHistory =
         value.installationIdentityDigest !== value.repository.installationIdentityDigest ||
         value.parentCount !== 0 ||
+        // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Require explicit fresh-history evidence in the publication receipt.
         value.freshHistory !== true;
       if (
         invalidFreshHistory ||
@@ -1909,6 +1922,7 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
         throw new Error("Fresh repository success receipt is invalid.");
       }
     } else if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       !isDecimal(value.repositoryId) ||
       !safeBranch(value.branchName) ||
       !isObjectId(value.branchSha) ||
@@ -1916,6 +1930,7 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
       !isDecimal(value.pullRequestId) ||
       !Number.isSafeInteger(value.pullRequestNumber) ||
       value.pullRequestNumber < 1 ||
+      // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Require an explicitly draft pull request in the stored receipt.
       value.draft !== true ||
       !safeBranch(value.baseBranch) ||
       !isObjectId(value.baseSha) ||

@@ -21,6 +21,7 @@ type ResumeRepositoryAccess = (input: {
   sessionAuth: unknown;
   sessionId: string;
   fetchImplementation?: typeof fetch;
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep the injected transport result untrusted at this boundary.
 }) => Promise<unknown>;
 type RecheckRepositoryAccess = (input: {
   sessionAuth: unknown;

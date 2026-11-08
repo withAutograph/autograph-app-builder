@@ -275,6 +275,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
       };
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const jwksFetch = vi.fn<typeof fetch>(async (url, init) => {
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
         expect(String(url)).toBe(config.jwksUrl);
         return await auth.customFetchImpl(url, init);
       });

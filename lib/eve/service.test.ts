@@ -360,6 +360,7 @@ describe("local Eve acceptance", () => {
   });
 
   it("preserves buffered settlement across a Next development module reload", async () => {
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Retain the intentionally partial settlement event fixture.
     const settledEvents = [
       {
         data: { message: "Your plan is ready.", turnId: "turn-reload" },
@@ -675,6 +676,7 @@ describe("local Eve acceptance", () => {
       url: "https://preview.example.test/app?access=opaque-signed-value",
       verifiedAt: "2026-09-13T17:00:00.000Z",
     };
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Retain the intentionally partial preview action event fixture.
     const events = [
       {
         data: {
@@ -788,6 +790,7 @@ describe("local Eve acceptance", () => {
     const revision = createHash("sha256")
       .update(JSON.stringify({ digest, mediaType, path }))
       .digest("hex");
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Retain the intentionally partial action-request event fixture.
     const events = [
       {
         data: {
@@ -1212,6 +1215,7 @@ describe("local Eve acceptance", () => {
     });
     const initial = stream([{ data: {}, type: "session.waiting" } as MessageStreamEvent]);
     const followUp = stream([
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Retain the intentionally partial approval-request fixture.
       {
         data: {
           requests: ["request-source", "request-plan", "request-preview"].map((requestId) => ({
@@ -1225,6 +1229,7 @@ describe("local Eve acceptance", () => {
       } as unknown as MessageStreamEvent,
     ]);
     const responded = stream([
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Retain the intentionally partial approval-response fixture.
       {
         data: {
           resolutions: ["request-source", "request-plan", "request-preview"].map((requestId) => ({

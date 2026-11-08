@@ -16,6 +16,7 @@ import {
   targetExecutionBinding,
 } from "./target-planning";
 
+// oxlint-disable-next-line eslint/require-await -- Keep unexpected sandbox calls as rejected promises.
 const unexpectedSandboxOperation = async () => {
   throw new Error("Unexpected sandbox operation in test fixture");
 };

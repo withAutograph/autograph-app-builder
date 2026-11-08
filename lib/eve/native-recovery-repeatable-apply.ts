@@ -174,6 +174,7 @@ export const authorizeRepeatablePrivateApplyCalls = (
     parts.flatMap((part) => (part.type === "tool-result" ? [part.toolCallId] : [])),
   );
   const authorized: string[] = [];
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Collect eligible unexecuted apply calls in source order.
   for (const call of parts) {
     if (call.type !== "tool-call" || call.toolName !== "apply_app_creation") {
       continue;

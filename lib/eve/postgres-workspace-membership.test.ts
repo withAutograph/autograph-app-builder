@@ -26,6 +26,7 @@ function databaseReturning<T extends Record<string, unknown>>(rows: T[]) {
   const from = vi.fn(() => joined);
   const select = vi.fn(() => ({ from }));
   return {
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The database fixture implements only the membership query operations under test.
     database: { select } as unknown as Database,
     from,
     innerJoin,

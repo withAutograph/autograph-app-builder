@@ -1,3 +1,4 @@
+/* oxlint-disable github/filenames-match-regex, unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { applicationSourceImportState } from "@/lib/agent/application-source-import-state";
 import { emitCurrentBuildWorkflowProjection } from "@/lib/agent/approved-build-continuation-runtime";
 import { defineTool } from "eve/tools";

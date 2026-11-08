@@ -147,6 +147,7 @@ export const readApprovedRetainedMembershipInspections = async (input: {
   const approved: ApprovedMembershipInspection[] = [];
   const seen = new Set<string>();
   // Each authority lookup and guard may touch the same protected journal.
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Inspect candidate membership authority against the protected journal.
   for (const candidate of candidates) {
     const { planDigest } = candidate.operator;
     if (seen.has(planDigest)) {

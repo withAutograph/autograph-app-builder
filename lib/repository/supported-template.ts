@@ -349,9 +349,11 @@ export const inspectSupportedTemplateDependencyClosure =
     };
   };
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const configurationRecord = function configurationRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
+    ? // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+      (value as Record<string, unknown>)
     : {};
 };
 
@@ -367,6 +369,7 @@ echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
 const repositoryReleasePolicyPath = ".github/workflows/cd.yml" as const;
 
 const supportsReleaseGate = function supportsReleaseGate(workflowSource: string): boolean {
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   let workflow: Record<string, unknown>;
   try {
     workflow = configurationRecord(parseYaml(workflowSource));
@@ -516,6 +519,7 @@ export const assertRepositoryReleasePolicyAtGitSnapshot =
 const declaredNextRuntime = function declaredNextRuntime(
   packageSource: string,
 ): "nextjs" | "unsupported" {
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   let packageManifest: Record<string, unknown>;
   try {
     packageManifest = configurationRecord(JSON.parse(packageSource) as unknown);
@@ -719,6 +723,7 @@ export const resolveAllowedRepository = async function resolveAllowedRepository(
   input: string,
 ): Promise<string> {
   const candidate = await realpath(nodePath.resolve(input));
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep source and filesystem observations in their established order.
   const roots = await Promise.all(allowedRoots().map((root) => realpath(root)));
   if (!roots.some((root) => within(root, candidate))) {
     throw new Error("The repository path is outside REPOSITORY_LOCAL_ROOTS.");
@@ -831,10 +836,12 @@ const sandboxSourceArchivePath = ".app-builder/source-tree.tar.gz";
 
 const fixtureSandboxEnabled = () => hasTestCapability("simulated-target");
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const isPreparedRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const exactKeys = function exactKeys(
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   value: Record<string, unknown>,
   expected: readonly string[],
 ): boolean {
@@ -861,6 +868,7 @@ const developmentWorkingTreeArchive = async function developmentWorkingTreeArchi
   paths: readonly string[],
 ): Promise<void> {
   const archiveProcess = spawn(
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided tar executable.
     "tar",
     ["--create", "--gzip", "--file=-", "--null", "--files-from=-"],
     {
@@ -899,7 +907,7 @@ const developmentWorkingTreeArchive = async function developmentWorkingTreeArchi
     const transfer = sandbox.writeFile({ content: archiveStream, path: sandboxSourceArchivePath });
     for (const path of paths) {
       if (!archiveProcess.stdin.write(`${path}\0`)) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Respect tar stdin backpressure.
+        // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Process the archive or source entries in order.
         await once(archiveProcess.stdin, "drain");
       }
     }
@@ -1055,6 +1063,7 @@ const readVerifiedPreparedSandboxBaseline = async function readVerifiedPreparedS
   record: PreparedSandboxWorkspace,
 ): Promise<PreparedSourceFile[]> {
   const files = await readPreparedSandboxSourceManifest(sandbox, record);
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep source and filesystem observations in their established order.
   const checksums = await sandbox.readTextFile({
     path: sandboxSourceChecksumsPath,
   });
@@ -1074,7 +1083,7 @@ const verifyPreparedSandboxFiles = async (
   }
   if (fixtureSandboxEnabled()) {
     for (const file of files) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Process the archive or source entries in order.
       const content = await sandbox.readBinaryFile({
         path: `repository/${file.path}`,
       });
@@ -1393,6 +1402,7 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
   }
 
   const treeProcess = spawn(
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
     "git",
     ["-C", eligibility.sourcePath, "ls-tree", "-rz", "--full-tree", expectedSha],
     { stdio: ["ignore", "pipe", "ignore"] },
@@ -1428,7 +1438,7 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
   }
   const sourceFiles: PreparedSourceFile[] = [];
   for (const entry of treeEntries) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Hash one source blob at a time.
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Process the archive or source entries in order.
     const fileDigest = await digestProcessStdout("git", [
       "-C",
       eligibility.sourcePath,
@@ -1474,6 +1484,7 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
     }
   } else {
     const archiveProcess = spawn(
+      // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
       "git",
       ["-C", eligibility.sourcePath, "archive", "--format=tar.gz", expectedSha],
       { stdio: ["ignore", "pipe", "inherit"] },

@@ -389,6 +389,7 @@ describe("native externally managed policy recovery integration", () => {
         target: f.record.request,
       };
       const store: HostedRuntimeJournalStore = {
+        // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
         compareAndSet: async (input) => {
           if (input.expectedRevision !== row.revision) {
             return;
@@ -399,8 +400,11 @@ describe("native externally managed policy recovery integration", () => {
           };
           return structuredClone(row);
         },
+        // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
         read: async () => structuredClone(row),
+        // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
         reserve: async () => structuredClone(row),
+        // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
         reserveFenceGeneration: async () => {
           requireFixtureValue(row.record.operator, "journal operator").fenceGeneration = 1;
           row.revision += 1;
@@ -413,7 +417,9 @@ describe("native externally managed policy recovery integration", () => {
         ordinary.retention.expiresAt = new Date(now + 86_400_000).toISOString();
         requireFixtureValue(ordinary.delivery, "ordinary delivery").gitSha = "7".repeat(40);
       }
+      // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
       const plan = vi.fn(async () => structuredClone(ordinary));
+      // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
       const readGatewayAlias = vi.fn(async () => {
         throw new Error("ordinary first proposal must not read predecessor alias");
       });
@@ -422,6 +428,7 @@ describe("native externally managed policy recovery integration", () => {
       const deps: ProtectedHostedOperatorDependencies = {
         store,
         now: () => now,
+        // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
         authorize: async () => context,
         assertAuthorized: async () => {},
         plan,
@@ -436,6 +443,7 @@ describe("native externally managed policy recovery integration", () => {
                   readGatewayAlias,
                 }),
             }),
+        // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
         readApproval: async (input) => ({ ...input, approved: true, approvalId: "approval-notes" }),
         withResourceLease: async (_input, run) => await run(async () => {}),
         reconcile: async (input) => {
@@ -496,6 +504,7 @@ describe("native externally managed policy recovery integration", () => {
           }
           return receipt;
         },
+        // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
         verify: async () => ({
           actors: 1,
           tenants: 1,
@@ -504,9 +513,11 @@ describe("native externally managed policy recovery integration", () => {
           manifestSha256: f.record.operator.plan.release.sha256,
           authenticatedBehavior: "unassessed",
         }),
+        // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
         bindings: async () => ({}),
       };
       const handler = createProtectedHostedOperatorHandler(deps);
+      // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
       const request = (body: Record<string, unknown>) =>
         new Request("https://operator.example.test/v1/runtime", {
           method: "POST",
@@ -622,7 +633,8 @@ describe("native externally managed policy recovery integration", () => {
       const { operator } = record;
       operator.plan =
         state === "legacy"
-          ? withExternallyManagedHostProtection(f.proposed, undefined)
+          ? // oxlint-disable-next-line unicorn/no-useless-undefined -- Exercise the legacy host-protection case with no explicit value.
+            withExternallyManagedHostProtection(f.proposed, undefined)
           : f.proposed;
       if (state === "legacy") {
         const { hostProtection, appDeliveryReplacement, ...legacy } = operator.plan;
@@ -729,9 +741,12 @@ describe("native externally managed policy recovery integration", () => {
         target: f.current.request,
       };
       const store: HostedRuntimeJournalStore = {
+        // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
         read: vi.fn(async () => structuredClone(row)),
+        // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
         reserve: vi.fn(async () => structuredClone(row)),
         compareAndSet: vi.fn(
+          // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
           async (input: Parameters<HostedRuntimeJournalStore["compareAndSet"]>[0]) => {
             if (input.expectedRevision !== row.revision) {
               return;
@@ -744,6 +759,7 @@ describe("native externally managed policy recovery integration", () => {
           },
         ),
         reserveFenceGeneration: vi.fn(
+          // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
           async (
             input: Parameters<NonNullable<HostedRuntimeJournalStore["reserveFenceGeneration"]>>[0],
           ) => {
@@ -815,7 +831,9 @@ describe("native externally managed policy recovery integration", () => {
       let approved = false;
       let guardReadUnavailable = false;
       let failNextGuardRead = outcome === "transient-hook";
+      // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
       const calls: { method: string; path: string; body?: Record<string, unknown> }[] = [];
+      // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
       const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = new URL(input instanceof Request ? input.url : String(input));
         expect(url.origin).toBe("https://api.vercel.com");
@@ -918,6 +936,7 @@ describe("native externally managed policy recovery integration", () => {
         }
         return new Response(null, { status: 404 });
       });
+      // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
       const readCredential = vi.fn(async () => ({
         token: "synthetic-private-credential",
         binding: {
@@ -941,6 +960,7 @@ describe("native externally managed policy recovery integration", () => {
         readCredential,
         fetch: fetcher,
         assertAuthorized: async () => {},
+        // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
         assertEnvironment: async () => {
           expect(appBound).toBe(true);
         },
@@ -957,6 +977,7 @@ describe("native externally managed policy recovery integration", () => {
         fetch: fetcher,
         target: "gateway",
         assertAuthorized: async () => {},
+        // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
         assertEnvironment: async () => {
           expect(gatewayBoundOrigin).toBe("https://fresh-notes.example.test");
         },
@@ -978,6 +999,7 @@ describe("native externally managed policy recovery integration", () => {
       });
       const executed: string[] = [];
       let ordinaryPlan: typeof f.proposed | undefined;
+      // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
       const ordinaryPlanning = vi.fn(async () => {
         if (!ordinaryPlan) {
           throw new Error("fresh generic planning must not replace this pending proposal");
@@ -986,6 +1008,7 @@ describe("native externally managed policy recovery integration", () => {
       });
       const deps: ProtectedHostedOperatorDependencies = {
         store,
+        // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
         authorize: async () => context,
         assertAuthorized: async () => {},
         assertCanonicalOwner: async () => {},
@@ -1001,6 +1024,7 @@ describe("native externally managed policy recovery integration", () => {
         verifyReadyDeliveryReplacement: async (_context, plan, predecessor) => {
           await native.verify(plan, predecessor);
         },
+        // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
         readApproval: async (input) => {
           const result = { ...input, approved: input.callId !== "new-human-call" || approved };
           let approvalId = "new-human-approval";
@@ -1083,6 +1107,7 @@ describe("native externally managed policy recovery integration", () => {
           }
           return receipt;
         },
+        // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
         verify: async () => ({
           actors: 1,
           tenants: 1,
@@ -1091,9 +1116,11 @@ describe("native externally managed policy recovery integration", () => {
           manifestSha256: f.proposed.release.sha256,
           authenticatedBehavior: "unassessed",
         }),
+        // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
         bindings: async () => ({}),
       };
       const handler = createProtectedHostedOperatorHandler(deps);
+      // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
       const request = (body: Record<string, unknown>) =>
         new Request("https://operator.example.test/v1/runtime", {
           method: "POST",

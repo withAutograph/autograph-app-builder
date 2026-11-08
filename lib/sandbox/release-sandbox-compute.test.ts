@@ -14,6 +14,7 @@ import {
 
 // These direct hook calls do not run inside Eve's durable state context.
 // An absent preview is the normal initial state for this gate-only fixture.
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../agent/working-preview-state dependency used by this test.
 vi.mock("../agent/working-preview-state", async (importOriginal) => {
   const actual = await importOriginal<{
     workingPreviewAttemptState: typeof workingPreviewAttemptState;

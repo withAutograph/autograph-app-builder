@@ -279,6 +279,7 @@ describe("Vercel integration security", () => {
         },
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         fetch: vi.fn<typeof fetch>(async (url) => {
+          // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
           if (String(url).endsWith("/v2/oauth/access_token")) {
             return Response.json({ access_token: "provider-token-sentinel" });
           }

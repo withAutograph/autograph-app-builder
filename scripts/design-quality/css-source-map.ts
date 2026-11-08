@@ -64,6 +64,7 @@ export function originalCssSource(
     let generated = 0;
     const segments = lines[line]?.split(",") ?? [];
     let candidate: { source: number; originalLine: number; originalColumn: number } | undefined;
+    // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Decode source-map segments in order until the matching position.
     for (const segment of segments) {
       const fields: number[] = [];
       let index = 0;

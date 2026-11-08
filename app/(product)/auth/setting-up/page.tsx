@@ -24,6 +24,7 @@ export default function SettingUpPage() {
 
   useEffect(() => {
     if (session.data?.user) {
+      // oxlint-disable-next-line react-doctor/nextjs-no-client-side-redirect -- Wait for the client session and its callback query before continuing.
       router.replace(resolveAuthCallbackURL("/", callbackSearch));
     }
   }, [callbackSearch, router, session.data?.user]);

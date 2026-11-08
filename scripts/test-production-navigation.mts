@@ -14,6 +14,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 
+// oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
 const execute = promisify(execFile);
 const source = path.resolve(import.meta.dirname, "..");
 const docker = process.argv.at(3) ?? "";
@@ -36,6 +37,7 @@ const environment: NodeJS.ProcessEnv = {
   NEXT_TELEMETRY_DISABLED: "1",
   NODE_ENV: "production",
   PATH: process.env.PATH,
+  // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Forward the temporary directory to the isolated navigation subprocess.
   TMPDIR: process.env.TMPDIR,
 };
 const scratch = await mkdtemp(path.join(tmpdir(), "autograph-navigation-"));
@@ -69,6 +71,7 @@ const stopChild = async (child: ChildProcess) => {
   }
   const closed = once(child, "close");
   child.kill("SIGTERM");
+  // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
   const force = setTimeout(() => child.kill("SIGKILL"), 5000);
   try {
     await closed;
@@ -145,6 +148,7 @@ try {
   const copies = await Promise.allSettled(
     files.map(async (file) => {
       // Git also lists submodule directory entries; they are not app sources.
+      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       const info = await lstat(path.join(source, file)).catch((error: unknown) => {
         if (
           typeof error === "object" &&
@@ -179,6 +183,7 @@ try {
   await Promise.all(
     packageDirectories.map(async (directory) => {
       const dependencyView = path.join(source, directory, "node_modules");
+      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       const installed = await lstat(dependencyView).catch((error: unknown) => {
         if (
           typeof error === "object" &&
@@ -246,6 +251,7 @@ try {
       outgoing.end();
     });
     incoming.pipe(upstream);
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     outgoing.on("close", () => upstream.destroy());
   });
   tls.on("upgrade", (incoming, socket, head) => {
@@ -261,7 +267,9 @@ try {
       upstream.write(head);
       socket.pipe(upstream).pipe(socket);
     });
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     upstream.on("error", () => socket.destroy());
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     socket.on("error", () => upstream.destroy());
     socket.on("close", () => {
       upgradedSockets.delete(socket);

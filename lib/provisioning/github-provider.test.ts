@@ -16,6 +16,7 @@ const authority = {
 };
 const requestId = "123e4567-e89b-42d3-a456-426614174000";
 const content = new TextEncoder().encode("# Starter\n");
+// oxlint-disable-next-line sonarjs/hashing -- Match Git's SHA-1 blob identity in this fixture.
 const blobSha = createHash("sha1")
   .update(`blob ${content.byteLength}\0`)
   .update(content)
@@ -100,6 +101,7 @@ describe("GitHub starter repository provisioning", () => {
     expect(() =>
       starterSourceBinding({
         ...canonical,
+        // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Exercise rejection of deliberately incomplete provenance.
         provenance: {
           ...canonical.provenance,
           sourceReceiptDigest: undefined,
@@ -150,12 +152,14 @@ describe("GitHub starter repository provisioning", () => {
       const methods: { path: string; method: string; body?: unknown }[] = [];
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const request = vi.fn<typeof fetch>(async (url, init) => {
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
         const parsedUrl = new URL(String(url));
         const path = `${parsedUrl.pathname}${parsedUrl.search}`;
         const method = init?.method ?? "GET";
         const body: unknown =
           init?.body && parsedUrl.origin === "https://api.github.com"
-            ? JSON.parse(String(init.body))
+            ? // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
+              JSON.parse(String(init.body))
             : undefined;
         methods.push({ body, method, path });
         if (parsedUrl.origin === "https://github.com" && path === "/login/oauth/access_token") {
@@ -298,6 +302,7 @@ describe("GitHub starter repository provisioning", () => {
       credentialStore: credentials,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       fetch: vi.fn<typeof fetch>(async (url) => {
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
         const path = new URL(String(url)).pathname;
         if (path === "/app/installations/101") {
           return Response.json({
@@ -347,6 +352,7 @@ describe("GitHub starter repository provisioning", () => {
     const resolved = "vendor-portal-a1b2c3";
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (url, init) => {
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const path = new URL(String(url)).pathname;
       if (path === "/app/installations/101") {
         return Response.json({
@@ -494,6 +500,7 @@ describe("GitHub starter repository provisioning", () => {
     expect(
       request.mock.calls.filter(
         ([url, init]) =>
+          // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
           new URL(String(url)).pathname === "/orgs/withAutograph/repos" && init?.method === "POST",
       ),
     ).toHaveLength(1);

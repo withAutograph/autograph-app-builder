@@ -1,3 +1,4 @@
+/* oxlint-disable github/filenames-match-regex, unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { frameworkSharedPaths } from "@/lib/repository/framework-upgrade";
 import { defineTool } from "eve/tools";
 import type { SandboxSession } from "eve/sandbox";

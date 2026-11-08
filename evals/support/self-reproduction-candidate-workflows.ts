@@ -81,6 +81,7 @@ export const exerciseCandidateBrowserWorkflows = async (
     const check = (id: string, passed: boolean | null, detail: string) =>
       assertions.push({ detail, id, passed });
     const button = (name: RegExp) => page.getByRole("button", { name }).first();
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     const exists = (locator: CandidateLocator) => locator.isVisible().catch(() => false);
     const text = () => page.locator("body").textContent();
     let outcome: CandidateWorkflowOutcome = {
@@ -154,11 +155,14 @@ export const exerciseCandidateBrowserWorkflows = async (
       const saved = page.getByText(/draft saved|changes saved/iu).first();
       const acknowledged = await saved
         .waitFor({ state: "visible", timeout: 5000 })
+        // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
         .then(() => true)
+        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
         .catch(() => false);
       await page.waitForLoadState("networkidle");
       await page.reload({ waitUntil: "networkidle" });
       const nameValue = await name.inputValue();
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep capture and workflow observations in their established order.
       const briefValue = await brief.inputValue();
       let draftDurability: boolean | null;
       if (
@@ -285,6 +289,7 @@ export const exerciseCandidateBrowserWorkflows = async (
       if (count > 0) {
         const href = await links.first().getAttribute("href");
         if (
+          // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
           href === null ||
           href === undefined ||
           href === "" ||
@@ -328,6 +333,7 @@ export const exerciseCandidateBrowserWorkflows = async (
         await runChildArtifact();
       }
     };
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the dictionary open for the supported keys.
     const workflows: Record<string, () => Promise<null>> = {
       documentation: async () => {
         await runDocumentation();
@@ -399,10 +405,12 @@ export const exerciseCandidateBrowserWorkflows = async (
           buttons: await page
             .getByRole("button")
             .allTextContents()
+            // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
             .catch(() => []),
           headings: await page
             .getByRole("heading")
             .allTextContents()
+            // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
             .catch(() => []),
           mutationPaths: writes,
         };

@@ -55,6 +55,7 @@ export interface DirtyPathSnapshot {
   worktreeStatus: string;
   indexMode?: string;
   indexObjectId?: string;
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   kind: "absent" | "regular" | "directory" | "symlink" | "special";
   mode?: string;
   size?: number;
@@ -379,6 +380,7 @@ export const proposalFromJournal = (
   version: receipt.version,
 });
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 type ReceiptDigestInput = { digest?: string } | { digest?: string; [key: string]: unknown };
 
 export const receiptDigest = (receipt: ReceiptDigestInput): string => {

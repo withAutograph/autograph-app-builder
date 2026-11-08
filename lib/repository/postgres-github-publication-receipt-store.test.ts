@@ -80,6 +80,7 @@ function databaseFixture(input: {
   const update = vi.fn(() => ({ set }));
 
   return {
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The database fixture supplies only the receipt-store query operations.
     database: { insert, select, update } as unknown as Database,
     insert,
     limit,

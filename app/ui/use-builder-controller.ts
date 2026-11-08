@@ -186,11 +186,13 @@ export function useBuilderController({
     (notice) => notice.provider === "github" && notice.status === "connected",
   );
   const [team, setTeam] = useState(
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     resumedVercelConnection
       ? (teamOptions[0]?.value ?? "")
       : (initialDraft?.team ?? teamOptions[0]?.value ?? ""),
   );
   const [gitScope, setGitScope] = useState(
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     resumedGitHubConnection
       ? (gitScopeOptions[0]?.value ?? "")
       : (initialDraft?.gitScope ?? gitScopeOptions[0]?.value ?? ""),
@@ -272,6 +274,7 @@ export function useBuilderController({
         };
       }
     },
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- The action state explicitly starts without a result.
     undefined,
   );
   const serverSaveWaiters = useRef(
@@ -359,6 +362,7 @@ export function useBuilderController({
             headers: { "Content-Type": "application/json" },
             keepalive: true,
             method: "POST",
+            // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
           }).then(async (response) => {
             if (!response.ok) {
               throw new Error("builder-draft-save-failed");
@@ -561,6 +565,7 @@ export function useBuilderController({
     // Invalid app names simply keep submission disabled.
   }
   const canSubmit = Boolean(
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     !sourceUploadPending &&
     form.brief.trim() &&
     (!form.appName.trim() || validAppId) &&
@@ -666,6 +671,7 @@ export function useBuilderController({
     // oxlint-disable promise/prefer-await-to-then
     // oxlint-disable-next-line promise/prefer-await-to-then
     void restorePending()
+      // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
       .then((entry) => {
         if (disposed || !entry) {
           return;
@@ -766,6 +772,7 @@ export function useBuilderController({
           }
         }
         if (
+          // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
           controller.signal.aborted ||
           !remote ||
           activeDraftId.current !== localDraftId ||

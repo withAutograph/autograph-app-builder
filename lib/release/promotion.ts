@@ -120,6 +120,7 @@ export { sha256 } from "../../scripts/portable-release";
 async function sha256File(path: string) {
   const digest = createHash("sha256");
   for await (const chunk of createReadStream(path)) {
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- Hash each chunk from the existing file stream.
     digest.update(chunk);
   }
   return digest.digest("hex");
@@ -334,7 +335,7 @@ export async function immutableTreeDigest(rootInput: string) {
     throw new Error("Release output tree was empty.");
   }
   for (const path of paths) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Read promotion inputs in order.
     const bytes = await readFile(nodePath.join(root, path));
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const info = await lstat(nodePath.join(root, path));

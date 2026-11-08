@@ -38,7 +38,9 @@ export function parseProviderConnectionReturn(input: {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function providerConnectionReturnFromFormData(formData: FormData): ProviderConnectionReturn {
   return parseProviderConnectionReturn({
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve FormData conversion for both string and File entries.
     resumeKey: formData.get("resumeKey")?.toString(),
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve FormData conversion for both string and File entries.
     returnTo: formData.get("returnTo")?.toString(),
   });
 }

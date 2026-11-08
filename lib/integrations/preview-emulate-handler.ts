@@ -1,7 +1,9 @@
 import { setImmediate } from "node:timers/promises";
 
 import { createEmulateHandler } from "@emulators/adapter-next";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Pass the full provider emulator module to the adapter.
 import * as github from "@emulators/github";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Pass the full provider emulator module to the adapter.
 import * as vercel from "@emulators/vercel";
 
 import { providerEmulationSeed } from "./provider-emulation-seed";

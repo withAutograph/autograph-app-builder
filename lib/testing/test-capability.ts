@@ -57,6 +57,7 @@ export function testCapabilityEnabled(
   return Object.isFrozen(candidate.capabilities) && candidate.capabilities.includes(capability);
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- The capability accessor can return arbitrary stored data.
 const isCapabilityAccessor = (value: unknown): value is () => unknown =>
   typeof value === "function";
 
@@ -65,6 +66,7 @@ export function hasTestCapability(
   capability: TestCapability,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): boolean {
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/no-unsafe-dictionary-type -- The shared symbol registry is attached to process outside its declared type.; Preserve the existing open-ended value contract.
   const accessor = (process as unknown as Record<symbol, unknown>)[registryAccessor];
   return testCapabilityEnabled(
     capability,

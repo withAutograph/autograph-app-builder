@@ -101,6 +101,7 @@ interface FixtureSession {
   events: unknown[];
   inputRequests?: unknown[];
   sessionId: string;
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   status: "working" | "input_required" | "waiting" | "completed" | "cancelled";
 }
 
@@ -140,6 +141,7 @@ function hostedFixture(
   let primaryStartCount = 0;
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   return async (urlInput: string | URL | Request, init?: RequestInit) => {
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
     const url = String(urlInput);
     if (url.endsWith("/.well-known/oauth-protected-resource")) {
       return Response.json({
@@ -170,6 +172,7 @@ function hostedFixture(
     const secondary = authorization === `Bearer ${secondaryToken}`;
     const body = z
       .object({ id: z.unknown().optional(), method: z.string(), params: z.unknown().optional() })
+      // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
       .parse(JSON.parse(String(init?.body)));
     if (body.method === "initialize") {
       return rpc(body.id, {
@@ -407,6 +410,7 @@ describe("hosted portable fresh-client proof", () => {
           method: z.string().optional(),
           params: z.looseObject({ name: z.string().optional() }).optional(),
         })
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
         .parse(JSON.parse(String(init?.body ?? "{}")));
       if (body.method !== "tools/call" || body.params?.name !== "autograph_get") {
         return response;

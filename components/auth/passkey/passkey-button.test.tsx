@@ -10,6 +10,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { PasskeyButton } from "./passkey-button";
 
 const auth = vi.hoisted(() => ({ navigate: vi.fn(), signIn: vi.fn() }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @better-auth-ui/react dependency used by this test.
 vi.mock("@better-auth-ui/react", () => ({
   useAuth: () => ({
     authClient: {},
@@ -19,6 +20,7 @@ vi.mock("@better-auth-ui/react", () => ({
   }),
   useAuthPlugin: () => ({ localization: { passkey: "Passkey" } }),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @better-auth-ui/react/plugins/passkey dependency used by this test.
 vi.mock("@better-auth-ui/react/plugins/passkey", () => ({
   useAddPasskey: () => ({ mutateAsync: vi.fn() }),
   usePasskeyAutoFill: vi.fn(),

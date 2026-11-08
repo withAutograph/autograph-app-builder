@@ -76,6 +76,7 @@ function createMutationId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
+  // oxlint-disable-next-line sonarjs/pseudo-random -- Preserve mutation IDs when crypto.randomUUID is unavailable.
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
@@ -86,6 +87,7 @@ function cloneSnapshot<T>(snapshot: T): T {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function browserIsOnline() {
+  // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- Treat only an explicit offline indication as offline.
   return typeof navigator === "undefined" || navigator.onLine !== false;
 }
 

@@ -783,7 +783,7 @@ const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold:
     sessionId: originalId,
     stage: "needs_attention",
   });
-  // oxlint-disable-next-line eslint/require-await -- The recovery test transport has no model or provider.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping, eslint/require-await -- The recovery test transport has no model or provider.
   const emptyRecovery = async () => ({ events: [], status: "waiting" as const });
   const recoveryTransport: HostedEveTransport = {
     activateRecovery: async ({ operationId }) => {
@@ -900,7 +900,7 @@ const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold:
       totalEvents: 0,
     }),
   };
-  // oxlint-disable-next-line eslint/require-await -- Match asynchronous transport ports.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping, eslint/require-await -- Match asynchronous transport ports.
   const empty = async () => ({ events: [], status: "waiting" as const });
   const transport: HostedEveTransport = {
     activateRecovery: recoveryTransport.activateRecovery,

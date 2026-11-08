@@ -30,6 +30,7 @@ export function Passkey({ passkey }: PasskeyProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
 
+  // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty passkey name uses the localized fallback.
   const passkeyName = passkey.name || passkeyLocalization.passkey;
 
   return (

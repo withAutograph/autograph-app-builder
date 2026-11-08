@@ -200,6 +200,7 @@ export const runTrustedFrameworkEvidence = async (input: {
             requirementId: requirement.id,
           };
         } finally {
+          // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
           await context?.close().catch(() => {
             // Cleanup does not change the framework outcome.
           });

@@ -93,7 +93,7 @@ interface GitHubOAuthTokens {
   accessToken?: string;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// eslint-disable-next-line eslint/func-style, anti-slop/no-unknown-returns -- Keep bounded response JSON unknown until its consumer parses it. Preserve function declaration hoisting and initialization timing.
 async function readBoundedJson(response: Response, limit: number): Promise<unknown> {
   if (!response.ok) {
     return null;
@@ -409,6 +409,7 @@ const previewOAuthRuntimeConfigSchema = z
       resource.protocol === "http:" &&
       issuer.hostname === "localhost";
     if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       !(
         config.hostedAdapter === "1" ||
         (config.localDevelopmentEmulation === true &&
@@ -537,6 +538,7 @@ export function readPreviewOAuthRuntimeConfig(
       hostedAdapter: environment.EVE_HOSTED_ADAPTER,
       issuer: environment.BETTER_AUTH_URL,
       localDevelopmentEmulation:
+        // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
         environment.APP_BUILDER_EXECUTION_MODE === "development" &&
         environment.APP_BUILDER_EXECUTION_BUNDLE === "local-development" &&
         environment.APP_BUILDER_LOCAL_ADAPTER === "1" &&

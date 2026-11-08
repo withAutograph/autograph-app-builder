@@ -104,6 +104,7 @@ const transport = function transport(overrides: Partial<HostedEveTransport> = {}
       await input.onAccepted?.("fixture-delivery");
       return deliveredSnapshot();
     }),
+    // oxlint-disable-next-line eslint/require-await -- Preserve asynchronous hosted transport fixture behavior.
     start: vi.fn(async () => ({ adapterSessionId: "eve_1", snapshot })),
   };
   return { ...base, ...overrides };
@@ -729,6 +730,7 @@ describe("public start request recovery", () => {
 });
 
 const reservationStore = function reservationStore(
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- The reservation fixture accepts the callback's arbitrary result.
   makeReservation: (candidate: HostedOperationRecord) => unknown,
 ): HostedEveStore {
   return {

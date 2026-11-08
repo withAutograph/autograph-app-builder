@@ -16,7 +16,9 @@ describe("hosted validation runtime", () => {
       requests.push(request);
       const result = Promise.resolve({ exitCode: 0, stderr: "", stdout: "" });
       const thenProperty = String.fromCodePoint(116, 104, 101, 110);
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The fixture exposes only the thenable interface used by the hosted runtime.
       return Object.fromEntries([
+        // oxlint-disable-next-line github/no-then -- Keep the bound thenable method in the runtime fixture.
         [thenProperty, result.then.bind(result)],
       ]) as unknown as PromiseLike<{
         exitCode: number;

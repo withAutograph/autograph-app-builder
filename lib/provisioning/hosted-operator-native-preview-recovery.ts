@@ -97,6 +97,7 @@ export const createNativePreviewRecoveryPlan = (
   }
   const { trustedSources, ...bindings } = gatewayBindings;
   void trustedSources;
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Inspect retained operator candidates in recovery order.
   for (const origin of [
     { operator: current },
     ...(current.retainedRenewalOperations ?? []).toReversed(),

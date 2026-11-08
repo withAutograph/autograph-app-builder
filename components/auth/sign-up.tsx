@@ -384,6 +384,7 @@ export function SignUp({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [fieldErrors, setFieldErrors] = useState<SignUpFieldErrors>({});
   const currentLocation = useSyncExternalStore(
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     () => () => null,
     () => window.location.href,
     () => "",
@@ -446,6 +447,7 @@ export function SignUp({
       return;
     }
 
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
     const additionalFieldValues: Record<string, unknown> = {};
 
     for (const field of additionalFields ?? []) {
@@ -456,7 +458,7 @@ export function SignUp({
 
       if (field.validate) {
         try {
-          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+          // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Validate fields in order and preserve the first failure.
           await field.validate(value);
         } catch (error) {
           toast.error(error instanceof Error ? error.message : String(error));
@@ -508,6 +510,7 @@ export function SignUp({
                 <AuthButton key={`${plugin.id}-${index.toString()}`} view="signUp" />
               )),
             )}
+            {/* oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing social sign-in conditions. */}
             {socialPosition === "top" && (
               <>
                 {socialProviders && socialProviders.length > 0 && (
@@ -543,6 +546,7 @@ export function SignUp({
               />
             )}
 
+            {/* oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing social sign-in conditions. */}
             {socialPosition === "bottom" && (
               <>
                 {showSeparator === true && (

@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-member-access -- Preserve the existing untyped input and rendering boundary. */
 import { cp, lstat, mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -156,6 +157,7 @@ const archiveName = `${portable.name}-${portable.version}.tar.gz`;
 await writeFile(path.join(output, archiveName), archive);
 
 const marketplaceRoot = path.join(output, "codex-marketplace");
+// oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing package manifest JSON boundary.
 const marketplacePluginRoot = path.join(marketplaceRoot, "plugins", portable.name);
 await mkdir(path.join(marketplacePluginRoot, ".codex-plugin"), {
   mode: 0o755,

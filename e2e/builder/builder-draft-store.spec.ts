@@ -5,6 +5,7 @@ import { expect, test } from "playwright/test";
 
 import { activeBuilderModelId } from "../../lib/integrations/active-model";
 import { createBuilderDraftStore } from "../../lib/db/builder-drafts";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Pass the complete database schema to Drizzle.
 import * as schema from "../../lib/db/schema";
 import type { BuilderDraftRecord } from "../../lib/builder-drafts/contracts";
 import { databaseUrl, resetApplicationState } from "../support/harness";

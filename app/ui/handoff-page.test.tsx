@@ -4,22 +4,28 @@ import { HandoffContent } from "../(product)/handoff/[id]/handoff-content";
 import type { getBuilderHandoffPageData } from "../../lib/handoff/deployment";
 
 const server = vi.hoisted(() => ({
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- The mocked page loader preserves its untrusted result boundary.
   load: vi.fn<(input: Parameters<typeof getBuilderHandoffPageData>[0]) => Promise<unknown>>(),
   redirect: vi.fn((url: string) => {
     throw new Error(`redirect:${url}`);
   }),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../../lib/handoff/deployment dependency used by this test.
 vi.mock("../../lib/handoff/deployment", () => ({
   getBuilderHandoffPageData: server.load,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled next/headers dependency used by this test.
 vi.mock("next/headers", () => ({
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   headers: async () => new Headers({ cookie: "web-session" }),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled next/navigation dependency used by this test.
 vi.mock("next/navigation", () => ({ redirect: server.redirect }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./handoff-controls dependency used by this test.
 vi.mock("./handoff-controls", () => ({
   HandoffControls: () => <div>Continue controls</div>,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./builder-shell dependency used by this test.
 vi.mock("./builder-shell", () => ({
   Header: () => <header>Autograph</header>,
 }));

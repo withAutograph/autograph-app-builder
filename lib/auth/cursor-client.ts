@@ -63,6 +63,7 @@ export async function isCursorClientReady(database: Reader, resource: string): P
       if (
         !Array.isArray(actual) ||
         actual.length !== value.length ||
+        // oxlint-disable-next-line react-doctor/js-set-map-lookups -- Compare the small registration arrays as supplied.
         !value.every((entry) => actual.includes(entry))
       ) {
         return false;
@@ -85,6 +86,7 @@ export async function isCursorClientReady(database: Reader, resource: string): P
     .limit(1);
   return (
     target !== undefined &&
+    // oxlint-disable-next-line react-doctor/js-set-map-lookups -- Preserve the returned scope list's membership behavior.
     previewOAuthScopes.every((scope) => target.allowedScopes?.includes(scope) ?? false)
   );
 }
@@ -102,6 +104,7 @@ export async function setupCursorClient(database: Database, resource: string) {
     if (
       !target ||
       target.disabled ||
+      // oxlint-disable-next-line react-doctor/js-set-map-lookups -- Preserve the returned scope list's membership behavior.
       !previewOAuthScopes.every((scope) => target.allowedScopes?.includes(scope) ?? false)
     ) {
       throw new Error("Initialize the OAuth resource before registering Cursor.");

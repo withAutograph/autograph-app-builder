@@ -684,6 +684,7 @@ const assertContainedStatePath = async (
     }
     const isLeaf = index === segments.length - 1;
     if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       value.isSymbolicLink() ||
       value.uid !== process.geteuid?.() ||
       value.dev.toString() !== capability.stateRoot.device ||
@@ -788,6 +789,7 @@ const createInitialJournal = async (
     await link(candidate, path);
     await syncDirectory(nodePath.dirname(path));
   } finally {
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await unlink(candidate).catch(() => {
       // Cleanup errors are intentionally ignored.
     });
@@ -1019,6 +1021,7 @@ const quiesceAbandonedLease = async (
   }
   let stderr = "";
   holder.stderr.setEncoding("utf-8");
+  // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
   holder.stderr.on("data", (chunk: string) => (stderr += chunk));
   const { promise: exited, resolve: resolveExit }: PromiseWithResolvers<void> =
     Promise.withResolvers();
@@ -1073,6 +1076,7 @@ const verifiedFileReader = (
 ): (() => AsyncIterable<Uint8Array>) =>
   async function* readVerifiedFile() {
     const sha256 = createHash("sha256");
+    // oxlint-disable-next-line sonarjs/hashing -- Verify the source against its Git SHA-1 blob ID.
     const sha1 = createHash("sha1").update(Buffer.from(`blob ${expectedSize}\0`));
     let total = 0;
     for await (const bytes of read()) {
@@ -1209,6 +1213,7 @@ const exactPreparedSourceTree = async (
     if (!Number.isSafeInteger(size) || contentHash.digest("hex") !== file.sha256) {
       throw new Error(`The prepared fresh-template source drifted at ${file.path}.`);
     }
+    // oxlint-disable-next-line sonarjs/hashing -- Bind source bytes to Git's SHA-1 blob ID.
     const gitHash = createHash("sha1").update(Buffer.from(`blob ${size}\0`));
     let verifiedSize = 0;
     // oxlint-disable-next-line eslint/no-await-in-loop -- Re-read to bind Git's size-prefixed blob identity.
@@ -1317,6 +1322,7 @@ const exactResultTree = async (input: {
     if (!Number.isSafeInteger(size) || contentHash.digest("hex") !== change.after.digest) {
       throw new Error(`The reviewed bootstrap overlay is stale at ${change.path}.`);
     }
+    // oxlint-disable-next-line sonarjs/hashing -- Bind reviewed overlay bytes to Git's SHA-1 blob ID.
     const gitHash = createHash("sha1").update(Buffer.from(`blob ${size}\0`));
     let verifiedSize = 0;
     // oxlint-disable-next-line eslint/no-await-in-loop -- Bind the reviewed bytes to Git's size-prefixed identity.
@@ -1491,6 +1497,7 @@ export const deriveFreshBootstrapProposal = async (input: {
     expected: input.expectedPrestate,
     protectedPaths,
   });
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep bootstrap identity and source observations in their established order.
   const files = await exactResultTree({
     capability,
     readOverlayFile: input.readOverlayFile,
@@ -1556,6 +1563,7 @@ const assertExactInputs = async (input: {
 }): Promise<ExactFile[]> => {
   assertExactFreshBootstrapProposal(input.proposal);
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     input.proposal.atomicAdapterDigest !== FRESH_BOOTSTRAP_ATOMIC_ADAPTER_DIGEST ||
     ![
       FRESH_BOOTSTRAP_MATERIALIZE_ADAPTER_DIGEST,
@@ -1842,6 +1850,7 @@ const assertRawGitAuthority = async (
   const gitDirectory = nodePath.resolve(root, ".git");
   const gitState = await lstat(gitDirectory);
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     rootState.isSymbolicLink() ||
     !rootState.isDirectory() ||
     gitState.isSymbolicLink() ||
@@ -1872,7 +1881,7 @@ const assertRawGitAuthority = async (
     nodePath.resolve(gitDirectory, "shallow"),
   ]) {
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Inspect repository paths in order.
       await lstat(forbidden);
       throw new Error("The fresh repository contains forbidden Git authority.");
     } catch (error: unknown) {
@@ -2030,6 +2039,7 @@ const rawWorktreeManifest = async (
   const walk = async (relativePath: string): Promise<void> => {
     const directory = relativePath === "" ? root : nodePath.resolve(root, relativePath);
     const entries = await readdir(directory, { withFileTypes: true });
+    // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Inspect repository entries while excluding permitted metadata.
     for (const entry of entries) {
       const path = relativePath === "" ? entry.name : `${relativePath}/${entry.name}`;
       if (path === ".git") {
@@ -2042,7 +2052,7 @@ const rawWorktreeManifest = async (
         throw new Error("The fresh repository contains an unsafe raw nodePath.");
       }
       const absolute = nodePath.resolve(root, path);
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Inspect repository paths in order.
       const state = await lstat(absolute);
       if (
         state.isSymbolicLink() ||
@@ -2112,9 +2122,12 @@ const assertExactRepository = async (
   const gitDirectory = nodePath.resolve(root, ".git");
   await assertRawGitAuthority(proposal, root);
   const destinationIdentity = await identity(root);
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep bootstrap identity and source observations in their established order.
   const gitDirectoryIdentity = await identity(gitDirectory);
   const ref = `refs/heads/${proposal.repositoryIdentity.initialBranch}`;
+  // oxlint-disable-next-line react-doctor/async-parallel -- Read the manifest before resolving Git identities.
   const rawManifest = await rawWorktreeManifest(root, proposal, options.allowClaimMarker === true);
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep bootstrap identity and source observations in their established order.
   const absoluteGitDirectory = await realpath(
     git(capability, root, ["rev-parse", gitAbsolutePathFormat, "--git-dir"]).trim(),
   );
@@ -2157,7 +2170,7 @@ const assertExactRepository = async (
       if (!entry.isDirectory()) {
         throw new Error("The fresh repository contains unexpected packed or object authority.");
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Inspect repository paths in order.
       const entries = await readdir(nodePath.resolve(objectDirectory, entry.name));
       if (entries.length !== 0) {
         throw new Error("The fresh repository contains unexpected packed or object authority.");
@@ -2176,6 +2189,7 @@ const assertExactRepository = async (
     }
   }
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     git(capability, root, ["rev-parse", "--show-object-format"]).trim() !== "sha1" ||
     absoluteGitDirectory !== gitDirectory ||
     absoluteCommonDirectory !== gitDirectory ||
@@ -2202,7 +2216,7 @@ const assertExactRepository = async (
     nodePath.resolve(gitDirectory, "refs", "replace"),
   ]) {
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Inspect repository paths in order.
       await lstat(forbidden);
       throw new Error("The final repository contains forbidden Git authority.");
     } catch (error: unknown) {

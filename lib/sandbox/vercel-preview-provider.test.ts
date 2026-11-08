@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Sandbox } from "@vercel/sandbox";
 
 const sdk = vi.hoisted(() => ({ get: vi.fn() }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @vercel/sandbox dependency used by this test.
 vi.mock("@vercel/sandbox", () => ({ Sandbox: sdk }));
 
 const { Sandbox: RealSandbox } = await vi.importActual<{ Sandbox: typeof Sandbox }>(

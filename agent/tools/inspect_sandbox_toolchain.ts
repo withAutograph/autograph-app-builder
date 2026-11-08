@@ -1,3 +1,4 @@
+/* oxlint-disable github/filenames-match-regex, unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { Sandbox } from "@vercel/sandbox";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { readPrivateComputeProviderState } from "@/lib/sandbox/private-compute-resume";
@@ -80,7 +81,8 @@ export default defineTool({
     });
     const cache =
       backend.blockers.length === 0
-        ? await inspectDependencyCache(sandbox).catch(() => globalThis.undefined)
+        ? // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+          await inspectDependencyCache(sandbox).catch(() => globalThis.undefined)
         : undefined;
     const execution =
       cache === undefined

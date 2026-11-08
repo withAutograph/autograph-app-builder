@@ -65,6 +65,7 @@ export async function completeAuthorization(
       stateMatches: destination.searchParams.get("state") === parsed.authorization.state,
     };
     if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       !callbackValidation.origin ||
       !callbackValidation.path ||
       callbackValidation.codeCount !== 1 ||

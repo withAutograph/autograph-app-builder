@@ -172,6 +172,7 @@ function dependencyClosure(root: string): Map<string, string> {
     }
     rootVersions.set(name, packageVersion(packagePath));
   }
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Walk dependency closure while handling already-seen packages.
   while (pending.length > 0) {
     const current = pending.shift();
     if (current === undefined) {

@@ -287,6 +287,7 @@ it("strips fresh invocation from durable completion", async () => {
       freshUsage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 },
     },
   };
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- The typed journal mock resolves to undefined.
   const read = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
   const put = vi.fn(async (_key: string, record: SourceReviewJournalRecord) => record);
   const assess = vi.fn(async () => assessment);
@@ -308,6 +309,7 @@ it("strips fresh invocation from durable completion", async () => {
   expect(result.invocation?.freshUsage.totalTokens).toBe(12);
 });
 it("keeps repeated evidence authorization separate from the one completed-assessment lookup", async () => {
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- The typed journal mock resolves to undefined.
   const read = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
   const assertCurrentOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
   const put = vi.fn(async (_key: string, record: SourceReviewJournalRecord) => record);
@@ -538,6 +540,7 @@ it("rejects an incompatible canonical first writer returned by journal put", asy
     { ...valid, reasoningEffort: "medium" as const },
     { ...valid, reviewRubricDigest: "a".repeat(64) },
   ]) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- The typed journal mock resolves to undefined.
     const read = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
     const put = vi.fn(async () => ({ kind: "application-completed" as const, assessment }));
     // oxlint-disable-next-line eslint/no-await-in-loop -- Exercise each canonical mismatch independently.

@@ -1,3 +1,4 @@
+/* oxlint-disable github/filenames-match-regex, unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
@@ -28,6 +29,7 @@ const isReviewedPhase = (
   ReturnType<typeof appBuilderWorkflowState.get>,
   {
     phase:
+      // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
       | "reviewed"
       | "publication_pending"
       | "publication_failed"
@@ -253,6 +255,7 @@ export default defineTool({
     };
     const summaries: WorkflowPhaseSummaries = {};
     if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       state.phase === "app_spec_accepted" ||
       state.phase === "dependencies_prepared" ||
       state.phase === "identity_resolved" ||
@@ -267,6 +270,7 @@ export default defineTool({
       summaries.appSpec = appSpecSummary(state.appSpec);
     }
     if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       state.phase === "dependencies_prepared" ||
       state.phase === "identity_resolved" ||
       state.phase === "planned" ||
@@ -280,6 +284,7 @@ export default defineTool({
       summaries.dependencies = { digest: state.dependencyReceipt.digest };
     }
     if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       state.phase === "identity_resolved" ||
       state.phase === "planned" ||
       state.phase === "apply_failed" ||
@@ -292,6 +297,7 @@ export default defineTool({
       summaries.identity = { digest: state.identityReceipt.digest };
     }
     if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       state.phase === "planned" ||
       state.phase === "apply_failed" ||
       state.phase === "applied" ||
@@ -311,6 +317,7 @@ export default defineTool({
       };
     }
     if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       state.phase === "applied" ||
       state.phase === "validation_pending" ||
       state.phase === "validation_failed" ||

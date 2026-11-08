@@ -25,7 +25,7 @@ const badgeVariants = cva(
   },
 );
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line sonarjs/function-name, eslint/func-style -- React components use PascalCase names for JSX and diagnostics. Preserve function declaration hoisting and initialization timing.
 function Badge({
   className,
   variant = "default",

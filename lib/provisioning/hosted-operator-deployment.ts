@@ -1038,6 +1038,7 @@ export const createHostedOperatorControlPlane = async (input: {
         existing.issuer === linkInput.issuer,
         existing.endpointOrigin === linkInput.endpointOrigin,
       ].every(Boolean);
+    // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep this helper scoped to its fixture or invocation.
     const assertRealmIdentityLinkReplaceable = (
       operator: Awaited<ReturnType<typeof readKnownAuthBootstrap>>["operator"],
       link: z.infer<typeof operatorRealmIdentityLinkSchema>,

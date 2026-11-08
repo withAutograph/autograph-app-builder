@@ -49,6 +49,7 @@ function fixture() {
   }
   const cycleFile = path.join(stateRoot, "eve-cycle");
   writeFileSync(cycleFile, "c".repeat(64), { mode: 0o600 });
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the dictionary open for the supported keys.
   const environment: Record<string, string> = {
     APP_BUILDER_LOCAL_EVE_CYCLE_FILE: cycleFile,
     APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
@@ -108,6 +109,7 @@ describe("closed local Eve launch", () => {
     expect(forwarded).toEqual(["SIGTERM"]);
 
     let settled = false;
+    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
     void stopped.then(() => {
       settled = true;
     });
@@ -261,6 +263,7 @@ describe("closed local Eve launch", () => {
     ["static Vercel token", { VERCEL_TOKEN: "nope" }],
     ["static AI Gateway key", { AI_GATEWAY_API_KEY: "nope" }],
     ["Microsandbox image", { APP_BUILDER_SANDBOX_IMAGE: "latest" }],
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture value exercises sandbox environment filtering.
     ["Microsandbox home", { MSB_HOME: "/tmp/msb" }],
     ["wrong backend", { APP_BUILDER_SANDBOX_PROVIDER: "microsandbox" }],
     ["state recovery", { WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "1" }],

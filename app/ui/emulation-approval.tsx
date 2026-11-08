@@ -15,7 +15,7 @@ export function VercelMark({ size = 20 }: { size?: number }) {
   );
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line sonarjs/function-name, eslint/func-style -- React components use PascalCase names for JSX and diagnostics. Preserve function declaration hoisting and initialization timing.
 function ProviderMark({ provider }: { provider: EmulatedProvider }) {
   return provider === "github" ? <FaGithub aria-hidden="true" size={20} /> : <VercelMark />;
 }

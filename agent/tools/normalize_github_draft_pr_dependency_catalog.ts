@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
 import { defineTool } from "eve/tools";
 import { z } from "zod";

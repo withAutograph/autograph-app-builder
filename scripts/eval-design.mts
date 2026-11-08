@@ -116,6 +116,7 @@ async function main() {
       "packages/design-systems/core/tokens/theme.css",
     ),
     "utf-8",
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
   ).catch(() => {
     limitations.push("Reference theme could not be read; token evidence is incomplete.");
     return "";
@@ -123,12 +124,14 @@ async function main() {
   const reference = await readReference(referenceRoot);
   limitations.push(...reference.limitations);
   const sourceFiles = hasNonemptyOption(values["source-dir"])
-    ? await sources(path.resolve(values["source-dir"])).catch(() => {
+    ? // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+      await sources(path.resolve(values["source-dir"])).catch(() => {
         limitations.push("Generated source could not be read.");
         return [];
       })
     : [];
   // A read-only candidate inventory, not proof of rendered component identity.
+  // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
   const sharedFiles = await sources(path.join(referenceRoot, "packages", "design-systems")).catch(
     () => null,
   );
@@ -158,6 +161,7 @@ async function main() {
   const scenarios = hasNonemptyOption(scenarioPath)
     ? scenariosSchema.parse(
         JSON.parse(
+          // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
           await readFile(scenarioPath, "utf-8").catch((error: unknown) => {
             if (
               !hasNonemptyOption(values.scenario) &&
@@ -204,6 +208,7 @@ async function main() {
   );
   let referenceCommit: string | null = null;
   try {
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
     referenceCommit = execFileSync("git", ["-C", referenceRoot, "rev-parse", "HEAD"], {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"],
@@ -214,6 +219,7 @@ async function main() {
   const catalog = await readFile(
     path.join(referenceRoot, "docs/app-builder-ui-catalog.json"),
     "utf-8",
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
   ).catch(() => "");
   const measured = {
     adherence,
@@ -292,6 +298,7 @@ async function main() {
 // oxlint-disable-next-line promise/prefer-await-to-callbacks
 // Keep the CLI's terminal error handler attached to the promise.
 // oxlint-disable-next-line promise/prefer-await-to-then
+// oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
 main().catch((error: unknown) => {
   // Do not print network errors that can contain secret preview query strings.
   console.error(

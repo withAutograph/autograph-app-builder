@@ -36,6 +36,7 @@ const hook = createReleaseSandboxComputeHook({
   releaseLease: mocks.release,
 });
 
+// oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The hook fixture supplies only the session and sandbox operations under test.
 const context = {
   getSandbox: () => Promise.resolve({ id: "sandbox", stop: mocks.stop }),
   session: { auth: {}, id: "session" },

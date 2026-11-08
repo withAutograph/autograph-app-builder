@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 
 const maintenance = vi.hoisted(() => ({ cleanup: vi.fn() }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../lib/builder-drafts/deployment dependency used by this test.
 vi.mock("../lib/builder-drafts/deployment", () => ({
   deleteInactiveBuilderDraftsForMaintenance: maintenance.cleanup,
 }));

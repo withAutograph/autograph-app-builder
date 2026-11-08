@@ -11,7 +11,7 @@ import type { BetterFetchError } from "better-auth/react";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line sonarjs/function-name, eslint/func-style -- React components use PascalCase names for JSX and diagnostics. Preserve function declaration hoisting and initialization timing.
 export function ErrorToaster() {
   const queryClient = useQueryClient();
 
@@ -33,10 +33,12 @@ export function ErrorToaster() {
       }
 
       const err = error as BetterFetchError;
+      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       if (err?.error?.code === "EMAIL_NOT_VERIFIED") {
         return;
       }
       if (err?.error) {
+        // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-argument -- Preserve the existing auth error passed to the toast.
         toast.error(err.error.message);
       }
     };
@@ -64,11 +66,13 @@ export function ErrorToaster() {
 
       const err = error as BetterFetchError;
       if (
+        // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
         err.error?.code === "EMAIL_NOT_VERIFIED" &&
         !matchMutation({ mutationKey: oneTapMutationKeys.prompt }, mutation)
       ) {
         return;
       }
+      // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/prefer-nullish-coalescing, typescript/no-unsafe-argument -- Preserve auth error messaging and its empty-message fallback.
       toast.error(err.error?.message || err.message);
     };
 

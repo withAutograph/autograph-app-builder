@@ -1,5 +1,6 @@
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Pass the complete database schema to the auth adapter.
 import * as databaseSchema from "../db/schema";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { createPreviewOAuthServer, readPreviewOAuthRuntimeConfig } from "./preview-oauth-runtime";
@@ -42,6 +43,7 @@ function getPreviewOAuthDeploymentRuntime(
     providerEmulation = readProviderEmulation(environment);
   } catch (error) {
     const invalidFields =
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       typeof error === "object" &&
       error !== null &&
       "issues" in error &&
@@ -49,7 +51,8 @@ function getPreviewOAuthDeploymentRuntime(
         ? error.issues
             .map((issue) =>
               typeof issue === "object" && issue !== null && "path" in issue
-                ? String((issue as { path: unknown[] }).path[0] ?? "unknown")
+                ? // oxlint-disable-next-line typescript/no-base-to-string -- Preserve string coercion of arbitrary validation-path values.
+                  String((issue as { path: unknown[] }).path[0] ?? "unknown")
                 : "unknown",
             )
             .join(",")

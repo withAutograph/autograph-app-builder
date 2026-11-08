@@ -1,3 +1,4 @@
+/* oxlint-disable github/filenames-match-regex, unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
@@ -263,6 +264,7 @@ export default defineTool({
           ? Promise.resolve(null)
           : ctx
               .getSandbox()
+              // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
               .then((sandbox) => sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` })),
       review,
       sourceReceipt,

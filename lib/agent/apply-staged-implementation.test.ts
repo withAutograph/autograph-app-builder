@@ -6,6 +6,7 @@ import type { ApprovalPolicy } from "eve/tools/approval";
 import applyAppCreation from "../../agent/tools/apply_app_creation";
 
 const mocks = vi.hoisted(() => {
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   const current: Record<string, unknown> = {};
   return {
     current,
@@ -13,34 +14,42 @@ const mocks = vi.hoisted(() => {
     wrap: vi.fn(),
   };
 });
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled eve/tools dependency used by this test.
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled eve/context dependency used by this test.
 vi.mock("eve/context", () => ({
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- The state fixture retains arbitrary callback values.
   defineState: (_name: string, initial: () => unknown) => {
     let state = initial();
     return {
       get: () => state,
+      // oxlint-disable-next-line anti-slop/no-unknown-returns -- The state fixture retains arbitrary callback values.
       update: (change: (current: unknown) => unknown) => {
         state = change(state);
       },
     };
   },
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./workflow-state dependency used by this test.
 vi.mock("./workflow-state", () => ({
   APP_BUILDER_WORKFLOW_VERSION: 1,
   appBuilderWorkflowState: { get: () => mocks.current },
   updateExactWorkflow: vi.fn(),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./apply-implementation-files dependency used by this test.
 vi.mock("./apply-implementation-files", async (original) => ({
   ...(await original()),
   withImplementationFiles: mocks.wrap,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../repository/target-apply dependency used by this test.
 vi.mock("../repository/target-apply", () => ({
   executeProposalBoundApply: mocks.execute,
   fixtureApplyCommandExecutor: vi.fn(),
   inspectFixtureApplyOverlay: vi.fn(),
   sandboxApplyCommandExecutor: vi.fn(),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../testing/test-capability dependency used by this test.
 vi.mock("../testing/test-capability", () => ({ hasTestCapability: () => false }));
 type AuthoredApprovalPolicy = Extract<
   NonNullable<typeof applyAppCreation.approval>,

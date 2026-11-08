@@ -90,6 +90,7 @@ const fixture = (existing?: "main" | "provider-default" | "historical-main") => 
   });
   const file = (name: string) =>
     path.join(checkout, name.replace(/^\/workspace\/repository\//u, ""));
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep this helper scoped to its fixture or invocation.
   const unsupported = async (): Promise<never> => {
     throw new Error("Unused Sandbox port");
   };

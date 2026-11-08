@@ -5,6 +5,7 @@ import { setTimeout } from "node:timers/promises";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Pass the complete database schema to Drizzle.
 import * as databaseSchema from "../../../../lib/db/schema";
 import type { HostedPrincipal } from "../../../../lib/eve/hosted-auth";
 import { reconcileExpiredSandboxLeases } from "../../../../lib/sandbox/execution-lease";

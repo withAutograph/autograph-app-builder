@@ -4,7 +4,7 @@ import {
   unavailableResponse,
 } from "@/lib/mcp/request-auth";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line sonarjs/function-name, eslint/func-style -- Next.js discovers this named HTTP method export. Preserve function declaration hoisting and initialization timing.
 export function GET(): Response {
   try {
     const metadata = protectedResourceMetadata(readHostedMcpAuthConfig(process.env));
@@ -19,7 +19,7 @@ export function GET(): Response {
   }
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line sonarjs/function-name, eslint/func-style -- Next.js discovers this named HTTP method export. Preserve function declaration hoisting and initialization timing.
 export function OPTIONS(): Response {
   return new Response(null, {
     headers: {

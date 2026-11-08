@@ -96,12 +96,14 @@ export interface HostedBuilderHandoffRuntime {
     handoffId: string;
     requestDigest: string;
     sessionId: string;
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep the injected session result untrusted at this boundary.
   }) => Promise<unknown>;
   recheckRepositoryAccess: (input: {
     principal: HostedPrincipal;
     repository: string;
     sourceHandoffId?: string;
   }) => Promise<
+    // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
     | {
         status: "ready";
       }
@@ -466,6 +468,7 @@ export function createAutographMcpHandler(
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function adapterMode(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
 ): "local" | "hosted" | "unconfigured" | "invalid" {
   const local = environment.APP_BUILDER_LOCAL_ADAPTER;
   const hosted = environment.EVE_HOSTED_ADAPTER;
@@ -562,6 +565,7 @@ async function requiredScopesForRequest(request: Request): Promise<string[]> {
   try {
     const body: unknown = await request.clone().json();
     if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       typeof body === "object" &&
       body !== null &&
       "method" in body &&

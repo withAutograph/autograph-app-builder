@@ -211,6 +211,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
         }
         let phase: PublicReleaseEffect | "observe-production" = bindProductionRuntimeEffect;
         try {
+          // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Apply approved release effects in order and skip completed effects.
           for (const effect of plan.effects) {
             phase = effect;
             await authorize(invocation, plan, true);

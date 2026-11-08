@@ -3,6 +3,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { readProductionNavigationRuntimeConfig } from "./production-navigation";
 
 const artifact = vi.hoisted(() => ({ productionNavigationArtifact: false }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./production-navigation-artifact dependency used by this test.
 vi.mock("./production-navigation-artifact", () => artifact);
 
 const fixture = {

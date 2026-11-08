@@ -28,6 +28,7 @@ export const sandboxLeaseAdvisoryKey = (principal: HostedPrincipal, adapterSessi
 
 const postgresNowEpochMs = async (database: Transaction) => {
   const rows = await database.execute(sql`select clock_timestamp() as "database_now"`);
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The driver may return either an array or a rows wrapper for this query.
   const result = rows as unknown as
     | readonly [{ database_now: Date | string }]
     | { rows: readonly [{ database_now: Date | string }] };
@@ -129,6 +130,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
     return await database.transaction(async (transaction) => {
       await lockExactLease(transaction, principal, input.adapterSessionId);
       const nowEpochMs = await postgresNowEpochMs(transaction);
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Read the lease after obtaining the transaction clock.
       const existing = await exactLease(transaction, principal, input.adapterSessionId, true);
       if (existing?.state === "active" && existing.expiresAtEpochMs > nowEpochMs) {
         if (
@@ -182,6 +184,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
   async assertCurrent(input) {
     return await database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Read the lease after obtaining the transaction clock.
       const lease = await exactLease(transaction, input.principal, input.adapterSessionId);
       if (lease === null || lease.state !== "active" || lease.expiresAtEpochMs <= nowEpochMs) {
         throw new Error(staleLeaseMessage);
@@ -220,7 +223,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
           epoch: current.state === "orphaned" ? current.epoch + 1 : current.epoch,
           state: "orphaned",
         });
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Update lease records sequentially within the transaction.
         const updated = await transaction
           .update(sandboxExecutionLeases)
           .set(leaseValues(lease))
@@ -243,6 +246,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
   heartbeat(input) {
     return database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Read the lease after obtaining the transaction clock.
       const current = await exactLease(transaction, input.principal, input.adapterSessionId, true);
       if (
         current === null ||
@@ -272,6 +276,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
   release(input) {
     return database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Read the lease after obtaining the transaction clock.
       const current = await exactLease(transaction, input.principal, input.adapterSessionId, true);
       if (current === null || current.epoch !== input.epoch) {
         throw new Error("The sandbox execution lease epoch is stale.");
@@ -306,6 +311,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
   releaseCurrent(input) {
     return database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Read the lease after obtaining the transaction clock.
       const current = await exactLease(transaction, input.principal, input.adapterSessionId, true);
       if (current === null) {
         return null;
@@ -346,6 +352,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
   settleRecovery(input) {
     return database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Read the lease after obtaining the transaction clock.
       const current = await exactLease(
         transaction,
         input.lease.principal,

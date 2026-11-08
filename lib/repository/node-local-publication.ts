@@ -58,6 +58,7 @@ const unavailableDiagnosticLog = "an unavailable private diagnostic log";
 const localPublicationGitPath = "app-builder/local-publication.json";
 
 interface FileState {
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   kind: "absent" | "regular" | "directory" | "symlink" | "special";
   mode?: string;
   materializedPath?: string;
@@ -171,6 +172,7 @@ const runGitCapture = async function runGitCapture(
   args: readonly string[],
 ): Promise<GitProcessResult> {
   const diagnosticCapture = await startGitDiagnosticCapture();
+  // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
   const child = spawn("git", [...args], {
     env: fixedGitEnvironment(),
     stdio: ["ignore", "pipe", "pipe"],
@@ -201,6 +203,7 @@ const fixedGitApply = async function fixedGitApply(
 ): Promise<void> {
   const diagnosticCapture = await startGitDiagnosticCapture();
   const child = spawn(
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
     "git",
     [
       "-c",
@@ -340,6 +343,7 @@ const buildExactGitPatch = async function buildExactGitPatch(input: {
       // oxlint-disable-next-line eslint/no-await-in-loop -- keep each private diagnostic capture scoped to one streamed patch.
       const diagnosticCapture = await startGitDiagnosticCapture();
       const child = spawn(
+        // oxlint-disable-next-line sonarjs/no-os-command-from-path -- This operation invokes the environment-provided git executable.
         "git",
         ["diff", "--no-index", "--binary", "--no-prefix", "--no-renames", "--", "old", "new"],
         { cwd: item, env: fixedGitEnvironment(), stdio: ["ignore", "pipe", "pipe"] },
@@ -372,6 +376,7 @@ const buildExactGitPatch = async function buildExactGitPatch(input: {
     await rm(scratch, { force: true, recursive: true });
     throw error;
   } finally {
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await patchFile.close().catch(() => null);
   }
 };
@@ -440,6 +445,7 @@ export const parseGitStatusV2 = function parseGitStatusV2(
 ): readonly ParsedGitStatus[] {
   const records = output.split("\0");
   const result: ParsedGitStatus[] = [];
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Parse Git status records while preserving record order.
   for (let index = 0; index < records.length; index += 1) {
     const record = records[index];
     if (record === "" || record.startsWith("# ") || record.startsWith("! ")) {
@@ -572,11 +578,15 @@ export const inspectLocalPublicationDestination =
       throw new Error("The selected destination is not the exact original source checkout.");
     }
     const [headSha, headTree, headReference, gitDirectoryValue] = await Promise.all([
+      // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
       git(canonicalPath, ["rev-parse", "HEAD"]).then((value) => value.trim()),
+      // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
       git(canonicalPath, ["rev-parse", "HEAD^{tree}"]).then((value) => value.trim()),
+      // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
       git(canonicalPath, ["rev-parse", "--symbolic-full-name", "HEAD"]).then((value) =>
         value.trim(),
       ),
+      // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
       git(canonicalPath, ["rev-parse", "--absolute-git-dir"]).then((value) => value.trim()),
     ]);
     const gitDirectoryPath = await realpath(gitDirectoryValue);
@@ -584,6 +594,7 @@ export const inspectLocalPublicationDestination =
       lstat(canonicalPath),
       lstat(gitDirectoryPath),
     ]);
+    // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep repository observations and publication steps in their established order.
     const indexPath = await gitOwnedPath(canonicalPath, "index");
     const indexState = await fileState(indexPath);
     if (indexState.kind !== "regular" || indexState.digest === undefined) {
@@ -726,11 +737,13 @@ const atomicWrite = async function atomicWrite(
     await handle.sync();
   } catch (error) {
     await handle.close();
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await unlink(temporary).catch(() => null);
     throw error;
   }
   await handle.close();
   if (expectedPreimage !== undefined && !sameFileState(await fileState(path), expectedPreimage)) {
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await unlink(temporary).catch(() => null);
     throw new Error("The file changed while its atomic replacement was prepared.");
   }
@@ -758,6 +771,7 @@ const createInitialJournal = async function createInitialJournal(
     await link(candidate, path);
     await syncDirectory(nodePath.dirname(path));
   } finally {
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await unlink(candidate).catch(() => null);
   }
 };
@@ -801,6 +815,7 @@ const acquireLock = async function acquireLock(root: string): Promise<() => Prom
     throw new Error("A local-publication attempt is already in progress.");
   }
   return async () => {
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await rmdir(lockPath).catch(() => null);
   };
 };
@@ -875,7 +890,9 @@ export const verifyPublishedChangeSet = async function verifyPublishedChangeSet(
   }
   const root = await resolveAllowedRepository(input.receipt.destinationPath);
   const [headSha, headTree] = await Promise.all([
+    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
     git(root, ["rev-parse", "HEAD"]).then((value) => value.trim()),
+    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
     git(root, ["rev-parse", "HEAD^{tree}"]).then((value) => value.trim()),
   ]);
   if (headSha !== input.receipt.baseSha || headTree !== input.receipt.sourceTree) {
@@ -1028,11 +1045,12 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
     await input.hooks?.afterPendingJournal?.();
     for (let index = 0; index < input.proposal.executionPaths.length; index += 1) {
       const path = input.proposal.executionPaths[index];
+      // oxlint-disable-next-line react-doctor/js-index-maps -- Preserve first-match lookup after each awaited hook.
       const change = input.proposal.changes.find((candidate) => candidate.path === path);
       if (change === undefined) {
         throw new Error(`Missing approved change for ${path}.`);
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Run mutation hooks in execution order.
       await input.hooks?.beforeMutation?.(change.path, index);
     }
     await input.hooks?.beforeGitApply?.();
@@ -1061,7 +1079,7 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
     await input.hooks?.afterGitApply?.();
     for (let index = 0; index < input.proposal.executionPaths.length; index += 1) {
       const path = input.proposal.executionPaths[index];
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Run mutation hooks in execution order.
       await input.hooks?.afterMutation?.(path, index);
     }
     for (const change of input.proposal.changes) {
@@ -1122,6 +1140,7 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
       const observedPost: string[] = [];
       for (let index = 0; index < input.proposal.executionPaths.length; index += 1) {
         const path = input.proposal.executionPaths[index];
+        // oxlint-disable-next-line react-doctor/js-index-maps -- Re-read the first match during asynchronous recovery.
         const change = input.proposal.changes.find((candidate) => candidate.path === path);
         if (change === undefined) {
           uncertainPaths.push(path);
@@ -1178,6 +1197,7 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
       }
       const conflictedPathSet = new Set(conflictedPaths);
       for (const path of observedPost) {
+        // oxlint-disable-next-line react-doctor/js-index-maps -- Preserve first-match lookup during per-path readback.
         const change = input.proposal.changes.find((candidate) => candidate.path === path);
         if (change === undefined) {
           conflictedPaths.push(path);

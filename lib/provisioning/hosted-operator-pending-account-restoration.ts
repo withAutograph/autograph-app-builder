@@ -394,6 +394,7 @@ export const restorePendingAccountPreparation = async (
   if (input.operation !== "prepare" || proposal.stage !== "auth-participants") {
     return null;
   }
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Retry restoration against the current protected journal state.
   for (;;) {
     const row = await deps.store.read(context);
     if (

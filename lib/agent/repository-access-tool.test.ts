@@ -5,9 +5,10 @@ import type { RepositoryAccessRuntime } from "./deployment-repository-access-run
 import { resolveRepositoryAccessForTool } from "./repository-access-tool";
 import type { RepositoryAccessToolContext } from "./repository-access-tool";
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled eve/context dependency used by this test.
 vi.mock("eve/context", () => ({
   defineState: () => ({
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- The state test double must receive its undefined initial value.
+    // oxlint-disable-next-line unicorn/no-useless-undefined, anti-slop/no-unknown-returns -- The state fixture preserves the callback's arbitrary result. The state test double must receive its undefined initial value.
     update: (fn: (value: undefined) => unknown) => fn(undefined),
   }),
 }));

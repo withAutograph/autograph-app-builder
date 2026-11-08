@@ -74,28 +74,40 @@ describe("separate native operator host", () => {
     expect(readFileSync(path.join(root, "vercel.json"), "utf-8")).toContain("next build");
   });
   it("the actual entrypoint returns503 until a real factory is statically wired, without readiness claims", async () => {
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
     const response = await entrypoint.fetch(request());
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
     expect(response.status).toBe(503);
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
     expect(response.headers.get("cache-control")).toBe("no-store");
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
     expect(await response.json()).toEqual({ code: "protected_operator_required" });
   });
   it.each(["/v1/repository-production", "/v1/repository-production/access/complete"])(
     "dispatches Production ingress independently of Preview configuration: %s",
     async (route) => {
+      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       const response = await entrypoint.fetch(
         new Request(`https://operator.example.test${route}`, { method: "POST" }),
       );
+      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       expect(response.status).toBe(503);
+      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       expect(response.headers.get("cache-control")).toBe("no-store");
+      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       expect(await response.json()).toEqual({ code: "app_access_unavailable" });
     },
   );
   it("dispatches the exact possession ingress before full runtime initialization", async () => {
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
     const response = await entrypoint.fetch(
       new Request("https://operator.example.test/v1/key-custody/possession"),
     );
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
     expect(response.status).toBe(503);
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
     expect(response.headers.get("cache-control")).toBe("no-store");
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
     expect(await response.json()).toEqual({ error: "key_custody_unavailable" });
   });
   it.each([

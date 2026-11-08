@@ -363,6 +363,7 @@ export function createPasskeyOnboardingPlugin(input: {
             // Better Auth keeps registration context in its challenge record;
             // createSession is the parsed verification-body marker that
             // distinguishes first-account onboarding from Settings enrollment.
+            // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
             if (ctx.body?.createSession !== true) {
               return;
             }
@@ -402,6 +403,7 @@ export function createPasskeyOnboardingPlugin(input: {
             session: {
               create: {
                 async before(
+                  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
                   session: Record<string, unknown> & { userId: string },
                   ctx: { path?: string; context: { adapter: unknown } } | null,
                 ) {

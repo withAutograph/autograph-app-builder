@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { executeProductReadback } from "./product-behavior";
 
 const run = async (
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   mode: "stored" | "fake" | "wrong" | "redirect" | "invalid" | "auth",
   expired = false,
 ) => {
@@ -24,6 +25,7 @@ const run = async (
         response.writeHead(307, { location: "https://outside.test/leak" });
       } else {
         if (mode === "stored") {
+          // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
           stored = JSON.parse(body).value;
         }
         response.writeHead(200, { "content-type": "application/json" });
@@ -63,6 +65,7 @@ const run = async (
     throw new Error("Missing server address");
   }
   const transport: typeof fetch = (url, options) => {
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
     const target = new URL(String(url));
     expect(target.origin).toBe("https://preview.test");
     expect(options?.redirect).toBe("manual");
@@ -232,6 +235,7 @@ it("validates the complete streamed read even when an early marker matches", asy
         );
       }
       if (options?.method === "POST") {
+        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
         const submitted: unknown = JSON.parse(String(options.body));
         if (typeof submitted !== "object" || submitted === null || !("value" in submitted)) {
           throw new Error("Invalid test request");

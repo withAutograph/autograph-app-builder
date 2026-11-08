@@ -19,6 +19,7 @@ export function AuthContinuity({
   action?: "sign-in" | "sign-up";
 }) {
   const hasSavedBrief = useSyncExternalStore(
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     () => () => null,
     () => (sessionStorage.getItem(anonymousBriefStorageKey) ?? "").trim().length > 0,
     () => false,

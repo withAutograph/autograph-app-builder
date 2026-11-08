@@ -85,7 +85,7 @@ export function gateAEvalWorkflowBodyTimeout(profile: unknown): string | undefin
   return name === "sandbox" || name === "hosted-artifact" ? "360000" : undefined;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// eslint-disable-next-line eslint/func-style, anti-slop/no-unsafe-dictionary-type -- Preserve function declaration hoisting and initialization timing.; Preserve the existing open-ended value contract.
 function canonical(proof: Record<string, unknown>) {
   return JSON.stringify(
     Object.fromEntries([
@@ -257,6 +257,7 @@ export async function runWithTestCapability(options: {
   let buffered = "";
   let answered = false;
   authorization.write(`${JSON.stringify({ publicKey: publicKeySource, version: 2 })}\n`);
+  // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
   const timeout = setTimeout(() => child.kill("SIGKILL"), 10_000);
   timeout.unref();
   authorization.setEncoding("utf-8");

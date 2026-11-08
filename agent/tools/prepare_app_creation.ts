@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 /* oxlint-disable github/filenames-match-regex -- Preserve the existing registered Eve tool name and public workflow identity. */
 import { localSourcePrerequisiteResponse } from "@/lib/agent/local-source-prerequisite-response";
 import { PRIVATE_COMPUTE_PROFILE_ID } from "@/lib/sandbox/private-compute-profile";

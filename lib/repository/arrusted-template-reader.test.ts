@@ -25,6 +25,7 @@ function readerFetch(input?: {
   permissions?: Record<string, string>;
   repositorySelection?: "all" | "selected";
   tokenRepositoryIds?: number[];
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   repository?: Record<string, unknown>;
   totalCount?: number;
   status?: number;
@@ -32,6 +33,7 @@ function readerFetch(input?: {
   const calls: { url: string; init: RequestInit }[] = [];
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const implementation: typeof fetch = async (request, init = {}) => {
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
     const url = String(request);
     calls.push({ init, url });
     if (url.endsWith("/app/installations/456/access_tokens")) {
@@ -90,6 +92,7 @@ describe("Arrusted private template reader", () => {
     const tokenCall = mock.calls.find(({ url }) =>
       url.endsWith("/app/installations/456/access_tokens"),
     );
+    // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
     expect(JSON.parse(String(tokenCall?.init.body))).toEqual({
       permissions: { contents: "read" },
       repository_ids: [ARRUSTED_TEMPLATE_REPOSITORY_ID],

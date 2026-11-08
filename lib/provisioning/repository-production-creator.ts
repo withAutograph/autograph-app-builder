@@ -220,7 +220,9 @@ export const createRepositoryProductionCreator = (
   const frameFor = (row: RepositoryProductionRow): CreatorFrame | undefined => {
     const frame = originalFrameFor(row);
     const choice = recipientFor(row);
-    if (frame === undefined || choice === undefined) return frame;
+    if (frame === undefined || choice === undefined) {
+      return frame;
+    }
     if (
       choice.baseFrameDigest === undefined
         ? frame.email !== choice.email
@@ -237,11 +239,13 @@ export const createRepositoryProductionCreator = (
   };
   const dispatchedCreate = (row: RepositoryProductionRow) =>
     row.record.workerCheckpoints.some((value) => {
-      if (!z.object({ kind: z.literal(CREATOR_CREATE_DISPATCH_KIND) }).safeParse(value).success)
+      if (!z.object({ kind: z.literal(CREATOR_CREATE_DISPATCH_KIND) }).safeParse(value).success) {
         return false;
+      }
       const dispatch = createDispatchSchema.parse(value);
-      if (dispatch.invitationId !== repositoryProductionOperationRef(row.record.scope))
+      if (dispatch.invitationId !== repositoryProductionOperationRef(row.record.scope)) {
         throw new Error("repository_production_creator_owner_mismatch");
+      }
       return true;
     });
   const canChoose = (row: RepositoryProductionRow) =>
@@ -258,8 +262,9 @@ export const createRepositoryProductionCreator = (
     let row = await current(context);
     const previous = recipientFor(row);
     if (previous?.requestId === requestId) {
-      if (previous.email !== selectedEmail)
+      if (previous.email !== selectedEmail) {
         throw new Error("repository_production_creator_recipient_mismatch");
+      }
       return;
     }
     if (
@@ -267,9 +272,12 @@ export const createRepositoryProductionCreator = (
         const choice = recipientSchema.safeParse(value);
         return choice.success && choice.data.requestId === requestId;
       })
-    )
+    ) {
       throw new Error("repository_production_creator_recipient_mismatch");
-    if (!canChoose(row)) throw new RepositoryProductionCreatorRecipientLockedError();
+    }
+    if (!canChoose(row)) {
+      throw new RepositoryProductionCreatorRecipientLockedError();
+    }
     const original = originalFrameFor(row);
     // Only an authoritative absence allows changing delivery. An uncertain read never authorizes replacement.
     if (
@@ -278,8 +286,9 @@ export const createRepositoryProductionCreator = (
       throw new RepositoryProductionCreatorRecipientLockedError();
     }
     row = await current(context);
-    if (!canChoose(row) || recipientFor(row)?.requestId !== previous?.requestId)
+    if (!canChoose(row) || recipientFor(row)?.requestId !== previous?.requestId) {
       throw new RepositoryProductionCreatorRecipientLockedError();
+    }
     await context.checkpoint({
       version: 1,
       kind: CREATOR_RECIPIENT_KIND,
@@ -469,6 +478,7 @@ export const createRepositoryProductionCreator = (
       const requested = row.record.intent.creatorEmail;
       const choice = recipientFor(row);
       if (
+        // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
         requested !== undefined &&
         frameFor(row)?.email !== requested &&
         choice?.email !== requested &&
@@ -538,7 +548,9 @@ export const createRepositoryProductionCreator = (
         frame = { ...frame, renewal };
         await context.assertCurrent();
         const original = originalFrameFor(row);
-        if (original === undefined) throw new Error("repository_production_creator_setup_missing");
+        if (original === undefined) {
+          throw new Error("repository_production_creator_setup_missing");
+        }
         await context.checkpoint({ ...original, renewal });
       }
       await ensure(context, frame);
@@ -550,7 +562,9 @@ export const createRepositoryProductionCreator = (
         return { state: "required" };
       }
       const value = await read(row, frame);
-      if (value === undefined) return { state: "required" };
+      if (value === undefined) {
+        return { state: "required" };
+      }
       if (isVerified(value, frame) && value.verifiedActorId !== null) {
         return {
           kind: "managed-invitation",
@@ -581,7 +595,7 @@ export const createRepositoryProductionCreator = (
         };
       }
       const value = await read(row, frame);
-      if (value === undefined)
+      if (value === undefined) {
         return {
           status: "failed" as const,
           email: frame.email,
@@ -590,6 +604,7 @@ export const createRepositoryProductionCreator = (
           message:
             "Your app sign-in setup has not finished. Retry setup to continue with your saved app.",
         };
+      }
       if (isVerified(value, frame)) {
         return {
           status:

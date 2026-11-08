@@ -15,6 +15,7 @@ it("archives desktop variants and retains historical names", () => {
 it("does not interpret names as paths or HTML", () => {
   for (const name of [
     "../desktop-0",
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises screenshot archive path handling.
     "/tmp/desktop-0",
     "x<img>-0",
     "desktop?secret-0",

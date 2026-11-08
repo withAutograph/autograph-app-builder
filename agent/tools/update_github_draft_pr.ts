@@ -1,3 +1,4 @@
+/* oxlint-disable github/filenames-match-regex, unicorn/filename-case -- Eve derives the public tool identifier from this existing filename. */
 import { publishedDraftRepairCompletions } from "@/lib/agent/draft-reconciliation-state";
 import { updatePublishedDraftRepair } from "@/lib/agent/published-draft-repair-publication";
 import { defineTool } from "eve/tools";

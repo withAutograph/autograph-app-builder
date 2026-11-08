@@ -46,6 +46,7 @@ const installCatalogFixture = () => {
   installed = true;
 };
 
+// oxlint-disable-next-line sonarjs/function-name -- Next.js discovers this named HTTP method export.
 export const GET = async () => {
   await connection();
   installCatalogFixture();
@@ -53,6 +54,7 @@ export const GET = async () => {
   return Response.json({ models, upstreamCalls }, { headers: { "Cache-Control": "no-store" } });
 };
 
+// oxlint-disable-next-line sonarjs/function-name -- Next.js discovers this named HTTP method export.
 export const POST = async (request: Request) => {
   installCatalogFixture();
   const text = await request.text();

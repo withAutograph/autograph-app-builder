@@ -6,7 +6,7 @@ const requestHandler = createDeploymentPrototypePreviewRequestHandler({
   workloadIdentity: createVercelWorkloadIdentity(),
 });
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line sonarjs/function-name, eslint/func-style -- Next.js discovers this named HTTP method export. Preserve function declaration hoisting and initialization timing.
 export async function GET(
   request: Request,
   context: {

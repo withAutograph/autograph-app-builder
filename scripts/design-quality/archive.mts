@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-member-access -- Preserve the existing untyped input and rendering boundary. */
 import { copyFile, mkdir, readFile, readdir, writeFile as writeRawFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -34,6 +35,7 @@ if (
 }
 const input = path.resolve(values["report-dir"]);
 const report = JSON.parse(await readFile(path.join(input, "report.json"), "utf-8"));
+// oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing archived report JSON boundary.
 const timestamp = new Date(report.createdAt).toISOString();
 const date = timestamp.slice(0, 10);
 const time = timestamp.slice(11, 23).replaceAll(/[:.]/gu, "");
@@ -44,6 +46,7 @@ await mkdir(path.join(archiveRoot, date), { recursive: true });
 // A report is a historical observation: never silently replace an existing run.
 await mkdir(destination);
 for (const capture of report.captures) {
+  // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing archived report JSON boundary.
   const filename = captureFilename(capture.name);
   // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   await copyFile(path.join(input, filename), path.join(destination, filename));
@@ -56,6 +59,7 @@ report.archive = {
   note: "Saved generated preview; advisory model judgment, not human-calibrated ground truth. Local machine paths omitted.",
 };
 await writeFile(path.join(destination, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
+// oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing archived report JSON boundary.
 await writeFile(path.join(destination, "index.html"), renderReport(report));
 const md = (v: unknown) =>
   String(v).replaceAll(/[<>|]/gu, (c) => ({ "<": "&lt;", ">": "&gt;", "|": "\\|" })[c] ?? c);
@@ -90,6 +94,7 @@ if (report.adherence) {
     "",
     "| Dimension | Conforming | Nonconforming | Unassessed | Adherence |",
     "| --- | --- | --- | --- | --- |",
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing archived report JSON boundary.
     ...Object.entries(a.dimensions).map(([name, value]) => {
       const d = value as {
         conforming: number;
@@ -107,6 +112,7 @@ if (report.adherence) {
     "",
   );
 }
+// oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing archived report JSON boundary.
 for (const [axis, rating] of Object.entries(report.judge.ratings ?? {})) {
   const r = rating as { score: number; reason: string };
   lines.push(`| ${md(axis)} | ${r.score}/4 | ${md(r.reason)} |`);
@@ -131,6 +137,7 @@ lines.push(
   "| --- | --- | --- | --- |",
 );
 for (const capture of report.captures) {
+  // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing archived report JSON boundary.
   for (const [category, summary] of Object.entries(capture.styles?.categories ?? {})) {
     const s = summary as {
       counts: Record<string, number>;
@@ -139,6 +146,7 @@ for (const capture of report.captures) {
       coveragePercent: number | null;
     };
     lines.push(
+      // oxlint-disable-next-line typescript/no-unsafe-call -- Archive reads observations from the saved report without changing malformed-report behavior.
       `| ${md(capture.name)} | ${md(category)} | ${capture.styles.observations?.filter((o: { category: string; provenance: string; classification: string }) => o.category === category && o.provenance === "generated" && o.classification === "semantic-token-reference").length ?? s.counts["token-reference"] ?? 0}/${s.assessed} | ${s.coveragePercent ?? "n/a"}% (${s.assessed}/${s.total}) |`,
     );
   }

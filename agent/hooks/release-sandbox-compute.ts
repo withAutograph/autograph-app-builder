@@ -49,11 +49,8 @@ const releaseDependencies: ReleaseDependencies = {
 async function release(
   ctx: HookContext,
   reason:
-    | "turn-completed"
-    | "turn-cancelled"
-    | "turn-failed"
-    | "session-completed"
-    | "session-failed",
+    // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
+    "turn-completed" | "turn-cancelled" | "turn-failed" | "session-completed" | "session-failed",
   dependencies: ReleaseDependencies,
 ) {
   const environment = process.env;

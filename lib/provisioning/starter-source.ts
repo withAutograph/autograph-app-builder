@@ -126,6 +126,7 @@ function restrictedGit(args: string[], askpass?: { credentialFile: string; askpa
       },
     );
     const output: Buffer[] = [];
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     child.stdout.on("data", (chunk: Buffer) => output.push(chunk));
     child.once("error", reject);
     child.once("close", (code) => {

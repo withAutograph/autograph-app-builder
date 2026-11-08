@@ -70,7 +70,9 @@ export function ProviderButton({
           requestSignUp: view === "signUp",
         },
         {
-          onSuccess: () => navigate({ to: callbackURL.pathname + callbackURL.search }),
+          onSuccess: () =>
+            // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+            navigate({ to: callbackURL.pathname + callbackURL.search }),
         },
       );
       return;

@@ -30,7 +30,7 @@ export async function ensureSandboxDirectories(
     const batch = directories.slice(index, index + DIRECTORY_BATCH_SIZE);
     let result: Awaited<ReturnType<SandboxSession["run"]>>;
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- prepare each directory batch in order.
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Prepare each sandbox directory batch in order.
       result = await sandbox.run({
         command: `mkdir -p ${batch.map(quoteSandboxArgument).join(" ")}`,
         workingDirectory: "/workspace",

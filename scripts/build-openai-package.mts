@@ -40,6 +40,7 @@ if (hasConnectionId && hasSuppliedEndpoint) {
   throw new Error("Pass either --connection-id or --endpoint, not both.");
 }
 
+// oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
 if (portable.version !== AUTOGRAPH_PACKAGE_VERSION) {
   throw new Error(`plugin.json version must be exactly ${AUTOGRAPH_PACKAGE_VERSION}.`);
 }
@@ -50,23 +51,30 @@ if (hasSuppliedEndpoint) {
 
 const portableMcpPath = path.resolve("mcp.json");
 const portableMcp = JSON.parse(await readFile(portableMcpPath, "utf-8"));
+// oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-argument -- Preserve the existing package manifest JSON boundary.
 const portableServerNames = Object.keys(portableMcp.mcpServers ?? {});
 if (portableServerNames.length !== 1 || portableServerNames[0] !== AUTOGRAPH_MCP_SERVER_NAME) {
   throw new Error(`mcp.json must declare exactly one ${AUTOGRAPH_MCP_SERVER_NAME} MCP server.`);
 }
+// oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
 const portableServer = portableMcp.mcpServers[AUTOGRAPH_MCP_SERVER_NAME];
 if (
   !portableServer ||
   typeof portableServer !== "object" ||
+  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
   portableServer.type !== "streamable-http"
 ) {
   throw new Error(`${AUTOGRAPH_MCP_SERVER_NAME} must use the streamable-http transport.`);
 }
+// oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
 assertAutographMcpEndpoint(portableServer.url, { release: false });
 
 const manifestBase = {
+  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
   author: portable.author,
+  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
   description: portable.description,
+  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
   homepage: portable.homepage,
   interface: {
     brandColor: "#111827",
@@ -78,6 +86,7 @@ const manifestBase = {
       "Build an event planning app for coordinating guests, schedules, and tasks",
       "Design a customer feedback app with a clear review workflow",
     ],
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
     developerName: portable.author.name,
     displayName: "Autograph App Builder",
     logo: "./assets/autograph-icon.png",
@@ -85,13 +94,19 @@ const manifestBase = {
       "Use Autograph App Builder to design, plan, create, validate, and separately publish apps in explicitly supported repositories.",
     screenshots: [],
     shortDescription: "Design and create apps with Autograph",
+    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
     websiteURL: portable.homepage,
   },
+  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
   keywords: portable.keywords,
+  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
   license: portable.license,
+  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
   name: portable.name,
+  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
   repository: portable.repository,
   skills: "./skills/",
+  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
   version: portable.version,
 };
 const manifest: typeof manifestBase & { apps?: string; mcpServers?: string } = manifestBase;
@@ -108,6 +123,7 @@ await writeFile(
   await formatWithOxfmt(".codex-plugin/plugin.json", JSON.stringify(manifest)),
 );
 if (hasEndpoint) {
+  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
   portableServer.url = endpoint;
   await writeFile(
     portableMcpPath,

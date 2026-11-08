@@ -28,6 +28,7 @@ describe("owned previous local preview Auth origin", () => {
       APP_DATABASE_URL: "postgres://private",
     };
     writeFileSync(file, JSON.stringify(contents), { mode: 0o600 });
+    // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
     const run = (target = file, optionalBrowserOrigin = false) =>
       spawnSync(
         process.execPath,

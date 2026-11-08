@@ -24,6 +24,7 @@ function validEmulatorRedirect(input: {
   }
   const destination = new URL(location);
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     destination.origin !== input.origin ||
     destination.pathname !== input.path ||
     destination.searchParams.getAll("code").length !== 1 ||
@@ -35,7 +36,7 @@ function validEmulatorRedirect(input: {
   return destination;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line sonarjs/function-name, eslint/func-style -- Next.js discovers this named HTTP method export. Preserve function declaration hoisting and initialization timing.
 export async function POST(request: Request, context: { params: Promise<{ provider: string }> }) {
   const { provider } = await context.params;
   let emulation;
@@ -52,6 +53,7 @@ export async function POST(request: Request, context: { params: Promise<{ provid
   const state = form.get("state");
   const phase = form.get("phase");
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     typeof state !== "string" ||
     state.length < 20 ||
     state.length > 2048 ||
@@ -111,6 +113,7 @@ export async function POST(request: Request, context: { params: Promise<{ provid
     const codeChallenge = form.get("code_challenge");
     const codeChallengeMethod = form.get("code_challenge_method");
     if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       clientId !== emulation.githubClientId ||
       redirectUri !== `${origin}/github/installations/callback` ||
       typeof codeChallenge !== "string" ||

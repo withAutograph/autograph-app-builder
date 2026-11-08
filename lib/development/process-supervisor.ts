@@ -9,7 +9,9 @@ type DevelopmentChild = NodeJS.EventEmitter &
 type DevelopmentSignal = "SIGINT" | "SIGTERM";
 
 type SignalTarget = Readonly<{
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Signal listener methods may return their host-specific value.
   once: (signal: DevelopmentSignal, listener: () => void) => unknown;
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Signal listener methods may return their host-specific value.
   off: (signal: DevelopmentSignal, listener: () => void) => unknown;
 }>;
 
@@ -48,6 +50,7 @@ export function waitForDevelopmentShutdown(signal: AbortSignal, exitCode: () => 
   if (signal.aborted) {
     return Promise.resolve({ code: exitCode(), kind: "stop" as const });
   }
+  // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
   return once(signal, "abort").then(() => ({ code: exitCode(), kind: "stop" as const }));
 }
 
@@ -59,6 +62,7 @@ export function developmentChildExit(child: DevelopmentChild) {
   if (child.signalCode !== null) {
     return Promise.resolve(1);
   }
+  // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
   return once(child, "exit").then(([code, signal]) => (code as number | null) ?? (signal ? 1 : 0));
 }
 
@@ -121,7 +125,9 @@ export async function stopDevelopmentChild(
     return;
   }
   const graceful = await Promise.race([
+    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
     exited.then(() => true),
+    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
     delay(gracefulTimeoutMs).then(() => false as const),
   ]);
   if (!graceful && child.exitCode === null && child.signalCode === null) {
@@ -142,8 +148,11 @@ export async function waitForDevelopmentPortRelease(
     const socket = createConnection({ host: "127.0.0.1", port });
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const occupied = await once(socket, "connect")
+      // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
       .then(() => true)
+      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       .catch(() => false)
+      // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
       .finally(() => socket.destroy());
     if (!occupied) {
       return;

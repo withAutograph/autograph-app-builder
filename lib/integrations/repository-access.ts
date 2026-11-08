@@ -143,7 +143,9 @@ export interface GitHubRepositoryAccessProvider {
   inspectInstallation: (input: {
     operation: "resolve-existing-source";
     requestedPermissions: z.infer<typeof readPermissionsSchema>;
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep external provider responses untrusted at this boundary.
   }) => Promise<unknown>;
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep external provider responses untrusted at this boundary.
   inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown>;
   inspectTargetAccess?: GitHubTargetAccessProvider["inspectTargetAccess"];
 }
@@ -230,9 +232,10 @@ export async function classifyGitHubRepositoryAccess(input: {
     installation: z.infer<typeof installationReadBackSchema>;
   }[] = [];
   let providerFailures = 0;
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Inspect provider bindings sequentially and retain failure accounting.
   for (const binding of active) {
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Inspect provider bindings in order.
       const provider = await input.providerFactory({
         authority,
         installation: binding,
@@ -340,6 +343,7 @@ export async function classifyGitHubRepositoryAccessWithTargetProof(input: {
   }
   const matches: ReadyRepositoryAccess[] = [];
   let providerFailures = 0;
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Check repository access sequentially for each authorized binding.
   for (const binding of active) {
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Provider authority is checked sequentially for each installation.

@@ -91,6 +91,7 @@ export const scenariosSchema = z.array(
 );
 export type Scenario = z.infer<typeof scenariosSchema>[number];
 export type Category = "color" | "typography" | "spacing" | "radius" | "border" | "shadow";
+// oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the dictionary open for the supported keys.
 export const properties: Record<string, Category> = {
   "background-color": "color",
   "border-top-color": "border",
@@ -308,6 +309,7 @@ export async function settleFiniteMotion(page: Page) {
       const iterations = timing?.iterations ?? 1;
       return Number.isFinite(iterations) && Number.isFinite(timing?.duration);
     });
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await Promise.all(finite.map((motion) => motion.finished.catch(() => null)));
   });
 }
@@ -520,6 +522,7 @@ export async function measureStyles(
           sourceURL?: string;
           sourceMapURL?: string;
         };
+        // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
       }) => headers.set(header.styleSheetId, header),
     );
     await session.send("DOM.enable");
@@ -535,11 +538,14 @@ export async function measureStyles(
       const header = headers.get(styleSheetId);
       const css = await session
         .send("CSS.getStyleSheetText", { styleSheetId })
+        // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
         .then((result: { text: string }) => result.text)
+        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
         .catch(() => "");
       const declared = /\/[*]#\s*sourceMappingURL=(?<url>[^\s*]+)\s*[*]\//u.exec(css)?.[1];
       // CDP may report optional URLs as empty strings. In that case the
       // stylesheet's sourceMappingURL comment is the only usable evidence.
+      // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty header falls back to the CSS source map reference.
       const url = header?.sourceMapURL || declared;
       let text: string | undefined;
       if (url?.startsWith("data:application/json") === true) {
@@ -556,6 +562,7 @@ export async function measureStyles(
         }
       } else if (url) {
         try {
+          // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- An empty stylesheet URL falls back to the page URL.
           const target = new URL(url, header?.sourceURL || page.url());
           // Source maps are diagnostic evidence, never a reason to contact an
           // unrelated origin from a preview capture.
@@ -574,12 +581,17 @@ export async function measureStyles(
         const parsed = text ? JSON.parse(text) : undefined;
         const hasValidSources =
           parsed &&
+          // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
           parsed.version === 3 &&
+          // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
           Array.isArray(parsed.sources) &&
+          // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-argument -- Pass source-map data to the existing string validation.
           allStrings(parsed.sources);
         if (
           hasValidSources &&
+          // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
           (parsed.sourceRoot === undefined || typeof parsed.sourceRoot === "string") &&
+          // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
           typeof parsed.mappings === "string"
         ) {
           map = parsed;
@@ -650,6 +662,7 @@ export async function measureStyles(
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const { model } = await session
         .send("DOM.getBoxModel", { nodeId })
+        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
         .catch(() => ({ model: null }));
       if (!model || model.width <= 0 || model.height <= 0) {
         continue;

@@ -70,6 +70,7 @@ export function assertBoundGhcrPayload(
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("GHCR provider returned malformed output.");
   }
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   const record = parsed as Record<string, unknown>;
   if (
     Object.keys(record).toSorted().join(",") !== "Secret,ServerURL,Username" ||
@@ -114,6 +115,7 @@ export function assertVerifiedGhcrLoginPayload(
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("GitHub keyring verification returned malformed output.");
   }
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   const record = parsed as Record<string, unknown>;
   if (
     Object.keys(record).toSorted().join(",") !== "Username,identityDigest,provenanceDigest" ||
@@ -163,6 +165,7 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
   ) {
     throw new Error(malformedAuthenticationStatus);
   }
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   const records = (hosts as Record<string, unknown>)[githubHost];
   if (!Array.isArray(records) || records.length !== 1) {
     throw new Error("GitHub authentication status was ambiguous.");
@@ -171,6 +174,7 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
   if (typeof record !== "object" || record === null || Array.isArray(record)) {
     throw new Error(malformedAuthenticationStatus);
   }
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   const value = record as Record<string, unknown>;
   const identityMismatch = "GitHub keyring identity did not match approval.";
   if (
@@ -522,6 +526,7 @@ async function readApprovedKeyringToken(username: string): Promise<Buffer> {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function verifyNamespace(username: string): Promise<void> {
   const user = await runBoundedGh(["api", "/user", "--jq", ".login"]);
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep GitHub identity and membership queries in their established order.
   const membership = await runBoundedGh([
     "api",
     `/user/memberships/orgs/${githubOrganization}`,
@@ -551,6 +556,7 @@ async function writeCredential(username: string, token: Buffer): Promise<void> {
   const suffix = Buffer.from('"}\n', "utf-8");
   const payload = Buffer.concat([prefix, token, suffix]);
   try {
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     await promisify(process.stdout.write.bind(process.stdout))(payload);
   } finally {
     prefix.fill(0);
@@ -575,6 +581,7 @@ async function writeVerifiedLogin(
     "utf-8",
   );
   try {
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     await promisify(process.stdout.write.bind(process.stdout))(payload);
   } finally {
     payload.fill(0);

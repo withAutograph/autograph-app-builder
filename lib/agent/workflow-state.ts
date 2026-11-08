@@ -408,6 +408,7 @@ export type PublicationWorkflowPhase = Extract<
   AppBuilderWorkflowState,
   {
     phase:
+      // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
       | "publication_pending"
       | "publication_failed"
       | "published_local"
@@ -547,7 +548,9 @@ export const assertCurrentGitHubDraftProposal = (input: {
 };
 
 export const assertPublicationJournalStatus = (
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   phase: "reviewed" | "publication_pending" | "publication_failed" | "published_local",
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   status: "pending" | "failed" | "succeeded" | undefined,
 ): void => {
   const allowed: Record<typeof phase, readonly (typeof status)[]> = {
@@ -565,10 +568,9 @@ export const assertPublicationJournalStatus = (
 
 export const assertFreshBootstrapJournalStatus = (
   phase:
-    | "reviewed"
-    | "fresh_bootstrap_pending"
-    | "fresh_bootstrap_failed"
-    | "published_fresh_bootstrap",
+    // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
+    "reviewed" | "fresh_bootstrap_pending" | "fresh_bootstrap_failed" | "published_fresh_bootstrap",
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   status: "pending" | "failed" | "succeeded" | undefined,
 ): void => {
   const allowed: Record<typeof phase, readonly (typeof status)[]> = {

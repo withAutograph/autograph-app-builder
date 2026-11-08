@@ -12,6 +12,7 @@ export const candidateCapabilities = (
 ): {
   environment: Record<string, string>;
   receipt: { modelGateway: string; childSandbox: string; persistence: string };
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared return contract for all supported results.
 } => ({
   environment: credentials
     ? {
@@ -29,6 +30,7 @@ export const candidateCapabilities = (
 
 /** Redact complete diagnostics before serialization, including bare credential values. */
 export const redactCandidateEvidence = <T>(value: T, secrets: readonly string[]): T => {
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve arbitrary candidate evidence values during redaction.
   const redact = (item: unknown): unknown => {
     if (typeof item === "string") {
       let text = item;

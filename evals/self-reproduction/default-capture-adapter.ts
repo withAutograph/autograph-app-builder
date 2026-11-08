@@ -4,6 +4,7 @@ import type { CaptureAdapter, CaptureState } from "../support/self-reproduction-
 
 type CaptureTarget = Pick<Locator, "count" | "nth">;
 interface PreparationPage {
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- The browser navigation result is not consumed by this port.
   goto: (url: string, options?: Parameters<Page["goto"]>[1]) => Promise<unknown>;
   getByRole: (...args: Parameters<Page["getByRole"]>) => CaptureTarget;
   getByText: (...args: Parameters<Page["getByText"]>) => CaptureTarget;
@@ -123,6 +124,7 @@ export const createSemanticCaptureAdapter = (baseURL: string, side: "reference" 
       }
       if (state === "loading") {
         await capture();
+        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
         const text = (await target.textContent().catch(() => "")) ?? "";
         return [
           {
@@ -141,6 +143,7 @@ export const createSemanticCaptureAdapter = (baseURL: string, side: "reference" 
         page.getByRole("button", { name: /build|create|continue|get started|retry|try again/iu }),
         page.getByRole("link", { name: /build|create|continue|get started|retry|try again/iu }),
       ]);
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Keep capture and workflow observations in their established order.
       const before = await signature(page);
       await capture();
       await recovery?.click();

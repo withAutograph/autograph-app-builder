@@ -1009,6 +1009,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     }
     const publications = toolResults.filter(({ name }) => name === "publish_fresh_repository");
     if (publications.length === 0) {
+      // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
       const publication = { ...(status.output as Record<string, unknown>) };
       delete publication.workflowPhase;
       delete publication.retryAllowed;
@@ -1140,6 +1141,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         ? staleBranchWorktreeMessage
         : "Branch-worktree publication preconditions were rejected without mutating the source checkout.";
     }
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
     const output = latestStatus.output as Record<string, unknown>;
     const proposal = { ...output };
     if (typeof proposal.proposalDigest === "string") {
@@ -1380,6 +1382,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return "The prior local-publication attempt is recovery-required and was not redispatched automatically.";
     }
     const publicationProposal = {
+      // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
       ...(proposal.output as Record<string, unknown>),
     };
     if (typeof publicationProposal.proposalDigest === "string") {

@@ -69,7 +69,10 @@ export function BuildWithSection({
           value="codex"
           required
           checked={selected === "codex"}
-          onChange={() => onChange("codex")}
+          onChange={() =>
+            // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+            onChange("codex")
+          }
         />
       </label>
       <label>
@@ -81,7 +84,10 @@ export function BuildWithSection({
           value="cursor"
           required
           checked={selected === "cursor"}
-          onChange={() => onChange("cursor")}
+          onChange={() =>
+            // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
+            onChange("cursor")
+          }
         />
       </label>
     </div>

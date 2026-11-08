@@ -510,11 +510,13 @@ export function createPreparedAppContextReader(input: {
       repository
         ? input
             .github(sessionAuth, withPreparedGitHubSelection({ repository }, intent))
+            // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
             .catch((): RepositoryAccessResult => ({
               repository: parseRepositoryReference(repository),
               status: PROVIDER_UNAVAILABLE,
             }))
         : Promise.resolve(),
+      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       input.vercel(sessionAuth, intent).catch(unavailable),
     ]);
     const returnTo = preparedHandoffReturnPath(sessionAuth);

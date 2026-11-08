@@ -59,6 +59,7 @@ function store(input: {
   const select = vi.fn(() => ({
     from: () => ({ where: selectWhere }),
   }));
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The database fixture implements only the query operations used by this test.
   const database = {
     select,
     update: () => ({

@@ -205,6 +205,7 @@ export function toEveInputResponses(
 }
 
 type CancellableResponse = AsyncIterable<MessageStreamEvent> & {
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve the cancellation port's unspecified return value.
   cancel: () => Promise<unknown>;
 };
 
@@ -283,6 +284,7 @@ async function settleLocalCancellation(operation: Promise<unknown>) {
       delay(localCancellationTimeoutMs, null, {
         ref: false,
         signal: timeoutController.signal,
+        // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
       }).then(() => {
         throw new HostedCancellationUnsettledError();
       }),
@@ -462,6 +464,7 @@ function consumeResponse(
   response: CancellableResponse,
   modelTurnTimeoutMs: number,
   options: {
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve the cancellation port's unspecified return value.
     cancelTurn: (turnId: string | undefined) => Promise<unknown>;
     consumeDurableTail: (observeEvent: (event: MessageStreamEvent) => void) => void;
     appendEvent: (events: MessageStreamEvent[], event: MessageStreamEvent) => boolean;
@@ -513,6 +516,7 @@ function consumeResponse(
       state.recoveryRequired.add(sessionId);
       // Cancellation cleanup is deliberately fire-and-forget from the timer.
       // oxlint-disable-next-line promise/prefer-await-to-then
+      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       void settleLocalCancellation(options.cancelTurn(modelTurnId)).catch(() => null);
     }, modelTurnTimeoutMs);
     modelTurnTimer.unref?.();
@@ -763,7 +767,7 @@ export function createLocalEveSessionService(
         state.restartInterrupted.delete(sessionId);
       }
       // Remove the recovery entry regardless of its terminal outcome.
-      // oxlint-disable-next-line promise/prefer-await-to-then
+      // oxlint-disable-next-line typescript/strict-void-return, promise/prefer-await-to-then
     })().finally(() => state.recoveries.delete(sessionId));
     state.recoveries.set(sessionId, recovery);
     await recovery;
@@ -985,6 +989,7 @@ export function createLocalEveSessionService(
           100,
           localResultOptions(sessionId),
         );
+        // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
         let stage: "complete" | "designing" | "prototype" | "ready";
         if (result.status === "completed") {
           stage = "complete";

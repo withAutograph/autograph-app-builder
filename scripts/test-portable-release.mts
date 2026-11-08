@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-member-access -- Preserve the existing untyped input and rendering boundary. */
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -18,6 +19,7 @@ const run = async (script: string, args: string[], expected = 0) => {
     stdio: expected === 0 ? "inherit" : "ignore",
   });
   const [code] = await Promise.race([
+    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
     once(child, "error").then(([error]) => {
       throw error;
     }),
@@ -96,7 +98,9 @@ try {
   }
   if (
     firstReceipt.source.repository !== "https://github.com/withAutograph/autograph-app-builder" ||
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing portable release fixture boundary.
     !/^[0-9a-f]{40}$/u.test(firstReceipt.source.sha) ||
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing portable release fixture boundary.
     !/^[0-9a-f]{40}$/u.test(firstReceipt.source.tree)
   ) {
     throw new Error("Portable release was not bound to an immutable source.");
@@ -129,6 +133,7 @@ try {
   ) {
     throw new Error("Codex marketplace manifest must authenticate App Builder on first use.");
   }
+  // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing portable release fixture boundary.
   const codexPluginRoot = join(marketplace, marketplaceManifest.plugins[0].source.path);
   const codexPluginRootStat = await stat(codexPluginRoot);
   if (!codexPluginRootStat.isDirectory()) {
@@ -176,12 +181,14 @@ try {
 
   const mutateReceipt = async (
     name: string,
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
     mutation: (receipt: Record<string, unknown>) => void,
   ) => {
     const root = join(temp, `tampered-${name}`);
     await cp(first, root, { recursive: true });
     const path = join(root, RELEASE_RECEIPT_FILE);
     const receipt = JSON.parse(await readFile(path, "utf-8"));
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing portable release fixture boundary.
     mutation(receipt);
     await writeFile(path, `${JSON.stringify(receipt, null, 2)}\n`);
     await expectRejected(

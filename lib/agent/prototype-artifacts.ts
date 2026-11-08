@@ -198,6 +198,7 @@ export function recordPrototypeArtifactRevision(input: {
   const revision = sha256(JSON.stringify({ digest, mediaType: input.mediaType, path: input.path }));
   const prior = input.artifacts.find(({ path }) => path === input.path);
   if (prior?.version !== 2 && prior?.revision === revision) {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared return contract for all supported results.
     return { artifact: prior, artifacts: input.artifacts, reused: true };
   }
 
@@ -211,6 +212,7 @@ export function recordPrototypeArtifactRevision(input: {
     revision,
     sessionId: input.sessionId,
   };
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared return contract for all supported results.
   return {
     artifact,
     artifacts: [...input.artifacts.filter(({ path }) => path !== input.path), artifact].toSorted(
@@ -389,6 +391,7 @@ const resolveChunkContinuation = (
   chunkDigest: string,
 ): ChunkContinuation => {
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     prior?.transfer === undefined &&
     prior?.lastChunkReceipt?.expectedDigest === input.expectedDigest &&
     prior.lastChunkReceipt.lastChunkIndex === input.chunkIndex &&
@@ -654,5 +657,6 @@ export function recordPrototypeArtifactBundle(input: {
     }
     throw new Error("The prototype bundle must contain a complete build-ready AppSpec.");
   }
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared return contract for all supported results.
   return { appSpec, artifacts, reused };
 }

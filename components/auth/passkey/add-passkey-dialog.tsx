@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-member-access -- Preserve the existing untyped input and rendering boundary. */
 "use client";
 
 import { isSessionNotFreshError } from "@better-auth-ui/core";
@@ -36,6 +37,7 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
     useAuthPlugin(passkeyPlugin);
 
   const addPasskey = useAddPasskey(authClient);
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- React requires an initial value for this optional ref.
   const pendingRequest = useRef<AddPasskeyParams<PasskeyAuthClient>>(undefined);
 
   const handleOpenChange = (nextOpen: boolean) => {

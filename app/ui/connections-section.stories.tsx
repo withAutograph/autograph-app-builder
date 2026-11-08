@@ -6,10 +6,15 @@ import { ConnectionsSection } from "./builder-connections";
 const meta = {
   args: {
     connected: [],
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     onAdd: fn(),
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     onCustomize: fn(),
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     onRemove: fn(),
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     onSearchChange: fn(),
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     onShowMore: fn(),
     search: "",
     selected: [],

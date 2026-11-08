@@ -465,6 +465,7 @@ export function createVercelInstallationAuthorization(input: {
         if (!tokenResponse.ok) {
           const errorPayload = z
             .object({ error: z.string().max(64).optional() })
+            // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
             .safeParse(await tokenResponse.json().catch(() => ({})));
           const errorCode = errorPayload.success ? errorPayload.data.error : undefined;
           throw new Error(

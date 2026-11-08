@@ -34,13 +34,16 @@ afterEach(async () => {
   // Keep filesystem fixtures scoped to this local-mode test.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
   const makeWritable = async (path: string) => {
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await chmod(path, 0o700).catch(() => {});
     await runSequentially(
+      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       await readdir(path, { withFileTypes: true }).catch(() => []),
       async (entry) => {
         if (entry.isDirectory()) {
           await makeWritable(join(path, entry.name));
         } else if (!entry.isSymbolicLink()) {
+          // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
           await chmod(join(path, entry.name), 0o600).catch(() => {});
         }
       },
@@ -92,34 +95,42 @@ async function fixture() {
 describe("development source snapshots", () => {
   it("accepts an explicit endpoint-only launch without changing the plugin-install default", () => {
     expect(
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
       parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"]).installPlugin,
     ).toBeUndefined();
     expect(
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
       parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "false"])
         .installPlugin,
     ).toBe(false);
     expect(
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
       parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "true"])
         .installPlugin,
     ).toBe(true);
     expect(() =>
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
       parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "yes"]),
     ).toThrow(/--install-plugin/u);
   });
 
   it("accepts an explicit endpoint-only launch without changing the plugin-install default", () => {
     expect(
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
       parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"]).installPlugin,
     ).toBeUndefined();
     expect(
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
       parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "false"])
         .installPlugin,
     ).toBe(false);
     expect(
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
       parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "true"])
         .installPlugin,
     ).toBe(true);
     expect(() =>
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
       parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "yes"]),
     ).toThrow(/--install-plugin/u);
   });
@@ -336,11 +347,13 @@ describe("development dependency key", () => {
 
 describe("development CLI", () => {
   it("keeps the default bundler and passes an explicit supported selection to Next", () => {
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
     const defaults = parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"]);
     expect(developmentNextBundlerArguments(defaults)).toEqual([]);
     for (const nextBundler of ["turbopack", "webpack"] as const) {
       const selected = parseDevelopmentArguments([
         "--arrusted-root",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
         "/tmp/arrusted",
         "--next-bundler",
         nextBundler,
@@ -349,6 +362,7 @@ describe("development CLI", () => {
       expect(developmentNextBundlerArguments(selected)).toEqual([`--${nextBundler}`]);
     }
     expect(() =>
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
       parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--next-bundler", "unknown"]),
     ).toThrow("--next-bundler must be turbopack or webpack.");
   });
@@ -357,12 +371,15 @@ describe("development CLI", () => {
     expect(() =>
       parseDevelopmentArguments([
         "--arrusted-root",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
         "/tmp/arrusted",
         "--endpoint",
         "https://example.com",
       ]),
     ).toThrow(/unsupported/u);
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
     expect(parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"])).toMatchObject({
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
       arrustedRoot: "/tmp/arrusted",
       evePort: 2000,
       nextPort: 3000,
@@ -372,19 +389,24 @@ describe("development CLI", () => {
 
 it("opts into emulated web without changing default development", () => {
   expect(
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
     parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"]).emulatedWeb,
   ).toBeUndefined();
   expect(
     parseDevelopmentArguments([
       "--arrusted-root",
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
       "/tmp/arrusted",
       "--emulated-web",
       "true",
       "--web-ca",
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
       "/tmp/ca.pem",
     ]),
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
   ).toMatchObject({ emulatedWeb: true, webCa: "/tmp/ca.pem" });
   expect(() =>
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
     parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--emulated-web", "yes"]),
   ).toThrow("true or false");
 });
@@ -393,6 +415,7 @@ it("selects an existing hosted MCP resource through the native connector", () =>
   expect(
     parseDevelopmentArguments([
       "--arrusted-root",
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
       "/tmp/arrusted",
       "--hosted-session-resource",
       "https://builder.example.test/mcp",
@@ -406,6 +429,7 @@ it("selects an existing hosted MCP resource through the native connector", () =>
     expect(() =>
       parseDevelopmentArguments([
         "--arrusted-root",
+        // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
         "/tmp/arrusted",
         "--hosted-session-resource",
         value,
@@ -418,6 +442,7 @@ it("selects an existing native client by an explicit absolute path", () => {
   expect(
     parseDevelopmentArguments([
       "--arrusted-root",
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
       "/tmp/arrusted",
       "--hosted-session-resource",
       "https://builder.example.test/mcp",
@@ -428,6 +453,7 @@ it("selects an existing native client by an explicit absolute path", () => {
   expect(() =>
     parseDevelopmentArguments([
       "--arrusted-root",
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Fixture path exercises local development argument parsing.
       "/tmp/arrusted",
       "--hosted-session-codex-bin",
       "relative-codex",

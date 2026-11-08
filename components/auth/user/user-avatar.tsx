@@ -42,6 +42,7 @@ export function UserAvatar({ className, user, isPending, fallback }: UserAvatarP
 
   const resolvedUser = user ?? session?.user;
 
+  // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- Empty user names fall through to the next identifier.
   const initials = (resolvedUser?.username || resolvedUser?.name || resolvedUser?.email)
     ?.slice(0, 2)
     .toUpperCase();
@@ -50,11 +51,17 @@ export function UserAvatar({ className, user, isPending, fallback }: UserAvatarP
     <Avatar className={cn("size-8 bg-muted text-foreground text-sm rounded-full", className)}>
       <AvatarImage
         src={resolvedUser?.image ?? undefined}
-        alt={resolvedUser?.displayUsername || resolvedUser?.name || resolvedUser?.email}
+        alt={
+          // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- Empty display names fall through to another identifier.
+          resolvedUser?.displayUsername || resolvedUser?.name || resolvedUser?.email
+        }
       />
 
       <AvatarFallback className="text-muted-foreground!">
-        {fallback || initials || <User2 className="size-4" />}
+        {
+          // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- Empty fallback content and initials use the next fallback.
+          fallback || initials || <User2 className="size-4" />
+        }
       </AvatarFallback>
     </Avatar>
   );

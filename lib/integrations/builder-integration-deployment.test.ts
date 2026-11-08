@@ -6,10 +6,13 @@ const stores = vi.hoisted(() => ({
   listVercel: vi.fn(),
   readGitHub: vi.fn(),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../mcp/hosted-route dependency used by this test.
 vi.mock("../mcp/hosted-route", () => ({ openHostedPostgresDatabase: () => ({}) }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../auth/github-app-installation dependency used by this test.
 vi.mock("../auth/github-app-installation", () => ({
   readGitHubAppInstallationEnvironment: vi.fn(),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../auth/preview-oauth-runtime dependency used by this test.
 vi.mock("../auth/preview-oauth-runtime", () => ({
   readPreviewOAuthRuntimeConfig: () => ({
     databaseUrl: "postgres://test",
@@ -17,6 +20,7 @@ vi.mock("../auth/preview-oauth-runtime", () => ({
     resource: "audience",
   }),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../repository/postgres-github-installation-store dependency used by this test.
 vi.mock("../repository/postgres-github-installation-store", () => ({
   createPostgresHostedGitHubInstallationStore: () => ({
     list: stores.listGitHub,
@@ -24,10 +28,13 @@ vi.mock("../repository/postgres-github-installation-store", () => ({
   }),
   mergeHostedGitHubInstallationBindings: (bindings: unknown[]) => bindings,
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./postgres-vercel-installation dependency used by this test.
 vi.mock("./postgres-vercel-installation", () => ({
   createPostgresVercelInstallationStore: () => ({ list: stores.listVercel }),
 }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./vercel-installation dependency used by this test.
 vi.mock("./vercel-installation", () => ({ readVercelIntegrationEnvironment: () => ({}) }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./local-provider-emulation dependency used by this test.
 vi.mock("./local-provider-emulation", () => ({
   providerEmulationEnvironment: (value: unknown) => value,
 }));

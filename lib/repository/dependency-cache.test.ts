@@ -72,6 +72,7 @@ const createSandbox = <T extends Partial<SandboxSession>>(overrides: T): Sandbox
 });
 
 const { join } = nodePath;
+// oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
 const executeFile = promisify(execFile);
 
 const closureObservationSchema = z.looseObject({
@@ -184,6 +185,7 @@ function liveDependencySourceFixture(input?: { packageJson?: string; ordinarySou
   ]);
   const sourceFiles = [...contents].map(([path, content]) => ({
     mode: "100644" as const,
+    // oxlint-disable-next-line sonarjs/hashing -- Preserve the fixture's 40-character source object ID.
     objectId: createHash("sha1").update(content).digest("hex"),
     path,
     sha256: createHash("sha256").update(content).digest("hex"),
@@ -215,6 +217,7 @@ const liveCargoHomeDigest = "b".repeat(64);
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function liveTemplateCacheFixture() {
   let source = liveDependencySourceFixture();
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   let closureState: "cargo-tampered" | "clean" | "missing" | "node-tampered" = "clean";
   let bootstrapStderr = "";
   const stored = new Map<string, string>();
@@ -563,6 +566,7 @@ describe("offline dependency cache", () => {
         ]),
       ).rejects.toThrow();
     } finally {
+      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       await executeFile("/bin/chmod", ["-R", "u+w", root]).catch(() => {});
       await rm(root, { force: true, recursive: true });
     }
