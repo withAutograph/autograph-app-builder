@@ -385,14 +385,18 @@ const operatorMembershipSummary = (plan: HostedOperatorPlan) => {
       `${plan.action === "cleanup" ? "Remove" : "Create"} the approved organization and its owner membership.`,
     );
   }
-  const membershipSummary =
-    memberLines.length === 0
-      ? ""
-      : `Organization access:\n${memberLines.map((line) => `- ${line}`).join("\n")}`;
-  const organizationReferenceSummary =
-    organizationReferenceLines.length === 0
-      ? ""
-      : `Organization details (provider identity references):\n${organizationReferenceLines.map((line) => `- ${plan.action === "cleanup" ? "Remove" : "Create"} ${line}`).join("\n")}`;
+  let membershipSummary = "";
+  if (memberLines.length !== 0) {
+    const lines = memberLines.map((line) => `- ${line}`).join("\n");
+    membershipSummary = `Organization access:\n${lines}`;
+  }
+  let organizationReferenceSummary = "";
+  if (organizationReferenceLines.length !== 0) {
+    const lines = organizationReferenceLines
+      .map((line) => `- ${plan.action === "cleanup" ? "Remove" : "Create"} ${line}`)
+      .join("\n");
+    organizationReferenceSummary = `Organization details (provider identity references):\n${lines}`;
+  }
   return { membershipSummary, organizationReferenceSummary };
 };
 const operatorAccessEffect = (plan: HostedOperatorPlan) => {
@@ -405,8 +409,10 @@ const operatorAccessSummary = (
   accessEffect: ReturnType<typeof operatorAccessEffect>,
   accessDescription: string,
 ) => {
-  if (appAccessLines.length > 0)
-    return `${accessDescription}\n${appAccessLines.map((line) => `- ${line}`).join("\n")}`;
+  if (appAccessLines.length > 0) {
+    const lines = appAccessLines.map((line) => `- ${line}`).join("\n");
+    return `${accessDescription}\n${lines}`;
+  }
   if (unresolvedAccessLines.length > 0)
     return "See Access details for each app user and its roles.";
   if (accessEffect === undefined) return "No app-user access changes are included in this plan.";
@@ -440,10 +446,13 @@ const operatorAccessDescriptions = (plan: HostedOperatorPlan) => {
   );
   const unresolvedAccessVerb =
     accessEffect === undefined ? "Approved scope (not changed by this plan):" : `${accessEffect}:`;
-  const unresolvedAccessSummary =
-    unresolvedAccessLines.length === 0
-      ? ""
-      : `Access details (provider identity references):\n${unresolvedAccessLines.map((line) => `- ${unresolvedAccessVerb} ${line}`).join("\n")}`;
+  let unresolvedAccessSummary = "";
+  if (unresolvedAccessLines.length !== 0) {
+    const lines = unresolvedAccessLines
+      .map((line) => `- ${unresolvedAccessVerb} ${line}`)
+      .join("\n");
+    unresolvedAccessSummary = `Access details (provider identity references):\n${lines}`;
+  }
   return { accessSummary, unresolvedAccessSummary };
 };
 const operatorAccountSummary = (plan: HostedOperatorPlan) => {
@@ -452,10 +461,11 @@ const operatorAccountSummary = (plan: HostedOperatorPlan) => {
     plan.action === "prepare" && planHasEffect(plan, "normal-accounts")
       ? (program?.actors.filter((actor) => actor.account === "create-email-password") ?? [])
       : [];
-  const accountSummary =
-    newAccountActors.length > 0
-      ? ` Create sign-in accounts for ${newAccountActors.map((actor) => `${actor.name} (${actor.email})`).join(", ")}.`
-      : "";
+  let accountSummary = "";
+  if (newAccountActors.length > 0) {
+    const names = newAccountActors.map((actor) => `${actor.name} (${actor.email})`).join(", ");
+    accountSummary = ` Create sign-in accounts for ${names}.`;
+  }
   return accountSummary;
 };
 
@@ -563,10 +573,16 @@ const continuityApprovalDescription = (input: unknown): string | undefined => {
   } catch {
     return undefined;
   }
-  const actorScope =
-    "plan" in parsed.data
-      ? `Test actor and organization references (provider identity references):\n${parsed.data.plan.actors.map((actor) => `- ${actor.actorId} in ${actor.organizationId}`).join("\n")}`
-      : "Use only the actors, organizations and browser-test selection recorded in this saved plan. Builder verifies its full owner-scoped plan before execution; this approval does not add accounts or grant roles.";
+  let actorScope: string;
+  if ("plan" in parsed.data) {
+    const actors = parsed.data.plan.actors
+      .map((actor) => `- ${actor.actorId} in ${actor.organizationId}`)
+      .join("\n");
+    actorScope = `Test actor and organization references (provider identity references):\n${actors}`;
+  } else {
+    actorScope =
+      "Use only the actors, organizations and browser-test selection recorded in this saved plan. Builder verifies its full owner-scoped plan before execution; this approval does not add accounts or grant roles.";
+  }
   return [
     `Run the app's existing browser checks against its Preview environment. The checks may perform the actions written into the app and restart only this app's process.`,
     "What will happen:\n- Start the app's Preview environment and temporarily publish its test connection to the shared service.\n- Close the app environment and remove the temporary connection when the checks finish. The shared service may retain the target until its normal refresh or expiry.",
