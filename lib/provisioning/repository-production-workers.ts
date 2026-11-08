@@ -243,7 +243,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
             identityCapture: proof.identityCapture,
             identityVerification: proof.identityVerification,
           };
-    const plan = {
+    const planStart = {
       version: 1,
       kind: "repository-production-setup-v1",
       action: managedAccess?.active === false ? "cleanup" : "prepare",
@@ -269,7 +269,13 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       appInstallation: { customerIds: [scope.organizationId] },
       access,
       effects: [{ id: AUTH_MEMBERSHIP_EFFECT, kind: AUTH_MEMBERSHIP_EFFECT }],
-      ...(membership === undefined ? {} : { authMembership: membership }),
+    };
+    const planWithMembership: typeof planStart & { authMembership?: typeof membership } = planStart;
+    if (membership !== undefined) {
+      planWithMembership.authMembership = membership;
+    }
+    const plan = {
+      ...planWithMembership,
       deploymentBoundary: {
         teamId: deps.profile.operator.teamId,
         operator: deps.profile.operator,
@@ -463,7 +469,9 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       installer: { id: worker.id, sha256: worker.sha256 },
       tenant_targets: [scope.organizationId],
     };
-    return await (deps.runWorker ?? runRepositoryProductionFileSpool)(deps.profile.sandbox, {
+    const runWorker = deps.runWorker ?? runRepositoryProductionFileSpool;
+    const { sandbox } = deps.profile;
+    const workerInput: Parameters<typeof runRepositoryProductionFileSpool>[1] = {
       operation: "auth-management",
       worker,
       context: workerContext,
@@ -478,14 +486,13 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       },
       signal: deps.signal,
       assertCurrent: context.assertCurrent,
-      ...(readOnly
-        ? {}
-        : {
-            recordCheckpoint: async (frame) => {
-              await context.checkpoint(z.json().parse(frame));
-            },
-          }),
-    });
+    };
+    if (!readOnly) {
+      workerInput.recordCheckpoint = async (frame) => {
+        await context.checkpoint(z.json().parse(frame));
+      };
+    }
+    return await runWorker(sandbox, workerInput);
   };
   const managedAuth = async (
     context: RepositoryProductionEffectContext,
