@@ -67,28 +67,45 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
     setIsUploading(false);
   }
 
-  // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
-  async function handleDelete() {
+  const uploadAvatarWithFeedback = async (event: ChangeEvent<HTMLInputElement>) => {
+    try {
+      await handleFileChange(event);
+    } catch (error) {
+      if (error instanceof Error) {
+        toast.error(error.message);
+      }
+    }
+  };
+
+  const finishAvatarDeletion = async (currentImage: string | null | undefined) => {
+    if (currentImage) {
+      setIsDeleting(true);
+      try {
+        await avatar.delete?.(currentImage);
+      } catch (error) {
+        if (error instanceof Error) {
+          toast.error(error.message);
+        }
+        return;
+      } finally {
+        setIsDeleting(false);
+      }
+    }
+    toast.success(localization.settings.avatarDeletedSuccess);
+  };
+
+  const handleDelete = () => {
     const currentImage = session?.user.image;
 
     updateUser(
       { image: null },
       {
-        onSuccess: async () => {
-          if (currentImage) {
-            setIsDeleting(true);
-            try {
-              await avatar.delete?.(currentImage);
-            } finally {
-              setIsDeleting(false);
-            }
-          }
-
-          toast.success(localization.settings.avatarDeletedSuccess);
+        onSuccess: () => {
+          void finishAvatarDeletion(currentImage);
         },
       },
     );
-  }
+  };
 
   return (
     <Field className={className}>
@@ -99,7 +116,9 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
         type="file"
         accept="image/*"
         className="hidden"
-        onChange={handleFileChange}
+        onChange={(event) => {
+          void uploadAvatarWithFeedback(event);
+        }}
       />
 
       <div className="flex items-center gap-4">

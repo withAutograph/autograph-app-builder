@@ -78,11 +78,23 @@ export function UserProfile({ className }: UserProfileProps) {
     });
   }
 
+  const submitWithFeedback = async (event: SyntheticEvent<HTMLFormElement>) => {
+    try {
+      await handleSubmit(event);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   return (
     <div>
       <h2 className="text-sm font-semibold mb-3">{localization.settings.userProfile}</h2>
 
-      <form onSubmit={handleSubmit}>
+      <form
+        onSubmit={(event) => {
+          void submitWithFeedback(event);
+        }}
+      >
         <Card className={cn(className)}>
           <CardContent className="flex flex-col gap-6">
             <ChangeAvatar />

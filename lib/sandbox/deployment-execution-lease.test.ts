@@ -49,7 +49,8 @@ describe("hosted sandbox turn lease lifecycle", () => {
   it("acquires and releases a fresh epoch at each of two turn boundaries", async () => {
     const store = new InMemorySandboxExecutionLeaseStore();
     install(store);
-    const firstSandbox = sandboxFixture();
+    const firstStop = vi.fn(async () => {});
+    const firstSandbox = sandboxFixture(firstStop);
     const first = await acquireHostedSandboxExecutionLease({
       nowEpochMs: 1000,
       sandbox: firstSandbox,
@@ -73,7 +74,8 @@ describe("hosted sandbox turn lease lifecycle", () => {
       }),
     ).resolves.toMatchObject({ lease: { state: "released" }, released: true });
 
-    const secondSandbox = sandboxFixture();
+    const secondStop = vi.fn(async () => {});
+    const secondSandbox = sandboxFixture(secondStop);
     const second = await acquireHostedSandboxExecutionLease({
       nowEpochMs: 3000,
       sandbox: secondSandbox,
@@ -88,8 +90,8 @@ describe("hosted sandbox turn lease lifecycle", () => {
       sessionAuth: sessionAuth(),
       sessionId: "session_1",
     });
-    expect(firstSandbox.stop).toHaveBeenCalledOnce();
-    expect(secondSandbox.stop).toHaveBeenCalledOnce();
+    expect(firstStop).toHaveBeenCalledOnce();
+    expect(secondStop).toHaveBeenCalledOnce();
   });
 
   it("releases after module-local command state is lost and reacquires safely", async () => {

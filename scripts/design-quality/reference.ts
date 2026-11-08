@@ -123,7 +123,9 @@ const sourcePath = (packageRoot: string, target: string): string | undefined => 
 const aliasEntryPoints = (root: string, limitations: string[]): EntryPoint[] => {
   let parsed: ts.ParsedCommandLine;
   try {
-    const config = ts.readConfigFile(nodePath.join(root, "tsconfig.json"), ts.sys.readFile);
+    const config = ts.readConfigFile(nodePath.join(root, "tsconfig.json"), (file) =>
+      ts.sys.readFile(file),
+    );
     if (config.error) {
       throw new Error("Unable to read TypeScript configuration.");
     }
@@ -655,7 +657,9 @@ export const checkJsxAttributes = ({
   files: { path: string; content: string }[];
 }): JsxAttributeCheckResult => {
   const limitations: string[] = [];
-  const config = ts.readConfigFile(nodePath.join(arrustedRoot, "tsconfig.json"), ts.sys.readFile);
+  const config = ts.readConfigFile(nodePath.join(arrustedRoot, "tsconfig.json"), (file) =>
+    ts.sys.readFile(file),
+  );
   if (config.error) {
     return {
       attributes: [],

@@ -172,6 +172,15 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
     }
   };
 
+  const startPasskey = async () => {
+    try {
+      await (view === "signUp" ? createPasskey() : continueWithPasskey());
+    } catch {
+      setFailed(true);
+      setPending(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-3">
       <Button
@@ -190,7 +199,9 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
           failed &&
             "border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive",
         )}
-        onClick={view === "signUp" ? createPasskey : continueWithPasskey}
+        onClick={() => {
+          void startPasskey();
+        }}
       >
         {pending ? <Spinner /> : <Fingerprint />}
         {failed

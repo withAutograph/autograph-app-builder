@@ -504,11 +504,13 @@ export const assertCanonicalLocalPublicationJournal = (journal: LocalPublication
   if (
     journal.rolledBackPaths.some((path) => !applied.has(path)) ||
     journal.conflictedPaths.some((path) => !applied.has(path)) ||
-    journal.uncertainPaths.some((path) => applied.has(path)) ||
-    [...uncertain].some(
-      (path) => journal.rolledBackPaths.includes(path) || journal.conflictedPaths.includes(path),
-    )
+    journal.uncertainPaths.some((path) => applied.has(path))
   ) {
+    throw new Error(noncanonicalFailureReceiptMessage);
+  }
+  const rolledBack = new Set(journal.rolledBackPaths);
+  const conflicted = new Set(journal.conflictedPaths);
+  if ([...uncertain].some((path) => rolledBack.has(path) || conflicted.has(path))) {
     throw new Error(noncanonicalFailureReceiptMessage);
   }
   if (

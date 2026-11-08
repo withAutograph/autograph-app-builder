@@ -19,11 +19,19 @@ export function Builder({
     sourceUploadPending,
     preparingSubmission,
     submit,
+    setDraftSaveError,
     interactive,
     connectionFlow,
     setConnectionFlow,
     completeConnection,
   } = controller;
+  const submitWithFeedback = async (event: Parameters<typeof submit>[0]) => {
+    try {
+      await submit(event);
+    } catch {
+      setDraftSaveError("We couldn’t save your form. Retry saving before creating your app.");
+    }
+  };
   return (
     <BuilderControllerContext value={controller}>
       <main
@@ -32,7 +40,12 @@ export function Builder({
         inert={submissionPending || preparingSubmission || sourceUploadPending}
         aria-busy={submissionPending || preparingSubmission || sourceUploadPending}
       >
-        <form className={styles.builderCard} onSubmit={submit}>
+        <form
+          className={styles.builderCard}
+          onSubmit={(event) => {
+            void submitWithFeedback(event);
+          }}
+        >
           {draftStatus}
           <fieldset
             className={styles.builderControls}

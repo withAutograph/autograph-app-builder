@@ -217,6 +217,15 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     }
   }, [data.handoffId, destination, renewal, renewalPending, router]);
 
+  const copyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopyNotice("Prompt copied.");
+    } catch {
+      setCopyNotice("Copy failed. Select and copy the prompt below manually.");
+    }
+  };
+
   const renew = () => {
     if (!isClientReady || renewalPending || access !== "ready") {
       return;
@@ -334,13 +343,8 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
             className={handoffStyles.secondaryButton}
             type="button"
             disabled={disabled}
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(prompt);
-                setCopyNotice("Prompt copied.");
-              } catch {
-                setCopyNotice("Copy failed. Select and copy the prompt below manually.");
-              }
+            onClick={() => {
+              void copyPrompt();
             }}
           >
             Copy prompt

@@ -679,26 +679,27 @@ const assertExactGhcrDockerConfig = function assertExactGhcrDockerConfig(stateRo
 const verifyStateRootContents = function verifyStateRootContents(
   provenance: ImageProvenance,
 ): void {
-  for (const entry of readdirSync(provenance.builder.stateRoot, {
+  const { stateRoot } = provenance.builder;
+  for (const entry of readdirSync(stateRoot, {
     withFileTypes: true,
   })) {
     if (entry.name === ghcrDockerConfigName) {
-      assertExactGhcrDockerConfig(provenance.builder.stateRoot);
+      assertExactGhcrDockerConfig(stateRoot);
       continue;
     }
     if (entry.name === ghcrBoundHelperName) {
-      assertExactGhcrBoundHelper(provenance.builder.stateRoot);
+      assertExactGhcrBoundHelper(stateRoot);
       continue;
     }
     if (entry.name === githubStateRootName) {
-      assertGithubStateRoot(join(provenance.builder.stateRoot, githubStateRootName));
+      assertGithubStateRoot(join(stateRoot, githubStateRootName));
       continue;
     }
     const kind = receiptKinds[entry.name as keyof typeof receiptKinds];
     if (kind === undefined || !entry.isFile() || entry.isSymbolicLink()) {
       throw new Error("Image lifecycle state contains an unknown or unsafe artifact.");
     }
-    readReceipt(provenance.builder.stateRoot, entry.name, kind, provenance);
+    readReceipt(stateRoot, entry.name, kind, provenance);
   }
 };
 

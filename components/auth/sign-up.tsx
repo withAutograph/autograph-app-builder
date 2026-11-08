@@ -199,6 +199,14 @@ export function SignUp({
       ? resolvePasskeyRedirectTo(redirectTo, currentSearch, currentOrigin)
       : redirectTo);
 
+  const submitWithFeedback = async (event: SyntheticEvent<HTMLFormElement>) => {
+    try {
+      await handleSubmit(event);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   return (
     <div className="relative w-full max-w-sm">
       <Card className={cn("w-full", className)}>
@@ -229,7 +237,11 @@ export function SignUp({
             )}
 
             {emailAndPassword?.enabled && (
-              <form onSubmit={handleSubmit}>
+              <form
+                onSubmit={(event) => {
+                  void submitWithFeedback(event);
+                }}
+              >
                 <FieldGroup>
                   {emailAndPassword.name !== false && (
                     <Field data-invalid={(fieldErrors.name ?? "") !== ""}>

@@ -148,7 +148,15 @@ export function BuilderStorage() {
     repositoryEditedByUser,
     setForm,
     beginProviderConnection,
+    setDraftSaveError,
   } = useBuilderControllerContext();
+  const connectProvider = async () => {
+    try {
+      await beginProviderConnection("github");
+    } catch {
+      setDraftSaveError("We couldn’t save your form. Retry saving to connect a provider.");
+    }
+  };
   return (
     <StoreInSection
       bare
@@ -173,7 +181,9 @@ export function BuilderStorage() {
       onPrivacyChange={(privateRepository) => {
         setForm((current) => ({ ...current, privateRepository }));
       }}
-      onConnect={() => beginProviderConnection("github")}
+      onConnect={() => {
+        void connectProvider();
+      }}
     />
   );
 }
@@ -189,7 +199,15 @@ export function BuilderDeployment() {
     setDeploymentProvider,
     setTeam,
     beginProviderConnection,
+    setDraftSaveError,
   } = useBuilderControllerContext();
+  const connectProvider = async () => {
+    try {
+      await beginProviderConnection("vercel");
+    } catch {
+      setDraftSaveError("We couldn’t save your form. Retry saving to connect a provider.");
+    }
+  };
   return (
     <DeployToSection
       bare
@@ -205,7 +223,9 @@ export function BuilderDeployment() {
       onTeamChange={(value) => {
         setTeam(value);
       }}
-      onConnect={() => beginProviderConnection("vercel")}
+      onConnect={() => {
+        void connectProvider();
+      }}
     />
   );
 }

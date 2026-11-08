@@ -354,11 +354,11 @@ export async function waitForForwardedEveChild(
     const { promise, resolve, reject } =
       Promise.withResolvers<[number | null, NodeJS.Signals | null]>();
     const handlers = {
-      exit(exitCode: number | null, exitSignal: NodeJS.Signals | null) {
+      exit: (exitCode: number | null, exitSignal: NodeJS.Signals | null) => {
         child.removeListener("error", handlers.error);
         resolve([exitCode, exitSignal]);
       },
-      error(error: Error) {
+      error: (error: Error) => {
         child.removeListener("exit", handlers.exit);
         reject(error);
       },

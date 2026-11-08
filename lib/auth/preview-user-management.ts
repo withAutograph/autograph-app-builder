@@ -122,10 +122,10 @@ function organizationError(cause: unknown) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPreviewUserManagementLifecycle(authority: PreviewOrganizationUserAuthority) {
   return {
-    async beforeSessionCreate<T extends { userId: string }>(
+    beforeSessionCreate: async <T extends { userId: string }>(
       session: T,
       context?: { path?: string } | null,
-    ) {
+    ) => {
       // Passkey onboarding provisions its organization and activates it using
       // the same adapter transaction that creates the credential and session.
       if (context?.path === "/passkey/verify-registration") {
@@ -154,10 +154,10 @@ export function createPreviewUserManagementLifecycle(authority: PreviewOrganizat
     },
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    async beforeUserCreate(
+    beforeUserCreate: async (
       user: PreviewVerifiedUser & Record<string, unknown>,
       context: { path?: string } | null,
-    ) {
+    ) => {
       if (!identityCallbackPaths.has(context?.path ?? "")) {
         return;
       }

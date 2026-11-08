@@ -49,7 +49,7 @@ export function createPreviewEmulateHandler(input: {
   let persistenceRevision = 0;
   const emulateHandler = createEmulateHandler({
     persistence: {
-      load: persistence.load,
+      load: () => persistence.load(),
       save(state) {
         persistenceRevision += 1;
         pendingPersistence = persistence.save(state);

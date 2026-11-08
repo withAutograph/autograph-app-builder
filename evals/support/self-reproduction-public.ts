@@ -479,8 +479,14 @@ const validateResponses = (session: EveSessionResult, responses: Responses) => {
     responses,
     sessionId: session.sessionId,
   });
+  const requestsById = new Map<string, (typeof requests)[number]>();
+  for (const request of requests) {
+    if (!requestsById.has(request.requestId)) {
+      requestsById.set(request.requestId, request);
+    }
+  }
   for (const item of responses) {
-    const request = requests.find((entry) => entry.requestId === item.requestId);
+    const request = requestsById.get(item.requestId);
     if (!request) {
       throw new Error("Unknown request");
     }
