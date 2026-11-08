@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import nodePath from "node:path";
 import type { Browser } from "playwright";
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import {
   captureParity,
   runPairedCaptureEvidence,
@@ -51,13 +52,17 @@ describe("paired capture orchestration", () => {
       expect(result.candidate).toHaveLength(15);
       expect(close).toHaveBeenCalledTimes(30);
       expect(newContext.mock.calls).toHaveLength(30);
-      const receipt = JSON.parse(
-        await readFile(
-          nodePath.join(root, "parity/captures/desktop/keyboard/candidate.json"),
-          "utf-8",
-        ),
-      );
-      expect(receipt.assertions.every((item: { passed: boolean }) => !item.passed)).toBe(true);
+      const receipt = z
+        .object({ assertions: z.array(z.object({ passed: z.boolean() })) })
+        .parse(
+          JSON.parse(
+            await readFile(
+              nodePath.join(root, "parity/captures/desktop/keyboard/candidate.json"),
+              "utf-8",
+            ),
+          ),
+        );
+      expect(receipt.assertions.every((item) => !item.passed)).toBe(true);
       const [referenceCapture] = result.reference;
       const [candidateCapture] = result.candidate;
       if (!referenceCapture || !candidateCapture) {
@@ -142,9 +147,18 @@ describe("paired capture orchestration", () => {
         candidate: { disposition: "observed" },
         reference: { disposition: "observed" },
       });
-      const manifest = JSON.parse(
-        await readFile(nodePath.join(root, "parity/captures/manifest.json"), "utf-8"),
-      );
+      const manifest = z
+        .object({
+          rows: z.array(
+            z.object({
+              candidate: z.object({ png: z.string().optional() }),
+              reference: z.object({ png: z.string().optional() }),
+            }),
+          ),
+        })
+        .parse(
+          JSON.parse(await readFile(nodePath.join(root, "parity/captures/manifest.json"), "utf-8")),
+        );
       expect(manifest.rows).toHaveLength(15);
       expect(manifest.rows[0].reference.png).toContain("/reference.png");
       expect(manifest.rows[0].candidate.png).toContain("/candidate.png");

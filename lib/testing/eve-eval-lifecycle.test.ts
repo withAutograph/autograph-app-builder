@@ -38,7 +38,7 @@ function lockFixture() {
     "vercel-authorized",
   );
   mkdirSync(backend, { recursive: true });
-  const addLock = (name: string, owner: unknown) => {
+  const addLock = (name: string, owner: { createdAt?: string; pid: number }) => {
     const lock = nodePath.join(backend, `${name}.lock`);
     mkdirSync(lock);
     writeFileSync(nodePath.join(lock, "owner.json"), `${JSON.stringify(owner)}\n`, {
@@ -68,7 +68,8 @@ async function startServer(port: number) {
       stdio: ["ignore", "ignore", "ignore", "ipc"],
     },
   );
-  const [message] = await once(child, "message");
+  const messages: unknown[] = await once(child, "message");
+  const [message] = messages;
   return { child, port: Number(message) };
 }
 
@@ -121,16 +122,15 @@ describe("Eve eval resource lifecycle", () => {
     const lock = nodePath.join(fixture.backend, "linked.lock");
     symlinkSync(outside, lock);
 
-    await expect(
-      reconcileDeadEveEvalPrewarmLocks(fixture.root, {
-        processAlive: () => false,
-      }),
-    ).resolves.toEqual([
+    const receipts = await reconcileDeadEveEvalPrewarmLocks(fixture.root, {
+      processAlive: () => false,
+    });
+    expect(receipts).toEqual([
       expect.objectContaining({
-        lock: expect.stringContaining("linked.lock"),
         status: "preserved",
       }),
     ]);
+    expect(receipts[0]?.lock).toContain("linked.lock");
     expect(existsSync(nodePath.join(outside, "owner.json"))).toBe(true);
   });
 

@@ -1,6 +1,7 @@
 import { createHash, generateKeyPairSync } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import { provisionGitHubRepository, starterSourceBinding } from "./github-provider";
 import type { GitHubUserCredentialStore } from "./github-user-credential";
@@ -152,7 +153,7 @@ describe("GitHub starter repository provisioning", () => {
         const parsedUrl = new URL(String(url));
         const path = `${parsedUrl.pathname}${parsedUrl.search}`;
         const method = init?.method ?? "GET";
-        const body =
+        const body: unknown =
           init?.body && parsedUrl.origin === "https://api.github.com"
             ? JSON.parse(String(init.body))
             : undefined;
@@ -186,7 +187,7 @@ describe("GitHub starter repository provisioning", () => {
         if (path.endsWith("/access_tokens")) {
           return Response.json(
             {
-              permissions: body.permissions,
+              permissions: z.looseObject({ permissions: z.unknown() }).parse(body).permissions,
               token: "github-installation-access-token",
             },
             { status: 201 },

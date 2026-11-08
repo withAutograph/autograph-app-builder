@@ -15,9 +15,16 @@ describe("working preview diagnostics", () => {
     try {
       const diagnosticsPath = nodePath.join(directory, "output.json");
       const source = `${workingPreviewDiagnosticCollectorSource}\nconst launch = ${JSON.stringify({ diagnosticsPath })};\nexport { appendPreviewDiagnostic };`;
-      const collector = await import(
-        `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
-      );
+      const collector = z
+        .object({
+          appendPreviewDiagnostic: z.function({
+            input: [z.enum(["stdout", "stderr"]), z.string()],
+            output: z.void(),
+          }),
+        })
+        .parse(
+          await import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`),
+        );
       collector.appendPreviewDiagnostic("stdout", "a".repeat(20_000));
       collector.appendPreviewDiagnostic("stdout", "latest stdout");
       collector.appendPreviewDiagnostic("stderr", "Error: missing configuration");
