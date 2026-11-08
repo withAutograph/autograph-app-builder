@@ -89,16 +89,16 @@ const originalPlan = hostedOperatorPlanSchema.parse({
     projectId: "prj_gateway",
   },
   deploymentBoundary: {
+    app: { branch: "preview", environment: "preview", projectId: "prj_app" },
     authority: {
       audience: "https://builder.example.test/mcp",
       issuer: "https://builder.example.test/api/auth",
       ownerUserId: "owner",
       workspaceId: "workspace",
     },
-    teamId: "team_fixture",
-    app: { branch: "preview", environment: "preview", projectId: "prj_app" },
     gateway: { branch: "preview", environment: "preview", projectId: "prj_gateway" },
     operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
+    teamId: "team_fixture",
     verification: {
       gatewayOrigin: "https://gateway.example.test",
       jwksUrl: "https://gateway.example.test/_platform/jwks.json",
@@ -124,12 +124,12 @@ const makeOperator = (plan: HostedOperatorPlan): HostedOperatorRecordBase => {
   }
   const planDigest = operatorPlanDigest(plan);
   const marker = canonical({
-    version: 1,
-    purpose: "protected-owned-organization-v1",
-    planDigest,
-    ownerSessionId: plan.selection.sessionId,
-    identityProofSha256: spec.identityProof.sha256,
     actorId: spec.actorId,
+    identityProofSha256: spec.identityProof.sha256,
+    ownerSessionId: plan.selection.sessionId,
+    planDigest,
+    purpose: "protected-owned-organization-v1",
+    version: 1,
   });
   return {
     mode: "protected-operator-v1",
@@ -176,7 +176,7 @@ const fixture = () => {
     },
     operator,
   };
-  return { record, operator, original };
+  return { operator, original, record };
 };
 
 const participantPlan = (plan: HostedOperatorPlan) => {

@@ -129,7 +129,7 @@ const makeFixture = (
   });
   const assertPlanOrigin = vi.fn(async () => {});
   const readApproval = vi.fn(async () => structuredClone(receipt));
-  const ports = { store, authorize, assertPlanOrigin, readApproval, now: () => clock };
+  const ports = { assertPlanOrigin, authorize, now: () => clock, readApproval, store };
   const registry = createNativeTargetOnboardingRegistry(ports);
   const approved = async () => {
     await registry.reservePlan("server-invocation", p);
@@ -497,8 +497,8 @@ describe("native target registry authorization and restart", () => {
     await f.accept();
     await f.registry.recordReady("server-invocation", f.p.appId, f.proof());
     const reader = createNativeTargetOnboardingReader({
-      store: { read: f.store.read },
       authorize: f.authorize,
+      store: { read: f.store.read },
     });
     expect(
       (await reader.readReady("server-invocation", f.p.appId))?.registration.observed.projectId,
@@ -615,6 +615,7 @@ describe("Postgres native target journal adapter", () => {
       return { onConflictDoNothing: () => ({ returning: async () => [saved] }) };
     });
     const database = {
+      insert: () => ({ values }),
       select: () => ({
         from: () => ({
           where: (condition: SQL) => {
@@ -623,7 +624,6 @@ describe("Postgres native target journal adapter", () => {
           },
         }),
       }),
-      insert: () => ({ values }),
       update: () => ({
         set: (update: Partial<StoredValues>) => ({
           where: (condition: SQL) => {

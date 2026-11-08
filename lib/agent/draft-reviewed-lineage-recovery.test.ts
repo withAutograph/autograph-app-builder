@@ -154,9 +154,6 @@ const fixture = () => {
         "utf-8",
       );
     },
-    async writeTextFile(input: { path: string; content: string }) {
-      writeFileSync(path.join(root, input.path), input.content);
-    },
     async run(input: {
       command: string;
       workingDirectory?: string;
@@ -214,6 +211,9 @@ const fixture = () => {
         },
       });
       return { exitCode: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
+    },
+    async writeTextFile(input: { path: string; content: string }) {
+      writeFileSync(path.join(root, input.path), input.content);
     },
   });
   // SAFETY: Consumed apply fields are complete; unused preparation contracts are controlled fixture identities.
@@ -391,13 +391,13 @@ const fixture = () => {
     },
   } as Awaited<ReturnType<typeof artifacts.publishCompiledOperatorArtifactsForSession>>);
   return {
-    root,
-    repository,
-    sandbox,
-    reviewed,
     candidate,
     commands,
     context,
+    repository,
+    reviewed,
+    root,
+    sandbox,
     setFailure: (value: typeof failure) => {
       failure = value;
     },

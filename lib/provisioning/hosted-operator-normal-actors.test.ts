@@ -102,10 +102,10 @@ const fixture = (
     checkpoint: async (next) => {
       state = structuredClone(next);
     },
-    readCapturedActor: async () => null,
-    readOrganizationSession: async () => null,
     clientFactory: (input) =>
       createHostedOperatorNormalAuthClient({ ...input, fetch: privateFetch }),
+    readCapturedActor: async () => null,
+    readOrganizationSession: async () => null,
   };
   return { auth, getState: () => state, ports, requests };
 };
@@ -210,6 +210,9 @@ describe("normal actor preparation", () => {
       assertMembershipApproved: async () => {
         throw new Error("resolved_approval_required");
       },
+      prepareOrganization: async () => {
+        effects.push("prepare");
+      },
       readOrganizationOwnerProof: async () => {
         effects.push("proof");
         return null;
@@ -217,9 +220,6 @@ describe("normal actor preparation", () => {
       reconcileOrganization: async () => {
         effects.push("readback");
         return "absent";
-      },
-      prepareOrganization: async () => {
-        effects.push("prepare");
       },
     };
     const before = local.requests.length;
@@ -339,12 +339,6 @@ describe("normal actor preparation", () => {
     const ports: NormalActorPreparationPorts = {
       ...local.ports,
       assertMembershipApproved: async () => {},
-      readOrganizationOwnerProof: async (session) => ({
-        actorId: session.actorId,
-        realmSessionId: session.realmSessionId,
-        reference: `proof-${session.realmSessionId}`,
-        sha256: "a".repeat(64),
-      }),
       prepareOrganization: async ({ organizationId, owner }) => {
         effects.push(`prepare:${organizationId}`);
         const target = twoOrganizations.organizations.find(
@@ -358,6 +352,12 @@ describe("normal actor preparation", () => {
         });
         preparedOrganizations.add(organizationId);
       },
+      readOrganizationOwnerProof: async (session) => ({
+        actorId: session.actorId,
+        realmSessionId: session.realmSessionId,
+        reference: `proof-${session.realmSessionId}`,
+        sha256: "a".repeat(64),
+      }),
       reconcileOrganization: async ({ organizationId }) => {
         effects.push(`read:${organizationId}`);
         return preparedOrganizations.has(organizationId) ? "applied" : "absent";
@@ -582,7 +582,7 @@ describe("internal actor save observation wrappers", () => {
         await originalCheckpoint(state);
       };
       await prepareNormalActorAccounts({ operationRef, ports: local.ports, program });
-      return { full, observation, checkpoints, requests: local.requests };
+      return { checkpoints, full, observation, requests: local.requests };
     };
     const fallback = await run(false);
     const observed = await run(true);

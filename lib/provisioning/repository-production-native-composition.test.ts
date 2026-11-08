@@ -91,16 +91,16 @@ const fixture = () => {
   const ports: Omit<RepositoryProductionSetupPorts, "withLease"> = {
     assertAuthorized,
     store: {
-      read: async () => structuredClone(row),
-      reserve: async () => {
-        throw new Error("must reuse original app");
-      },
       compareAndSet: async (previous, record) => {
         if (previous.revision !== row.revision) {
           throw new Error("conflicting setup");
         }
         row = { ...row, revision: row.revision + 1, record: structuredClone(record) };
         return structuredClone(row);
+      },
+      read: async () => structuredClone(row),
+      reserve: async () => {
+        throw new Error("must reuse original app");
       },
     },
     reservePrivateState: async () => {

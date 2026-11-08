@@ -87,7 +87,7 @@ const fixture = () => {
       releaseId: plan.runtime.releaseId,
     }),
   };
-  return { ports, store, writes, applied, handler: createPublicReleaseHandler(ports) };
+  return { applied, handler: createPublicReleaseHandler(ports), ports, store, writes };
 };
 describe("public app release lifecycle", () => {
   it("reports Auth bootstrap as its separate approved purpose without authenticated app acceptance", async () => {
@@ -322,7 +322,7 @@ it.each([
   [
     403,
     { message: "private-provider-body" },
-    { provider: "github", statusCode: 403, code: "forbidden", requestRef: "ABCD:1234:AA00:1234" },
+    { code: "forbidden", provider: "github", requestRef: "ABCD:1234:AA00:1234", statusCode: 403 },
   ],
   [
     200,
@@ -330,7 +330,7 @@ it.each([
       errors: [{ type: "FORBIDDEN", message: "private-provider-body", path: ["private"] }],
       data: null,
     },
-    { provider: "github", statusCode: 200, code: "FORBIDDEN", requestRef: "ABCD:1234:AA00:1234" },
+    { code: "FORBIDDEN", provider: "github", requestRef: "ABCD:1234:AA00:1234", statusCode: 200 },
   ],
   [
     200,
@@ -338,7 +338,7 @@ it.each([
       errors: [{ type: "private-unrecognized-type", message: "private-provider-body" }],
       data: null,
     },
-    { provider: "github", statusCode: 200, requestRef: "ABCD:1234:AA00:1234" },
+    { provider: "github", requestRef: "ABCD:1234:AA00:1234", statusCode: 200 },
   ],
 ])(
   "persists bounded actual GitHub denial metadata at HTTP%s without another branch dispatch",
@@ -347,11 +347,6 @@ it.each([
     let posts = 0;
     const github = createPublicReleaseGitHubProvider({
       assertCurrent: async () => {},
-      readCredential: async () => ({
-        token: "private-test-token",
-        repositoryId: plan.source.repositoryId,
-        installationId: plan.source.installationId,
-      }),
       fetch: async (resource) => {
         const parsed = z
           .union([z.string(), z.instanceof(URL), z.instanceof(Request)])
@@ -386,6 +381,11 @@ it.each([
         }
         throw new Error("Unexpected request");
       },
+      readCredential: async () => ({
+        token: "private-test-token",
+        repositoryId: plan.source.repositoryId,
+        installationId: plan.source.installationId,
+      }),
     });
     const apply = f.ports.applyEffect;
     const reconcile = f.ports.reconcileEffect;
