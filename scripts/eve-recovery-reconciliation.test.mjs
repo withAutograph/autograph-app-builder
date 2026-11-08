@@ -648,7 +648,7 @@ const fixture = async (options = {}) => {
     allowParked: options.allowParked === true,
     binding: { ownerRunId: boundOwnerRunId, logicalSessionId },
     authorizeOwner: async (currentBinding) => {
-      assert.deepEqual(currentBinding, { ownerRunId: boundOwnerRunId, logicalSessionId });
+      assert.deepEqual(currentBinding, { logicalSessionId, ownerRunId: boundOwnerRunId });
       assert.ok(Object.isFrozen(currentBinding));
       authorized = true;
       await Promise.resolve();
@@ -897,7 +897,7 @@ const acceptedSuffix = () => [
 
 test("exact encrypted post-checkpoint cancel/send/cancel is retained for ordinary owner admission", async () => {
   const suffix = acceptedSuffix();
-  const f = await fixture({ runStatus: "cancelled", inboxSuffix: suffix, encrypted: true });
+  const f = await fixture({ encrypted: true, inboxSuffix: suffix, runStatus: "cancelled" });
   const payload = readTerminalRecoveryCandidate(f.collected.candidate);
   assert.deepEqual(
     payload.carriedInbox.map((entry) => entry.payload),
@@ -918,7 +918,7 @@ test("exact encrypted post-checkpoint cancel/send/cancel is retained for ordinar
 });
 for (const kind of ["reset", "session-timeout", "unknown"]) {
   test(`unsupported historical inbox ${kind} remains uncertain`, async () => {
-    const f = await fixture({ runStatus: "cancelled", inboxSuffix: [{ kind }] });
+    const f = await fixture({ inboxSuffix: [{ kind }], runStatus: "cancelled" });
     const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
     assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
   });
@@ -932,7 +932,7 @@ for (const mutation of [
   "missing-envelope",
 ]) {
   test(`historical inbox cannot waive uncertainty with ${mutation}`, async () => {
-    const f = await fixture({ runStatus: "cancelled", inboxSuffix: acceptedSuffix() });
+    const f = await fixture({ inboxSuffix: acceptedSuffix(), runStatus: "cancelled" });
     const payload = readTerminalRecoveryCandidate(f.collected.candidate);
     const first = payload.carriedInbox[0];
     if (mutation === "foreign-run") {
@@ -959,8 +959,8 @@ for (const mutation of [
 }
 test("retained inbox commands never waive unknown native effects", async () => {
   const f = await fixture({
-    runStatus: "cancelled",
     inboxSuffix: acceptedSuffix(),
+    runStatus: "cancelled",
     uncommittedWrite: true,
   });
   const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
@@ -972,7 +972,7 @@ test("retained inbox commands never waive unknown native effects", async () => {
 });
 
 test("a later authored step leaves historical command admission uncertain", async () => {
-  const f = await fixture({ runStatus: "cancelled", inboxSuffix: acceptedSuffix() });
+  const f = await fixture({ inboxSuffix: acceptedSuffix(), runStatus: "cancelled" });
   const payload = readTerminalRecoveryCandidate(f.collected.candidate);
   payload.events.push({
     runId: ownerRunId,
@@ -993,17 +993,17 @@ for (const item of [
   },
   {
     options: { runStatus: "waiting" },
+    parentStatus: completedStatus,
     stage: "handoff_successor",
     status: "waiting",
-    parentStatus: completedStatus,
   },
   { options: { finalStatusTransition: true }, stage: "final_owner", status: "suspended" },
 ]) {
   test(`actual native handoff resolver identifies ${item.stage} refusal`, async () => {
     const f = await fixture({
-      handoff: true,
       allowParked: true,
       expectedUnavailable: true,
+      handoff: true,
       ...item.options,
     });
     assert.equal(f.collected.reason, "source-not-terminal");
@@ -1018,10 +1018,10 @@ for (const item of [
 
 test("running anchored-result parent is observable only through an opaque lineage preflight", async () => {
   const options = {
-    handoff: true,
-    anchorStatus: "running",
-    runStatus: "running",
     allowParked: true,
+    anchorStatus: "running",
+    handoff: true,
+    runStatus: "running",
   };
   const terminal = await fixture({ ...options, expectedUnavailable: true });
   assert.equal(terminal.collected.boundary.stage, "handoff_parent");
