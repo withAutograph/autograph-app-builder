@@ -18,6 +18,7 @@ interface FixedGit {
   (path: string, args: readonly string[], encoding: "buffer"): Buffer;
 }
 
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing fixedGit overload implementation. */
 // SAFETY: The encoding branch returns UTF-8 text for "utf-8" and the original Buffer for "buffer".
 const fixedGit = function fixedGit(
   path: string,
@@ -63,6 +64,7 @@ const fixedGit = function fixedGit(
   );
   return encoding === "utf-8" ? output.toString("utf-8") : output;
 } as FixedGit;
+/* oxlint-enable typescript/no-unsafe-type-assertion */
 
 export const LEGACY_SOURCE_RECEIPT_VERSION = 3 as const;
 export const SOURCE_RECEIPT_VERSION = 4 as const;
@@ -176,7 +178,7 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
   ) {
     throw new Error(invalidCanonicalCloneInspectionMessage);
   }
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const contents = value.contents as Partial<Record<string, string>>;
   const contract = value.contract.map((entry) => {
     if (!isRecord(entry) || !hasExactKeys(entry, ["mode", "objectId", "path", "sha256"])) {
@@ -312,12 +314,12 @@ export const parseSourceReceiptEvidence = (value: unknown): SourceReceiptEvidenc
   ) {
     throw new Error("Source receipt evidence is invalid.");
   }
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- Retain the existing receipt boundary before checking the stored digest.; Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- Retain the existing receipt boundary before checking the stored digest.; Preserve the existing type assertion at this boundary.
   const { digest, ...unsigned } = value as unknown as SourceReceiptEvidence;
   if (digest !== sourceReceiptDigest(unsigned)) {
     throw new Error("Source receipt evidence digest is invalid.");
   }
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- Return the same receipt value after the existing digest check.; Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- Return the same receipt value after the existing digest check.; Preserve the existing type assertion at this boundary.
   return value as unknown as SourceReceiptEvidence;
 };
 

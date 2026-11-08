@@ -61,7 +61,7 @@ export function SearchCombobox({
     : options;
   useEffect(() => {
     const close = (event: PointerEvent) => {
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       if (rootRef.current?.contains(event.target as Node) !== true) {
         setOpen(false);
       }

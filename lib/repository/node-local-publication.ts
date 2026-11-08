@@ -182,8 +182,10 @@ const runGitCapture = async function runGitCapture(
     output.push(Buffer.from(chunk));
   });
   child.stderr.pipe(diagnosticCapture.writer);
+  /* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing child-process close-event tuple assumption. */
   // SAFETY: This spawned ChildProcess emits close with its exit code and termination signal.
   const [code] = (await once(child, "close")) as [number | null, NodeJS.Signals | null];
+  /* oxlint-enable typescript/no-unsafe-type-assertion */
   const stderrLogPath = await finishGitDiagnosticCapture(diagnosticCapture, code !== 0);
   const initial: Pick<GitProcessResult, "stderrLogPath"> = {};
   if (stderrLogPath !== undefined) {
@@ -235,13 +237,15 @@ const fixedGitApply = async function fixedGitApply(
   }
   if (
     inputResult.status === "rejected" &&
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     (inputResult.reason as NodeJS.ErrnoException).code !== "EPIPE"
   ) {
     throw inputResult.reason;
   }
+  /* oxlint-disable typescript/no-unsafe-type-assertion -- Preserve the existing child-process close-event tuple assumption. */
   // SAFETY: The fulfilled promise is once(child, "close"), whose arguments are the exit code and signal.
   const [code, signal] = processResult.value as [number | null, NodeJS.Signals | null];
+  /* oxlint-enable typescript/no-unsafe-type-assertion */
   const stderrLogPath = await finishGitDiagnosticCapture(diagnosticCapture, code !== 0);
   if (code !== 0) {
     const statusDetail = signal ?? `exit ${code}`;
@@ -358,7 +362,7 @@ const buildExactGitPatch = async function buildExactGitPatch(input: {
         await patchFile.writeFile(chunk);
       }
       // SAFETY: resultPromise observes this spawned ChildProcess's close event, carrying exit code and signal.
-      // oxlint-disable-next-line eslint/no-await-in-loop -- finish each streamed diff before starting the next one
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion, eslint/no-await-in-loop -- finish each streamed diff before starting the next one
       const [code, signal] = (await resultPromise) as [number | null, NodeJS.Signals | null];
       // oxlint-disable-next-line eslint/no-await-in-loop -- finish each patch diagnostic before the next patch starts.
       const stderrLogPath = await finishGitDiagnosticCapture(diagnosticCapture, code !== 1);
@@ -530,7 +534,7 @@ const fileState = async function fileState(path: string): Promise<FileState> {
       size,
     };
   } catch (error: unknown) {
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return { kind: "absent" };
     }
@@ -797,12 +801,12 @@ export const readLocalPublicationJournal = async function readLocalPublicationJo
   const root = await resolveAllowedRepository(destinationPath);
   const path = await gitOwnedPath(root, localPublicationGitPath);
   try {
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const journal = JSON.parse(await readFile(path, "utf-8")) as LocalPublicationJournal;
     assertJournal(journal);
     return journal;
   } catch (error: unknown) {
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return undefined;
     }

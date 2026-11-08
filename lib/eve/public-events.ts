@@ -164,7 +164,7 @@ const recordStringField = (value: unknown, key: string): string | undefined => {
   if (typeof value !== "object" || value === null || !(key in value)) {
     return undefined;
   }
-  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
   const field = (value as Record<string, unknown>)[key];
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return typeof field === "string" ? field : undefined;
@@ -248,7 +248,7 @@ const publicBuilderFailure = (failure: { code: string; message: string }, operat
   } as const satisfies Record<string, string>;
   const name =
     operation !== undefined && Object.hasOwn(operationLabels, operation)
-      ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      ? // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         operationLabels[operation as keyof typeof operationLabels]
       : "this Builder step";
   const size =
@@ -1282,7 +1282,7 @@ const inputRequest = (request: {
   }
   const title =
     request.kind === toolApprovalKind && toolName !== undefined && toolName in approvalTitles
-      ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      ? // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         approvalTitles[toolName as keyof typeof approvalTitles]
       : request.prompt;
   let description: string | undefined;

@@ -1,4 +1,4 @@
-/* oxlint-disable anti-slop/require-safety-comment-for-type-assertion -- Preserve existing assertions, including those in template expressions. */
+/* oxlint-disable typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve existing assertions, including those in template expressions. */
 import type { AppBuilderWorkflowState, PreparedAppCreation } from "./workflow-state";
 import type { SandboxSession } from "eve/sandbox";
 import { hasTestCapability } from "../testing/test-capability";

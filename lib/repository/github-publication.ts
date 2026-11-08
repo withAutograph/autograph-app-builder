@@ -706,7 +706,7 @@ function contentManifest(
 ): ReviewedChangeSetReceipt["changes"] {
   return changes.map((change) => {
     if (change.kind === "added") {
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       return Object.fromEntries([
         ["path", change.path],
         ["kind", change.kind],
@@ -720,7 +720,7 @@ function contentManifest(
       ]) as ReviewedChangeSetReceipt["changes"][number];
     }
     if (change.kind === "modified") {
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       return Object.fromEntries([
         ["path", change.path],
         ["kind", change.kind],
@@ -734,7 +734,7 @@ function contentManifest(
         ],
       ]) as ReviewedChangeSetReceipt["changes"][number];
     }
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     return Object.fromEntries([
       ["path", change.path],
       ["kind", change.kind],

@@ -61,9 +61,9 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
   const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const formData = new FormData(e.target as HTMLFormElement);
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const name = (formData.get("name") as string)?.trim();
 
     submitRequest({

@@ -63,7 +63,7 @@ export function developmentChildExit(child: DevelopmentChild) {
     return Promise.resolve(1);
   }
   /* oxlint-disable typescript/strict-boolean-expressions -- Preserve the existing truthiness for supported values. */
-  // oxlint-disable-next-line github/no-then, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing promise sequencing and settlement behavior.; Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, github/no-then, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing promise sequencing and settlement behavior.; Preserve the existing type assertion at this boundary.
   return once(child, "exit").then(([code, signal]) => (code as number | null) ?? (signal ? 1 : 0));
   /* oxlint-enable typescript/strict-boolean-expressions */
 }
@@ -94,7 +94,7 @@ export async function stopDevelopmentChild(
     try {
       process.kill(-child.pid, value);
     } catch (error) {
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
         throw error;
       }

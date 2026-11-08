@@ -743,7 +743,7 @@ function otherPublicApprovalDescription(input: unknown, toolName?: string): stri
       typeof record.changeSet === "object" &&
       record.changeSet !== null &&
       !Array.isArray(record.changeSet)
-        ? // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
+        ? // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
           (record.changeSet as Record<string, unknown>)
         : undefined;
     const parsed = z

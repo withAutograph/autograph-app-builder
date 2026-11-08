@@ -95,7 +95,7 @@ export default defineTool({
       const stored: LocalPublicationSuccessReceipt =
         workflow.phase === "published_local"
           ? workflow.publicationReceipt
-          : // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+          : // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
             (durable as LocalPublicationSuccessReceipt);
       if (!matches(proposalFromJournal(stored))) {
         throw new Error(

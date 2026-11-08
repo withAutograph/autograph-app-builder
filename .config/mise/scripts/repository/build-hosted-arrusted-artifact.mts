@@ -146,7 +146,7 @@ function packageResolutionRoot(packagePath: string): string {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function packageVersion(packagePath: string): string {
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const manifest = JSON.parse(readFileSync(path.join(packagePath, "package.json"), "utf-8")) as {
     version?: string;
   };
@@ -185,7 +185,7 @@ function dependencyClosure(root: string): Map<string, string> {
     if (packagePath === undefined) {
       throw new Error(`Dependency ${name} is missing.`);
     }
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const manifest = JSON.parse(readFileSync(path.join(packagePath, "package.json"), "utf-8")) as {
       version?: string;
       dependencies?: Record<string, string>;

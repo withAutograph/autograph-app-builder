@@ -334,7 +334,7 @@ const sourcePaths = async (sourceRoot: string): Promise<string[]> => {
           continue;
         }
       } catch (error) {
-        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
           continue;
         }
@@ -399,7 +399,7 @@ const sourceEntry = async (sourceRoot: string, path: string) => {
       `Development source supports only regular files and safe symbolic links: ${path}`,
     );
   } catch (error) {
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       // oxlint-disable-next-line typescript/consistent-return -- Preserve the missing source entry result.
       return;
@@ -667,7 +667,7 @@ export const removeDevelopmentSnapshot = async (root: string) => {
   try {
     await makeWritable(root);
   } catch (error) {
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       throw error;
     }
@@ -685,7 +685,7 @@ const digestFileOrAbsent = async (path: string) => {
     }
     return sha256(await readFile(path));
   } catch (error) {
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return "absent";
     }

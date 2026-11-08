@@ -140,7 +140,7 @@ function digestFileOrAbsent(filePath: string) {
     }
     return sha256(readFileSync(filePath));
   } catch (error) {
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return "absent";
     }
@@ -403,7 +403,7 @@ export function readDevelopmentVercelBootstrapInput(
   const sourceRoot = exactSourceRoot(required(environment, "REPOSITORY_LOCAL_ROOTS"));
   const result = {
     dependencyKey: required(environment, "APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY"),
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     lockfiles: Object.fromEntries(
       dependencyInputs.map((inputPath) => [
         inputPath,

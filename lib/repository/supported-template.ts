@@ -334,7 +334,7 @@ export const inspectSupportedTemplateDependencyClosure =
         throw new Error(`Adapter dependency is not a regular Git blob: ${path}`);
       }
       return {
-        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         mode: match.groups.mode as DependencyFile["mode"],
         objectId: match.groups.objectId,
         path,
@@ -356,7 +356,7 @@ export const inspectSupportedTemplateDependencyClosure =
 const configurationRecord = function configurationRecord(value: unknown): Record<string, unknown> {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
+    ? // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
       (value as Record<string, unknown>)
     : {};
 };
@@ -498,7 +498,7 @@ export const inspectRepositoryReleasePolicyAtGitSnapshot =
       sourceTree,
       workflow: {
         bytes: gitBytes(input.sourcePath, ["show", `${sourceSha}:${repositoryReleasePolicyPath}`]),
-        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         mode: match.groups.mode as "100644" | "100755",
         objectId: match.groups.objectId,
         status: "present",
@@ -988,7 +988,7 @@ export const parsePreparedWorkspace = function parsePreparedWorkspace(
   ) {
     throw new Error(invalidWorkspaceRecordMessage);
   }
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   return record as PreparedSandboxWorkspace;
 };
 
@@ -1029,7 +1029,7 @@ const parsePreparedSourceFiles = function parsePreparedSourceFiles(
       throw new Error(invalidWorkspaceManifestMessage);
     }
     paths.add(file.path);
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     return file as PreparedSourceFile;
   });
 };

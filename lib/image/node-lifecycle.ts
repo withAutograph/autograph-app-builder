@@ -561,7 +561,7 @@ const readReceipt = function readReceipt(
   ) {
     throw new Error(`${kind} receipt must be an owned mode 0600 regular file.`);
   }
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const parsed = JSON.parse(readFileSync(path, "utf-8")) as ReceiptEnvelope;
   if (
     parsed.version !== 1 ||
@@ -704,7 +704,7 @@ const verifyStateRootContents = function verifyStateRootContents(
     } else if (entry.name === githubStateRootName) {
       assertGithubStateRoot(join(stateRoot, githubStateRootName));
     } else {
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       const kind = receiptKinds[entry.name as keyof typeof receiptKinds];
       if (kind === undefined || !entry.isFile() || entry.isSymbolicLink()) {
         throw new Error("Image lifecycle state contains an unknown or unsafe artifact.");
@@ -1238,7 +1238,7 @@ const execute = function execute(
   cwd: string,
   extraEnvironment: Readonly<Record<string, string>> = {},
 ): string {
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const tool = command.program as ImageTool;
   const inspectVersion = (versionTool: ImageTool) => {
     const versionCommand = imageToolVersionCommand(versionTool);
@@ -1539,7 +1539,7 @@ const inspectRemoteImageUnlocked = function inspectRemoteImageUnlocked(
       ...ghcrCredentialEnvironment(provenance.builder.stateRoot, login.identity),
       ...buildxEnvironment,
     };
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const localIdentity = local.result as {
       imageId: string;
       rootFsLayers: readonly string[];

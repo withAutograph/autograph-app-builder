@@ -29,7 +29,7 @@ async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
   if (!emulation || !["vercel", "github"].includes(provider) || typeof query.state !== "string") {
     notFound();
   }
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const typedProvider = provider as EmulatedProvider;
   const resumeKey = parseProviderResumeKey(query.resume);
   const authorizing = provider === "github" && query.phase === "authorize";

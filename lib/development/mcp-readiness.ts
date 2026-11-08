@@ -7,7 +7,7 @@ function jsonRpcBody(text: string) {
     .filter((line) => line.startsWith("data:"))
     .map((line) => line.slice("data:".length).trim())
     .find((line) => line.length > 0);
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   return JSON.parse(data ?? text) as {
     error?: { message?: string };
     result?: { tools?: { name?: string }[] };

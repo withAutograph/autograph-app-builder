@@ -1,4 +1,4 @@
-/* oxlint-disable sonarjs/no-undefined-assignment -- Preserve explicit undefined values in existing JSX or generated-source expressions. */
+/* oxlint-disable typescript/no-unsafe-type-assertion, sonarjs/no-undefined-assignment -- Preserve explicit undefined values in existing JSX or generated-source expressions. */
 "use client";
 
 import { parseAdditionalFieldValue } from "@better-auth-ui/core";

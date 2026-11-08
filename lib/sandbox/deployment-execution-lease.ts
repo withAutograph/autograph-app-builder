@@ -106,7 +106,7 @@ function errorWithCleanupEvidence(error: unknown, evidence: SandboxCleanupEviden
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function sandboxCleanupEvidence(error: unknown) {
   return error instanceof Error
-    ? // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Cleanup evidence is attached to errors under a private symbol.; Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
+    ? // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions, anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Cleanup evidence is attached to errors under a private symbol.; Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
       ((error as unknown as Record<PropertyKey, unknown>)[cleanupEvidenceKey] as
         | SandboxCleanupEvidence
         | undefined)

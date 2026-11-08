@@ -152,7 +152,7 @@ export function sourceHandoffIdForSessionAuth(
     // Local sessions have no prepared hosted context. A malformed hosted
     // envelope must not silently become an unbound session.
     const current =
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       (sessionAuth as { current?: { authenticator?: string; principalType?: string } } | null)
         ?.current;
     if (current?.authenticator === "mcp-oauth-jwks" || current?.principalType === "service") {

@@ -95,7 +95,7 @@ export default defineTool({
             }
           })();
     const required =
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       (Object.keys(requiredToolVersions) as (keyof typeof requiredToolVersions)[]).map(
         (command) => {
           const observed = tools.find((tool) => tool.command === command);

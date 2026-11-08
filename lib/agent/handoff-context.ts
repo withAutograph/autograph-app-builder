@@ -30,7 +30,7 @@ export function createPreparedHandoffReader(input: {
     if (
       record.handoffId !== handoffId ||
       Object.entries(authority).some(
-        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         ([key, value]) => record.authority[key as keyof HostedSessionTenantAuthority] !== value,
       )
     ) {

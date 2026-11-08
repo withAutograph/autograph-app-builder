@@ -50,7 +50,7 @@ const connectionIcons = {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ConnectionIcon({ kind, name }: { kind?: string; name: string }) {
   /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const Icon = kind ? connectionIcons[kind as keyof typeof connectionIcons] : undefined;
   /* oxlint-enable typescript/strict-boolean-expressions */
   const hasBrandAsset = kind === "ramp" || kind === "netsuite";
