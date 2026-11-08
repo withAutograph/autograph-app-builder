@@ -189,13 +189,13 @@ const applicationModel = (steps: ApplicationModelStep[]) => {
           input: JSON.stringify(args),
         })),
         finishReason: {
-          unified: Array.isArray(step) ? ("tool-calls" as const) : ("length" as const),
           raw: "tool_calls",
+          unified: Array.isArray(step) ? ("tool-calls" as const) : ("length" as const),
         },
         response: {
           id: `application-${index}`,
-          timestamp: new Date(),
           modelId: "openai/gpt-6.1-sol",
+          timestamp: new Date(),
         },
         usage: {
           inputTokens: { cacheRead: 0, cacheWrite: 0, noCache: 10, total: 10 },
@@ -1217,12 +1217,12 @@ describe("independent application source review", () => {
     const evidence = createApplicationReviewEvidence({
       reviewInput: input,
       observed: {
-        treeDigest: "observed",
         files: [...source].map(([file, text]) => ({
           path: file,
           mode: "644",
           digest: createHash("sha256").update(text).digest("hex"),
         })),
+        treeDigest: "observed",
       },
       changedPaths: [path],
       visiblePaths: [...source.keys()],
@@ -1233,8 +1233,8 @@ describe("independent application source review", () => {
     const collect = async (cursor?: ApplicationSourceReadCursor): Promise<void> => {
       const readRequest = (): Parameters<ApplicationReviewEvidence["readSource"]>[0] => {
         const request: Parameters<ApplicationReviewEvidence["readSource"]>[0] = {
-          path,
           endLine: 1,
+          path,
         };
         if (cursor !== undefined) {
           request.cursor = cursor;
@@ -1263,26 +1263,26 @@ describe("independent application source review", () => {
     expect(windows[1].startColumn).toBe(windows[0].nextCursor?.column);
     expect(
       await evidence.verifySourceCitation({
-        path,
-        startLine: 1,
         endLine: 1,
         excerpt: windows[0].content,
+        path,
+        startLine: 1,
       }),
     ).toBe(true);
     expect(
       await evidence.verifySourceCitation({
-        path,
-        startLine: 1,
         endLine: 1,
         excerpt: `${windows[0].content.slice(-40)}${windows[1].content.slice(0, 40)}`,
+        path,
+        startLine: 1,
       }),
     ).toBe(true);
     expect(
       await evidence.verifySourceCitation({
-        path,
-        startLine: 1,
         endLine: 1,
         excerpt: `${windows[0].content}invented`,
+        path,
+        startLine: 1,
       }),
     ).toBe(false);
     expect(await evidence.readSource({ path: imported })).toMatchObject({
@@ -1410,7 +1410,7 @@ describe("independent application source review", () => {
     const model = applicationModel([
       inspectApplication,
       recordApplication,
-      { length: true, calls: resumedEvidence },
+      { calls: resumedEvidence, length: true },
       resumedEvidence,
       completeApplication,
     ]);

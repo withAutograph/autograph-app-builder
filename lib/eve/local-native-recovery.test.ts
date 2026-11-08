@@ -200,15 +200,15 @@ describe("local native terminal recovery authority", () => {
       },
     });
     const original = await service.start({
-      resumeSessionId: "wrun_original",
       clientRequestId: "read-only-resume",
+      resumeSessionId: "wrun_original",
     });
     expect(original).toMatchObject({ cursor: 2, sessionId: "wrun_original", status: "failed" });
     expect(f.post).not.toHaveBeenCalled();
     const recovered = await service.start({
-      resumeSessionId: "wrun_original",
-      resumeMode: "recover",
       clientRequestId: "explicit-public-recovery",
+      resumeMode: "recover",
+      resumeSessionId: "wrun_original",
     });
     expect(recovered).toMatchObject({ cursor: 3, sessionId: "wrun_original", status: "waiting" });
     expect(recovered.events[0]).toEqual(original.events[0]);
@@ -237,9 +237,9 @@ describe("local native terminal recovery authority", () => {
       },
     });
     const initial = await service.start({
-      resumeSessionId: "wrun_original",
-      resumeMode: "recover",
       clientRequestId: "resume-delayed-tail",
+      resumeMode: "recover",
+      resumeSessionId: "wrun_original",
     });
     expect(initial).toMatchObject({ cursor: 2, status: "failed" });
     childVisible = true;
@@ -287,13 +287,13 @@ describe("local native terminal recovery authority", () => {
           }),
         },
       },
-      { stateGeneration: f.root, isRecoveredSession: (id) => f.recovery.lineage(id).length > 1 },
+      { isRecoveredSession: (id) => f.recovery.lineage(id).length > 1, stateGeneration: f.root },
     );
-    await service.start({ resumeSessionId: "wrun_original", clientRequestId: "read-reader" });
+    await service.start({ clientRequestId: "read-reader", resumeSessionId: "wrun_original" });
     await service.send({
-      sessionId: "wrun_original",
       clientRequestId: "new-reader-message",
       message: "Continue",
+      sessionId: "wrun_original",
     });
     await vi.waitFor(() => {
       expect(childEvents).toHaveLength(2);
@@ -393,7 +393,7 @@ describe("local native terminal recovery authority", () => {
           attach: (id, options) => ({ ...native.sessions.attach(id, options), respond, cancel }),
         },
       },
-      { stateGeneration: f.root, isRecoveredSession: () => true, modelTurnTimeoutMs: 200 },
+      { isRecoveredSession: () => true, modelTurnTimeoutMs: 200, stateGeneration: f.root },
     );
     await service.get({ cursor: 0, limit: 100, sessionId: "wrun_original" });
     await service.respond({
@@ -456,12 +456,12 @@ describe("local native terminal recovery authority", () => {
           }),
         },
       },
-      { stateGeneration: f.root, isRecoveredSession: () => true },
+      { isRecoveredSession: () => true, stateGeneration: f.root },
     );
     await service.send({
-      sessionId: "wrun_original",
       clientRequestId: "fresh-process",
       message: "Continue",
+      sessionId: "wrun_original",
     });
     expect(cursors).toEqual([2]);
   });
@@ -486,12 +486,12 @@ describe("local native terminal recovery authority", () => {
           }),
         },
       },
-      { stateGeneration: f.root, isRecoveredSession: () => recovered },
+      { isRecoveredSession: () => recovered, stateGeneration: f.root },
     );
     await service.send({
-      sessionId: "wrun_original",
       clientRequestId: "old-fragment",
       message: "Continue",
+      sessionId: "wrun_original",
     });
     await vi.waitFor(async () => {
       const current = await service.get({ cursor: 0, limit: 100, sessionId: "wrun_original" });
