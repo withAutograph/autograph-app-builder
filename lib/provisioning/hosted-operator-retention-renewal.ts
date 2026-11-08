@@ -277,6 +277,19 @@ export const isRetentionRenewalSuccessor = (
   const newExpiry = Date.parse(plan.retention.expiresAt);
   const leaseExpiry =
     record.leaseExpiresAt === undefined ? Number.NaN : Date.parse(record.leaseExpiresAt);
+  const isPendingRecoveryEffect = () => {
+    if (pendingEffectId === undefined || pending === undefined) {
+      return false;
+    }
+    if (["bindings", GATEWAY_BINDINGS_KIND, "gateway-delivery"].includes(pending.kind)) {
+      return true;
+    }
+    return (
+      pending.kind === "delivery" &&
+      operator.plan.hostProtection !== undefined &&
+      operator.plan.appDeliveryReplacement !== undefined
+    );
+  };
   return [
     Number.isFinite(now),
     isExpiredAt(oldExpiry, now),
@@ -287,12 +300,7 @@ export const isRetentionRenewalSuccessor = (
     hasText(operator.approvalId),
     isRealApprovalCall(record.approvedByCallId),
     operator.planDigest === operatorPlanDigest(operator.plan),
-    pendingEffectId !== undefined &&
-      pending !== undefined &&
-      (["bindings", GATEWAY_BINDINGS_KIND, "gateway-delivery"].includes(pending.kind) ||
-        (pending.kind === "delivery" &&
-          operator.plan.hostProtection !== undefined &&
-          operator.plan.appDeliveryReplacement !== undefined)),
+    isPendingRecoveryEffect(),
     pending?.kind === "gateway-delivery" || pendingEffectAttempt !== undefined,
     receiptsPrecedePending(operator, previousEffectIds, receiptIds, pendingEffectId),
     hasNoActiveLease(record, leaseExpiry, now),

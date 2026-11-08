@@ -114,10 +114,9 @@ function installedOidcNeedsRefresh(input: {
     const credentialPath = path.resolve(input.repositoryRoot, localEnvironmentFile);
     const stat = lstatSync(credentialPath);
     const ownerId = process.getuid?.();
+    const isRegularSingleLinkFile = stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1;
     if (
-      stat.isFile() &&
-      !stat.isSymbolicLink() &&
-      stat.nlink === 1 &&
+      isRegularSingleLinkFile &&
       ownerId !== undefined &&
       stat.uid === ownerId &&
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
