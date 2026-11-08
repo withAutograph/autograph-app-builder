@@ -9,6 +9,8 @@ export const IMAGE_VERSION = "sandbox-v2";
 export const ARRUSTED_IMAGE_TARGET_SHA = "d378904a05e1bc2c0896886e6fbd3b816babaee2";
 export const ARRUSTED_IMAGE_TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0d39";
 
+const dockerBuildx = "docker-buildx";
+
 const sha40 = /^[0-9a-f]{40}$/u;
 const sha256 = /^[0-9a-f]{64}$/u;
 const secretKey = /(?<key>authorization|cookie|credential|password|secret|token)/iu;
@@ -36,7 +38,7 @@ export const IMAGE_TOOL_VERSIONS = {
 export type ImageTool = keyof typeof IMAGE_TOOL_VERSIONS;
 
 export const imageToolVersionCommand = (tool: ImageTool): CommandSpec => ({
-  args: tool === "docker-buildx" ? ["version"] : ["--version"],
+  args: tool === dockerBuildx ? ["version"] : ["--version"],
   program: tool,
 });
 
@@ -47,7 +49,7 @@ export const assertExactImageToolVersion = (tool: ImageTool, output: string): vo
   let valid: boolean;
   if (tool === "docker") {
     valid = new RegExp(`^Docker version ${escaped},`, "u").test(normalized);
-  } else if (tool === "docker-buildx") {
+  } else if (tool === dockerBuildx) {
     valid = new RegExp(`\\bv${escaped}(?:\\s|$)`, "u").test(normalized);
   } else if (tool === "msb") {
     valid = normalized === `msb ${expected}` || normalized === `Microsandbox CLI v${expected}`;
@@ -260,7 +262,7 @@ export const imageBuildCommand = (
       "--load",
       provenance.builder.root,
     ],
-    program: "docker-buildx",
+    program: dockerBuildx,
   };
 };
 
@@ -289,22 +291,22 @@ export const exactDigestReference = (reference: string): string => {
 
 export const remoteIndexCommand = (reference: string): CommandSpec => ({
   args: ["imagetools", "inspect", "--raw", exactDigestReference(reference)],
-  program: "docker-buildx",
+  program: dockerBuildx,
 });
 
 export const remoteDescriptorCommand = (provenance: ImageProvenance): CommandSpec => ({
   args: ["imagetools", "inspect", provenance.image.tag, "--format", "{{json .Manifest}}"],
-  program: "docker-buildx",
+  program: dockerBuildx,
 });
 
 export const remoteManifestCommand = (reference: string): CommandSpec => ({
   args: ["imagetools", "inspect", "--raw", exactDigestReference(reference)],
-  program: "docker-buildx",
+  program: dockerBuildx,
 });
 
 export const remoteImageCommand = (reference: string): CommandSpec => ({
   args: ["imagetools", "inspect", exactDigestReference(reference), "--format", "{{json .Image}}"],
-  program: "docker-buildx",
+  program: dockerBuildx,
 });
 
 export const imagePreloadCommand = (reference: string): CommandSpec => ({
