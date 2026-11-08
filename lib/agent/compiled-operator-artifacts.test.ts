@@ -993,13 +993,13 @@ describe("owned compiled artifact workflow hook", () => {
     });
     const execution = {
       logicalSessionId: "adapter",
-      ownerRunId: "callback-step-owner",
       ownerAnchorRunId: "adapter-child",
+      ownerRunId: "callback-step-owner",
     };
     const resolve = () =>
-      resolver({ adapterSessionId: "adapter", authority, principal, sessionAuth, execution });
+      resolver({ adapterSessionId: "adapter", authority, execution, principal, sessionAuth });
     mocks.resolve.mockImplementation((input: Parameters<typeof resolver>[0]) => resolver(input));
-    const input = { ...frame(), sessionAuth, callbackExecution: execution };
+    const input = { ...frame(), callbackExecution: execution, sessionAuth };
     await service.cancel({ sessionId: recovered.sessionId });
     await expect(resolve()).rejects.toMatchObject({ code: "authorization_required" });
     await expect(publishCompiledOperatorArtifactsForSession(input)).rejects.toMatchObject({
@@ -1049,9 +1049,9 @@ describe("owned compiled artifact workflow hook", () => {
     ).rejects.toMatchObject({ code: "authorization_required" });
     await expect(
       readHostedOperatorCallbackOwner({
-        store,
-        owner: { ...owner, adapterGeneration: 2 },
         execution,
+        owner: { ...owner, adapterGeneration: 2 },
+        store,
       }),
     ).rejects.toMatchObject({ code: "authorization_required" });
     const captured = await publishCompiledOperatorArtifactsForSession(input);

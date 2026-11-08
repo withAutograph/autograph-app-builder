@@ -1202,8 +1202,8 @@ describe("protected hosted operator boundary", () => {
     const result = await f.client.request({
       action: "plan",
       operation: "prepare",
-      selection,
       releaseIntent: "prepared-preview",
+      selection,
     });
     expect(result.status).toBe("planned");
     expect(f.deps.plan).toHaveBeenCalledWith(
@@ -1217,8 +1217,8 @@ describe("protected hosted operator boundary", () => {
     const request = {
       action: "plan" as const,
       operation: "prepare" as const,
-      selection,
       releaseIntent: "prepared-preview" as const,
+      selection,
     };
     const first = await f.client.request(request);
     const before = structuredClone(f.row);
@@ -1248,8 +1248,8 @@ describe("protected hosted operator boundary", () => {
     const request = {
       action: "plan" as const,
       operation: "prepare" as const,
-      selection,
       releaseIntent: "prepared-preview" as const,
+      selection,
     };
     await f.client.request(request);
     const before = structuredClone(f.row);
@@ -1279,8 +1279,8 @@ describe("protected hosted operator boundary", () => {
     const request = {
       action: "plan" as const,
       operation: "prepare" as const,
-      selection,
       releaseIntent: "prepared-preview" as const,
+      selection,
     };
     const first = await f.client.request(request);
     const authorize = f.deps.assertAuthorized;
@@ -1345,10 +1345,10 @@ describe("protected hosted operator boundary", () => {
     f.deps.plan = vi.fn(async () => pending);
     const request = {
       action: "plan" as const,
-      operation: "prepare" as const,
-      selection,
-      releaseIntent: "prepared-preview" as const,
       authSignupPolicy: policy,
+      operation: "prepare" as const,
+      releaseIntent: "prepared-preview" as const,
+      selection,
     };
     const first = await f.client.request(request);
     expect(await f.client.request(request)).toMatchObject({

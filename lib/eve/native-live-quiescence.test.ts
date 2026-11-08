@@ -135,10 +135,10 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
     checkpointOwnerRunId: "old-native",
     logicalSessionId: "logical",
     selectedOrigin: {
-      kind: "committed-turn-output" as const,
-      stepId: "step",
       eventId: "event",
+      kind: "committed-turn-output" as const,
       slot: 1,
+      stepId: "step",
     },
     coveredNativeEventIds: [],
     frontierEventIds: [],
@@ -231,7 +231,7 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
   // readCandidate's payload is inspected only after terminal reconciliation; retain its exact origin contract.
   dependencies.readCandidate = vi.fn<TerminalRecoveryDependencies["readCandidate"]>(() => ({
     version: 1,
-    binding: { ownerRunId: "old-native", logicalSessionId: "logical" },
+    binding: { logicalSessionId: "logical", ownerRunId: "old-native" },
     checkpointOwnerRunId: physicalOwner,
     handoffChain: lineageParents.map((id, index) => ({
       parentRunId: id,
@@ -319,7 +319,7 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
           state: {
             "eve.harness.emission": { sessionStarted: true, sequence: 1, stepIndex: 0, turnId },
           },
-          history: [{ role: "assistant", content: "Completed ordinary turn" }],
+          history: [{ content: "Completed ordinary turn", role: "assistant" }],
         },
       });
       before = state;
@@ -582,10 +582,10 @@ describe("native recovery refusal diagnostics", () => {
             payload: {
               recoveryPhase: "inspect-source",
               sourceObservation: {
-                sourcePublicSessionId: "private-canary-source",
-                sourceAdapterSessionId: "old-native",
-                sourceAdapterGeneration: 1,
                 cancellationRevision: 0,
+                sourceAdapterGeneration: 1,
+                sourceAdapterSessionId: "old-native",
+                sourcePublicSessionId: "private-canary-source",
               },
             },
             auth: actor,
@@ -738,10 +738,10 @@ describe("native refusal boundary observation", () => {
             payload: {
               recoveryPhase: "inspect-source",
               sourceObservation: {
-                sourcePublicSessionId: "source",
-                sourceAdapterSessionId: "old-native",
-                sourceAdapterGeneration: 1,
                 cancellationRevision: 0,
+                sourceAdapterGeneration: 1,
+                sourceAdapterSessionId: "old-native",
+                sourcePublicSessionId: "source",
               },
             },
             auth: actor,
@@ -814,7 +814,7 @@ it("continues exact-source collection after step inspection fails, retaining aut
   f.collect.mockResolvedValueOnce({
     kind: "unavailable",
     reason: "source-not-terminal",
-    boundary: { stage: "handoff_parent", status: "running", allowParked: true },
+    boundary: { allowParked: true, stage: "handoff_parent", status: "running" },
   });
   const info = vi.spyOn(console, "info").mockImplementation(() => {});
   try {
@@ -926,7 +926,7 @@ it("relays the actual native diagnostic response through postMutation on the sta
   f.collect.mockResolvedValueOnce({
     kind: "unavailable",
     reason: "source-not-terminal",
-    boundary: { stage: "handoff_parent", status: "running", allowParked: true },
+    boundary: { allowParked: true, stage: "handoff_parent", status: "running" },
   });
   f.dependencies.inspectSource = () => Promise.reject(new TypeError("private-canary-step-error"));
   const adapter = createSameOriginEveTransport({
@@ -960,10 +960,10 @@ it("relays the actual native diagnostic response through postMutation on the sta
         scopes: ["autograph:get"],
       },
       source: {
-        sourcePublicSessionId: "source",
-        sourceAdapterSessionId: "old-native",
-        sourceAdapterGeneration: 1,
         cancellationRevision: 0,
+        sourceAdapterGeneration: 1,
+        sourceAdapterSessionId: "old-native",
+        sourcePublicSessionId: "source",
       },
     });
     expect(loggedEvent(info.mock.calls, "builder.native_source_observation_relay")).toMatchObject({
@@ -1289,11 +1289,11 @@ it("uses server-default bulk pagination and exhausts all step pages", async () =
         return Promise.resolve(
           input.pagination?.cursor === undefined
             ? {
-                data: [{ runId: "old-native", stepId: "one", status: "completed" }],
+                data: [{ runId: "old-native", status: "completed", stepId: "one" }],
                 hasMore: true,
                 cursor: "page-two",
               }
-            : { data: [{ runId: "old-native", stepId: "two", status: "failed" }], hasMore: false },
+            : { data: [{ runId: "old-native", status: "failed", stepId: "two" }], hasMore: false },
         );
       },
     },
@@ -1526,10 +1526,10 @@ it("GET-only opaque preflight relays complete owned-lineage facts without stoppi
         scopes: ["autograph:get"],
       },
       source: {
-        sourcePublicSessionId: "source",
-        sourceAdapterSessionId: "old-native",
-        sourceAdapterGeneration: 1,
         cancellationRevision: 0,
+        sourceAdapterGeneration: 1,
+        sourceAdapterSessionId: "old-native",
+        sourcePublicSessionId: "source",
       },
     });
     expect(loggedEvent(info.mock.calls, "builder.native_source_observation_relay")).toMatchObject({
@@ -1596,11 +1596,11 @@ it("refuses another operation's ready hook before stopping any owner", async () 
           operationId: "another-operation",
           ownerRunId: "foreign-ready",
           provenance: {
+            checkpointVersion: 1,
             kind: "committed-turn-output",
-            sourceStepId: "step",
             sourceEventId: "event",
             sourceSlot: 1,
-            checkpointVersion: 1,
+            sourceStepId: "step",
           },
         },
       }),
@@ -1624,11 +1624,11 @@ it("does not accept a caller-supplied parked owner without its exact native read
     ...descriptor,
     ownerRunId: "forged-ready",
     provenance: {
+      checkpointVersion: 1,
       kind: "committed-turn-output",
-      sourceStepId: "step",
       sourceEventId: "event",
       sourceSlot: 1,
-      checkpointVersion: 1,
+      sourceStepId: "step",
     },
   };
   expect(
@@ -1646,7 +1646,7 @@ it("does not accept a caller-supplied parked owner without its exact native read
 const idleSession = (): HarnessSession => ({
   sessionId: "logical",
   continuationToken: "continuation",
-  history: [{ role: "assistant", content: "The prior response belongs to an earlier prompt." }],
+  history: [{ content: "The prior response belongs to an earlier prompt.", role: "assistant" }],
   agent: { dynamicModel: true, system: "", tools: [] },
   compaction: { recentWindowSize: 1, threshold: 1000 },
 });
