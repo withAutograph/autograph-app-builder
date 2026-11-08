@@ -852,7 +852,13 @@ const saveReport = async () => {
     settings,
     toolOutcomes: records
       .filter((record) => record.kind === "turn-completed")
-      .flatMap((record) => (Array.isArray(record.toolCalls) ? record.toolCalls : [])),
+      .flatMap((record) => {
+        if (Array.isArray(record.toolCalls)) {
+          const calls: unknown[] = record.toolCalls;
+          return calls;
+        }
+        return [];
+      }),
     transcript: {
       path: generationTranscriptFile,
       records: records.length,

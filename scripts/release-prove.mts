@@ -102,10 +102,10 @@ async function run(
     env: options.environment ?? process.env,
     maxBuffer: 32 * 1024 * 1024,
   });
-  if (!options.capture && result.stdout.trim() !== "") {
+  if (options.capture !== true && result.stdout.trim() !== "") {
     process.stdout.write(result.stdout);
   }
-  if (!options.capture && result.stderr.trim() !== "") {
+  if (options.capture !== true && result.stderr.trim() !== "") {
     process.stderr.write(result.stderr);
   }
   return result.stdout;

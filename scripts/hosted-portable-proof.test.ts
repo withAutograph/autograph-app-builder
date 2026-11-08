@@ -204,7 +204,7 @@ function hostedFixture(
       let sessionId = "primary-session";
       if (secondary) {
         sessionId = "secondary-session";
-      } else if (options.discardedStartRetryDrift && primaryStartCount === 1) {
+      } else if (options.discardedStartRetryDrift === true && primaryStartCount === 1) {
         sessionId = "discarded-session-a";
       }
       return tool(session(sessionId, "working", 0));
@@ -272,7 +272,7 @@ function hostedFixture(
         const requests = pendingPhases.map((phase) => {
           const expected = receipt(phase);
           const described =
-            options.approvalDigestDrift && phase === "appspec"
+            options.approvalDigestDrift === true && phase === "appspec"
               ? { ...expected, subjectDigest: "d".repeat(64) }
               : expected;
           return {
@@ -307,7 +307,8 @@ function hostedFixture(
       const draft = {
         baseRef: target.baseRef,
         baseSha: target.baseSha,
-        changeSetDigest: options.draftDigestDrift ? "e".repeat(64) : target.changeSetDigest,
+        changeSetDigest:
+          options.draftDigestDrift === true ? "e".repeat(64) : target.changeSetDigest,
         draft: true,
         format: "autograph-draft-pr-publication-receipt-v1",
         headRef: target.headRef,
