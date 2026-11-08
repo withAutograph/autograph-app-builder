@@ -634,10 +634,6 @@ export default defineConfig({
       rules: { "react-doctor/js-cache-property-access": "off" },
     },
     {
-      files: [additionalAuthFieldPath],
-      rules: { "react-doctor/js-hoist-intl": "off" },
-    },
-    {
       files: [handoffControlsPath],
       rules: { "react-doctor/no-fetch-in-effect": "off" },
     },
@@ -680,7 +676,7 @@ export default defineConfig({
     },
     {
       // Preserve existing runtime contracts pending focused migration.
-      files: ["scripts/design-quality/archive-entry.ts", sharedLintFile4],
+      files: ["scripts/design-quality/archive-entry.ts"],
       rules: { "typescript/no-unsafe-return": "off" },
     },
     {

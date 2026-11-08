@@ -116,6 +116,7 @@ function exactKeys(value, keys) {
     Object.keys(value).toSorted().join(",") === [...keys].toSorted().join(",")
   );
 }
+/** @returns {unknown} The untrusted authorization frame. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function readFdFrame() {
   let source = "";
@@ -139,6 +140,7 @@ function readFdFrame() {
   }
   return JSON.parse(source);
 }
+/** @returns {unknown} The untrusted authorization frame. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function readPortFrame(port) {
   const deadline = Date.now() + timeoutMs;

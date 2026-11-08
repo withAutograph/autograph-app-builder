@@ -5,7 +5,7 @@ import type { AdditionalField as AdditionalFieldConfig } from "@better-auth-ui/c
 import { useAuth, useCopyToClipboard } from "@better-auth-ui/react";
 import { format } from "date-fns";
 import { CalendarIcon, Check, ChevronDownIcon, Copy } from "lucide-react";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { ComponentType } from "react";
 import { toast } from "sonner";
 
@@ -249,7 +249,10 @@ const SliderField = function SliderField({ name, field, isPending }: AdditionalF
 
   const [value, setValue] = useState<number>(initial);
 
-  const formatter = new Intl.NumberFormat(undefined, field.formatOptions);
+  const formatter = useMemo(
+    () => new Intl.NumberFormat(undefined, field.formatOptions),
+    [field.formatOptions],
+  );
 
   return (
     <Field>
