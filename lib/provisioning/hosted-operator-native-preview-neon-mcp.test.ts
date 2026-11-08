@@ -424,6 +424,11 @@ const fixture = (
       await Promise.resolve();
     },
   };
+  const approval: Pick<PreviewNeonMcpDependencies, "assertApprovedScope" | "assertApprovedOwner"> =
+    { assertApprovedScope: approved };
+  if (useLocalApprovedOwner) {
+    approval.assertApprovedOwner = approvedOwner;
+  }
   return {
     approved,
     approvedOwner,
@@ -433,8 +438,7 @@ const fixture = (
     planningOwner,
     planning,
     reader: createPreviewNeonMcpReader({
-      assertApprovedScope: approved,
-      ...(useLocalApprovedOwner ? { assertApprovedOwner: approvedOwner } : {}),
+      ...approval,
       assertPlanningScope: planning,
       assertPlanningOwner: useLocalPlanningOwner ? planningOwner : undefined,
       configuration,

@@ -1,4 +1,5 @@
 /* oxlint-disable eslint/require-await -- In-memory async service ports preserve the real handler contract without provider operations. */
+import type { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
 import { createProtectedHostedOperatorHandler } from "./hosted-operator-service";
 import type { ProtectedHostedOperatorDependencies } from "./hosted-operator-service";
@@ -174,70 +175,75 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
     proofRef: "original-approved-owner-proof",
     proofSha256: "e".repeat(64),
   };
+  const recordPrefix = {
+    version: 1,
+    kind: "app-runtime",
+    approvedByCallId: "original-approved-call",
+    request: target,
+    status: "prepared",
+    step: "bound",
+    environmentBound: true,
+    privateState: {
+      encryptedToken: "ciphertext",
+      keyVersion: "key-v1",
+      tokenIv: "iv",
+      tokenTag: "tag",
+    },
+    proof: {
+      actors: 0,
+      artifactHash: "c".repeat(64),
+      authenticatedBehavior: "unassessed",
+      manifestSha256: originalPlan.release.sha256,
+      releaseId: originalPlan.release.id,
+      tenants: 1,
+    },
+  };
+  type OperatorFixture = Omit<z.input<typeof hostedOperatorRecordSchema>, "authPreparation"> & {
+    authPreparation: Omit<
+      NonNullable<z.input<typeof hostedOperatorRecordSchema>["authPreparation"]>,
+      "targetDigest"
+    > & { targetDigest: string | undefined };
+  };
+  const operator: OperatorFixture = {
+    mode: "protected-operator-v1",
+    approvalId: "original-approval",
+    operationRef,
+    plan: originalPlan,
+    planDigest,
+    fenceGeneration: 1,
+    identityLink,
+    authPreparation: {
+      assetSha256: "1".repeat(64),
+      catalogFingerprint: "2".repeat(64),
+      database: originalPlan.authDatabase.database,
+      observedAt: "2026-10-19T12:00:00Z",
+      runtimeRole: originalPlan.authDatabase.runtimeRole,
+      targetDigest: originalPlan.authSchema?.targetDigest,
+    },
+    receipts: originalPlan.effects.map((effect) => ({
+      effectId: effect.id,
+      observedAt: "2026-10-19T12:00:00Z",
+      resourceVersion: "observed",
+      fenceGeneration: 1,
+    })),
+  };
+  if (observedEndpoint) {
+    operator.deliveredGatewayDeploymentId = "ready-owner-gateway";
+    operator.gatewayDeliveryCandidates = [
+      {
+        deploymentId: "ready-owner-gateway",
+        readyState: "READY",
+        origin: identityLink.endpointOrigin,
+        branch: "preview",
+        projectId: "prj_gateway",
+        repoId: "gateway-repo",
+        operationRef,
+      },
+    ];
+  }
   let row: HostedRuntimeJournalRow = {
     revision: 1,
-    record: hostedRuntimeJournalRecordSchema.parse({
-      version: 1,
-      kind: "app-runtime",
-      approvedByCallId: "original-approved-call",
-      request: target,
-      status: "prepared",
-      step: "bound",
-      environmentBound: true,
-      privateState: {
-        encryptedToken: "ciphertext",
-        keyVersion: "key-v1",
-        tokenIv: "iv",
-        tokenTag: "tag",
-      },
-      proof: {
-        actors: 0,
-        artifactHash: "c".repeat(64),
-        authenticatedBehavior: "unassessed",
-        manifestSha256: originalPlan.release.sha256,
-        releaseId: originalPlan.release.id,
-        tenants: 1,
-      },
-      operator: {
-        mode: "protected-operator-v1",
-        approvalId: "original-approval",
-        operationRef,
-        plan: originalPlan,
-        planDigest,
-        fenceGeneration: 1,
-        identityLink,
-        authPreparation: {
-          assetSha256: "1".repeat(64),
-          catalogFingerprint: "2".repeat(64),
-          database: originalPlan.authDatabase.database,
-          observedAt: "2026-10-19T12:00:00Z",
-          runtimeRole: originalPlan.authDatabase.runtimeRole,
-          targetDigest: originalPlan.authSchema?.targetDigest,
-        },
-        receipts: originalPlan.effects.map((effect) => ({
-          effectId: effect.id,
-          observedAt: "2026-10-19T12:00:00Z",
-          resourceVersion: "observed",
-          fenceGeneration: 1,
-        })),
-        ...(observedEndpoint
-          ? {
-              deliveredGatewayDeploymentId: "ready-owner-gateway",
-              gatewayDeliveryCandidates: [
-                {
-                  deploymentId: "ready-owner-gateway",
-                  readyState: "READY",
-                  origin: identityLink.endpointOrigin,
-                  branch: "preview",
-                  projectId: "prj_gateway",
-                  repoId: "gateway-repo",
-                  operationRef,
-                },
-              ],
-            }
-          : {}),
-      },
-    }),
+    record: hostedRuntimeJournalRecordSchema.parse({ ...recordPrefix, operator }),
   };
   const original = structuredClone(row.record);
   const deps: ProtectedHostedOperatorDependencies = {
