@@ -840,7 +840,7 @@ describe("native externally managed policy recovery integration", () => {
           });
         }
         if (url.pathname.startsWith("/v9/projects/")) {
-          const projectId = url.pathname.split("/")[3];
+          const projectId = url.pathname.split("/").at(3);
           return Response.json({
             id: projectId,
             accountId: "team-notes",
@@ -1477,7 +1477,7 @@ describe("explicit READY delivery replacement", () => {
     "not-ready",
   ])("rejects a named app candidate that is %s", (change) => {
     const { record, intent, candidate } = fixture();
-    const app = requireFixtureValue(record.operator.deliveryCandidates, "delivery candidates")[0];
+    const [app] = requireFixtureValue(record.operator.deliveryCandidates, "delivery candidates");
     if (change === "absent") {
       record.operator.deliveryCandidates = [];
     }

@@ -311,8 +311,11 @@ const parseOutput = <T>(result: TargetCommandResult, schema: z.ZodType<T>, label
   }
   const validated = schema.safeParse(parsed);
   if (!validated.success) {
+    const issues = validated.error.issues
+      .map((issue) => `${issue.path.join(".") || "result"}: ${issue.message}`)
+      .join("; ");
     throw new Error(
-      `${label} returned JSON that does not match Builder's expected result. Check the repository task output contract, then retry planning. Cause: ${planningFailureDetail(validated.error.issues.map((issue) => `${issue.path.join(".") || "result"}: ${issue.message}`).join("; "))}`,
+      `${label} returned JSON that does not match Builder's expected result. Check the repository task output contract, then retry planning. Cause: ${planningFailureDetail(issues)}`,
     );
   }
   return validated.data;

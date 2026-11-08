@@ -16,7 +16,7 @@ import { createPostgresOperatorArtifactSelections } from "../../../../lib/provis
 import type { OperatorArtifactContext } from "../../../../lib/provisioning/hosted-operator-artifact-store";
 
 // Never consumes deployment credentials or a caller-supplied database URL.
-const [, , postgresBin] = process.argv;
+const [postgresBin] = process.argv.slice(2);
 const initialPublicationOperation = "initial-publication";
 assert.ok(postgresBin && path.isAbsolute(postgresBin));
 const port = await new Promise<number>((resolve, reject) => {

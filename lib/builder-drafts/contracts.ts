@@ -1,7 +1,7 @@
 import { sourceCandidateReferenceSchema } from "../handoff/application-source-contract";
 import { z } from "zod";
 
-const uuidSchema = z.string().uuid();
+const uuidSchema = z.uuid();
 const boundedText = (maximum: number) => z.string().max(maximum);
 const connectionSchema = z.string().trim().min(1).max(120);
 
@@ -61,7 +61,7 @@ export const builderDraftPageDataSchema = z.strictObject({
   draftId: uuidSchema,
   record: builderDraftRecordSchema,
   revision: z.number().int().positive(),
-  updatedAt: z.string().datetime({ offset: true }),
+  updatedAt: z.iso.datetime({ offset: true }),
 });
 
 export type BuilderDraftPageData = z.infer<typeof builderDraftPageDataSchema>;

@@ -69,8 +69,9 @@ export function authorizeHostedPrincipal(input: {
   if (claims.audience !== input.expectedAudience) {
     throw new HostedAuthorizationError("audience_mismatch");
   }
-  const scopes = [...new Set(claims.scopes)].toSorted();
-  if (input.requiredScopes.some((scope) => !scopes.includes(scope))) {
+  const scopeSet = new Set(claims.scopes);
+  const scopes = [...scopeSet].toSorted();
+  if (input.requiredScopes.some((scope) => !scopeSet.has(scope))) {
     throw new HostedAuthorizationError("insufficient_scope");
   }
 

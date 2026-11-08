@@ -1149,7 +1149,8 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
       if (!mutationCallReturned) {
         appliedPaths = [...observedPost];
       }
-      conflictedPaths.push(...appliedPaths.filter((path) => !observedPost.includes(path)));
+      const observedPostSet = new Set(observedPost);
+      conflictedPaths.push(...appliedPaths.filter((path) => !observedPostSet.has(path)));
       if (observedPost.length > 0) {
         try {
           const rollbackPatch = await buildExactGitPatch({

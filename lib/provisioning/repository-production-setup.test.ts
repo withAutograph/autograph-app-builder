@@ -280,7 +280,7 @@ describe("Builder-owned Production setup", () => {
   });
   it("persists the verified creator before initial schema installation without granting access early", async () => {
     const f = fixture();
-    const apply = f.ports.apply;
+    const { apply } = f.ports;
     f.ports.prepareCreatorIdentity = async ({ row, assertCurrent }) => {
       await assertCurrent();
       expect(row.record.effects["allocate-storage"].state).toBe("applied");
