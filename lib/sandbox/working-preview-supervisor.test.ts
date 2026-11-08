@@ -200,7 +200,8 @@ describe("generated working preview supervisor", () => {
         ],
         { stdio: "ignore" },
       );
-      const [initializerCode] = await once(initializer, "exit");
+      const initializerExit: unknown[] = await once(initializer, "exit");
+      const [initializerCode] = initializerExit;
       expect(initializerCode).toBe(0);
       await writeFile(
         supervisorPath,

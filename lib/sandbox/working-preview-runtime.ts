@@ -485,7 +485,9 @@ const cleanupPreviewAttempt = async (input: {
       ? provider.update({ ports: [] }, { signal: AbortSignal.timeout(10_000) })
       : undefined,
   ]);
-  const failed = cleanup.filter((result) => result.status === "rejected");
+  const failed: { status: "rejected"; reason: unknown }[] = cleanup.filter(
+    (result) => result.status === "rejected",
+  );
   if (launchDispatched && command === undefined) {
     failed.push({
       reason: new Error(
