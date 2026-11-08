@@ -164,15 +164,15 @@ describe.skipIf(tools === undefined)("authoring custody against actual PostgreSQ
     });
     store = createPostgresHostedEveStore(database);
     const start = hostedOperationRecordSchema.parse({
-      version: 1,
-      principal,
-      operationId: "start",
       clientRequestId: "start",
-      kind: "start",
-      state: "reserved",
-      requestDigest: `sha256:${"a".repeat(64)}`,
       createdAtEpochMs: 1,
+      kind: "start",
+      operationId: "start",
+      principal,
+      requestDigest: `sha256:${"a".repeat(64)}`,
+      state: "reserved",
       updatedAtEpochMs: 1,
+      version: 1,
     });
     await store.reserveOperation(principal, start);
     await store.settleSucceeded({
@@ -315,15 +315,15 @@ describe.skipIf(tools === undefined)("authoring custody against actual PostgreSQ
     const sessionId = "correction-public";
     const logicalSessionId = "correction-logical";
     const start = hostedOperationRecordSchema.parse({
-      version: 1,
-      principal,
-      operationId: "correction-start",
       clientRequestId: "correction-start",
-      kind: "start",
-      state: "reserved",
-      requestDigest: `sha256:${"a".repeat(64)}`,
       createdAtEpochMs: 1,
+      kind: "start",
+      operationId: "correction-start",
+      principal,
+      requestDigest: `sha256:${"a".repeat(64)}`,
+      state: "reserved",
       updatedAtEpochMs: 1,
+      version: 1,
     });
     await store.reserveOperation(principal, start);
     await store.settleSucceeded({
