@@ -1157,7 +1157,11 @@ const verifySandboxWorkspaceBoundary = async function verifySandboxWorkspaceBoun
     !exactKeys(
       observed as Record<string, unknown>,
       Object.keys(developmentWorkspaceInspectionReceipt),
-    ) ||
+    )
+  ) {
+    throw new Error(`The prepared ${kind} workspace escaped its sandbox boundary.`);
+  }
+  if (
     Object.entries(developmentWorkspaceInspectionReceipt).some(
       ([key, expected]) => (observed as Record<string, unknown>)[key] !== expected,
     )

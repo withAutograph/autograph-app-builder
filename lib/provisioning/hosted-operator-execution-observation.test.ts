@@ -631,15 +631,11 @@ describe("canonical execution observation", () => {
       f.gate.resolve(undefined);
       await execution;
       expect(f.record.leaseId).toBeUndefined();
+      const expectedOutcome =
+        outcome === "prepared" ? { status: "prepared" } : { code: outcome, status: "blocked" };
       expect(await f.status()).toMatchObject({
         status: outcome === "prepared" ? "prepared" : "pending",
-        execution: {
-          state: "settled",
-          outcome: {
-            status: outcome === "prepared" ? "prepared" : "blocked",
-            ...(outcome === "prepared" ? {} : { code: outcome }),
-          },
-        },
+        execution: { state: "settled", outcome: expectedOutcome },
       });
       expect(f.executeEffect).toHaveBeenCalledTimes(outcome === "prepared" ? 4 : 1);
       expect(f.record.privateState).toEqual(privateState);

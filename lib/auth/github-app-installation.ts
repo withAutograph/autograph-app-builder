@@ -241,11 +241,14 @@ const membershipStateConsumption = "membership-state-consumption";
 const invalidResponse = "invalid-response";
 const invalidToken = "invalid-token";
 
+const isNonArrayObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 const property = (value: unknown, key: string): unknown => {
-  if (typeof value !== "object" || value === null || Array.isArray(value) || !(key in value)) {
+  if (!isNonArrayObject(value) || !(key in value)) {
     throw new Error(invalidResponse);
   }
-  return (value as Record<string, unknown>)[key];
+  return value[key];
 };
 
 const decimalProperty = (value: unknown, key: string): string => {
@@ -565,10 +568,10 @@ const oauthErrorCategoryFromException = (error: unknown) => {
 };
 
 const propertyOrUndefined = (value: unknown, key: string): unknown => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isNonArrayObject(value)) {
     return undefined;
   }
-  return key in value ? (value as Record<string, unknown>)[key] : undefined;
+  return key in value ? value[key] : undefined;
 };
 
 const normalizedUserTokens = (authentication: unknown, now: number) => {

@@ -10,10 +10,10 @@ const strongAlgorithmSchema = z.enum(["RS256", "PS256", "ES256", "EdDSA"]);
 export const hostedMcpAuthConfigSchema = z
   .strictObject({
     algorithm: strongAlgorithmSchema,
-    audience: z.string().url().startsWith("https://"),
-    issuer: z.string().url().startsWith("https://"),
-    jwksUrl: z.string().url().startsWith("https://"),
-    resourceUrl: z.string().url().startsWith("https://"),
+    audience: z.url().startsWith("https://"),
+    issuer: z.url().startsWith("https://"),
+    jwksUrl: z.url().startsWith("https://"),
+    resourceUrl: z.url().startsWith("https://"),
   })
   .superRefine((config, context) => {
     for (const [field, value] of [

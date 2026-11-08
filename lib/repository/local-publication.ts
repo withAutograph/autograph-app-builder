@@ -538,9 +538,13 @@ export const assertExactDurablePublicationSuccess: (
     receiptAuthorityMismatch ||
     durable.reviewDigest !== workflowReceipt.reviewDigest ||
     durable.destinationPath !== workflowReceipt.destinationPath ||
-    durable.postconditionDigest !== workflowReceipt.postconditionDigest ||
-    !exactProposalMatch(proposalFromJournal(durable), proposalFromJournal(workflowReceipt))
+    durable.postconditionDigest !== workflowReceipt.postconditionDigest
   ) {
+    throw new Error(
+      "The published local workflow does not exactly match its durable success journal.",
+    );
+  }
+  if (!exactProposalMatch(proposalFromJournal(durable), proposalFromJournal(workflowReceipt))) {
     throw new Error(
       "The published local workflow does not exactly match its durable success journal.",
     );

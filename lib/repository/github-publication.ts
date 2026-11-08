@@ -1102,6 +1102,8 @@ const installationKeys = [
   "permissions",
   "digest",
 ] as const;
+const invalidInstallationIdentityMessage = "The GitHub installation identity is invalid.";
+
 const permissionKeys = [
   "metadata",
   "contents",
@@ -1116,19 +1118,30 @@ export function createGitHubInstallationIdentity(
   input: Omit<GitHubInstallationIdentity, "version" | "permissions" | "digest">,
 ): GitHubInstallationIdentity {
   if (
-    (input.operation !== RESOLVE_EXISTING_SOURCE &&
-      input.operation !== CREATE_FRESH_REPOSITORY &&
-      input.operation !== PUBLISH_DRAFT_PULL_REQUEST) ||
-    !isDecimal(input.installationId) ||
-    !isDecimal(input.accountId) ||
+    input.operation !== RESOLVE_EXISTING_SOURCE &&
+    input.operation !== CREATE_FRESH_REPOSITORY &&
+    input.operation !== PUBLISH_DRAFT_PULL_REQUEST
+  ) {
+    throw new Error(invalidInstallationIdentityMessage);
+  }
+  if (!isDecimal(input.installationId) || !isDecimal(input.accountId)) {
+    throw new Error(invalidInstallationIdentityMessage);
+  }
+  if (
     !safeName(input.accountLogin) ||
-    (input.accountType !== "Organization" && input.accountType !== "User") ||
-    (input.repositorySelection !== "all" && input.repositorySelection !== "selected") ||
+    (input.accountType !== "Organization" && input.accountType !== "User")
+  ) {
+    throw new Error(invalidInstallationIdentityMessage);
+  }
+  if (input.repositorySelection !== "all" && input.repositorySelection !== "selected") {
+    throw new Error(invalidInstallationIdentityMessage);
+  }
+  if (
     !Array.isArray(input.selectedRepositoryIds) ||
     new Set(input.selectedRepositoryIds).size !== input.selectedRepositoryIds.length ||
     input.selectedRepositoryIds.some((id) => !isDecimal(id))
   ) {
-    throw new Error("The GitHub installation identity is invalid.");
+    throw new Error(invalidInstallationIdentityMessage);
   }
   const identityFields = {
     accountId: input.accountId,
@@ -1825,7 +1838,11 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
     value.version !== GITHUB_PUBLICATION_VERSION ||
     !isDigest(value.proposalDigest) ||
     !isDigest(value.idempotencyKey) ||
-    typeof value.approvedByCallId !== "string" ||
+    typeof value.approvedByCallId !== "string"
+  ) {
+    throw new Error("GitHub mutation receipt bindings are invalid.");
+  }
+  if (
     value.approvedByCallId.length === 0 ||
     (value.kind !== FRESH_REPOSITORY_KIND && value.kind !== DRAFT_PULL_REQUEST_KIND)
   ) {

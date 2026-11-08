@@ -157,17 +157,20 @@ const fixture = async (
   });
   const keyring = { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" };
   const state = initialNormalActorState(program, accountOperationRef);
+  const actorSession: NonNullable<(typeof state.actors)[number]["session"]> = {
+    reference: "33333333-3333-4333-8333-333333333333",
+    actorId: "real-owner",
+    realmSessionId: "real-session",
+    origin: program.origin,
+    expiresAt: "2030-01-01T00:00:00.000Z",
+  };
+  if (opaqueOrganization !== undefined) {
+    actorSession.activeOrganizationId = opaqueOrganization;
+  }
   state.actors[0] = {
     actorKey: "owner",
     signup: "complete",
-    session: {
-      reference: "33333333-3333-4333-8333-333333333333",
-      actorId: "real-owner",
-      realmSessionId: "real-session",
-      origin: program.origin,
-      expiresAt: "2030-01-01T00:00:00.000Z",
-      ...(opaqueOrganization === undefined ? {} : { activeOrganizationId: opaqueOrganization }),
-    },
+    session: actorSession,
     storageState: {
       cookies: [
         {

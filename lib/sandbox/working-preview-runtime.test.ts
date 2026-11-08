@@ -71,7 +71,7 @@ const setup = () => {
         return Promise.resolve();
       }),
     },
-    getCommand: vi.fn(() => Promise.resolve(command)),
+    getCommand: vi.fn<() => Promise<typeof command>>().mockResolvedValue(command),
     runCommand: vi.fn(() => {
       events.push("spawn");
       return Promise.resolve(command);

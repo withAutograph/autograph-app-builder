@@ -528,18 +528,19 @@ describe("verified pre-dispatch rejection diagnostics", () => {
   });
 });
 
+const bindingFor = (descriptor: NativeRecoveryDescriptor): NativeRecoveryBinding => ({
+  ...descriptor,
+  ownerRunId: "private-recovered-owner",
+  provenance: {
+    kind: "committed-turn-output",
+    sourceStepId: "private-step",
+    sourceEventId: "private-event",
+    sourceSlot: 1,
+    checkpointVersion: 1,
+  },
+});
+
 describe("native recovery verification diagnostics", () => {
-  const bindingFor = (descriptor: NativeRecoveryDescriptor): NativeRecoveryBinding => ({
-    ...descriptor,
-    ownerRunId: "private-recovered-owner",
-    provenance: {
-      kind: "committed-turn-output",
-      sourceStepId: "private-step",
-      sourceEventId: "private-event",
-      sourceSlot: 1,
-      checkpointVersion: 1,
-    },
-  });
   const recoveredFixture = async () => {
     const store = new InMemoryHostedEveStore();
     const transport = adapter();

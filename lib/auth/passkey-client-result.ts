@@ -9,8 +9,8 @@ function passkeyResultError(result: unknown): PasskeyClientError | null {
     return null;
   }
 
-  const { error } = result as { error?: PasskeyClientError | null };
-  return error && typeof error === "object" ? error : null;
+  const { error } = result;
+  return error !== null && typeof error === "object" ? error : null;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
