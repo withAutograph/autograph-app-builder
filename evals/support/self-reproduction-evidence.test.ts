@@ -254,7 +254,7 @@ describe("self-reproduction evidence persistence", () => {
       readFileSync(transcriptPath, "utf-8")
         .trim()
         .split("\n")
-        .map((line) => JSON.parse(line)),
+        .map((line): unknown => JSON.parse(line)),
     ).toEqual(outcomes);
     expect(readFileSync(logPath, "utf-8")).toContain("Native eval started");
     expect(evidenceCompletion(null, records)).toMatchObject({ status: "failed" });

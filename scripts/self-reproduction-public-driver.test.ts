@@ -891,7 +891,7 @@ describe("public self-reproduction preview reporting", () => {
       const raw: unknown[] = readFileSync(privatePath, "utf-8")
         .trim()
         .split("\n")
-        .map((line) => JSON.parse(line));
+        .map((line): unknown => JSON.parse(line));
       expect(raw).toEqual([
         { page: 1, receipt },
         { page: 2, text: `Open ${receipt.url}` },

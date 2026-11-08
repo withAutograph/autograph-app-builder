@@ -335,7 +335,8 @@ test("passkey registration guards Sign Up and supports returning login", async (
     await expect
       .poll(async () => {
         const response = await page.request.get("/api/auth/get-session");
-        return await response.json();
+        const session: unknown = await response.json();
+        return session;
       })
       .toMatchObject({ user: { emailVerified: false } });
     expect(await authCounts()).toEqual(registeredCounts);
@@ -641,7 +642,10 @@ test("verification transport loss stays on Sign In after an assertion", async ({
     await page.unroute("**/api/auth/passkey/verify-authentication");
     await page.getByRole("button", { name: "Couldn’t use your passkey. Try again." }).click();
     await expect
-      .poll(async () => await currentSession(page))
+      .poll(async () => {
+        const session: unknown = await currentSession(page);
+        return session;
+      })
       .toMatchObject({
         user: { emailVerified: false },
       });
@@ -698,7 +702,10 @@ test("a session created after Sign Up renders blocks context issuance", async ({
 
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
     await expect
-      .poll(async () => await currentSession(page))
+      .poll(async () => {
+        const session: unknown = await currentSession(page);
+        return session;
+      })
       .toMatchObject({ user: { id: expect.any(String) } });
     const baseline = await authCounts();
     const deviceCredentials = await authenticator.credentials();

@@ -271,12 +271,7 @@ const decodeClaims = (token: string): VercelOidcClaims => {
   };
 };
 
-export const validateLocalVercelOidcClaims = (input: {
-  token: string;
-  project: LinkedVercelProject;
-  nowEpochSeconds: number;
-  allowExpired?: boolean;
-}): {
+interface ValidatedLocalVercelOidcClaims {
   issuerMode: "global" | "team";
   audienceBound: true;
   subjectBound: true;
@@ -286,7 +281,14 @@ export const validateLocalVercelOidcClaims = (input: {
   issuedAt: number;
   notBefore: number;
   expiresAt: number;
-} => {
+}
+
+export const validateLocalVercelOidcClaims = (input: {
+  token: string;
+  project: LinkedVercelProject;
+  nowEpochSeconds: number;
+  allowExpired?: boolean;
+}): ValidatedLocalVercelOidcClaims => {
   const claims = decodeClaims(input.token);
   const expectedAudience = `https://vercel.com/${claims.owner}`;
   const expectedSubject = `owner:${claims.owner}:project:${input.project.projectName}:environment:development`;

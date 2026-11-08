@@ -47,6 +47,17 @@ export interface WorkflowAdapterFactoryInput {
   outputRoot: string;
 }
 
+const sessionUserId = (session: unknown): unknown => {
+  if (session === null || typeof session !== "object" || !("user" in session)) {
+    return undefined;
+  }
+  const { user } = session;
+  if (user === null || typeof user !== "object" || !("id" in user)) {
+    return undefined;
+  }
+  return user.id;
+};
+
 const infrastructureUnavailable = "infrastructure-unavailable";
 const providerReturnSuccess = "provider-return-success";
 
@@ -203,7 +214,7 @@ const referenceAdapter = (
       await page.getByRole("status").filter({ hasText: "Draft saved" }).waitFor();
       if (workflowId === "authentication") {
         const ownerSession = await currentSession(page);
-        const ownerId = ownerSession?.user?.id;
+        const ownerId = sessionUserId(ownerSession);
         if (typeof ownerId !== "string") {
           throw new TypeError("Reference OAuth did not establish an owner identity.");
         }
@@ -230,7 +241,7 @@ const referenceAdapter = (
         const restoredBrief = await restored.getByLabel("App Brief", { exact: true }).inputValue();
         const restoredDraft =
           persisted &&
-          restoredSession?.user?.id === ownerId &&
+          sessionUserId(restoredSession) === ownerId &&
           restoredName === fixedName &&
           restoredBrief === fixedBrief;
         await restored.getByRole("radio", { exact: true, name: "ChatGPT / Codex" }).check();
@@ -257,7 +268,7 @@ const referenceAdapter = (
         let otherUserDenied = false;
         try {
           const strangerSession = await currentSession(stranger);
-          const strangerId = strangerSession?.user?.id;
+          const strangerId = sessionUserId(strangerSession);
           const response = await stranger.request.get(statusPath);
           const body = await response.json();
           const isDistinctUser =

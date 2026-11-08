@@ -127,7 +127,8 @@ export async function currentSession(page: Page) {
   try {
     const response = await page.request.get("/api/auth/get-session");
     if (!response.ok()) return null;
-    return await response.json();
+    const session: unknown = await response.json();
+    return session;
   } catch {
     return null;
   }
@@ -137,7 +138,12 @@ export async function currentSession(page: Page) {
 export async function signOut(page: Page) {
   await page.goto("/auth/sign-out");
   await expect(page).toHaveURL(/\/auth\/sign-in/u);
-  await expect.poll(async () => await currentSession(page)).toBeNull();
+  await expect
+    .poll(async () => {
+      const session: unknown = await currentSession(page);
+      return session;
+    })
+    .toBeNull();
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -158,7 +164,13 @@ export async function finishOAuth(page: Page, provider: EmulatedProvider, callba
   );
   await page.getByRole("button", { name: `Continue with ${provider}` }).click();
   await expect
-    .poll(async () => await currentSession(page), { timeout: 30_000 })
+    .poll(
+      async () => {
+        const session: unknown = await currentSession(page);
+        return session;
+      },
+      { timeout: 30_000 },
+    )
     .toMatchObject({ user: { email: "dev@autograph.local" } });
   // Session creation precedes the setting-up route's final navigation. Do not
   // let a caller's goto interrupt that still-running OAuth continuation.
@@ -197,7 +209,13 @@ export async function registerPasskey(context: BrowserContext, page: Page, callb
   await page.goto(`/auth/sign-up?callbackURL=${encodeURIComponent(callbackURL)}`);
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
   await expect
-    .poll(async () => await currentSession(page), { timeout: 30_000 })
+    .poll(
+      async () => {
+        const session: unknown = await currentSession(page);
+        return session;
+      },
+      { timeout: 30_000 },
+    )
     .toMatchObject({ user: { emailVerified: false } });
   // Session creation precedes the setting-up route's final navigation. Wait
   // for the callback before a caller navigates away, as finishOAuth does.

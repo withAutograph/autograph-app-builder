@@ -1194,7 +1194,7 @@ const verifyGhcrLoginWithOwnedProcessGroup = async function verifyGhcrLoginWithO
   }, 50_000);
   try {
     const status = await once(child, "close").then(
-      ([code]) => code ?? -1,
+      ([code]): unknown => code ?? -1,
       () => -1,
     );
     if (failed || timedOut || status !== 0) {

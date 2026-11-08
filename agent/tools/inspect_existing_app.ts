@@ -238,7 +238,7 @@ const listAvailableSourcePaths = async function listAvailableSourcePaths(
   } catch {
     manifest = [];
   }
-  const entries = Array.isArray(manifest) ? manifest : [];
+  const entries: unknown[] = Array.isArray(manifest) ? manifest : [];
   const allowedPaths = entries.flatMap((candidate): string[] => {
     if (
       typeof candidate === "object" &&

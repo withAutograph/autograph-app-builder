@@ -24,6 +24,9 @@ import {
   waitForHandoffContent,
 } from "../support/harness";
 
+const sessionSchema = z
+  .looseObject({ user: z.looseObject({ id: z.unknown() }).nullish() })
+  .nullish();
 const statusBodySchema = z.looseObject({ status: z.unknown() });
 const handoffBodySchema = z.looseObject({
   handoffId: z.unknown(),
@@ -211,7 +214,7 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
   page,
 }) => {
   await finishOAuth(page, "GitHub");
-  const ownerSession = await currentSession(page);
+  const ownerSession = sessionSchema.parse(await currentSession(page));
   const ownerId = ownerSession?.user?.id;
   expect(typeof ownerId).toBe("string");
   const handoff = await prepareNamedHandoff(
@@ -245,7 +248,7 @@ test("fresh anonymous and distinct passkey accounts cannot read another user's h
     await stranger.addCookies(ownerCookies.filter(({ name }) => name === "vercel-flag-overrides"));
     authenticator = await registerPasskey(stranger, strangerPage);
     await expect(strangerPage).toHaveURL(`${appOrigin}/`);
-    const strangerSession = await currentSession(strangerPage);
+    const strangerSession = sessionSchema.parse(await currentSession(strangerPage));
     const strangerId = strangerSession?.user?.id;
     expect(typeof strangerId).toBe("string");
     expect(strangerId).not.toBe(ownerId);
@@ -398,7 +401,9 @@ test("Cursor install link remains hidden until its dedicated local client is reg
       const installConfig = installUrl.searchParams.get("config");
       if (installConfig === undefined || installConfig === null || installConfig === "")
         throw new Error("Cursor install link is missing its configuration");
-      const config = JSON.parse(Buffer.from(installConfig, "base64").toString("utf-8"));
+      const config = z
+        .looseObject({ auth: z.looseObject({ CLIENT_ID: z.unknown() }), url: z.unknown() })
+        .parse(JSON.parse(Buffer.from(installConfig, "base64").toString("utf-8")));
       expect(Object.keys(config).toSorted()).toEqual(["auth", "url"]);
       expect(config.url).toBe(`${appOrigin}/mcp`);
       expect(Object.keys(config.auth)).toEqual(["CLIENT_ID"]);

@@ -193,7 +193,7 @@ it("retains the actual pin-refusal stage after deleting the owned Sandbox", asyn
   expect(f.sandbox.delete).toHaveBeenCalledOnce();
   expect(f.sandbox.writeFiles).not.toHaveBeenCalled();
   expect(f.request.recordCheckpoint).not.toHaveBeenCalled();
-  const events = log.mock.calls.map(([entry]) => JSON.parse(String(entry)));
+  const events = log.mock.calls.map(([entry]): unknown => JSON.parse(String(entry)));
   expect(events).toContainEqual(
     expect.objectContaining({
       launcherStage: "worker_pin",
@@ -219,7 +219,7 @@ it("reports a real protocol rejection without exposing the malformed worker outp
   expect(f.command.kill).toHaveBeenCalledOnce();
   expect(f.sandbox.delete).toHaveBeenCalledOnce();
   expect(f.request.recordCheckpoint).not.toHaveBeenCalled();
-  const events = log.mock.calls.map(([entry]) => JSON.parse(String(entry)));
+  const events = log.mock.calls.map(([entry]): unknown => JSON.parse(String(entry)));
   expect(events).toContainEqual(expect.objectContaining({ launcherStage: "worker_protocol" }));
   const output = JSON.stringify(log.mock.calls);
   expect(output).not.toContain("private protocol body");
@@ -249,7 +249,7 @@ it("preserves late authority rejection, cancellation and cleanup even when loggi
   ).rejects.toBe(original);
   expect(f.sandbox.delete).toHaveBeenCalledOnce();
   expect(f.request.recordCheckpoint).not.toHaveBeenCalled();
-  const events = log.mock.calls.map(([entry]) => JSON.parse(String(entry)));
+  const events = log.mock.calls.map(([entry]): unknown => JSON.parse(String(entry)));
   expect(events).toContainEqual(
     expect.objectContaining({ launcherStage: "spool_setup", requestAborted: true }),
   );

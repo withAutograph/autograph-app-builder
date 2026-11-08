@@ -18,7 +18,9 @@ async function expectTheme(
   await expect(html(page)).toHaveClass(new RegExp(`(^|\\s)${theme}(\\s|$)`, "u"));
   await expect(html(page)).toHaveCSS("color-scheme", theme);
   if (storedTheme) {
-    await expect.poll(async () => await page.evaluate(() => localStorage.theme)).toBe(storedTheme);
+    await expect
+      .poll(async () => await page.evaluate(() => localStorage.getItem("theme")))
+      .toBe(storedTheme);
   }
 }
 
@@ -45,7 +47,9 @@ test("first visit follows System and reacts to an OS preference change", async (
   await page.goto("/");
   await expectTheme(page, "dark");
   await expect(page.getByRole("heading", { name: "Build an app" })).toBeVisible();
-  await expect.poll(async () => await page.evaluate(() => localStorage.theme ?? null)).toBeNull();
+  await expect
+    .poll(async () => await page.evaluate(() => localStorage.getItem("theme")))
+    .toBeNull();
 
   await page.emulateMedia({ colorScheme: "light" });
   await expectTheme(page, "light");
@@ -66,7 +70,13 @@ test("stock menu and Appearance card share a persistent cross-tab preference", a
   await expectTheme(page, "dark");
   await page.getByRole("button", { name: "Continue with GitHub" }).click();
   await expect
-    .poll(async () => await currentSession(page), { timeout: 30_000 })
+    .poll(
+      async () => {
+        const session: unknown = await currentSession(page);
+        return session;
+      },
+      { timeout: 30_000 },
+    )
     .toMatchObject({ user: { email: "dev@autograph.local" } });
 
   await page.goto("/");
@@ -125,7 +135,13 @@ test("explicit Dark remains active across anonymous, auth, builder, and account 
   await expectTheme(page, "dark", "dark");
   await page.getByRole("button", { name: "Continue with GitHub" }).click();
   await expect
-    .poll(async () => await currentSession(page), { timeout: 30_000 })
+    .poll(
+      async () => {
+        const session: unknown = await currentSession(page);
+        return session;
+      },
+      { timeout: 30_000 },
+    )
     .toMatchObject({ user: { email: "dev@autograph.local" } });
 
   await page.goto("/");

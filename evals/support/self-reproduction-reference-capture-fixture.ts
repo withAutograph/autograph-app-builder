@@ -4,6 +4,17 @@ import { expect } from "playwright/test";
 import postgres from "postgres";
 import { selfReproductionDraft } from "./self-reproduction-draft-fixture";
 
+const sessionUserId = (session: unknown): unknown => {
+  if (session === null || typeof session !== "object" || !("user" in session)) {
+    return undefined;
+  }
+  const { user } = session;
+  if (user === null || typeof user !== "object" || !("id" in user)) {
+    return undefined;
+  }
+  return user.id;
+};
+
 export interface ReferenceCaptureFixtureReceipt {
   status: "ready" | "blocked";
   state: "authenticated-durable-draft";
@@ -48,7 +59,7 @@ export const prepareReferenceCaptureFixture = async (
     receipt.stage = "builder-readiness";
     await waitForBuilderReady(page);
     const session = await currentSession(page);
-    const ownerId = session?.user?.id;
+    const ownerId = sessionUserId(session);
     if (typeof ownerId !== "string") {
       throw new TypeError("Emulated OAuth did not establish an owner.");
     }

@@ -98,15 +98,14 @@ async function verifyOwner(page: Page, tokens: Tokens, ownerUserId: string, work
     const response = await page.request.get(`${issuer}/jwks`);
     if (!response.ok()) throw new Error("JWKS request failed.");
     stage = "signature, issuer, audience, and lifetime verification";
-    const { payload } = await jwtVerify(
-      tokens.access_token,
-      createLocalJWKSet(await response.json()),
-      {
-        algorithms: ["ES256"],
-        audience: resource,
-        issuer,
-      },
-    );
+    const jwks = z
+      .looseObject({ keys: z.array(z.looseObject({ kty: z.string().optional() })) })
+      .parse(await response.json());
+    const { payload } = await jwtVerify(tokens.access_token, createLocalJWKSet(jwks), {
+      algorithms: ["ES256"],
+      audience: resource,
+      issuer,
+    });
     stage = "web owner comparison";
     if (payload.sub !== ownerUserId) throw new Error("JWT owner does not match.");
     stage = "web workspace comparison";

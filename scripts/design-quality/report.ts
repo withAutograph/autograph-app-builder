@@ -40,7 +40,7 @@ export function renderReport(report: {
   }[];
 }) {
   const pretty = (v: unknown) =>
-    `<pre>${escapeHtml(JSON.stringify(v, (key, value) => (key === "observations" && Array.isArray(value) ? { count: value.length, details: "Download report.json for individual observations" } : value), 2))}</pre>`;
+    `<pre>${escapeHtml(JSON.stringify(v, (key, value: unknown) => (key === "observations" && Array.isArray(value) ? { count: value.length, details: "Download report.json for individual observations" } : value), 2))}</pre>`;
   const renderExcerpt = (excerpt: string | undefined) =>
     (excerpt ?? "") === ""
       ? "Source text not supplied; location only."

@@ -331,7 +331,7 @@ describe("target validation", () => {
           path: "apps/example/test/review.test.ts",
         }),
       );
-      const events = info.mock.calls.map(([entry]) => JSON.parse(z.string().parse(entry)));
+      const events = info.mock.calls.map(([entry]): unknown => JSON.parse(z.string().parse(entry)));
       expect(events).toEqual([
         expect.objectContaining({
           command: "check-build",
