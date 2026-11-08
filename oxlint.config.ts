@@ -621,11 +621,6 @@ export default defineConfig({
     },
     {
       // Preserve existing runtime contracts pending focused migration.
-      files: [sharedLintFile27],
-      rules: { "typescript/switch-exhaustiveness-check": "off" },
-    },
-    {
-      // Preserve existing runtime contracts pending focused migration.
       files: ["scripts/design-quality/archive-entry.ts"],
       rules: { "typescript/no-unsafe-return": "off" },
     },
