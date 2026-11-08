@@ -48,6 +48,7 @@ import {
   fixtureValidationCommandExecutor,
   sandboxValidationCommandExecutor,
 } from "@/lib/repository/target-validation";
+import type { TargetValidationCommandReceipt } from "@/lib/repository/target-validation";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 import { validationLogStoreForSession } from "@/lib/agent/validation-log-store-for-session";
 import { productionReadinessHandoff } from "@/lib/agent/production-readiness-handoff";
@@ -55,6 +56,11 @@ import {
   invalidateProductBehaviorEvidence,
   currentProductBehaviorEvidence,
 } from "@/lib/agent/product-behavior-state";
+
+interface ValidationCommandSummary {
+  logs?: ReturnType<typeof validationLogsWithReadInputs>;
+  name: TargetValidationCommandReceipt["name"];
+}
 
 const validationPhase = (callId: string, phase: string, detail?: string | boolean): void => {
   console.info(
@@ -264,18 +270,32 @@ export const createAppValidationTool = (
       const priorPublishedGitHubDraftProposalDigest =
         current.publishedGitHubDraftProposalDigest ??
         (current.phase === "reviewed" ? current.githubDraftProposal?.proposal.digest : undefined);
-      let base = {
+      type AppliedState = Extract<
+        ReturnType<typeof appBuilderWorkflowState.get>,
+        { phase: "applied" }
+      >;
+      const applied = {
         appSpec: current.appSpec,
         applyReceipt: current.applyReceipt,
         artifacts: current.artifacts,
-        ...(priorPublishedGitHubDraftProposalDigest === undefined
-          ? {}
-          : { publishedGitHubDraftProposalDigest: priorPublishedGitHubDraftProposalDigest }),
-        dependencyReceipt: current.dependencyReceipt,
-        ...(current.checkoutDependencyAttempts === undefined
-          ? {}
-          : { checkoutDependencyAttempts: current.checkoutDependencyAttempts }),
-        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+      };
+      const publication: Pick<AppliedState, "publishedGitHubDraftProposalDigest"> = {};
+      if (priorPublishedGitHubDraftProposalDigest !== undefined) {
+        publication.publishedGitHubDraftProposalDigest = priorPublishedGitHubDraftProposalDigest;
+      }
+      const dependency = { dependencyReceipt: current.dependencyReceipt };
+      const checkout: Pick<AppliedState, "checkoutDependencyAttempts" | "githubSource"> = {};
+      if (current.checkoutDependencyAttempts !== undefined) {
+        checkout.checkoutDependencyAttempts = current.checkoutDependencyAttempts;
+      }
+      if (current.githubSource !== undefined) {
+        checkout.githubSource = current.githubSource;
+      }
+      let base = {
+        ...applied,
+        ...publication,
+        ...dependency,
+        ...checkout,
         identityReceipt: current.identityReceipt,
         preparedByCallId: current.preparedByCallId,
         proposal: current.proposal,
@@ -594,14 +614,13 @@ export const createAppValidationTool = (
         attemptDigest: result.receipt.attemptDigest,
         backendValidation,
         commandCount: result.receipt.commands.length,
-        logs: result.receipt.commands.map((command) => ({
-          name: command.name,
-          ...(command.logs === undefined
-            ? {}
-            : {
-                logs: validationLogsWithReadInputs(result.receipt.attemptDigest, command),
-              }),
-        })),
+        logs: result.receipt.commands.map((command) => {
+          const summary: ValidationCommandSummary = { name: command.name };
+          if (command.logs !== undefined) {
+            summary.logs = validationLogsWithReadInputs(result.receipt.attemptDigest, command);
+          }
+          return summary;
+        }),
         productAcceptance: productAcceptanceObligations(
           current.appSpec,
           evidence,
