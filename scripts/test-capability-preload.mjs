@@ -29,9 +29,10 @@ const workerPortKey = "__appBuilderStructuralTestAuthorizationV2";
 const workerProfileKey = `${workerPortKey}Profile`;
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const repositoryRootStat = statSync(repositoryRoot, { bigint: true });
+const invalidRootPath =
+  !path.isAbsolute(repositoryRoot) || realpathSync(repositoryRoot) !== repositoryRoot;
 if (
-  !path.isAbsolute(repositoryRoot) ||
-  realpathSync(repositoryRoot) !== repositoryRoot ||
+  invalidRootPath ||
   !repositoryRootStat.isDirectory() ||
   repositoryRootStat.uid !== BigInt(process.getuid?.() ?? -1) ||
   // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -330,10 +331,12 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
       this.once("error", cleanup);
       this.once("exit", cleanup);
       channel.port1.once("message", (request) => {
-        if (
+        const invalidRequestEnvelope =
           settled ||
           Buffer.byteLength(JSON.stringify(request)) > maxBytes ||
-          !exactKeys(request, ["version", "nonce", "context"]) ||
+          !exactKeys(request, ["version", "nonce", "context"]);
+        if (
+          invalidRequestEnvelope ||
           request.version !== 2 ||
           typeof request.nonce !== "string" ||
           typeof request.context !== "string"

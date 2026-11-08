@@ -757,9 +757,9 @@ const createInitialJournal = async function createInitialJournal(
 };
 
 const assertJournal = function assertJournal(journal: LocalPublicationJournal): void {
+  const invalidJournalValue = journal === null || typeof journal !== "object";
   if (
-    journal === null ||
-    typeof journal !== "object" ||
+    invalidJournalValue ||
     (journal.status !== "pending" && journal.status !== "succeeded" && journal.status !== "failed")
   ) {
     throw new Error("The durable local-publication journal has an unsupported state.");
@@ -1031,10 +1031,12 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
     }
     await input.hooks?.beforeGitApply?.();
     const immediate = await verifyPreconditions(input);
-    if (
+    const rootIdentityChanged =
       immediate.rootIdentity.device !== input.proposal.rootIdentity.device ||
       immediate.rootIdentity.inode !== input.proposal.rootIdentity.inode ||
-      immediate.gitDirectoryPath !== input.proposal.gitDirectoryPath ||
+      immediate.gitDirectoryPath !== input.proposal.gitDirectoryPath;
+    if (
+      rootIdentityChanged ||
       immediate.gitDirectoryIdentity.device !== input.proposal.gitDirectoryIdentity.device ||
       immediate.gitDirectoryIdentity.inode !== input.proposal.gitDirectoryIdentity.inode
     ) {

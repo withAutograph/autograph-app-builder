@@ -28,9 +28,10 @@ function isErrno(error: unknown, code: string) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ownerBound(info: Awaited<ReturnType<typeof lstat>>) {
+  if (typeof info.uid !== "number" || typeof info.mode !== "number") {
+    return false;
+  }
   return (
-    typeof info.uid === "number" &&
-    typeof info.mode === "number" &&
     info.uid === process.getuid?.() &&
     !info.isSymbolicLink() &&
     // oxlint-disable-next-line eslint/no-bitwise -- File permission mask check.
@@ -237,9 +238,14 @@ export function createEveEvalRuntimeDirectories(
       realpathSync(path) !== path ||
       !info.isDirectory() ||
       info.isSymbolicLink() ||
-      info.uid !== process.getuid?.() ||
+      info.uid !== process.getuid?.()
+    ) {
+      throw new Error("The Eve eval runtime directory was not owner-only.");
+    }
+    if (
       // oxlint-disable-next-line eslint/no-bitwise -- File permission mask check.
-      (info.mode & 0o077) !== 0
+      (info.mode & 0o077) !==
+      0
     ) {
       throw new Error("The Eve eval runtime directory was not owner-only.");
     }

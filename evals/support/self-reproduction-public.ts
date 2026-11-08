@@ -158,11 +158,9 @@ export const publicObservationReport = (state: PublicState, nowMs = Date.now()) 
 
 export const validatePublicEndpoint = (endpoint: string) => {
   const url = new URL(endpoint);
+  const credentialsOrQuery = url.username || url.password || url.search || url.hash;
   if (
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash ||
+    credentialsOrQuery ||
     (url.protocol !== "https:" &&
       !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)))
   ) {
@@ -493,12 +491,14 @@ const validateResponses = (session: EveSessionResult, responses: Responses) => {
       throw new Error("Question requires an ordinary answer");
     }
     const { response } = item;
-    if (
-      response.kind === "answer" &&
-      ((!request.allowFreeform && !response.optionId) ||
-        (response.optionId && !request.options?.some((option) => option.id === response.optionId)))
-    ) {
-      throw new Error("Answer must use a supported option");
+    if (response.kind === "answer") {
+      const missingRequiredOption = !request.allowFreeform && !response.optionId;
+      if (
+        missingRequiredOption ||
+        (response.optionId && !request.options?.some((option) => option.id === response.optionId))
+      ) {
+        throw new Error("Answer must use a supported option");
+      }
     }
   }
 };

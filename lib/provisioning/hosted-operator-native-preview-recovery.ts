@@ -45,10 +45,11 @@ export const hasPendingNativePreviewRecovery = (record: HostedRuntimeJournalReco
   if (
     record === undefined ||
     current === undefined ||
-    !["pending", "failed"].includes(record.status) ||
-    current.plan.stage !== "app" ||
-    current.plan.action !== "prepare"
+    !["pending", "failed"].includes(record.status)
   ) {
+    return false;
+  }
+  if (current.plan.stage !== "app" || current.plan.action !== "prepare") {
     return false;
   }
   if (current.plan.appDeliveryReplacement !== undefined) {
@@ -145,21 +146,23 @@ export const createNativePreviewRecoveryPlan = (
         ...previous.retention,
         expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
       },
-      effects: previous.effects.map((effect) =>
-        effect.kind === "bindings" || effect.kind === "gateway-bindings"
-          ? {
-              ...effect,
-              description:
-                "Bind and read back only owned Preview environment rows; consume the explicitly configured administrator-managed Trusted Sources policy without setting or claiming fresh policy proof.",
-            }
-          : effect.kind === "delivery" || effect.kind === "gateway-delivery"
-            ? {
-                ...effect,
-                description:
-                  "Create and verify a fresh native Preview under this new approval, replacing the named READY predecessor. This may create duplicate deployment usage charges.",
-              }
-            : effect,
-      ),
+      effects: previous.effects.map((effect) => {
+        if (effect.kind === "bindings" || effect.kind === "gateway-bindings") {
+          return {
+            ...effect,
+            description:
+              "Bind and read back only owned Preview environment rows; consume the explicitly configured administrator-managed Trusted Sources policy without setting or claiming fresh policy proof.",
+          };
+        }
+        if (effect.kind === "delivery" || effect.kind === "gateway-delivery") {
+          return {
+            ...effect,
+            description:
+              "Create and verify a fresh native Preview under this new approval, replacing the named READY predecessor. This may create duplicate deployment usage charges.",
+          };
+        }
+        return effect;
+      }),
     });
     if (
       isReadyDeliveryReplacementSuccessor(

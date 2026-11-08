@@ -199,10 +199,12 @@ export function verifyWorkspaceTokenPair(input: {
   ];
   for (const claims of [primary, secondary]) {
     const scopes = new Set(claims.scope.split(" "));
-    if (
+    const invalidIssuerOrStart =
       claims.iss !== input.scenario.oauth.issuer ||
       claims.aud !== input.scenario.oauth.audience ||
-      claims.nbf > input.nowEpochSeconds ||
+      claims.nbf > input.nowEpochSeconds;
+    if (
+      invalidIssuerOrStart ||
       claims.exp <= input.nowEpochSeconds ||
       claims.exp - claims.nbf > 300 ||
       requiredScopes.some((scope) => !scopes.has(scope))
@@ -258,17 +260,23 @@ export function verifiedDraftPrEvidence(text: string, scenario: HostedProofScena
   const receipt = draftPrReceiptSchema.parse(JSON.parse(candidates[0].slice(marker.length)));
   const url = new URL(receipt.url);
   const expectedPath = `/${receipt.repository}/pull/`;
-  if (
+  const invalidUrl =
     url.origin !== "https://github.com" ||
     !url.pathname.startsWith(expectedPath) ||
     !/^[1-9][0-9]*$/u.test(url.pathname.slice(expectedPath.length)) ||
-    url.search !== "" ||
+    url.search !== "";
+  const invalidTarget =
+    invalidUrl ||
     url.hash !== "" ||
     receipt.repository !== scenario.target.repository ||
-    receipt.baseRef !== scenario.target.baseRef ||
+    receipt.baseRef !== scenario.target.baseRef;
+  const invalidRevision =
+    invalidTarget ||
     receipt.baseSha !== scenario.target.baseSha ||
     receipt.headRef !== scenario.target.headRef ||
-    receipt.headRef === receipt.baseRef ||
+    receipt.headRef === receipt.baseRef;
+  if (
+    invalidRevision ||
     receipt.headSha === receipt.baseSha ||
     receipt.changeSetDigest !== scenario.target.changeSetDigest
   ) {

@@ -291,12 +291,15 @@ export const executePreviewActivation = async (input: {
   } else {
     effects = { ...effects, ...(await input.store.initializeOAuth(request)) };
   }
-  const changed =
+  let changed =
     effects.userRowsAffected + effects.accountRowsAffected + effects.membershipRowsAffected > 0 ||
-    request.action === runtimeRoleAction ||
-    effects.runtimeRoleCreated ||
-    effects.resourceRowsAfter > effects.resourceRowsBefore ||
-    effects.jwksRowsAfter > effects.jwksRowsBefore;
+    request.action === runtimeRoleAction;
+  if (!changed) {
+    changed =
+      effects.runtimeRoleCreated ||
+      effects.resourceRowsAfter > effects.resourceRowsBefore ||
+      effects.jwksRowsAfter > effects.jwksRowsBefore;
+  }
   return previewActivationReceiptSchema.parse({
     action: request.action,
     appliedAt: new Date(nowEpochMs).toISOString(),

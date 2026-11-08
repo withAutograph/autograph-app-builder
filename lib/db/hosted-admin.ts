@@ -7,6 +7,9 @@ import { hostedIdentifierSchema } from "../eve/hosted-auth";
 const sha256Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const instantSchema = z.iso.datetime({ offset: true });
 
+const hasCredentialsOrSuffix = (url: URL): boolean =>
+  Boolean(url.username || url.password || url.search || url.hash);
+
 export const hostedTenantAuthoritySchema = z
   .strictObject({
     audience: z.url().startsWith("https://"),
@@ -17,26 +20,14 @@ export const hostedTenantAuthoritySchema = z
   .superRefine((authority, context) => {
     const issuer = new URL(authority.issuer);
     const audience = new URL(authority.audience);
-    if (
-      issuer.username ||
-      issuer.password ||
-      issuer.search ||
-      issuer.hash ||
-      issuer.pathname !== "/api/auth"
-    ) {
+    if (hasCredentialsOrSuffix(issuer) || issuer.pathname !== "/api/auth") {
       context.addIssue({
         code: "custom",
         message: "Hosted Preview issuer must be the exact /api/auth URL.",
         path: ["issuer"],
       });
     }
-    if (
-      audience.username ||
-      audience.password ||
-      audience.search ||
-      audience.hash ||
-      audience.pathname !== "/mcp"
-    ) {
+    if (hasCredentialsOrSuffix(audience) || audience.pathname !== "/mcp") {
       context.addIssue({
         code: "custom",
         message: "Hosted Preview audience must be the exact /mcp URL.",
