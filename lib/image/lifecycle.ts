@@ -416,7 +416,10 @@ export const parseLocalImageInspection = (
   if (
     !Array.isArray(rootFsLayers) ||
     rootFsLayers.length === 0 ||
-    rootFsLayers.some((layer) => typeof layer !== "string" || !/^sha256:[0-9a-f]{64}$/u.test(layer))
+    !rootFsLayers.every(
+      (layer: unknown): layer is string =>
+        typeof layer === "string" && /^sha256:[0-9a-f]{64}$/u.test(layer),
+    )
   ) {
     throw new Error("Local image inspection did not return exact rootfs layers.");
   }
@@ -424,7 +427,7 @@ export const parseLocalImageInspection = (
     imageId: image.Id,
     platform: IMAGE_PLATFORM,
     revision: provenance.builder.commit,
-    rootFsLayers: rootFsLayers as string[],
+    rootFsLayers,
     tag: provenance.image.tag,
   };
 };

@@ -1943,10 +1943,7 @@ describe("existing draft reconciliation provider", () => {
       requestId: "REQUEST_1",
       status: "accepted",
     });
-    const mergeBody = calls.find(({ url }) => url.endsWith("/git/commits"))?.body as {
-      parents: string[];
-      tree: string;
-    };
+    const mergeBody = calls.find(({ url }) => url.endsWith("/git/commits"))?.body;
     expect(mergeBody).toMatchObject({ parents: [head, base], tree: resolvedTree });
     const graphql = calls.find(({ url }) => url.endsWith("/graphql"))?.body as {
       query: string;

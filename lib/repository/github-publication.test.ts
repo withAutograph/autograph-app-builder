@@ -578,10 +578,8 @@ describe("closed GitHub publication contract", () => {
   it("rejects unknown keys and permission escalation", () => {
     const identity = installation("publish-draft-pull-request");
     expect(() => {
-      assertExactInstallationIdentity({
-        ...identity,
-        token: "secret",
-      } as never);
+      const identityWithToken = { ...identity, token: "secret" };
+      assertExactInstallationIdentity(identityWithToken);
     }).toThrow(/schema/u);
     expect(() => {
       assertExactInstallationIdentity({
@@ -635,7 +633,8 @@ describe("closed GitHub publication contract", () => {
   it("accepts exact active release-gate observations and rejects schema or digest drift", () => {
     const repo = repository(installation("resolve-existing-source"));
     expect(() => {
-      assertExactRepositoryObservation({ ...repo, url: "private" } as never);
+      const repositoryWithUrl = { ...repo, url: "private" };
+      assertExactRepositoryObservation(repositoryWithUrl);
     }).toThrow(/schema/u);
     expect(() => {
       assertExactRepositoryObservation({ ...repo, headTree: "9".repeat(40) });
@@ -734,10 +733,8 @@ describe("closed GitHub publication contract", () => {
     const fresh = freshProposal(adapter);
     const draft = draftProposal(adapter);
     expect(() => {
-      assertExactDraftPullRequestProposal({
-        ...draft,
-        endpoint: "https://example.com",
-      } as never);
+      const draftWithEndpoint = { ...draft, endpoint: "https://example.com" };
+      assertExactDraftPullRequestProposal(draftWithEndpoint);
     }).toThrow(/schema/u);
     expect(() =>
       createFreshRepositoryProposal({
@@ -817,8 +814,9 @@ describe("closed GitHub publication contract", () => {
       expect(change.after.bytes).toEqual(reviewedBytes);
     }
     expect(() => {
+      const contentWithToken = { ...content, token: "secret" };
       assertExactGitHubPublicationContent({
-        content: { ...content, token: "secret" } as never,
+        content: contentWithToken,
         proposal,
         review: review(),
       });
