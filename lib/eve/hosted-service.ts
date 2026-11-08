@@ -4751,25 +4751,40 @@ export function createHostedEveSessionService(input: {
               );
               const result = projectSnapshot(sessionId, response.snapshot);
               const timestamp = now();
-              const sessionBase: HostedPagedSessionBase = {
+              const sessionIdentity: Pick<
+                HostedPagedSessionBase,
+                "adapterGeneration" | "adapterSessionId"
+              > &
+                Partial<HostedPagedSessionBase> = {
                 adapterGeneration: 1,
                 adapterSessionId: response.adapterSessionId,
-                ...(result.uiPreview?.appId === undefined && existing.appId === undefined
-                  ? {}
-                  : { appId: result.uiPreview?.appId ?? existing.appId }),
+              };
+              if (result.uiPreview?.appId !== undefined || existing.appId !== undefined) {
+                sessionIdentity.appId = result.uiPreview?.appId ?? existing.appId;
+              }
+              const sessionOrigin = {
+                ...sessionIdentity,
                 createdAtEpochMs: timestamp,
                 lastProgressAtEpochMs: timestamp,
                 originAdapterSessionId: response.adapterSessionId,
-                ...(recoveryBinding === undefined
-                  ? {}
-                  : { nativeRecoveryBinding: recoveryBinding }),
+              };
+              if (recoveryBinding !== undefined) {
+                sessionOrigin.nativeRecoveryBinding = recoveryBinding;
+              }
+              const sessionParent = {
+                ...sessionOrigin,
                 parentSessionId: existing.sessionId,
                 principal,
                 resumability: ["completed", "failed", "cancelled"].includes(result.status)
-                  ? "terminal"
-                  : "live",
+                  ? ("terminal" as const)
+                  : ("live" as const),
                 sessionId,
-                ...(existing.sourceHandoffId ? { sourceHandoffId: existing.sourceHandoffId } : {}),
+              };
+              if (existing.sourceHandoffId) {
+                sessionParent.sourceHandoffId = existing.sourceHandoffId;
+              }
+              const sessionBase: HostedPagedSessionBase = {
+                ...sessionParent,
                 stage: stageForResult(result),
                 status: result.status,
                 title: existing.title,

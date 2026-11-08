@@ -2058,7 +2058,17 @@ const failureReceipt = (input: {
   failureMessage: string;
 }): BranchWorktreePublicationFailureReceipt => {
   const { digest: proposalDigest, ...proposal } = input.proposal;
-  const unsigned = {
+  const initial: Pick<
+    BranchWorktreePublicationFailureReceipt,
+    | keyof typeof proposal
+    | "appliedPaths"
+    | "branchCreated"
+    | "failureMessage"
+    | "proposalDigest"
+    | "publishedByCallId"
+    | "reason"
+    | "recoveryOfDigest"
+  > = {
     ...proposal,
     appliedPaths: input.appliedPaths,
     branchCreated: input.branchCreated,
@@ -2066,7 +2076,12 @@ const failureReceipt = (input: {
     proposalDigest,
     publishedByCallId: input.callId,
     reason: input.reason,
-    ...(input.recoveryOfDigest === undefined ? {} : { recoveryOfDigest: input.recoveryOfDigest }),
+  };
+  if (input.recoveryOfDigest !== undefined) {
+    initial.recoveryOfDigest = input.recoveryOfDigest;
+  }
+  const unsigned = {
+    ...initial,
     recoveryRequired: true as const,
     status: "failed" as const,
     worktreeCreated: input.worktreeCreated,
@@ -2082,7 +2097,16 @@ const successReceipt = async (input: {
   await assertPostimages(input.proposal);
   const snapshot = await verifyWorktreeIdentity(input.proposal);
   const { digest: proposalDigest, ...proposal } = input.proposal;
-  const unsigned = {
+  const initial: Pick<
+    BranchWorktreePublicationSuccessReceipt,
+    | keyof typeof proposal
+    | "appliedPaths"
+    | "branchCreated"
+    | "postconditionDigest"
+    | "proposalDigest"
+    | "publishedByCallId"
+    | "recoveryOfDigest"
+  > = {
     ...proposal,
     appliedPaths: input.proposal.approvedPaths,
     branchCreated: true,
@@ -2091,7 +2115,12 @@ const successReceipt = async (input: {
     ),
     proposalDigest,
     publishedByCallId: input.callId,
-    ...(input.recoveryOfDigest === undefined ? {} : { recoveryOfDigest: input.recoveryOfDigest }),
+  };
+  if (input.recoveryOfDigest !== undefined) {
+    initial.recoveryOfDigest = input.recoveryOfDigest;
+  }
+  const unsigned = {
+    ...initial,
     recoveryRequired: false as const,
     status: "succeeded" as const,
     worktreeCreated: true,

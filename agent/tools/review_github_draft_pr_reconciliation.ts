@@ -89,14 +89,18 @@ export default defineTool({
         },
       };
     }
+    const reviewPrefix: Pick<
+      Parameters<typeof createReconciliationReviewReceipt>[0],
+      "appId" | "publicationScope" | "dependencyCatalog"
+    > = { appId: candidate.appId };
+    if (candidate.publicationScope !== undefined) {
+      reviewPrefix.publicationScope = candidate.publicationScope;
+    }
+    if (candidate.dependencyCatalog !== undefined) {
+      reviewPrefix.dependencyCatalog = candidate.dependencyCatalog;
+    }
     const review = createReconciliationReviewReceipt({
-      appId: candidate.appId,
-      ...(candidate.publicationScope === undefined
-        ? {}
-        : { publicationScope: candidate.publicationScope }),
-      ...(candidate.dependencyCatalog === undefined
-        ? {}
-        : { dependencyCatalog: candidate.dependencyCatalog }),
+      ...reviewPrefix,
       baseChanges: observed.baseChanges,
       baseSha: candidate.baseSha,
       baseTree: candidate.baseTree,

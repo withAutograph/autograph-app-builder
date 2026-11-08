@@ -1516,20 +1516,18 @@ export function createLocalEveSessionService(
       result,
       privateInputForEvents(localSessionEvents.get(result.sessionId) ?? []),
     );
-  return {
+  const wrapped: EveSessionService = {
     ...service,
     cancel: async (request) => present(await service.cancel(request)),
     get: async (request) => present(await service.get(request)),
-    ...(getStart === undefined
-      ? {}
-      : {
-          getStart: async (request: Parameters<NonNullable<EveSessionService["getStart"]>>[0]) =>
-            present(await getStart(request)),
-        }),
-    respond: async (request) => present(await service.respond(request)),
-    send: async (request) => present(await service.send(request)),
-    start: async (request) => present(await service.start(request)),
   };
+  if (getStart !== undefined) {
+    wrapped.getStart = async (request) => present(await getStart(request));
+  }
+  wrapped.respond = async (request) => present(await service.respond(request));
+  wrapped.send = async (request) => present(await service.send(request));
+  wrapped.start = async (request) => present(await service.start(request));
+  return wrapped;
 }
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract

@@ -217,15 +217,18 @@ export const resolveOwnedStandardRuntimeConfiguration = async (input: {
   ) {
     throw new HostedOperatorError("resource_mismatch");
   }
-  const result = assembleStandardBuilderRuntimeConfiguration({
+  const assemblyInput: Parameters<typeof assembleStandardBuilderRuntimeConfiguration>[0] = {
     base: input.configuration,
     authority: input.context.authority,
     appId: input.context.target.appId,
     destination,
     captured,
     environment: input.environment,
-    ...(verifiedPublicOrigin === undefined ? {} : { verifiedPublicOrigin }),
-  });
+  };
+  if (verifiedPublicOrigin !== undefined) {
+    assemblyInput.verifiedPublicOrigin = verifiedPublicOrigin;
+  }
+  const result = assembleStandardBuilderRuntimeConfiguration(assemblyInput);
   await input.resources.owner.assertCanonicalAppOwner(input.context);
   if (
     (await input.resources.readStandardOriginSelection?.(input.context, destination)) !==
@@ -529,9 +532,15 @@ export const openNativeTargetConfigurationResources = async (
           authority: context.authority,
           scope: choiceScope,
         });
+        const originInput: Pick<
+          Parameters<typeof readStandardBuilderPublicOrigin>[0],
+          "destination" | "selectedPublicOrigin"
+        > = { destination };
+        if (selectedPublicOrigin !== undefined) {
+          originInput.selectedPublicOrigin = selectedPublicOrigin;
+        }
         return await readStandardBuilderPublicOrigin({
-          destination,
-          ...(selectedPublicOrigin === undefined ? {} : { selectedPublicOrigin }),
+          ...originInput,
           assertCurrent: async () => {
             if (
               (await choiceStore.read({ authority: context.authority, scope: choiceScope })) !==
