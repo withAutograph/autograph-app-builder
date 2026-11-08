@@ -1289,7 +1289,7 @@ export function createHostedEveSessionService(input: {
   ): Promise<boolean> {
     const session = toDurableHostedSessionRecord(current);
     const observeTransport = input.transport.observe;
-    const observeSessionPaged = input.store.observeSessionPaged;
+    const { observeSessionPaged } = input.store;
     if (
       observeTransport === undefined ||
       observeSessionPaged === undefined ||
@@ -1385,7 +1385,7 @@ export function createHostedEveSessionService(input: {
           deferPrivateApprovalPersistence: true,
         });
         try {
-          observation = spool.observation;
+          ({ observation } = spool);
           const native = spool.observation.nativeObservationState;
           const tail = spool.observation.nativeTailIndex;
           if (
@@ -1696,7 +1696,7 @@ export function createHostedEveSessionService(input: {
           targets.set(JSON.stringify(target), target);
         }
         const candidates: NonNullable<ReturnType<typeof reconstructNativeApprovalResponse>>[] = [];
-        const checkpointDigest = current.checkpointDigest;
+        const { checkpointDigest } = current;
         const currentState = state;
         for (const target of targets.values()) {
           const candidate = reconstructNativeApprovalResponse({
@@ -3179,7 +3179,7 @@ export function createHostedEveSessionService(input: {
           transport: input.transport.observe,
         });
         if (activationFailure !== undefined) {
-          const observation = spool.observation;
+          const { observation } = spool;
           if (
             observation.observationComplete !== true ||
             observation.nativeTailIndex === undefined ||
@@ -5123,7 +5123,7 @@ export function createHostedEveSessionService(input: {
           }),
         );
         for (const acknowledgement of page.acknowledgements) {
-          const operation = acknowledgement.operation;
+          const { operation } = acknowledgement;
           const marker = operation.sendDelivery;
           if (
             marker?.resumeCancellationRevision === binding.cancellationRevision &&

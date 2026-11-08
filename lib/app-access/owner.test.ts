@@ -228,7 +228,7 @@ describe("recovered web app access owner", () => {
 
   it("keeps a recovered command's request identity and original operator scope", async () => {
     const f = await fixture();
-    const sessionId = f.selected.child.sessionId;
+    const { sessionId } = f.selected.child;
     const command = {
       action: "retry-setup",
       clientRequestId: "123e4567-e89b-42d3-a456-426614174000",
@@ -259,7 +259,7 @@ describe("recovered web app access owner", () => {
   ])("denies another authenticated owner or tenant", async (signedIn) => {
     const f = await fixture();
     f.setSignedIn(signedIn);
-    const sessionId = f.selected.child.sessionId;
+    const { sessionId } = f.selected.child;
     const response = await f.route(request(sessionId), sessionId);
     expect(response.status).toBe(403);
     expect(f.reads).toEqual([]);
@@ -269,7 +269,7 @@ describe("recovered web app access owner", () => {
   it("requires an authenticated Builder account", async () => {
     const f = await fixture();
     f.setSignedIn(null);
-    const sessionId = f.selected.child.sessionId;
+    const { sessionId } = f.selected.child;
     const response = await f.route(request(sessionId), sessionId);
     expect(response.status).toBe(401);
     expect(f.reads).toEqual([]);
@@ -297,7 +297,7 @@ describe("recovered web app access owner", () => {
       read,
       execute: f.execute,
     });
-    const sessionId = f.selected.child.sessionId;
+    const { sessionId } = f.selected.child;
     const response = await route(request(sessionId), sessionId);
     expect(response.status).toBe(403);
     expect(await response.text()).not.toContain("organizationName");
@@ -310,7 +310,7 @@ describe("recovered web app access owner", () => {
       sessionId: f.selected.child.sessionId,
       nowEpochMs: 200,
     });
-    const sessionId = f.selected.original.sessionId;
+    const { sessionId } = f.selected.original;
     const response = await f.route(request(sessionId), sessionId);
     expect(response.status).not.toBe(200);
     expect(f.reads).toEqual([]);

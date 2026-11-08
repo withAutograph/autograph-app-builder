@@ -167,7 +167,7 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
     plan: () => Promise.resolve(plan),
     readApproval: (input) => Promise.resolve({ ...input, approvalId: "approval", approved: true }),
     withResourceLease: async (_input, run) => {
-      const leaseId = row.record.leaseId;
+      const { leaseId } = row.record;
       try {
         return await run(() => {
           const liveExpiry =
@@ -331,7 +331,7 @@ describe("canonical execution observation", () => {
     const execution = f.request("execute");
     await f.entered.promise;
     const effect = readExecutingEffect(f);
-    const revision = f.revision;
+    const { revision } = f;
     const expiresAt = f.record.leaseExpiresAt;
     const providerReads = f.assertAuthorized.mock.calls.length;
     await Promise.all(Array.from({ length: 100 }, () => effect.assertCurrentObservation()));
@@ -365,7 +365,7 @@ describe("canonical execution observation", () => {
     const execution = f.request("execute");
     try {
       await entered.promise;
-      const revision = f.revision;
+      const { revision } = f;
       const providerReads = f.assertAuthorized.mock.calls.length;
       await vi.advanceTimersByTimeAsync(61_000);
       expect(f.revision).toBe(revision + 3);
@@ -394,7 +394,7 @@ describe("canonical execution observation", () => {
       const execution = f.request("execute", true, abort.signal);
       await f.entered.promise;
       const effect = readExecutingEffect(f);
-      const revision = f.revision;
+      const { revision } = f;
       if (lost === "owner") {
         f.assertCanonicalOwner.mockRejectedValue(new HostedOperatorError("authorization_required"));
       }
@@ -435,7 +435,7 @@ describe("canonical execution observation", () => {
     try {
       await f.entered.promise;
       const effect = readExecutingEffect(f);
-      const revision = f.revision;
+      const { revision } = f;
       f.assertCanonicalOwner.mockRejectedValue(new HostedOperatorError("authorization_required"));
       await vi.advanceTimersByTimeAsync(20_000);
       expect(effect.signal?.aborted).toBe(true);
@@ -463,7 +463,7 @@ describe("canonical execution observation", () => {
     try {
       await f.entered.promise;
       const effect = readExecutingEffect(f);
-      const revision = f.revision;
+      const { revision } = f;
       const rechecked = Promise.withResolvers<undefined>();
       vi.spyOn(f.store, "compareAndSet").mockImplementationOnce(() => {
         f.assertCanonicalOwner.mockImplementation(() => {
@@ -498,7 +498,7 @@ describe("canonical execution observation", () => {
     const release = Promise.withResolvers<undefined>();
     try {
       await f.entered.promise;
-      const compareAndSet = f.store.compareAndSet;
+      const { compareAndSet } = f.store;
       vi.spyOn(f.store, "compareAndSet").mockImplementationOnce(async (input) => {
         await release.promise;
         return await compareAndSet(input);
@@ -526,7 +526,7 @@ describe("canonical execution observation", () => {
     vi.setSystemTime(now);
     const f = fixture(false, Date.now);
     const lost = Promise.withResolvers<never>();
-    const withResourceLease = f.deps.withResourceLease;
+    const { withResourceLease } = f.deps;
     let callback: Promise<unknown> | undefined;
     f.deps.withResourceLease = async (input, run) => {
       const running = withResourceLease(input, run);
@@ -543,7 +543,7 @@ describe("canonical execution observation", () => {
       expect(await response.json()).toMatchObject({ status: "blocked" });
       expect(effect.signal?.aborted).toBe(true);
       expect(f.record.leaseId).toBeUndefined();
-      const revision = f.revision;
+      const { revision } = f;
       await vi.advanceTimersByTimeAsync(80_000);
       expect(f.revision).toBe(revision);
       expect(vi.getTimerCount()).toBe(0);
@@ -653,7 +653,7 @@ describe("canonical execution observation", () => {
   ] as const)("does not let a stale attempt settle after %s", (drift) => {
     const f = fixture();
     const record = structuredClone(f.record);
-    const operator = record.operator;
+    const { operator } = record;
     if (operator === undefined) {
       throw new Error("Fixture requires an operator");
     }

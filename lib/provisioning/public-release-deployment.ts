@@ -166,15 +166,15 @@ export const createPublicReleaseDeployment = (input: {
         assertCurrentOwner,
       });
     const original = await load();
-    const configuration = input.configuration;
+    const { configuration } = input;
     const runtime = standardRuntimeSchema.safeParse(configuration);
     const ownedProfile = configuration?.standardRuntime;
-    const keyring = input.keyring;
-    const environment = input.environment;
-    const readResourceBindings = input.readResourceBindings;
-    const readSourceOwner = input.readSourceOwner;
-    const assertRuntimeAuthorized = input.assertRuntimeAuthorized;
-    const databaseUrl = input.databaseUrl;
+    const { keyring } = input;
+    const { environment } = input;
+    const { readResourceBindings } = input;
+    const { readSourceOwner } = input;
+    const { assertRuntimeAuthorized } = input;
+    const { databaseUrl } = input;
     if (
       configuration === undefined ||
       ownedProfile === undefined ||
@@ -212,8 +212,8 @@ export const createPublicReleaseDeployment = (input: {
       provisioningDigest: project.provisioningDigest,
     };
     const sourceInstallationId = project.githubInstallationId;
-    const productionBranch = project.productionBranch;
-    const readInstallationScopes = input.readInstallationScopes;
+    const { productionBranch } = project;
+    const { readInstallationScopes } = input;
     const publicOrigin = new URL(configuration.gateway.publicOrigin).origin;
     const runtimeContext: RuntimeReadContext = {
       authority: owner.authority,

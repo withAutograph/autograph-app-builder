@@ -1732,7 +1732,7 @@ describe("protected hosted operator boundary", () => {
     f.approve();
     await f.client.request(request);
     const credentials = structuredClone(f.row?.record.privateState);
-    const readApproval = f.deps.readApproval;
+    const { readApproval } = f.deps;
     f.deps.readApproval = async (input) =>
       input.planDigest === request.planDigest ? await readApproval(input) : null;
     f.deps.plan = async () => ({
@@ -2687,7 +2687,7 @@ describe("idle installer source successor planning", () => {
     const now = Date.parse("2026-10-20T12:00:00Z");
     const f = fixture(() => now);
     const requireRow = () => {
-      const row = f.row;
+      const { row } = f;
       if (row === undefined) {
         throw new Error("Missing source successor fixture journal");
       }
@@ -2773,7 +2773,7 @@ describe("idle installer source successor planning", () => {
     f.approve();
     let originalApproved = true;
     let newApproved = false;
-    const readApproval = f.deps.readApproval;
+    const { readApproval } = f.deps;
     f.deps.readApproval = vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(
       async (input) => {
         if (
@@ -3070,7 +3070,7 @@ describe("approved retention renewal planning", () => {
       expect(f.deps.plan).not.toHaveBeenCalled();
 
       const privateError = new TypeError("private authorization detail owner-token");
-      const assertAuthorized = f.deps.assertAuthorized;
+      const { assertAuthorized } = f.deps;
       const log = vi.spyOn(console, "info").mockImplementation(() => {});
       try {
         f.deps.assertAuthorized = vi.fn(async () => {
@@ -3091,7 +3091,7 @@ describe("approved retention renewal planning", () => {
         f.deps.assertAuthorized = assertAuthorized;
       }
       if (pendingKind !== "gateway-delivery") {
-        const readApproval = f.deps.readApproval;
+        const { readApproval } = f.deps;
         const approvalRead = vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(
           async (input) => (input.callId === "renewed-call" ? null : await readApproval(input)),
         );
@@ -4049,7 +4049,7 @@ describe("closed prepare final verification diagnostics", () => {
             throw privateError;
           }
         });
-      const compareAndSet = f.deps.store.compareAndSet;
+      const { compareAndSet } = f.deps.store;
       f.deps.store.compareAndSet = async (input) => {
         const settlementFailure =
           stage === "execution_settlement" &&
@@ -4116,7 +4116,7 @@ describe("closed prepare final verification diagnostics", () => {
 
   it("classifies final proof publication failure and retries without duplicate effects", async () => {
     const { f, execute } = await finalFixture();
-    const compareAndSet = f.deps.store.compareAndSet;
+    const { compareAndSet } = f.deps.store;
     const privateError = Object.assign(new Error("private-publication-query private-token"), {
       code: "42501",
     });
@@ -4156,12 +4156,12 @@ describe("closed prepare final verification diagnostics", () => {
     "classifies resource lease cleanup with journal release failure %s",
     async (releaseFails) => {
       const { f, execute } = await finalFixture();
-      const withResourceLease = f.deps.withResourceLease;
+      const { withResourceLease } = f.deps;
       f.deps.withResourceLease = async (input, run) => {
         await withResourceLease(input, run);
         throw new TypeError("private-resource-lease-cleanup");
       };
-      const compareAndSet = f.deps.store.compareAndSet;
+      const { compareAndSet } = f.deps.store;
       f.deps.store.compareAndSet = async (input) => {
         if (
           releaseFails &&
@@ -4207,7 +4207,7 @@ describe("closed prepare final verification diagnostics", () => {
 
   it("classifies journal lease clearing failure without repeating completed effects", async () => {
     const { f, execute } = await finalFixture();
-    const compareAndSet = f.deps.store.compareAndSet;
+    const { compareAndSet } = f.deps.store;
     f.deps.store.compareAndSet = async (input) => {
       if (f.row?.record.leaseId !== undefined && input.record.leaseId === undefined) {
         throw new TypeError("private-journal-lease-clear");
@@ -4318,7 +4318,7 @@ describe("completed owned Gateway binding convergence", () => {
       const request = await prepared(f);
       f.approve();
       expect((await f.client.request(request)).status).toBe("prepared");
-      const row = f.row;
+      const { row } = f;
       if (row?.record.operator === undefined) {
         throw new Error("Missing approved fixture operation");
       }
@@ -4341,7 +4341,7 @@ describe("completed owned Gateway binding convergence", () => {
         }),
       };
       const executeCalls = vi.mocked(f.deps.executeEffect).mock.calls.length;
-      const reconcile = f.deps.reconcile;
+      const { reconcile } = f.deps;
       const deliveryReceipt = {
         effectId: outcome === "nonmatching" ? "unrelated-effect" : "gateway-delivery",
         resourceVersion: "verified-existing-delivery",
