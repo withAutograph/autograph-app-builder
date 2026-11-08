@@ -21,10 +21,10 @@ const ownerResolver = vi.fn<typeof resolveHostedOperatorOwnerContext>();
 
 const fixture = () => {
   const authority = {
-    issuer: "https://builder.example/api/auth",
     audience: "https://builder.example/mcp",
-    workspaceId: "workspace",
+    issuer: "https://builder.example/api/auth",
     ownerUserId: "owner",
+    workspaceId: "workspace",
   };
   const owner = operatorOwnerContextSchema.parse({
     adapterGeneration: 1,
@@ -35,39 +35,16 @@ const fixture = () => {
     sessionId: "public-session",
   });
   const plan: NativeTargetOnboardingPlan = {
-    version: 1,
-    appId: "invoice-review",
-    origin: {
-      publicSessionId: owner.sessionId,
-      adapterSessionId: owner.adapterSessionId,
-      adapterGeneration: 1,
-      appSpecDigest: "a".repeat(64),
-      release: {
-        id: "release",
-        artifactRef: "private-artifact",
-        manifestSha256: "b".repeat(64),
-        schemaSha256: "c".repeat(64),
-      },
-    },
-    project: {
-      name: "invoice-review",
-      teamId: "team",
-      installationId: "installation",
-      projectSettings: {
-        framework: null,
-        rootDirectory: "apps/invoice-review",
-        sourceFilesOutsideRootDirectory: true,
-      },
-      protection: nativeTargetRequiredProjectProtection,
-    },
-    branch: "preview",
     appDatabase: {
-      resourceId: "app-resource",
       database: "invoice_data",
       migratorRole: "invoice_migrator",
+      resourceId: "app-resource",
       runtimeRole: "invoice_runtime",
     },
-    productRoles: [],
+    appId: "invoice-review",
+    branch: "preview",
+    conflictPolicy: "stop-on-conflict",
+    cost: { description: "Dedicated project", ownership: "current-owner" },
     nativeNeon: {
       approvalReference: "approved-neon",
       nativeStore: {
@@ -76,64 +53,87 @@ const fixture = () => {
         sourceProjectId: "source-project",
       },
       scope: {
-        projectId: "neon-project",
         branchId: "neon-branch",
         endpointId: "endpoint",
         hostname: "db.example",
         maintenanceDatabase: "neondb",
         maintenanceRole: "maintenance",
+        projectId: "neon-project",
       },
     },
+    origin: {
+      adapterGeneration: 1,
+      adapterSessionId: owner.adapterSessionId,
+      appSpecDigest: "a".repeat(64),
+      publicSessionId: owner.sessionId,
+      release: {
+        artifactRef: "private-artifact",
+        id: "release",
+        manifestSha256: "b".repeat(64),
+        schemaSha256: "c".repeat(64),
+      },
+    },
+    productRoles: [],
+    project: {
+      installationId: "installation",
+      name: "invoice-review",
+      projectSettings: {
+        framework: null,
+        rootDirectory: "apps/invoice-review",
+        sourceFilesOutsideRootDirectory: true,
+      },
+      protection: nativeTargetRequiredProjectProtection,
+      teamId: "team",
+    },
+    retention: { policy: "Until owner cleanup" },
+    version: 1,
     worker: {
-      id: "worker",
       executablePath: "/worker/install",
-      sha256: "d".repeat(64),
+      id: "worker",
       operationScope: "generated-app-release-install-v1",
+      sha256: "d".repeat(64),
       subcommand: "protected-generated-app-install",
     },
-    cost: { ownership: "current-owner", description: "Dedicated project" },
-    retention: { policy: "Until owner cleanup" },
-    conflictPolicy: "stop-on-conflict",
   };
   const input = {
     appId: plan.appId,
     operationRef: "00000000-0000-5000-a000-000000000001",
-    planDigest: nativeTargetOnboardingPlanDigest(plan),
     plan,
+    planDigest: nativeTargetOnboardingPlanDigest(plan),
   };
   const actor = {
-    authenticator: "mcp-oauth-jwks",
-    principalType: "user",
-    principalId: "owner",
-    subject: "owner",
-    issuer: authority.issuer,
     attributes: {
       "mcp:audience": authority.audience,
-      "mcp:workspace-id": authority.workspaceId,
       "mcp:scopes": ["autograph:start"],
+      "mcp:workspace-id": authority.workspaceId,
     },
+    authenticator: "mcp-oauth-jwks",
+    issuer: authority.issuer,
+    principalId: "owner",
+    principalType: "user",
+    subject: "owner",
   };
   const ctx = {
-    session: { id: "adapter", auth: { current: actor, initiator: actor } },
+    session: { auth: { current: actor, initiator: actor }, id: "adapter" },
     callId: "call",
     abortSignal: new AbortController().signal,
   };
   const responseCtx: ApprovalResponseContext<NativeTargetPreparationRequest> = {
-    responder: actor,
-    session: { id: "adapter", initiator: actor, turn: { id: "turn", sequence: 1 } },
-    request: {
-      requestId: "native-request",
-      callId: "call",
-      toolName: "prepare-app-native-target",
-      toolInput: input,
-    },
-    response: { decision: "approve" },
     auth: {
       getToken: () => Promise.reject(new Error("unused")),
       requireAuth: () => {
         throw new Error("unused");
       },
     },
+    request: {
+      callId: "call",
+      requestId: "native-request",
+      toolInput: input,
+      toolName: "prepare-app-native-target",
+    },
+    responder: actor,
+    response: { decision: "approve" },
+    session: { id: "adapter", initiator: actor, turn: { id: "turn", sequence: 1 } },
   };
   let output: NativeTargetTransportResponse = { ...input, status: "planned" };
   const sent: {
@@ -162,13 +162,13 @@ const fixture = () => {
     token: () => Promise.resolve("synthetic-oidc"),
   });
   const proof = {
-    requestId: "native-request",
     callId: "original-approved-call",
-    planDigest: input.planDigest,
-    responderPrincipalId: "owner",
-    publicSessionId: "public-session",
-    outcome: "approved" as const,
     observedAt: "2026-10-21T16:00:00Z",
+    outcome: "approved" as const,
+    planDigest: input.planDigest,
+    publicSessionId: "public-session",
+    requestId: "native-request",
+    responderPrincipalId: "owner",
   };
   return {
     actor,
@@ -206,19 +206,19 @@ describe("native target protected client", () => {
       f.client.plan(
         {
           appId: f.plan.appId,
-          project: {
-            name: f.plan.project.name,
-            teamId: f.plan.project.teamId,
-            installationId: f.plan.project.installationId,
-            projectSettings: f.plan.project.projectSettings,
-          },
           branch: f.plan.branch,
           conflictPolicy: f.plan.conflictPolicy,
+          project: {
+            installationId: f.plan.project.installationId,
+            name: f.plan.project.name,
+            projectSettings: f.plan.project.projectSettings,
+            teamId: f.plan.project.teamId,
+          },
         },
         f.ctx,
         {
-          phase: "validated",
           appSpec: { appId: f.plan.appId, digest: f.plan.origin.appSpecDigest },
+          phase: "validated",
         },
       ),
     ).rejects.toThrow("plan-app-hosted-runtime");
@@ -229,14 +229,14 @@ describe("native target protected client", () => {
     const result = await f.client.plan(
       {
         appId: f.plan.appId,
-        project: {
-          name: f.plan.project.name,
-          teamId: f.plan.project.teamId,
-          installationId: f.plan.project.installationId,
-          projectSettings: f.plan.project.projectSettings,
-        },
         branch: f.plan.branch,
         conflictPolicy: f.plan.conflictPolicy,
+        project: {
+          installationId: f.plan.project.installationId,
+          name: f.plan.project.name,
+          projectSettings: f.plan.project.projectSettings,
+          teamId: f.plan.project.teamId,
+        },
       },
       f.ctx,
       { phase: "prepared" },
@@ -253,17 +253,17 @@ describe("native target protected client", () => {
       f.client.plan(
         {
           appId: f.plan.appId,
-          project: {
-            name: f.plan.project.name,
-            teamId: f.plan.project.teamId,
-            installationId: f.plan.project.installationId,
-            projectSettings: f.plan.project.projectSettings,
-          },
           branch: f.plan.branch,
           conflictPolicy: f.plan.conflictPolicy,
+          project: {
+            installationId: f.plan.project.installationId,
+            name: f.plan.project.name,
+            projectSettings: f.plan.project.projectSettings,
+            teamId: f.plan.project.teamId,
+          },
         },
         f.ctx,
-        { phase: "prepared", appSpec: { appId: "other-app", digest: f.plan.origin.appSpecDigest } },
+        { appSpec: { appId: "other-app", digest: f.plan.origin.appSpecDigest }, phase: "prepared" },
       ),
     ).rejects.toThrow();
     expect(f.request).not.toHaveBeenCalled();
@@ -287,8 +287,8 @@ describe("native target protected client", () => {
     const f = fixture();
     const plan = {
       ...f.plan,
-      resourceProfileId: "isolated-development",
       resourceProfileAuthorityDigest: "a".repeat(64),
+      resourceProfileId: "isolated-development",
       resourceSelectionRevision: 1,
     };
     const description = publicApprovalDescription(
@@ -314,19 +314,19 @@ describe("native target protected client", () => {
     await f.client.plan(
       {
         appId: f.plan.appId,
-        project: {
-          name: f.plan.project.name,
-          teamId: f.plan.project.teamId,
-          installationId: f.plan.project.installationId,
-          projectSettings: f.plan.project.projectSettings,
-        },
         branch: f.plan.branch,
         conflictPolicy: f.plan.conflictPolicy,
+        project: {
+          installationId: f.plan.project.installationId,
+          name: f.plan.project.name,
+          projectSettings: f.plan.project.projectSettings,
+          teamId: f.plan.project.teamId,
+        },
       },
       f.ctx,
       {
-        phase: "app_spec_accepted",
         appSpec: { appId: f.plan.appId, digest: f.plan.origin.appSpecDigest },
+        phase: "app_spec_accepted",
       },
     );
     expect(f.sent).toHaveLength(1);
@@ -365,8 +365,8 @@ describe("native target protected client", () => {
     f.setOutput({
       ...f.input,
       operationRef: "00000000-0000-5000-a000-000000000002",
-      status: "ready",
       projectId: "other",
+      status: "ready",
     });
     await expect(f.client.prepare(f.input, f.ctx)).rejects.toThrow();
   });
@@ -409,8 +409,8 @@ describe("native target protected client", () => {
           Response.json({
             appId: f.input.appId,
             authenticatedBehavior: "unassessed",
-            status: "blocked",
             code,
+            status: "blocked",
           }),
         );
         await expect(f.client.hasApproval(f.input, f.ctx)).rejects.toMatchObject({
@@ -514,11 +514,11 @@ describe("native target protected client", () => {
     const f = fixture();
     f.setOutput({ status: "pending" });
     expect(await f.client.hasApproval(f.input, f.ctx)).toBe(false);
-    f.setOutput({ status: "approved", proof: f.proof });
+    f.setOutput({ proof: f.proof, status: "approved" });
     expect(await f.client.hasApproval(f.input, f.ctx)).toBe(true);
-    f.setOutput({ status: "cancelled", proof: { ...f.proof, outcome: "cancelled" } });
+    f.setOutput({ proof: { ...f.proof, outcome: "cancelled" }, status: "cancelled" });
     await expect(f.client.hasApproval(f.input, f.ctx)).rejects.toThrow();
-    f.setOutput({ status: "approved", proof: { ...f.proof, responderPrincipalId: "other" } });
+    f.setOutput({ proof: { ...f.proof, responderPrincipalId: "other" }, status: "approved" });
     await expect(f.client.hasApproval(f.input, f.ctx)).rejects.toThrow();
   });
   it("forwards only exact candidate identity and never treats it as terminal", async () => {
@@ -614,17 +614,17 @@ describe("native target protected client", () => {
   it("rejects inconsistent native request/call and adapter identities at transport parsing", () => {
     const f = fixture();
     const request = {
-      ownerContext: f.owner,
+      action: "native-target-approval-candidate",
       adapterSessionId: "adapter",
       callId: "call",
-      action: "native-target-approval-candidate",
-      input: f.input,
       candidate: {
-        requestId: "request",
         callId: "different-call",
-        toolName: "prepare-app-native-target",
+        requestId: "request",
         responder: { authenticator: "mcp-oauth-jwks", principalId: "owner", principalType: "user" },
+        toolName: "prepare-app-native-target",
       },
+      input: f.input,
+      ownerContext: f.owner,
     };
     expect(nativeTargetTransportRequestSchema.safeParse(request).success).toBe(false);
     expect(

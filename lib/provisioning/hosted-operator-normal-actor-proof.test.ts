@@ -48,8 +48,8 @@ const requiredFixture = <T>(value: T | undefined): T => {
 
 const accountOperationRef = "11111111-1111-4111-8111-111111111111";
 const authority = {
-  issuer: "https://builder.example.test/api/auth",
   audience: "https://builder.example.test/mcp",
+  issuer: "https://builder.example.test/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
@@ -57,17 +57,14 @@ const target = {
   appId: "normal-app",
   branch: "preview",
   environment: "preview" as const,
-  projectId: "prj_app",
-  sessionId: "owner-session",
   installationId: "installation",
+  projectId: "prj_app",
   scopeId: "team",
   scopeType: "team" as const,
+  sessionId: "owner-session",
 };
 const context = { authority, target };
 const program = normalActorProgramSchema.parse({
-  version: 1,
-  appId: target.appId,
-  origin: "https://apps.example.com",
   actors: [
     {
       account: "create-email-password",
@@ -77,20 +74,23 @@ const program = normalActorProgramSchema.parse({
     },
     { account: "create-email-password", actorKey: "peer", email: "peer@example.com", name: "Peer" },
   ],
-  organizations: [
-    { name: "One", organizationId: "org-one", ownerActorKey: "owner", slug: "one" },
-    { name: "Two", organizationId: "org-two", ownerActorKey: "owner", slug: "two" },
+  appAccess: [
+    { actorKey: "owner", organizationId: "org-one", roles: ["owner"] },
+    { actorKey: "peer", organizationId: "org-two", roles: ["member"] },
   ],
+  appId: target.appId,
   memberships: [
     { actorKey: "owner", organizationId: "org-one", role: "owner" },
     { actorKey: "peer", organizationId: "org-one", role: "member" },
     { actorKey: "owner", organizationId: "org-two", role: "owner" },
     { actorKey: "peer", organizationId: "org-two", role: "member" },
   ],
-  appAccess: [
-    { actorKey: "owner", organizationId: "org-one", roles: ["owner"] },
-    { actorKey: "peer", organizationId: "org-two", roles: ["member"] },
+  organizations: [
+    { name: "One", organizationId: "org-one", ownerActorKey: "owner", slug: "one" },
+    { name: "Two", organizationId: "org-two", ownerActorKey: "owner", slug: "two" },
   ],
+  origin: "https://apps.example.com",
+  version: 1,
 });
 const plan = hostedOperatorPlanSchema.parse({
   version: 1,
@@ -151,11 +151,11 @@ const plan = hostedOperatorPlanSchema.parse({
     catalogAppIds: [target.appId],
     operatorOrigin: "https://operator.example.com",
     sourceWorkload: {
-      issuer: "https://oidc.vercel.com",
       audience: "https://operator.example.com",
+      environment: "preview",
+      issuer: "https://oidc.vercel.com",
       ownerId: "team",
       projectId: "prj_gateway",
-      environment: "preview",
       subject: "gateway",
     },
   },
@@ -166,14 +166,13 @@ const plan = hostedOperatorPlanSchema.parse({
     repoId: "gateway-repo",
   },
   deploymentBoundary: {
-    authority,
-    teamId: "team",
     app: {
       branch: target.branch,
       deploymentId: "dpl_app",
       environment: "preview",
       projectId: target.projectId,
     },
+    authority,
     gateway: {
       branch: target.branch,
       deploymentId: "dpl_gateway",
@@ -181,6 +180,7 @@ const plan = hostedOperatorPlanSchema.parse({
       projectId: "prj_gateway",
     },
     operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
+    teamId: "team",
     verification: {
       gatewayOrigin: "https://gateway.example.test",
       jwksUrl: "https://gateway.example.test/_platform/jwks.json",
@@ -242,7 +242,7 @@ const fixture = async (publicRelease?: {
     hostname: plan.neon.endpoint,
     migratorRole: plan.authDatabase.migratorRole,
     runtimeRole: plan.authDatabase.runtimeRole,
-    neon: { projectId: plan.neon.projectId, branchId: plan.neon.branchId },
+    neon: { branchId: plan.neon.branchId, projectId: plan.neon.projectId },
     port: 5432,
     schema: "public" as const,
   };
@@ -430,11 +430,11 @@ const fixture = async (publicRelease?: {
         return publicKey;
       },
       transportSource: {
-        issuer: "https://oidc.vercel.com",
         audience: "https://operator.example.com",
+        environment: "preview",
+        issuer: "https://oidc.vercel.com",
         ownerId: "team",
         projectId: "prj_operator",
-        environment: "preview",
       },
       readback: async (request) => {
         if (proofReadbackResponse !== undefined) {
@@ -634,8 +634,8 @@ const fixture = async (publicRelease?: {
     ).toMatchObject({ status: "participants-prepared" });
     const proposed = await request({
       action: "plan",
-      operation: "prepare",
       normalActorProgram: program,
+      operation: "prepare",
       selection: plan.selection,
     });
     expect(proposed.status).toBe("planned");

@@ -25,10 +25,10 @@ import {
 const fixture = () => {
   const time = new Date("2026-10-21T16:00:00Z");
   const authority = {
-    issuer: "https://builder.example/api/auth",
     audience: "https://builder.example/mcp",
-    workspaceId: "workspace",
+    issuer: "https://builder.example/api/auth",
     ownerUserId: "owner",
+    workspaceId: "workspace",
   };
   const owner = {
     authority,
@@ -64,9 +64,9 @@ const fixture = () => {
     },
     branch: "preview",
     appDatabase: {
-      resourceId: "app-resource",
       database: "invoice_data",
       migratorRole: "invoice_migrator",
+      resourceId: "app-resource",
       runtimeRole: "invoice_runtime",
     },
     productRoles: [],
@@ -78,12 +78,12 @@ const fixture = () => {
         sourceProjectId: "source-project",
       },
       scope: {
-        projectId: "neon-project",
         branchId: "neon-branch",
         endpointId: "endpoint",
         hostname: "db.example",
         maintenanceDatabase: "neondb",
         maintenanceRole: "maintenance",
+        projectId: "neon-project",
       },
     },
     worker: {
@@ -93,7 +93,7 @@ const fixture = () => {
       operationScope: "generated-app-release-install-v1",
       subcommand: "protected-generated-app-install",
     },
-    cost: { ownership: "current-owner", description: "Dedicated Preview project" },
+    cost: { description: "Dedicated Preview project", ownership: "current-owner" },
     retention: { policy: "Retain until owner cleanup" },
     conflictPolicy: "stop-on-conflict",
   };
@@ -174,7 +174,7 @@ const fixture = () => {
           validation: {
             browser: null,
             check: { task: "check" },
-            test: { task: "test", shards: 1 },
+            test: { shards: 1, task: "test" },
           },
         },
       }),
