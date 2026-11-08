@@ -166,19 +166,25 @@ describe("PostgreSQL handoff renewal", () => {
   it.each([false, true])(
     "returns the winner when a concurrent renewal or bind wins (bound=%s)",
     async (bound) => {
-      const current = {
+      const current: typeof builderHandoffs.$inferSelect = {
         ...row,
         expiresAt: renewal.expiresAt,
-        ...(bound ? { redeemedAt: row.createdAt, sessionId: "existing-session" } : {}),
       };
+      if (bound) {
+        current.redeemedAt = row.createdAt;
+        current.sessionId = "existing-session";
+      }
       const test = store({ current: [current] });
+      const expectedRecord: { expiresAt: Date; handoffId: string; sessionId?: string } = {
+        expiresAt: current.expiresAt,
+        handoffId: row.handoffId,
+      };
+      if (bound) {
+        expectedRecord.sessionId = "existing-session";
+      }
       expect(await test.handoffs.renewExpired(renewal)).toMatchObject({
         disposition: "existing",
-        record: {
-          expiresAt: current.expiresAt,
-          handoffId: row.handoffId,
-          ...(bound ? { sessionId: "existing-session" } : {}),
-        },
+        record: expectedRecord,
       });
       expect(test.readWhere.mock.calls[0][0].params).toEqual([
         authority.issuer,

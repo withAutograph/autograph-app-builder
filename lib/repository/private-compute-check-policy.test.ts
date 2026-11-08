@@ -37,13 +37,13 @@ const profile = () =>
       afterSha256: hash(PRIVATE_COMPUTE_CHECK_TASK),
     },
     limits: {
-      version: 1,
-      teamId: "team_owned",
-      projectId: "prj_owned",
-      plan: "pro",
-      maxVcpus: 8,
       limited: false,
+      maxVcpus: 8,
       observedAt: "2026-11-03T12:00:00.000Z",
+      plan: "pro",
+      projectId: "prj_owned",
+      teamId: "team_owned",
+      version: 1,
     },
   });
 const modeOf = async (file: string) => {

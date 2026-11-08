@@ -62,7 +62,7 @@ function requestFixture(input: { lookupOptions: LookupOptions; responseStatus?: 
             request.emit("error", error);
             return;
           }
-          if (input.lookupOptions.all) {
+          if (input.lookupOptions.all === true) {
             expect(address).toEqual(publicAddresses);
           } else {
             expect(address).toBe(publicAddresses[0].address);

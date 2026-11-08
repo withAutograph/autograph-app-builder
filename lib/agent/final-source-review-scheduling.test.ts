@@ -546,7 +546,7 @@ it("prepared review resumes in the original acceptance context without a second 
     expect(ordinary).toMatchObject({
       sourceAssessment: { reviewCompleted: false, status: "unassessed" },
     });
-    expect({ directCalls, preparedCalls, finalizedCalls }).toEqual({
+    expect({ directCalls, finalizedCalls, preparedCalls }).toEqual({
       directCalls: 0,
       finalizedCalls: 0,
       preparedCalls: 0,
@@ -559,7 +559,7 @@ it("prepared review resumes in the original acceptance context without a second 
       sourceAssessment: { reviewCompleted: false, status: "blocked" },
     });
     expect(appBuilderWorkflowState.get().phase).toBe("reviewed");
-    expect({ directCalls, preparedCalls, finalizedCalls }).toEqual({
+    expect({ directCalls, finalizedCalls, preparedCalls }).toEqual({
       directCalls: 0,
       finalizedCalls: 1,
       preparedCalls: 1,
