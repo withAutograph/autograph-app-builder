@@ -96,39 +96,39 @@ describe("private public-release consent", () => {
     const readHistory = vi.fn((_start, observe: (event: MessageStreamEvent) => void) => {
       observe(request());
       observe(settlement());
-      return Promise.resolve({ complete: false, nextNativeIndex: 2, nativeTailIndex: 2 });
+      return Promise.resolve({ complete: false, nativeTailIndex: 2, nextNativeIndex: 2 });
     });
     await expect(
       readPrivatePublicReleaseApproval({
-        plan,
+        assertOwner,
         callId: "current-call",
         owner,
+        plan,
         readHistory,
-        assertOwner,
       }),
     ).rejects.toThrow();
     expect(assertOwner).toHaveBeenCalledTimes(1);
     const complete = (_start: number, observe: (event: MessageStreamEvent) => void) => {
       observe(request());
       observe(settlement());
-      return Promise.resolve({ complete: true, nextNativeIndex: 3, nativeTailIndex: 2 });
+      return Promise.resolve({ complete: true, nativeTailIndex: 2, nextNativeIndex: 3 });
     };
     expect(
       await readPrivatePublicReleaseApproval({
-        plan,
+        assertOwner,
         callId: "current-call",
         owner,
+        plan,
         readHistory: complete,
-        assertOwner,
       }),
     ).toEqual({ approvalId: "request", approvedByCallId: "current-call" });
     await expect(
       readPrivatePublicReleaseApproval({
-        plan,
+        assertOwner: () => Promise.reject(new Error("revoked")),
         callId: "current-call",
         owner,
+        plan,
         readHistory: complete,
-        assertOwner: () => Promise.reject(new Error("revoked")),
       }),
     ).rejects.toThrow("revoked");
   });

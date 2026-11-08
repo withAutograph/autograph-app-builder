@@ -19,10 +19,10 @@ import type { ProtectedHostedOperatorDependencies } from "./hosted-operator-serv
 import { authority, context, selection, setup } from "./hosted-acceptance-recovery.test-fixture";
 
 const ownerContext = {
-  kind: "direct" as const,
-  adapterSessionId: "native-owner-anchor",
   adapterGeneration: 1,
+  adapterSessionId: "native-owner-anchor",
   authority,
+  kind: "direct" as const,
   principal: { ...authority, scopes: ["autograph:send"] },
   sessionId: context.target.sessionId,
 };
@@ -83,11 +83,14 @@ const composed = async () => {
     }
     return await readPrivateOperatorApproval({
       ...approvalContext,
+      assertOwner: async () => {
+        await f.deps.assertOwner(context);
+      },
       capture: (state) => {
         const captureInput: Parameters<typeof createPrivateContinuityApprovalCapture>[0] = {
           plan: saved.plan,
-          request,
           principal: ownerContext.principal,
+          request,
         };
         if (callId !== undefined) {
           captureInput.callId = callId;
@@ -107,13 +110,10 @@ const composed = async () => {
           onEvent(event);
         }
         return {
-          nextNativeIndex: end,
-          nativeTailIndex: events.length,
           complete: end === events.length,
+          nativeTailIndex: events.length,
+          nextNativeIndex: end,
         };
-      },
-      assertOwner: async () => {
-        await f.deps.assertOwner(context);
       },
     });
   };

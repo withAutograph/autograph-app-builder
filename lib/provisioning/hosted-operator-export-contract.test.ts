@@ -157,23 +157,23 @@ const plan = () =>
     exportId: fixture.worker.exportId,
     planRef: `_protected-operator/export-plans/${fixture.worker.exportId}`,
     authority: {
-      issuer: "issuer-fixture",
       audience: "audience-fixture",
-      workspaceId: "workspace-fixture",
+      issuer: "issuer-fixture",
       ownerUserId: "owner-fixture",
+      workspaceId: "workspace-fixture",
     },
     // Provider resource project/branch and repository target project/branch are distinct identities.
     target: {
-      sessionId: "saved-session-fixture",
       appId: fixture.worker.scope.appId,
-      projectId: "vercel-app-project",
       branch: "published-app-branch",
+      projectId: "vercel-app-project",
+      sessionId: "saved-session-fixture",
     },
     originalSetup: {
-      operationRef: "40000000-0000-4000-8000-000000000004",
-      planDigest: "1".repeat(64),
       approvalId: "original-setup-approval",
       approvedByCallId: "original-setup-call",
+      operationRef: "40000000-0000-4000-8000-000000000004",
+      planDigest: "1".repeat(64),
     },
     scope: structuredClone(fixture.worker.scope),
     resource: structuredClone(fixture.worker.resource),
@@ -181,8 +181,8 @@ const plan = () =>
     selection: "public-app-customer-tables-v1",
     format: "ndjson",
     destination: {
-      kind: "owner-private-builder-artifact",
       artifactPrefix: `_protected-operator/artifacts/tenant-export/${fixture.worker.exportId}`,
+      kind: "owner-private-builder-artifact",
     },
   });
 const journal = () => {
@@ -339,8 +339,8 @@ test("reading and completion require exact export intent approval, own attempt a
     {
       ...complete,
       claim: {
-        claimId: "60000000-0000-4000-8000-000000000006",
         attemptId: attempt.attemptId,
+        claimId: "60000000-0000-4000-8000-000000000006",
         fenceGeneration: 2,
       },
     },
