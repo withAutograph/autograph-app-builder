@@ -113,7 +113,6 @@ export default defineConfig({
         "lib/sandbox/vercel-backend.ts",
         "lib/testing/eve-eval-lifecycle.ts",
         "scripts/design-quality/css-source-map.ts",
-        "scripts/design-quality/reference.ts",
         sharedLintFile31,
       ],
       rules: { "sonarjs/too-many-break-or-continue-in-loop": "off" },
