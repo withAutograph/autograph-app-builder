@@ -167,27 +167,40 @@ export function createRemoteJwksAccessTokenVerifier(input: {
         requiredClaims: ["iss", "aud", "sub", "exp", "iat", "nbf", "scope"],
       });
       const { exp, iat, nbf } = payload;
+      const invalidClaimsMessage = "Invalid verified token claims.";
       if (
         payload.iss !== config.issuer ||
         payload.aud !== config.audience ||
         typeof payload.sub !== "string" ||
-        typeof exp !== "number" ||
+        typeof exp !== "number"
+      ) {
+        throw new Error(invalidClaimsMessage);
+      }
+      const invalidIntegerTimes =
         !Number.isInteger(exp) ||
         typeof iat !== "number" ||
         !Number.isInteger(iat) ||
-        typeof nbf !== "number" ||
+        typeof nbf !== "number";
+      if (invalidIntegerTimes) {
+        throw new Error(invalidClaimsMessage);
+      }
+      if (
         !Number.isInteger(nbf) ||
         exp <= nowEpochSeconds ||
         nbf > nowEpochSeconds ||
-        iat > nowEpochSeconds ||
-        // Issuance precedes async membership claims; nbf can legitimately be later.
-        exp - nbf > 300 ||
-        exp - iat > 300 ||
+        iat > nowEpochSeconds
+      ) {
+        throw new Error(invalidClaimsMessage);
+      }
+      // Issuance precedes async membership claims; nbf can legitimately be later.
+      const invalidLifetime = exp - nbf > 300 || exp - iat > 300;
+      if (
+        invalidLifetime ||
         typeof payload.scope !== "string" ||
         !oauthScopeTokenPattern.test(payload.scope) ||
         typeof payload.workspace_id !== "string"
       ) {
-        throw new Error("Invalid verified token claims.");
+        throw new Error(invalidClaimsMessage);
       }
       return verifiedHostedClaimsSchema.parse({
         audience: payload.aud,
