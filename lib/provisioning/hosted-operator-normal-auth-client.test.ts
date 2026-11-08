@@ -96,8 +96,8 @@ describe("normal Auth client", () => {
       fetch: localFetch,
       assertApprovedEffect: approved,
     });
-    await owner.signUp({ name: "Owner", email: "owner@example.com", password });
-    await participant.signUp({ name: "Member", email: "member@example.com", password });
+    await owner.signUp({ email: "owner@example.com", name: "Owner", password });
+    await participant.signUp({ email: "member@example.com", name: "Member", password });
     const actor = await participant.getSession();
     if (!actor) {
       throw new Error("Missing fixture actor");
@@ -177,7 +177,7 @@ describe("normal Auth client", () => {
       fetch: localFetch,
       assertApprovedEffect: approved,
     });
-    await owner.signUp({ name: "Owner", email: "owner@example.com", password });
+    await owner.signUp({ email: "owner@example.com", name: "Owner", password });
     const ids: string[] = [];
     for (const slug of ["first", "second"]) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Ordinary organization creation changes this single fixture owner session.
@@ -378,8 +378,8 @@ describe("normal Auth client", () => {
     });
     for (const expected of [
       { code: "transport_failed" },
-      { code: "auth_rejected", httpStatus: 401, authCode: "INVALID_EMAIL_OR_PASSWORD" },
-      { code: "auth_rejected", httpStatus: 500, authCode: undefined },
+      { authCode: "INVALID_EMAIL_OR_PASSWORD", code: "auth_rejected", httpStatus: 401 },
+      { authCode: undefined, code: "auth_rejected", httpStatus: 500 },
       { code: "invalid_response" },
     ]) {
       try {
@@ -480,7 +480,7 @@ describe("normal Auth rate limit recovery", () => {
       });
       const f = fixture([retry, successfulAccount()]);
       const client = createHostedOperatorNormalAuthClient(f.options);
-      await client[method]({ email: "member@example.com", password, name: "Member" });
+      await client[method]({ email: "member@example.com", name: "Member", password });
       expect(f.waits).toEqual([2000]);
       expect(f.permissions).toEqual([
         method === "signUp" ? "sign_up" : "sign_in",
@@ -498,9 +498,9 @@ describe("normal Auth rate limit recovery", () => {
   );
 
   it.each<{ headers: Record<string, string>; delay: number }>([
-    { headers: { "x-retry-after": "2", "retry-after": "8" }, delay: 2000 },
-    { headers: { "retry-after": "3" }, delay: 3000 },
-    { headers: { "retry-after": "Wed, 14 Oct 2026 12:00:04 GMT" }, delay: 4000 },
+    { delay: 2000, headers: { "retry-after": "8", "x-retry-after": "2" } },
+    { delay: 3000, headers: { "retry-after": "3" } },
+    { delay: 4000, headers: { "retry-after": "Wed, 14 Oct 2026 12:00:04 GMT" } },
   ])("honors X timing precedence and standard delta/date timing", async ({ headers, delay }) => {
     const f = fixture([rejection(headers), successfulAccount()]);
     await createHostedOperatorNormalAuthClient(f.options).signIn({
@@ -528,7 +528,7 @@ describe("normal Auth rate limit recovery", () => {
       },
     });
     await expect(
-      client.signUp({ email: "member@example.com", password, name: "Member" }),
+      client.signUp({ email: "member@example.com", name: "Member", password }),
     ).rejects.toMatchObject({ code: "approval_required" });
     expect(f.attempts).toHaveLength(1);
     expect(f.waits).toEqual([1000]);
@@ -539,7 +539,7 @@ describe("normal Auth rate limit recovery", () => {
     { "x-retry-after": "invalid" },
     { "x-retry-after": "-1" },
     { "x-retry-after": "0" },
-    { "x-retry-after": "invalid", "retry-after": "1" },
+    { "retry-after": "1", "x-retry-after": "invalid" },
     { "retry-after": "invalid date" },
   ])("does not replay absent, invalid or immediate timing", async (headers) => {
     const f = fixture([rejection(headers), successfulAccount()]);
@@ -566,8 +566,8 @@ describe("normal Auth rate limit recovery", () => {
       await expect(
         createHostedOperatorNormalAuthClient(f.options).signUp({
           email: "member@example.com",
-          password,
           name: "Member",
+          password,
         }),
       ).rejects.toMatchObject({ code: "auth_rejected", httpStatus: status });
       expect(f.attempts).toHaveLength(1);

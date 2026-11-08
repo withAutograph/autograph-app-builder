@@ -107,34 +107,34 @@ const plan = hostedOperatorPlanSchema.parse({
 const gatewayPlan = hostedOperatorPlanSchema.parse({
   ...plan,
   publicGateway: {
-    projectId: "prj_gateway",
     branch: "gateway-main",
     origin: "https://approved-gateway.example.test",
+    projectId: "prj_gateway",
   },
   gatewayDelivery: {
-    projectId: "prj_gateway",
     branch: "gateway-main",
-    repoId: "gateway-repo",
     gitSha: sha,
+    projectId: "prj_gateway",
+    repoId: "gateway-repo",
   },
   deploymentBoundary: {
     authority,
     teamId: "team",
-    app: { projectId: "prj_app", branch: selection.branch, environment: "preview" },
-    gateway: { projectId: "prj_gateway", branch: "gateway-main", environment: "preview" },
-    operator: { projectId: "prj_operator", deploymentId: "dpl_operator", environment: "preview" },
+    app: { branch: selection.branch, environment: "preview", projectId: "prj_app" },
+    gateway: { branch: "gateway-main", environment: "preview", projectId: "prj_gateway" },
+    operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
     verification: {
       gatewayOrigin: "https://approved-gateway.example.test",
-      publicOrigin: "https://approved-gateway.example.test",
       jwksUrl: "https://approved-gateway.example.test/_platform/jwks.json",
+      publicOrigin: "https://approved-gateway.example.test",
     },
   },
   effects: [
     ...plan.effects,
     {
+      description: "Deliver and pin the exact approved Gateway Preview",
       id: "gateway-delivery",
       kind: "gateway-delivery",
-      description: "Deliver and pin the exact approved Gateway Preview",
     },
   ],
 });
@@ -694,8 +694,8 @@ it("delivers the approved published ref while retaining the resource branch", as
     delivery: { ...plan.delivery, branch },
     publicGateway: {
       branch: "main",
-      projectId: "prj_gateway",
       origin: "https://public.example.test",
+      projectId: "prj_gateway",
     },
     deploymentBoundary: {
       app: { branch, deploymentId: "dpl_previous", environment: "preview", projectId: "prj_app" },
@@ -710,8 +710,8 @@ it("delivers the approved published ref while retaining the resource branch", as
       teamId: "team",
       verification: {
         gatewayOrigin: "https://gateway.example.test",
-        publicOrigin: "https://public.example.test",
         jwksUrl: "https://gateway.example.test/_platform/jwks.json",
+        publicOrigin: "https://public.example.test",
       },
     },
   });
@@ -889,7 +889,7 @@ const renewedDelivery = (gateway: boolean, addAppGrant = false) => {
       ? {}
       : {
           appTrustedSources: {
-            gatewayPreview: { projectId: "prj_gateway", from: "preview", to: "preview" },
+            gatewayPreview: { from: "preview", projectId: "prj_gateway", to: "preview" },
           },
         }),
     gatewayBindings: {
@@ -918,7 +918,7 @@ const renewedDelivery = (gateway: boolean, addAppGrant = false) => {
             }
           : effect,
       ),
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind Gateway" },
+      { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
       gatewayPlan.effects[5],
     ],
   });
@@ -929,7 +929,7 @@ const renewedDelivery = (gateway: boolean, addAppGrant = false) => {
       ...original.gatewayBindings,
       trustedSources: {
         ...original.gatewayBindings?.trustedSources,
-        appPreview: { projectId: selection.projectId, from: "preview", to: "preview" },
+        appPreview: { from: "preview", projectId: selection.projectId, to: "preview" },
       },
     },
     effects: original.effects.map((effect) => {
@@ -952,7 +952,7 @@ const renewedDelivery = (gateway: boolean, addAppGrant = false) => {
     ...(addAppGrant
       ? {
           appTrustedSources: {
-            gatewayPreview: { projectId: "prj_gateway", from: "preview", to: "preview" },
+            gatewayPreview: { from: "preview", projectId: "prj_gateway", to: "preview" },
           },
         }
       : {}),
@@ -1232,20 +1232,20 @@ const narrowedGateway = async () => {
     bootstrap: { endpointId: "ep-fixture", maintenanceDatabase: "neondb", role: "neondb_owner" },
     effects: [
       {
+        description: "Prepare Auth",
         id: "auth-resources",
         kind: "resources",
         resourceId: plan.authDatabase.resourceId,
-        description: "Prepare Auth",
       },
       {
+        description: "Prepare app",
         id: "app-resources",
         kind: "resources",
         resourceId: plan.appDatabase.resourceId,
-        description: "Prepare app",
       },
-      { id: "install", kind: "install", description: "Install Auth" },
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind approved protection" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Deliver Gateway" },
+      { description: "Install Auth", id: "install", kind: "install" },
+      { description: "Bind approved protection", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Deliver Gateway", id: "gateway-delivery", kind: "gateway-delivery" },
     ],
     gatewayBindings: {
       authBrowserOrigin: "https://auth-preview.example.test",
@@ -1261,8 +1261,8 @@ const narrowedGateway = async () => {
         subject: "fixture-gateway",
       },
       trustedSources: {
-        builderProduction: { projectId: "builder", from: "production", to: "preview" },
-        operatorPreview: { projectId: "operator", from: "preview", to: "preview" },
+        builderProduction: { from: "production", projectId: "builder", to: "preview" },
+        operatorPreview: { from: "preview", projectId: "operator", to: "preview" },
       },
     },
   });
@@ -1293,8 +1293,8 @@ it("reconciles an approved narrowing's retained metadata and reassigns only afte
   const f = await narrowedGateway();
   expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "retryable" });
   expect(await f.writer.deliver(f.input)).toMatchObject({
-    status: "applied",
     selected: { deploymentId: "dpl_new" },
+    status: "applied",
   });
   expect(f.calls.some((call) => call.path === "/v13/deployments/dpl_previous")).toBe(true);
   expect(
@@ -1402,8 +1402,8 @@ it("uses independently observed project and team ownership when the different al
   const f = await narrowedGateway();
   Object.assign(f.differentDeployment, { ownerId: undefined });
   expect(await f.writer.deliver(f.input)).toMatchObject({
-    status: "applied",
     selected: { deploymentId: "dpl_new" },
+    status: "applied",
   });
   expect(f.calls.some((call) => call.path === "/v9/projects/prj_gateway")).toBe(true);
   expect(f.calls.some((call) => call.path === "/v2/teams/team")).toBe(true);

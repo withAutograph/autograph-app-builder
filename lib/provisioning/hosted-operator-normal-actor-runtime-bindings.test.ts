@@ -53,28 +53,28 @@ const program = normalActorProgramSchema.parse({
   origin: "https://apps.example.com",
   actors: [
     {
+      account: "create-email-password",
       actorKey: "owner",
       email: "owner@example.com",
       name: "Owner",
-      account: "create-email-password",
     },
-    { actorKey: "peer", email: "peer@example.com", name: "Peer", account: "create-email-password" },
+    { account: "create-email-password", actorKey: "peer", email: "peer@example.com", name: "Peer" },
     {
+      account: "create-email-password",
       actorKey: "no-access",
       email: "no-access@example.com",
       name: "No access",
-      account: "create-email-password",
     },
     {
+      account: "capture-existing",
       actorKey: "unassigned",
       email: "unassigned@example.com",
       name: "Unassigned",
-      account: "capture-existing",
     },
   ],
   organizations: [
-    { organizationId: "org-one", ownerActorKey: "owner", name: "One", slug: "one" },
-    { organizationId: "org-two", ownerActorKey: "owner", name: "Two", slug: "two" },
+    { name: "One", organizationId: "org-one", ownerActorKey: "owner", slug: "one" },
+    { name: "Two", organizationId: "org-two", ownerActorKey: "owner", slug: "two" },
   ],
   memberships: [
     { actorKey: "owner", organizationId: "org-one", role: "owner" },
@@ -102,24 +102,24 @@ const plan = hostedOperatorPlanSchema.parse({
     sessionId: target.sessionId,
   },
   appDatabase: {
-    resourceId: "app-resource",
     database: "normal",
     migratorRole: "normal_owner",
+    resourceId: "app-resource",
     runtimeRole: "normal_runtime",
   },
   authDatabase: {
-    resourceId: "auth-resource",
     database: "auth",
     migratorRole: "auth_owner",
+    resourceId: "auth-resource",
     runtimeRole: "auth_runtime",
   },
   contextId: "accepted-spec",
   cost: { class: "shared-recovery-group", description: "Approved normal accounts", owner: "owner" },
   effects: [
     {
+      description: "Capture approved actual accounts",
       id: "normal-accounts",
       kind: "normal-accounts",
-      description: "Capture approved actual accounts",
     },
   ],
   installer: { reference: "owned-worker", sha256: "a".repeat(64) },
@@ -351,11 +351,11 @@ const fixture = async (
       audience: "https://operator.example.com",
       jwksUrl: "https://gateway.example.test/_platform/jwks.json",
       transportSource: {
-        issuer: "https://oidc.vercel.com",
         audience: "https://operator.example.com",
+        environment: "preview",
+        issuer: "https://oidc.vercel.com",
         ownerId: "team",
         projectId: "prj_operator",
-        environment: "preview",
       },
     },
   }));
@@ -372,12 +372,12 @@ const fixture = async (
     access: proposeResolvedNormalActorAccess(program, state),
     authMembership: { kind: "create-owned-organizations", organizations: specs },
     effects: [
-      { kind: "resources", id: "resources", description: "Fixture resources" },
-      { kind: "install", id: "install", description: "Fixture app" },
-      { kind: "auth-membership", id: "auth-membership:org-one", description: "One" },
-      { kind: "auth-membership", id: "auth-membership:org-two", description: "Two" },
-      { kind: "access", id: "access", description: "Fixture roles" },
-      { kind: "bindings", id: "bindings", description: "Fixture runtime" },
+      { description: "Fixture resources", id: "resources", kind: "resources" },
+      { description: "Fixture app", id: "install", kind: "install" },
+      { description: "One", id: "auth-membership:org-one", kind: "auth-membership" },
+      { description: "Two", id: "auth-membership:org-two", kind: "auth-membership" },
+      { description: "Fixture roles", id: "access", kind: "access" },
+      { description: "Fixture runtime", id: "bindings", kind: "bindings" },
     ],
   });
   row = {
@@ -707,10 +707,10 @@ describe("fresh authenticated normal actor runtime bindings", () => {
       stage: "app",
       normalActorProgram: undefined,
       effects: [
-        { kind: "resources", id: "resources", description: "Fixture resources" },
-        { kind: "install", id: "install", description: "Fixture app" },
-        { kind: "access", id: "access", description: "Fixture access" },
-        { kind: "bindings", id: "bindings", description: "Fixture binding" },
+        { description: "Fixture resources", id: "resources", kind: "resources" },
+        { description: "Fixture app", id: "install", kind: "install" },
+        { description: "Fixture access", id: "access", kind: "access" },
+        { description: "Fixture binding", id: "bindings", kind: "bindings" },
       ],
     });
     expect(await f.runtime({ ...f.input, plan: legacy })).toBeUndefined();
