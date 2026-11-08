@@ -75,12 +75,16 @@ const inputSchema = schema.omit({
 
 const canonicalChanges = (changes: readonly OverlayChange[]) =>
   changes
-    .map(({ kind, path, before, after }) => ({
-      kind,
-      path,
-      ...(before === undefined ? {} : { before }),
-      ...(after === undefined ? {} : { after }),
-    }))
+    .map(({ kind, path, before, after }) => {
+      const entry: OverlayChange = { kind, path };
+      if (before !== undefined) {
+        entry.before = before;
+      }
+      if (after !== undefined) {
+        entry.after = after;
+      }
+      return entry;
+    })
     .toSorted((a, b) => compareOverlayPaths(a.path, b.path));
 
 export const assertPublishedDraftRepairReview = (input: PublishedDraftRepairReview): void => {

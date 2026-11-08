@@ -562,7 +562,8 @@ export function readPreviewOAuthRuntimeConfig(
       ? `https://${environment.VERCEL_URL}/api/auth`
       : undefined);
   const resource =
-    environment.MCP_RESOURCE_URL ?? (issuer ? `${new URL(issuer).origin}/mcp` : undefined);
+    environment.MCP_RESOURCE_URL ??
+    (issuer !== undefined && issuer !== "" ? `${new URL(issuer).origin}/mcp` : undefined);
   return previewOAuthRuntimeConfigSchema.parse({
     databaseUrl: environment.DATABASE_URL,
     environment: deploymentEnvironment,

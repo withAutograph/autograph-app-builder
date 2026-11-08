@@ -380,12 +380,16 @@ export const receiptDigest = <T extends { digest?: string }>(receipt: T): string
 };
 
 const exactPathEvidence = (journal: LocalPublicationJournal): readonly PublicationPathEvidence[] =>
-  journal.changes.map((change) => ({
-    operation: change.kind,
-    path: change.path,
-    ...(change.before === undefined ? {} : { before: change.before }),
-    ...(change.after === undefined ? {} : { after: change.after }),
-  }));
+  journal.changes.map((change) => {
+    const evidence: PublicationPathEvidence = { operation: change.kind, path: change.path };
+    if (change.before !== undefined) {
+      evidence.before = change.before;
+    }
+    if (change.after !== undefined) {
+      evidence.after = change.after;
+    }
+    return evidence;
+  });
 
 const samePaths = (left: readonly string[], right: readonly string[]) =>
   JSON.stringify(left) === JSON.stringify(right);

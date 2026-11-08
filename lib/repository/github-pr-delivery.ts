@@ -323,10 +323,10 @@ export const createGitHubPrDeliveryProvider = (
       headSha: pull.head.sha,
       baseBranch: pull.base.ref,
       checks: "pending",
-      ...(pull.merged && pull.merge_commit_sha !== null
-        ? { mergeCommitSha: pull.merge_commit_sha }
-        : {}),
     };
+    if (pull.merged && pull.merge_commit_sha !== null) {
+      result.mergeCommitSha = pull.merge_commit_sha;
+    }
     if (
       state !== "closed" &&
       !pull.draft &&

@@ -257,12 +257,21 @@ export const reconcileLocalPlanningSource = async (
       .map((file) => `${file.sha256}  repository/${file.path}`)
       .join("\n")}\n`,
   });
-  return {
+  const result: typeof outcome & {
+    workspace: typeof workspace;
+    selectedSourceSha: string;
+    selectedSourceTree: string;
+    sourceSnapshotTree: string;
+    restoredOriginalBase?: NonNullable<typeof restoredOriginalBase>;
+  } = {
     workspace,
     ...outcome,
     selectedSourceSha: input.receipt.sourceSha,
     selectedSourceTree: input.receipt.sourceTree,
     sourceSnapshotTree: capture.snapshotTree,
-    ...(restoredOriginalBase === undefined ? {} : { restoredOriginalBase }),
   };
+  if (restoredOriginalBase !== undefined) {
+    result.restoredOriginalBase = restoredOriginalBase;
+  }
+  return result;
 };
