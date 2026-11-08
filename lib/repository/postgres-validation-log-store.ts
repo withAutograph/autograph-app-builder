@@ -1,8 +1,6 @@
 import { and, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Drizzle database type uses the full schema.
-import type * as schema from "../db/schema";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import { validationLogChunks, validationLogManifests } from "../db/schema";
 import type { HostedPrincipal } from "../eve/hosted-auth";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
@@ -13,7 +11,6 @@ import type {
   ValidationLogStore,
 } from "./validation-log";
 
-type Database = PostgresJsDatabase<typeof schema>;
 const readCompletion = (value: string): ValidationLogCompletion => {
   if (value === "complete" || value === "interrupted" || value === "unavailable") {
     return value;

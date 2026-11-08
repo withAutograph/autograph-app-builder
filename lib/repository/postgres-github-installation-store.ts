@@ -1,12 +1,10 @@
 import { and, asc, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import { hostedGitHubInstallationBindings, hostedGitHubInstallations } from "../db/schema";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 export type HostedGitHubTenantAuthority = z.infer<typeof hostedTenantAuthoritySchema>;
 
 export const hostedGitHubInstallationBindingSchema = z.strictObject({

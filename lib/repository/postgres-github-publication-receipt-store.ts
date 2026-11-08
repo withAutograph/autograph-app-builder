@@ -1,8 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { hostedGitHubPublicationJournals } from "../db/schema";
 import {
@@ -13,7 +12,6 @@ import {
 import type { GitHubMutationReceipt, GitHubPublicationReceiptStore } from "./github-publication";
 import type { HostedGitHubTenantAuthority } from "./postgres-github-installation-store";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 const freshRepositoryKind = "fresh-repository" as const;
 const draftPullRequestKind = "draft-pull-request" as const;
 

@@ -1,9 +1,8 @@
 import { isDeepStrictEqual } from "node:util";
 import { and, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { hostedGitHubPublicationProposals } from "../db/schema";
 import {
@@ -20,7 +19,6 @@ import type {
 import { createPostgresGitHubPublicationReceiptStore } from "./postgres-github-publication-receipt-store";
 import type { HostedGitHubTenantAuthority } from "./postgres-github-installation-store";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 export type GitHubPublicationProposal = FreshRepositoryProposal | DraftPullRequestProposal;
 
 export interface GitHubPublicationProposalStore {

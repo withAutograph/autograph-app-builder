@@ -1,14 +1,11 @@
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import { describe, expect, it, vi } from "vitest";
 
-import type * as databaseSchema from "../db/schema";
 import type { HostedPrincipal } from "./hosted-auth";
 import {
   createPostgresOAuthMembershipAuthority,
   createPostgresWorkspaceMembership,
 } from "./postgres-workspace-membership";
-
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 
 const principal: HostedPrincipal = {
   audience: "https://builder.example.test/mcp",

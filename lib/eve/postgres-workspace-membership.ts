@@ -1,12 +1,9 @@
 import { and, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 
-import type * as databaseSchema from "../db/schema";
 import { member, organization, user } from "../db/schema";
 import type { HostedWorkspaceMembership } from "../mcp/request-handler";
 import { hostedPrincipalSchema } from "./hosted-auth";
-
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 
 /**
  * Request-time membership authority. A signed workspace claim selects the
