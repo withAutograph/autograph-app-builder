@@ -420,6 +420,7 @@ const verifiedSubmission = async (
           documentId: finding.requirementDocumentId,
           quote: finding.requirementQuote,
         }),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         ...finding.citations.map((citation) => evidence.verifySourceCitation(citation)),
       ]);
       return checks.every(Boolean);
@@ -463,6 +464,7 @@ const reviewTools = (
         cursor: z.number().int().nonnegative().optional(),
       }),
       execute: async ({ kind, prefix, cursor = 0 }, { toolCallId }) => {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         const result = await read(() => {
           const items =
             kind === "requirements"
@@ -499,6 +501,7 @@ const reviewTools = (
         cursor: z.number().int().nonnegative().optional(),
       }),
       execute: async (request, { toolCallId }) => {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         const result = await read(() => evidence.readRequirements(request));
         if (result instanceof ApplicationReviewSelectionError) {
           return { error: "selection_unavailable", message: result.message };
@@ -536,6 +539,7 @@ const reviewTools = (
           .optional(),
       }),
       execute: async (request, { toolCallId }) => {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         const result = await read(() => evidence.readSource(request));
         if (result instanceof ApplicationReviewSelectionError) {
           return { error: "selection_unavailable", message: result.message };
@@ -562,6 +566,7 @@ const reviewTools = (
         "Record source-demonstrated findings with exact requirement document IDs/quotes and absolute source citations, plus runtime unknowns. Submit incrementally; invalid evidence is not accepted.",
       inputSchema: evidenceSubmissionSchema,
       execute: async (submission) => {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         const verified = await read(() => verifiedSubmission(submission, evidence));
         if (verified !== true) {
           state.invalidEvidence = true;

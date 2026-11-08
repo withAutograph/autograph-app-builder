@@ -37,6 +37,7 @@ vi.mock("./preapproval-authoring-runtime", async (original) => {
   const actual = await original<typeof import("./preapproval-authoring-runtime")>();
   return {
     ...actual,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     recordPreapprovalAuthoringDecision: (
       _ctx: Pick<HookContext, "session">,
       decision: Parameters<typeof actual.recordPreapprovalAuthoringDecision>[1],
@@ -150,6 +151,7 @@ const inspection = (current: ReturnType<typeof seed>, owner = ctx(), callId = "a
     type: "action.result",
   } as unknown as Parameters<typeof observePlannedAuthoringInspection>[0];
 };
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const run = (operation: () => void | Promise<void>) =>
   contextStorage.run(new ContextContainer(), operation);
 const decision = (owner = ctx()) =>
@@ -160,6 +162,7 @@ const decision = (owner = ctx()) =>
   });
 
 describe("declined current-proposal drafting observation", () => {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   it("binds a genuine later user message and actual successful inspection without touching denial or grant", () =>
     run(() => {
       const current = seed();
@@ -181,6 +184,7 @@ describe("declined current-proposal drafting observation", () => {
       expect(readPrivateApplyAuthority()).toEqual(authority);
       expect(appBuilderWorkflowState.get()).toEqual(current);
     }));
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   it("never arms denial alone, a pre-denial user message, or inspection-only activity", () =>
     run(() => {
       const current = seed();
@@ -189,6 +193,7 @@ describe("declined current-proposal drafting observation", () => {
       observePlannedAuthoringInspection(inspection(current), ctx());
       expect(decision().decision).toBe("planned");
     }));
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   it.each(["missing", "foreign", "granted", "pending"] as const)("blocks %s authority", (mode) =>
     run(() => {
       const current = seed();
@@ -213,6 +218,7 @@ describe("declined current-proposal drafting observation", () => {
   );
   it.each(["failed", "isError", "other-turn", "other-proposal"] as const)(
     "requires a genuine successful same-turn matching inspection: %s",
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     (mode) =>
       run(() => {
         const current = seed();
@@ -237,6 +243,7 @@ describe("declined current-proposal drafting observation", () => {
         expect(decision().decision).toBe("planned");
       }),
   );
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   it("keeps the first inspection stable and disables correction for successor or source drift", () =>
     run(() => {
       const current = seed();
@@ -331,6 +338,7 @@ describe("declined current-proposal drafting observation", () => {
       });
     },
   );
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   it("does not transfer the declined correction to a genuine successor proposal or its new pending Build", () =>
     run(() => {
       const current = seed();
@@ -354,6 +362,7 @@ describe("declined current-proposal drafting observation", () => {
         current.proposal.digest,
       );
     }));
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   it("rejects a substituted replay of the same real user event instead of resetting the inspection fence", () =>
     run(() => {
       const current = seed();

@@ -110,6 +110,7 @@ describe("draft reconciliation publication review", () => {
 
   it("returns bounded candidate pages with continuation without invalidating review", async () => {
     const retained = mocks.candidate;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     mocks.read.mockImplementation((input: { cursor?: number; expectedDigest?: string }) =>
       Promise.resolve({
         content: "bounded text",

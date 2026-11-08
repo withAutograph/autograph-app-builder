@@ -115,6 +115,7 @@ export function createDeploymentGitHubPublicationRuntimeResolver(input: {
     dependencies: input.resolverDependencies,
     enabled: true,
     prEffectsEnabled: (input.environment.APP_BUILDER_GITHUB_PR_DELIVERY_ENABLED ?? "1") === "1",
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     openDatabase: () => openDatabase(config.databaseUrl),
     providerFactory: ({ authority, installation }) =>
       createAdapter(

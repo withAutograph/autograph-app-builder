@@ -27,10 +27,12 @@ export type ManagedRuntimeWorkerAssetSource = Pick<
 > & { stop: () => Promise<void> };
 const sourcePort = (sandbox: Sandbox): ManagedRuntimeWorkerAssetSource => ({
   name: sandbox.name,
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   readFileToBuffer: (...args) => sandbox.readFileToBuffer(...args),
   stop: async () => {
     await sandbox.stop();
   },
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   delete: (...args) => sandbox.delete(...args),
 });
 export type ManagedRuntimeWorkerAssetTarget = Pick<Sandbox, "writeFiles" | "readFileToBuffer"> & {

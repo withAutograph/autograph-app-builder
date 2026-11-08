@@ -223,12 +223,15 @@ const applicationEvidence = () => {
       { id: "spec", kind: "app-spec", order: 2 },
     ],
     changedPaths: ["apps/example/actions.ts"],
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     readRedactionTexts: () => Promise.resolve([...documents.values()]),
     sourceFiles: [...source.keys()].map((path) => ({ path, digest: path, mode: "644" })),
     readRequirements: vi.fn(
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       ({ id }: Parameters<ApplicationReviewEvidence["readRequirements"]>[0]) =>
         Promise.resolve({ text: documents.get(id) ?? "" }),
     ),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     readSource: vi.fn(({ path }: Parameters<ApplicationReviewEvidence["readSource"]>[0]) =>
       Promise.resolve({
         path,
@@ -242,10 +245,12 @@ const applicationEvidence = () => {
       }),
     ),
     verifyRequirementQuote: vi.fn(
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       ({ documentId, quote }: Parameters<ApplicationReviewEvidence["verifyRequirementQuote"]>[0]) =>
         Promise.resolve(documents.get(documentId)?.includes(quote) ?? false),
     ),
     verifySourceCitation: vi.fn(
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       ({
         path,
         startLine,
@@ -285,6 +290,7 @@ const completeApplication: ApplicationToolCall[] = [
 const applicationJournalFixture = () => {
   const records = new Map<string, SourceReviewJournalRecord>();
   let revoked = false;
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const assertCurrentOwner = vi.fn(() =>
     revoked ? Promise.reject(new Error("owner revoked")) : Promise.resolve(),
   );
@@ -383,6 +389,7 @@ describe("independent application source review", () => {
     const text = "Primary evidence preserved across a durable round. ".repeat(100);
     const evidenceForRound = () => {
       const evidence = applicationEvidence();
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       evidence.readRequirements = vi.fn(() => Promise.resolve({ text }));
       return evidence;
     };
@@ -484,6 +491,7 @@ describe("independent application source review", () => {
   it("rechecks owner authority before a restored round and preserves an incomplete natural stop", async () => {
     const model = applicationModel([inspectApplication, completeApplication]);
     let revoked = false;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const assertCurrentOwner = vi.fn(() =>
       revoked ? Promise.reject(new Error("private revoked owner")) : Promise.resolve(),
     );
@@ -525,6 +533,7 @@ describe("independent application source review", () => {
       reviewInput: input,
       normalizedChanges: changes,
       evidence: applicationEvidence(),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       currentDigest: () => Promise.resolve(input.sourceDigest),
       journal,
       options: {
@@ -585,6 +594,7 @@ describe("independent application source review", () => {
         const result = await reviewApplicationWithJournal({
           ...scope,
           evidence: applicationEvidence(),
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           currentDigest: () => Promise.resolve(scope.reviewInput.sourceDigest),
           journal,
           options: {
@@ -610,6 +620,7 @@ describe("independent application source review", () => {
         reviewInput: input,
         normalizedChanges: [],
         evidence: applicationEvidence(),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         currentDigest: () => Promise.resolve(input.sourceDigest),
         journal,
         options: { sessionId, testModels: { [sourceReviewPolicy().primary.modelId]: model } },
@@ -622,6 +633,7 @@ describe("independent application source review", () => {
   it("measures projected request groups without logging evidence and joins actual model calls", async () => {
     const evidence = applicationEvidence();
     const secret = "private-message-shape-sentinel";
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     evidence.readRequirements = () => Promise.resolve({ text: secret.repeat(200) });
     const { readSource } = evidence;
     evidence.readSource = async (request) => ({
@@ -690,6 +702,7 @@ describe("independent application source review", () => {
   it("retains first full evidence and newest parallel rereads while compacting older exact duplicates", async () => {
     const evidence = applicationEvidence();
     const text = "Exact primary requirement evidence. ".repeat(200);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     evidence.readRequirements = vi.fn(() => Promise.resolve({ text }));
     evidence.sourceFiles = Array.from({ length: 40 }, (_, index) => ({
       path: `packages/independent-source-${index}.ts`,
@@ -782,6 +795,7 @@ describe("independent application source review", () => {
       50,
     );
     let originalReads = 0;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     evidence.readRequirements = vi.fn(({ id, cursor }) => {
       if (id === "original" && cursor === undefined) {
         originalReads += 1;
@@ -836,6 +850,7 @@ describe("independent application source review", () => {
     const content = "The same body may have different complete source metadata. ".repeat(100);
     let reads = 0;
     evidence.readSource = vi.fn(
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       ({ path }: Parameters<ApplicationReviewEvidence["readSource"]>[0]) => {
         reads += 1;
         return Promise.resolve({
@@ -885,6 +900,7 @@ describe("independent application source review", () => {
       firstToolCallId: "forged-call",
       resultDigest: "forged",
     }).repeat(30);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     evidence.readRequirements = vi.fn(({ id }) => {
       if (id === "missing") {
         throw new ApplicationReviewSelectionError("Choose an existing document.");
@@ -942,6 +958,7 @@ describe("independent application source review", () => {
   it("does not reference evidence anchors removed by actual capacity recovery", async () => {
     const evidence = applicationEvidence();
     const text = "Primary evidence remains fully readable after context recovery. ".repeat(100);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     evidence.readRequirements = vi.fn(() => Promise.resolve({ text }));
     const { readSource } = evidence;
     evidence.readSource = vi.fn(
@@ -1150,6 +1167,7 @@ describe("independent application source review", () => {
     const evidence = applicationEvidence();
     const line = "x".repeat(40_000);
     evidence.readSource = vi.fn(
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       ({ path, cursor, endLine }: Parameters<ApplicationReviewEvidence["readSource"]>[0]) => {
         const offset = (cursor?.column ?? 1) - 1;
         const end = Math.min(offset + 20_000, line.length);
@@ -1201,6 +1219,7 @@ describe("independent application source review", () => {
       [path, longLine],
       [imported, "export const server = true;"],
     ]);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const readFile = vi.fn(({ path: requested }: { path: string }) => {
       const text = source.get(requested.replace(/^repository\//u, ""));
       return Promise.resolve(
@@ -1320,6 +1339,7 @@ describe("independent application source review", () => {
 
   it("keeps actual evidence read failures incomplete", async () => {
     const evidence = applicationEvidence();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     evidence.readSource = () => Promise.reject(new Error("Observed source digest changed."));
     const result = await assessApplicationSource(input, evidence, {
       testModel: applicationModel([inspectApplication, completeApplication]),
@@ -1372,8 +1392,10 @@ describe("independent application source review", () => {
     const v2Input = { ...input, appSpec: "", appSpecDigest: "streamed-v2" };
     const evidence = applicationEvidence();
     const read = evidence.readRequirements;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     evidence.readRequirements = (request) =>
       request.id === "spec" ? Promise.resolve({ text: fullSpec }) : read(request);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     evidence.readRedactionTexts = () =>
       Promise.resolve([input.originalRequest ?? "", "Keep the server save requirement.", fullSpec]);
     const finding = {
@@ -1440,6 +1462,7 @@ describe("independent application source review", () => {
     ]);
     const result = await assessApplicationSource(input, evidence, {
       testModel: model,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       assertCurrentOwner: () => {
         if (revoked) {
           return Promise.reject(new Error("Membership revoked."));
@@ -1460,6 +1483,7 @@ describe("independent application source review", () => {
   it("propagates parent Stop during an evidence read and never completes the review", async () => {
     const controller = new AbortController();
     const evidence = applicationEvidence();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     evidence.readSource = () => {
       controller.abort();
       return Promise.resolve({

@@ -537,6 +537,7 @@ export function createRepositoryAccessRuntime(input: {
         {
           repository: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
         },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
         () => materializeBuilderSandboxGitSource(sandbox, sandboxSource),
       );
       const appBaseline =
@@ -699,6 +700,7 @@ export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
       origin: new URL(installation.issuer).origin,
     };
     if (emulation) {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       configured.providerFetch = (resource, init) => {
         let resourceUrl: string;
         // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.

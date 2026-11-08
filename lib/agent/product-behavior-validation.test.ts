@@ -519,6 +519,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     const sandbox = {};
     const context = {
       callId: "validate_capture",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       getSandbox: () => Promise.resolve(sandbox),
       session: { auth: { owned: "auth" }, id: "adapter" },
     };
@@ -579,6 +580,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       backend: { kind: "generated-postgres" },
       validation: { browser: { task: "test-e2e" } },
     });
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     mocks.prepare.mockImplementation((input: { execution?: unknown }) =>
       input.execution === undefined
         ? Promise.resolve(null)
@@ -1045,6 +1047,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       }
       const result = await validateAppCreation.execute({ implementationFiles: [] }, {
         callId: "repair_dependencies",
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         getSandbox: () => Promise.resolve(sandbox),
         session: { auth: {}, id: "session" },
       } as never);
@@ -1081,6 +1084,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     const context = (sandbox: ReturnType<typeof dependencySandbox>) =>
       ({
         callId: "retry_dependencies",
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         getSandbox: () => Promise.resolve(sandbox),
         session: { auth: {}, id: "session" },
       }) as never;

@@ -446,6 +446,7 @@ describe("publication records actual source for its compiled app release", () =>
     expect(hooks.sandbox).not.toHaveBeenCalled();
   });
   it("returns selection-changed if the accepted specification moves during discovery", async () => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     hooks.assertOwner.mockImplementation(() => {
       hooks.state.appSpec.digest = "f".repeat(64);
       return Promise.resolve();

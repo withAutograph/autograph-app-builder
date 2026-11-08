@@ -17,6 +17,7 @@ vi.mock("./draft-reconciliation-state", () => ({
 }));
 vi.mock("./workflow-state", () => ({ appBuilderWorkflowState: { get: mocks.getState } }));
 vi.mock("./deployment-github-publication-runtime", () => ({
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   githubPublicationRuntimeForSession: () =>
     Promise.resolve({
       inspectPublishedPullRequest: mocks.inspect,
@@ -54,11 +55,13 @@ const observe = (changes: Partial<GitHubPrDeliveryObservation> = {}) => ({
   ...changes,
 });
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const approve = (toolInput: GitHubPrDeliveryApproval) =>
   // SAFETY: The approval callback reads only the supplied session.id and toolInput.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Narrow fixture context to fields used by the approval callback.
   approveGitHubPrDelivery({ session, toolInput } as never);
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const step = (input: GitHubPrDeliveryApproval, cycle?: string) =>
   continueGitHubPrDelivery(
     input,

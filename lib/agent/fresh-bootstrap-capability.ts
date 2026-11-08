@@ -11,13 +11,13 @@ interface FreshBootstrapTestContext {
 }
 const structurallyInjectedCapability = new AsyncLocalStorage<FreshBootstrapTestContext>();
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve the existing promise and synchronous exception behavior. Preserve function declaration hoisting and initialization timing.
 export function currentFreshBootstrapCapability(): Promise<FreshBootstrapCapability> {
   const injected = structurallyInjectedCapability.getStore()?.capability;
   return injected === undefined ? productionFreshBootstrapCapability() : Promise.resolve(injected);
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve the existing promise and synchronous exception behavior. Preserve function declaration hoisting and initialization timing.
 export function withFreshBootstrapTestCapability<T>(
   capability: FreshBootstrapCapability,
   operation: () => Promise<T>,

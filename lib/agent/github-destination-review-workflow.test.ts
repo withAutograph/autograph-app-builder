@@ -42,6 +42,7 @@ const binding = createGitHubDestinationReviewBinding({
   validationDigest: "validation",
 });
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const originalDestinationFiles = () =>
   Promise.resolve(
     (

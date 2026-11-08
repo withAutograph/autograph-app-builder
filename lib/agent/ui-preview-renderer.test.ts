@@ -167,6 +167,7 @@ it("preserves workspace executable modes when the preview compiler needs depende
     renderUiPreview(input, {
       run,
       readTextFile: vi.fn().mockResolvedValue(html),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       writeTextFile: vi.fn(() => Promise.resolve()),
     }),
   ).resolves.toBe(html);

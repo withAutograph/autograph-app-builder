@@ -138,6 +138,7 @@ describe("durable application review workflow orchestration", () => {
   it("observes Stop during descriptor loading before dispatching a model round", async () => {
     const controller = new AbortController();
     const stopped = new Error("Stopped during descriptor load.");
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const load = vi.fn<NonNullable<Steps["load"]>>(() => {
       controller.abort(stopped);
       return Promise.resolve(structuredClone(prepared));
@@ -213,6 +214,7 @@ describe("durable application review workflow orchestration", () => {
   it("observes cancellation after a completed round before saving its outcome", async () => {
     const controller = new AbortController();
     const stopped = new Error("Stopped during the round.");
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const round = vi.fn<Steps["round"]>(() => {
       controller.abort(stopped);
       return Promise.resolve({ assessment, continuation: checkpoint(1) });

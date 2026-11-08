@@ -114,6 +114,7 @@ function dependencies(input?: {
 
 describe("hosted tenant GitHub publication runtime resolver", () => {
   it("resolves an existing source through a target proof without installation inventory", async () => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const inspectInstallation = vi.fn(() =>
       Promise.reject(new Error("inventory must not be read")),
     );
@@ -311,7 +312,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
       enabled: false,
     });
 
-    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
+    // oxlint-disable-next-line typescript/promise-function-async, github/no-then -- Preserve this test double's existing promise and synchronous behavior. Preserve the existing promise sequencing and settlement behavior.
     await expect(resolver.resolve(null).then((runtime) => runtime.status())).resolves.toMatchObject(
       {
         adapterConfigured: false,
@@ -376,7 +377,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
       providerFactory,
     });
 
-    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
+    // oxlint-disable-next-line typescript/promise-function-async, github/no-then -- Preserve this test double's existing promise and synchronous behavior. Preserve the existing promise sequencing and settlement behavior.
     await expect(resolver.resolve(auth).then((runtime) => runtime.status())).resolves.toMatchObject(
       { enabled: true },
     );

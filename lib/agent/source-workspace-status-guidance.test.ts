@@ -367,7 +367,9 @@ describe("source and workspace status guidance", () => {
     ]);
     const sandbox = {
       id: observed.workspaceId,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       readTextFile: ({ path }: { path: string }) => Promise.resolve(files.get(path) ?? null),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       run: () =>
         Promise.resolve({
           exitCode: 0,

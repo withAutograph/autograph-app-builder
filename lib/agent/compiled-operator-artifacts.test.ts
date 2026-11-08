@@ -295,6 +295,7 @@ describe("owned compiled artifact workflow hook", () => {
   });
 
   it("does not return a historical marker after the current owner changes during its read", async () => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     mocks.readPublishedSource.mockImplementation(() => {
       mocks.owner = { ...mocks.owner, adapterGeneration: 2 };
       return Promise.resolve(historicalSource);
@@ -444,6 +445,7 @@ describe("owned compiled artifact workflow hook", () => {
   );
   it("stops equivalent association when the accepted specification changes during exact release readback", async () => {
     const completion = await captureCompletion();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     mocks.readExact.mockImplementation(() => {
       mocks.state = { ...mocks.state, appSpec: { appId: "spend-review", digest: "f".repeat(64) } };
       return Promise.resolve(
@@ -523,6 +525,7 @@ describe("owned compiled artifact workflow hook", () => {
 
   it("refuses original release recording after owner changes during historical read", async () => {
     const completion = await captureCompletion();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     mocks.readExact.mockImplementation(() => {
       mocks.owner = { ...mocks.owner, adapterGeneration: 2 };
       return Promise.resolve(
@@ -997,8 +1000,10 @@ describe("owned compiled artifact workflow hook", () => {
       ownerAnchorRunId: "adapter-child",
       ownerRunId: "callback-step-owner",
     };
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const resolve = () =>
       resolver({ adapterSessionId: "adapter", authority, execution, principal, sessionAuth });
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     mocks.resolve.mockImplementation((input: Parameters<typeof resolver>[0]) => resolver(input));
     const input = { ...frame(), callbackExecution: execution, sessionAuth };
     await service.cancel({ sessionId: recovered.sessionId });

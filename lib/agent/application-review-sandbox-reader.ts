@@ -27,6 +27,7 @@ export const createApplicationReviewSandboxReader = async (
   };
   await guard();
   const get: NonNullable<ApplicationReviewSandboxReaderDependencies["get"]> =
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     dependencies.get ?? ((options) => Sandbox.get(options));
   const sandbox = await get({
     name: input.sandboxName,

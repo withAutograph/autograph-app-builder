@@ -72,6 +72,7 @@ vi.mock("../repository/source-receipt", () => ({ SOURCE_RECEIPT_VERSION: 4 }));
 vi.mock("../repository/supported-template", () => ({
   prepareDevelopmentSandboxWorkspace: vi.fn(),
   prepareSupportedSandboxWorkspace: vi.fn(),
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   readPreparedSandboxWorkspaceRecord: () => Promise.resolve(mocks.workspace),
 }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ../repository/sandbox-github-source dependency used by this test.
@@ -83,6 +84,7 @@ const selectedSource = () => ({
   phase: "reviewed",
   receipt: { sourcePath: "/workspace/repository", version: 4 },
 });
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
 const execute = () =>
   prepareWorkspace.execute(
     {},
@@ -112,6 +114,7 @@ describe("hosted workspace source acquisition", () => {
     mocks.source = { phase: "empty" };
     mocks.workflow = { phase: "empty" };
     mocks.inspectGitHub.mockResolvedValue(mocks.workspace);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     mocks.acquire.mockImplementation(() => {
       mocks.source = selectedSource();
       return Promise.resolve(mocks.source);

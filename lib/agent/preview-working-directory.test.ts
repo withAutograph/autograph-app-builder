@@ -132,6 +132,7 @@ describe("preview command working directory", () => {
         callId: "hosted-preview",
         getSandbox: vi.fn().mockResolvedValue({
           id: "sandbox_replacement",
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           readTextFile: () => Promise.resolve("{}"),
         }),
         getToken: vi.fn(),
@@ -164,6 +165,7 @@ describe("preview command working directory", () => {
       sourceReceipt: { sourceKind: "existing-repository" },
       workspace: { workspacePath: "/workspace/repository" },
     };
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const readTextFile = vi.fn(({ path }: { path: string }) =>
       Promise.resolve(path.endsWith("package.json") ? "{}" : null),
     );
@@ -301,6 +303,7 @@ describe("preview command working directory", () => {
       callId: "call",
       getSandbox: vi
         .fn()
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         .mockResolvedValue({ id: "sandbox", readTextFile: () => Promise.resolve(null) }),
       getToken: vi.fn(),
       requireAuth: (): never => {
@@ -333,6 +336,7 @@ describe("preview command working directory", () => {
     };
     const sandbox = {
       id: "sandbox",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       readTextFile: vi.fn(({ path }: { path: string }) => {
         if (path.endsWith("package.json")) {
           return Promise.resolve(JSON.stringify({ dependencies: { next: "16" } }));
@@ -455,6 +459,7 @@ describe("preview command working directory", () => {
           callId: "call",
           getSandbox: vi.fn().mockResolvedValue({
             id: "sandbox",
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
             readTextFile: ({ path }: { path: string }) => {
               if (path.endsWith("package.json")) {
                 return Promise.resolve(JSON.stringify({ dependencies: { next: "16" } }));

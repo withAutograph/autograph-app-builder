@@ -62,6 +62,7 @@ async function createDeploymentPreparedHandoffReader() {
     issuer: config.issuer,
   });
   const read = createPreparedHandoffReader({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     isActiveMember: (value) => membership.isActiveMember(value),
     read: createPostgresBuilderHandoffStore(database).read,
   });

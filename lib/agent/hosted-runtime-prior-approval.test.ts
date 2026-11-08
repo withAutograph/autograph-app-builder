@@ -593,6 +593,7 @@ const retainedApprovalCapture = async (
     });
   const checkpointDigest = ref.digest;
   mirrorObservedCurrentSession(f);
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   f.store.readCheckpointPage = vi.fn<NonNullable<HostedEveStore["readCheckpointPage"]>>(() =>
     Promise.resolve({
       checkpointDigest,

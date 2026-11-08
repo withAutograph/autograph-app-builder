@@ -136,9 +136,12 @@ const fixture = () => {
     callId: "original-tool-call",
     toolName: "prepare-app-hosted-runtime",
     abortSignal: abort.signal,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     ask: () => Promise.reject(new Error("No human continuation")),
     agents: {},
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     agent: () => Promise.reject(new Error("No agent call")),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     getToken: () => Promise.reject(new Error("No provider grant")),
     requireAuth: () => {
       throw new Error("No provider grant");
@@ -158,6 +161,7 @@ const fixture = () => {
     operationRef: approved.operationRef,
     planDigest: approved.planDigest,
   };
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const store = { getSession: () => Promise.resolve(session) };
   const calls: string[] = [];
   let observed: OperatorPublicResult = {
@@ -173,6 +177,7 @@ const fixture = () => {
     ownerContext,
     sessionId: selection.sessionId,
     token: vi.fn<() => Promise<string>>().mockResolvedValue("synthetic-private"),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     fetch: (_url, init) => {
       const body = operatorRequestSchema.parse(JSON.parse(z.string().parse(init?.body)));
       calls.push(body.action);
@@ -242,11 +247,13 @@ describe("automatic observation of one approved execution", () => {
     const readReceivers: boolean[] = [];
     const sleepReceivers: boolean[] = [];
     const ports: HostedRuntimeExecutionWaitPorts = {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       read: function read(this: undefined, input, ctx, snapshot, delayMs) {
         readReceivers.push(this === undefined);
         expect(snapshot).toBe(f.snapshot);
         return f.read(input, ctx, snapshot, delayMs);
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       sleepUntil: function sleepUntil(this: undefined) {
         sleepReceivers.push(this === undefined);
         f.setObserved({
@@ -324,12 +331,15 @@ describe("automatic observation of one approved execution", () => {
         createHook: () => {
           throw new Error("No identity hook");
         },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         register: () => Promise.reject(new Error("No identity")),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         acknowledge: () => Promise.reject(new Error("No identity")),
         sleepUntil: async () => {},
         execution: {
           snapshot: f.snapshot,
           read: f.read,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           sleepUntil: () => {
             sleeps += 1;
             const status = outcome === "prepared" ? "prepared" : "blocked";
@@ -420,6 +430,7 @@ describe("automatic observation of one approved execution", () => {
       commitObserved: publish,
       isTransportUnknown: isHostedOperatorTransportUnknown,
       now: () => 1000,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       prepareObserved: () => {
         f.session.cancellationRevision = 4;
         return Promise.resolve({
@@ -427,6 +438,7 @@ describe("automatic observation of one approved execution", () => {
           result: { ...f.observed, status: "prepared" },
         });
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       readStatus: () =>
         Promise.resolve({
           ...f.observed,
@@ -490,7 +502,9 @@ describe("automatic observation of one approved execution", () => {
       },
       isTransportUnknown: isHostedOperatorTransportUnknown,
       now: () => 1000,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       prepareObserved: () => Promise.reject(new Error("No terminal evidence")),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       readStatus: () => {
         reads += 1;
         return Promise.reject(
@@ -523,7 +537,9 @@ describe("automatic observation of one approved execution", () => {
   it("returns the original approval-wait snapshot for observation while existing ignored-return callers remain valid", async () => {
     const f = fixture();
     const result = await waitForHostedRuntimeApprovalReceipt(f.approved, f.context, {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       read: () => Promise.resolve({ status: "approved", snapshot: f.snapshot }),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       sleepUntil: () => Promise.reject(new Error("No wait")),
     });
     expect(result.snapshot).toBe(f.snapshot);

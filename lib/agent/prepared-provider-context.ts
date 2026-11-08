@@ -682,6 +682,7 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
           return emulation
             ? {
                 apiOrigin: emulation.vercelOrigin,
+                // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
                 fetch: ((resource, init) =>
                   providerEmulationFetch(resource as URL, init, emulation)) satisfies typeof fetch,
               }

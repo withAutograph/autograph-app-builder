@@ -229,6 +229,7 @@ describe("deployment repository access authorization", () => {
   it("uses a target proof without reading an installation repository inventory", async () => {
     const legacy = mutableProvider({ repositoryAvailable: () => true });
     const provider = await legacy({ authority, installation });
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const inspectInstallation = vi.fn(() =>
       Promise.reject(new Error("inventory must not be read")),
     );
@@ -418,6 +419,7 @@ describe("deployment repository access authorization", () => {
       principal,
     });
     await fixture.continuations.authorize({ authority, continuationId });
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const complete = () =>
       authorization.completeAuthorization({
         callback: {
@@ -458,6 +460,7 @@ describe("deployment repository access authorization", () => {
     });
     await fixture.continuations.authorize({ authority, continuationId });
     fixture.makeAvailable();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const complete = (bypass: string) =>
       authorization.completeAuthorization({
         callback: {

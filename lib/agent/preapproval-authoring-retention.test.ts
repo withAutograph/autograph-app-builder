@@ -28,6 +28,7 @@ import {
 const roots: string[] = [];
 afterEach(async () => {
   vi.unstubAllEnvs();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
 const fixture = async () => {

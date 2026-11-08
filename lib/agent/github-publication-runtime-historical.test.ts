@@ -164,8 +164,11 @@ const ownedDraftFixture = (
   const runtime = composeGitHubPublicationRuntime({
     adapter: {
       ...adapterWithoutHistoricalLookup(),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       inspectExistingDraft: () => Promise.resolve(draft),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       inspectRepository: () => Promise.resolve(repository),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       inspectInstallation: () => Promise.resolve(installation),
       ...adapterOverrides,
     },
@@ -188,6 +191,7 @@ const recordedSource = (draft: ExistingDraftObservation) => ({
 describe("same-session owned draft repair", () => {
   it("recovers the exact owned historical published head without retained reconciliation slots", async () => {
     const { draft, runtime } = ownedDraftFixture();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const readPublishedSource = vi.fn(() => Promise.resolve(recordedSource(draft)));
     const result = await runtime.inspectExistingDraftReconciliationSource({
       name: draft.name,
@@ -212,6 +216,7 @@ describe("same-session owned draft repair", () => {
         name: draft.name,
         owner: draft.owner,
         pullRequestNumber: draft.number,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         readPublishedSource: () => Promise.resolve(recordedSource(draft)),
         repositoryId: draft.repositoryId,
       });
@@ -239,6 +244,7 @@ describe("same-session owned draft repair", () => {
         name: draft.name,
         owner: draft.owner,
         pullRequestNumber: draft.number,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         readPublishedSource: () => Promise.resolve(changed),
         repositoryId: draft.repositoryId,
       });
@@ -250,6 +256,7 @@ describe("same-session owned draft repair", () => {
   it("never consults a marker without the tenant-owned original publication receipt", async () => {
     const { draft, findDraftByPullRequest, runtime } = ownedDraftFixture();
     findDraftByPullRequest.mockImplementationOnce(missingPublicationReceipt);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const readPublishedSource = vi.fn(() => Promise.resolve(recordedSource(draft)));
     const result = await runtime.inspectExistingDraftReconciliationSource({
       name: draft.name,
@@ -264,6 +271,7 @@ describe("same-session owned draft repair", () => {
 
   it("keeps the existing original-head baseline without an additional marker read", async () => {
     const { draft, runtime } = ownedDraftFixture({ branchSha: "1".repeat(40) });
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const readPublishedSource = vi.fn(() => Promise.resolve(recordedSource(draft)));
     const result = await runtime.inspectExistingDraftReconciliationSource({
       name: draft.name,

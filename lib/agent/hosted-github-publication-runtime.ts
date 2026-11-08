@@ -165,6 +165,7 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
       }
 
       const { authority, principal } = exactGitHubPublicationAuthority(sessionAuth);
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       const selectedInstallationId = await selectedPublicationInstallation(selection, () =>
         dependencies.readPreparedHandoff(sessionAuth),
       );

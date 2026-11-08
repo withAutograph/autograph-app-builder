@@ -49,6 +49,7 @@ describe("owned private browser authority", () => {
           preview: current,
           sandbox: { run, writeTextFile },
           assertCurrent: () => {},
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
           operation: () => Promise.resolve("unused"),
         }),
       ).rejects.toBeInstanceOf(PrivatePreviewBrowserPrerequisiteError);
@@ -120,6 +121,7 @@ describe("owned private browser authority", () => {
       const run = vi
         .fn<Parameters<typeof withPrivatePreviewBrowserAccess>[0]["sandbox"]["run"]>()
         .mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       const writeTextFile = vi.fn(() => {
         if (kind === "cancelled") {
           controller.abort();

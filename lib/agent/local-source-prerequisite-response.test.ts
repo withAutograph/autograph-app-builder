@@ -24,6 +24,7 @@ vi.mock("./local-source-transport-history", () => ({
 }));
 vi.mock("../repository/development-source", () => ({
   canAutoSelectDevelopmentSource: () => true,
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   developmentSourceReceipt: () =>
     Promise.resolve({ sourceSha: "9".repeat(40), sourcePath: "/owned-current-source" }),
 }));
@@ -35,6 +36,7 @@ vi.mock("./local-planning-source-base", () => ({
   }),
 }));
 vi.mock("../repository/local-planning-source", () => ({
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   captureLocalPlanningSource: () =>
     Promise.resolve({
       generation: { workspaceDigest: mocks.captureDigest() },
@@ -43,6 +45,7 @@ vi.mock("../repository/local-planning-source", () => ({
   reconcileLocalPlanningSource: mocks.reconcile,
 }));
 vi.mock("./source-bound-sandbox", () => ({
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   getSourceBoundSandbox: () => Promise.resolve({ id: "owned-workspace" }),
 }));
 vi.mock("./approved-build-continuation-runtime", () => ({

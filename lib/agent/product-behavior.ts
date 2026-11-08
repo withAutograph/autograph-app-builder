@@ -92,6 +92,7 @@ export const executeProductReadback = async (input: {
     }
     const marker = randomUUID();
     const body = JSON.stringify({ ...input.scenario.body, [input.scenario.markerField]: marker });
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     const request = (url: string, options: RequestInit = {}) => {
       signal.throwIfAborted();
       if (Date.now() >= input.authority.expiresAt) {

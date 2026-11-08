@@ -31,6 +31,7 @@ const fixture = (
   restoredSourceReads: readonly unknown[] = [],
   options: { abortSignal?: AbortSignal; actualSource?: string } = {},
 ) => {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const readFile = vi.fn(({ path }: { path: string }) =>
     Promise.resolve(
       path === `repository/${sourcePath}`

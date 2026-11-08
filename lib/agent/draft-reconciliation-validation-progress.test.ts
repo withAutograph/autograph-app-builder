@@ -490,6 +490,7 @@ describe("draft reconciliation command progress", () => {
       stderr: input.command === installCommand ? "lockfile mismatch" : "",
       stdout: "",
     }));
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     const call = () =>
       validateReconciliation.execute(
         {
@@ -582,6 +583,7 @@ describe("draft reconciliation command progress", () => {
       let attached = false;
       const events: string[] = [];
       const root = mocks.candidate?.root;
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       mocks.run.mockImplementation((input: { command: string; workingDirectory?: string }) => {
         if (input.command === "mise run --no-deps --skip-tools format:app") {
           expect(attached).toBe(true);
@@ -593,6 +595,7 @@ describe("draft reconciliation command progress", () => {
         }
         return Promise.resolve({ exitCode: 0, stderr: "", stdout: "" });
       });
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       mocks.inspect.mockImplementation(() => {
         expect(attached).toBe(true);
         return Promise.resolve({
@@ -602,6 +605,7 @@ describe("draft reconciliation command progress", () => {
           unresolvedConflicts: [],
         });
       });
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       mocks.compile.mockImplementation(() => {
         expect(attached).toBe(true);
         events.push("compile");
@@ -894,6 +898,7 @@ describe("draft reconciliation command progress", () => {
       status: "in_progress",
     });
     let installFailed = false;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     mocks.run.mockImplementation((input: { command: string }) => {
       if (input.command === installCommand && !installFailed) {
         installFailed = true;
@@ -1322,6 +1327,7 @@ describe("draft reconciliation command progress", () => {
       }
       mocks.candidate.root = changedRoot;
       const initialWorkflow = mocks.workflow;
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       mocks.check.mockImplementation(() => {
         mocks.workflow = { ...mocks.workflow, bindingGeneration: "fresh-at-browser-step" };
         return Promise.resolve({ exitCode: 0, stderr: "", stdout: "" });
@@ -1386,6 +1392,7 @@ describe("draft reconciliation command progress", () => {
       const requestedSignal = cancelled ? requestAbort.signal : abortSignal;
       if (!cancelled) {
         mocks.browser.mockImplementationOnce(actual.runAppBrowserTests);
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         mocks.resolveRuntime.mockImplementationOnce((execution) => {
           execution.signal?.throwIfAborted();
           return Promise.reject(new Error("Approved HTTPS binding unavailable"));
@@ -1627,6 +1634,7 @@ describe("draft reconciliation command progress", () => {
   });
 
   it("does not infer an installation repair from missing declaration evidence", async () => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     mocks.check.mockImplementationOnce(() => {
       mocks.readText.mockRejectedValue(new Error("dependency metadata unavailable"));
       return Promise.resolve({

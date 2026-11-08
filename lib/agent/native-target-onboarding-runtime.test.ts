@@ -109,6 +109,7 @@ const fixture = () => {
   const store = createInMemoryNativeTargetOnboardingStore();
   let receipt: NativeTargetOnboardingApproval | null = null;
   let allowed = true;
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const authorize = () => {
     if (!allowed) {
       throw new Error("denied");
@@ -116,9 +117,11 @@ const fixture = () => {
     return Promise.resolve(owner);
   };
   const registry = createNativeTargetOnboardingRegistry({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     assertPlanOrigin: () => Promise.resolve(),
     authorize,
     now: () => time,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     readApproval: () => Promise.resolve(receipt),
     store,
   });
@@ -141,6 +144,7 @@ const fixture = () => {
     },
   );
   const observeProject = vi.fn<NativeTargetOnboardingRuntimePorts["observeProject"]>(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     (_ctx, input) =>
       Promise.resolve({
         status: "verified",
@@ -153,6 +157,7 @@ const fixture = () => {
   );
   const ports: NativeTargetOnboardingRuntimePorts = {
     now: () => time,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     readCapturedRelease: vi.fn<NativeTargetOnboardingRuntimePorts["readCapturedRelease"]>(() =>
       Promise.resolve({
         release: plan.origin.release,
@@ -301,6 +306,7 @@ describe("native target workflow runtime", () => {
       session: { id: "adapter", initiator: null, turn: { id: "turn", sequence: 0 } },
       response: { decision: "approve" },
       auth: {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
         getToken: () => Promise.reject(new Error("unused")),
         requireAuth: () => {
           throw new Error("unused");

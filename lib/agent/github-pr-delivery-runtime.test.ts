@@ -94,6 +94,7 @@ const fixture = (receiptRepositoryId = "100") => {
     state: "open",
   };
   const inspect = vi.fn<GitHubPrDeliveryProvider["inspect"]>().mockResolvedValue(observation);
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   const unexpected = vi.fn(() => Promise.reject(new Error("Unexpected publication operation")));
   const compareAndSet = vi.fn();
   const inspectExistingDraft = vi.fn().mockImplementation(unexpected);

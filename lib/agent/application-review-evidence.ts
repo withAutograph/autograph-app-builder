@@ -325,6 +325,7 @@ export const createApplicationReviewEvidence = (input: {
     }
     return text;
   };
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   const loadSource = (path: string): Promise<string> => {
     const file = fileByPath.get(path);
     if (file === undefined) {
@@ -338,8 +339,10 @@ export const createApplicationReviewEvidence = (input: {
     return pending;
   };
   const documents = new Map<string, () => Promise<string>>();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   documents.set("original", () => Promise.resolve(input.reviewInput.originalRequest ?? ""));
   for (const [index, text] of input.reviewInput.clarifications.entries()) {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     documents.set(`clarification-${index}`, () => Promise.resolve(text));
   }
   documents.set("app-spec", async () => {
@@ -354,6 +357,7 @@ export const createApplicationReviewEvidence = (input: {
     return parts.join("");
   });
   const requirementText = new Map<string, Promise<string>>();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   const loadRequirement = (id: string): Promise<string> => {
     input.abortSignal?.throwIfAborted();
     const load = documents.get(id);
@@ -377,6 +381,7 @@ export const createApplicationReviewEvidence = (input: {
     })),
     async readRedactionTexts() {
       input.abortSignal?.throwIfAborted();
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       const texts = await Promise.all([...documents.keys()].map((id) => loadRequirement(id)));
       input.abortSignal?.throwIfAborted();
       return texts;
