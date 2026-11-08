@@ -527,10 +527,13 @@ const selectedApplication = (
     });
     throw new HostedOperatorError(RESOURCE_MISMATCH);
   }
+  const appProjectMismatch = selected.projectId !== context.target.projectId;
+  const appBranchMismatch = selected.branch !== context.target.branch;
+  const teamMismatch = context.target.scopeId !== configuration.teamId;
   const failed = {
-    app_project: selected.projectId !== context.target.projectId,
-    app_branch: selected.branch !== context.target.branch,
-    team: context.target.scopeId !== configuration.teamId,
+    app_branch: appBranchMismatch,
+    app_project: appProjectMismatch,
+    team: teamMismatch,
   };
   if (Object.values(failed).some(Boolean)) {
     reportOperatorPlanningMismatch(context.target.sessionId, "application_selection", failed);

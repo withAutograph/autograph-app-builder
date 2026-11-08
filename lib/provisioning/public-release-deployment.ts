@@ -403,9 +403,11 @@ export const createPublicReleaseDeployment = (input: {
           sourceCapability: retained.sourceCapability,
         };
         if (expected?.integrationRemoval !== undefined) {
+          const { integrationRemoval } = expected;
+          const operationRef = publicReleaseOperationRef(expected);
           removalInput.expected = {
-            removal: expected.integrationRemoval,
-            operationRef: publicReleaseOperationRef(expected),
+            operationRef,
+            removal: integrationRemoval,
           };
         }
         removal = await readRemoval({
@@ -972,7 +974,7 @@ export const createPublicReleaseDeployment = (input: {
           candidate,
           database: input.database,
         });
-        return reconcilePublicReleasePlanHistory({ candidate, snapshots, records: history });
+        return reconcilePublicReleasePlanHistory({ candidate, records: history, snapshots });
       },
       withTargetLease: createPublicReleaseTargetLease({
         databaseUrl,
@@ -1067,7 +1069,8 @@ export const createPublicReleaseDeployment = (input: {
       },
     };
   };
-  const dispatch = createPublicReleaseDispatcher({ owner: input.owner, createPorts });
+  const { owner: dispatcherOwner } = input;
+  const dispatch = createPublicReleaseDispatcher({ createPorts, owner: dispatcherOwner });
   return Object.assign(dispatch, {
     /** Internal read port on the already authenticated operator request; it dispatches no release action. */
     readRuntimeBinding: async (binding: {

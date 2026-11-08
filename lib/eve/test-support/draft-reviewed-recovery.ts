@@ -699,13 +699,16 @@ export const nativeFixture = async (
     return page;
   };
   const world = {
-    runs: {
-      get: async (runId: string) => ({
-        runId,
-        status: runId === owner ? nativeStatus : "cancelled",
-      }),
-    },
     events: {
+      get: async (runId: string, eventId: string) => {
+        const event = nativeEvents.find(
+          (entry) => entry.runId === runId && entry.eventId === eventId,
+        );
+        if (event === undefined) {
+          throw new Error("Unknown native event");
+        }
+        return event;
+      },
       list: async ({
         runId,
         pagination,
@@ -718,15 +721,6 @@ export const nativeFixture = async (
           runId,
           pagination,
         ),
-      get: async (runId: string, eventId: string) => {
-        const event = nativeEvents.find(
-          (entry) => entry.runId === runId && entry.eventId === eventId,
-        );
-        if (event === undefined) {
-          throw new Error("Unknown native event");
-        }
-        return event;
-      },
       listByCorrelationId: async ({
         runId,
         correlationId,
@@ -743,6 +737,12 @@ export const nativeFixture = async (
           runId,
           pagination,
         ),
+    },
+    runs: {
+      get: async (runId: string) => ({
+        runId,
+        status: runId === owner ? nativeStatus : "cancelled",
+      }),
     },
     steps: {
       get: async (runId: string, step: string) =>
@@ -827,21 +827,26 @@ export const nativeFixture = async (
   };
   const stopReceipts = new Set<string>();
   const activatedHooks = new Set<string>();
+  const collectLineagePreflight = createOwnedLineagePreflightCollector(collectorPorts);
   const deps = {
     collect,
-    visitHistoricalCheckpoints,
-    collectLineagePreflight: createOwnedLineagePreflightCollector(collectorPorts),
-    readLineagePreflight: readOwnedLineagePreflight,
-    reconcileLineagePreflight: reconcileOwnedLineagePreflight,
-    inspectSource: async (id: string) => await inspectNativeRecoverySource(world, id),
-    stopSource: async (id: string, reason: string) => {
-      if (id !== owner) {
-        throw new Error("Foreign owner stop");
+    collectLineagePreflight,
+    getHook: async () => {
+      if (hook === undefined) {
+        throw new Error("missing hook");
       }
-      nativeStatus = "cancelled";
-      stopReceipts.add(reason);
+      return hook;
     },
-    readStopReceipt: async (id: string, reason: string) => id === owner && stopReceipts.has(reason),
+    inspectSource: async (id: string) => await inspectNativeRecoverySource(world, id),
+    isHookNotFound: (error: Error) => error.message === "missing hook",
+    now: () => 0,
+    readCandidate: readTerminalRecoveryCandidate,
+    readEntry: async () => ({
+      kind: "initial",
+      serializedContext: { "eve.capabilities": { original: true } },
+      sessionTimeoutMs: false,
+    }),
+    readLineagePreflight: readOwnedLineagePreflight,
     readLogicalInboxOwner: async (): Promise<
       { runId: string; logicalSessionId: string } | undefined
     > => {
@@ -853,16 +858,12 @@ export const nativeFixture = async (
       }
       return undefined;
     },
+    readStopReceipt: async (id: string, reason: string) => id === owner && stopReceipts.has(reason),
+    reconcile: reconcileTerminalRecoveryCandidate,
+    reconcileLineagePreflight: reconcileOwnedLineagePreflight,
     resumeHook: async (token: string) => {
       activatedHooks.add(token);
     },
-    readCandidate: readTerminalRecoveryCandidate,
-    reconcile: reconcileTerminalRecoveryCandidate,
-    readEntry: async () => ({
-      kind: "initial",
-      serializedContext: { "eve.capabilities": { original: true } },
-      sessionTimeoutMs: false,
-    }),
     start: async (input: { descriptor: typeof f.input.descriptor; provenance: unknown }) => {
       starts.push(input);
       hook = {
@@ -876,14 +877,14 @@ export const nativeFixture = async (
         }),
       };
     },
-    getHook: async () => {
-      if (hook === undefined) {
-        throw new Error("missing hook");
+    stopSource: async (id: string, reason: string) => {
+      if (id !== owner) {
+        throw new Error("Foreign owner stop");
       }
-      return hook;
+      nativeStatus = "cancelled";
+      stopReceipts.add(reason);
     },
-    isHookNotFound: (error: Error) => error.message === "missing hook",
-    now: () => 0,
+    visitHistoricalCheckpoints,
     wait: async () => {
       throw new Error("unexpected wait");
     },

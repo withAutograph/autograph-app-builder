@@ -830,8 +830,8 @@ export const createHostedOperatorControlPlane = async (input: {
         await readCredential(authority, installationId),
       readReadyNativeTarget: async (authority, appId) => {
         const row = await createPostgresNativeTargetOnboardingStore(database).read({
-          authority,
           appId,
+          authority,
         });
         return row?.record.stage === "ready" ? row.record : undefined;
       },
@@ -1248,7 +1248,7 @@ export const createHostedOperatorControlPlane = async (input: {
       const expectedOrganizationRefresh =
         existing !== undefined &&
         canRefreshSelectedOrganization(known.operator, existing, linkInput)
-          ? { operationRef: known.operator.operationRef, link: existing }
+          ? { link: existing, operationRef: known.operator.operationRef }
           : undefined;
       const aad = JSON.stringify({
         authority: linkInput.context.authority,
@@ -1557,11 +1557,13 @@ export const createHostedOperatorControlPlane = async (input: {
       );
       const forwardedBy = input.workloadPolicy.subject;
       Object.assign(initiator.attributes, { "eve:forwarded-by": forwardedBy });
+      const { record } = current;
+      const now = Date.now();
       const observed = observeRealmContinuationRecord({
         context,
-        record: current.record,
         initiator,
-        now: Date.now(),
+        now,
+        record,
       });
       if (observed?.reason.kind === "consumed-proof") {
         const artifacts = ownedArtifacts(context);
