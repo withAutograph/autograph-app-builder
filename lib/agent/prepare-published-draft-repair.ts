@@ -40,6 +40,8 @@ import { ARRUSTED_TEMPLATE_REPOSITORY } from "../repository/source-receipt";
 import type { SandboxSession } from "eve/sandbox";
 import { priorResumedBuildDraftProposal } from "./existing-app-repair-planning";
 
+const PUBLISHED_DRAFT_REPAIR = "published-draft-repair";
+
 type Reviewed = Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
 const assertCurrentOrigin = (
   expected: Reviewed,
@@ -187,7 +189,7 @@ const acquireOwnedPublishedDraft = async (
     draft: owned.draft,
   });
   assertCurrentOrigin(state, previous);
-  return { access, runtime, owned, repair };
+  return { access, owned, repair, runtime };
 };
 
 /** Acquire a second private checkout for this session's actual published app, never replace its starter. */
@@ -242,7 +244,7 @@ export const preparePublishedDraftRepair = async (input: PreparationInput) => {
       if (unpublished !== undefined) {
         candidateInput.unpublished = unpublished;
       }
-      if (previous?.kind === "published-draft-repair" && previous.repair.digest === repair.digest) {
+      if (previous?.kind === PUBLISHED_DRAFT_REPAIR && previous.repair.digest === repair.digest) {
         candidateInput.previousCandidate = previous;
         candidateInput.replayPreviousCandidate = true;
       }
@@ -254,7 +256,7 @@ export const preparePublishedDraftRepair = async (input: PreparationInput) => {
   void _publicationScope;
   const candidate = {
     ...preparedRepair,
-    kind: "published-draft-repair" as const,
+    kind: PUBLISHED_DRAFT_REPAIR,
     repair,
     version: 1 as const,
     repositoryId: owned.draft.repositoryId,
@@ -262,7 +264,7 @@ export const preparePublishedDraftRepair = async (input: PreparationInput) => {
     githubSourceDigest: owned.source.digest,
     originalReviewDigest: state.reviewReceipt.digest,
     reviewedLineage: structuredClone(state),
-  };
+  } satisfies DraftReconciliationCandidate;
   updateExactDraftReconciliation({
     expected: previous,
     operation: "preparing this owned published draft repair",
@@ -270,7 +272,7 @@ export const preparePublishedDraftRepair = async (input: PreparationInput) => {
   });
   return {
     status: "ready_for_validation" as const,
-    kind: "published-draft-repair" as const,
+    kind: PUBLISHED_DRAFT_REPAIR,
     baseline: "draft-head" as const,
     headSha: candidate.headSha,
     root: candidate.root,
@@ -285,7 +287,7 @@ const samePublishedDraft = (
   repair: ReturnType<typeof createPublishedDraftRepairSource>,
 ): boolean => {
   const origin =
-    previous.kind === "published-draft-repair" ? previous.repair : previous.publishedOrigin;
+    previous.kind === PUBLISHED_DRAFT_REPAIR ? previous.repair : previous.publishedOrigin;
   return (
     origin !== undefined &&
     [
@@ -408,7 +410,7 @@ const reconciliationPreparationLineage = (
             sameOrigin &&
             previousCandidate.headSha === repair.draft.headSha,
         };
-  return { ownedPrevious, preservedPrevious, recoveryMode, reopenCurrent, previousInput };
+  return { ownedPrevious, preservedPrevious, previousInput, recoveryMode, reopenCurrent };
 };
 
 const retainedInitialAppSource = async (input: {

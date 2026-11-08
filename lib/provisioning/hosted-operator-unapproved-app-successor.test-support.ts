@@ -333,5 +333,5 @@ export const captureFixture = () => {
     ["auth-resources", "app-resources", "auth-schema"].includes(receipt.effectId),
   );
   record.approvedByCallId = "operator:unapproved-plan";
-  return { record, added };
+  return { added, record };
 };

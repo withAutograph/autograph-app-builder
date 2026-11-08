@@ -259,7 +259,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
     if (session.id !== locator.providerSessionId) {
       throw unavailable();
     }
-    return { provider, locator };
+    return { locator, provider };
   };
   const closeOwnedCommand = async (context: HostedOperatorContext, record: ContinuityRecord) => {
     if (record.locator === undefined) {
@@ -303,7 +303,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
     }
     const session = await currentSession(provider);
     if (session.id === locator.providerSessionId) {
-      return { locator, current: record.current };
+      return { current: record.current, locator };
     }
     if (!canRebindUndispatchedContinuityRuntime(record)) {
       throw unavailable();
@@ -320,7 +320,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
     });
     await assertCurrent();
     await checkpoint({ locator: recoveredLocator, current });
-    return { locator: recoveredLocator, current };
+    return { current, locator: recoveredLocator };
   };
   const runtime: HostedContinuityDependencies["runtime"] = {
     async start(context, record, _capabilities, assertCurrent, checkpoint) {

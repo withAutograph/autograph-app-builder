@@ -261,12 +261,12 @@ const assertTransition = (
     NativeTargetOnboardingRecord["stage"],
     readonly NativeTargetOnboardingRecord["stage"][]
   > = {
-    planned: ["approved", "cancelled"],
     approved: ["creating", "cancelled"],
-    creating: ["creating", "unknown", "ready", "approved", "cancelled"],
-    unknown: ["unknown", "ready", "approved", "cancelled"],
-    ready: [],
     cancelled: [],
+    creating: ["creating", "unknown", "ready", "approved", "cancelled"],
+    planned: ["approved", "cancelled"],
+    ready: [],
+    unknown: ["unknown", "ready", "approved", "cancelled"],
   };
   if (!allowed[before.stage].includes(after.stage)) {
     throw conflict();
