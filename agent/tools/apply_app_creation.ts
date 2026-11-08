@@ -214,9 +214,13 @@ export default defineTool({
             artifacts: current.artifacts,
             dependencyReceipt: current.dependencyReceipt,
           };
-          const source: Pick<AppliedState, "githubSource"> = {};
+          const source: Pick<AppliedState, "githubSource" | "publishedGitHubDraftProposalDigest"> =
+            {};
           if (current.githubSource !== undefined) {
             source.githubSource = current.githubSource;
+          }
+          if (current.publishedGitHubDraftProposalDigest !== undefined) {
+            source.publishedGitHubDraftProposalDigest = current.publishedGitHubDraftProposalDigest;
           }
           return {
             ...applied,
@@ -272,9 +276,13 @@ export default defineTool({
           artifacts: current.artifacts,
           dependencyReceipt: current.dependencyReceipt,
         };
-        const source: Pick<AppliedState, "githubSource"> = {};
+        const source: Pick<AppliedState, "githubSource" | "publishedGitHubDraftProposalDigest"> =
+          {};
         if (current.githubSource !== undefined) {
           source.githubSource = current.githubSource;
+        }
+        if (current.publishedGitHubDraftProposalDigest !== undefined) {
+          source.publishedGitHubDraftProposalDigest = current.publishedGitHubDraftProposalDigest;
         }
         return {
           ...applied,

@@ -280,6 +280,16 @@ const prepareRecoveryFixture = async (
   return { applied, planned };
 };
 
+describe("ordinary same-app Build publication continuity", () => {
+  it("retains the verified publication marker in a new Build proposal", async () => {
+    await run(async () => {
+      const { planned } = await prepareRecoveryFixture("reviewed", "verified-publication");
+      expect(planned.publishedGitHubDraftProposalDigest).toBe("verified-publication");
+      expect(planned).not.toHaveProperty("githubDraftProposal");
+    });
+  });
+});
+
 describe("resume the approved build through the planning tool", () => {
   it.each([undefined, "verified-publication"])(
     "preserves only the explicit publication marker while retaining the sealed draft for inspection",

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ToolContext } from "eve/tools";
 import type { AppBuilderWorkflowState } from "./workflow-state";
-import { appBuilderWorkflowState } from "./workflow-state";
+import { appBuilderWorkflowState, updateExactWorkflow } from "./workflow-state";
 import { getSourceBoundSandbox } from "./source-bound-sandbox";
 import { githubPublicationRuntimeForSession } from "./deployment-github-publication-runtime";
 import type { DraftInspectionRecoveryInput } from "./github-publication-runtime";
@@ -10,7 +10,10 @@ import {
   repositoryAccessReceiptSchema,
   repositoryAccessReceiptState,
 } from "./repository-access-state";
-import { createPublishedDraftRepairSource } from "./published-draft-repair";
+import {
+  createPublishedDraftRepairSource,
+  retainedPublishedDraftOriginForReview,
+} from "./published-draft-repair";
 import { resolveDraftReviewedWorkflow } from "./draft-reviewed-lineage";
 import {
   draftReconciliationCompletions,
@@ -61,6 +64,12 @@ const assertCurrentOrigin = (
     current.appSpec.digest === expected.appSpec.digest,
     current.reviewReceipt.digest === expected.reviewReceipt.digest,
     current.applyReceipt.digest === expected.applyReceipt.digest,
+    current.publishedGitHubDraftProposalDigest === expected.publishedGitHubDraftProposalDigest,
+    current.workspace.workspaceId === expected.workspace.workspaceId,
+    current.workspace.workspacePath === expected.workspace.workspacePath,
+    current.workspace.workspaceDigest === expected.workspace.workspaceDigest,
+    current.workspace.sourceSha === expected.workspace.sourceSha,
+    current.workspace.sourceTree === expected.workspace.sourceTree,
   ].every(Boolean);
   if (!matches) {
     throw new Error("The accepted app workflow changed during draft repair preparation.");
@@ -122,8 +131,10 @@ const acquireOwnedPublishedDraft = async (
 ) => {
   const { state, ctx } = input;
   assertCurrentOrigin(state, previous);
+  const recoveredOrigin = retainedPublishedDraftOriginForReview(state, previous);
   const proposalDigest =
     state.publishedGitHubDraftProposalDigest ??
+    recoveredOrigin?.publicationProposalDigest ??
     state.githubDraftProposal?.proposal.digest ??
     priorResumedBuildDraftProposal(state, ctx.session.id)?.digest;
   const savedAccess = repositoryAccessReceiptState.get();
@@ -135,6 +146,20 @@ const acquireOwnedPublishedDraft = async (
   const access = repositoryAccessReceiptSchema.parse(savedAccess);
   if (access.sessionId !== ctx.session.id) {
     throw new Error("The repository access belongs to another session.");
+  }
+  if (
+    recoveredOrigin !== undefined &&
+    ![
+      recoveredOrigin.installationId === access.scope.installationId,
+      recoveredOrigin.draft.repositoryId === access.repository.repositoryId,
+      recoveredOrigin.draft.owner === access.repository.owner,
+      recoveredOrigin.draft.name === access.repository.name,
+      recoveredOrigin.draft.number === input.pullRequestNumber,
+    ].every(Boolean)
+  ) {
+    throw new Error(
+      "The retained publication differs from this session's verified repository access.",
+    );
   }
   const runtime = await githubPublicationRuntimeForSession(ctx.session.auth, {
     selectedInstallationId: access.scope.installationId,
@@ -190,14 +215,32 @@ const acquireOwnedPublishedDraft = async (
     draft: owned.draft,
   });
   assertCurrentOrigin(state, previous);
-  return { access, owned, repair, runtime };
+  if (recoveredOrigin === undefined) {
+    return { access, owned, repair, runtime, state };
+  }
+  if (
+    owned.proposal.digest !== recoveredOrigin.publicationProposalDigest ||
+    owned.publication.digest !== recoveredOrigin.publicationDigest
+  ) {
+    throw new Error("The verified original publication differs from the retained owned origin.");
+  }
+  ctx.abortSignal?.throwIfAborted();
+  const recoveredState = { ...state, publishedGitHubDraftProposalDigest: owned.proposal.digest };
+  const current = appBuilderWorkflowState.get();
+  updateExactWorkflow({
+    expected: current,
+    operation: "recover the verified owned publication",
+    transition: () => ({ ...current, publishedGitHubDraftProposalDigest: owned.proposal.digest }),
+  });
+  assertCurrentOrigin(recoveredState, previous);
+  return { access, owned, repair, runtime, state: recoveredState };
 };
 
 /** Acquire a second private checkout for this session's actual published app, never replace its starter. */
 export const preparePublishedDraftRepair = async (input: PreparationInput) => {
-  const { state, ctx } = input;
+  const { ctx } = input;
   const previous = structuredClone(draftReconciliationState.get());
-  const { access, owned, repair } = await acquireOwnedPublishedDraft(input, previous);
+  const { access, owned, repair, state } = await acquireOwnedPublishedDraft(input, previous);
   const sandbox = await getSourceBoundSandbox(ctx);
   assertCurrentOrigin(state, previous);
   const originAlreadyCarried = publishedDraftRepairCompletions
@@ -514,9 +557,12 @@ const publishedDraftUnpublishedSource = async (input: {
 
 /** Reconcile the owned draft with its live base without changing the accepted starter source. */
 export const preparePublishedDraftReconciliation = async (input: PreparationInput) => {
-  const { state, ctx } = input;
+  const { ctx } = input;
   const previous = structuredClone(draftReconciliationState.get());
-  const { access, runtime, owned, repair } = await acquireOwnedPublishedDraft(input, previous);
+  const { access, runtime, owned, repair, state } = await acquireOwnedPublishedDraft(
+    input,
+    previous,
+  );
   const { ownedPrevious, preservedPrevious, recoveryMode, reopenCurrent, previousInput } =
     reconciliationPreparationLineage(input, previous, repair);
   const originalPublicationRepair =
