@@ -597,7 +597,14 @@ export function createPreviewOAuthServer(input: {
   const { githubClientId, githubClientSecret, vercelClientId, vercelClientSecret } = config;
   if (
     localEmulation &&
-    (!githubClientId || !githubClientSecret || !vercelClientId || !vercelClientSecret)
+    (githubClientId === undefined ||
+      githubClientId === "" ||
+      githubClientSecret === undefined ||
+      githubClientSecret === "" ||
+      vercelClientId === undefined ||
+      vercelClientId === "" ||
+      vercelClientSecret === undefined ||
+      vercelClientSecret === "")
   ) {
     throw new Error("Local provider emulation requires GitHub and Vercel OAuth credentials.");
   }

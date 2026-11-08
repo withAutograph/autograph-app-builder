@@ -88,7 +88,7 @@ const CopyButton = function CopyButton({
 
   const handleCopy = async function handleCopy() {
     const value = getValue();
-    if (!value) {
+    if (value === undefined || value === null || value === "") {
       return;
     }
 
@@ -144,7 +144,7 @@ const DateInput = function DateInput({ name, field, isPending }: AdditionalField
   }
 
   return (
-    <Field data-invalid={!!error}>
+    <Field data-invalid={error !== undefined && error !== null && error !== ""}>
       <FieldLabel htmlFor={`${name}-date`}>{field.label}</FieldLabel>
 
       <div className="relative flex gap-2">
@@ -173,7 +173,7 @@ const DateInput = function DateInput({ name, field, isPending }: AdditionalField
             type="button"
             id={`${name}-date`}
             data-empty={!date}
-            aria-invalid={!!error}
+            aria-invalid={error !== undefined && error !== null && error !== ""}
             disabled={isPending || field.readOnly}
             className={cn(
               buttonVariants({ variant: "outline" }),

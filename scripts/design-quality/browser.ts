@@ -176,7 +176,7 @@ function matchedSelector(match: {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function singleGapValue(value: string): string | undefined {
   const candidate = value.trim();
-  if (!candidate) {
+  if (candidate.length === 0) {
     return undefined;
   }
   let depth = 0;
@@ -196,7 +196,7 @@ function singleGapValue(value: string): string | undefined {
 }
 
 export const sourcePath = (value: string | undefined) => {
-  if (!value) {
+  if (value === undefined || value === null || value === "") {
     return;
   }
   try {
@@ -208,7 +208,7 @@ export const sourcePath = (value: string | undefined) => {
 };
 
 export const generatedSource = (path: string | undefined, generated: string[]) => {
-  if (!path) {
+  if (path === undefined || path === null || path === "") {
     return false;
   }
   const clean = path.replaceAll("\\", "/");
@@ -538,7 +538,7 @@ export async function measureStyles(
       // stylesheet's sourceMappingURL comment is the only usable evidence.
       const url = header?.sourceMapURL || declared;
       let text: string | undefined;
-      if (url?.startsWith("data:application/json")) {
+      if (url?.startsWith("data:application/json") === true) {
         try {
           const comma = url.indexOf(",");
           if (comma !== -1) {
@@ -723,7 +723,7 @@ export async function measureStyles(
       });
       for (const [property, category] of Object.entries(properties)) {
         const inline = (matched.inlineStyle?.cssProperties ?? []).filter(
-          (p) => p.name === property && !p.disabled && p.parsedOk !== false,
+          (p) => p.name === property && p.disabled !== true && p.parsedOk !== false,
         );
         const rules = (matched.matchedCSSRules ?? []).filter(
           (m) =>
@@ -737,7 +737,7 @@ export async function measureStyles(
           : [];
         const own = rules.flatMap((m) =>
           m.rule.style.cssProperties
-            .filter((p) => p.name === property && !p.disabled && p.parsedOk !== false)
+            .filter((p) => p.name === property && p.disabled !== true && p.parsedOk !== false)
             .map((p) => ({ p, rule: m.rule, selector: matchedSelector(m) })),
         );
         const needsGapFallback =
@@ -746,7 +746,7 @@ export async function measureStyles(
         const gapShorthands = needsGapFallback
           ? rules.flatMap((m) =>
               m.rule.style.cssProperties.filter(
-                (p) => p.name === "gap" && !p.disabled && p.parsedOk !== false,
+                (p) => p.name === "gap" && p.disabled !== true && p.parsedOk !== false,
               ),
             )
           : [];
@@ -760,7 +760,7 @@ export async function measureStyles(
                   .filter(
                     (p) =>
                       p.name === "gap" &&
-                      !p.disabled &&
+                      p.disabled !== true &&
                       p.parsedOk !== false &&
                       singleGapValue(p.value),
                   )
@@ -774,7 +774,7 @@ export async function measureStyles(
         const ownEvidence = gapFallback.length ? gapFallback : own;
         let declarationEntries = inherited.flatMap((m) =>
           m.rule.style.cssProperties
-            .filter((p) => p.name === property && !p.disabled && p.parsedOk !== false)
+            .filter((p) => p.name === property && p.disabled !== true && p.parsedOk !== false)
             .map((p) => ({
               p,
               rule: m.rule as typeof m.rule | undefined,
@@ -813,7 +813,7 @@ export async function measureStyles(
           declaration?.range ??
           ((rule?.style.cssProperties ?? []).filter(
             (entry) =>
-              !entry.disabled && entry.parsedOk !== false && typeof entry.text === "string",
+              entry.disabled !== true && entry.parsedOk !== false && typeof entry.text === "string",
           ).length === 1
             ? rule?.style.range
             : undefined);
@@ -849,7 +849,9 @@ export async function measureStyles(
                   : undefined,
                 (rule?.style.cssProperties ?? []).filter(
                   (entry) =>
-                    !entry.disabled && entry.parsedOk !== false && typeof entry.text === "string",
+                    entry.disabled !== true &&
+                    entry.parsedOk !== false &&
+                    typeof entry.text === "string",
                 ),
               )
             : undefined;

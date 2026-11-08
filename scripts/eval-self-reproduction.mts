@@ -454,7 +454,7 @@ const reportHtml = (report: {
 };
 
 const runGenerator = async (arrustedRoot: string | undefined) => {
-  if (values["report-only"]) {
+  if (values["report-only"] === true) {
     return { reason: "Report-only mode selected.", status: "not-run" };
   }
   if (!values.generator && !arrustedRoot) {
@@ -898,7 +898,7 @@ const saveReport = async () => {
 };
 
 const main = async () => {
-  if (values.help) {
+  if (values.help === true) {
     console.log(`Usage: mise run eval:self-reproduction -- [--arrusted-root PATH] [--output-dir EXTERNAL_PATH]
   [--reference-url URL] [--candidate-url URL] [--capture-adapter evals/PATH] [--generation-timeout-ms N]
   [--candidate-runtime] [--debug-prerender] [--reference-runtime]
@@ -919,7 +919,7 @@ complete paired desktop state matrix against both supplied URLs.
 The checked-in brief and fixed answers are always preserved unchanged.`);
     return;
   }
-  if (!values["report-only"] && !(values.generator && process.env.NODE_ENV === "test")) {
+  if (values["report-only"] !== true && !(values.generator && process.env.NODE_ENV === "test")) {
     throw new Error(
       "Self-reproduction generation requires the public App Builder entrypoint. Guided internal-stage generation is retired. Run an ordinary Builder session with the product brief, then use --report-only --candidate-root PATH to assess its output.",
     );
@@ -953,8 +953,8 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     const providedCheckout = values["arrusted-root"] ?? process.env.SELF_REPRODUCTION_ARRUSTED_ROOT;
     const templateSource =
       providedCheckout ||
-      values["candidate-runtime"] ||
-      (!values["report-only"] && !values.generator)
+      values["candidate-runtime"] === true ||
+      (values["report-only"] !== true && !values.generator)
         ? await prepareSelfReproductionTemplateSource({
             outputDirectory: output,
             providedCheckout,
@@ -992,29 +992,31 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         },
       ),
     );
-    settings = values["report-only"]
-      ? {
-          configuredModel: activeBuilderModelId,
-          modelInvocation: "unverified: report-only does not run generation",
-          publication: "No publication is performed by report-only comparison.",
-          reasoningConfiguration:
-            "Static source configuration retained in settings-source/agent.ts; no effective invocation settings are asserted.",
-          source: "settings-source/",
-          status: "source-config-only",
-        }
-      : {
-          model: activeBuilderModelId,
-          publication: "disabled by sandbox eval profile",
-          reasoningConfiguration:
-            "Preserved verbatim in settings-source/agent.ts; effective runtime identity is retained in transcript events.",
-          runtimeIdentity: "See session.started events in generation-transcript.jsonl",
-          source: "settings-source/",
-          status: "preserved",
-        };
+    settings =
+      values["report-only"] === true
+        ? {
+            configuredModel: activeBuilderModelId,
+            modelInvocation: "unverified: report-only does not run generation",
+            publication: "No publication is performed by report-only comparison.",
+            reasoningConfiguration:
+              "Static source configuration retained in settings-source/agent.ts; no effective invocation settings are asserted.",
+            source: "settings-source/",
+            status: "source-config-only",
+          }
+        : {
+            model: activeBuilderModelId,
+            publication: "disabled by sandbox eval profile",
+            reasoningConfiguration:
+              "Preserved verbatim in settings-source/agent.ts; effective runtime identity is retained in transcript events.",
+            runtimeIdentity: "See session.started events in generation-transcript.jsonl",
+            source: "settings-source/",
+            status: "preserved",
+          };
     await jsonFile("settings.json", settings);
-    generation = values["report-only"]
-      ? { reason: "Report-only mode selected.", status: "not-run" }
-      : { status: "running" };
+    generation =
+      values["report-only"] === true
+        ? { reason: "Report-only mode selected.", status: "not-run" }
+        : { status: "running" };
     await saveReport();
     generation = await runGenerator(arrustedRoot);
     await saveReport();
@@ -1090,8 +1092,8 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     }
     await saveReport();
     if (
-      values["reference-runtime"] ||
-      (!values["report-only"] && !values.generator && !values["reference-url"])
+      values["reference-runtime"] === true ||
+      (values["report-only"] !== true && !values.generator && !values["reference-url"])
     ) {
       if (!values["mise-executable"]) {
         throw new Error("Reference startup requires the mise-owned eval entrypoint.");
@@ -1110,7 +1112,10 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         Object.assign(process.env, reference.receipt.environment);
       }
     }
-    if (values["candidate-runtime"] || (!values["report-only"] && !values.generator)) {
+    if (
+      values["candidate-runtime"] === true ||
+      (values["report-only"] !== true && !values.generator)
+    ) {
       const credentials = loadProjectOidc();
       const { evaluateCandidateRuntime } =
         await import("../evals/support/self-reproduction-runtime");
@@ -1260,7 +1265,10 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         throw new Error("Expected reference instant-navigation evaluator evidence.");
       }
       referenceNavigationReceipts = [receipt];
-    } else if (values["reference-navigation"] || (!values["report-only"] && !values.generator)) {
+    } else if (
+      values["reference-navigation"] === true ||
+      (values["report-only"] !== true && !values.generator)
+    ) {
       if (!values["mise-executable"]) {
         throw new Error("Reference navigation requires the mise-owned eval entrypoint.");
       }
@@ -1299,7 +1307,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
   if (!["completed", "not-run"].includes(String(generation.status)) || errors.length) {
     process.exitCode = 1;
   }
-  if (values.json) {
+  if (values.json === true) {
     console.log(await readFile(join(output, "report.json"), "utf-8"));
   } else {
     console.log(`Self-reproduction report: ${join(output, "index.html")}`);

@@ -328,9 +328,10 @@ function SessionOutcome({
 }) {
   if (decisionOutcome?.status === "failed") {
     const pullRequestNumber = draftPullRequestNumber(decisionOutcome.request.title);
-    const heading = pullRequestNumber
-      ? `Draft PR ${pullRequestNumber} could not be updated`
-      : "Your response could not be submitted";
+    const heading =
+      (pullRequestNumber ?? "") === ""
+        ? "Your response could not be submitted"
+        : `Draft PR ${pullRequestNumber} could not be updated`;
     return (
       <main className="mcpApp shell outcome outcome--failure" role="alert">
         <span aria-hidden="true">!</span>
@@ -377,7 +378,7 @@ function SessionOutcome({
     }
 
     const pullRequestNumber = draftPullRequestNumber(decisionOutcome.request.title);
-    if (pullRequestNumber) {
+    if ((pullRequestNumber ?? "") !== "") {
       return (
         <main className="mcpApp shell outcome outcome--success" role="status">
           <span aria-hidden="true">✓</span>
@@ -429,7 +430,7 @@ export function IdentityInvitation({
     return (
       <section aria-label="Connect your app account">
         <p role="status">Your sign-in link has expired. Your app and setup progress are saved.</p>
-        {accessUrl ? (
+        {accessUrl === undefined || accessUrl === null || accessUrl === "" ? null : (
           <a
             href={accessUrl}
             target="_blank"
@@ -445,7 +446,7 @@ export function IdentityInvitation({
           >
             Get a new sign-in link in Builder
           </a>
-        ) : null}
+        )}
       </section>
     );
   }
@@ -718,16 +719,16 @@ export function SessionAppView({
             type="button"
             className="primary"
             disabled={!complete || !canCallTools || state === "submitting"}
-            aria-describedby={continueGuidance ? "continue-guidance" : undefined}
+            aria-describedby={(continueGuidance ?? "") === "" ? undefined : "continue-guidance"}
             onClick={submit}
           >
             {state === "submitting" ? "Submitting…" : "Continue"}
           </button>
-          {continueGuidance ? (
+          {(continueGuidance ?? "") === "" ? null : (
             <p className="continue-guidance" id="continue-guidance">
               {continueGuidance}
             </p>
-          ) : null}
+          )}
           {submissionError ? (
             <p className="error" role="alert">
               {submissionError}

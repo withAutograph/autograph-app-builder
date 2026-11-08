@@ -62,7 +62,7 @@ export function readPasskeyOnboardingConfig(
   }
 
   const secret = environment.BETTER_AUTH_SECRET?.trim();
-  if (!secret || secret.length < 32 || /[\0\r\n]/u.test(secret)) {
+  if (secret === undefined || secret === "" || secret.length < 32 || /[\0\r\n]/u.test(secret)) {
     throw new Error("Passkey onboarding requires BETTER_AUTH_SECRET.");
   }
 
@@ -84,10 +84,12 @@ export function readPasskeyOnboardingConfig(
     }
     const deploymentId = environment.VERCEL_DEPLOYMENT_ID?.trim();
     const deploymentHostname = environment.VERCEL_URL?.trim();
+    const invalidDeploymentId =
+      deploymentId === undefined || deploymentId === "" || deploymentId.length > 256;
     if (
-      !deploymentId ||
-      deploymentId.length > 256 ||
-      !deploymentHostname ||
+      invalidDeploymentId ||
+      deploymentHostname === undefined ||
+      deploymentHostname === "" ||
       !origin.startsWith("https://")
     ) {
       throw new Error("Preview passkey onboarding requires exact Vercel deployment metadata.");
@@ -204,7 +206,7 @@ export function verifyPasskeyOnboardingToken(
   config: PasskeyOnboardingConfig,
   now = new Date(),
 ) {
-  if (!token || token.length > 4096) {
+  if (token === null || token === undefined || token === "" || token.length > 4096) {
     return null;
   }
   const [encodedPayload, signature, extra] = token.split(".");
@@ -304,10 +306,10 @@ export function authenticatedPasskeyRegistration(
   userId: string | null | undefined,
   context: string | null | undefined,
 ) {
-  if (!userId) {
+  if (userId === null || userId === undefined || userId === "") {
     return null;
   }
-  if (context) {
+  if (context !== null && context !== undefined && context !== "") {
     throw onboardingAlreadyAuthenticated();
   }
   return { name: "Additional passkey", userId };
