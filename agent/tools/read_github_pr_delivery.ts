@@ -5,16 +5,20 @@ import { z } from "zod";
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import { draftReconciliationState } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { resolveGitHubPrDeliverySubject } from "@/lib/agent/github-pr-delivery-subject";
 
 export default defineTool({
   description:
     "Read the current GitHub pull request, required checks, and merge status for this session's published draft. A draft defers checks until ready for review. A passing check or a merge does not verify the hosted app.",
   async execute(_input, ctx) {
-    const state = appBuilderWorkflowState.get();
-    if (state.phase !== "reviewed" || state.githubDraftProposal === undefined) {
+    const subject = resolveGitHubPrDeliverySubject(
+      appBuilderWorkflowState.get(),
+      draftReconciliationState.get(),
+    );
+    if (subject === undefined) {
       throw new Error("This session has no reviewed draft pull request publication.");
     }
-    const installation = state.githubDestinationReview?.installation.installationId;
+    const { proposalDigest, reconciliation, installationId: installation } = subject;
     const runtime = await githubPublicationRuntimeForSession(
       ctx.session.auth,
       installation === undefined ? undefined : { selectedInstallationId: installation },
@@ -22,10 +26,6 @@ export default defineTool({
     if (runtime.inspectPublishedPullRequest === undefined) {
       throw new Error("GitHub pull request status is unavailable for this session.");
     }
-    const proposalDigest = state.githubDraftProposal.proposal.digest;
-    const candidate = draftReconciliationState.get();
-    const reconciliation =
-      candidate?.appId === state.appSpec.appId ? candidate.publishedReconciliation : undefined;
     const reconciledHead =
       reconciliation === undefined
         ? undefined
@@ -37,7 +37,8 @@ export default defineTool({
     if (
       runtime.runPublishedPullRequestEffect !== undefined &&
       observation.state === "open" &&
-      observation.reviewedRevision
+      observation.reviewedRevision &&
+      (reconciliation === undefined || reconciledHead !== undefined)
     ) {
       const target: typeof observation.reviewedTarget & { installationId?: string } = {
         ...observation.reviewedTarget,
