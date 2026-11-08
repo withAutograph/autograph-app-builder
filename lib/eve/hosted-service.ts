@@ -2376,6 +2376,7 @@ export function createHostedEveSessionService(input: {
       throw new HostedSubmissionUnknownError();
     }
     try {
+      let existingOperation: ReturnType<typeof requireOwnedOperation> | undefined;
       switch (reservation.disposition) {
         case "conflict": {
           throw new HostedIdempotencyConflictError();
@@ -2406,76 +2407,77 @@ export function createHostedEveSessionService(input: {
             resumeSessionId: options.resumeSessionId,
             sessionId: options.sessionId,
           });
-          switch (operation.state) {
-            case "succeeded": {
-              const result = eveSessionResultSchema.parse(operation.result);
-              if (operation.kind === "start") {
-                await requireBoundSucceededStartSession(operation);
-                await activateCommittedRecovery(operation);
-              }
-              return result;
-            }
-            case "submission_unknown":
-            case "reserved": {
-              if (operation.kind === "send" && operation.sendDelivery !== undefined) {
-                const settled = await reconcileSendOperation(operation);
-                if (settled !== undefined) {
-                  return settled;
-                }
-              }
-              if (
-                operation.kind === "respond" &&
-                operation.internalSessionLimitResponse !== undefined
-              ) {
-                // oxlint-disable-next-line eslint/no-use-before-define -- Canonical reconciliation calls the hoisted observer without continuing work.
-                const result = await readSession({
-                  continueWork: false,
-                  cursor: 0,
-                  limit: 100,
-                  sessionId: operation.sessionId ?? "",
-                });
-                const settled = await reconcileSessionLimitOperation(operation, result);
-                if (settled !== undefined) {
-                  return settled;
-                }
-              }
-              if (
-                operation.kind === "respond" &&
-                operation.internalSessionLimitResponse === undefined
-              ) {
-                const settled = await reconcileResourceApprovalOperation(
-                  operation,
-                  options.request,
-                );
-                if (settled !== undefined) {
-                  return settled;
-                }
-              }
-              // Canonical Eve session creation is idempotent for this principal
-              // and operationId while its first run remains resumable. Once Eve
-              // expires that ownership, an exact retry may begin a new run.
-              // Only starts may retry; send/respond remain non-replayable.
-              if (
-                options.kind !== "start" ||
-                (operation.state === "reserved" &&
-                  now() - operation.updatedAtEpochMs < HOSTED_START_REQUEST_TIMEOUT_MS)
-              ) {
-                throw new HostedSubmissionUnknownError();
-              }
-              recoveringStart = true;
-              break;
-            }
-            case "rejected": {
-              throw new HostedRejectedOperationError(operation.safeErrorCode);
-            }
-            default: {
-              return assertNever(operation);
-            }
-          }
+          existingOperation = operation;
           break;
         }
         default: {
           return assertNever(reservation);
+        }
+      }
+      if (existingOperation !== undefined) {
+        const operation = existingOperation;
+        switch (operation.state) {
+          case "succeeded": {
+            const result = eveSessionResultSchema.parse(operation.result);
+            if (operation.kind === "start") {
+              await requireBoundSucceededStartSession(operation);
+              await activateCommittedRecovery(operation);
+            }
+            return result;
+          }
+          case "submission_unknown":
+          case "reserved": {
+            if (operation.kind === "send" && operation.sendDelivery !== undefined) {
+              const settled = await reconcileSendOperation(operation);
+              if (settled !== undefined) {
+                return settled;
+              }
+            }
+            if (
+              operation.kind === "respond" &&
+              operation.internalSessionLimitResponse !== undefined
+            ) {
+              // oxlint-disable-next-line eslint/no-use-before-define -- Canonical reconciliation calls the hoisted observer without continuing work.
+              const result = await readSession({
+                continueWork: false,
+                cursor: 0,
+                limit: 100,
+                sessionId: operation.sessionId ?? "",
+              });
+              const settled = await reconcileSessionLimitOperation(operation, result);
+              if (settled !== undefined) {
+                return settled;
+              }
+            }
+            if (
+              operation.kind === "respond" &&
+              operation.internalSessionLimitResponse === undefined
+            ) {
+              const settled = await reconcileResourceApprovalOperation(operation, options.request);
+              if (settled !== undefined) {
+                return settled;
+              }
+            }
+            // Canonical Eve session creation is idempotent for this principal
+            // and operationId while its first run remains resumable. Once Eve
+            // expires that ownership, an exact retry may begin a new run.
+            // Only starts may retry; send/respond remain non-replayable.
+            if (
+              options.kind !== "start" ||
+              (operation.state === "reserved" &&
+                now() - operation.updatedAtEpochMs < HOSTED_START_REQUEST_TIMEOUT_MS)
+            ) {
+              throw new HostedSubmissionUnknownError();
+            }
+            recoveringStart = true;
+            break;
+          }
+          case "rejected": {
+            throw new HostedRejectedOperationError(operation.safeErrorCode);
+          }
+          default: {
+            return assertNever(operation);
+          }
         }
       }
     } catch (error) {

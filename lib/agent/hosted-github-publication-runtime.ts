@@ -142,7 +142,7 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
     // oxlint-disable-next-line promise/prefer-await-to-callbacks
     // Preserve the shared lazy promise while clearing it after a failed open.
     // oxlint-disable-next-line promise/prefer-await-to-then
-    databasePromise ??= Promise.resolve(input.openDatabase()).catch((error) => {
+    databasePromise ??= Promise.resolve(input.openDatabase()).catch((error: unknown) => {
       databasePromise = undefined;
       throw error;
     });

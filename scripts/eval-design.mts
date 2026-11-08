@@ -158,7 +158,7 @@ async function main() {
   const scenarios = hasNonemptyOption(scenarioPath)
     ? scenariosSchema.parse(
         JSON.parse(
-          await readFile(scenarioPath, "utf-8").catch((error) => {
+          await readFile(scenarioPath, "utf-8").catch((error: unknown) => {
             if (
               !hasNonemptyOption(values.scenario) &&
               (error as NodeJS.ErrnoException).code === "ENOENT"
@@ -292,7 +292,7 @@ async function main() {
 // oxlint-disable-next-line promise/prefer-await-to-callbacks
 // Keep the CLI's terminal error handler attached to the promise.
 // oxlint-disable-next-line promise/prefer-await-to-then
-main().catch((error) => {
+main().catch((error: unknown) => {
   // Do not print network errors that can contain secret preview query strings.
   console.error(
     `Design evaluation could not finish (${error instanceof Error ? error.name : "error"}). Check preview availability and supplied input files. No runtime state was changed.`,

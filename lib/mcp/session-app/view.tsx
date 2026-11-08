@@ -179,7 +179,9 @@ export function AuthorizationControl({
             : challenge?.instructions || request.description}
         </p>
         {challenge?.userCode ? (
-          <code aria-label="Authorization code">{challenge.userCode}</code>
+          <span role="group" aria-label="Authorization code">
+            <code>{challenge.userCode}</code>
+          </span>
         ) : null}
       </div>
       {challenge?.url ? (
