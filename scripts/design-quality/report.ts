@@ -55,7 +55,24 @@ export function renderReport(report: {
       .slice(Math.max(0, line - 2), line + 2)
       .map((text, offset) => `${Math.max(1, line - 1) + offset}: ${text}`)
       .join("\n");
-    return `<article id="finding-${index}"><strong>${escapeHtml(o.classification ?? o.dimension)} · ${escapeHtml(o.verdict)}</strong><p>${escapeHtml(o.summary)}</p>${candidateNote}<small>${escapeHtml(o.evidence)} evidence${o.source ? ` · <a href="#source-${index}">${escapeHtml(o.source.path)}:${o.source.line}</a>` : ""}${o.capture ? ` · <a href="#${escapeHtml(o.capture)}">Screenshot region</a>` : ""}</small>${o.source ? `<details id="source-${index}"><summary>Source location: ${escapeHtml(o.source.path)}:${o.source.line}</summary>${(excerpt ?? "") === "" ? "Source text not supplied; location only." : `<pre>${escapeHtml(excerpt)}</pre>`}</details>` : ""}</article>`;
+    return [
+      `<article id="finding-${index}"><strong>${escapeHtml(o.classification ?? o.dimension)} · ${escapeHtml(o.verdict)}</strong><p>${escapeHtml(o.summary)}</p>${candidateNote}<small>${escapeHtml(o.evidence)} evidence`,
+      o.source
+        ? ` · <a href="#source-${index}">${escapeHtml(o.source.path)}:${o.source.line}</a>`
+        : "",
+      o.capture ? ` · <a href="#${escapeHtml(o.capture)}">Screenshot region</a>` : "",
+      "</small>",
+      o.source
+        ? [
+            `<details id="source-${index}"><summary>Source location: ${escapeHtml(o.source.path)}:${o.source.line}</summary>`,
+            (excerpt ?? "") === ""
+              ? "Source text not supplied; location only."
+              : `<pre>${escapeHtml(excerpt)}</pre>`,
+            "</details>",
+          ].join("")
+        : "",
+      "</article>",
+    ].join("");
   };
   const groups = (
     [
