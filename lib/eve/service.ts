@@ -529,6 +529,38 @@ function consumeResponse(
         settleResponseBoundary();
         return;
       }
+      case "action.input.appended":
+      case "action.partial":
+      case "action.result":
+      case "approval.candidate":
+      case "approval.settled":
+      case "authorization.completed":
+      case "authorization.required":
+      case "compaction.completed":
+      case "compaction.requested":
+      case "context.cleared":
+      case "input.resolved":
+      case "message.appended":
+      case "message.completed":
+      case "message.received":
+      case "reasoning.appended":
+      case "reasoning.completed":
+      case "result.completed":
+      case "session.started":
+      case "step.completed":
+      case "step.failed":
+      case "subagent.called":
+      case "subagent.completed":
+      case "subagent.event":
+      case "subagent.started":
+      case "turn.completed":
+      case "turn.failed":
+      case "turn.started": {
+        if (modelTurnActive) {
+          armModelTurnTimer();
+        }
+        return;
+      }
       default: {
         if (modelTurnActive) {
           armModelTurnTimer();
@@ -705,7 +737,8 @@ export function createLocalEveSessionService(
     }
     const existing = state.recoveries.get(sessionId);
     if (existing !== undefined) {
-      return await existing;
+      await existing;
+      return;
     }
     const recovery = (async () => {
       const snapshot = await readLocalSnapshot(sessionId);
@@ -728,7 +761,7 @@ export function createLocalEveSessionService(
       // oxlint-disable-next-line promise/prefer-await-to-then
     })().finally(() => state.recoveries.delete(sessionId));
     state.recoveries.set(sessionId, recovery);
-    return await recovery;
+    await recovery;
   }
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

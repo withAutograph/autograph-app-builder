@@ -1,6 +1,13 @@
 "use client";
 
-import { startTransition, useActionState, useEffect, useRef, useState } from "react";
+import {
+  startTransition,
+  useActionState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 
 import { continueHandoffProvisioning } from "@/app/actions/builder";
@@ -52,13 +59,13 @@ export function HandoffProvisioningProgress({
     undefined,
   );
 
-  useEffect(() => {
-    if (initial.revision <= latestRevision.current) {
-      return;
-    }
-    latestRevision.current = initial.revision;
+  if (initial.revision > snapshot.revision && initial.revision > latestRevision.current) {
     setSnapshot(initial);
-  }, [initial]);
+  }
+
+  useLayoutEffect(() => {
+    latestRevision.current = Math.max(latestRevision.current, snapshot.revision);
+  }, [snapshot.revision]);
 
   useEffect(() => {
     if (snapshot.provisioning.status !== "settled" || settledRefresh.current) {

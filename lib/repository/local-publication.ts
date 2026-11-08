@@ -379,7 +379,9 @@ export const proposalFromJournal = (
   version: receipt.version,
 });
 
-export const receiptDigest = <T extends { digest?: string }>(receipt: T): string => {
+type ReceiptDigestInput = { digest?: string } | { digest?: string; [key: string]: unknown };
+
+export const receiptDigest = (receipt: ReceiptDigestInput): string => {
   const unsigned = Object.fromEntries(Object.entries(receipt).filter(([key]) => key !== "digest"));
   return stableDigest(unsigned);
 };

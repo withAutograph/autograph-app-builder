@@ -1688,6 +1688,25 @@ export const projectInstalledEveEvent = (
         { index, status: "failed", type: "status" },
       ];
     }
+    case "action.input.appended":
+    case "approval.candidate":
+    case "compaction.completed":
+    case "compaction.requested":
+    case "context.cleared":
+    case "message.appended":
+    case "message.received":
+    case "reasoning.appended":
+    case "reasoning.completed":
+    case "result.completed":
+    case "session.started":
+    case "subagent.called":
+    case "subagent.completed":
+    case "subagent.event":
+    case "subagent.started":
+    case "turn.completed":
+    case "turn.started": {
+      return [];
+    }
     default: {
       return [];
     }

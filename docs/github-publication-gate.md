@@ -363,6 +363,26 @@ original starter manifest. If the destination has independently changed one of
 those shared files, reconcile that file against the current destination before
 publishing.
 
+After an owned app's PR merges, Builder can prepare its next PR in the same
+session and private workspace. Approved repair history supplies only the prior
+proposal lookup, bound to the same app, specification, original source and
+workspace. The tenant journal must independently contain that canonical
+successful publication, and GitHub must report its reviewed revision as merged
+in the same repository and installation. A moved head needs the existing
+provider-verified published reconciliation; a private candidate cannot prove it.
+This proof authorizes review of the current app-owned changes, without reading
+the original starter manifest or republishing the app's unchanged files.
+
+A sealed-only proposal with no publication journal remains an initial
+publication and retains full-app completeness. An optional legacy publication
+marker neither proves a merge nor replaces the journal; a contradictory marker
+is never silently replaced. The new review reads current immutable destination
+preimages and invalidates the old acceptance and seal. The creator must accept
+and approve the newly sealed publication through Builder. The original source,
+private edits, workspace and app resources remain intact. A merged PR is used
+only as prior authoring provenance here; native deployment activation remains
+provider-owned.
+
 Builder reuses the saved app's recorded repository. When a new app still needs
 a destination, `prepare_github_draft_review` returns the same saved build's
 destination setup at `/builds/<session-id>/destination`. Use that setup to choose

@@ -114,7 +114,7 @@ function organizationError(cause: unknown) {
       });
     }
     default: {
-      throw new Error(`Unsupported organization provisioning reason: ${cause.reason}`);
+      throw new Error(`Unsupported organization provisioning reason: ${String(cause.reason)}`);
     }
   }
 }

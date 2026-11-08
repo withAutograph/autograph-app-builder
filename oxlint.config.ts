@@ -109,17 +109,11 @@ export default defineConfig({
         sharedLintFile21,
         nodeFreshBootstrapPath,
         "lib/repository/node-local-publication.ts",
-        "lib/repository/sandbox-draft-reconciliation.test.ts",
         "lib/repository/target-validation.ts",
         "lib/sandbox/vercel-backend.ts",
         "lib/testing/eve-eval-lifecycle.ts",
-        sharedLintFile30,
-        sharedLintFile12,
-        "scripts/design-quality/class-evidence.ts",
         "scripts/design-quality/css-source-map.ts",
-        "scripts/design-quality/reference.ts",
         sharedLintFile31,
-        sharedLintFile32,
       ],
       rules: { "sonarjs/too-many-break-or-continue-in-loop": "off" },
     },
@@ -184,7 +178,6 @@ export default defineConfig({
         "components/auth/user/user-button.tsx",
         "evals/support/product-quality.ts",
         sharedLintFile7,
-        "evals/support/self-reproduction-parity-evidence.test.ts",
         "evals/support/self-reproduction-preview-observation.ts",
         "evals/support/self-reproduction-public.ts",
         "lib/agent/component-composition-policy.ts",
@@ -329,7 +322,6 @@ export default defineConfig({
         sharedLintFile26,
         "lib/eve/local-eve-launch.test.ts",
         sharedLintFile8,
-        "lib/handoff/postgres-store.test.ts",
         "lib/hosted/session-authority.ts",
         "lib/image/lifecycle.ts",
         sharedLintFile29,
@@ -387,8 +379,6 @@ export default defineConfig({
         "evals/self-reproduction/workflow-adapter.ts",
         "evals/support/self-reproduction-supplementary.ts",
         "lib/auth/real-oauth-test-harness.ts",
-        "lib/eve/same-origin-http.test.ts",
-        "lib/integrations/postgres-vercel-installation.test.ts",
         "lib/mcp/handoff-provider-test-harness.ts",
         "lib/release/promotion.ts",
         "lib/repository/reviewed-receipt-contract.test.ts",
@@ -500,12 +490,6 @@ export default defineConfig({
     {
       // Preserve documented test and tool invocation paths.
       files: [
-        ".storybook/visual/app-builder.visual.spec.ts",
-        "playwright.design-quality.config.ts",
-        "playwright.product-quality.config.ts",
-        "playwright.production-navigation.config.ts",
-        "playwright.storybook.config.ts",
-        "vitest.shims.d.ts",
         "evals/g2-model.vitest.config.mts",
         "evals/g2-provider-brief-first-attempt.model.test.ts",
         "evals/product-quality/product-quality.visual.playwright.ts",
@@ -534,11 +518,9 @@ export default defineConfig({
         "components/auth/settings/security/fresh-session-prompt.tsx",
         "components/auth/sign-out.tsx",
         "components/create-app/provider-choice-section.tsx",
-        sharedLintFile8,
         "lib/mcp/session-app/approval-request.tsx",
         "lib/mcp/session-app/view.tsx",
         productionSetupTestPath,
-        eveEvalPreloadPath,
       ],
       rules: { "typescript/no-confusing-void-expression": "off" },
     },
@@ -546,15 +528,10 @@ export default defineConfig({
       // Preserve ordering in existing sequential operations.
       files: [
         "e2e/support/harness.ts",
-        "lib/agent/github-pr-delivery-lineage.test.ts",
         "lib/provisioning/hosted-operator-ready-replacement-native.ts",
         productionCreatorTestPath,
       ],
       rules: { "eslint/no-await-in-loop": "off" },
-    },
-    {
-      files: [builderControllerPath],
-      rules: { "react-doctor/no-pass-data-to-parent": "off" },
     },
     {
       files: [
@@ -563,10 +540,6 @@ export default defineConfig({
         handoffControlsPath,
       ],
       rules: { "react-doctor/nextjs-no-client-side-redirect": "off" },
-    },
-    {
-      files: [sharedLintFile5],
-      rules: { "react-doctor/prefer-html-dialog": "off" },
     },
     {
       files: [nodeLocalPublicationPath],
@@ -580,10 +553,6 @@ export default defineConfig({
         nodeFreshBootstrapPath,
       ],
       rules: { "react-doctor/async-parallel": "off" },
-    },
-    {
-      files: [handoffControlsPath],
-      rules: { "react-doctor/no-chain-state-updates": "off" },
     },
     {
       // Git object identity requires the existing SHA-1 format.
@@ -618,39 +587,13 @@ export default defineConfig({
       rules: { "typescript/no-unsafe-call": "off" },
     },
     {
-      files: [githubProviderPath],
-      rules: { "react-doctor/js-cache-property-access": "off" },
-    },
-    {
-      files: [handoffControlsPath],
-      rules: { "react-doctor/no-fetch-in-effect": "off" },
-    },
-    {
-      files: [handoffProgressPath],
-      rules: { "react-doctor/no-derived-state": "off" },
-    },
-    {
-      files: [handoffProgressPath],
-      rules: { "react-doctor/no-derived-state-effect": "off" },
-    },
-    {
       files: [draftAutosavePath],
       rules: { "sonarjs/pseudo-random": "off" },
     },
     {
       // Retain existing receiver and callback behavior pending review.
-      files: [
-        "lib/auth/preview-auth-ui.test.ts",
-        "lib/auth/preview-cimd-transport.ts",
-        sharedLintFile18,
-        productionCreatorTestPath,
-      ],
+      files: ["lib/auth/preview-auth-ui.test.ts", sharedLintFile18, productionCreatorTestPath],
       rules: { "typescript/unbound-method": "off" },
-    },
-    {
-      // Preserve existing runtime contracts pending focused migration.
-      files: [sharedLintFile27, sharedLintFile8],
-      rules: { "typescript/switch-exhaustiveness-check": "off" },
     },
     {
       // Preserve existing runtime contracts pending focused migration.
@@ -658,33 +601,10 @@ export default defineConfig({
       rules: { "typescript/no-unsafe-return": "off" },
     },
     {
-      // Preserve exhaustive-switch errors for unexpected runtime values.
-      files: [
-        "lib/auth/preview-user-management.ts",
-        "lib/eve/hosted-service.test.ts",
-        sharedLintFile13,
-      ],
-      rules: { "typescript/restrict-template-expressions": "off" },
-    },
-    {
-      // Preserve existing callback and abort behavior pending contract review.
-      files: ["lib/development/mcp-readiness.ts"],
-      rules: { "typescript/only-throw-error": "off" },
-    },
-    {
-      // Existing findings awaiting behavior-preserving contract changes.
-      files: [
-        "lib/auth/postgres-organization-user-authority.ts",
-        "lib/repository/local-publication.ts",
-      ],
-      rules: { "typescript/no-unnecessary-type-parameters": "off" },
-    },
-    {
       // Existing findings awaiting behavior-preserving contract changes.
       files: [
         "lib/agent/application-review-context-store.test.ts",
         "lib/agent/fresh-bootstrap-source.test.ts",
-        "lib/agent/github-destination-review-workflow.test.ts",
         "lib/agent/prior-validated-private-artifact.test.ts",
         "lib/agent/product-behavior-validation.test.ts",
         "lib/eve/native-live-quiescence.test.ts",
@@ -703,17 +623,11 @@ export default defineConfig({
         "lib/repository/canonical-acquisition-alignment.test.ts",
         "lib/repository/local-planning-source.test.ts",
         "lib/repository/local-preview-auth-origin.test.ts",
-        "lib/sandbox/managed-runtime.test.ts",
         "oxlint.config.ts",
         eveEvalPreloadPath,
         "scripts/eve-recovery-holder-observation.test.mjs",
       ],
       rules: { "unicorn/consistent-function-scoping": "off" },
-    },
-    {
-      // Preserve existing rejection handling until its value contract is narrowed.
-      files: ["scripts/release-publish.mts", sharedLintFile3],
-      rules: { "typescript/use-unknown-in-catch-callback-variable": "off" },
     },
     {
       // Preserve explicit boolean distinctions in existing boundary checks.
@@ -741,7 +655,6 @@ export default defineConfig({
         builderControllerPath,
         "components/auth/passkey/add-passkey-dialog.tsx",
         sharedLintFile24,
-        "lib/agent/fresh-published-draft-preparation.test.ts",
         "lib/agent/hosted-github-publication-runtime.test.ts",
         "lib/agent/prepare-app-creation-projection.test.ts",
         "lib/agent/review-applied-product-source.test.ts",
@@ -755,14 +668,6 @@ export default defineConfig({
       rules: { "unicorn/no-useless-undefined": "off" },
     },
     {
-      // Preserve the existing error classes at these validation boundaries.
-      files: [
-        ".config/mise/scripts/repository/build-hosted-arrusted-artifact.mts",
-        "lib/provisioning/starter-source.ts",
-      ],
-      rules: { "unicorn/prefer-type-error": "off" },
-    },
-    {
       // These files are owned by concurrent work and retain their existing findings.
       files: [
         "app/ui/app-access.tsx",
@@ -774,7 +679,6 @@ export default defineConfig({
         productionCreatorTestPath,
         "lib/provisioning/repository-production-native.ts",
         productionSetupTestPath,
-        eveEvalPreloadPath,
       ],
       rules: { "eslint/curly": "off" },
     },
@@ -860,7 +764,6 @@ export default defineConfig({
         "anti-slop/no-module-mocking": "off",
         "sonarjs/code-eval": "off",
         "sonarjs/no-hardcoded-ip": "off",
-        "typescript/no-implied-eval": "off",
       },
     },
   ],

@@ -167,8 +167,13 @@ async function removePublicationTree(root: string) {
       await chmod(path, 0o600);
     }
   }
-  await makeWritable(root).catch((error: NodeJS.ErrnoException) => {
-    if (error.code !== "ENOENT") {
+  await makeWritable(root).catch((error: unknown) => {
+    if (
+      typeof error !== "object" ||
+      error === null ||
+      !("code" in error) ||
+      error.code !== "ENOENT"
+    ) {
       throw error;
     }
   });

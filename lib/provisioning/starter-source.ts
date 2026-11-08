@@ -254,9 +254,6 @@ async function tarFiles(tar: AsyncIterable<Uint8Array>) {
     if (invalidPathOrSize || ![0, 48].includes(type) || files.has(path)) {
       throw new Error(STARTER_ARCHIVE_INVALID);
     }
-    if (!Number.isSafeInteger(size)) {
-      throw new Error(STARTER_ARCHIVE_INVALID);
-    }
     const bytes = await readExact(size);
     if (!bytes) {
       throw new Error(STARTER_ARCHIVE_INVALID);

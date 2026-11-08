@@ -146,13 +146,14 @@ test("public profiles contain only exact Gateway public keys and capabilities ha
   ).toBe(false);
 });
 
+const processFixtureSource = (revision: string) =>
+  `import {writeFileSync} from 'node:fs';writeFileSync(process.env.OBSERVATION_FILE,JSON.stringify({pid:process.pid,value:process.env.APP_FIXTURE_VALUE,revision:${JSON.stringify(revision)},ambient:process.env.MANAGED_HOST_ONLY_SENTINEL}));process.on('SIGTERM',()=>process.exit(0));setInterval(()=>{},1000);`;
+
 const processFixture = async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "managed-owned-process-"));
   const script = path.join(directory, "app.mjs");
   const observation = path.join(directory, "app-observation.json");
-  const source = (revision: string) =>
-    `import {writeFileSync} from 'node:fs';writeFileSync(process.env.OBSERVATION_FILE,JSON.stringify({pid:process.pid,value:process.env.APP_FIXTURE_VALUE,revision:${JSON.stringify(revision)},ambient:process.env.MANAGED_HOST_ONLY_SENTINEL}));process.on('SIGTERM',()=>process.exit(0));setInterval(()=>{},1000);`;
-  await writeFile(script, source("one"));
+  await writeFile(script, processFixtureSource("one"));
   const environment = {
     APP_FIXTURE_VALUE: "same-approved-environment",
     OBSERVATION_FILE: observation,
@@ -200,7 +201,7 @@ const processFixture = async () => {
     observation,
     owner,
     script,
-    source,
+    source: processFixtureSource,
     supervisor,
   };
 };

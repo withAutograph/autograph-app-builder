@@ -42,6 +42,22 @@ const binding = createGitHubDestinationReviewBinding({
   validationDigest: "validation",
 });
 
+const originalDestinationFiles = () =>
+  Promise.resolve(
+    (
+      [
+        ["microfrontends.json", "old-routes"],
+        ["bun.lock", "old-lock"],
+        ["package.json", "same-root"],
+      ] as const
+    ).map(([path, sha256]) => ({
+      path,
+      sha256,
+      mode: "100644" as const,
+      objectId: "blob",
+    })),
+  );
+
 describe("initial draft destination review workflow", () => {
   it("includes the complete new app and retained registration after a narrow repair", async () => {
     const files = (
@@ -69,22 +85,7 @@ describe("initial draft destination review workflow", () => {
       },
       sandbox: {},
     } as never;
-    const original = () =>
-      Promise.resolve(
-        (
-          [
-            ["microfrontends.json", "old-routes"],
-            ["bun.lock", "old-lock"],
-            ["package.json", "same-root"],
-          ] as const
-        ).map(([path, sha256]) => ({
-          path,
-          sha256,
-          mode: "100644" as const,
-          objectId: "blob",
-        })),
-      );
-    const result = await initialDraftCandidatePaths(input, original);
+    const result = await initialDraftCandidatePaths(input, originalDestinationFiles);
     expect(result.candidatePaths.toSorted()).toEqual([
       "apps/example/app/actions.ts",
       "apps/example/app/page.tsx",

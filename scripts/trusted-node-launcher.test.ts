@@ -547,12 +547,9 @@ describe("trusted Node launcher", () => {
         expect(source).toContain(
           'exec "$(mise which node)" --import tsx scripts/eval-design.mts "$@"',
         );
-        continue;
+      } else if (/(?<path>mise which (?:node|pnpm)|node_modules\/)/u.test(source)) {
+        expect(source, path).toContain("trusted-node-launcher");
       }
-      if (!/(?<path>mise which (?:node|pnpm)|node_modules\/)/u.test(source)) {
-        continue;
-      }
-      expect(source, path).toContain("trusted-node-launcher");
     }
   });
 

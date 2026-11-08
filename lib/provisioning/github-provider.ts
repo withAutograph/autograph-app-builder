@@ -309,10 +309,11 @@ export async function provisionGitHubRepository(input: {
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function refreshUserToken() {
     for (let attempt = 0; attempt < 3; attempt += 1) {
+      const providerUserId = input.installation.accountId;
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const credential = await input.credentialStore.read({
         authority: input.authority,
-        providerUserId: input.installation.accountId,
+        providerUserId,
       });
       if (credential === undefined || credential === null || !credential.active) {
         throw new Error(CREDENTIAL_UNAVAILABLE);
@@ -345,7 +346,7 @@ export async function provisionGitHubRepository(input: {
           await input.credentialStore.deactivate({
             authority: input.authority,
             now: new Date(now()),
-            providerUserId: input.installation.accountId,
+            providerUserId,
           });
           throw new Error(CREDENTIAL_UNAVAILABLE, { cause: error });
         }
@@ -364,7 +365,7 @@ export async function provisionGitHubRepository(input: {
         authority: input.authority,
         expectedRevision: credential.revision,
         now: new Date(refreshedAt),
-        providerUserId: input.installation.accountId,
+        providerUserId,
         tokens: {
           accessToken,
           accessTokenExpiresAt,

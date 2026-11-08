@@ -170,7 +170,7 @@ let candidateRuntime: CandidateRuntimeReceipt | { status: "not-run" | "failed"; 
   reason: "Candidate runtime evaluation was not requested.",
   status: "not-run",
 };
-let candidate: Record<string, unknown> & { status: string } = {
+let candidate: Record<string, unknown> & { status: string; reason?: string } = {
   reason: "No candidate export has been supplied.",
   status: "unavailable",
 };
@@ -864,7 +864,7 @@ const saveReport = async () => {
       reason:
         candidateOutput === "available"
           ? "Candidate source is available; behavioral parity observations have not run."
-          : String(candidate.reason ?? "Candidate output is unavailable."),
+          : (candidate.reason ?? "Candidate output is unavailable."),
       sourceRevision: String(
         (candidate.revision as { commit?: unknown } | undefined)?.commit ?? "generated-export",
       ),

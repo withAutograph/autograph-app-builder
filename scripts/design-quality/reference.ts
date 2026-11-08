@@ -254,14 +254,14 @@ export const readReference = async (arrustedRoot: string): Promise<Reference> =>
   const entryPoints = aliasEntryPoints(arrustedRoot, limitations);
   const manifests = await walk(arrustedRoot);
   for (const manifest of manifests) {
-    let pkg: PackageJson;
+    let pkg: PackageJson | undefined;
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       pkg = JSON.parse(await readFile(nodePath.join(arrustedRoot, manifest), "utf-8"));
     } catch {
-      continue;
+      pkg = undefined;
     }
-    if (!pkg.name || !relevantModule.test(pkg.name)) {
+    if (pkg === undefined || !pkg.name || !relevantModule.test(pkg.name)) {
       continue;
     }
     const packageRoot = nodePath.dirname(nodePath.join(arrustedRoot, manifest));
@@ -271,35 +271,34 @@ export const readReference = async (arrustedRoot: string): Promise<Reference> =>
         path: sourcePath(packageRoot, target),
       }))
       .filter((entry): entry is EntryPoint => Boolean(entry.path));
-    if (!entries.length) {
+    if (entries.length) {
+      const program = ts.createProgram(
+        entries.map((entry) => entry.path),
+        {
+          allowJs: true,
+          jsx: ts.JsxEmit.Preserve,
+          module: ts.ModuleKind.NodeNext,
+          moduleResolution: ts.ModuleResolutionKind.NodeNext,
+          skipLibCheck: true,
+        },
+      );
+      const checker = program.getTypeChecker();
+      for (const entry of entries) {
+        const source = program.getSourceFile(entry.path);
+        if (!source) {
+          continue;
+        }
+        const moduleSymbol = checker.getSymbolAtLocation(source);
+        if (moduleSymbol) {
+          const exported: Record<string, PublicExport> = {};
+          for (const symbol of checker.getExportsOfModule(moduleSymbol)) {
+            exported[symbol.getName()] = propsForExport(symbol, source, checker);
+          }
+          modules[entry.module] = { exports: exported };
+        }
+      }
+    } else {
       limitations.push(`Could not resolve a TypeScript public entry point for ${pkg.name}.`);
-      continue;
-    }
-    const program = ts.createProgram(
-      entries.map((entry) => entry.path),
-      {
-        allowJs: true,
-        jsx: ts.JsxEmit.Preserve,
-        module: ts.ModuleKind.NodeNext,
-        moduleResolution: ts.ModuleResolutionKind.NodeNext,
-        skipLibCheck: true,
-      },
-    );
-    const checker = program.getTypeChecker();
-    for (const entry of entries) {
-      const source = program.getSourceFile(entry.path);
-      if (!source) {
-        continue;
-      }
-      const moduleSymbol = checker.getSymbolAtLocation(source);
-      if (!moduleSymbol) {
-        continue;
-      }
-      const exported: Record<string, PublicExport> = {};
-      for (const symbol of checker.getExportsOfModule(moduleSymbol)) {
-        exported[symbol.getName()] = propsForExport(symbol, source, checker);
-      }
-      modules[entry.module] = { exports: exported };
     }
   }
   for (const entry of entryPoints) {
@@ -316,14 +315,14 @@ export const readReference = async (arrustedRoot: string): Promise<Reference> =>
       limitations.push(
         `Could not load TypeScript exports for ${entry.module}; its public types are unassessed.`,
       );
-      continue;
+    } else {
+      const checker = program.getTypeChecker();
+      const exported: Record<string, PublicExport> = {};
+      for (const symbol of checker.getExportsOfModule(moduleSymbol)) {
+        exported[symbol.getName()] = propsForExport(symbol, source, checker);
+      }
+      modules[entry.module] = { exports: exported };
     }
-    const checker = program.getTypeChecker();
-    const exported: Record<string, PublicExport> = {};
-    for (const symbol of checker.getExportsOfModule(moduleSymbol)) {
-      exported[symbol.getName()] = propsForExport(symbol, source, checker);
-    }
-    modules[entry.module] = { exports: exported };
   }
   if (!Object.keys(modules).length) {
     limitations.push(

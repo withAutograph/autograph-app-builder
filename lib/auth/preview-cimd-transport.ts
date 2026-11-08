@@ -132,7 +132,11 @@ export function createPreviewCimdTransport(
     }
 
     const callerSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
-    const timeoutSignal = (dependencies.timeoutSignal ?? AbortSignal.timeout)(REQUEST_TIMEOUT_MS);
+    const { timeoutSignal: makeTimeoutSignal } = dependencies;
+    const timeoutSignal =
+      makeTimeoutSignal === null || makeTimeoutSignal === undefined
+        ? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+        : makeTimeoutSignal(REQUEST_TIMEOUT_MS);
     const signal = callerSignal ? AbortSignal.any([callerSignal, timeoutSignal]) : timeoutSignal;
     const addresses = await awaitWithAbort(
       dependencies.resolveHostname(url.hostname, {
