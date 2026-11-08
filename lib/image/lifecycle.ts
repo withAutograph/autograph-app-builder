@@ -500,9 +500,11 @@ export const parseRemoteIndexDescriptor = (
   if (!isExactDigest(descriptor.digest)) {
     throw new Error("Remote registry inspection did not return an exact manifest digest.");
   }
-  if (
+  const invalidDescriptor =
     !hasExactKeys(descriptor, ["digest", "manifests", "mediaType", "schemaVersion", "size"]) ||
-    descriptor.schemaVersion !== 2 ||
+    descriptor.schemaVersion !== 2;
+  if (
+    invalidDescriptor ||
     descriptor.mediaType !== ociIndexMediaType ||
     !isPositiveSize(descriptor.size) ||
     !Array.isArray(descriptor.manifests)
@@ -622,10 +624,12 @@ export const parseRemoteImageInspection = (
   attestationPolicy: "descriptor-bound-not-trusted";
   revision: string;
 }> => {
-  if (
+  const identityMismatch =
     !isExactDigest(local.imageId) ||
     selection.platformManifestDigest !== local.imageId ||
-    selection.platformReference !== exactDigestReference(`${IMAGE_REPOSITORY}@${local.imageId}`) ||
+    selection.platformReference !== exactDigestReference(`${IMAGE_REPOSITORY}@${local.imageId}`);
+  if (
+    identityMismatch ||
     !Array.isArray(local.rootFsLayers) ||
     local.rootFsLayers.length === 0 ||
     local.rootFsLayers.some((digest) => !isExactDigest(digest))

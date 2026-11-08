@@ -711,7 +711,11 @@ export const observeImageProvenance = function observeImageProvenance(
   if (injected !== undefined) {
     if (
       approval.arrustedRoot !== injected.arrusted.root ||
-      approval.stateRoot !== injected.builder.stateRoot ||
+      approval.stateRoot !== injected.builder.stateRoot
+    ) {
+      throw new Error("Injected image provenance does not match the lifecycle approval.");
+    }
+    if (
       approval.builderCommit !== injected.builder.commit ||
       approval.builderTree !== injected.builder.tree ||
       approval.dockerfileSha256 !== injected.dockerfile.sha256
@@ -1064,29 +1068,43 @@ const requireCurrentGhcrLogin = function requireCurrentGhcrLogin(
     "status",
     "username",
   ];
+  const invalidReceiptMessage =
+    "GHCR login receipt does not match the current credential boundary.";
+  if (typeof result !== "object" || result === null || !hasExactKeys(result, expectedResultKeys)) {
+    throw new Error(invalidReceiptMessage);
+  }
   if (
-    typeof result !== "object" ||
-    result === null ||
-    !hasExactKeys(result, expectedResultKeys) ||
     (result as { status?: unknown }).status !== "credential-matched" ||
     (result as { registry?: unknown }).registry !== "ghcr.io" ||
-    (result as { schema?: unknown }).schema !== "ghcr-login-v3" ||
+    (result as { schema?: unknown }).schema !== "ghcr-login-v3"
+  ) {
+    throw new Error(invalidReceiptMessage);
+  }
+  if (
     (result as { authenticationProvider?: unknown }).authenticationProvider !==
       `gh@${githubCliVersion}-keyring` ||
     (result as { operatorApprovalTransport?: unknown }).operatorApprovalTransport !==
       "one-time-stdin" ||
     (result as { keyringReadbackTransport?: unknown }).keyringReadbackTransport !==
       "github-cli-keyring" ||
-    (result as { providerMutation?: unknown }).providerMutation !== "none" ||
+    (result as { providerMutation?: unknown }).providerMutation !== "none"
+  ) {
+    throw new Error(invalidReceiptMessage);
+  }
+  if (
     (result as { provenanceDigest?: unknown }).provenanceDigest !== provenance.digest ||
     (result as { authenticationBoundaryDigest?: unknown }).authenticationBoundaryDigest !==
       hashArtifact(JSON.stringify(binding)) ||
     JSON.stringify((result as { authenticationBoundary?: unknown }).authenticationBoundary) !==
-      JSON.stringify(binding) ||
+      JSON.stringify(binding)
+  ) {
+    throw new Error(invalidReceiptMessage);
+  }
+  if (
     typeof (result as { username?: unknown }).username !== "string" ||
     !/^[a-f0-9]{64}$/u.test(String((result as { identityDigest?: unknown }).identityDigest))
   ) {
-    throw new Error("GHCR login receipt does not match the current credential boundary.");
+    throw new Error(invalidReceiptMessage);
   }
   const { username } = result as { username: string };
   assertGhcrUsername(username);
@@ -1245,10 +1263,10 @@ const execute = function execute(
           }
           const launcher = join(cwd, ".config/mise/scripts/trusted-node-launcher");
           const stat = lstatSync(launcher);
+          if (realpathSync(launcher) !== launcher || !stat.isFile() || stat.isSymbolicLink()) {
+            throw new Error("The image lifecycle trusted Node launcher is invalid.");
+          }
           if (
-            realpathSync(launcher) !== launcher ||
-            !stat.isFile() ||
-            stat.isSymbolicLink() ||
             stat.uid !== (process.getuid?.() ?? -1) ||
             stat.nlink !== 1 ||
             // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.

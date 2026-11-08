@@ -429,23 +429,27 @@ const previewOAuthRuntimeConfigSchema = z
         path: ["hostedAdapter"],
       });
     }
-    if (
-      config.passkeyOnboarding === null &&
-      (config.githubClientId === undefined ||
+    if (config.passkeyOnboarding === null) {
+      let missingCredentials =
+        config.githubClientId === undefined ||
         config.githubClientId === "" ||
         config.githubClientSecret === undefined ||
-        config.githubClientSecret === "" ||
-        config.vercelClientId === undefined ||
-        config.vercelClientId === "" ||
-        config.vercelClientSecret === undefined ||
-        config.vercelClientSecret === "")
-    ) {
-      context.addIssue({
-        code: "custom",
-        message:
-          "Hosted auth without passkey onboarding requires all GitHub and Vercel credentials.",
-        path: ["passkeyOnboarding"],
-      });
+        config.githubClientSecret === "";
+      if (!missingCredentials) {
+        missingCredentials =
+          config.vercelClientId === undefined ||
+          config.vercelClientId === "" ||
+          config.vercelClientSecret === undefined ||
+          config.vercelClientSecret === "";
+      }
+      if (missingCredentials) {
+        context.addIssue({
+          code: "custom",
+          message:
+            "Hosted auth without passkey onboarding requires all GitHub and Vercel credentials.",
+          path: ["passkeyOnboarding"],
+        });
+      }
     }
   });
 
@@ -600,18 +604,22 @@ export function createPreviewOAuthServer(input: {
   const resourceOrigin = new URL(config.resource).origin;
   const localEmulation = readProviderEmulation(process.env);
   const { githubClientId, githubClientSecret, vercelClientId, vercelClientSecret } = config;
-  if (
-    localEmulation &&
-    (githubClientId === undefined ||
+  if (localEmulation) {
+    let missingCredentials =
+      githubClientId === undefined ||
       githubClientId === "" ||
       githubClientSecret === undefined ||
-      githubClientSecret === "" ||
-      vercelClientId === undefined ||
-      vercelClientId === "" ||
-      vercelClientSecret === undefined ||
-      vercelClientSecret === "")
-  ) {
-    throw new Error("Local provider emulation requires GitHub and Vercel OAuth credentials.");
+      githubClientSecret === "";
+    if (!missingCredentials) {
+      missingCredentials =
+        vercelClientId === undefined ||
+        vercelClientId === "" ||
+        vercelClientSecret === undefined ||
+        vercelClientSecret === "";
+    }
+    if (missingCredentials) {
+      throw new Error("Local provider emulation requires GitHub and Vercel OAuth credentials.");
+    }
   }
   const localGithubClientId = githubClientId ?? "";
   const localGithubClientSecret = githubClientSecret ?? "";

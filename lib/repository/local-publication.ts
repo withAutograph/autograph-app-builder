@@ -189,9 +189,11 @@ const canonicalChanges = (review: ReviewedChangeSetReceipt): readonly OverlayCha
         throw new Error("The reviewed change set contains an unsupported file mode or digest.");
       }
     }
-    if (
+    const malformedAdditionOrModification =
       (change.kind === "added" && (change.before !== undefined || change.after === undefined)) ||
-      (change.kind === "modified" && (change.before === undefined || change.after === undefined)) ||
+      (change.kind === "modified" && (change.before === undefined || change.after === undefined));
+    if (
+      malformedAdditionOrModification ||
       (change.kind === "deleted" && (change.before === undefined || change.after !== undefined))
     ) {
       throw new Error("The reviewed change set contains a malformed change.");
@@ -274,11 +276,13 @@ export const createLocalPublicationProposal = (input: {
     sourceSha: source.sourceSha,
     sourceTree: source.sourceTree,
   });
-  if (
+  const destinationMismatch =
     destination.canonicalPath !== source.sourcePath ||
     destination.headSha !== source.sourceSha ||
     destination.headTree !== source.sourceTree ||
-    destination.contractDigest !== source.contractDigest ||
+    destination.contractDigest !== source.contractDigest;
+  if (
+    destinationMismatch ||
     review.sourceSha !== source.sourceSha ||
     review.sourceTree !== source.sourceTree ||
     review.repositoryContractDigest !== source.contractDigest
@@ -432,11 +436,13 @@ export const assertCanonicalLocalPublicationJournal = (journal: LocalPublication
   }
 
   if (journal.status === "succeeded") {
-    if (
+    const inconsistentSuccessPaths =
       !samePaths(journal.intentPaths, journal.executionPaths) ||
       !samePaths(journal.appliedPaths, journal.executionPaths) ||
       journal.rolledBackPaths.length !== 0 ||
-      journal.conflictedPaths.length !== 0 ||
+      journal.conflictedPaths.length !== 0;
+    if (
+      inconsistentSuccessPaths ||
       journal.uncertainPaths.length !== 0 ||
       journal.recoveryRequired ||
       journal.postconditionDigest !==
@@ -475,10 +481,12 @@ export const assertCanonicalLocalPublicationJournal = (journal: LocalPublication
       [...journal.appliedPaths].toSorted(compareOverlayPaths),
     );
   if (journal.reason === "precondition-failed") {
-    if (
+    const hasAttemptedPaths =
       journal.intentPaths.length !== 0 ||
       journal.appliedPaths.length !== 0 ||
-      journal.rolledBackPaths.length !== 0 ||
+      journal.rolledBackPaths.length !== 0;
+    if (
+      hasAttemptedPaths ||
       journal.conflictedPaths.length !== 0 ||
       journal.uncertainPaths.length !== 0 ||
       journal.recoveryRequired
@@ -517,11 +525,13 @@ export const assertExactDurablePublicationSuccess: (
     throw new Error("The published local workflow does not have its durable success journal.");
   }
   assertCanonicalLocalPublicationJournal(durable);
-  if (
+  const receiptAuthorityMismatch =
     durable.digest !== workflowReceipt.digest ||
     durable.proposalDigest !== workflowReceipt.proposalDigest ||
     durable.publishedByCallId !== workflowReceipt.publishedByCallId ||
-    durable.sourceReceiptDigest !== workflowReceipt.sourceReceiptDigest ||
+    durable.sourceReceiptDigest !== workflowReceipt.sourceReceiptDigest;
+  if (
+    receiptAuthorityMismatch ||
     durable.reviewDigest !== workflowReceipt.reviewDigest ||
     durable.destinationPath !== workflowReceipt.destinationPath ||
     durable.postconditionDigest !== workflowReceipt.postconditionDigest ||

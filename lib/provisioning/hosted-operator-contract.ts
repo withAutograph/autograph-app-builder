@@ -714,6 +714,32 @@ const validateAuthSignupPolicy = (
     });
   }
 };
+const runtimePreparationConflictsWithDeployment = (
+  plan: z.infer<typeof hostedOperatorPlanDataSchema>,
+): boolean => {
+  if (
+    plan.deploymentBoundary?.composition !== SINGLE_PROJECT_SERVICES ||
+    plan.action !== "prepare" ||
+    plan.releaseIntent !== undefined
+  ) {
+    return true;
+  }
+  if (
+    plan.delivery !== undefined ||
+    plan.gatewayDelivery !== undefined ||
+    plan.gatewayBindings !== undefined
+  ) {
+    return true;
+  }
+  return (
+    plan.appTrustedSources !== undefined ||
+    plan.effects.some((effect) =>
+      ["bindings", "delivery", GATEWAY_BINDINGS_EFFECT, GATEWAY_DELIVERY_EFFECT].includes(
+        effect.kind,
+      ),
+    )
+  );
+};
 const validateResourcePreparation = (
   plan: z.infer<typeof hostedOperatorPlanDataSchema>,
   ctx: z.RefinementCtx,
@@ -758,21 +784,7 @@ const validateResourcePreparation = (
     }
   }
 
-  if (
-    plan.runtimePreparation !== undefined &&
-    (plan.deploymentBoundary?.composition !== SINGLE_PROJECT_SERVICES ||
-      plan.action !== "prepare" ||
-      plan.releaseIntent !== undefined ||
-      plan.delivery !== undefined ||
-      plan.gatewayDelivery !== undefined ||
-      plan.gatewayBindings !== undefined ||
-      plan.appTrustedSources !== undefined ||
-      plan.effects.some((effect) =>
-        ["bindings", "delivery", GATEWAY_BINDINGS_EFFECT, GATEWAY_DELIVERY_EFFECT].includes(
-          effect.kind,
-        ),
-      ))
-  ) {
+  if (plan.runtimePreparation !== undefined && runtimePreparationConflictsWithDeployment(plan)) {
     ctx.addIssue({
       code: "custom",
       path: ["runtimePreparation"],
@@ -1069,21 +1081,7 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
   // Each phase has an observed receipt, including a no-op verification for already-existing resources.
   // Authority is opened only after install/grant verification, and closed before retirement.
   validateResourcePreparation(plan, ctx);
-  if (
-    plan.runtimePreparation !== undefined &&
-    (plan.deploymentBoundary?.composition !== SINGLE_PROJECT_SERVICES ||
-      plan.action !== "prepare" ||
-      plan.releaseIntent !== undefined ||
-      plan.delivery !== undefined ||
-      plan.gatewayDelivery !== undefined ||
-      plan.gatewayBindings !== undefined ||
-      plan.appTrustedSources !== undefined ||
-      plan.effects.some((effect) =>
-        ["bindings", "delivery", GATEWAY_BINDINGS_EFFECT, GATEWAY_DELIVERY_EFFECT].includes(
-          effect.kind,
-        ),
-      ))
-  ) {
+  if (plan.runtimePreparation !== undefined && runtimePreparationConflictsWithDeployment(plan)) {
     ctx.addIssue({
       code: "custom",
       path: ["runtimePreparation"],
@@ -1114,10 +1112,10 @@ export const nativeDeliveryGitRef = (
   if (plan.gatewayDelivery?.gitRef !== undefined) {
     return plan.gatewayDelivery.gitRef;
   }
-  return plan.stage === "app" &&
-    delivery.gitSha !== undefined &&
-    plan.delivery?.repoId === delivery.repoId &&
-    plan.delivery.gitSha === delivery.gitSha
+  if (plan.stage !== "app" || delivery.gitSha === undefined) {
+    return delivery.branch;
+  }
+  return plan.delivery?.repoId === delivery.repoId && plan.delivery.gitSha === delivery.gitSha
     ? plan.delivery.branch
     : delivery.branch;
 };

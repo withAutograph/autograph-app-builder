@@ -380,18 +380,26 @@ const supportsReleaseGate = function supportsReleaseGate(workflowSource: string)
   const safety = configurationRecord(steps[0]);
   const expectedScopeCondition =
     "needs.template-safety.outputs.enabled == 'true' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == github.event.repository.default_branch && github.event.workflow_run.head_repository.full_name == github.repository";
-  return (
-    templateSafety.name === "Authorize (Template instance safety)" &&
-    JSON.stringify(templateSafety.permissions) === JSON.stringify({}) &&
-    JSON.stringify(templateSafety.outputs) ===
-      JSON.stringify({ enabled: `\${{ steps.safety.outputs.enabled }}` }) &&
-    steps.length === 1 &&
-    safety.id === "safety" &&
-    safety.name === "Read active repository safety flag" &&
-    JSON.stringify(safety.env) ===
+  if (
+    templateSafety.name !== "Authorize (Template instance safety)" ||
+    JSON.stringify(templateSafety.permissions) !== JSON.stringify({}) ||
+    JSON.stringify(templateSafety.outputs) !==
+      JSON.stringify({ enabled: `\${{ steps.safety.outputs.enabled }}` }) ||
+    steps.length !== 1
+  ) {
+    return false;
+  }
+  if (
+    safety.id !== "safety" ||
+    safety.name !== "Read active repository safety flag" ||
+    JSON.stringify(safety.env) !==
       JSON.stringify({
         REPOSITORY_RELEASE_ENABLED: `\${{ vars.REPOSITORY_RELEASE_ENABLED }}`,
-      }) &&
+      })
+  ) {
+    return false;
+  }
+  return (
     safety.run === checkoutFreeReleaseGate &&
     scope.needs === "template-safety" &&
     scope.if === expectedScopeCondition
@@ -929,15 +937,28 @@ export const parsePreparedWorkspace = function parsePreparedWorkspace(
     typeof record.workspaceId !== "string" ||
     record.workspaceId === "" ||
     record.workspacePath !== sandboxRepositoryPath ||
-    typeof record.sourcePath !== "string" ||
+    typeof record.sourcePath !== "string"
+  ) {
+    throw new Error(invalidWorkspaceRecordMessage);
+  }
+  if (
     !nodePath.isAbsolute(record.sourcePath) ||
     typeof record.sourceSha !== "string" ||
-    !/^[0-9a-f]{40}$/u.test(record.sourceSha) ||
-    typeof record.sourceTree !== "string" ||
-    !/^[0-9a-f]{40}$/u.test(record.sourceTree) ||
+    !/^[0-9a-f]{40}$/u.test(record.sourceSha)
+  ) {
+    throw new Error(invalidWorkspaceRecordMessage);
+  }
+  if (typeof record.sourceTree !== "string" || !/^[0-9a-f]{40}$/u.test(record.sourceTree)) {
+    throw new Error(invalidWorkspaceRecordMessage);
+  }
+  if (
     typeof record.workspaceDigest !== "string" ||
     !/^[0-9a-f]{64}$/u.test(record.workspaceDigest) ||
-    record.adapter !== SUPPORTED_TEMPLATE_ADAPTER ||
+    record.adapter !== SUPPORTED_TEMPLATE_ADAPTER
+  ) {
+    throw new Error(invalidWorkspaceRecordMessage);
+  }
+  if (
     typeof record.eligibilityDigest !== "string" ||
     !/^[0-9a-f]{64}$/u.test(record.eligibilityDigest)
   ) {
@@ -967,7 +988,11 @@ const parsePreparedSourceFiles = function parsePreparedSourceFiles(
       !["100644", "100755"].includes(file.mode ?? "") ||
       typeof file.objectId !== "string" ||
       !/^[0-9a-f]{40}$/u.test(file.objectId) ||
-      typeof file.path !== "string" ||
+      typeof file.path !== "string"
+    ) {
+      throw new Error(invalidWorkspaceManifestMessage);
+    }
+    if (
       !safeSourcePath(file.path) ||
       paths.has(file.path) ||
       typeof file.sha256 !== "string" ||
@@ -1146,11 +1171,15 @@ export const samePreparedWorkspaceSourceContext = function samePreparedWorkspace
   observed: PreparedSandboxWorkspace,
   expected: PreparedSandboxWorkspace,
 ): boolean {
+  if (
+    observed.workspaceId !== expected.workspaceId ||
+    observed.workspacePath !== expected.workspacePath ||
+    observed.sourcePath !== expected.sourcePath ||
+    observed.sourceSha !== expected.sourceSha
+  ) {
+    return false;
+  }
   return (
-    observed.workspaceId === expected.workspaceId &&
-    observed.workspacePath === expected.workspacePath &&
-    observed.sourcePath === expected.sourcePath &&
-    observed.sourceSha === expected.sourceSha &&
     observed.sourceTree === expected.sourceTree &&
     observed.workspaceDigest === expected.workspaceDigest &&
     observed.adapter === expected.adapter
@@ -1383,13 +1412,10 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
         throw new Error("The reviewed Git tree contains an invalid entry.");
       }
       const { mode, type, objectId, path } = match.groups ?? {};
-      if (
-        type !== "blob" ||
-        !["100644", "100755"].includes(mode ?? "") ||
-        path === undefined ||
-        objectId === undefined ||
-        !safeSourcePath(path)
-      ) {
+      if (type !== "blob" || !["100644", "100755"].includes(mode ?? "") || path === undefined) {
+        throw new Error("The reviewed Git tree contains an unsupported entry.");
+      }
+      if (objectId === undefined || !safeSourcePath(path)) {
         throw new Error("The reviewed Git tree contains an unsupported entry.");
       }
       treeEntries.push({ mode: mode as "100644" | "100755", objectId, path });
