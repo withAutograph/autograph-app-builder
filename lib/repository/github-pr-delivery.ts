@@ -223,7 +223,7 @@ const readReadyCycle = async (request: Request, pull: z.infer<typeof pullSchema>
     return null;
   }
   const baseChangedAt = cycle.baseChanges.nodes[0]?.createdAt ?? readyAt;
-  return { readyAt, earliestRunAt: Math.max(Date.parse(readyAt), Date.parse(baseChangedAt)) };
+  return { earliestRunAt: Math.max(Date.parse(readyAt), Date.parse(baseChangedAt)), readyAt };
 };
 
 const checkJobs = async (request: Request, prefix: string, runId: number) => {

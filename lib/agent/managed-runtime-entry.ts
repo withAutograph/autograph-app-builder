@@ -60,7 +60,7 @@ const atomicMetadata = async (
   value: ManagedRuntimeCurrent | z.infer<typeof managedRuntimeReadySchema>,
 ) => {
   const temporary = `${file}.${randomUUID()}.tmp`;
-  await writeFile(temporary, JSON.stringify(value), { mode: 0o600, flag: "wx" });
+  await writeFile(temporary, JSON.stringify(value), { flag: "wx", mode: 0o600 });
   await rename(temporary, file);
 };
 /** Input contains no selector/lifecycle/transport bearers. Runtime credentials are unlinked before app spawn. */
@@ -101,7 +101,7 @@ export const runManagedRuntimeEntry = async <Configuration>(
     ? AbortSignal.any([parentSignal, ownership.signal])
     : ownership.signal;
   const currentPath = path.join(parsed.rootDirectory, "current.json");
-  await mkdir(parsed.rootDirectory, { recursive: true, mode: 0o700 });
+  await mkdir(parsed.rootDirectory, { mode: 0o700, recursive: true });
   await atomicMetadata(currentPath, {
     ...initial,
     leaseExpiresAt: managedRuntimeOwnerLease(initial.leaseExpiresAt),
@@ -148,11 +148,11 @@ export const runManagedRuntimeEntry = async <Configuration>(
   // Arrusted's app:runtime reads its binding from this private state directory
   // before launching an app. Preserve the same resource across process replacement.
   const appStateDirectory = path.join(parsed.rootDirectory, "app-state");
-  await mkdir(appStateDirectory, { recursive: true, mode: 0o700 });
+  await mkdir(appStateDirectory, { mode: 0o700, recursive: true });
   await writeFile(
     path.join(appStateDirectory, "environment.json"),
     JSON.stringify(appEnvironment),
-    { mode: 0o600, flag: "wx" },
+    { flag: "wx", mode: 0o600 },
   );
   const launchSameEnvironment = createManagedOwnedChildLauncher({
     executable: "mise",
@@ -188,8 +188,8 @@ export const runManagedRuntimeEntry = async <Configuration>(
   });
   const ipc = await startManagedRuntimeIpc({
     lifecycleSha256: parsed.lifecycleSha256,
-    supervisor,
     rootDirectory: parsed.rootDirectory,
+    supervisor,
   });
   const bridge = createManagedRuntimeBridge({
     identity,

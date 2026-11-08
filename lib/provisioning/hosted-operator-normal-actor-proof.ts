@@ -71,9 +71,9 @@ const proofSchema = z
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const cookieHeader = (storage: NormalBrowserStorageState, origin: string, path: string) => {
   const jar = new CookieJar(undefined, {
+    allowSpecialUseDomain: false,
     prefixSecurity: "strict",
     rejectPublicSuffixes: true,
-    allowSpecialUseDomain: false,
   });
   for (const cookie of storage.cookies) {
     const domain = cookie.domain.startsWith(".") ? cookie.domain.slice(1) : cookie.domain;
@@ -345,9 +345,9 @@ export const createHostedOperatorNormalActorProofCollector = (
         origin: preparation.program.origin,
       });
       const normal = createHostedOperatorNormalAuthClient({
+        fetch,
         origin: preparation.program.origin,
         storageState: candidate.storageState,
-        fetch,
       });
       const session = await normal.getSession();
       if (

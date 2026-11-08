@@ -218,7 +218,7 @@ export const createProvisioningEventHandlers = (
             claim.adapterSessionId,
             targetRequestId === undefined ? "unknown" : "accepted",
           ),
-          { status: 200, headers: { "cache-control": "no-store" } },
+          { headers: { "cache-control": "no-store" }, status: 200 },
         );
       }
       if (previousReceipt === "unknown") {
@@ -226,19 +226,19 @@ export const createProvisioningEventHandlers = (
         if (accepted) {
           await dependencies.acceptDelivery(claim, dispatchId);
           return Response.json(receipt(dispatchId, claim.adapterSessionId, "accepted"), {
-            status: 200,
             headers: { "cache-control": "no-store" },
+            status: 200,
           });
         }
         return Response.json(receipt(dispatchId, claim.adapterSessionId, "unknown"), {
-          status: 200,
           headers: { "cache-control": "no-store" },
+          status: 200,
         });
       }
     } catch {
       return Response.json(receipt(dispatchId, claim.adapterSessionId, "unknown"), {
-        status: 200,
         headers: { "cache-control": "no-store" },
+        status: 200,
       });
     }
     return undefined;
@@ -271,13 +271,13 @@ export const createProvisioningEventHandlers = (
         }
         return Response.json(
           receipt(dispatchId, claim.adapterSessionId, applied ? "accepted" : "unknown"),
-          { status: 200, headers: { "cache-control": "no-store" } },
+          { headers: { "cache-control": "no-store" }, status: 200 },
         );
       }
     } catch {
       return Response.json(receipt(dispatchId, claim.adapterSessionId, "unknown"), {
-        status: 200,
         headers: { "cache-control": "no-store" },
+        status: 200,
       });
     }
     return undefined;
@@ -362,7 +362,7 @@ export const createProvisioningEventHandlers = (
           await dependencies.acceptDelivery(authorized.claim, input.dispatchId);
           return Response.json(
             receipt(input.dispatchId, authorized.claim.adapterSessionId, "accepted"),
-            { status: 200, headers: { "cache-control": "no-store" } },
+            { headers: { "cache-control": "no-store" }, status: 200 },
           );
         }
         return Response.json(
@@ -371,13 +371,13 @@ export const createProvisioningEventHandlers = (
             authorized.claim.adapterSessionId,
             alreadyClaimed ? "unknown" : notSubmitted,
           ),
-          { status: 200, headers: { "cache-control": "no-store" } },
+          { headers: { "cache-control": "no-store" }, status: 200 },
         );
       }
     } catch {
       return Response.json(
         receipt(input.dispatchId, authorized.claim.adapterSessionId, "unknown"),
-        { status: 200, headers: { "cache-control": "no-store" } },
+        { headers: { "cache-control": "no-store" }, status: 200 },
       );
     }
 
@@ -407,7 +407,7 @@ export const createProvisioningEventHandlers = (
           authorized.claim.adapterSessionId,
           applied ? "accepted" : "unknown",
         ),
-        { status: 200, headers: { "cache-control": "no-store" } },
+        { headers: { "cache-control": "no-store" }, status: 200 },
       );
     } catch {
       // Session.respond has no public idempotency key. Once the receiver claim is
@@ -415,7 +415,7 @@ export const createProvisioningEventHandlers = (
       // a second logical event.
       return Response.json(
         receipt(input.dispatchId, authorized.claim.adapterSessionId, "unknown"),
-        { status: 200, headers: { "cache-control": "no-store" } },
+        { headers: { "cache-control": "no-store" }, status: 200 },
       );
     }
   };
@@ -442,7 +442,7 @@ export const createProvisioningEventHandlers = (
             authorized.claim.adapterSessionId,
             targetRequestId === undefined ? "unknown" : "accepted",
           ),
-          { status: 200, headers: { "cache-control": "no-store" } },
+          { headers: { "cache-control": "no-store" }, status: 200 },
         );
       }
       const accepted = await wasApplied(authorized.claim, input.dispatchId, attachSession);
@@ -450,13 +450,13 @@ export const createProvisioningEventHandlers = (
         await dependencies.acceptDelivery(authorized.claim, input.dispatchId);
         return Response.json(
           receipt(input.dispatchId, authorized.claim.adapterSessionId, "accepted"),
-          { status: 200, headers: { "cache-control": "no-store" } },
+          { headers: { "cache-control": "no-store" }, status: 200 },
         );
       }
       if (persistedReceipt === "unknown") {
         return Response.json(
           receipt(input.dispatchId, authorized.claim.adapterSessionId, "unknown"),
-          { status: 200, headers: { "cache-control": "no-store" } },
+          { headers: { "cache-control": "no-store" }, status: 200 },
         );
       }
       const claimed = await dependencies.readDeliveryClaim(authorized.claim, input.dispatchId);
@@ -466,7 +466,7 @@ export const createProvisioningEventHandlers = (
           authorized.claim.adapterSessionId,
           claimed ? "unknown" : notSubmitted,
         ),
-        { status: 200, headers: { "cache-control": "no-store" } },
+        { headers: { "cache-control": "no-store" }, status: 200 },
       );
     } catch {
       return Response.json({ error: "unauthorized" }, { status: 401 });
