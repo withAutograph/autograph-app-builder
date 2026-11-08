@@ -23,8 +23,8 @@ const configuration = {
   sandbox: {
     authProposal: { executablePath: "/proposal", id: "proposal", sha256: digest },
     projectId: "owned-project",
-    teamId: "owned-team",
     source: { snapshotId: "owned-snapshot", type: "snapshot" },
+    teamId: "owned-team",
   },
 } as HostedOperatorSourceConfiguration;
 interface ProposalFixtureFrame {
@@ -54,11 +54,11 @@ const fixture = (existing = true) => {
   const getOidc = vi.fn<() => Promise<string>>().mockResolvedValue("owned-oidc");
   const assertCurrentOwner = vi.fn(async () => {});
   return {
-    sandbox,
+    assertCurrentOwner,
     createSandbox,
     getOidc,
-    assertCurrentOwner,
     propose: createHostedOperatorAuthProposal(configuration, { createSandbox, getOidc }),
+    sandbox,
   };
 };
 describe("private existing Auth proposal", () => {

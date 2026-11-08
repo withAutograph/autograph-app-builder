@@ -131,29 +131,29 @@ const replacementPlan = {
 };
 const setup = () => {
   let row: HostedRuntimeJournalRow = {
-    revision: 802,
     record: hostedRuntimeJournalRecordSchema.parse({
-      version: 1,
-      kind: "app-runtime",
-      request: target,
-      status: "pending",
-      step: "reserved",
       approvedByCallId: "operator:unapproved-plan",
+      kind: "app-runtime",
+      operator: {
+        fenceGeneration: 7,
+        mode: "protected-operator-v1",
+        operationRef: "fcc825bc-d683-422c-8b58-0d0a065ceb57",
+        plan: replacementPlan,
+        planDigest: operatorPlanDigest(replacementPlan),
+        receipts: [],
+      },
       privateState: {
         encryptedToken: "ciphertext",
         keyVersion: "key-v1",
         tokenIv: "iv",
         tokenTag: "tag",
       },
-      operator: {
-        mode: "protected-operator-v1",
-        operationRef: "fcc825bc-d683-422c-8b58-0d0a065ceb57",
-        plan: replacementPlan,
-        planDigest: operatorPlanDigest(replacementPlan),
-        receipts: [],
-        fenceGeneration: 7,
-      },
+      request: target,
+      status: "pending",
+      step: "reserved",
+      version: 1,
     }),
+    revision: 802,
   };
   const readApprovedPlan = vi.fn(async () => await Promise.resolve(original));
   const read = vi.fn(async () => await Promise.resolve(structuredClone(row)));
@@ -174,7 +174,7 @@ const setup = () => {
   const run = async (proposed = replacementPlan) =>
     await recoverOriginalApprovedPlan(
       { assertAuthorized, readApprovedPlan, store: { compareAndSet, read } },
-      { authority, target, ownerContext },
+      { authority, ownerContext, target },
       { action: "plan", operation: "prepare", selection },
       selection.appId,
       proposed,
@@ -228,9 +228,9 @@ describe("original approved plan recovery", () => {
       if (kind === "receipt") {
         f.operator().receipts.push({
           effectId: "resources",
+          fenceGeneration: 7,
           observedAt: "2026-10-14T00:00:00Z",
           resourceVersion: "v1",
-          fenceGeneration: 7,
         });
       }
       if (kind === "approved-call") {

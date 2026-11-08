@@ -121,8 +121,8 @@ describe("owner-bound private Realm identity link contract", () => {
   });
   it("freezes both scoped Trusted Sources rules in the existing plan digest", () => {
     const trustedSources = {
-      builderProduction: { projectId: "prj_builder", from: "production", to: "preview" },
-      operatorPreview: { projectId: "prj_operator", from: "preview", to: "preview" },
+      builderProduction: { from: "production", projectId: "prj_builder", to: "preview" },
+      operatorPreview: { from: "preview", projectId: "prj_operator", to: "preview" },
     };
     const scoped = hostedOperatorPlanSchema.parse({
       ...plan,
@@ -154,9 +154,9 @@ describe("owner-bound private Realm identity link contract", () => {
         gatewayBindings: {
           ...plan.gatewayBindings,
           trustedSources: {
-            builderProduction: { projectId: "prj_builder", from: "production", to: "preview" },
-            operatorPreview: { projectId: "prj_operator", from: "preview", to: "preview" },
-            [source]: { projectId: "prj_source", from, to },
+            builderProduction: { from: "production", projectId: "prj_builder", to: "preview" },
+            operatorPreview: { from: "preview", projectId: "prj_operator", to: "preview" },
+            [source]: { from, projectId: "prj_source", to },
           },
         },
       }).success,

@@ -35,8 +35,8 @@ await nextConfig("phase-production-server", {});`;
     ["--import", require.resolve("tsx"), "--input-type=module", "-e", script],
     {
       cwd: root,
-      env: { PATH: process.env.PATH, HOME: process.env.HOME, NODE_ENV: "production", VERCEL: "1" },
       encoding: "utf-8",
+      env: { PATH: process.env.PATH, HOME: process.env.HOME, NODE_ENV: "production", VERCEL: "1" },
     },
   );
   const output = z
@@ -67,12 +67,12 @@ console.log(JSON.stringify({heapLimit:v8.getHeapStatistics().heap_size_limit,arg
   );
   const result = execFileSync("/bin/sh", ["-c", hostedEveBuildCommand], {
     cwd: root,
+    encoding: "utf-8",
     env: {
       PATH: `${path.dirname(process.execPath)}:/usr/bin:/bin`,
       NODE_ENV: "production",
       NODE_OPTIONS: "--no-warnings --max-old-space-size=4096",
     },
-    encoding: "utf-8",
   });
   const observed = z
     .object({ args: z.array(z.string()), heapLimit: z.number().positive(), options: z.string() })
