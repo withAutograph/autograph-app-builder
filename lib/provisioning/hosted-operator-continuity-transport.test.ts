@@ -107,7 +107,7 @@ const preparedPlan = hostedOperatorPlanSchema.parse({
     teamId: "team",
     app: { projectId: target.projectId, branch: target.branch, environment: "preview" },
     gateway: { projectId: gateway.projectId, branch: "gateway-main", environment: "preview" },
-    operator: { projectId: "prj_operator", deploymentId: "dpl_operator", environment: "preview" },
+    operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
     verification: {
       gatewayOrigin: gateway.publicOrigin,
       publicOrigin: gateway.publicOrigin,
@@ -115,15 +115,15 @@ const preparedPlan = hostedOperatorPlanSchema.parse({
     },
   },
   effects: [
-    { id: "resources", kind: "resources", description: "resources" },
-    { id: "install", kind: "install", description: "install" },
-    { id: "access", kind: "access", description: "access" },
-    { id: "bindings", kind: "bindings", description: "bindings" },
-    { id: "delivery", kind: "delivery", description: "delivery" },
+    { description: "resources", id: "resources", kind: "resources" },
+    { description: "install", id: "install", kind: "install" },
+    { description: "access", id: "access", kind: "access" },
+    { description: "bindings", id: "bindings", kind: "bindings" },
+    { description: "delivery", id: "delivery", kind: "delivery" },
     {
+      description: "Deliver approved managed route",
       id: "gateway-delivery",
       kind: "gateway-delivery",
-      description: "Deliver approved managed route",
     },
   ],
 });
@@ -700,8 +700,8 @@ it("reads saved checkpoints and verified actor facts only for the owner without 
   expect(checkpoints.intentId).toBe(planned.plan.intentId);
   expect(checkpoints.checkpoints.suiteDispatch).toBe("unrecorded");
   expect(await f.client.readContinuityVerifiedActors(planned.plan.intentId)).toEqual({
-    requestCorrelation: "not_established",
     actors: [],
+    requestCorrelation: "not_established",
   });
   expect(f.record).toEqual(before);
   f.setOwner(false);
@@ -727,8 +727,8 @@ it("reads approved binding status through the owner-verified transport without d
   const result = await f.client.readContinuityBindings(planned.plan.intentId);
   expect(result.bindings).toEqual([
     {
-      appId: target.appId,
       actorId: "actor",
+      appId: target.appId,
       organizationId: "org",
       role: "ordinary_role",
       status: "actor_active",

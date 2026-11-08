@@ -169,30 +169,30 @@ const fixture = () => {
   };
   // SAFETY: This controlled native fixture exposes the two actual outcomes for denial variants below.
   const settlement = {
-    requestId: request.requestId,
     outcome: "approved" as "approved" | "cancelled",
+    requestId: request.requestId,
     responderPrincipalId: "owner",
   };
   const nativeEvents = [
-    { type: "input.requested", data: { requests: [request] } },
+    { data: { requests: [request] }, type: "input.requested" },
     {
-      type: "approval.settled",
       data: settlement,
+      type: "approval.settled",
     },
   ];
   const history = [
     {
-      role: "assistant",
       content: [
         call,
         { type: "tool-approval-request", toolCallId: call.toolCallId, approvalId: "approval" },
       ],
+      role: "assistant",
     },
     {
-      role: "tool",
       content: [{ type: "tool-approval-response", approvalId: "approval", approved: true }],
+      role: "tool",
     },
-    { role: "assistant", content: "An intervening ordinary question" },
+    { content: "An intervening ordinary question", role: "assistant" },
   ];
   const context = {
     "eve.sessionId": "logical",
@@ -216,15 +216,15 @@ const fixture = () => {
         logicalSessionId: "logical",
         originalAuthoritySessionId: "original-public-session",
       },
-      binding: { ownerRunId: "physical", logicalSessionId: "logical" },
+      binding: { logicalSessionId: "logical", ownerRunId: "physical" },
       expectedPrincipalId: "owner",
       payload: {
-        binding: { ownerRunId: "physical", logicalSessionId: "logical" },
+        binding: { logicalSessionId: "logical", ownerRunId: "physical" },
         candidates: [
           {
             origin: { slot: 24 },
             serializedContext: context,
-            sessionState: { snapshot: { session: { sessionId: "logical", history } } },
+            sessionState: { snapshot: { session: { history, sessionId: "logical" } } },
           },
         ],
         nativeEvents,
@@ -306,7 +306,7 @@ it("does not cover draft updates, other publication tools or provider-executed c
 it("rejects malformed or ambiguous native approvals rather than ignoring conflicting frames", () => {
   const f = fixture();
   for (const extra of [
-    { type: "approval.settled", data: { ...f.settlement, outcome: "unexpected" } },
+    { data: { ...f.settlement, outcome: "unexpected" }, type: "approval.settled" },
     {
       type: "input.requested",
       data: { requests: [{ ...f.request, kind: "question", requestId: "other-request" }] },
@@ -333,7 +333,7 @@ it("leaves native result and incoming runtime outcome reconciliation to their or
         ...f.input.payload,
         nativeEvents: [
           ...f.nativeEvents,
-          { type: "action.result", data: { result: { callId: f.call.toolCallId } } },
+          { data: { result: { callId: f.call.toolCallId } }, type: "action.result" },
         ],
       },
     }),
@@ -433,7 +433,7 @@ it("requires the retained sealed preparation and preserves literal read-only mod
               type: "input.requested",
               data: { requests: [{ ...f.request, action: { ...f.request.action, input } }] },
             },
-            { type: "approval.settled", data: f.settlement },
+            { data: f.settlement, type: "approval.settled" },
           ],
           candidates: [
             {
@@ -565,7 +565,7 @@ it("retains historical runtime-result vetoes outside the latest candidate", () =
 });
 it("validates unrelated native events and preserves approval ordering across them", () => {
   const f = fixture();
-  const unrelated = { type: "assistant.output", data: { retained: "unrelated native evidence" } };
+  const unrelated = { data: { retained: "unrelated native evidence" }, type: "assistant.output" };
   const events = [unrelated, f.nativeEvents[0], unrelated, f.nativeEvents[1], unrelated];
   expect(
     authorizeRepeatableDraftReconciliationCalls({
@@ -576,7 +576,7 @@ it("validates unrelated native events and preserves approval ordering across the
   expect(
     authorizeRepeatableDraftReconciliationCalls({
       ...f.input,
-      payload: { ...f.input.payload, nativeEvents: [{ type: "unrelated", data: null }, ...events] },
+      payload: { ...f.input.payload, nativeEvents: [{ data: null, type: "unrelated" }, ...events] },
     }),
   ).toEqual([]);
   expect(

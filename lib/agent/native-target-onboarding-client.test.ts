@@ -27,11 +27,11 @@ const fixture = () => {
     ownerUserId: "owner",
   };
   const owner = operatorOwnerContextSchema.parse({
-    kind: "direct",
-    authority,
-    principal: { ...authority, scopes: ["autograph:start"] },
     adapterGeneration: 1,
     adapterSessionId: "adapter",
+    authority,
+    kind: "direct",
+    principal: { ...authority, scopes: ["autograph:start"] },
     sessionId: "public-session",
   });
   const plan: NativeTargetOnboardingPlan = {
@@ -336,9 +336,9 @@ describe("native target protected client", () => {
       "x-vercel-trusted-oidc-idp-token": "synthetic-oidc",
     });
     expect(f.sent[0]?.body).toMatchObject({
-      ownerContext: f.owner,
       adapterSessionId: "adapter",
       callId: "call",
+      ownerContext: f.owner,
       selectedApp: { appId: f.plan.appId, appSpecDigest: f.plan.origin.appSpecDigest },
     });
     expect(f.sent[0]?.body).not.toHaveProperty("session");
@@ -414,8 +414,8 @@ describe("native target protected client", () => {
           }),
         );
         await expect(f.client.hasApproval(f.input, f.ctx)).rejects.toMatchObject({
-          name: "HostedOperatorError",
           code,
+          name: "HostedOperatorError",
         });
         expect(f.request).toHaveBeenCalledTimes(1);
         expect(warn.mock.calls).toEqual([
@@ -563,10 +563,10 @@ describe("native target protected client", () => {
     );
     expect(ownerResolver).toHaveBeenCalledWith(
       expect.objectContaining({
+        adapterSessionId: "adapter",
         authority: f.owner.authority,
         principal: f.owner.principal,
         sessionAuth: f.ctx.session.auth,
-        adapterSessionId: "adapter",
       }),
     );
   });
