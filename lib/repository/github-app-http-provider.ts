@@ -94,9 +94,10 @@ const providerHttpStatus = (error: unknown): number | undefined => {
     return;
   }
   const { status } = cause;
-  return typeof status === "number" && Number.isInteger(status) && status >= 400 && status <= 599
-    ? status
-    : undefined;
+  if (typeof status !== "number" || !Number.isInteger(status)) {
+    return;
+  }
+  return status >= 400 && status <= 599 ? status : undefined;
 };
 
 const decimal = z.string().regex(/^[1-9]\d*$/u);

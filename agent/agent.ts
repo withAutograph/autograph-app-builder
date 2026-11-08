@@ -391,10 +391,12 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           workspaceDigest?: string;
         }
       | undefined;
-    if (
+    const hasPendingAppSpec =
       acceptanceResults.length < appSpecArtifacts.length &&
       currentAppSpec?.digest !== undefined &&
-      currentAppSpec.revision !== undefined &&
+      currentAppSpec.revision !== undefined;
+    if (
+      hasPendingAppSpec &&
       workspace?.sourceSha !== undefined &&
       workspace.sourceTree !== undefined &&
       workspace.eligibilityDigest !== undefined &&
@@ -538,8 +540,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           reason?: string;
         }
       | undefined;
-    return status?.enabled === false &&
-      status.adapterConfigured === false &&
+    const adapterDisabled = status?.enabled === false && status.adapterConfigured === false;
+    return adapterDisabled &&
       status.genericShellAuthority === false &&
       status.liveGitHubCallsAvailable === false
       ? `GitHub publication is fail-closed: ${status.reason ?? "no typed adapter is configured."}`
@@ -1247,10 +1249,12 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ({ name }) => name === "publish_reviewed_change_set",
     );
     const latestStatusIndex = toolResults.findLastIndex(({ name }) => name === "workspace_status");
-    if (
+    const needsCurrentStatus =
       status === undefined ||
       (retry && latestPublicationIndex > latestStatusIndex) ||
-      workflow === undefined ||
+      workflow === undefined;
+    if (
+      needsCurrentStatus ||
       !["reviewed", "publication_pending", "publication_failed", "published_local"].includes(
         workflow?.phase ?? "",
       )
@@ -1507,10 +1511,12 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const status = statusResult.output as
       | { phase?: string; proposal?: { digest?: string } }
       | undefined;
-    if (
+    const outsideExecutionPhases =
       status?.phase !== "planned" &&
       status?.phase !== "apply_failed" &&
-      status?.phase !== "applied" &&
+      status?.phase !== "applied";
+    if (
+      outsideExecutionPhases &&
       status?.phase !== "validation_pending" &&
       status?.phase !== "validation_failed" &&
       status?.phase !== "validated"
@@ -1644,10 +1650,12 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         };
       }
       const artifact = artifactResult.output as { digest?: string; revision?: string } | undefined;
-      if (
+      const missingSourceIdentity =
         workspace?.sourceSha === undefined ||
         workspace.sourceTree === undefined ||
-        workspace.eligibilityDigest === undefined ||
+        workspace.eligibilityDigest === undefined;
+      if (
+        missingSourceIdentity ||
         workspace.workspaceDigest === undefined ||
         artifact?.digest === undefined ||
         artifact.revision === undefined

@@ -735,11 +735,10 @@ function exactContentFileState(value: unknown, includeBytes: boolean): boolean {
   if (!record(value) || !exactKeys(value, keys)) {
     return false;
   }
-  return (
-    (value.mode === "644" || value.mode === "755") &&
-    isDigest(value.digest) &&
-    (!includeBytes || value.bytes instanceof Uint8Array)
-  );
+  if (value.mode !== "644" && value.mode !== "755") {
+    return false;
+  }
+  return isDigest(value.digest) && (!includeBytes || value.bytes instanceof Uint8Array);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -850,19 +849,29 @@ export function assertExactGitHubFreshRepositoryContent(input: {
   }
   const algorithm = proposal.sourceTree.length === 64 ? "sha256" : "sha1";
   const paths = content.files.map((file: GitHubFreshRepositoryContentFile) => file.path);
+  const invalidFile = (file: GitHubFreshRepositoryContentFile): boolean => {
+    if (
+      !exactKeys(file, ["path", "mode", "objectId", "digest", "bytes"]) ||
+      !safeSourcePath(file.path) ||
+      (file.mode !== "100644" && file.mode !== "100755")
+    ) {
+      return true;
+    }
+    if (
+      !isObjectId(file.objectId) ||
+      !isDigest(file.digest) ||
+      !(file.bytes instanceof Uint8Array)
+    ) {
+      return true;
+    }
+    return (
+      bytesDigest(file.bytes) !== file.digest ||
+      gitObjectDigest("blob", file.bytes, algorithm).toString("hex") !== file.objectId
+    );
+  };
   if (
     new Set(paths).size !== paths.length ||
-    content.files.some(
-      (file: GitHubFreshRepositoryContentFile) =>
-        !exactKeys(file, ["path", "mode", "objectId", "digest", "bytes"]) ||
-        !safeSourcePath(file.path) ||
-        (file.mode !== "100644" && file.mode !== "100755") ||
-        !isObjectId(file.objectId) ||
-        !isDigest(file.digest) ||
-        !(file.bytes instanceof Uint8Array) ||
-        bytesDigest(file.bytes) !== file.digest ||
-        gitObjectDigest("blob", file.bytes, algorithm).toString("hex") !== file.objectId,
-    ) ||
+    content.files.some(invalidFile) ||
     freshContentTree(content.files, algorithm) !== proposal.sourceTree
   ) {
     throw new Error("The fresh repository content does not match the immutable source tree.");

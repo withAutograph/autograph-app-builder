@@ -540,6 +540,9 @@ const assertExactExecutable = async (expected: ExecutableIdentity): Promise<void
   }
 };
 
+const invalidBootstrapSourceEntryMessage =
+  "Fresh bootstrap rejects submodules, symlinks, reserved names, and unsafe paths.";
+
 const hasMissingBootstrapTools = (capability: FreshBootstrapCapability) =>
   !existsSync(capability.systemGit) ||
   !existsSync(capability.systemPython) ||
@@ -1121,23 +1124,19 @@ const exactSourceTree = async (
         record,
       );
     if (match === null) {
-      throw new Error(
-        "Fresh bootstrap rejects submodules, symlinks, reserved names, and unsafe paths.",
-      );
+      throw new Error(invalidBootstrapSourceEntryMessage);
     }
     const [, mode, type, blob, path] = match;
+    if (mode === "120000" || mode === "160000" || type !== "blob") {
+      throw new Error(invalidBootstrapSourceEntryMessage);
+    }
     if (
-      mode === "120000" ||
-      mode === "160000" ||
-      type !== "blob" ||
       !safeSourcePath(path) ||
       path
         .split("/")
         .some((part) => [".git", repositoryBootstrapClaim].includes(part.toLowerCase()))
     ) {
-      throw new Error(
-        "Fresh bootstrap rejects submodules, symlinks, reserved names, and unsafe paths.",
-      );
+      throw new Error(invalidBootstrapSourceEntryMessage);
     }
     // oxlint-disable-next-line eslint/no-await-in-loop -- Verify each blob before adding its receipt.
     const digest = await digestProcessStdout(
@@ -1182,7 +1181,11 @@ const exactPreparedSourceTree = async (
     if (
       !["100644", "100755"].includes(file.mode) ||
       !/^[0-9a-f]{40}$/u.test(file.objectId) ||
-      !/^[0-9a-f]{64}$/u.test(file.sha256) ||
+      !/^[0-9a-f]{64}$/u.test(file.sha256)
+    ) {
+      throw new Error("The prepared fresh-template manifest is invalid.");
+    }
+    if (
       !safeSourcePath(file.path) ||
       paths.has(file.path) ||
       file.path
@@ -1248,7 +1251,11 @@ const exactResultTree = async (input: {
   if (
     input.review.sourceReceiptDigest !== receipt.digest ||
     input.review.sourceSha !== receipt.sourceSha ||
-    input.review.sourceTree !== receipt.sourceTree ||
+    input.review.sourceTree !== receipt.sourceTree
+  ) {
+    throw new Error("The reviewed change set no longer matches its source receipt.");
+  }
+  if (
     input.review.eligibilityDigest !== receipt.eligibilityDigest ||
     input.review.repositoryContractDigest !== receipt.contractDigest
   ) {

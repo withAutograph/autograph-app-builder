@@ -153,6 +153,8 @@ const guardDecisions: readonly ("continue" | "stop")[] = ["continue", "stop"];
 const HOSTED_START_REQUEST_TIMEOUT_MS = 300_000;
 const HOSTED_IDLE_RESERVATION_GRACE_MS = 300_000;
 const HOSTED_PROGRESS_NOTICE_MS = 60_000;
+const isUnsettledReservation = (operation: Pick<HostedOperationRecord, "state">): boolean =>
+  operation.state === "reserved" || operation.state === "submission_unknown";
 
 export {
   HostedAdapterSessionUnavailableError,
@@ -1873,7 +1875,7 @@ export function createHostedEveSessionService(input: {
       if (
         settled === undefined &&
         operation.internalSessionLimitResponse.decision === "stop" &&
-        (operation.state === "reserved" || operation.state === "submission_unknown")
+        isUnsettledReservation(operation)
       ) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- Retain current ownership while waiting for this exact stop operation.
         await assertSessionLimitOwner(session);
@@ -2061,7 +2063,7 @@ export function createHostedEveSessionService(input: {
           operation.sendDelivery === undefined ||
           operation.internalBuildContinuation !== undefined ||
           operation.internalAuthoringContinuation !== undefined ||
-          (operation.state !== "reserved" && operation.state !== "submission_unknown")
+          !isUnsettledReservation(operation)
         ) {
           throw new HostedSubmissionUnknownError();
         }

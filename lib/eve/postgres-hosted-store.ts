@@ -141,21 +141,28 @@ function sessionTenantPredicate(principal: HostedPrincipal) {
 export function parseHostedOperationRow(input: unknown): HostedOperationRecord {
   const row = operationRowSchema.parse(input);
   const record = hostedOperationRecordSchema.parse(row.record);
+  const bindingError = "Hosted operation row is not canonically bound.";
   if (
     row.issuer !== record.principal.issuer ||
     row.audience !== record.principal.audience ||
     row.workspaceId !== record.principal.workspaceId ||
-    row.ownerUserId !== record.principal.ownerUserId ||
-    row.operationId !== record.operationId ||
-    row.sessionId !== (record.sessionId ?? null) ||
-    row.kind !== record.kind ||
-    row.clientRequestId !== record.clientRequestId ||
+    row.ownerUserId !== record.principal.ownerUserId
+  ) {
+    throw new Error(bindingError);
+  }
+  if (row.operationId !== record.operationId || row.sessionId !== (record.sessionId ?? null)) {
+    throw new Error(bindingError);
+  }
+  if (row.kind !== record.kind || row.clientRequestId !== record.clientRequestId) {
+    throw new Error(bindingError);
+  }
+  if (
     row.requestDigest !== record.requestDigest ||
     row.state !== record.state ||
     row.createdAt.getTime() !== record.createdAtEpochMs ||
     row.updatedAt.getTime() !== record.updatedAtEpochMs
   ) {
-    throw new Error("Hosted operation row is not canonically bound.");
+    throw new Error(bindingError);
   }
   return record;
 }
@@ -1192,14 +1199,20 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           input.cancellationRevisionAtDispatch === undefined
             ? undefined
             : z.number().int().nonnegative().parse(input.cancellationRevisionAtDispatch);
-        if (
-          revision !== undefined &&
-          (current === null ||
-            revision !== (toDurableHostedSessionRecord(current).cancellationRevision ?? 0) ||
-            (operationRow.sendCancellationRevisionAtDispatch !== null &&
-              operationRow.sendCancellationRevisionAtDispatch !== revision))
-        ) {
-          throw new Error("Canonical SEND acknowledgement cancellation revision changed.");
+        if (revision !== undefined) {
+          const revisionError = "Canonical SEND acknowledgement cancellation revision changed.";
+          if (
+            current === null ||
+            revision !== (toDurableHostedSessionRecord(current).cancellationRevision ?? 0)
+          ) {
+            throw new Error(revisionError);
+          }
+          if (
+            operationRow.sendCancellationRevisionAtDispatch !== null &&
+            operationRow.sendCancellationRevisionAtDispatch !== revision
+          ) {
+            throw new Error(revisionError);
+          }
         }
         const updated = hostedOperationRecordSchema.parse({
           ...bindSendDelivery(operation, current, input.delivery),
@@ -1938,15 +1951,20 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     async settleSucceededPaged(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
       let base = durableHostedSessionRecordSchema.parse(input.session);
+      const sessionError = "Paged hosted session creation needs an uncheckpointed tenant session.";
       if (
         base.version !== 2 ||
         base.checkpoint !== undefined ||
         base.checkpointRef !== undefined ||
-        base.checkpointDigest !== undefined ||
+        base.checkpointDigest !== undefined
+      ) {
+        throw new Error(sessionError);
+      }
+      if (
         base.checkpointProgressDigest !== undefined ||
         tenantKeyFor(base.principal) !== tenantKeyFor(principal)
       ) {
-        throw new Error("Paged hosted session creation needs an uncheckpointed tenant session.");
+        throw new Error(sessionError);
       }
       return database.transaction(async (transaction) => {
         const operation = await operationById(transaction, principal, input.operationId, true);

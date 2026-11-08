@@ -34,35 +34,39 @@ export const readProductionNavigationRuntimeConfig = function readProductionNavi
   }
 
   for (const [key, value] of Object.entries(environment)) {
-    if (
-      value !== undefined &&
-      (key === "VERCEL" ||
+    if (value !== undefined) {
+      const deploymentIdentity =
+        key === "VERCEL" ||
         (key.startsWith("VERCEL_") && !key.startsWith("VERCEL_AUTH_CLIENT_")) ||
         [
           "DEPLOYMENT_ID",
           "PROJECT_ID",
           "APP_BUILDER_DEPLOYMENT_ID",
           "APP_BUILDER_PROJECT_ID",
-        ].includes(key))
-    ) {
-      throw new Error("Production navigation test artifacts cannot run with deployment identity.");
+        ].includes(key);
+      if (deploymentIdentity) {
+        throw new Error(
+          "Production navigation test artifacts cannot run with deployment identity.",
+        );
+      }
     }
   }
   if (
     environment.APP_BUILDER_LOCAL_AUTH_EMULATION === "1" ||
     environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION ||
-    environment.APP_BUILDER_PREVIEW_PROVIDER_EMULATION ||
-    environment.APP_BUILDER_PROVIDER_EMULATION ||
-    environment.APP_BUILDER_PASSKEY_TEST_MODE
+    environment.APP_BUILDER_PREVIEW_PROVIDER_EMULATION
   ) {
+    throw new Error("Production navigation uses real sessions, not provider or passkey emulation.");
+  }
+  if (environment.APP_BUILDER_PROVIDER_EMULATION || environment.APP_BUILDER_PASSKEY_TEST_MODE) {
     throw new Error("Production navigation uses real sessions, not provider or passkey emulation.");
   }
   const config = environmentSchema.parse(environment);
   const origin = new URL(config.APP_BUILDER_PRODUCTION_NAVIGATION_ORIGIN);
+  if (origin.protocol !== "https:" || origin.hostname !== "localhost" || !origin.port) {
+    throw new Error("Production navigation requires exact loopback HTTPS auth and resource URLs.");
+  }
   if (
-    origin.protocol !== "https:" ||
-    origin.hostname !== "localhost" ||
-    !origin.port ||
     config.APP_BUILDER_PRODUCTION_NAVIGATION_ORIGIN !== origin.origin ||
     config.BETTER_AUTH_URL !== `${origin.origin}/api/auth` ||
     config.MCP_RESOURCE_URL !== `${origin.origin}/mcp`
@@ -73,7 +77,11 @@ export const readProductionNavigationRuntimeConfig = function readProductionNavi
   if (
     !["postgres:", "postgresql:"].includes(database.protocol) ||
     database.hostname !== "127.0.0.1" ||
-    !database.port ||
+    !database.port
+  ) {
+    throw new Error("Production navigation requires an isolated loopback fixture database.");
+  }
+  if (
     !/^\/autograph_navigation_[a-z0-9_]+$/u.test(database.pathname) ||
     database.search ||
     database.hash
