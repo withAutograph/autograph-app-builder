@@ -569,7 +569,7 @@ describe("final verifier entry diagnostics", () => {
 
 describe("app publication binding at plan renewal", () => {
   it("plans the actual described root for an older selected source with no target profile", async () => {
-    const f = publicationFixture({ repoId: "initial-repository", gitSha: "c".repeat(40) });
+    const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "initial-repository" });
     const legacyDescription = appDescriptionSchema.parse({
       ...currentSourceDescription,
       deployment: undefined,
@@ -592,7 +592,7 @@ describe("app publication binding at plan renewal", () => {
     expect(f.configuration.applications.actual?.projectSettings).toBeUndefined();
   });
   it("freezes the selected source profile into a new app plan without changing configured settings", async () => {
-    const f = publicationFixture({ repoId: "initial-repository", gitSha: "c".repeat(40) });
+    const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "initial-repository" });
     const application = f.configuration.applications.actual;
     if (application === undefined) {
       throw new Error("Fixture app is missing");
@@ -655,7 +655,7 @@ describe("app publication binding at plan renewal", () => {
   );
 
   it("renews the app plan with the exact actual repository, commit, branch, and project", async () => {
-    const binding = { repoId: "actual-repository-id", gitSha: "c".repeat(40) };
+    const binding = { gitSha: "c".repeat(40), repoId: "actual-repository-id" };
     const f = publicationFixture(binding);
     const plan = await resolveFullPlan(
       bootstrapWithGatewayOrigin("https://gateway.example"),
@@ -693,7 +693,7 @@ describe("app publication binding at plan renewal", () => {
   });
 
   it("uses current captured release roles for a new grant and creates no grant for an empty role list", async () => {
-    const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+    const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "actual-repository-id" });
     const base = bootstrapWithGatewayOrigin("https://gateway.example");
     const withRoles = await resolveFullPlan(
       base,
@@ -729,7 +729,7 @@ describe("app publication binding at plan renewal", () => {
   });
 
   it("adds the app Preview grant without dropping existing Gateway trust sources", async () => {
-    const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+    const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "actual-repository-id" });
     const base = bootstrapWithGatewayOrigin("https://gateway.example");
     const plan = await resolveFullPlan(
       hostedOperatorPlanSchema.parse({
@@ -770,7 +770,7 @@ describe("app publication binding at plan renewal", () => {
   });
 
   it("validates a trusted source against the exact Gateway workload, team and app Preview while accepting legacy plans", async () => {
-    const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+    const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "actual-repository-id" });
     const plan = await resolveFullPlan(
       bootstrapWithGatewayOrigin("https://gateway.example"),
       context,
@@ -854,7 +854,7 @@ describe("app publication binding at plan renewal", () => {
   });
 
   it("binds owner signup eligibility and roles to its approved Auth organization", async () => {
-    const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+    const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "actual-repository-id" });
     const base = bootstrapWithGatewayOrigin("https://current-gateway.example");
     const result = await resolveFullPlan(
       base,
@@ -896,7 +896,7 @@ describe("app publication binding at plan renewal", () => {
   it.each(["branch", "projectId", "scopeId"] as const)(
     "retains the actual %s ownership check with a complete publication binding",
     async (field) => {
-      const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+      const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "actual-repository-id" });
       const changed = { ...context, target: { ...context.target, [field]: "different" } };
       await expect(
         resolveFullPlan(bootstrapPlan(), changed, f.configuration, f.controlPlane),
@@ -1005,7 +1005,7 @@ describe("configured owner-authorized Preview target metadata", () => {
 });
 
 const participantResolutionFixture = (captureOnly = false) => {
-  const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+  const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "actual-repository-id" });
   const declaredProgram = normalActorProgramSchema.parse({
     version: 1,
     appId: context.target.appId,
@@ -1157,7 +1157,7 @@ const participantResolutionFixture = (captureOnly = false) => {
     >(async () => await Promise.resolve({ preparation, state })),
     readNormalActorOrganizationProofs: vi.fn(async () => await Promise.resolve(organizations)),
   };
-  return { ...f, ports, base, program, accountPlan, state, preparation, organizations };
+  return { ...f, accountPlan, base, organizations, ports, preparation, program, state };
 };
 
 const unusedCompositionControlPlane = (): Parameters<
@@ -3709,7 +3709,7 @@ describe("retained approved Auth binding selection", () => {
     const originalPlan = bootstrapWithGatewayOrigin("https://gateway.example");
     const record = existingAuthRecord(originalPlan);
     record.retainedAuth = retainedOperatorAuthFromJournal(record);
-    const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+    const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "actual-repository-id" });
     const appPlan = await resolveFullPlan(originalPlan, context, f.configuration, f.controlPlane);
     record.operator = {
       ...record.operator!,
@@ -5060,7 +5060,7 @@ it("uses only the same approved completed additive capture successor for app pla
 });
 
 it("keeps legacy project separation frozen and accepts an explicitly planned single Services destination", async () => {
-  const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+  const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "actual-repository-id" });
   const original = bootstrapWithGatewayOrigin("https://apps.example");
   const boundary = original.deploymentBoundary;
   if (
@@ -5106,7 +5106,7 @@ it("keeps legacy project separation frozen and accepts an explicitly planned sin
 });
 
 it("plans same-project resource preparation without Preview effects or an environment claim", async () => {
-  const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+  const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "actual-repository-id" });
   f.configuration.composition = "single-project-services";
   f.configuration.gateway.projectId = context.target.projectId;
   f.configuration.gateway.workload.projectId = context.target.projectId;

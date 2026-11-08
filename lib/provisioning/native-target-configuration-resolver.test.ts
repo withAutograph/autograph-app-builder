@@ -27,22 +27,22 @@ import type { OperatorOwnerContext, OperatorSelection } from "./hosted-operator-
 const worker = {
   executablePath: "/trusted/install",
   id: "trusted-installer",
-  sha256: "a".repeat(64),
   operationScope: "generated-app-release-install-v1" as const,
+  sha256: "a".repeat(64),
   subcommand: "protected-generated-app-install" as const,
 };
 const resource = (name: string) => ({
   database: name,
   migratorRole: `${name}_owner`,
-  runtimeRole: `${name}_runtime`,
   resourceId: `${name}-resource`,
+  runtimeRole: `${name}_runtime`,
 });
 const workload = {
   audience: "https://vercel.com/team",
+  environment: "preview" as const,
   issuer: "https://oidc.vercel.com/team",
   ownerId: "team",
   projectId: "builder",
-  environment: "preview" as const,
   subject: "builder-workload",
 };
 const configuration = (): HostedOperatorSourceConfiguration => ({
@@ -131,23 +131,23 @@ const ready = (appId = "new-app"): NativeTargetReadyRegistration => {
       productRoles: [],
       worker,
       origin: {
-        publicSessionId: "original-session",
-        adapterSessionId: "original-adapter",
         adapterGeneration: 1,
+        adapterSessionId: "original-adapter",
         appSpecDigest: "b".repeat(64),
+        publicSessionId: "original-session",
         release: {
-          id: "release-original",
           artifactRef: "private-artifact",
+          id: "release-original",
           manifestSha256: "c".repeat(64),
           schemaSha256: "d".repeat(64),
         },
       },
       project: {
-        name: appId,
-        teamId: "team",
         installationId: "installation",
+        name: appId,
         projectSettings,
         protection: nativeTargetRequiredProjectProtection,
+        teamId: "team",
       },
       nativeNeon: {
         approvalReference: "original-approved-native-scope",
@@ -159,32 +159,32 @@ const ready = (appId = "new-app"): NativeTargetReadyRegistration => {
       conflictPolicy: "stop-on-conflict",
     },
     approval: {
-      requestId: "request",
       callId: "call",
-      planDigest: "a".repeat(64),
-      responderPrincipalId: "owner",
-      publicSessionId: "original-session",
-      outcome: "approved",
       observedAt: time,
+      outcome: "approved",
+      planDigest: "a".repeat(64),
+      publicSessionId: "original-session",
+      requestId: "request",
+      responderPrincipalId: "owner",
     },
     attempt: {
       attemptId,
       candidateName: appId,
-      leaseId: attemptId,
       leaseExpiresAt: time,
+      leaseId: attemptId,
       startedAt: time,
     },
     dispatchAuthorizedAt: time,
-    acceptedCreation: { attemptId, projectId: `project-${appId}`, acceptedAt: time },
+    acceptedCreation: { acceptedAt: time, attemptId, projectId: `project-${appId}` },
     registration: {
       attemptId,
       observed: {
-        projectId: `project-${appId}`,
-        name: appId,
-        teamId: "team",
         installationId: "installation",
+        name: appId,
+        projectId: `project-${appId}`,
         projectSettings,
         protection: nativeTargetRequiredProjectProtection,
+        teamId: "team",
       },
       observedAt: time,
     },
@@ -541,8 +541,8 @@ describe("fresh normal same-project runtime assembly", () => {
     const { audience, issuer, environment: operatorEnvironment, ownerId } = workload;
     base.nativeNeon.configuration.operator = {
       audience,
-      issuer,
       environment: operatorEnvironment,
+      issuer,
       ownerId,
       projectId: base.operator.projectId,
     };
@@ -577,16 +577,16 @@ describe("fresh normal same-project runtime assembly", () => {
       validation: { check: { task: "check" }, browser: null, test: null },
     };
     const destination = {
-      projectId: "standard-project",
-      teamId: "team",
+      deploymentAccess: "public-app" as const,
       installationId: "installation",
       name: "apps-new-app",
-      teamSlug: "team",
+      projectId: "standard-project",
+      provisioningDigest: "2".repeat(64),
+      provisioningRequestId: "bb863e20-5238-4e28-b156-31b9ca26d304",
       repository: "owner/apps-new-app",
       repositoryId: "123",
-      provisioningRequestId: "bb863e20-5238-4e28-b156-31b9ca26d304",
-      provisioningDigest: "2".repeat(64),
-      deploymentAccess: "public-app" as const,
+      teamId: "team",
+      teamSlug: "team",
     };
     const environment = {
       PROTECTED_HOSTED_OPERATOR_STANDARD_RUNTIME_PROFILES: JSON.stringify([
@@ -615,7 +615,7 @@ describe("fresh normal same-project runtime assembly", () => {
       ]),
     };
     const readStandardDestination = vi.fn().mockResolvedValue(destination);
-    const readStandardCapture = vi.fn().mockResolvedValue({ selection: selected, description });
+    const readStandardCapture = vi.fn().mockResolvedValue({ description, selection: selected });
     const resolve = createNativeTargetConfigurationResolver({
       configuration: base,
       environment,
@@ -1101,8 +1101,8 @@ describe("fresh normal same-project runtime assembly", () => {
     const { audience, issuer, environment: operatorEnvironment, ownerId } = workload;
     base.nativeNeon.configuration.operator = {
       audience,
-      issuer,
       environment: operatorEnvironment,
+      issuer,
       ownerId,
       projectId: base.operator.projectId,
     };
@@ -1137,16 +1137,16 @@ describe("fresh normal same-project runtime assembly", () => {
       validation: { check: { task: "check" }, browser: null, test: null },
     };
     const destination = {
-      projectId: "standard-project",
-      teamId: "team",
+      deploymentAccess: "public-app" as const,
       installationId: "installation",
       name: "apps-new-app",
-      teamSlug: "team",
+      projectId: "standard-project",
+      provisioningDigest: "2".repeat(64),
+      provisioningRequestId: "bb863e20-5238-4e28-b156-31b9ca26d304",
       repository: "owner/apps-new-app",
       repositoryId: "123",
-      provisioningRequestId: "bb863e20-5238-4e28-b156-31b9ca26d304",
-      provisioningDigest: "2".repeat(64),
-      deploymentAccess: "public-app" as const,
+      teamId: "team",
+      teamSlug: "team",
     };
     const environment = {
       PROTECTED_HOSTED_OPERATOR_STANDARD_RUNTIME_PROFILES: JSON.stringify([
@@ -1174,7 +1174,7 @@ describe("fresh normal same-project runtime assembly", () => {
       ]),
     };
     const readStandardDestination = vi.fn().mockResolvedValue(destination);
-    const readStandardCapture = vi.fn().mockResolvedValue({ selection: selected, description });
+    const readStandardCapture = vi.fn().mockResolvedValue({ description, selection: selected });
     const resolve = createNativeTargetConfigurationResolver({
       configuration: base,
       environment,
