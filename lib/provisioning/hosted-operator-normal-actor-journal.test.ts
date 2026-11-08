@@ -43,7 +43,7 @@ const program = normalActorProgramSchema.parse({
   appId: target.appId,
   origin: "https://apps.example.test",
   actors: [
-    { actorKey: "owner", email: "owner@example.test", name: "Owner", account: "capture-existing" },
+    { account: "capture-existing", actorKey: "owner", email: "owner@example.test", name: "Owner" },
   ],
   organizations: [],
   memberships: [],
@@ -63,24 +63,24 @@ const plan = hostedOperatorPlanSchema.parse({
     sessionId: target.sessionId,
   },
   appDatabase: {
-    resourceId: "app-resource",
     database: "normal",
     migratorRole: "normal_owner",
+    resourceId: "app-resource",
     runtimeRole: "normal_runtime",
   },
   authDatabase: {
-    resourceId: "auth-resource",
     database: "auth",
     migratorRole: "auth_owner",
+    resourceId: "auth-resource",
     runtimeRole: "auth_runtime",
   },
   contextId: "accepted-spec",
   cost: { class: "shared-recovery-group", description: "Approved normal accounts", owner: "owner" },
   effects: [
     {
+      description: "Capture approved actual accounts",
       id: "normal-accounts",
       kind: "normal-accounts",
-      description: "Capture approved actual accounts",
     },
   ],
   installer: { reference: "owned-worker", sha256: "a".repeat(64) },
@@ -247,7 +247,7 @@ const organizationProofFixture = async () => {
   const selectedProgram = normalActorProgramSchema.parse({
     ...program,
     organizations: [
-      { organizationId: "org-one", ownerActorKey: "owner", name: "One", slug: "one" },
+      { name: "One", organizationId: "org-one", ownerActorKey: "owner", slug: "one" },
     ],
     memberships: [{ actorKey: "owner", organizationId: "org-one", role: "owner" }],
   });
@@ -338,11 +338,11 @@ const currentBootstrapFixture = async () => {
       gitSha: "c".repeat(40),
     },
     effects: [
-      { id: "auth-resources", kind: "resources", description: "Auth", resourceId: "auth-resource" },
-      { id: "app-resources", kind: "resources", description: "App", resourceId: "app-resource" },
-      { id: "auth-schema", kind: "install", description: "Auth schema" },
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway configuration" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
+      { description: "Auth", id: "auth-resources", kind: "resources", resourceId: "auth-resource" },
+      { description: "App", id: "app-resources", kind: "resources", resourceId: "app-resource" },
+      { description: "Auth schema", id: "auth-schema", kind: "install" },
+      { description: "Gateway configuration", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
     ],
   });
   const operationRef = "33333333-3333-4333-8333-333333333333";
@@ -715,7 +715,7 @@ describe("retained actual normal actor journal", () => {
     const selectedProgram = normalActorProgramSchema.parse({
       ...program,
       organizations: [
-        { organizationId: "org-one", ownerActorKey: "owner", name: "One", slug: "one" },
+        { name: "One", organizationId: "org-one", ownerActorKey: "owner", slug: "one" },
       ],
       memberships: [{ actorKey: "owner", organizationId: "org-one", role: "owner" }],
     });
@@ -770,11 +770,11 @@ describe("retained actual normal actor journal", () => {
         operatorOrigin: "https://operator.example.test",
         catalogAppIds: [target.appId],
         sourceWorkload: {
-          issuer: "https://oidc.vercel.com",
           audience: "https://gateway.example.test",
+          environment: "preview",
+          issuer: "https://oidc.vercel.com",
           ownerId: "team",
           projectId: "prj_gateway",
-          environment: "preview",
           subject: "gateway",
         },
       },
