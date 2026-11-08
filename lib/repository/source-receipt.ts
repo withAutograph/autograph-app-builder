@@ -125,7 +125,7 @@ export type CanonicalTemplateSnapshot = Omit<SupportedTemplateSnapshot, "sourceS
 const isGitObjectId = (value: unknown): value is string =>
   typeof value === "string" && (/^[0-9a-f]{40}$/u.test(value) || /^[0-9a-f]{64}$/u.test(value));
 
-const hasExactKeys = (value: object, expected: readonly string[]): boolean =>
+const hasExactKeys = (value: Record<string, unknown>, expected: readonly string[]): boolean =>
   Object.keys(value).toSorted().join("\0") === [...expected].toSorted().join("\0");
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

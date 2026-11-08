@@ -95,7 +95,7 @@ export function EmulationApproval({
             <LockKeyhole aria-hidden="true" size={16} />
             <span>{scope}</span>
           </div>
-          <div className={styles.form} aria-label={actionLabel}>
+          <div className={styles.form} role="group" aria-label={actionLabel}>
             {action}
           </div>
           <p className={styles.footer}>{environment} only · Powered by Emulate</p>

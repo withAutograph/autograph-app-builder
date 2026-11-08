@@ -937,7 +937,7 @@ for (const mutation of [
   test(`historical inbox cannot waive uncertainty with ${mutation}`, async () => {
     const f = await fixture({ inboxSuffix: acceptedSuffix(), runStatus: "cancelled" });
     const payload = readTerminalRecoveryCandidate(f.collected.candidate);
-    const first = payload.carriedInbox[0];
+    const [first] = payload.carriedInbox;
     if (mutation === "foreign-run") {
       first.runId = "wrun-foreign";
     }

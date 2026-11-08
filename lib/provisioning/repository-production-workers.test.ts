@@ -262,7 +262,7 @@ describe("concrete protected Production worker composition", () => {
     await expect(f.workers.reconcile(f.context)).resolves.toMatchObject({ state: "applied" });
     expect(f.calls.map((call) => call.readOnly)).toEqual([false, true]);
     for (const call of f.calls) {
-      const context = call.context;
+      const { context } = call;
       if (!("kind" in context)) {
         throw new Error("Fixture storage worker context is missing");
       }
@@ -282,6 +282,55 @@ describe("concrete protected Production worker composition", () => {
         fence_generation: f.context.row.record.lease?.fenceGeneration,
         resource_id: f.context.row.record.resource?.resourceId,
       });
+    }
+  });
+
+  it.each([{ roles: ["requester"] }, { roles: [] }])(
+    "partitions initial schema installation with the verified creator while access remains unapplied (roles: $roles)",
+    async ({ roles }) => {
+      const f = await fixture();
+      f.context.effect = "install-schema";
+      f.context.row.record.intent.creatorRoles = roles;
+      await f.workers.apply(f.context);
+      await expect(f.workers.reconcile(f.context)).resolves.toMatchObject({ state: "applied" });
+      expect(f.calls.map((call) => [call.operation, call.readOnly])).toEqual([
+        ["schema", false],
+        ["schema", true],
+      ]);
+      for (const call of f.calls) {
+        const planBytes = defined(call.startupFiles["approved-access-plan.json"]);
+        expect(planFrom(planBytes).access).toEqual([
+          { actorId: "verified-actor", actorKind: "human", organizationId: "org", roles },
+        ]);
+        expect(call.context.operation.approval_digest).toBe(
+          createHash("sha256").update(planBytes).digest("hex"),
+        );
+        expect(call.context.tenant_targets).toEqual(["org"]);
+      }
+      expect(f.context.row.record.effects["creator-access"].state).toBe("idle");
+    },
+  );
+
+  it.each([undefined, "different-actor"])(
+    "refuses initial schema dispatch without the same saved verified actor (%s)",
+    async (actorId) => {
+      const f = await fixture();
+      f.context.effect = "install-schema";
+      f.context.row.record.creatorActorId = actorId;
+      await expect(f.workers.apply(f.context)).rejects.toThrow("identity_required");
+      expect(f.calls).toEqual([]);
+    },
+  );
+
+  it("keeps schema revisions on retained scope without replaying creator grants", async () => {
+    const f = await fixture();
+    f.context.effect = "install-schema";
+    f.context.row.record.effects["creator-access"] = { state: "applied", receipt: {} };
+    f.context.row.record.creatorActorId = "previously-linked-actor";
+    await f.workers.apply(f.context);
+    for (const call of f.calls) {
+      expect(call.operation).toBe("schema");
+      expect(planFrom(call.startupFiles["approved-access-plan.json"]).access).toEqual([]);
     }
   });
 

@@ -911,8 +911,9 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
         "",
       path: `${relativeRoot}/apps/${appId}/.config/app-spec.md`,
     });
+    const packageName = `@autograph/${appId}`;
     await sandbox.writeTextFile({
-      content: `${JSON.stringify({ name: `@autograph/${appId}` }, null, 2)}\n`,
+      content: `${JSON.stringify({ name: packageName }, null, 2)}\n`,
       path: `${relativeRoot}/apps/${appId}/package.json`,
     });
     await sandbox.writeTextFile({

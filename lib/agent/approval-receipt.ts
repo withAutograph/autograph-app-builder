@@ -326,9 +326,12 @@ const operatorEffectSummaries = (plan: HostedOperatorPlan) => {
 const signupApprovalDescription = (plan: HostedOperatorPlan) => {
   const signupPolicy = plan.authSignupPolicy;
   if (signupPolicy === undefined || !planHasEffect(plan, "auth-signup-policy")) return "";
-  return plan.action === "cleanup"
-    ? `Sign-up access:\n- Remove sign-up access for ${signupPolicy.eligibility === "public" ? "anyone" : "approved email addresses only"}, including its ${signupPolicy.membershipRole} membership and app roles: ${signupPolicy.appRoles.join(", ")}.`
-    : `Sign-up access:\n- Eligibility: ${signupPolicy.eligibility === "public" ? "anyone" : "approved email addresses only"}.\n- New members receive the ${signupPolicy.membershipRole} membership and these app roles: ${signupPolicy.appRoles.join(", ")}.`;
+  const { action } = plan;
+  const eligibility =
+    signupPolicy.eligibility === "public" ? "anyone" : "approved email addresses only";
+  return action === "cleanup"
+    ? `Sign-up access:\n- Remove sign-up access for ${eligibility}, including its ${signupPolicy.membershipRole} membership and app roles: ${signupPolicy.appRoles.join(", ")}.`
+    : `Sign-up access:\n- Eligibility: ${eligibility}.\n- New members receive the ${signupPolicy.membershipRole} membership and these app roles: ${signupPolicy.appRoles.join(", ")}.`;
 };
 const operatorActorLookups = (plan: HostedOperatorPlan) => {
   const program = plan.normalActorProgram;
@@ -548,12 +551,11 @@ const operatorApprovalDescription = (
       : "Prepare this app's Preview resources and required service connections.";
   const costOwner = "the owner recorded in this approved plan";
   const retentionSummary = operatorRetentionSummary(plan);
+  const effectLines = effectSummaries.map((effect) => `- ${effect}`).join("\n");
   return [
     resourceSentence,
     "Production will not be deployed or activated.",
-    ...(effectSummaries.length > 0
-      ? [`What will happen:\n${effectSummaries.map((effect) => `- ${effect}`).join("\n")}`]
-      : []),
+    ...(effectSummaries.length > 0 ? [`What will happen:\n${effectLines}`] : []),
     ...(membershipSummary ? [membershipSummary] : []),
     `Access and cost:\n- ${accessSummary}${accountSummary}\n- ${plan.cost.description} Billing responsibility follows ${costOwner}. Check the provider's billing page for amounts.`,
     ...(unresolvedAccessSummary ? [unresolvedAccessSummary] : []),
@@ -620,9 +622,13 @@ const nativeTargetApprovalDescription = (input: unknown): string | undefined => 
     plan.retention.expiresAt === undefined
       ? ""
       : ` (expires ${formatUtcExpiry(plan.retention.expiresAt)})`;
+  const resourceProfile =
+    plan.resourceProfileId === undefined
+      ? "The configured resource"
+      : `Approved profile ${plan.resourceProfileId}`;
   return [
     `Create the Preview project ${plan.project.name} for app ${plan.appId}, then register its Preview branch.`,
-    `Resource selection:\n- ${plan.resourceProfileId === undefined ? "The configured resource" : `Approved profile ${plan.resourceProfileId}`} uses Neon project ${plan.nativeNeon.scope.projectId}, branch ${plan.nativeNeon.scope.branchId}, store ${plan.appDatabase.resourceId}.\n- Reserve database ${plan.appDatabase.database} and roles ${plan.appDatabase.migratorRole} / ${plan.appDatabase.runtimeRole}.`,
+    `Resource selection:\n- ${resourceProfile} uses Neon project ${plan.nativeNeon.scope.projectId}, branch ${plan.nativeNeon.scope.branchId}, store ${plan.appDatabase.resourceId}.\n- Reserve database ${plan.appDatabase.database} and roles ${plan.appDatabase.migratorRole} / ${plan.appDatabase.runtimeRole}.`,
     ...((plan.resourceSelectionRevision ?? 0) > 0
       ? [
           "This revised resource selection needs a new approval. Earlier approvals do not authorize this plan; their audit remains retained.",

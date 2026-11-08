@@ -37,7 +37,7 @@ const hostedPreviewConfigurationSchema = z
       ]),
     }),
     eve: z.strictObject({
-      baseUrl: z.string().url().startsWith("https://"),
+      baseUrl: z.url().startsWith("https://"),
       packageVersion: z.literal("0.43.0"),
     }),
     forwarder: previewForwarderSchema,

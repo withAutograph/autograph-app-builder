@@ -402,7 +402,7 @@ test("trusted Builder call contract flows through actual native prepare and reco
     originalAuthoritySessionId: "original-public",
     parentCancellationRevision: 0,
   };
-  const selected = f.payload.candidates[0];
+  const [selected] = f.payload.candidates;
   const binding = {
     ...descriptor,
     ownerRunId: "new-physical-child",

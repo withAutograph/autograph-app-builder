@@ -544,7 +544,7 @@ describe("consumed proof after Gateway selection advances", () => {
   ] as const)("rejects incompatible retained identity evidence: %s", (change) => {
     const { after } = fixture();
     const link = after.identityLink;
-    const previous = after.gatewayDeliveryCandidates[0];
+    const [previous] = after.gatewayDeliveryCandidates;
     if (link === undefined || previous === undefined) {
       throw new Error("Missing controlled proof");
     }

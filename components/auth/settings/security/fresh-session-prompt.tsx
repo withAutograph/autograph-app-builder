@@ -3,7 +3,7 @@
 import { isTwoFactorRedirect } from "@better-auth-ui/core/plugins/two-factor";
 import { useAuth, useSession, useSignInEmail } from "@better-auth-ui/react";
 import { useState } from "react";
-import type { FormEvent } from "react";
+import type { SyntheticEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -35,7 +35,7 @@ export function FreshSessionPrompt({ onFresh }: FreshSessionPromptProps) {
     },
   });
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     const email = session.data?.user.email;
     if (!email) {

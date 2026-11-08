@@ -1138,7 +1138,8 @@ test("646 independent checkpoint histories retain every value while sharing immu
     records.flatMap((value) => value.sessionState.snapshot.session.history),
   );
   assert.equal(uniqueMessages.size, history.length);
-  const shared = records[0].sessionState.snapshot.session.history[0];
+  const [firstRecord] = records;
+  const [shared] = firstRecord.sessionState.snapshot.session.history;
   assert.equal(Object.isFrozen(shared), true);
   assert.equal(Object.isFrozen(shared.content[0].output), true);
   assert.throws(() => {

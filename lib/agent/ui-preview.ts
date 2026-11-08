@@ -186,7 +186,8 @@ export function validateUiPreview(input: UiPreviewInput): void {
   if (paths.size !== parsed.files.length) {
     throw new Error("UI preview paths must be unique.");
   }
-  if (new Set(parsed.routes).size !== parsed.routes.length) {
+  const routes = new Set(parsed.routes);
+  if (routes.size !== parsed.routes.length) {
     throw new Error("UI preview routes must be unique.");
   }
   const screenRoutes = new Set(
@@ -195,7 +196,7 @@ export function validateUiPreview(input: UiPreviewInput): void {
   if (
     parsed.routes.some((value) => !screenRoutes.has(value)) ||
     parsed.manifest.screens.some(
-      ({ route: value, entry }) => !parsed.routes.includes(value) || !paths.has(entry),
+      ({ route: value, entry }) => !routes.has(value) || !paths.has(entry),
     )
   ) {
     throw new Error("UI preview screens, routes, and entries must agree.");

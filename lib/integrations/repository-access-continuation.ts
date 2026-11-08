@@ -8,13 +8,13 @@ import type { RepositoryReference } from "./repository-access";
 
 const decimal = z.string().regex(/^[1-9][0-9]*$/u);
 const VERCEL_PROTECTION_BYPASS_QUERY = "x-vercel-protection-bypass";
-const continuationIdSchema = z.string().uuid();
+const continuationIdSchema = z.uuid();
 const opaqueRuntimeId = z.string().min(1).max(255);
 
 export const repositoryAccessContinuationSchema = z.strictObject({
   authority: hostedTenantAuthoritySchema,
   authorizedAt: z.date().optional(),
-  callbackUrl: z.string().url().max(4096),
+  callbackUrl: z.url().max(4096),
   consumedAt: z.date().optional(),
   continuationDigest: z.string().regex(/^[0-9a-f]{64}$/u),
   createdAt: z.date(),

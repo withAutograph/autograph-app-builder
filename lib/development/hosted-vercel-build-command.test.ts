@@ -85,7 +85,7 @@ it("prepares the hosted app and delegates Eve output to the generated service bu
     const outputPath = path.join(root, ".vercel/output/config.json");
     const hostOutput = await readFile(outputPath, "utf-8");
     const generated = outputSchema.parse(JSON.parse(hostOutput));
-    const service = Object.values(generated.services)[0];
+    const [service] = Object.values(generated.services);
     if (service === undefined) {
       throw new Error("Hosted Next integration did not generate an Eve service");
     }

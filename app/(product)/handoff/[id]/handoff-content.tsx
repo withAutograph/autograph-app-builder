@@ -93,7 +93,7 @@ export async function HandoffContent({ params }: { params: Promise<{ id: string 
         <section className={`${styles.readyCard} ${handoffStyles.card}`}>
           <h1>{intent.appName}</h1>
           <p>Your prepared app and existing provider connections are saved with Autograph.</p>
-          <div className={handoffStyles.resources} aria-label="Prepared resources">
+          <div className={handoffStyles.resources} role="group" aria-label="Prepared resources">
             <GitHubResource intent={intent} returnTo={returnTo} />
             {vercel && !(vercel.status === "skipped" && vercel.code === "not_selected") ? (
               <article>

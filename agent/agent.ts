@@ -314,14 +314,14 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       },
       {
         content: vendorOnboardingDecisions,
-        mediaType: "text/markdown" as const,
+        mediaType: markdownMediaType,
         path: "prototype/vendor-onboarding/decisions.md",
-      },
+      } satisfies { content: string; mediaType: typeof markdownMediaType; path: string },
       {
         content: vendorOnboardingAppSpec,
-        mediaType: "text/markdown" as const,
+        mediaType: markdownMediaType,
         path: vendorOnboardingAppSpecPath,
-      },
+      } satisfies { content: string; mediaType: typeof markdownMediaType; path: string },
     ].find(({ path: artifactPath }) => !recordedPaths.has(artifactPath));
     if (missingArtifact !== undefined) {
       return {

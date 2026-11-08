@@ -6,7 +6,7 @@ import { hostedTenantAuthoritySchema } from "./hosted-admin";
 import type { HostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
 
 const sha256Schema = z.string().regex(/^sha256:[0-9a-f]{64}$/u);
-const instantSchema = z.string().datetime({ offset: true });
+const instantSchema = z.iso.datetime({ offset: true });
 
 const planSchema = z.strictObject({
   action: z.literal("github-installation.bind"),

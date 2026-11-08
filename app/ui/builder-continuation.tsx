@@ -113,9 +113,11 @@ export function BuilderContinuation({
 
   // The request-fresh server draft is authoritative after provider return.
   const resumedDraft = initialDurableDraft;
-  const builderKey = providerResumeKey
-    ? `${providerResumeKey}:${resumedDraft ? "restored" : "missing"}`
-    : savedBrief || "new";
+  let builderKey = savedBrief || "new";
+  if (providerResumeKey) {
+    const resumeStatus = resumedDraft ? "restored" : "missing";
+    builderKey = `${providerResumeKey}:${resumeStatus}`;
+  }
 
   return (
     <>

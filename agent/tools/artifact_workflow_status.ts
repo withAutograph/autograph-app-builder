@@ -118,7 +118,7 @@ const githubDraftPublicationSummary = (state: ReturnType<typeof appBuilderWorkfl
   if (state.phase !== "reviewed" || state.githubDraftProposal === undefined) {
     return {};
   }
-  const proposal = state.githubDraftProposal.proposal;
+  const { proposal } = state.githubDraftProposal;
   const binding = {
     binding: state.githubDraftProposal,
     expectedProposalDigest: proposal.digest,

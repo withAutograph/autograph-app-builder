@@ -391,7 +391,7 @@ describe("native externally managed policy recovery integration", () => {
       const store: HostedRuntimeJournalStore = {
         compareAndSet: async (input) => {
           if (input.expectedRevision !== row.revision) {
-            return undefined;
+            return;
           }
           row = {
             record: hostedRuntimeJournalRecordSchema.parse(input.record),
@@ -737,7 +737,7 @@ describe("native externally managed policy recovery integration", () => {
         compareAndSet: vi.fn(
           async (input: Parameters<HostedRuntimeJournalStore["compareAndSet"]>[0]) => {
             if (input.expectedRevision !== row.revision) {
-              return undefined;
+              return;
             }
             row = {
               record: hostedRuntimeJournalRecordSchema.parse(input.record),
@@ -751,7 +751,7 @@ describe("native externally managed policy recovery integration", () => {
             input: Parameters<NonNullable<HostedRuntimeJournalStore["reserveFenceGeneration"]>>[0],
           ) => {
             if (input.expectedRevision !== row.revision) {
-              return undefined;
+              return;
             }
             requireFixtureValue(row.record.operator, "journal operator").fenceGeneration = 2;
             row.revision++;
@@ -840,7 +840,7 @@ describe("native externally managed policy recovery integration", () => {
           });
         }
         if (url.pathname.startsWith("/v9/projects/")) {
-          const projectId = url.pathname.split("/")[3];
+          const projectId = url.pathname.split("/").at(3);
           return Response.json({
             id: projectId,
             accountId: "team-notes",
@@ -1003,18 +1003,18 @@ describe("native externally managed policy recovery integration", () => {
         verifyReadyDeliveryReplacement: async (_context, plan, predecessor) => {
           await native.verify(plan, predecessor);
         },
-        readApproval: async (input) => ({
-          ...input,
-          approved: input.callId !== "new-human-call" || approved,
-          approvalId:
-            input.callId === "approval-call-notes"
-              ? "approval-notes"
-              : input.callId === "approval-call-first"
-                ? "approval-first-renewal"
-                : input.callId === "approval-call-current"
-                  ? "approval-current"
-                  : "new-human-approval",
-        }),
+        readApproval: async (input) => {
+          const result = { ...input, approved: input.callId !== "new-human-call" || approved };
+          let approvalId = "new-human-approval";
+          if (input.callId === "approval-call-notes") {
+            approvalId = "approval-notes";
+          } else if (input.callId === "approval-call-first") {
+            approvalId = "approval-first-renewal";
+          } else if (input.callId === "approval-call-current") {
+            approvalId = "approval-current";
+          }
+          return { ...result, approvalId };
+        },
         withResourceLease: async (_input, run) => await run(async () => {}),
         reconcile: async (input) => {
           await input.assertCurrent();
@@ -1477,7 +1477,7 @@ describe("explicit READY delivery replacement", () => {
     "not-ready",
   ])("rejects a named app candidate that is %s", (change) => {
     const { record, intent, candidate } = fixture();
-    const app = requireFixtureValue(record.operator.deliveryCandidates, "delivery candidates")[0];
+    const [app] = requireFixtureValue(record.operator.deliveryCandidates, "delivery candidates");
     if (change === "absent") {
       record.operator.deliveryCandidates = [];
     }

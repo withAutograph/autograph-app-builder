@@ -83,7 +83,7 @@ const fixture = (mutation = false, write = false, capture = false) => {
       if (options.detached !== true) {
         return { exitCode: 0, stdout: async () => `${sha}  /worker/integration\n` };
       }
-      const spool = options.args[2];
+      const spool = options.args.at(2);
       const framePath = `${spool}/requests/1.json`;
       const frameData = {
         kind: mutation ? "authorize_effect" : "check_fence",

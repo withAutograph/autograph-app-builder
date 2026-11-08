@@ -217,7 +217,7 @@ export const readyReplacementHistory = (
   now = Date.now(),
 ) => {
   if (!plan.appDeliveryReplacement) {
-    return undefined;
+    return;
   }
   for (const archived of record.operator?.retainedReadyDeliveryOperations?.toReversed() ?? []) {
     const snapshot: HostedRuntimeJournalRecord = {
@@ -240,7 +240,6 @@ export const readyReplacementHistory = (
       return predecessor;
     }
   }
-  return undefined;
 };
 
 export const readyReplacementPriorOperators = (

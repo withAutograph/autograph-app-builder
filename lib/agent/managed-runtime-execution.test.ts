@@ -313,7 +313,7 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
         return makeCommand("hash-command", "");
       }
       if (input.cmd === worker.executablePath) {
-        const inputPath = input.args[2];
+        const inputPath = input.args.at(2);
         const bytes = inputPath === undefined ? undefined : files.get(inputPath);
         if (bytes === undefined) {
           throw new Error("Missing controlled entry input");

@@ -184,7 +184,7 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
       const requestRef = vercelProvisionDiagnosticSchema.shape.requestRef.safeParse(
         response.headers.get("x-vercel-id"),
       );
-      let code: z.output<typeof vercelProvisionDiagnosticSchema.shape.code>;
+      let code: z.output<typeof vercelProvisionDiagnosticSchema>["code"];
       try {
         // Error bodies are untrusted diagnostic input; read only a bounded projection.
         const errorBody = await boundedJson(response, invocation.signal, 16_384);

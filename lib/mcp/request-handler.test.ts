@@ -489,7 +489,17 @@ describe("branded public tool mapping", () => {
       }[];
     }>(response);
 
-    expect((result.tools ?? []).map(({ name }) => name).toSorted()).toEqual(exactTools);
+    expect(
+      (result.tools ?? [])
+        .map(({ name }) => name)
+        .toSorted((left, right) => {
+          if (left === undefined) return 1;
+          if (right === undefined) return -1;
+          if (left < right) return -1;
+          if (left > right) return 1;
+          return 0;
+        }),
+    ).toEqual(exactTools);
     expect((result.tools ?? []).every(({ _meta }) => _meta?.ui?.resourceUri === undefined)).toBe(
       true,
     );

@@ -199,7 +199,13 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
           }
           continue;
         }
-        if (effect === CREATOR_ACCESS_EFFECT) {
+        // Initial installation needs the real verified actor's tenant partition,
+        // but membership and app grants remain the later creator-access effect.
+        if (
+          effect === CREATOR_ACCESS_EFFECT ||
+          (effect === "install-schema" &&
+            row.record.effects[CREATOR_ACCESS_EFFECT].state !== "applied")
+        ) {
           await ports.prepareCreatorIdentity?.({
             row,
             effect,
@@ -301,13 +307,14 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
         state: intent.storage.kind === "none" ? "checking-access" : "setting-up-data",
       };
     }
-    if (
-      unfinished(row.record) ||
-      !sameRepositoryProductionSetupEffects(row.record.intent, intent)
-    ) {
+    if (!sameRepositoryProductionSetupEffects(row.record.intent, intent)) {
       return { operationRef: row.operationRef, state: "reconciling" };
     }
-    if (row.record.effects["creator-access"].state !== "applied") {
+    if (
+      row.record.effects[CREATOR_ACCESS_EFFECT].state !== "applied" &&
+      (row.record.intent.storage.kind === "none" ||
+        row.record.effects["allocate-storage"].state === "applied")
+    ) {
       const identity = await ports.readCreatorIdentity(row);
       if (identity.state === "required") {
         const result: RepositoryProductionSetupResult = {
@@ -322,6 +329,9 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
         }
         return result;
       }
+    }
+    if (unfinished(row.record)) {
+      return { operationRef: row.operationRef, state: "reconciling" };
     }
     const complete = selectedEffects(row.record).every(
       (effect) => row.record.effects[effect].state === "applied",

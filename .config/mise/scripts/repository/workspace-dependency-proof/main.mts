@@ -7,7 +7,7 @@ import type { Readable } from "node:stream";
 import type { SandboxSession } from "eve/sandbox";
 import { ensureCheckoutDependencies } from "../../../../../lib/agent/checkout-dependencies";
 
-const [, , bun] = process.argv;
+const [bun] = process.argv.slice(2);
 if (!bun || !path.isAbsolute(bun)) {
   throw new Error("An absolute declared Bun executable is required.");
 }

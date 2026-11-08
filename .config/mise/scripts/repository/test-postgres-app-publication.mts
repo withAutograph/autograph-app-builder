@@ -16,7 +16,8 @@ import { createPostgresOperatorArtifactSelections } from "../../../../lib/provis
 import type { OperatorArtifactContext } from "../../../../lib/provisioning/hosted-operator-artifact-store";
 
 // Never consumes deployment credentials or a caller-supplied database URL.
-const [, , postgresBin] = process.argv;
+const [postgresBin] = process.argv.slice(2);
+const initialPublicationOperation = "initial-publication";
 assert.ok(postgresBin && path.isAbsolute(postgresBin));
 const port = await new Promise<number>((resolve, reject) => {
   const server = createServer();
@@ -130,12 +131,12 @@ try {
     publishedSource: { ...first.publishedSource, gitSha: "f".repeat(40) },
   };
   await Promise.all([
-    recordDestination(context, "initial-publication", first, "initial"),
-    recordDestination(context, "initial-publication", first, "initial"),
+    recordDestination(context, initialPublicationOperation, first, "initial"),
+    recordDestination(context, initialPublicationOperation, first, "initial"),
   ]);
   assert.deepEqual(await readDestination(context, first.appSpecDigest), first);
   await recordDestination(context, "revision-publication", second, "current");
-  await recordDestination(context, "initial-publication", first, "initial");
+  await recordDestination(context, initialPublicationOperation, first, "initial");
   assert.deepEqual(await stores().readDestination?.(context, first.appSpecDigest), second);
   assert.deepEqual(
     await store.readPublishedSource(context, first.publishedSource),
@@ -150,7 +151,7 @@ try {
     undefined,
     "No compiled SQL release is manufactured",
   );
-  await assert.rejects(recordDestination(context, "initial-publication", second, "initial"));
+  await assert.rejects(recordDestination(context, initialPublicationOperation, second, "initial"));
   // Initial Git publication succeeded but its first marker write failed; a later
   // reconciliation was recorded before recovery returned that retained old receipt.
   const missingInitial = {
@@ -218,7 +219,7 @@ try {
     await stores().readDestination?.(context, first.appSpecDigest),
     recoveredNewPullRequest,
   );
-  await recordDestination(context, "initial-publication", first, "initial");
+  await recordDestination(context, initialPublicationOperation, first, "initial");
   assert.deepEqual(await readDestination(context, first.appSpecDigest), recoveredNewPullRequest);
   for (const foreign of [
     { ...context, authority: { ...context.authority, ownerUserId: "other-owner" } },

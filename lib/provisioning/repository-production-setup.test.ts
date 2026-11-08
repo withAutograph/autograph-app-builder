@@ -267,7 +267,7 @@ describe("Builder-owned Production setup", () => {
     const f = fixture();
     f.setIdentity(false);
     expect((await f.service.prepare(scope, intent)).state).toBe("identity-required");
-    expect(f.calls).toEqual(["credentials", "allocate-storage", "install-schema"]);
+    expect(f.calls).toEqual(["credentials", "allocate-storage"]);
     f.setIdentity(true);
     expect((await f.service.prepare(scope, intent)).state).toBe("ready");
     expect(f.calls).toEqual([
@@ -278,6 +278,84 @@ describe("Builder-owned Production setup", () => {
       "bind-runtime",
     ]);
   });
+  it("persists the verified creator before initial schema installation without granting access early", async () => {
+    const f = fixture();
+    const { apply } = f.ports;
+    f.ports.prepareCreatorIdentity = async ({ row, assertCurrent }) => {
+      await assertCurrent();
+      expect(row.record.effects["allocate-storage"].state).toBe("applied");
+    };
+    f.ports.apply = async (context) => {
+      if (context.effect === "install-schema") {
+        expect(context.row.record.creatorActorId).toBe("creator");
+        expect(context.row.record.effects["creator-access"].state).toBe("idle");
+        expect(f.actual.has("creator-access")).toBe(false);
+      }
+      await apply(context);
+    };
+    expect((await f.service.prepare(scope, intent)).state).toBe("ready");
+  });
+
+  it("surfaces the saved sign-in while an old initial schema attempt remains pending", async () => {
+    const f = fixture();
+    f.setIdentity(false);
+    await f.service.prepare(scope, intent);
+    const current = f.read();
+    if (current === undefined) throw new Error("Setup fixture is missing");
+    await f.ports.store.compareAndSet(current, {
+      ...current.record,
+      effects: {
+        ...current.record.effects,
+        "install-schema": { state: "pending", attemptId: "11111111-1111-4111-a111-111111111111" },
+      },
+    });
+    const calls = [...f.calls];
+    const revision = f.read()?.revision;
+    expect(await f.service.status(scope, intent)).toMatchObject({
+      state: "identity-required",
+      signInUrl: "https://apps.test/sign-in",
+    });
+    expect(f.calls).toEqual(calls);
+    expect(f.read()?.revision).toBe(revision);
+    f.setIdentity(true);
+    expect((await f.service.status(scope, intent)).state).toBe("reconciling");
+    expect((await f.service.prepare(scope, intent)).state).toBe("ready");
+    expect(f.calls.filter((call) => call === "allocate-storage")).toHaveLength(1);
+  });
+
+  it("rejects an actor change between schema installation and the initial access grant", async () => {
+    const f = fixture();
+    f.ports.readCreatorIdentity = async () => ({
+      actorId: f.actual.has("install-schema") ? "different-actor" : "creator",
+      state: "verified",
+    });
+    await expect(f.service.prepare(scope, intent)).rejects.toThrow("identity_changed");
+    expect(f.calls).toEqual(["credentials", "allocate-storage", "install-schema"]);
+    expect(f.read()?.record.creatorActorId).toBe("creator");
+    expect(f.actual.has("creator-access")).toBe(false);
+  });
+
+  it("keeps unknown allocation ahead of sign-in and preserves the saved operation", async () => {
+    const f = fixture();
+    f.interrupt();
+    await expect(f.service.prepare(scope, intent)).rejects.toThrow("connection lost");
+    f.ports.readCreatorIdentity = async () => {
+      throw new Error("Allocation must reconcile before reading creator identity");
+    };
+    const before = structuredClone(f.read());
+    expect((await f.service.status(scope, intent)).state).toBe("reconciling");
+    expect(f.read()).toEqual(before);
+  });
+
+  it("stops before initial schema work if authority is revoked during identity setup", async () => {
+    const f = fixture();
+    f.ports.prepareCreatorIdentity = async () => f.revoke();
+    await expect(f.service.prepare(scope, intent)).rejects.toThrow("not authorized");
+    expect(f.calls).toEqual(["credentials", "allocate-storage"]);
+    expect(f.read()?.record.creatorActorId).toBeUndefined();
+    expect(f.read()?.record.effects["install-schema"].state).toBe("idle");
+  });
+
   it("returns the pending sign-in and recorded expiry on read-only status", async () => {
     const f = fixture();
     f.setIdentity(false);

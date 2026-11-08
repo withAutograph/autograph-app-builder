@@ -7,8 +7,8 @@ const runtimeRoleAction = "runtime-role.configure";
 const oauthInitializeAction = "oauth.initialize";
 
 const sha256Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
-const instantSchema = z.string().datetime({ offset: true });
-const httpsUrlSchema = z.string().url().startsWith("https://");
+const instantSchema = z.iso.datetime({ offset: true });
+const httpsUrlSchema = z.url().startsWith("https://");
 const identifierSchema = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/u);
 const roleSchema = z.string().regex(/^[a-z][a-z0-9_]{2,62}$/u);
 const githubAccountIdSchema = z.string().regex(/^[1-9][0-9]{0,19}$/u);
@@ -27,10 +27,7 @@ const common = {
 const invitedUserSchema = z.strictObject({
   ...common,
   action: z.literal(invitedUserAction),
-  email: z
-    .string()
-    .email()
-    .transform((value) => value.toLowerCase()),
+  email: z.email().transform((value) => value.toLowerCase()),
   githubAccountId: githubAccountIdSchema,
   githubLogin: githubLoginSchema,
   issuer: httpsUrlSchema,

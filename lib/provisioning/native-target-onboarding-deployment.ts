@@ -176,7 +176,7 @@ export const createNativeTargetApprovalCheckpoint = (
     if (row.requestDigest !== planDigest || parsed.planDigest !== planDigest) {
       throw mismatch();
     }
-    const revision = row.revision;
+    const { revision } = row;
     expected = { observation: structuredClone(parsed.observation), revision };
     return parsed.observation;
   };
@@ -231,7 +231,7 @@ export const createNativeTargetApprovalCheckpoint = (
     if (stored.planDigest !== planDigest || !isDeepStrictEqual(stored.observation, parsed)) {
       throw unavailable();
     }
-    const revision = inserted.revision;
+    const { revision } = inserted;
     expected = { observation: structuredClone(parsed), revision };
   };
   const assertForwardObservation = (

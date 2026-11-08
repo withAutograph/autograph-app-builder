@@ -4,22 +4,19 @@ import { z } from "zod";
 
 const repositorySchema = z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u);
 
-const localOrigin = z
-  .string()
-  .url()
-  .transform((value, context) => {
-    const url = new URL(value);
-    const local =
-      (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) ||
-      (url.protocol === "https:" && url.hostname.endsWith(".emulate.localhost"));
-    if (!local || url.pathname !== "/" || url.search || url.hash) {
-      context.addIssue({
-        code: "custom",
-        message: "Emulator origin must be a loopback origin.",
-      });
-    }
-    return url.origin;
-  });
+const localOrigin = z.url().transform((value, context) => {
+  const url = new URL(value);
+  const local =
+    (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) ||
+    (url.protocol === "https:" && url.hostname.endsWith(".emulate.localhost"));
+  if (!local || url.pathname !== "/" || url.search || url.hash) {
+    context.addIssue({
+      code: "custom",
+      message: "Emulator origin must be a loopback origin.",
+    });
+  }
+  return url.origin;
+});
 
 const vercelHost = z
   .string()
