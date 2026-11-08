@@ -731,8 +731,8 @@ describe("exact native preparation invocation approval", () => {
       };
       const invocation = {
         ...f.common,
-        callId: "current-call",
         action: "native-target-prepare" as const,
+        callId: "current-call",
         input: prepared,
       };
       const response = await f.send(invocation);
@@ -913,8 +913,8 @@ describe("retired attempt preparation with immutable initial approval", () => {
       f.dependencies.readApproval = readActualApproval;
       const response = await f.send({
         ...f.common,
-        callId: "fresh-call",
         action: "native-target-prepare",
+        callId: "fresh-call",
         input: prepared,
       });
       const result = nativeTargetTransportResponseSchemas["native-target-prepare"].parse(
@@ -931,8 +931,8 @@ describe("retired attempt preparation with immutable initial approval", () => {
         });
         await f.send({
           ...f.common,
-          callId: "fresh-call",
           action: "native-target-prepare",
+          callId: "fresh-call",
           input: prepared,
         });
         expect(f.createProject).toHaveBeenCalledTimes(1);

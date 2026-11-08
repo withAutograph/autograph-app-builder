@@ -754,8 +754,8 @@ const retainedProjectSettingsApprovalFixture = () => {
     callId,
     fixture,
     journal,
-    oldPlanDigest,
     observe,
+    oldPlanDigest,
     readApproval: createHostedOperatorReadApproval({ eve: fixture.eve, journal, observe }),
     target,
   };
@@ -931,8 +931,8 @@ const retainedRenewalApprovalFixture = () => {
     fixture,
     record,
     journal,
-    oldPlanDigest,
     observe,
+    oldPlanDigest,
     readApproval: createHostedOperatorReadApproval({ eve: fixture.eve, journal, observe }),
     target,
   };
@@ -2617,14 +2617,14 @@ describe("hosted operator owner authority", () => {
     await expect(
       fixture.authority.authorize(
         request(),
-        { ...selection, projectId: "prj_native", branch: "other" },
+        { ...selection, branch: "other", projectId: "prj_native" },
         ownerContext,
       ),
     ).rejects.toThrow();
     await expect(
       fixture.authority.authorize(
         request(),
-        { ...selection, projectId: "prj_native", appId: "another-app" },
+        { ...selection, appId: "another-app", projectId: "prj_native" },
         ownerContext,
       ),
     ).rejects.toThrow();

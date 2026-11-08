@@ -545,21 +545,21 @@ describe("retained actual normal actor journal", () => {
       keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
       now: () => now,
       readApproval: async () => ({
+        action: "prepare",
         approvalId: "initial-approval",
+        approved: true,
         callId: "initial-call",
         planDigest: operatorPlanDigest(plan),
-        action: "prepare",
-        approved: true,
       }),
       store: { compareAndSet: async () => undefined, read: async () => structuredClone(value.row) },
     });
     const effect = {
       ...context,
       effect: plan.effects[0],
-      operationRef: accountOperationRef,
-      plan,
       fenceGeneration: 1,
       leaseId: value.row.record.leaseId,
+      operationRef: accountOperationRef,
+      plan,
     };
     const snapshot = structuredClone(value.row);
     await guard.assertMutationAuthority(effect, snapshot);
@@ -583,10 +583,10 @@ describe("retained actual normal actor journal", () => {
     const effect = {
       ...context,
       effect: plan.effects[0],
-      operationRef: accountOperationRef,
-      plan,
       fenceGeneration: 1,
       leaseId: value.row.record.leaseId,
+      operationRef: accountOperationRef,
+      plan,
     };
     const snapshot = structuredClone(value.row);
     value.row = {
@@ -599,11 +599,11 @@ describe("retained actual normal actor journal", () => {
       keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
       now: () => now,
       readApproval: async () => ({
+        action: "prepare",
         approvalId: "initial-approval",
+        approved: true,
         callId: "initial-call",
         planDigest: operatorPlanDigest(plan),
-        action: "prepare",
-        approved: true,
       }),
       store: { compareAndSet: async () => undefined, read: async () => structuredClone(value.row) },
     });

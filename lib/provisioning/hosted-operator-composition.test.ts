@@ -1309,8 +1309,8 @@ describe("empty approved access effects", () => {
     const readResourceBindings = vi.fn(
       async () =>
         await Promise.resolve({
-          authDatabase: { migrationUrl: "private-auth", runtimeUrl: "private-auth-runtime" },
           appDatabase: { migrationUrl: "private-app", runtimeUrl: "private-app-runtime" },
+          authDatabase: { migrationUrl: "private-auth", runtimeUrl: "private-auth-runtime" },
         }),
     );
     const readGeneratedRelease = vi.fn(

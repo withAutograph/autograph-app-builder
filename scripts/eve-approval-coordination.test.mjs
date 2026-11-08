@@ -158,8 +158,8 @@ it("settles native approval before dispatch, preserves results and authorizers, 
   const { SessionKey } = await import(`${sdk}context/keys.js`);
   const ctx = new ContextContainer();
   ctx.set(SessionKey, {
-    sessionId: "session",
     auth: { current: auth, initiator: auth },
+    sessionId: "session",
     turn: { id: "turn-one" },
   });
   const { z } = await import("zod");
@@ -306,8 +306,8 @@ it.each([
     const auth = { authenticator: "test", principalId: "owner", principalType: "user" };
     const ctx = new ContextContainer();
     ctx.set(SessionKey, {
-      sessionId: "mixed-session",
       auth: { current: auth, initiator: auth },
+      sessionId: "mixed-session",
       turn: { id: "mixed-turn" },
     });
     let executions = 0;
@@ -527,8 +527,8 @@ it.each([400, 503])(
     const auth = { authenticator: "test", principalId: "owner", principalType: "user" };
     const ctx = new ContextContainer();
     ctx.set(SessionKey, {
-      sessionId: "failed-session",
       auth: { current: auth, initiator: auth },
+      sessionId: "failed-session",
       turn: { id: "failed-turn" },
     });
     let executions = 0;
@@ -705,8 +705,8 @@ it.each(["generic", "typed"])(
     const auth = { authenticator: "test", principalId: "owner", principalType: "user" };
     const ctx = new ContextContainer();
     ctx.set(SessionKey, {
-      sessionId: "cancel-authorizer",
       auth: { current: auth, initiator: auth },
+      sessionId: "cancel-authorizer",
       turn: { id: "cancel-turn" },
     });
     let authorizations = 0;

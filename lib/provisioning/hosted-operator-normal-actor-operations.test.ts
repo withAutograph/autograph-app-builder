@@ -59,9 +59,6 @@ const target = {
 };
 const context = { authority, target };
 const program = normalActorProgramSchema.parse({
-  version: 1,
-  appId: target.appId,
-  origin: "https://apps.example.com",
   actors: [
     {
       account: "create-email-password",
@@ -71,20 +68,23 @@ const program = normalActorProgramSchema.parse({
     },
     { account: "create-email-password", actorKey: "peer", email: "peer@example.com", name: "Peer" },
   ],
-  organizations: [
-    { name: "One", organizationId: "org-one", ownerActorKey: "owner", slug: "one" },
-    { name: "Two", organizationId: "org-two", ownerActorKey: "owner", slug: "two" },
+  appAccess: [
+    { actorKey: "owner", organizationId: "org-one", roles: ["owner"] },
+    { actorKey: "peer", organizationId: "org-two", roles: ["member"] },
   ],
+  appId: target.appId,
   memberships: [
     { actorKey: "owner", organizationId: "org-one", role: "owner" },
     { actorKey: "peer", organizationId: "org-one", role: "member" },
     { actorKey: "owner", organizationId: "org-two", role: "owner" },
     { actorKey: "peer", organizationId: "org-two", role: "member" },
   ],
-  appAccess: [
-    { actorKey: "owner", organizationId: "org-one", roles: ["owner"] },
-    { actorKey: "peer", organizationId: "org-two", roles: ["member"] },
+  organizations: [
+    { name: "One", organizationId: "org-one", ownerActorKey: "owner", slug: "one" },
+    { name: "Two", organizationId: "org-two", ownerActorKey: "owner", slug: "two" },
   ],
+  origin: "https://apps.example.com",
+  version: 1,
 });
 const plan = hostedOperatorPlanSchema.parse({
   version: 1,

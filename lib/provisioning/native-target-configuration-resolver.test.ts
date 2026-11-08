@@ -803,10 +803,10 @@ describe("fresh normal same-project runtime assembly", () => {
       });
       const common = {
         action,
-        ownerContext,
         adapterSessionId: ownerContext.adapterSessionId,
         callId: "current-capability-call",
         execution: { logicalSessionId: ownerContext.adapterSessionId },
+        ownerContext,
       };
       const incoming = appIntegrationCapabilityTransportRequestSchema.parse(
         action === "app-integration-capability-plan"
@@ -814,16 +814,16 @@ describe("fresh normal same-project runtime assembly", () => {
           : {
               ...common,
               input: {
-                plan,
                 operationRef: appIntegrationCapabilityOperationRef(plan),
+                plan,
                 planDigest: appIntegrationCapabilityPlanDigest(plan),
               },
             },
       );
       const result = await f.resolve(
         new Request("https://operator.example/v1/app-integrations", {
-          method: "POST",
           body: JSON.stringify(incoming),
+          method: "POST",
         }),
       );
       expect(result.applications[plan.selection.appId]?.projectId).toBe(f.destination.projectId);
@@ -845,8 +845,8 @@ describe("fresh normal same-project runtime assembly", () => {
     await expect(
       f.resolve(
         new Request("https://operator.example/v1/app-integrations", {
-          method: "POST",
           body: JSON.stringify(incoming),
+          method: "POST",
         }),
       ),
     ).rejects.toThrow("foreign app owner");
