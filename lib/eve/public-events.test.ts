@@ -420,9 +420,9 @@ describe("installed Eve 0.68 projection", () => {
     ]);
     expect(events).toContainEqual(
       expect.objectContaining({
-        type: "progress",
         label: "Installing the app's requested integrations",
         state,
+        type: "progress",
       }),
     );
     expect(JSON.stringify(events)).not.toContain("private installer diagnosis");
@@ -1857,7 +1857,7 @@ describe("Production app identity invitation", () => {
     const delta = projectInstalledEveEvents([...savedHistory, status]).slice(nextCursor);
     state = reduceIdentityInvitations(state, result(delta));
     expect(state.invitations).toEqual([
-      { callId: "status-after-upgrade", operationRef, url, expiresAt },
+      { callId: "status-after-upgrade", expiresAt, operationRef, url },
     ]);
     expect(outstandingInstalledEveRequests([...savedHistory, status])).toEqual([]);
     expect(JSON.stringify(delta)).not.toContain("private-proof");

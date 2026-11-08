@@ -453,9 +453,9 @@ describe("approved hosted runtime consumers", () => {
     },
   );
   it.each([
-    { publicOrigin: undefined, publicDelivery: false },
-    { publicOrigin: "https://apps-preview.example.test", publicDelivery: false },
-    { publicOrigin: "https://public-app.example.test", publicDelivery: true },
+    { publicDelivery: false, publicOrigin: undefined },
+    { publicDelivery: false, publicOrigin: "https://apps-preview.example.test" },
+    { publicDelivery: true, publicOrigin: "https://public-app.example.test" },
   ])(
     "preserves the verified browser destination $publicOrigin with publicDelivery=$publicDelivery",
     async ({ publicOrigin, publicDelivery }) => {
@@ -692,8 +692,8 @@ describe("approved hosted runtime consumers", () => {
       expect(result.stdout + result.stderr).not.toContain(secret);
     }
     expect(fixture.provider.runCommand.mock.calls.at(-1)?.[0].env).toMatchObject({
-      APP_TEST_MANAGED_SUITE_SELECTOR: selector,
       APP_TEST_MANAGED_LIFECYCLE_CAPABILITY: lifecycle,
+      APP_TEST_MANAGED_SUITE_SELECTOR: selector,
     });
   });
 
@@ -824,8 +824,8 @@ describe("approved hosted runtime consumers", () => {
     expect(fixture.provider.runCommand).toHaveBeenCalledTimes(1);
     expect(fixture.provider.runCommand).toHaveBeenCalledWith(
       expect.objectContaining({
-        cmd: "/usr/bin/env",
         args: ["mise", "run", "app:describe", context.appId],
+        cmd: "/usr/bin/env",
       }),
     );
   });
@@ -1083,9 +1083,9 @@ it.each([
   });
   await expect(result).rejects.toBeInstanceOf(HostedRuntimeProviderError);
   await expect(result).rejects.toMatchObject({
-    name: "HostedRuntimeProviderError",
     code: "resource_mismatch",
     message: `resource_mismatch: runtime restore ${stage}`,
+    name: "HostedRuntimeProviderError",
   });
 });
 
