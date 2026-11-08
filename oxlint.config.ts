@@ -594,11 +594,7 @@ export default defineConfig({
     },
     {
       // Retain existing receiver and callback behavior pending review.
-      files: [
-        "lib/auth/preview-auth-ui.test.ts",
-        sharedLintFile18,
-        productionCreatorTestPath,
-      ],
+      files: ["lib/auth/preview-auth-ui.test.ts", sharedLintFile18, productionCreatorTestPath],
       rules: { "typescript/unbound-method": "off" },
     },
     {
