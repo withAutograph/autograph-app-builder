@@ -391,8 +391,8 @@ describe("live native execution transfer", () => {
       { auth: actor, descriptor, ports: f.ports },
       {
         collect: (input) => f.dependencies.collect(input),
-        readCandidate: (candidate) => f.dependencies.readCandidate(candidate),
         now: () => 1,
+        readCandidate: (candidate) => f.dependencies.readCandidate(candidate),
         recordObservation,
       },
     );

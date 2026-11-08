@@ -834,7 +834,6 @@ describe("retained actual normal actor journal", () => {
     value.row.record.operator.pendingEffectId = "normal-accounts";
     value.row.record.operator.pendingEffectAttempt = { id: "00000000-0000-4000-8000-000000000004" };
     const store = {
-      read: async () => structuredClone(value.row),
       compareAndSet: async (request: {
         expectedRevision: number;
         record: typeof value.row.record;
@@ -845,6 +844,7 @@ describe("retained actual normal actor journal", () => {
         value.row = { revision: value.row.revision + 1, record: request.record };
         return structuredClone(value.row);
       },
+      read: async () => structuredClone(value.row),
     };
     const keyring = { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" };
     const guarded = createNormalActorJournal(

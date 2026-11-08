@@ -243,7 +243,6 @@ const fixture = async (
   };
   const ports = createNormalActorJournalAuthority({
     store: {
-      read: async () => structuredClone(row),
       compareAndSet: async (input) => {
         if (input.expectedRevision !== row.revision) {
           return undefined;
@@ -254,6 +253,7 @@ const fixture = async (
         };
         return structuredClone(row);
       },
+      read: async () => structuredClone(row),
     },
     keyring,
     now: Date.now,
@@ -415,14 +415,14 @@ const fixture = async (
     throw new Error("unexpected account or organization effect");
   };
   const dependencies: NormalActorOperationsDependencies = {
-    journalPorts: ports,
-    assertPlanningAuthorized: owner,
     assertCurrentPlan: assertCurrent,
-    normalRealmFetch: async () => fetchSession,
-    prepareActorCapture: unused,
+    assertPlanningAuthorized: owner,
     collectOrganizationOwnerProof: unused,
     executeOrganization: unused,
     inspectOrganization: unused,
+    journalPorts: ports,
+    normalRealmFetch: async () => fetchSession,
+    prepareActorCapture: unused,
   };
   return {
     journal,
@@ -705,16 +705,14 @@ describe("approved additive capture participant state", () => {
         },
       });
       const canonical = createNormalActorJournalAuthority({
-        store: f.ports.store,
+        assertApprovedOwner: f.ports.assertAuthorized,
+        assertCanonicalOwner: f.ports.assertAuthorized,
         keyring: f.ports.keyring,
         now: Date.now,
-        assertCanonicalOwner: f.ports.assertAuthorized,
-        assertApprovedOwner: f.ports.assertAuthorized,
         readApproval,
+        store: f.ports.store,
       });
       const runtime = createNormalActorRuntimeBindings({
-        journalPorts: canonical,
-        normalRealmFetch: async () => f.fetchSession,
         assertCurrentPlan: async (input) => {
           if (
             input.operationRef !== currentOperation ||
@@ -735,6 +733,8 @@ describe("approved additive capture participant state", () => {
             },
           );
         },
+        journalPorts: canonical,
+        normalRealmFetch: async () => f.fetchSession,
       });
       if (outcome === "valid") {
         const projection = await runtime({

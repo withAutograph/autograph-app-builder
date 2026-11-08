@@ -1322,7 +1322,7 @@ test("independently decoded retained contexts use less heap after exact primitiv
     const result = spawnSync(
       process.execPath,
       ["--expose-gc", "--max-old-space-size=128", "--input-type=module", "-e", script, mode],
-      { env: { NODE_NO_WARNINGS: "1" }, encoding: "utf-8" },
+      { encoding: "utf-8", env: { NODE_NO_WARNINGS: "1" } },
     );
     assert.equal(result.status, 0, result.stderr);
     return JSON.parse(result.stdout);

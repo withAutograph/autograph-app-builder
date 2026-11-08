@@ -1376,7 +1376,7 @@ const recoveredOwnerFixture = async (kind: "direct" | "handoff" = "direct") => {
       scopeType: "team",
     }),
   };
-  return { fixture, store, original, child, owner, authority, context, recover };
+  return { authority, child, context, fixture, original, owner, recover, store };
 };
 
 describe("recovered operator owner authority", () => {
@@ -2971,8 +2971,8 @@ describe("canonical original approved plan reader", () => {
     };
     return {
       f,
-      read,
       input: { ...context, plan: proposed, now: Date.parse("2026-10-14T00:00:00Z") },
+      read,
     };
   };
   it("selects the actual original owner approval without extending its expiry", async () => {

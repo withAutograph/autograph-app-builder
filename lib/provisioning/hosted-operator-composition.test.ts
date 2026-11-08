@@ -1167,9 +1167,9 @@ const unusedCompositionControlPlane = (): Parameters<
     throw new Error("Unexpected control-plane operation in signup guard fixture");
   };
   const store = {
-    reserve: unexpectedPort,
-    read: unexpectedPort,
     compareAndSet: unexpectedPort,
+    read: unexpectedPort,
+    reserve: unexpectedPort,
     reserveFenceGeneration: unexpectedPort,
   };
   return {
@@ -1294,8 +1294,8 @@ describe("empty approved access effects", () => {
       await Promise.resolve();
     });
     vi.spyOn(membershipLauncher, "createHostedOperatorSandboxLauncher").mockReturnValue({
-      inspect,
       execute,
+      inspect,
     });
     const assertCurrent = vi.fn<HostedOperatorEffectContext["assertCurrent"]>(async () => {
       await Promise.resolve();
@@ -1401,8 +1401,8 @@ describe("empty approved access effects", () => {
           "changed-effect",
         ] as const
       ).map((failure) => ({
-        mode,
         failure,
+        mode,
       })),
     ),
   )("rejects $failure before $mode can settle empty grants", async ({ mode, failure }) => {
@@ -4032,8 +4032,8 @@ describe("approved historical organization inspection", () => {
     });
     const execute = vi.fn<() => Promise<void>>().mockResolvedValue();
     vi.spyOn(membershipLauncher, "createHostedOperatorSandboxLauncher").mockReturnValue({
-      inspect,
       execute,
+      inspect,
     });
     vi.stubEnv(
       "VERCEL_OIDC_TOKEN",
@@ -4198,11 +4198,11 @@ describe("retained active schema installation scope", () => {
     );
     const readActiveCustomers = vi.fn(async () => await Promise.resolve(["original-org"]));
     const read = createRetainedAppInstallationCustomerReader({
-      readOwner,
-      readApproval,
       readActiveCustomers,
+      readApproval,
+      readOwner,
     });
-    const readScopes = createRetainedAppInstallationScopeReader({ readOwner, readApproval });
+    const readScopes = createRetainedAppInstallationScopeReader({ readApproval, readOwner });
     return {
       desired,
       prior,
