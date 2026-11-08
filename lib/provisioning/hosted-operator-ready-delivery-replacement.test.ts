@@ -391,7 +391,7 @@ describe("native externally managed policy recovery integration", () => {
       const store: HostedRuntimeJournalStore = {
         compareAndSet: async (input) => {
           if (input.expectedRevision !== row.revision) {
-            return undefined;
+            return;
           }
           row = {
             record: hostedRuntimeJournalRecordSchema.parse(input.record),
@@ -737,7 +737,7 @@ describe("native externally managed policy recovery integration", () => {
         compareAndSet: vi.fn(
           async (input: Parameters<HostedRuntimeJournalStore["compareAndSet"]>[0]) => {
             if (input.expectedRevision !== row.revision) {
-              return undefined;
+              return;
             }
             row = {
               record: hostedRuntimeJournalRecordSchema.parse(input.record),
@@ -751,7 +751,7 @@ describe("native externally managed policy recovery integration", () => {
             input: Parameters<NonNullable<HostedRuntimeJournalStore["reserveFenceGeneration"]>>[0],
           ) => {
             if (input.expectedRevision !== row.revision) {
-              return undefined;
+              return;
             }
             requireFixtureValue(row.record.operator, "journal operator").fenceGeneration = 2;
             row.revision++;

@@ -410,7 +410,7 @@ const artifactFile = async (name: string, content: string) => {
   await rename(`${path}.partial`, path);
 };
 
-const escape = (value: string) => {
+const escapeHtml = (value: string) => {
   const replacements: Record<string, string> = {
     '"': "&quot;",
     "&": "&amp;",
@@ -448,17 +448,17 @@ const revision = (directory: string | undefined) => {
 };
 
 const requirementRow = (requirement: Assessment["rows"][number]) =>
-  `<tr><td>${escape(requirement.status)}</td><th>${escape(requirement.side)}</th><td>${escape(requirement.requirementId)}</td><td>${escape(requirement.reason)}</td><td>${escape(requirement.artifacts.join(" "))}</td></tr>`;
+  `<tr><td>${escapeHtml(requirement.status)}</td><th>${escapeHtml(requirement.side)}</th><td>${escapeHtml(requirement.requirementId)}</td><td>${escapeHtml(requirement.reason)}</td><td>${escapeHtml(requirement.artifacts.join(" "))}</td></tr>`;
 
 type ReportGap = Record<string, unknown>;
 
 const gapRow = (gap: ReportGap) =>
-  `<li><strong>${escape(String(gap.priority).toUpperCase())}: ${escape(String(gap.title))}</strong><p>${escape(String(gap.expected))}</p><p>${escape(String(gap.recommendation))}</p><small>${escape(gap.confirmed ? "Observed failure; see retained evidence" : "Incomplete assessment; see status and reason")}</small></li>`;
+  `<li><strong>${escapeHtml(String(gap.priority).toUpperCase())}: ${escapeHtml(String(gap.title))}</strong><p>${escapeHtml(String(gap.expected))}</p><p>${escapeHtml(String(gap.recommendation))}</p><small>${escapeHtml(gap.confirmed ? "Observed failure; see retained evidence" : "Incomplete assessment; see status and reason")}</small></li>`;
 
 const captureFileLink = (item: { label: string }, file: string) => {
-  const link = `<a href="${escape(file)}">${escape(basename(file))}</a>`;
+  const link = `<a href="${escapeHtml(file)}">${escapeHtml(basename(file))}</a>`;
   if (!/\.(?:png|jpe?g|webp)$/iu.test(file)) return link;
-  return `${link}<img src="${escape(file)}" alt="${escape(item.label)} ${escape(basename(file))}" style="display:block;max-width:100%;margin:12px 0">`;
+  return `${link}<img src="${escapeHtml(file)}" alt="${escapeHtml(item.label)} ${escapeHtml(basename(file))}" style="display:block;max-width:100%;margin:12px 0">`;
 };
 
 const captureFileLinks = (item: { label: string; files: string[] }) =>
@@ -486,16 +486,16 @@ const reportHtml = (report: {
       if (!reference || !candidateCapture) {
         return "";
       }
-      return `<section><h3>${escape(name)} initial routes</h3><p>Diagnostic comparison; equivalent workflow states have not been established.</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><figure><figcaption>Reference</figcaption><img style="width:100%" src="${escape(reference)}" alt="Reference initial route"></figure><figure><figcaption>Candidate</figcaption><img style="width:100%" src="${escape(candidateCapture)}" alt="Candidate initial route"></figure></div></section>`;
+      return `<section><h3>${escapeHtml(name)} initial routes</h3><p>Diagnostic comparison; equivalent workflow states have not been established.</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><figure><figcaption>Reference</figcaption><img style="width:100%" src="${escapeHtml(reference)}" alt="Reference initial route"></figure><figure><figcaption>Candidate</figcaption><img style="width:100%" src="${escapeHtml(candidateCapture)}" alt="Candidate initial route"></figure></div></section>`;
     })
     .join("");
   const captureItems = report.captures
     .map(
       (item) =>
-        `<li><strong>${escape(item.label)}</strong>: ${escape(item.status)}${item.files.length ? captureFileLinks(item) : ""}</li>`,
+        `<li><strong>${escapeHtml(item.label)}</strong>: ${escapeHtml(item.status)}${item.files.length ? captureFileLinks(item) : ""}</li>`,
     )
     .join("");
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>App Builder self-reproduction eval</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1280px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td:first-child{text-transform:uppercase;font-weight:700}pre{white-space:pre-wrap;background:#f5f5f5;padding:16px}li{margin:14px 0}</style><main><h1>App Builder self-reproduction eval</h1><p>One unassisted baseline. Static evidence does not prove runtime behavior. Missing or unavailable evidence is never reported as success.</p><p>${escape(report.createdAt)} · <a href="report.json">JSON evidence</a> · <a href="report.md">Markdown summary</a></p><h2>Generation</h2><pre>${escape(JSON.stringify(report.generation, null, 2))}</pre><h2>Prioritized gaps</h2>${gaps}<h2>Requirements</h2><table><thead><tr><th>Status</th><th>Side</th><th>Requirement</th><th>Reason</th><th>Artifacts</th></tr></thead><tbody>${rows}</tbody></table><h2>Browser evidence</h2>${diagnosticPairs}<ul>${captureItems || "<li>Not captured.</li>"}</ul></main></html>`;
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>App Builder self-reproduction eval</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1280px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td:first-child{text-transform:uppercase;font-weight:700}pre{white-space:pre-wrap;background:#f5f5f5;padding:16px}li{margin:14px 0}</style><main><h1>App Builder self-reproduction eval</h1><p>One unassisted baseline. Static evidence does not prove runtime behavior. Missing or unavailable evidence is never reported as success.</p><p>${escapeHtml(report.createdAt)} · <a href="report.json">JSON evidence</a> · <a href="report.md">Markdown summary</a></p><h2>Generation</h2><pre>${escapeHtml(JSON.stringify(report.generation, null, 2))}</pre><h2>Prioritized gaps</h2>${gaps}<h2>Requirements</h2><table><thead><tr><th>Status</th><th>Side</th><th>Requirement</th><th>Reason</th><th>Artifacts</th></tr></thead><tbody>${rows}</tbody></table><h2>Browser evidence</h2>${diagnosticPairs}<ul>${captureItems || "<li>Not captured.</li>"}</ul></main></html>`;
 };
 
 interface TemplateAcquisition {

@@ -202,12 +202,17 @@ function AppBuilder(
     user?: { name: string; email: string };
   },
 ) {
-  const { user, connectionsEnabled = true, comingSoonEnabled = true, ...componentProps } = props;
+  const {
+    user,
+    authenticated,
+    connectionsEnabled = true,
+    comingSoonEnabled = true,
+    ...authenticatedProps
+  } = props;
   void user;
-  if (!componentProps.authenticated) {
+  if (!authenticated) {
     return <AnonymousBuilder />;
   }
-  const { authenticated: _authenticated, ...authenticatedProps } = componentProps;
   return (
     <div className={styles.appShell}>
       <Header />
@@ -985,7 +990,7 @@ describe("Vercel-faithful App Builder flow", () => {
   it("does not apply an older remote revision after a newer revision settles", async () => {
     const delayedRead = Promise.withResolvers<undefined>();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const read = vi.fn(async () => undefined);
+    const read = vi.fn(async (): Promise<undefined> => undefined);
     vi.spyOn(draftOutbox, "createBuilderDraftOutbox").mockReturnValue({
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       clear: async () => {},

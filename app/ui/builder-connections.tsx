@@ -137,7 +137,7 @@ export function ConnectionsSection({
         </button>
       ) : null}
       {selected.length ? (
-        <div className={styles.connectedList} aria-label="Added connections">
+        <div className={styles.connectedList} role="group" aria-label="Added connections">
           {selected.map((name) => (
             <article key={name}>
               <span>
@@ -186,10 +186,10 @@ export function ConnectionDrawer({
   onConnected: () => void;
 }) {
   const [showSuccess, setShowSuccess] = useState(false);
-  const [connectionName, setConnectionName] = useState(
+  const [connectionName, setConnectionName] = useState(() =>
     flow.name.toLowerCase().replaceAll(/[^a-z0-9]+/gu, "-"),
   );
-  const [description, setDescription] = useState(connectionDescription(flow.name));
+  const [description, setDescription] = useState(() => connectionDescription(flow.name));
   const accountLabel = flow.name === "Slack" ? "Slack Workspace" : "Account";
 
   useEffect(() => {
@@ -208,7 +208,12 @@ export function ConnectionDrawer({
 
   if (showSuccess) {
     return (
-      <div className={styles.connectionSuccess} role="dialog" aria-modal="true">
+      <div
+        className={styles.connectionSuccess}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Connection successful"
+      >
         <div>
           <h2>Connection successful</h2>
           <p>You can close this window and return to where you started.</p>

@@ -14,10 +14,10 @@ const browserFixture = (
 ) => {
   const locator = {
     allTextContents: async () => ["Synthetic control"],
-    blur: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    click: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    blur: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    click: vi.fn<() => Promise<void>>().mockResolvedValue(),
     count: async () => 0,
-    fill: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    fill: vi.fn<() => Promise<void>>().mockResolvedValue(),
     first: () => locator,
     getAttribute: async () => null,
     inputValue: async () => "Default draft value",
@@ -51,11 +51,11 @@ const browserFixture = (
     request: { get: async () => ({ ok: () => false, text: async () => "" }) },
     setDefaultTimeout: vi.fn(),
     url: () => "https://candidate.example/app/",
-    waitForLoadState: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    waitForTimeout: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    waitForLoadState: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    waitForTimeout: vi.fn<() => Promise<void>>().mockResolvedValue(),
   };
   const context = {
-    close: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    close: vi.fn<() => Promise<void>>().mockResolvedValue(),
     newPage: async () => page,
   };
   return { newContext: async () => context };

@@ -835,7 +835,7 @@ export const readCompletedCaptureBootstrap = (
     ) ||
     desired.deploymentBoundary?.teamId !== current.plan.deploymentBoundary?.teamId
   ) {
-    return undefined;
+    return;
   }
   /* oxlint-enable sonarjs/expression-complexity */
   return readUnapprovedCapturePredecessor(record, account.accountPlan, Date.now());
@@ -2479,7 +2479,7 @@ export const composeHostedOperatorDependencies = (
   };
   const emptyAccessScope = (input: HostedOperatorEffectContext) => {
     if (input.effect.kind !== "access" || input.plan.access.length !== 0) {
-      return undefined;
+      return;
     }
     if (input.plan.action !== "prepare") {
       throw new HostedOperatorError(RESOURCE_MISMATCH);
@@ -2505,7 +2505,7 @@ export const composeHostedOperatorDependencies = (
     approved: ReturnType<typeof emptyAccessScope>,
   ) => {
     if (approved === undefined) {
-      return undefined;
+      return;
     }
     const assertScope = () => {
       if (!isDeepStrictEqual(emptyAccessScope(input), approved)) {
@@ -3101,7 +3101,7 @@ export const composeHostedOperatorDependencies = (
     readReadyDeliveryReplacementPlan: async (context) => {
       const policy = selectedApplication(configuration, context).hostProtection;
       if (policy === undefined) {
-        return undefined;
+        return;
       }
       await controlPlane.assertPlanningAuthorized(context);
       const current = await controlPlane.store.read(context);

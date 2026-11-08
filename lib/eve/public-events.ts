@@ -432,25 +432,26 @@ export const createInstalledPrototypeReferenceReducer = (input: {
           if (!action.success || action.data.kind !== "tool-call") {
             continue;
           }
+          const { callId } = action.data;
           if (action.data.toolName !== "record_prototype_artifact") {
-            requested.delete(action.data.callId);
+            requested.delete(callId);
             if (action.data.toolName === "record_ui_preview") {
               const preview = z
                 .object({ appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u) })
                 .loose()
                 .safeParse(action.data.input);
               if (preview.success) {
-                requestedUiPreview.set(action.data.callId, preview.data.appId);
+                requestedUiPreview.set(callId, preview.data.appId);
               }
             } else {
-              requestedUiPreview.delete(action.data.callId);
+              requestedUiPreview.delete(callId);
             }
             continue;
           }
-          requestedUiPreview.delete(action.data.callId);
+          requestedUiPreview.delete(callId);
           const parsed = prototypeRequestSchema.safeParse(action.data.input);
           if (parsed.success) {
-            requested.set(action.data.callId, parsed.data);
+            requested.set(callId, parsed.data);
           }
         }
         return;
@@ -1130,10 +1131,10 @@ export const latestInstalledUiPreview = (
     if (!preview.success || preview.data.complete === false) {
       continue;
     }
+    const { content } = preview.data;
     if (
-      (preview.data.content !== undefined &&
-        sha256(preview.data.content) !== preview.data.digest) ||
-      (preview.data.content === undefined && preview.data.requiresChunkedRead !== true)
+      (content !== undefined && sha256(content) !== preview.data.digest) ||
+      (content === undefined && preview.data.requiresChunkedRead !== true)
     ) {
       continue;
     }
