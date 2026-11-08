@@ -126,10 +126,10 @@ const desiredPlan = () =>
       origin: "https://apps.example",
       actors: [
         {
+          account: "create-email-password",
           actorKey: "owner",
           email: "owner@example.test",
           name: "Owner",
-          account: "create-email-password",
         },
       ],
       organizations: [],
@@ -137,9 +137,9 @@ const desiredPlan = () =>
       appAccess: [],
     }),
     publicGateway: {
-      projectId: "gateway",
       branch: context.target.branch,
       origin: "https://apps.example",
+      projectId: "gateway",
     },
     deploymentBoundary: {
       authority,
@@ -151,15 +151,15 @@ const desiredPlan = () =>
         environment: "preview",
       },
       gateway: {
-        projectId: "gateway",
-        deploymentId: "gateway-deployment",
         branch: context.target.branch,
+        deploymentId: "gateway-deployment",
         environment: "preview",
+        projectId: "gateway",
       },
       operator: {
-        projectId: "operator",
         deploymentId: "operator-deployment",
         environment: "preview",
+        projectId: "operator",
       },
       verification: {
         gatewayOrigin: "https://gateway.example",
@@ -170,20 +170,20 @@ const desiredPlan = () =>
     gatewayBindings: {
       authBrowserOrigin: "https://apps.example",
       builderCallbackOrigin: "https://builder.example",
-      operatorOrigin: "https://operator.example",
       catalogAppIds: [context.target.appId],
+      operatorOrigin: "https://operator.example",
       sourceWorkload,
     },
     gatewayDelivery: {
-      projectId: "gateway",
       branch: context.target.branch,
-      repoId: "gateway-repo",
       gitSha: "c".repeat(40),
+      projectId: "gateway",
+      repoId: "gateway-repo",
     },
     effects: [
       ...bootstrapPlan().effects,
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway configuration" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
+      { description: "Gateway configuration", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
     ],
   });
 const completedRecord = (plan: HostedOperatorPlan = desiredPlan()) =>
@@ -256,7 +256,7 @@ const phaseFixture = (participants = false) => {
     operator.plan = hostedOperatorPlanSchema.parse({
       ...operator.plan,
       stage: "auth-participants",
-      effects: [{ id: "normal-accounts", kind: "normal-accounts", description: "Normal accounts" }],
+      effects: [{ description: "Normal accounts", id: "normal-accounts", kind: "normal-accounts" }],
     });
     operator.planDigest = operatorPlanDigest(operator.plan);
     operator.receipts = [
@@ -452,8 +452,8 @@ describe("retained installation metadata resource authority", () => {
       },
       effects: [
         ...f.input.plan.effects.filter((effect) => ["resources", "install"].includes(effect.kind)),
-        { id: "access", kind: "access", description: "Access" },
-        { id: "bindings", kind: "bindings", description: "Bindings" },
+        { description: "Access", id: "access", kind: "access" },
+        { description: "Bindings", id: "bindings", kind: "bindings" },
         ...f.input.plan.effects.filter((effect) =>
           ["gateway-bindings", "gateway-delivery"].includes(effect.kind),
         ),

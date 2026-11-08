@@ -42,7 +42,7 @@ const program = normalActorProgramSchema.parse({
   appId: target.appId,
   origin: "https://apps.example.test",
   actors: [
-    { actorKey: "owner", email: "owner@example.test", name: "Owner", account: "capture-existing" },
+    { account: "capture-existing", actorKey: "owner", email: "owner@example.test", name: "Owner" },
   ],
   organizations: [],
   memberships: [],
@@ -62,24 +62,24 @@ const plan = hostedOperatorPlanSchema.parse({
     sessionId: target.sessionId,
   },
   appDatabase: {
-    resourceId: "app-resource",
     database: "normal",
     migratorRole: "normal_owner",
+    resourceId: "app-resource",
     runtimeRole: "normal_runtime",
   },
   authDatabase: {
-    resourceId: "auth-resource",
     database: "auth",
     migratorRole: "auth_owner",
+    resourceId: "auth-resource",
     runtimeRole: "auth_runtime",
   },
   contextId: "accepted-spec",
   cost: { class: "shared-recovery-group", description: "Approved normal accounts", owner: "owner" },
   effects: [
     {
+      description: "Capture approved actual accounts",
       id: "normal-accounts",
       kind: "normal-accounts",
-      description: "Capture approved actual accounts",
     },
   ],
   installer: { reference: "owned-worker", sha256: "a".repeat(64) },
@@ -280,8 +280,8 @@ describe("human confirmation of private actual actor capture", () => {
     });
     expect(result.operator!.identityLink!.sealedNonce).toBeUndefined();
     expect(readState(result).actors[0]).toMatchObject({
-      signup: "complete",
       session,
+      signup: "complete",
       storageState: {
         cookies: [
           {
@@ -414,7 +414,7 @@ describe("human confirmation of private actual actor capture", () => {
     const scopedProgram = normalActorProgramSchema.parse({
       ...program,
       organizations: [
-        { organizationId, slug: "actual-org", name: "Actual organization", ownerActorKey: "owner" },
+        { name: "Actual organization", organizationId, ownerActorKey: "owner", slug: "actual-org" },
       ],
       memberships: [{ actorKey: "owner", organizationId, role: "owner" }],
     });
