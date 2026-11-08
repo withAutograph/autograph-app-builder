@@ -20,6 +20,8 @@ import type { GeneratedAppReleaseFiles } from "./hosted-operator-sandbox-launche
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 import type { ApprovedMembershipInspection } from "./hosted-operator-membership-inspection";
 
+const AUTH_MEMBERSHIP_EFFECT = "auth-membership";
+
 type OrganizationWorkerInput = Parameters<
   NormalActorOperationsDependencies["inspectOrganization"]
 >[0];
@@ -79,7 +81,7 @@ const selectedSpec = (input: OrganizationWorkerInput) => {
   }
   if (
     ![
-      effect.effect.kind === "auth-membership",
+      effect.effect.kind === AUTH_MEMBERSHIP_EFFECT,
       effect.effect.id === `auth-membership:${input.organizationId}`,
       effect.plan.stage === "app",
       sameOperatorSelection(effect.plan.selection, effect.target),
@@ -207,8 +209,10 @@ const assertHistoricalInspection = (
   );
   const matches = [
     captured,
-    historical.effect.kind === "auth-membership",
-    ["auth-membership", `auth-membership:${input.organizationId}`].includes(historical.effect.id),
+    historical.effect.kind === AUTH_MEMBERSHIP_EFFECT,
+    [AUTH_MEMBERSHIP_EFFECT, `auth-membership:${input.organizationId}`].includes(
+      historical.effect.id,
+    ),
     spec.actorId === input.owner.actorId,
     spec.identityProof.reference ===
       `_protected-operator/artifacts/realm-identity-proof/${input.effect.target.appId}/${spec.identityProof.sha256}`,

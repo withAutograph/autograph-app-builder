@@ -33,6 +33,8 @@ import type {
   ProtectedHostedOperatorDependencies,
 } from "./hosted-operator-service";
 
+const GATEWAY_BINDINGS_EFFECT = "gateway-bindings";
+
 const providerRow = z.object({
   comment: z.string().optional(),
   configurationId: z.string().nullable().optional(),
@@ -380,7 +382,7 @@ const validGatewayInput = (input: GatewayManagedEnvironmentContext, readonlyCano
   }
   return [
     plan.action === "prepare",
-    ["gateway-bindings", "gateway-delivery"].includes(input.effect.kind) ||
+    [GATEWAY_BINDINGS_EFFECT, "gateway-delivery"].includes(input.effect.kind) ||
       (readonlyCanonical &&
         input.effect.kind === "resources" &&
         input.effect.resourceId === plan.authDatabase.resourceId),
@@ -617,7 +619,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         input.plan,
         input.operationRef,
         input.effect.id,
-        "gateway-bindings",
+        GATEWAY_BINDINGS_EFFECT,
       )
     ) {
       throw unavailable();
@@ -1463,7 +1465,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
     async bind(input: GatewayManagedEnvironmentContext) {
       const observation = diagnostic(input, "bind");
       try {
-        if (input.effect.kind !== "gateway-bindings") {
+        if (input.effect.kind !== GATEWAY_BINDINGS_EFFECT) {
           throw unavailable();
         }
         const io = open(input, false, observation);

@@ -23,6 +23,8 @@ import {
   centralEffectReceiptMatches,
 } from "./central-integration-host-checkpoint";
 
+const CENTRAL_HOST_SETUP_KIND = "central-integration-host-setup-v1";
+
 const phase = z.enum(["idle", "pending", "applied"]);
 const receipt = z.strictObject({
   approvalId: z.string().min(1).optional(),
@@ -83,7 +85,7 @@ export const centralHostRecordSchema = z
     if (
       record.runtimeBindings !== undefined &&
       (record.effects["bind-central-preview-runtime"] === "idle" ||
-        plan.kind !== "central-integration-host-setup-v1" ||
+        plan.kind !== CENTRAL_HOST_SETUP_KIND ||
         Object.keys(record.runtimeBindings).some(
           (key) => !plan.environment.some((entry) => entry.key === key),
         ))
@@ -94,7 +96,7 @@ export const centralHostRecordSchema = z
       });
     }
 
-    if (plan.kind === "central-integration-host-setup-v1") {
+    if (plan.kind === CENTRAL_HOST_SETUP_KIND) {
       const native = record.nativeDeployment;
       if (
         native === undefined ||
@@ -278,9 +280,7 @@ export const createPostgresCentralHostStore = (database: Database) => {
         planDigest: centralHostPlanDigest(plan),
         effects: Object.fromEntries(plan.effects.map((effect) => [effect, "idle"])),
         attempts: {},
-        ...(plan.kind === "central-integration-host-setup-v1"
-          ? { nativeDeployment: { status: "empty" } }
-          : {}),
+        ...(plan.kind === CENTRAL_HOST_SETUP_KIND ? { nativeDeployment: { status: "empty" } } : {}),
       });
       const operationRef = centralHostOperationRef(plan);
       const now = new Date();
@@ -433,7 +433,7 @@ export const createReadCentralIntegrationHostReady =
     );
     if (
       setup === undefined ||
-      setup.record.plan.kind !== "central-integration-host-setup-v1" ||
+      setup.record.plan.kind !== CENTRAL_HOST_SETUP_KIND ||
       setup.record.planDigest !== caller.record.plan.setup.planDigest ||
       setup.record.nativeDeployment?.status !== "accepted" ||
       setup.record.nativeDeployment.providerDeploymentId !==

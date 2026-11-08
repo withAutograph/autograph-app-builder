@@ -10,6 +10,8 @@ import type { PublicReleaseInvocation, PublicReleaseEffectContext } from "./publ
 import { vercelProvisionDiagnosticSchema } from "./contracts";
 import { PublicReleaseProviderError } from "./public-release-provider-error";
 
+const VERCEL_API_ORIGIN = "https://api.vercel.com";
+
 const id = z.string().min(1);
 const rowSchema = z.object({
   id,
@@ -161,8 +163,8 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
     ) {
       throw fail();
     }
-    const url = new URL(route, "https://api.vercel.com");
-    if (url.origin !== "https://api.vercel.com") {
+    const url = new URL(route, VERCEL_API_ORIGIN);
+    if (url.origin !== VERCEL_API_ORIGIN) {
       throw fail();
     }
     url.searchParams.set("teamId", plan.project.teamId);
@@ -593,7 +595,7 @@ export const createPublicReleaseVercelBindingSnapshot =
       ) {
         throw fail();
       }
-      const url = new URL(route, "https://api.vercel.com");
+      const url = new URL(route, VERCEL_API_ORIGIN);
       url.searchParams.set("teamId", scope.teamId);
       const response = await (deps.fetch ?? fetch)(url, {
         method: "GET",
@@ -703,10 +705,7 @@ export const createPublicReleaseVercelActiveDeploymentSnapshot =
     ) {
       throw fail();
     }
-    const url = new URL(
-      `/v9/projects/${encodeURIComponent(scope.projectId)}`,
-      "https://api.vercel.com",
-    );
+    const url = new URL(`/v9/projects/${encodeURIComponent(scope.projectId)}`, VERCEL_API_ORIGIN);
     url.searchParams.set("teamId", scope.teamId);
     const response = await (deps.fetch ?? fetch)(url, {
       method: "GET",

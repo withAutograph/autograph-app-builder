@@ -17,6 +17,9 @@ import {
 } from "./hosted-operator-normal-actor-program";
 import { hostedOperatorRealmLinkConfigSha256 } from "./hosted-operator-realm-link-config";
 
+const TEST_APP_ORIGIN = "https://apps.example";
+const GATEWAY_DELIVERY_EFFECT = "gateway-delivery";
+
 export const requiredFixture = <T>(value: T | undefined): T => {
   if (value === undefined) {
     throw new Error("Missing fixture value");
@@ -125,7 +128,7 @@ const desiredPlan = () =>
     normalActorProgram: normalActorProgramSchema.parse({
       version: 1,
       appId: context.target.appId,
-      origin: "https://apps.example",
+      origin: TEST_APP_ORIGIN,
       actors: [
         {
           actorKey: "owner",
@@ -141,7 +144,7 @@ const desiredPlan = () =>
     publicGateway: {
       projectId: "gateway",
       branch: context.target.branch,
-      origin: "https://apps.example",
+      origin: TEST_APP_ORIGIN,
     },
     deploymentBoundary: {
       authority,
@@ -166,11 +169,11 @@ const desiredPlan = () =>
       verification: {
         gatewayOrigin: "https://gateway.example",
         jwksUrl: "https://gateway.example/_platform/jwks.json",
-        publicOrigin: "https://apps.example",
+        publicOrigin: TEST_APP_ORIGIN,
       },
     },
     gatewayBindings: {
-      authBrowserOrigin: "https://apps.example",
+      authBrowserOrigin: TEST_APP_ORIGIN,
       builderCallbackOrigin: "https://builder.example",
       operatorOrigin: "https://operator.example",
       catalogAppIds: [context.target.appId],
@@ -185,7 +188,11 @@ const desiredPlan = () =>
     effects: [
       ...bootstrapPlan().effects,
       { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway configuration" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
+      {
+        id: GATEWAY_DELIVERY_EFFECT,
+        kind: GATEWAY_DELIVERY_EFFECT,
+        description: "Gateway delivery",
+      },
     ],
   });
 const completedRecord = (plan: HostedOperatorPlan = desiredPlan()) =>
@@ -239,11 +246,11 @@ const completedRecord = (plan: HostedOperatorPlan = desiredPlan()) =>
           repoId: "gateway-repo",
           operationRef,
           origin: "https://gateway.example",
-          deploymentId: "gateway-delivery",
+          deploymentId: GATEWAY_DELIVERY_EFFECT,
           readyState: "READY",
         },
       ],
-      deliveredGatewayDeploymentId: "gateway-delivery",
+      deliveredGatewayDeploymentId: GATEWAY_DELIVERY_EFFECT,
     },
   });
 

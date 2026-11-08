@@ -810,7 +810,7 @@ const handlePlanOperation = async (
     const readAppProjectSettings = deps.readAppProjectSettings?.bind(deps);
     if (
       readAppProjectSettings !== undefined &&
-      saved?.record.approvedByCallId === "operator:unapproved-plan" &&
+      saved?.record.approvedByCallId === UNAPPROVED_PLAN &&
       saved.record.operator?.retainedProjectSettingsOperations !== undefined
     ) {
       const savedOperationRef = saved.record.operator.operationRef;

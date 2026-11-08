@@ -33,6 +33,8 @@ import type {
   ResourceBootstrapContextWire,
 } from "./hosted-operator-sandbox-launcher";
 
+const AUTH_MEMBERSHIP_EFFECT = "auth-membership";
+
 const sha256 = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
 const sealedSchema = z.strictObject({
   encryptedToken: z.string(),
@@ -266,7 +268,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       },
       appInstallation: { customerIds: [scope.organizationId] },
       access,
-      effects: [{ id: "auth-membership", kind: "auth-membership" }],
+      effects: [{ id: AUTH_MEMBERSHIP_EFFECT, kind: AUTH_MEMBERSHIP_EFFECT }],
       ...(membership === undefined ? {} : { authMembership: membership }),
       deploymentBoundary: {
         teamId: deps.profile.operator.teamId,
@@ -335,7 +337,11 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
     if (operation === "membership" && proof !== undefined && !("kind" in proof)) {
       startupFiles["operator-plan.json"] = planBytes;
       startupFiles["membership-effect.json"] = Buffer.from(
-        JSON.stringify({ version: 1, effectId: "auth-membership", kind: "auth-membership" }),
+        JSON.stringify({
+          version: 1,
+          effectId: AUTH_MEMBERSHIP_EFFECT,
+          kind: AUTH_MEMBERSHIP_EFFECT,
+        }),
       );
       startupFiles["auth-database-resource.json"] = Buffer.from(
         JSON.stringify({

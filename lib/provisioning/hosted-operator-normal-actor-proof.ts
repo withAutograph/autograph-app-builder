@@ -31,6 +31,8 @@ import type {
   OperatorArtifactStore,
 } from "./hosted-operator-artifact-store";
 
+const REALM_OPERATOR_PROOF_MEDIA_TYPE = "application/vnd.realm-operator-proof+json";
+
 export interface NormalActorRealmProofBinding extends Omit<
   NormalActorOrganizationProofBinding,
   "browserOrigin"
@@ -180,7 +182,7 @@ const readProof = async ({
       headers: {
         origin,
         "content-type": "application/x-www-form-urlencoded",
-        accept: "application/vnd.realm-operator-proof+json",
+        accept: REALM_OPERATOR_PROOF_MEDIA_TYPE,
         cookie,
       },
       redirect: "error",
@@ -192,9 +194,7 @@ const readProof = async ({
       httpStatus: response.status,
       redirected: response.redirected,
       contentTypeValid:
-        response.headers
-          .get("content-type")
-          ?.startsWith("application/vnd.realm-operator-proof+json") === true,
+        response.headers.get("content-type")?.startsWith(REALM_OPERATOR_PROOF_MEDIA_TYPE) === true,
     };
     observe({ stage: "proof_response", ...responseFacts });
     if (
@@ -202,9 +202,7 @@ const readProof = async ({
         response.status === 200,
         !response.redirected,
         response.url === "" || new URL(response.url).origin === origin,
-        response.headers
-          .get("content-type")
-          ?.startsWith("application/vnd.realm-operator-proof+json") === true,
+        response.headers.get("content-type")?.startsWith(REALM_OPERATOR_PROOF_MEDIA_TYPE) === true,
       ].every(Boolean)
     ) {
       throw unavailable();

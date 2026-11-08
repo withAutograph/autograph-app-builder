@@ -32,6 +32,8 @@ import type {
   TenantExportWorkerInput,
 } from "./hosted-operator-export-contract";
 
+const APP_EXPORT_KIND = "app-export";
+
 /** Private execution locator, retained before dispatch; no credentials or output bytes. */
 export const tenantExportWorkerLocatorSchema = z.strictObject({
   sandboxId: z.string().min(1),
@@ -41,7 +43,7 @@ export const tenantExportWorkerLocatorSchema = z.strictObject({
 export type TenantExportWorkerLocator = z.infer<typeof tenantExportWorkerLocatorSchema>;
 // This deployment-only state extends the Builder journal, never the cross-repo worker wire.
 export const hostedTenantExportExecutionRecordSchema = z.strictObject({
-  kind: z.literal("app-export"),
+  kind: z.literal(APP_EXPORT_KIND),
   originalTarget: hostedRuntimeTargetSchema,
   journal: tenantExportJournalRecordSchema,
   approvalObservation: privateOperatorApprovalObservationSchema.optional(),
@@ -364,10 +366,10 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
       advanceExportPlanningStage(onPlanStage, "plan_reservation");
       const record = await deps.store.reserve({
         record: {
-          kind: "app-export",
+          kind: APP_EXPORT_KIND,
           originalTarget: context.target,
           journal: {
-            kind: "app-export",
+            kind: APP_EXPORT_KIND,
             version: 1,
             requestId: exportId,
             authority: plan.authority,

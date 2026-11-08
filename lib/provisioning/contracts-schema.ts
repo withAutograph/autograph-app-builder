@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import { builderAppIdSchema } from "./names";
 
+const GITHUB_REPOSITORY_URL_PREFIX = "https://github.com/";
+
 const decimal = z.string().regex(/^[1-9][0-9]*$/u);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -116,7 +118,7 @@ const githubClonedStarterSchema = githubStarterBaseSchema
     readinessDigest: sha256,
     receiptVersion: z.literal(4),
     ref: z.literal("refs/heads/main"),
-    repository: z.string().url().startsWith("https://github.com/"),
+    repository: z.string().url().startsWith(GITHUB_REPOSITORY_URL_PREFIX),
     sourceReceiptDigest: sha256,
   })
   .strict();
@@ -128,7 +130,7 @@ const githubLegacyStarterSchema = githubStarterBaseSchema
     manifestSha256: sha256.optional(),
     method: z.literal("starter-archive-v3").optional(),
     ref: z.literal("refs/heads/main").optional(),
-    repository: z.string().url().startsWith("https://github.com/").optional(),
+    repository: z.string().url().startsWith(GITHUB_REPOSITORY_URL_PREFIX).optional(),
   })
   .strict();
 
@@ -148,7 +150,7 @@ export const githubProvisionSuccessSchema = z.strictObject({
   }),
   starter: z.union([githubClonedStarterSchema, githubLegacyStarterSchema]),
   status: z.literal("succeeded"),
-  url: z.string().url().startsWith("https://github.com/"),
+  url: z.string().url().startsWith(GITHUB_REPOSITORY_URL_PREFIX),
   visibility: z.enum(["public", "private"]),
 });
 

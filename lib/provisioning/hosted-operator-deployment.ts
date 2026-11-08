@@ -250,6 +250,8 @@ import {
 import { createPostgresHostedRuntimeJournalStore } from "./postgres-hosted-runtime-journal";
 import { createPostgresHostedOperatorResourceLease } from "./postgres-hosted-operator-resource-lease";
 
+const AUTH_BOOTSTRAP_STAGE = "auth-bootstrap";
+
 const PARTICIPANT_STAGE = "auth-participants";
 
 const databaseSchema = {
@@ -349,7 +351,7 @@ const isCompletedGatewayBindingObservation = (
   return [
     input.workerAttemptId === undefined,
     input.plan.action === "prepare",
-    input.plan.stage === "app" || input.plan.stage === "auth-bootstrap",
+    input.plan.stage === "app" || input.plan.stage === AUTH_BOOTSTRAP_STAGE,
     input.effect.kind === "gateway-bindings",
     operator?.receipts.some((receipt) => receipt.effectId === input.effect.id) === true,
     operator?.pendingEffectAttempt !== undefined,
@@ -934,7 +936,7 @@ export const createHostedOperatorControlPlane = async (input: {
         current.record.leaseExpiresAt === undefined,
       ].every(Boolean);
       const completedBootstrap =
-        operator.plan.stage === "auth-bootstrap" &&
+        operator.plan.stage === AUTH_BOOTSTRAP_STAGE &&
         operator.plan.effects.every((effect) =>
           operator.receipts.some((receipt) => receipt.effectId === effect.id),
         );
@@ -997,7 +999,7 @@ export const createHostedOperatorControlPlane = async (input: {
     ) =>
       existing !== undefined &&
       [
-        operator.plan.stage === "auth-bootstrap",
+        operator.plan.stage === AUTH_BOOTSTRAP_STAGE,
         operator.plan.normalActorProgram === undefined,
         existing.browserSession === undefined,
         linkInput.browserSession === undefined,

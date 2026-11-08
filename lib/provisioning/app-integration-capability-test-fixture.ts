@@ -2,6 +2,8 @@ import { appIntegrationReadObjectsDigest } from "../repository/app-integration-m
 import { appIntegrationCapabilityPlanSchema } from "./app-integration-capability-contract";
 import { authority } from "./public-release-test-fixture";
 
+const ISOLATED_READS_DESTINATION = "isolated-reads";
+
 const resource = (name: string) => ({
   resourceId: `${name}-resource`,
   environment: "preview" as const,
@@ -86,7 +88,7 @@ export const integrationCapabilityPlan = appIntegrationCapabilityPlanSchema.pars
     recipeId: "quickbooks-read",
     recipeVersion: "1",
     readObjectsSha256: appIntegrationReadObjectsDigest({
-      Vendor: { objectName: "Vendor", destination: "isolated-reads" },
+      Vendor: { objectName: "Vendor", destination: ISOLATED_READS_DESTINATION },
     }),
     authorizationOrigins: ["https://sandbox-authorize.example"],
     payloadHosts: ["sandbox-data.example"],
@@ -97,9 +99,9 @@ export const integrationCapabilityPlan = appIntegrationCapabilityPlanSchema.pars
     connectionProviderKey: "quickbooks-sandbox",
     recipeId: "quickbooks-read",
     recipeVersion: "1",
-    readObjects: { Vendor: { objectName: "Vendor", destination: "isolated-reads" } },
+    readObjects: { Vendor: { objectName: "Vendor", destination: ISOLATED_READS_DESTINATION } },
     readObjectsSha256: appIntegrationReadObjectsDigest({
-      Vendor: { objectName: "Vendor", destination: "isolated-reads" },
+      Vendor: { objectName: "Vendor", destination: ISOLATED_READS_DESTINATION },
     }),
   },
   serviceMemberships: [

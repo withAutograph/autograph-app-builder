@@ -14,6 +14,8 @@ import {
 } from "../integrations/vercel-installation";
 import type { VercelTokenKeyringConfig } from "../integrations/vercel-installation";
 
+const PUBLIC_RELEASE_CONFIGURATION_KIND = "public-release-runtime-configuration-v1";
+
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const id = z.string().min(1);
 const origin = z
@@ -49,7 +51,7 @@ const sealedSchema = z.strictObject({
 });
 const valuesSchema = z.record(z.string().regex(/^[A-Z_][A-Z0-9_]*$/u), z.string().min(1));
 const recordSchema = z.strictObject({
-  kind: z.literal("public-release-runtime-configuration-v1"),
+  kind: z.literal(PUBLIC_RELEASE_CONFIGURATION_KIND),
   scope: publicReleaseRuntimeConfigurationScopeSchema,
   sealed: sealedSchema,
 });
@@ -59,7 +61,7 @@ const identity = (scope: PublicReleaseRuntimeConfigurationScope) => {
   const hash = createHash("sha256")
     .update(
       JSON.stringify([
-        "public-release-runtime-configuration-v1",
+        PUBLIC_RELEASE_CONFIGURATION_KIND,
         publicReleaseRuntimeConfigurationScopeSchema.parse(scope),
       ]),
     )
@@ -227,7 +229,7 @@ export const createPublicReleaseRuntimeConfigurationStore = (input: {
             requestDigest: identity(scope).digest,
             revision: 1,
             record: recordSchema.parse({
-              kind: "public-release-runtime-configuration-v1",
+              kind: PUBLIC_RELEASE_CONFIGURATION_KIND,
               scope,
               sealed,
             }),

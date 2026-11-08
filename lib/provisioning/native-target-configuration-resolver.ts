@@ -61,6 +61,8 @@ import { readNeonAuthorizationConfiguration } from "./hosted-operator-neon-autho
 import type { HostedOperatorRequestDependencyLoader } from "./hosted-operator-native";
 import { reportHostedOperatorNativeFailure } from "./hosted-operator-native-diagnostic";
 
+const SINGLE_PROJECT_SERVICES = "single-project-services";
+
 // Identity projection only: the existing protected handler validates the complete operation.
 // Onboarding/consent actions have their own authority and do not need a configured app yet.
 const configurationRequestSchema = z.union([
@@ -309,7 +311,7 @@ export const createNativeTargetConfigurationResolver =
           await resources.owner.assertCanonicalAppOwner(context);
           return configuration;
         }
-        if (input.configuration.composition === "single-project-services") {
+        if (input.configuration.composition === SINGLE_PROJECT_SERVICES) {
           await resources.owner.verifyWorkload(request);
           await resources.owner.assertCanonicalAppOwner({
             authority: ownerContext.authority,
@@ -336,12 +338,12 @@ export const createNativeTargetConfigurationResolver =
         }
         // Public delivery cannot borrow a historical dedicated Preview registration.
         if (isPublicReleaseRequest(parsed.data)) {
-          if (input.configuration.composition !== "single-project-services") {
+          if (input.configuration.composition !== SINGLE_PROJECT_SERVICES) {
             throw new HostedOperatorError("builder_destination_configuration_required");
           }
           return structuredClone(input.configuration);
         }
-        if (input.configuration.composition === "single-project-services") {
+        if (input.configuration.composition === SINGLE_PROJECT_SERVICES) {
           await resources.owner.verifyWorkload(request);
           await resources.owner.assertCanonicalAppOwner({
             authority: ownerContext.authority,
@@ -368,7 +370,7 @@ export const createNativeTargetConfigurationResolver =
         }
         // Public delivery cannot borrow a historical dedicated Preview registration.
         if (isPublicReleaseRequest(parsed.data)) {
-          if (input.configuration.composition !== "single-project-services") {
+          if (input.configuration.composition !== SINGLE_PROJECT_SERVICES) {
             throw new HostedOperatorError("builder_destination_configuration_required");
           }
           return structuredClone(input.configuration);
