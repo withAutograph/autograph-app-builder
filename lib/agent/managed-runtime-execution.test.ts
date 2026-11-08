@@ -521,11 +521,11 @@ describe("managed runtime execution through supported SDK ports", () => {
     f.setSourceBytes(workerBytes);
     await f.start();
     expect(f.read()).toMatchObject({
-      requestId: failed.requestId,
       attemptId: failed.attemptId,
-      fence: failed.fence,
       current: { state: "ready" },
+      fence: failed.fence,
       locator: { commandId: "runtime-command" },
+      requestId: failed.requestId,
     });
     await f.start();
     expect(f.provider.runCommand).toHaveBeenCalledTimes(1);
@@ -546,11 +546,11 @@ describe("managed runtime execution through supported SDK ports", () => {
     await f.runtime.close(context, interrupted, async () => {});
     await f.start();
     expect(f.read()).toMatchObject({
-      requestId: interrupted.requestId,
       attemptId: interrupted.attemptId,
+      current: { state: "ready" },
       fence: interrupted.fence,
       locator: { ...interrupted.locator, commandId: "runtime-command" },
-      current: { state: "ready" },
+      requestId: interrupted.requestId,
     });
     expect(f.readSourceCreates()).toBe(1);
     expect(f.source.delete).toHaveBeenCalledTimes(1);

@@ -1892,8 +1892,8 @@ const narrowedGatewayApprovalFixture = () => {
         subject: "fixture",
       },
       trustedSources: {
-        builderProduction: { projectId: "prj_builder", from: "production", to: "preview" },
-        operatorPreview: { projectId: "prj_operator", from: "preview", to: "preview" },
+        builderProduction: { from: "production", projectId: "prj_builder", to: "preview" },
+        operatorPreview: { from: "preview", projectId: "prj_operator", to: "preview" },
       },
     },
     gatewayDelivery: {

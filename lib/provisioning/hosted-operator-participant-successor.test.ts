@@ -57,15 +57,15 @@ const target = {
 };
 const context = { authority, target };
 const program = normalActorProgramSchema.parse({
-  version: 1,
+  appAccess: [],
   appId: target.appId,
-  origin: "https://apps.example.com",
   actors: [
     { account: "capture-existing", actorKey: "owner", email: "owner@example.test", name: "Owner" },
   ],
-  organizations: [],
   memberships: [],
-  appAccess: [],
+  organizations: [],
+  origin: "https://apps.example.com",
+  version: 1,
 });
 const plan = hostedOperatorPlanSchema.parse({
   version: 1,
@@ -1158,10 +1158,10 @@ describe("approved additive capture participant state", () => {
         ...program.actors,
         { account: "create-email-password", actorKey: "qa", email: "qa@example.test", name: "QA" },
       ],
+      memberships: [{ actorKey: "owner", organizationId: "qa-org", role: "owner" }],
       organizations: [
         { name: "QA", organizationId: "qa-org", ownerActorKey: "owner", slug: "qa-org" },
       ],
-      memberships: [{ actorKey: "owner", organizationId: "qa-org", role: "owner" }],
     });
     expect(isAdditiveCaptureParticipantProgram(program, next)).toBe(false);
   });

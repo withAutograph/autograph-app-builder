@@ -382,7 +382,7 @@ const fixture = async (options = {}) => {
   const collected = await collect({
     binding: { ownerRunId, logicalSessionId },
     authorizeOwner: async (currentBinding) => {
-      assert.deepEqual(currentBinding, { ownerRunId, logicalSessionId });
+      assert.deepEqual(currentBinding, { logicalSessionId, ownerRunId });
       assert.ok(Object.isFrozen(currentBinding));
       authorized = true;
       await Promise.resolve();
@@ -549,40 +549,40 @@ test("historical failed step covered by a later committed turn does not block kn
 test("diagnostic never serializes prompts, tool names, arguments, outputs or provider metadata", () => {
   const secret = "NEVER-LOG-PRIVATE-CONTENT";
   const messages = [
-    { role: "user", content: secret },
+    { content: secret, role: "user" },
     {
-      role: "assistant",
       content: [
         {
-          type: "tool-call",
-          toolCallId: OPAQUE_CALL_ID,
-          toolName: secret,
           input: { secret },
           providerOptions: { openai: { secret } },
+          toolCallId: OPAQUE_CALL_ID,
+          toolName: secret,
+          type: "tool-call",
         },
         {
-          type: TOOL_APPROVAL_REQUEST_TYPE,
           approvalId: OPAQUE_APPROVAL_ID,
           toolCallId: OPAQUE_CALL_ID,
+          type: TOOL_APPROVAL_REQUEST_TYPE,
         },
       ],
+      role: "assistant",
     },
     {
-      role: "tool",
       content: [
-        { type: TOOL_APPROVAL_RESPONSE_TYPE, approvalId: OPAQUE_APPROVAL_ID, approved: true },
+        { approvalId: OPAQUE_APPROVAL_ID, approved: true, type: TOOL_APPROVAL_RESPONSE_TYPE },
       ],
+      role: "tool",
     },
     {
-      role: "tool",
       content: [
         {
-          type: TOOL_RESULT_KIND,
+          output: { type: "text", value: secret },
           toolCallId: "another-call",
           toolName: secret,
-          output: { type: "text", value: secret },
+          type: TOOL_RESULT_KIND,
         },
       ],
+      role: "tool",
     },
   ];
   const before = structuredClone(messages);
@@ -601,10 +601,10 @@ test("diagnostic never serializes prompts, tool names, arguments, outputs or pro
   }
   assert.deepEqual(messages, before);
   const many = Array.from({ length: 40 }, (_, index) => ({
-    role: "assistant",
     content: [
-      { type: "tool-call", toolCallId: `private-${index}`, toolName: secret, input: { secret } },
+      { input: { secret }, toolCallId: `private-${index}`, toolName: secret, type: "tool-call" },
     ],
+    role: "assistant",
   }));
   const bounded = summarizeModelProtocol(many);
   assert.equal(bounded.missingResultCount, 40);

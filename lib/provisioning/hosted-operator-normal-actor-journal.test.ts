@@ -39,15 +39,15 @@ const target = {
 };
 const context = { authority, target };
 const program = normalActorProgramSchema.parse({
-  version: 1,
+  appAccess: [],
   appId: target.appId,
-  origin: "https://apps.example.test",
   actors: [
     { account: "capture-existing", actorKey: "owner", email: "owner@example.test", name: "Owner" },
   ],
-  organizations: [],
   memberships: [],
-  appAccess: [],
+  organizations: [],
+  origin: "https://apps.example.test",
+  version: 1,
 });
 const plan = hostedOperatorPlanSchema.parse({
   version: 1,
@@ -246,10 +246,10 @@ const fixture = (selectedPreparation = preparationInput) => {
 const organizationProofFixture = async () => {
   const selectedProgram = normalActorProgramSchema.parse({
     ...program,
+    memberships: [{ actorKey: "owner", organizationId: "org-one", role: "owner" }],
     organizations: [
       { name: "One", organizationId: "org-one", ownerActorKey: "owner", slug: "one" },
     ],
-    memberships: [{ actorKey: "owner", organizationId: "org-one", role: "owner" }],
   });
   const selectedPlan = hostedOperatorPlanSchema.parse({
     ...plan,
@@ -714,10 +714,10 @@ describe("retained actual normal actor journal", () => {
   it("waits for every approved organization session before recording account completion", async () => {
     const selectedProgram = normalActorProgramSchema.parse({
       ...program,
+      memberships: [{ actorKey: "owner", organizationId: "org-one", role: "owner" }],
       organizations: [
         { name: "One", organizationId: "org-one", ownerActorKey: "owner", slug: "one" },
       ],
-      memberships: [{ actorKey: "owner", organizationId: "org-one", role: "owner" }],
     });
     const selectedPlan = hostedOperatorPlanSchema.parse({
       ...plan,
