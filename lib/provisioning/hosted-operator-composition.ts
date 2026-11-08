@@ -1937,7 +1937,7 @@ export const composeHostedOperatorDependencies = (
       if (configuration.composition === singleProjectServicesComposition) {
         planResources.runtimePreparation = "single-project-resources-v1";
       }
-      return parsePlan({
+      const planIdentity = {
         ...planResources,
         contextId: selected.contextId ?? selected.currentSpec.appSpecDigest,
         cost: {
@@ -1948,10 +1948,18 @@ export const composeHostedOperatorDependencies = (
           ),
           owner: context.authority.ownerUserId,
         },
+      };
+      const boundaryPrefix: Pick<
+        NonNullable<HostedOperatorPlan["deploymentBoundary"]>,
+        "composition"
+      > = {};
+      if (configuration.composition === singleProjectServicesComposition) {
+        boundaryPrefix.composition = singleProjectServicesComposition;
+      }
+      const planEffects = {
+        ...planIdentity,
         deploymentBoundary: {
-          ...(configuration.composition === singleProjectServicesComposition
-            ? { composition: singleProjectServicesComposition }
-            : {}),
+          ...boundaryPrefix,
           app: {
             branch: inventory.app.branch,
             deploymentId: inventory.app.deploymentId,
@@ -2002,11 +2010,17 @@ export const composeHostedOperatorDependencies = (
             kind: "install",
           },
         ],
-        installer: {
-          reference: worker.id,
-          sha256: worker.sha256,
-          ...(worker.sourceCapture === undefined ? {} : { sourceCapture: worker.sourceCapture }),
-        },
+      };
+      const installer: HostedOperatorPlan["installer"] = {
+        reference: worker.id,
+        sha256: worker.sha256,
+      };
+      if (worker.sourceCapture !== undefined) {
+        installer.sourceCapture = worker.sourceCapture;
+      }
+      return parsePlan({
+        ...planEffects,
+        installer,
         neon: {
           branchId: native.branchId,
           connectionRef: configuration.nativeNeon.configuration.connector,

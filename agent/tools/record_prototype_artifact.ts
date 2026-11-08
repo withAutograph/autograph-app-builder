@@ -83,13 +83,24 @@ export default defineTool({
       }
       const db = openHostedPostgresDatabase(process.env.DATABASE_URL ?? "");
       await assertPrototypeChunkSchemaReady(db);
-      const recorded = await recordDurablePrototypeChunk({
-        appId,
-        ...(baseRevision === undefined ? {} : { baseRevision }),
+      type DurableChunkInput = Parameters<typeof recordDurablePrototypeChunk>[0];
+      const identity: Pick<DurableChunkInput, "appId" | "baseRevision"> = { appId };
+      if (baseRevision !== undefined) {
+        identity.baseRevision = baseRevision;
+      }
+      const chunk = {
+        ...identity,
         callId: ctx.callId,
         chunkIndex: chunkIndex ?? 0,
         content,
-        ...(existing && isPrototypeArtifactV2(existing) ? { current: existing } : {}),
+      };
+      const previous: Pick<DurableChunkInput, "current"> = {};
+      if (existing && isPrototypeArtifactV2(existing)) {
+        previous.current = existing;
+      }
+      const recorded = await recordDurablePrototypeChunk({
+        ...chunk,
+        ...previous,
         expectedDigest: expectedDigest ?? singleCallDigest ?? "",
         finalChunk: finalChunk ?? true,
         mediaType,

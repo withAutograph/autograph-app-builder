@@ -40,6 +40,12 @@ interface GitTreeBase {
   base_tree?: string;
 }
 
+interface GitHubInstallationAuthPrefix {
+  installationId: string;
+  permissions: GitHubPermissionRequest;
+  repositoryIds?: number[];
+}
+
 const invalidProviderConfigurationMessage = "GitHub App provider configuration is invalid.";
 const invalidResponseMessage = "invalid-response";
 const invalidMaterialMessage = "invalid-material";
@@ -371,12 +377,14 @@ export const createGitHubAppHttpProvider = (input: {
     expected: readonly number[];
   }): Promise<{ status: number; body: unknown; requestId: string }> => {
     try {
-      const response = await createGitHubTokenOctokit({
+      const client = createGitHubTokenOctokit({
         fetch: request,
         token: requestInput.authorization,
-      }).request(`${requestInput.method ?? "GET"} ${requestInput.path}`, {
-        ...(record(requestInput.body) ? requestInput.body : {}),
       });
+      const execute = client.request.bind(client);
+      const route = `${requestInput.method ?? "GET"} ${requestInput.path}`;
+      const body = record(requestInput.body) ? { ...requestInput.body } : {};
+      const response = await execute(route, body);
       if (!requestInput.expected.includes(response.status)) {
         throw new Error(`github-status-${response.status}`);
       }
@@ -427,12 +435,17 @@ export const createGitHubAppHttpProvider = (input: {
   };
 
   const token = async (permissions: PermissionSnapshot, repositoryIds?: readonly string[]) => {
-    const authentication = await app.octokit.auth({
+    const { octokit } = app;
+    const authenticate = octokit.auth.bind(octokit);
+    const prefix: GitHubInstallationAuthPrefix = {
       installationId: config.installationId,
       permissions: permissionRequest(permissions),
-      ...(repositoryIds === undefined
-        ? {}
-        : { repositoryIds: repositoryIds.map(safeRepositoryIdNumber) }),
+    };
+    if (repositoryIds !== undefined) {
+      prefix.repositoryIds = repositoryIds.map(safeRepositoryIdNumber);
+    }
+    const authentication = await authenticate({
+      ...prefix,
       refresh: true,
       type: "installation",
     });

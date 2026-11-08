@@ -229,9 +229,34 @@ export default defineTool({
       );
     }
     const relativeRoot = workflow.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
+    const publishedByCallId = ctx.callId;
+    const review = workflow.reviewReceipt;
+    const { sourceReceipt } = workflow;
+    const optionalHooks: Pick<Parameters<typeof publishReviewedChangeSet>[0], "hooks"> = {};
+    if (
+      hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
+      workflow.appSpec.appId === "publication-interruption"
+    ) {
+      optionalHooks.hooks = {
+        afterPendingJournal: () => {
+          throw new Error("Fixture interruption after durable publication pending.");
+        },
+        preservePendingOnFailure: true,
+      };
+    }
+    if (
+      hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
+      workflow.appSpec.appId === "publication-failure-recovery"
+    ) {
+      optionalHooks.hooks = {
+        afterMutation: () => {
+          throw new Error("Fixture failure after local publication mutation.");
+        },
+      };
+    }
     const result = await publishReviewedChangeSet({
       proposal,
-      publishedByCallId: ctx.callId,
+      publishedByCallId,
       readOverlayFile: (path) =>
         hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
         workflow.appSpec.appId === "publication-precondition-failure"
@@ -239,29 +264,9 @@ export default defineTool({
           : ctx
               .getSandbox()
               .then((sandbox) => sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` })),
-      review: workflow.reviewReceipt,
-      sourceReceipt: workflow.sourceReceipt,
-      ...(hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
-      workflow.appSpec.appId === "publication-interruption"
-        ? {
-            hooks: {
-              afterPendingJournal: () => {
-                throw new Error("Fixture interruption after durable publication pending.");
-              },
-              preservePendingOnFailure: true,
-            },
-          }
-        : {}),
-      ...(hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
-      workflow.appSpec.appId === "publication-failure-recovery"
-        ? {
-            hooks: {
-              afterMutation: () => {
-                throw new Error("Fixture failure after local publication mutation.");
-              },
-            },
-          }
-        : {}),
+      review,
+      sourceReceipt,
+      ...optionalHooks,
     });
     const terminalJournal = await readLocalPublicationJournal(expected.destinationPath);
     if (result.ok) {

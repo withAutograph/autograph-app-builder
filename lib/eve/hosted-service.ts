@@ -4970,12 +4970,17 @@ export function createHostedEveSessionService(input: {
         }
         return mutate({
           async dispatch(operationId) {
-            const response = await input.transport.start({
+            const transport = input.transport;
+            const start = transport.start;
+            const startInput: Parameters<HostedEveTransport["start"]>[0] = {
               operationId,
               principal,
               prompt: await recoveryPrompt({ principal, record: existing, store: input.store }),
-              ...(existing.sourceHandoffId ? { sourceHandoffId: existing.sourceHandoffId } : {}),
-            });
+            };
+            if (existing.sourceHandoffId) {
+              startInput.sourceHandoffId = existing.sourceHandoffId;
+            }
+            const response = await start.call(transport, startInput);
             if (
               input.transport.observeStarted !== undefined &&
               input.store.replaceSessionAdapterPaged !== undefined &&
@@ -5179,12 +5184,17 @@ export function createHostedEveSessionService(input: {
       const { prompt } = request;
       return mutate({
         async dispatch(operationId) {
-          const response = await input.transport.start({
+          const transport = input.transport;
+          const start = transport.start;
+          const startInput: Parameters<HostedEveTransport["start"]>[0] = {
             operationId,
             principal,
             prompt,
-            ...(request.sourceHandoffId ? { sourceHandoffId: request.sourceHandoffId } : {}),
-          });
+          };
+          if (request.sourceHandoffId) {
+            startInput.sourceHandoffId = request.sourceHandoffId;
+          }
+          const response = await start.call(transport, startInput);
           const sessionId = stableId(
             "ses",
             Object.fromEntries([

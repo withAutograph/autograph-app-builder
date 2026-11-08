@@ -914,14 +914,16 @@ const selectApplicationReviewModel = async (
   options.testModel ??
   createGateway({ apiKey: await getVercelOidcToken() })(reviewer.modelId);
 
+type SourceReviewGatewayOptions = { only: string[] } & { sessionId?: string };
+
 const applicationProviderOptions = (
   options: ApplicationSourceReviewOptions,
   reviewer: SourceReviewer,
 ) => {
-  const gateway = {
-    only: ["openai"],
-    ...(options.cacheSessionId === undefined ? {} : { sessionId: options.cacheSessionId }),
-  };
+  const gateway: SourceReviewGatewayOptions = { only: ["openai"] };
+  if (options.cacheSessionId !== undefined) {
+    gateway.sessionId = options.cacheSessionId;
+  }
   const provider: Parameters<typeof withBuilderGatewayReporting>[0] = { gateway };
   if (reviewer.reasoningEffort !== null) {
     provider.openai = { reasoningEffort: reviewer.reasoningEffort };
@@ -1024,8 +1026,8 @@ export const assessApplicationSourceRound = async (
   const { invocation, state } = restored;
   let { messages, requestOrdinal, stepNumber, lastRecovery } = restored;
   let currentMessages = messages;
-  const finish = (assessment?: ProductSourceAssessment): ApplicationReviewRoundResult => ({
-    continuation: {
+  const finish = (assessment?: ProductSourceAssessment): ApplicationReviewRoundResult => {
+    const next: ApplicationReviewContinuation = {
       version: 1,
       reviewer,
       reviewPolicyId: policyId,
@@ -1045,10 +1047,16 @@ export const assessApplicationSourceRound = async (
       invocation: { ...invocation, freshUsage: { ...invocation.freshUsage } },
       requestOrdinal,
       stepNumber,
-      ...(lastRecovery === undefined ? {} : { lastRecovery }),
-    },
-    ...(assessment === undefined ? {} : { assessment }),
-  });
+    };
+    if (lastRecovery !== undefined) {
+      next.lastRecovery = lastRecovery;
+    }
+    const result: ApplicationReviewRoundResult = { continuation: next };
+    if (assessment !== undefined) {
+      result.assessment = assessment;
+    }
+    return result;
+  };
   const blocked = (reason: string) =>
     finish({
       ...unavailableSourceAssessment(input, reason, "blocked", reviewer),
