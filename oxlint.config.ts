@@ -13,11 +13,8 @@ export default defineConfig({
     typeAware: true,
   },
   rules: {
-    // Temporary migration baseline; remove these as findings are fixed.
     "sonarjs/cognitive-complexity": "off",
-    "typescript/no-unsafe-type-assertion": "off",
     "eslint/complexity": "off",
-    // Temporary migration items: re-enable after the existing findings are fixed.
     "eslint/sort-keys": "off",
   },
   settings: jsPluginSettings,
