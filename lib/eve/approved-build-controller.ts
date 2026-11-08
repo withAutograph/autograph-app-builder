@@ -240,11 +240,15 @@ const dispatch = async (
     if (input.transport.sendAccepted === undefined) {
       throw new ContinuationPreflightError("transport_unavailable");
     }
+    const destination: Pick<
+      Parameters<NonNullable<HostedEveTransport["sendAccepted"]>>[0],
+      "adapterSessionId" | "logicalSessionId"
+    > = { adapterSessionId: session.adapterSessionId };
+    if (session.nativeRecoveryBinding !== undefined) {
+      destination.logicalSessionId = session.nativeRecoveryBinding.logicalSessionId;
+    }
     const request: Parameters<NonNullable<HostedEveTransport["sendAccepted"]>>[0] = {
-      adapterSessionId: session.adapterSessionId,
-      ...(session.nativeRecoveryBinding === undefined
-        ? {}
-        : { logicalSessionId: session.nativeRecoveryBinding.logicalSessionId }),
+      ...destination,
       message,
       operationId: candidate.operationId,
       principal: session.principal,

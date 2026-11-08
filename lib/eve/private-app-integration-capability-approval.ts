@@ -90,9 +90,15 @@ export const readPrivateAppIntegrationCapabilityApproval = async (input: {
   ) {
     throw new Error("Integration capability approval owner changed");
   }
+  const approvalContext: Pick<
+    Parameters<typeof readPrivateOperatorApproval>[0],
+    "owner" | "observation"
+  > = { owner: input.owner };
+  if (input.observation !== undefined) {
+    approvalContext.observation = input.observation;
+  }
   return await readPrivateOperatorApproval({
-    owner: input.owner,
-    ...(input.observation === undefined ? {} : { observation: input.observation }),
+    ...approvalContext,
     capture: (state) => {
       const captureInput: Parameters<
         typeof createPrivateAppIntegrationCapabilityApprovalCapture
