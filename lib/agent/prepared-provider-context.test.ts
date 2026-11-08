@@ -206,6 +206,7 @@ describe("prepared provider continuity", () => {
     expect(
       withPreparedGitHubSelection(
         { repository: "acme/stock" },
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         undefined as typeof intent | undefined,
       ),
     ).toEqual({

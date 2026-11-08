@@ -752,6 +752,7 @@ const reservationStore = function reservationStore(
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async reserveOperation(_principal, candidate) {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       return makeReservation(candidate) as ReserveOperationResult;
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -1170,6 +1171,7 @@ describe("hosted Eve service core", () => {
   it("rejects a non-closed principal before any store or transport access", () => {
     expect(() =>
       createHostedEveSessionService({
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         principal: { ...principal, unverifiedRole: "admin" } as HostedPrincipal,
         store: new InMemoryHostedEveStore(),
         transport: transport(),
@@ -1177,6 +1179,7 @@ describe("hosted Eve service core", () => {
     ).toThrow();
   });
 
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   it.each(Object.keys(hostedEveOperationScopes) as (keyof typeof hostedEveOperationScopes)[])(
     "requires the exact %s scope before store access",
     async (operation) => {
@@ -2309,6 +2312,7 @@ describe("hosted Eve service core", () => {
       settleSucceeded: (settlement) => base.settleSucceeded(settlement),
       async settleUnsuccessful(settlement) {
         const record = await base.settleUnsuccessful(settlement);
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         return transform(record) as HostedOperationRecord;
       },
     };

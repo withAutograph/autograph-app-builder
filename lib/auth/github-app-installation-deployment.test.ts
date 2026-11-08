@@ -78,11 +78,13 @@ function handlers(
     installationDigest: "c".repeat(64),
     providerUserDigest: "d".repeat(64),
     repositorySelection: "selected" as const,
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     returnState: { returnTo: "/" as const } as ProviderConnectionReturn,
     setupAction: "install" as const,
     stateDigest: "b".repeat(64),
     status: "bound" as const,
     version: 1 as const,
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     via: "installation" as "installation" | "existing",
   }));
   const routeInput: Parameters<typeof createGitHubAppInstallationRouteHandlers>[0] = {
@@ -538,6 +540,7 @@ describe("GitHub App installation routes", () => {
     const route = createGitHubAppInstallationRouteHandlers({
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       authorityForRequest: async () => authority,
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       authorization: {
         begin: vi.fn(),
         complete,

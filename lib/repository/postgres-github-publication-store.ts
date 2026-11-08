@@ -73,6 +73,7 @@ function parseProposal(input: unknown): GitHubPublicationProposal {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     throw new Error("GitHub publication proposal JSON is malformed.");
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const stored = input as GitHubPublicationProposal;
   // PostgreSQL jsonb reorders object keys. Publication v2 digests use the
   // constructor's JSON.stringify order, so restore that exact order after

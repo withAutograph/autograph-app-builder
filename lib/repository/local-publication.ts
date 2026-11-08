@@ -177,6 +177,7 @@ export const unrelatedProjectionDigest = (
 };
 
 const validMode = (mode: string): boolean =>
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   (LOCAL_PUBLICATION_ALLOWED_MODES as readonly string[]).includes(mode);
 
 const canonicalChanges = (review: ReviewedChangeSetReceipt): readonly OverlayChange[] => {

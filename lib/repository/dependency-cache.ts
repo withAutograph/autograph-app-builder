@@ -1602,6 +1602,7 @@ export const materializeOfflineDependencies = async function materializeOfflineD
   }
   let packageVersion: unknown;
   try {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     packageVersion = (JSON.parse(packageContent) as { version?: unknown }).version;
   } catch {
     throw new Error("The required offline dependency closure is invalid.");

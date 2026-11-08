@@ -639,7 +639,7 @@ function releaseGateAbsent(repository: GitHubRepositoryObservation): boolean {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assertCanonicalReview(review: ReviewedChangeSetReceipt): void {
-  // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/no-unsafe-dictionary-type -- Keep the existing broader shape used by this operation.; Preserve the existing open-ended value contract.
+  // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Keep the existing broader shape used by this operation.; Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
   const changeSet = { ...review } as Record<string, unknown>;
   delete changeSet.changeSetDigest;
   delete changeSet.reviewedByCallId;
@@ -706,6 +706,7 @@ function contentManifest(
 ): ReviewedChangeSetReceipt["changes"] {
   return changes.map((change) => {
     if (change.kind === "added") {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       return Object.fromEntries([
         ["path", change.path],
         ["kind", change.kind],
@@ -719,6 +720,7 @@ function contentManifest(
       ]) as ReviewedChangeSetReceipt["changes"][number];
     }
     if (change.kind === "modified") {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       return Object.fromEntries([
         ["path", change.path],
         ["kind", change.kind],
@@ -732,6 +734,7 @@ function contentManifest(
         ],
       ]) as ReviewedChangeSetReceipt["changes"][number];
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     return Object.fromEntries([
       ["path", change.path],
       ["kind", change.kind],

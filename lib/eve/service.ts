@@ -295,6 +295,7 @@ async function settleLocalCancellation(operation: Promise<unknown>) {
 }
 
 const localEveRuntimeStateKey = "__AUTOGRAPH_APP_BUILDER_LOCAL_EVE_RUNTIME_STATE_V1__" as const;
+// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
 const localRuntimeGlobal = globalThis as typeof globalThis & {
   [localEveRuntimeStateKey]?: LocalEveRuntimeState;
 };
@@ -918,6 +919,7 @@ export function createLocalEveSessionService(
     }
   }
 
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const service = Object.create(Object.prototype) as EveSessionService;
   service.start = async ({ prompt, resumeSessionId, clientRequestId, resumeMode }) => {
     if (resumeMode !== undefined && resumeMode !== "recover") {

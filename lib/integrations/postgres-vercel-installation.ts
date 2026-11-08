@@ -80,6 +80,7 @@ export async function readActiveVercelInstallationToken(input: {
       installationId: row.installationId,
       plan: row.plan,
       scopeId: row.scopeId,
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       scopeType: row.scopeType as "team" | "user",
       slug: row.slug,
       updatedAt: row.updatedAt,
@@ -107,6 +108,7 @@ export const readVercelInstallationBindings = async (input: {
     .from(hostedVercelInstallations)
     .where(tenant(hostedVercelInstallations, input.authority))
     .orderBy(asc(hostedVercelInstallations.displayName));
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   return rows as VercelInstallationBinding[];
 };
 
@@ -250,6 +252,7 @@ export function createPostgresVercelInstallationStore(input: {
       if (rows.length !== 1) {
         throw new Error("Vercel installation was not durable.");
       }
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       return rows[0] as VercelInstallationBinding;
     },
     async deactivate(installationId, now) {

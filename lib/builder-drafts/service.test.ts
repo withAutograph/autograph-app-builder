@@ -195,6 +195,7 @@ describe("builder draft service", () => {
     };
 
     await expect(
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       service.saveActive(authority, invalid as SaveActiveBuilderDraftInput),
     ).rejects.toThrow();
   });

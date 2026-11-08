@@ -235,6 +235,7 @@ const fixedGitApply = async function fixedGitApply(
   }
   if (
     inputResult.status === "rejected" &&
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     (inputResult.reason as NodeJS.ErrnoException).code !== "EPIPE"
   ) {
     throw inputResult.reason;
@@ -529,6 +530,7 @@ const fileState = async function fileState(path: string): Promise<FileState> {
       size,
     };
   } catch (error: unknown) {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return { kind: "absent" };
     }
@@ -795,10 +797,12 @@ export const readLocalPublicationJournal = async function readLocalPublicationJo
   const root = await resolveAllowedRepository(destinationPath);
   const path = await gitOwnedPath(root, localPublicationGitPath);
   try {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const journal = JSON.parse(await readFile(path, "utf-8")) as LocalPublicationJournal;
     assertJournal(journal);
     return journal;
   } catch (error: unknown) {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return undefined;
     }

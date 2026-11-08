@@ -415,6 +415,7 @@ export function createAutographMcpHandler(
           ) {
             try {
               const recovered = await service.recoverAppliedApprovalResponse({
+                // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
                 responses: input.responses as {
                   requestId: string;
                   response: { kind: "approve" | "deny" };
@@ -521,6 +522,7 @@ async function isPublicDiscoveryRequest(request: Request): Promise<boolean> {
   }
 }
 
+// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
 const discoveryOnlyService = new Proxy({} as EveSessionService, {
   get() {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
@@ -532,6 +534,7 @@ const discoveryOnlyService = new Proxy({} as EveSessionService, {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function authenticationRequiredService(challenge: string) {
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   return new Proxy({} as EveSessionService, {
     get() {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract

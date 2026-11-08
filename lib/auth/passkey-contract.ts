@@ -13,6 +13,7 @@ export function passkeyErrorCode(value: unknown): string | undefined {
     return undefined;
   }
 
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const envelope = value as PasskeyErrorEnvelope;
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof envelope.code === "string") {
@@ -23,6 +24,7 @@ export function passkeyErrorCode(value: unknown): string | undefined {
     return undefined;
   }
 
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const nestedCode = (envelope.error as PasskeyErrorEnvelope).code;
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return typeof nestedCode === "string" ? nestedCode : undefined;

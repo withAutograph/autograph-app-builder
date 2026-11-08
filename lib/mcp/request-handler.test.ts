@@ -151,6 +151,7 @@ async function mcpResult<T>(response: Response): Promise<T> {
     .split("\n")
     .find((line) => line.startsWith("data: "))
     ?.slice("data: ".length);
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const payload = JSON.parse(data ?? body) as { result?: T };
   if (payload.result === undefined) {
     throw new Error(`MCP result was missing: ${body}`);

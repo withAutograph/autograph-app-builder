@@ -158,6 +158,7 @@ describe("hosted sandbox turn lease lifecycle", () => {
         member: true,
         message: "acquire failed",
         store: () =>
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
           ({
             // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
             acquire: async () => {

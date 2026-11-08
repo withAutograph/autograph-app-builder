@@ -541,6 +541,7 @@ describe("same-session post-merge destination review", () => {
     // This is deliberately not a provider-proved published reconciliation.
     toolPorts.prior = {
       ...prior,
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       reconciliation: {
         installationIdentityDigest: f.proposal.installationIdentityDigest,
         priorPublicationDigest: "8".repeat(64),

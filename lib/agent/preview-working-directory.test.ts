@@ -515,6 +515,7 @@ describe("protected native preview early branch", () => {
           port: 3000,
           workingDirectory: ".",
         },
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         { getSandbox, session: { auth: {}, id: "session-native" } } as never,
       );
       expect(result).toEqual(receipt);
@@ -549,6 +550,7 @@ describe("protected native preview early branch", () => {
             port: 3000,
             workingDirectory: ".",
           },
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
           { getSandbox, session: { auth: {}, id: "session-native" } } as never,
         ),
       ).rejects.toThrow("resource_mismatch");
@@ -568,6 +570,7 @@ describe("protected native preview early branch", () => {
           port: 3000,
           workingDirectory: ".",
         },
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         { getSandbox, session: { auth: {}, id: "session-native" } } as never,
       ),
     ).rejects.toThrow("resource_mismatch");

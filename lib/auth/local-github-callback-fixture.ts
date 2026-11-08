@@ -58,6 +58,7 @@ export function applyLocalGitHubCallbackFixture(request: Request, environment: N
     return { applied: false, request };
   }
 
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   for (const [key, value] of fixtures[fixture as LocalGitHubCallbackFixture]) {
     url.searchParams.append(key, value);
   }

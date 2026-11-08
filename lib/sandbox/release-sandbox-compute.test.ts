@@ -107,6 +107,7 @@ describe("Eve durable turn execution envelope", () => {
         id: "provider_session_1",
         stop,
       }));
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       const context = {
         getSandbox,
         session: { auth: {}, id: "session_1" },

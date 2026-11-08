@@ -93,6 +93,7 @@ async function readLockOwner(lock: string) {
     throw new Error("owner.json was not an owner-bound regular file");
   }
   const source = await readFile(ownerPath, "utf-8");
+  // SAFETY: JSON.parse returns any; unknown makes no claim about the parsed shape.
   const value = JSON.parse(source) as unknown;
   if (
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -102,6 +103,7 @@ async function readLockOwner(lock: string) {
   ) {
     throw new Error("owner.json did not match Eve's lock schema");
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const owner = value as { createdAt?: unknown; pid?: unknown };
   if (
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -309,7 +311,7 @@ export function waitForEveEvalChild(
         }
       }
     };
-    // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the existing broader shape used by this operation.
+    // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/require-safety-comment-for-type-assertion -- Keep the existing broader shape used by this operation.; Preserve the existing type assertion at this boundary.
     const handlers = {} as {
       interrupt: () => void;
       terminate: () => void;

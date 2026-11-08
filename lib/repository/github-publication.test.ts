@@ -87,6 +87,7 @@ const reviewedChange = (
       ["mode", postimage.mode],
       ["digest", postimage.digest],
     ]);
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     return Object.fromEntries([
       ["path", change.path],
       ["kind", change.kind],
@@ -102,6 +103,7 @@ const reviewedChange = (
       ["mode", postimage.mode],
       ["digest", postimage.digest],
     ]);
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     return Object.fromEntries([
       ["path", change.path],
       ["kind", change.kind],
@@ -109,6 +111,7 @@ const reviewedChange = (
       ["after", after],
     ]) as NormalizedChangeSet["changes"][number];
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   return Object.fromEntries([
     ["path", change.path],
     ["kind", change.kind],
@@ -485,6 +488,7 @@ describe("closed GitHub publication contract", () => {
     expect(() =>
       parseGitHubPublicationProposalRow({
         ...row,
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         proposal: { ...(row.proposal as object), unexpectedField: true },
       }),
     ).toThrow();
@@ -569,7 +573,9 @@ describe("closed GitHub publication contract", () => {
     expect(() => {
       assertExactInstallationIdentity(identity);
     }).not.toThrow();
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const reordered = Object.fromEntries(Object.entries(identity).toReversed()) as typeof identity;
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     reordered.permissions = Object.fromEntries(
       Object.entries(identity.permissions).toReversed(),
     ) as typeof identity.permissions;
@@ -649,7 +655,9 @@ describe("closed GitHub publication contract", () => {
     expect(() => {
       assertExactRepositoryObservation(active);
     }).not.toThrow();
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const reordered = Object.fromEntries(Object.entries(active).toReversed()) as typeof active;
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     reordered.releaseGate = Object.fromEntries(
       Object.entries(active.releaseGate).toReversed(),
     ) as typeof active.releaseGate;
@@ -668,12 +676,14 @@ describe("closed GitHub publication contract", () => {
         name: "REPOSITORY_RELEASE_ENABLED" as const,
       },
     };
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     delete (unsigned as Partial<typeof proposal>).digest;
     const releaseEnabled = {
       ...unsigned,
       digest: hash(unsigned),
     };
     expect(() => {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       assertExactFreshRepositoryProposal(releaseEnabled as never);
     }).toThrow(/malformed/u);
   });
@@ -706,6 +716,7 @@ describe("closed GitHub publication contract", () => {
       },
     );
     const canonicalReview = review(changes, {}, true);
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const reordered = {
       ...canonicalReview,
       changes: canonicalReview.changes.map((change) => ({
@@ -1453,6 +1464,7 @@ describe("closed GitHub publication contract", () => {
       (adapter, proposal) => {
         const value = draftReadBack(proposal, adapter.publishRepo);
         const unsigned = { ...value, changedPathsSinceBase: ["apps/demo"] };
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         delete (unsigned as Partial<DraftPublicationReadBack>).digest;
         adapter.draftOutcome = {
           ...unsigned,
@@ -1690,6 +1702,7 @@ describe("existing draft PR updates", () => {
     repositoryId: "100",
     state: "open",
   };
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const priorPublication = {
     branchName: initial.headBranch,
     branchSha: initial.headSha,

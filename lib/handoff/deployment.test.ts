@@ -362,6 +362,7 @@ describe("builder handoff deployment", () => {
       },
     });
     const oversizedResponse = await route().handler(
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       new Request(`${origin}/api/builder/handoffs`, {
         body: oversized,
         duplex: "half",

@@ -71,7 +71,7 @@ export function assertBoundGhcrPayload(
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("GHCR provider returned malformed output.");
   }
-  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
   const record = parsed as Record<string, unknown>;
   if (
     Object.keys(record).toSorted().join(",") !== "Secret,ServerURL,Username" ||
@@ -118,7 +118,7 @@ export function assertVerifiedGhcrLoginPayload(
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("GitHub keyring verification returned malformed output.");
   }
-  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
   const record = parsed as Record<string, unknown>;
   if (
     Object.keys(record).toSorted().join(",") !== "Username,identityDigest,provenanceDigest" ||
@@ -160,6 +160,7 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
   ) {
     throw new Error(malformedAuthenticationStatus);
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const { hosts } = parsed as { hosts?: unknown };
   if (
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -170,7 +171,7 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
   ) {
     throw new Error(malformedAuthenticationStatus);
   }
-  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
   const records = (hosts as Record<string, unknown>)[githubHost];
   if (!Array.isArray(records) || records.length !== 1) {
     throw new Error("GitHub authentication status was ambiguous.");
@@ -181,7 +182,7 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
   if (typeof record !== "object" || record === null || Array.isArray(record)) {
     throw new Error(malformedAuthenticationStatus);
   }
-  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
   const value = record as Record<string, unknown>;
   const identityMismatch = "GitHub keyring identity did not match approval.";
   if (
@@ -208,6 +209,7 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
   if (!scopes.has("write:packages")) {
     throw new Error("GitHub keyring identity lacks package-write authority.");
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   return value as GhStatusRecord;
 }
 

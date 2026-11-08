@@ -16,14 +16,14 @@ const mocks = vi.hoisted(() => ({
   guard: vi.fn(),
   inspectGitHub: vi.fn(),
   repositoryAccess: vi.fn(),
-  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the existing broader shape used by this operation.
+  // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/require-safety-comment-for-type-assertion -- Keep the existing broader shape used by this operation.; Preserve the existing type assertion at this boundary.
   source: { phase: "empty" } as {
     phase: string;
     receipt?: SourceReceiptFixture;
     githubSource?: GitHubSourceFixture;
   },
   update: vi.fn(),
-  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the existing broader shape used by this operation.
+  // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/require-safety-comment-for-type-assertion -- Keep the existing broader shape used by this operation.; Preserve the existing type assertion at this boundary.
   workflow: { phase: "empty" } as {
     phase: string;
     githubSource?: GitHubSourceFixture;

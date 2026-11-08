@@ -26,7 +26,7 @@ function databaseReturning<T extends Record<string, unknown>>(rows: T[]) {
   const from = vi.fn(() => joined);
   const select = vi.fn(() => ({ from }));
   return {
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The database fixture implements only the membership query operations under test.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The database fixture implements only the membership query operations under test.; Preserve the existing type assertion at this boundary.
     database: { select } as unknown as Database,
     from,
     innerJoin,

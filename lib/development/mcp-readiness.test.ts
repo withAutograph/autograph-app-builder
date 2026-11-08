@@ -104,6 +104,7 @@ describe("development MCP readiness", () => {
       return Promise.resolve(value);
     };
     for (let wait = 0; wait < 7; wait += 1) {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       vi.mocked(delay).mockImplementationOnce(deterministicDelay as typeof delay);
     }
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -144,6 +145,7 @@ describe("development MCP readiness", () => {
       return Promise.resolve(value);
     };
     for (let wait = 0; wait < 3; wait += 1) {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       vi.mocked(delay).mockImplementationOnce(deterministicDelay as typeof delay);
     }
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double

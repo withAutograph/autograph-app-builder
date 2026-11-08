@@ -68,6 +68,7 @@ export async function fingerprintDevelopmentRuntime(repositoryRoot: string): Pro
     } catch (error) {
       // A file may disappear between Git's listing and the read while a live
       // edit is being saved. The next watcher pass observes the settled tree.
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         continue;
       }

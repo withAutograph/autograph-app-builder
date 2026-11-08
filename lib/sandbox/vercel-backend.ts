@@ -26,6 +26,7 @@ function retryableProviderFailure(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const { status } = error as Error & { status?: unknown };
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof status === "number" && (status === 429 || status >= 500)) {
@@ -42,6 +43,7 @@ function providerDiagnostic(error: unknown): string {
   if (!(error instanceof Error)) {
     return "unknown";
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const { cause } = error as Error & { cause?: unknown };
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof cause !== "object" || cause === null || !("code" in cause)) {

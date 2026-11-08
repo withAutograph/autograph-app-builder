@@ -469,6 +469,7 @@ function checkpointForSnapshot(
     if (candidate === null || typeof candidate !== "object") {
       continue;
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const projected = toPublicEvent(candidate as InternalEveEvent);
     if (projected === null) {
       continue;
@@ -688,6 +689,7 @@ async function spoolSnapshotEvents(snapshot: HostedEngineSnapshot): Promise<Page
       if (candidate === null || typeof candidate !== "object") {
         continue;
       }
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       const projected = toPublicEvent(candidate as InternalEveEvent);
       if (projected === null) {
         continue;
@@ -775,6 +777,7 @@ function* publicSnapshotEvents(snapshot: HostedEngineSnapshot) {
     if (candidate === null || typeof candidate !== "object") {
       continue;
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const projected = toPublicEvent(candidate as InternalEveEvent);
     if (projected === null) {
       continue;
@@ -979,6 +982,7 @@ const comparableStartSession = <T extends HostedSessionRecord | HostedPagedSessi
   } = session;
   void _storeOwnedAuthoring;
   void _storeOwnedDecision;
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   return comparable as T;
 };
 

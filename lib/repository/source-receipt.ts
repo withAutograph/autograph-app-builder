@@ -176,6 +176,7 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
   ) {
     throw new Error(invalidCanonicalCloneInspectionMessage);
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const contents = value.contents as Partial<Record<string, string>>;
   const contract = value.contract.map((entry) => {
     if (!isRecord(entry) || !hasExactKeys(entry, ["mode", "objectId", "path", "sha256"])) {
@@ -311,12 +312,12 @@ export const parseSourceReceiptEvidence = (value: unknown): SourceReceiptEvidenc
   ) {
     throw new Error("Source receipt evidence is invalid.");
   }
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Retain the existing receipt boundary before checking the stored digest.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- Retain the existing receipt boundary before checking the stored digest.; Preserve the existing type assertion at this boundary.
   const { digest, ...unsigned } = value as unknown as SourceReceiptEvidence;
   if (digest !== sourceReceiptDigest(unsigned)) {
     throw new Error("Source receipt evidence digest is invalid.");
   }
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Return the same receipt value after the existing digest check.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- Return the same receipt value after the existing digest check.; Preserve the existing type assertion at this boundary.
   return value as unknown as SourceReceiptEvidence;
 };
 

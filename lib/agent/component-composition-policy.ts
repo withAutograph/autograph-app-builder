@@ -124,6 +124,7 @@ export function bindArrustedComponentCompositionPolicy(input: {
   }
   let parsed: unknown;
   try {
+    // SAFETY: JSON.parse returns any; unknown makes no claim about the parsed shape.
     parsed = JSON.parse(input.content) as unknown;
   } catch {
     return {

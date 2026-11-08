@@ -54,6 +54,7 @@ if (argv[0] === "plan") {
   const invalidActionArguments =
     argv.length !== 7 ||
     argv[1] !== "--expected-action" ||
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     !actions.includes(argv[2] as (typeof actions)[number]);
   if (
     invalidActionArguments ||

@@ -222,6 +222,7 @@ async function exchangeLocalEmulatedOAuthCode(input: {
   if (!response.ok) {
     throw new Error("Emulated OAuth token exchange failed.");
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const body = (await response.json()) as {
     access_token?: unknown;
     token_type?: unknown;
@@ -670,6 +671,7 @@ export function createPreviewOAuthServer(input: {
             if (!response.ok) {
               return null;
             }
+            // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
             const profile = (await response.json()) as {
               id?: number;
               login?: string;
@@ -884,6 +886,7 @@ export function createPreviewOAuthServer(input: {
               ...result,
               // GitHub's own response contains additional profile fields
               // beyond the identity fields this boundary needs to inspect.
+              // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
               data: result.data as GithubProfile,
             };
           },

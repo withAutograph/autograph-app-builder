@@ -512,7 +512,7 @@ export async function* streamSameOriginEveEvents(input: {
         buffered += decoder.decode();
         const line = buffered.trim();
         if (line.length > 0 && eventCount <= tail) {
-          // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Preserve the existing parsed stream-envelope boundary.
+          // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing parsed stream-envelope boundary.; Preserve the existing type assertion at this boundary.
           const event = streamEnvelopeSchema.parse(
             JSON.parse(line),
           ) as unknown as MessageStreamEvent;
@@ -532,7 +532,7 @@ export async function* streamSameOriginEveEvents(input: {
         const line = buffered.slice(0, newline).trim();
         buffered = buffered.slice(newline + 1);
         if (line.length > 0) {
-          // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Preserve the existing parsed final stream-envelope boundary.
+          // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing parsed final stream-envelope boundary.; Preserve the existing type assertion at this boundary.
           const event = streamEnvelopeSchema.parse(
             JSON.parse(line),
           ) as unknown as MessageStreamEvent;
@@ -1017,7 +1017,8 @@ export async function observeSameOriginEveStream(
         readTrace.set("nativeNextIndex", installedEventCount);
         const turnId =
           "data" in event && "turnId" in event.data
-            ? (event.data.turnId as string | undefined)
+            ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+              (event.data.turnId as string | undefined)
             : undefined;
         if (
           turnId !== undefined &&
@@ -1332,7 +1333,8 @@ function activeTurnId(events: readonly MessageStreamEvent[]): string | undefined
   for (const event of events) {
     const turnId =
       "data" in event && "turnId" in event.data
-        ? (event.data.turnId as string | undefined)
+        ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+          (event.data.turnId as string | undefined)
         : undefined;
     if (
       turnId !== undefined &&
@@ -1554,7 +1556,8 @@ async function readCancellationSettlementIncremental(input: {
       nextNativeIndex += 1;
       const eventTurnId =
         "data" in event && "turnId" in event.data
-          ? (event.data.turnId as string | undefined)
+          ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+            (event.data.turnId as string | undefined)
           : undefined;
       if (
         eventTurnId !== undefined &&

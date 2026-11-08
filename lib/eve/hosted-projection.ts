@@ -35,6 +35,7 @@ function* internalEvents(candidates: readonly unknown[]): Generator<InternalEveE
   for (const candidate of candidates) {
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     if (candidate !== null && typeof candidate === "object") {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       yield candidate as InternalEveEvent;
     }
   }
@@ -48,6 +49,7 @@ const publicEventFromCandidate = (
   if (candidate === null || typeof candidate !== "object") {
     return undefined;
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const projected = toPublicEvent(candidate as InternalEveEvent);
   if (projected === null) {
     return undefined;

@@ -50,7 +50,7 @@ const isRecordedResult = (
 ): event is MessageStreamEvent & z.infer<typeof recordedResultSchema> =>
   recordedResultSchema.safeParse(event).success;
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing unknown input contract.; Preserve the existing type assertion at this boundary.
 const installedEvent = (event: unknown) => event as MessageStreamEvent;
 
 describe("authorization completion projection", () => {

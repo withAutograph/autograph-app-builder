@@ -57,8 +57,10 @@ export async function prepareOrReuseDependencies(input: {
     dependencyCacheDigest: "checkout",
     dependencyLayout: {
       kind: "checkout" as const,
+      // SAFETY: The newly created array is empty, matching the empty tuple type.
       roots: [] as [],
       version: 1 as const,
+      // SAFETY: The newly created array is empty, matching the empty tuple type.
       workspaceLinks: [] as [],
     },
     eligibilityDigest: current.workspace.eligibilityDigest,

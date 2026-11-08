@@ -59,6 +59,7 @@ describe("approval-bound implementation files", () => {
       wrapped({
         appId: "stock-exceptions",
         applyRoot: "/workspace/repository",
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         proposal: {
           operation: "iterate-existing-app",
           plan: { source: { workspacePath: "apps/stock-exceptions" } },
@@ -95,6 +96,7 @@ describe("approval-bound implementation files", () => {
       wrapped({
         appId: "inventory-queue",
         applyRoot: "/workspace/repository",
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         proposal: {
           operation: "iterate-existing-app",
           plan: { source: { workspacePath: "apps/inventory-queue" } },

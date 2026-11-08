@@ -153,6 +153,7 @@ type GitHubRepositorySourceProvider = GitHubRepositoryAccessProvider &
 function repositorySourceProvider(
   value: GitHubRepositoryAccessProvider,
 ): value is GitHubRepositorySourceProvider {
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const candidate = value as Partial<GitHubRepositorySourceProvider>;
   return (
     typeof candidate.inspectRepository === "function" &&
@@ -219,6 +220,7 @@ export function createRepositoryAccessRuntime(input: {
               // Octokit's installation lookup preserves HTTP status. A revoked
               // installation is not an outage; rate limits and invalid app
               // credentials must not ask the user to reconnect their account.
+              // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
               const failure = error as {
                 status?: number;
                 response?: { headers?: Record<string, string> };

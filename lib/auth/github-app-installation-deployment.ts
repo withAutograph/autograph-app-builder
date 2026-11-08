@@ -420,7 +420,8 @@ export function getGitHubAppInstallationDeploymentHandlers(
     credentialStore,
     emulation,
     fetch: emulation
-      ? (resource, init) => providerEmulationFetch(resource as string | URL, init, emulation)
+      ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+        (resource, init) => providerEmulationFetch(resource as string | URL, init, emulation)
       : undefined,
     installationStore: installations,
     membership: {

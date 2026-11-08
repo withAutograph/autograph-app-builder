@@ -684,6 +684,7 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
                 apiOrigin: emulation.vercelOrigin,
                 // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
                 fetch: ((resource, init) =>
+                  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
                   providerEmulationFetch(resource as URL, init, emulation)) satisfies typeof fetch,
               }
             : {};

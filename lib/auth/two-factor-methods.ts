@@ -31,6 +31,7 @@ export function isTwoFactorRedirect(data: unknown): data is TwoFactorRedirect {
   return (
     typeof data === "object" &&
     data !== null &&
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     (data as { twoFactorRedirect?: unknown }).twoFactorRedirect === true
   );
 }

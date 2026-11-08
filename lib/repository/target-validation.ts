@@ -338,6 +338,7 @@ export const compilerDiagnostics = (output: string): TargetValidationDiagnostic[
     const oxcHeader = oxcCompilerHeaderPattern.exec(sourceLine);
     if (oxcHeader !== null) {
       pendingCompiler = {
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         code: oxcHeader[1] as `TS${number}`,
       };
       continue;
@@ -369,6 +370,7 @@ export const compilerDiagnostics = (output: string): TargetValidationDiagnostic[
         continue;
       }
       if (/^TS\d+$/u.test(match[4])) {
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         append(match[4] as `TS${number}`, match[1], match[2], match[3]);
       }
       break;

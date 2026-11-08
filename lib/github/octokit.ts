@@ -107,6 +107,7 @@ export function createGitHubOAuthApp(input: {
       }
       let body: string;
       try {
+        // SAFETY: JSON.parse returns any; unknown makes no claim about the parsed shape.
         const parsed = JSON.parse(init.body) as unknown;
         if (
           // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.

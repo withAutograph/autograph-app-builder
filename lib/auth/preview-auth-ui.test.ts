@@ -166,6 +166,7 @@ describe("Preview Better Auth UI", () => {
 
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     expect(typeof hooks?.onRequest).toBe("function");
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     await hooks?.onRequest?.(request as never);
 
     const body = z.object({ oauth_query: z.string() }).parse(JSON.parse(request.body));

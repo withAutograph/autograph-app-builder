@@ -101,6 +101,7 @@ describe("apply tool staged repair integration", () => {
       vi.mocked(updateExactWorkflow).mockImplementationOnce(({ expected, transition }) => {
         mocks.current = { ...transition(expected) };
       });
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       const context = {
         callId: `publication-apply-${success}`,
         getSandbox: vi.fn().mockResolvedValue({}),
@@ -142,6 +143,7 @@ describe("apply tool staged repair integration", () => {
   it("asks once for an ordinary Build and retains staged UI through the approved repair", async () => {
     mocks.current = state("repair");
     const getSandbox = vi.fn().mockResolvedValue({});
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const context = { callId: "apply", getSandbox, session: { id: "session" } } as never;
     expect(await approval(context)).toBe("user-approval");
     expect(getSandbox).not.toHaveBeenCalled();
@@ -157,6 +159,7 @@ describe("apply tool staged repair integration", () => {
     ).rejects.toThrow("fixture command failure");
     expect(getSandbox).toHaveBeenCalledOnce();
     expect(mocks.execute).toHaveBeenCalledOnce();
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const repairContext = { callId: "repair", getSandbox, session: { id: "session" } } as never;
     expect(await approval(repairContext)).toBe("approved");
     await applyAppCreation.execute({ implementationFiles: [action] }, repairContext);
@@ -166,6 +169,7 @@ describe("apply tool staged repair integration", () => {
   it("applies an approved partial submission with advisory architecture diagnostics", async () => {
     mocks.current = state("advisory");
     const getSandbox = vi.fn().mockResolvedValue({});
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const context = { callId: "apply", getSandbox, session: { id: "session" } } as never;
     expect(await approval(context)).toBe("user-approval");
     await expect(
@@ -180,6 +184,7 @@ describe("apply tool staged repair integration", () => {
   it("already-applied reuse does not request sandbox or stage unused input", async () => {
     mocks.current = state("reuse", "applied");
     const getSandbox = vi.fn().mockResolvedValue({});
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const context = { callId: "apply", getSandbox, session: { id: "session" } } as never;
     expect(await approval(context)).toBe("user-approval");
     expect(await applyAppCreation.execute({ implementationFiles: [page] }, context)).toMatchObject({
@@ -194,6 +199,7 @@ describe("apply tool staged repair integration", () => {
   it("returns model-readable prerequisites for ui_accepted without creating build approval or touching source", async () => {
     mocks.current = { phase: "ui_accepted" };
     const getSandbox = vi.fn().mockResolvedValue({});
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const context = { callId: "no-proposal", getSandbox, session: { id: "session" } } as never;
     expect(await approval(context)).toBe("not-applicable");
     expect(await applyAppCreation.execute({ implementationFiles: [page] }, context)).toMatchObject({
@@ -208,6 +214,7 @@ describe("apply tool staged repair integration", () => {
   it("does not apply a proposal that appears after a read-only policy decision", async () => {
     mocks.current = { phase: "ui_accepted" };
     const getSandbox = vi.fn().mockResolvedValue({});
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const context = { callId: "phase-race", getSandbox, session: { id: "session" } } as never;
     expect(await approval(context)).toBe("not-applicable");
     mocks.current = state("new-after-policy");
@@ -218,6 +225,7 @@ describe("apply tool staged repair integration", () => {
     expect(mocks.wrap).not.toHaveBeenCalled();
     expect(mocks.execute).not.toHaveBeenCalled();
     expect(
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       await approval({
         callId: "new-approved-call",
         getSandbox,
@@ -236,6 +244,7 @@ describe("apply tool staged repair integration", () => {
       },
     };
     expect(
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       await approval({
         callId: "compute-resize",
         session: { id: "session" },
@@ -246,6 +255,7 @@ describe("apply tool staged repair integration", () => {
   it("does not apply a scope swapped after an approval policy decision", async () => {
     mocks.current = state("approved-before-swap");
     const getSandbox = vi.fn().mockResolvedValue({});
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const context = { callId: "scope-race", getSandbox, session: { id: "session" } } as never;
     expect(await approval(context)).toBe("user-approval");
     mocks.current = state("swapped-after-policy");
@@ -258,6 +268,7 @@ describe("apply tool staged repair integration", () => {
   });
   it("invalidates older pending approval when the same call becomes a read-only prerequisite", async () => {
     const getSandbox = vi.fn().mockResolvedValue({});
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const context = {
       callId: "same-call-old-pending",
       getSandbox,

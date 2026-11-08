@@ -36,6 +36,7 @@ vi.mock("@vercel/sandbox", async () => ({
 }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- The persistent authority store is a terminal provider boundary in these lifecycle tests.
 vi.mock("./deployment-execution-lease", () => ({ assertHostedSandboxCommandAuthority: authority }));
+// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
 const context = { session: { id: "provider-test" } } as SandboxProviderSessionContext;
 const nativeFixture = () => ({
   delete: vi.fn().mockResolvedValue(null),
@@ -44,6 +45,7 @@ const nativeFixture = () => ({
     mkdir: vi.fn().mockResolvedValue(null),
   },
   mounts: {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     "/workspace": { drive: "drive-owned", mode: "read-write" as "read-write" | "snapshot" },
   },
   name: "owned-name",
@@ -148,6 +150,7 @@ describe("Builder Vercel provider", () => {
       await journal.append(record, await journal.read());
       const stopped = {
         ...nativeFixture(),
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         status: "stopped" as "stopped" | "running",
         vcpus: 2,
         memory: 4096,

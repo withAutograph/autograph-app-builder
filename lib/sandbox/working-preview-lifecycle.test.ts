@@ -36,12 +36,12 @@ const hook = createReleaseSandboxComputeHook({
   releaseLease: mocks.release,
 });
 
-// oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The hook fixture supplies only the session and sandbox operations under test.
+// oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The hook fixture supplies only the session and sandbox operations under test.; Preserve the existing type assertion at this boundary.
 const context = {
   getSandbox: () => Promise.resolve({ id: "sandbox", stop: mocks.stop }),
   session: { auth: {}, id: "session" },
 } as unknown as HookContext;
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing unknown input contract.; Preserve the existing type assertion at this boundary.
 const events = hook.events as Record<string, (event: unknown, ctx: HookContext) => Promise<void>>;
 
 describe.each([false, true])("preview completion lifecycle hosted=%s", (hosted) => {

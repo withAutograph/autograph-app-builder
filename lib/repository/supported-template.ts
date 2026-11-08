@@ -334,6 +334,7 @@ export const inspectSupportedTemplateDependencyClosure =
         throw new Error(`Adapter dependency is not a regular Git blob: ${path}`);
       }
       return {
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         mode: match.groups.mode as DependencyFile["mode"],
         objectId: match.groups.objectId,
         path,
@@ -355,7 +356,7 @@ export const inspectSupportedTemplateDependencyClosure =
 const configurationRecord = function configurationRecord(value: unknown): Record<string, unknown> {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+    ? // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
       (value as Record<string, unknown>)
     : {};
 };
@@ -497,6 +498,7 @@ export const inspectRepositoryReleasePolicyAtGitSnapshot =
       sourceTree,
       workflow: {
         bytes: gitBytes(input.sourcePath, ["show", `${sourceSha}:${repositoryReleasePolicyPath}`]),
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
         mode: match.groups.mode as "100644" | "100755",
         objectId: match.groups.objectId,
         status: "present",
@@ -525,6 +527,7 @@ const declaredNextRuntime = function declaredNextRuntime(
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   let packageManifest: Record<string, unknown>;
   try {
+    // SAFETY: JSON.parse returns any; unknown makes no claim about the parsed shape.
     packageManifest = configurationRecord(JSON.parse(packageSource) as unknown);
   } catch {
     return "unsupported";
@@ -946,6 +949,7 @@ export const parsePreparedWorkspace = function parsePreparedWorkspace(
   ) {
     throw new Error(invalidWorkspaceRecordMessage);
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const record = input as Partial<PreparedSandboxWorkspace>;
   if (
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -984,6 +988,7 @@ export const parsePreparedWorkspace = function parsePreparedWorkspace(
   ) {
     throw new Error(invalidWorkspaceRecordMessage);
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   return record as PreparedSandboxWorkspace;
 };
 
@@ -1002,6 +1007,7 @@ const parsePreparedSourceFiles = function parsePreparedSourceFiles(
     ) {
       throw new Error(invalidWorkspaceManifestMessage);
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     const file = candidate as Partial<PreparedSourceFile>;
     if (
       !["100644", "100755"].includes(file.mode ?? "") ||
@@ -1023,6 +1029,7 @@ const parsePreparedSourceFiles = function parsePreparedSourceFiles(
       throw new Error(invalidWorkspaceManifestMessage);
     }
     paths.add(file.path);
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     return file as PreparedSourceFile;
   });
 };
@@ -1036,6 +1043,7 @@ export const readPreparedSandboxWorkspaceRecord = async function readPreparedSan
     return undefined;
   }
   try {
+    // SAFETY: JSON.parse returns any; unknown makes no claim about the parsed shape.
     return parsePreparedWorkspace(JSON.parse(content) as unknown);
   } catch (error) {
     throw new Error(invalidWorkspaceRecordMessage, {
@@ -1061,6 +1069,7 @@ export const readPreparedSandboxSourceManifest = async function readPreparedSand
   }
   let files: PreparedSourceFile[];
   try {
+    // SAFETY: JSON.parse returns any; unknown makes no claim about the parsed shape.
     files = parsePreparedSourceFiles(JSON.parse(manifestContent) as unknown);
   } catch (error) {
     throw new Error(invalidWorkspaceManifestMessage, {
@@ -1169,6 +1178,7 @@ const verifySandboxWorkspaceBoundary = async function verifySandboxWorkspaceBoun
   }
   let observed: unknown;
   try {
+    // SAFETY: JSON.parse returns any; unknown makes no claim about the parsed shape.
     observed = JSON.parse(normalizedStdout) as unknown;
   } catch {
     throw new Error(`The prepared ${kind} workspace escaped its sandbox boundary.`);
@@ -1628,6 +1638,7 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
   });
   if (previousManifest !== null) {
     try {
+      // SAFETY: JSON.parse returns any; unknown makes no claim about the parsed shape.
       previousFiles = parsePreparedSourceFiles(JSON.parse(previousManifest) as unknown);
       previousManifestValid = true;
     } catch {

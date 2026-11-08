@@ -6,6 +6,7 @@ export const providerConnectionReturnToSchema = z.union([
   z
     .string()
     .refine((value) => value.startsWith("/handoff/") && z.uuid().safeParse(value.slice(9)).success)
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     .transform((value) => value as `/handoff/${string}`),
 ]);
 

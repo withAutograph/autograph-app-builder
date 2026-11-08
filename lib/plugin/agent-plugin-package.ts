@@ -118,6 +118,7 @@ const prepareSafeOutputParent = async (root: string, output: string) => {
         throw new Error(`${path.relative(root, current)} must be a real directory.`);
       }
     } catch (error) {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         throw error;
       }
@@ -132,6 +133,7 @@ const prepareSafeOutputParent = async (root: string, output: string) => {
   try {
     await assertTreeContainsNoLinks(root, output);
   } catch (error) {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       throw error;
     }
@@ -242,7 +244,7 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
         .join("; ")}`,
     );
   }
-  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
   const frontmatter = document.toJS({ maxAliasCount: 0 }) as Record<string, unknown>;
   const unknownFields = Object.keys(frontmatter).filter(
     (field) => !SKILL_FRONTMATTER_FIELDS.has(field),
@@ -401,6 +403,7 @@ export const validateAgentPluginPackage = async ({
     if (actual !== digest) {
       throw new Error(`${name} does not match the pinned Agent Plugins ${SPEC_VERSION} schema.`);
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     schemaDocuments[name] = JSON.parse(bytes.toString("utf-8")) as JsonObject;
   }
 

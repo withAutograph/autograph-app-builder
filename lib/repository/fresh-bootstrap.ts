@@ -401,7 +401,7 @@ export const createFreshBootstrapProposal = (input: {
 };
 
 const canonicalProposal = (proposal: FreshBootstrapProposal) => {
-  // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/no-unsafe-dictionary-type -- Keep the existing broader shape used by this operation.; Preserve the existing open-ended value contract.
+  // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Keep the existing broader shape used by this operation.; Preserve the existing open-ended value contract.; Preserve the existing type assertion at this boundary.
   const unsigned = { ...proposal } as Record<string, unknown>;
   delete unsigned.digest;
   return unsigned;
@@ -666,6 +666,7 @@ export const proposalFromFreshBootstrapJournal = (
   ]) {
     Reflect.deleteProperty(candidate, key);
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   return { ...(candidate as Omit<FreshBootstrapProposal, "digest">), digest };
 };
 

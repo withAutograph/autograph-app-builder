@@ -228,6 +228,7 @@ async function tarEntry(path: string, requested: string) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function inspectOciCandidateArchive(path: string) {
   const indexBytes = await tarEntry(path, "index.json");
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const index = JSON.parse(indexBytes.toString("utf-8")) as {
     schemaVersion?: unknown;
     manifests?: unknown;
@@ -284,6 +285,7 @@ export async function inspectOciCandidateArchive(path: string) {
   if (`sha256:${sha256(manifestBytes)}` !== descriptor.digest) {
     throw new Error("Release OCI manifest bytes did not match the index.");
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
   const manifest = JSON.parse(manifestBytes.toString("utf-8")) as {
     schemaVersion?: unknown;
     config?: { digest?: unknown };

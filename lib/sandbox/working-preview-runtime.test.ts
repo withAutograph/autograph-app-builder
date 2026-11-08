@@ -11,6 +11,7 @@ import type {
   previewOwnershipSource,
 } from "./working-preview-ownership";
 
+// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
 const ownership = vi.hoisted(() => ({ current: null as Partial<PreviewAttempt> | null }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./working-preview-ownership dependency used by this test.
 vi.mock("./working-preview-ownership", async (importOriginal) => {
@@ -56,6 +57,7 @@ const setup = () => {
   const events: string[] = [];
   const command = {
     cmdId: "command-1",
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
     exitCode: null as number | null,
     kill: vi.fn(async () => {}),
     wait: vi.fn(async () => {}),
@@ -97,7 +99,7 @@ const setup = () => {
     cwd: "/workspace/repository",
     landingPath: "/example",
     port: 3000,
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The provider fixture supplies only the preview operations under test.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The provider fixture supplies only the preview operations under test.; Preserve the existing type assertion at this boundary.
     provider: provider as unknown as Sandbox,
     sandboxId: "logical-1",
   };

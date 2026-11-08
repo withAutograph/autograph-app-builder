@@ -533,6 +533,7 @@ export async function inspectFixtureApplyOverlay(
     throw new Error("The prepared workspace manifest is missing.");
   }
   const invalidManifest = "The prepared workspace manifest is invalid.";
+  // SAFETY: JSON.parse returns any; unknown makes no claim about the parsed shape.
   const parsed = JSON.parse(sourceManifest) as unknown;
   if (!Array.isArray(parsed)) {
     throw new TypeError(invalidManifest);
@@ -634,6 +635,7 @@ function parseTargetReceipt(
   }
   let candidate: unknown;
   try {
+    // SAFETY: JSON.parse returns any; unknown makes no claim about the parsed shape.
     candidate = JSON.parse(result.stdout) as unknown;
   } catch {
     return undefined;
