@@ -575,16 +575,16 @@ export const openNativeTargetConfigurationResources = async (
           await readCanonicalAppOwnerSession(ownerDependencies, context);
         };
         const selections = createPostgresOperatorArtifactSelections({
-          database,
           assertCurrentOwner,
+          database,
         });
         const selection = await selections.read(artifactContext, spec.appSpecDigest);
         if (selection === undefined || selection.appId !== context.target.appId) {
           throw new HostedOperatorError("builder_destination_configuration_required");
         }
         const publication = createOperatorArtifactPublication({
-          store: createPostgresOperatorArtifactStore({ database, assertCurrentOwner }),
           assertCurrentOwner,
+          store: createPostgresOperatorArtifactStore({ assertCurrentOwner, database }),
         });
         const captured = await publication.readGeneratedRelease(artifactContext, selection);
         await assertCurrentOwner();

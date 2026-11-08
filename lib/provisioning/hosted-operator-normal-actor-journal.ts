@@ -213,8 +213,20 @@ const captureAad = (
   context: HostedOperatorContext,
   preparation: NormalActorAccountProvenance,
   capture: z.infer<typeof captureReferenceSchema>,
-) =>
-  JSON.stringify({
+) => {
+  const aad: typeof context.authority & {
+    ownerSessionId: string;
+    appId: string;
+    accountOperationRef: string;
+    programDigest: string;
+    origin: string;
+    nonceSha256: string;
+    proofSha256: string;
+    actorKey: string;
+    organizationId?: string;
+    reference?: string;
+    purpose?: string;
+  } = {
     ...context.authority,
     ownerSessionId: context.target.sessionId,
     appId: preparation.program.appId,
@@ -224,10 +236,14 @@ const captureAad = (
     nonceSha256: capture.nonceSha256,
     proofSha256: capture.proofSha256,
     actorKey: capture.actorKey,
-    ...(capture.organizationId === undefined ? {} : { organizationId: capture.organizationId }),
-    reference: capture.reference,
-    purpose: "normal-auth-capture-v1",
-  });
+  };
+  if (capture.organizationId !== undefined) {
+    aad.organizationId = capture.organizationId;
+  }
+  aad.reference = capture.reference;
+  aad.purpose = "normal-auth-capture-v1";
+  return JSON.stringify(aad);
+};
 export const normalActorCaptureCookieDigest = (
   cookie: Pick<NormalActorCaptureCookie, "name" | "value">,
 ) => createHash("sha256").update(`${cookie.name}=${cookie.value}`).digest("hex");
@@ -459,14 +475,14 @@ const sameOrganizationProofBinding = (
     existing.transportSource.projectId === input.binding.transportSource.projectId,
     existing.transportSource.environment === input.binding.transportSource.environment,
   ].every(Boolean);
+const guarded = async <T>(action: () => Promise<T>, guard?: () => Promise<void>) => {
+  await guard?.();
+  const result = await action();
+  await guard?.();
+  return result;
+};
 /** Actual owner journal CAS; raw normal sessions are decrypted only in this private capability. */
 export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
-  const guarded = async <T>(action: () => Promise<T>, guard?: () => Promise<void>) => {
-    await guard?.();
-    const result = await action();
-    await guard?.();
-    return result;
-  };
   const assertPredecessorApprovals = async (
     context: HostedOperatorContext,
     prior: NonNullable<HostedRuntimeJournalRow["record"]["participantPreparationHistory"]>[number],
@@ -519,7 +535,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     }
     const preparation = row.record.accountPreparation;
     if (preparation === undefined) {
-      return { row, preparation: undefined, state: undefined };
+      return { preparation: undefined, row, state: undefined };
     }
     validateProvenance(context, preparation);
     await guarded(() => ports.assertAccountApproval(context, provenance(preparation)), guard);
@@ -556,7 +572,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     if (!sameJournalAfterLeaseRenewal(row, latest, ports.now()) || latest === undefined) {
       throw new Error("normal_actor_journal_changed");
     }
-    return { row: latest, preparation, state };
+    return { preparation, row: latest, state };
   };
   const mutate = async (
     context: HostedOperatorContext,

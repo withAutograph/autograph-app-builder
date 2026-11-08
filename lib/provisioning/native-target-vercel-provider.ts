@@ -130,7 +130,7 @@ export const observeNativeTargetVercelProject = async (
   if (!parsed.success) {
     return { status: "uncertain", projectId: input.projectId, reason: "invalid_response" };
   }
-  if (!projectMatches(parsed.data, { ...input, settings, protection }, input.projectId)) {
+  if (!projectMatches(parsed.data, { ...input, protection, settings }, input.projectId)) {
     return { status: "candidate", projectId: input.projectId, reason: "name_or_profile_mismatch" };
   }
   return {
@@ -239,8 +239,8 @@ export const createNativeTargetVercelProject = async (
   }
   return await observeNativeTargetVercelProject({
     ...input,
-    settings,
-    protection,
     projectId: accepted.data.id,
+    protection,
+    settings,
   });
 };
