@@ -167,21 +167,30 @@ const readVerifiedOwnerNativeStore = async (
     httpStatus?: number,
   ) => {
     try {
-      createHostedOperatorConsentDiagnostic(
+      const report = createHostedOperatorConsentDiagnostic(
         context.target.sessionId,
         input.diagnosticSink,
-      )({
+      );
+      const diagnostic: Pick<
+        Parameters<typeof report>[0],
+        "boundary" | "phase" | "stage" | "outcome" | "httpStatus"
+      > = {
         boundary: "operator",
         phase: "inline",
         stage: "operator_request",
         outcome: "setup_unavailable",
-        ...(httpStatus === undefined ? {} : { httpStatus }),
-        planningFailure: {
-          stage: "neon_native_store",
-          errorClass: "unexpected",
-          ...(nativeStoreFailure === undefined ? {} : { nativeStoreFailure }),
-        },
-      });
+      };
+      if (httpStatus !== undefined) {
+        diagnostic.httpStatus = httpStatus;
+      }
+      const planningFailure: NonNullable<Parameters<typeof report>[0]["planningFailure"]> = {
+        stage: "neon_native_store",
+        errorClass: "unexpected",
+      };
+      if (nativeStoreFailure !== undefined) {
+        planningFailure.nativeStoreFailure = nativeStoreFailure;
+      }
+      report({ ...diagnostic, planningFailure });
     } catch {
       /* Diagnostic failures preserve native authorization behavior. */
     }
@@ -401,9 +410,14 @@ const createAuthority = (
           await canonicalOwner(effect);
           await assertApprovedObservationPhase(context);
         };
-  return {
+  const approvedAuthority: Pick<Callbacks, "assertApprovedScope" | "assertApprovedOwner"> = {
     assertApprovedScope,
-    ...(assertApprovedOwner === undefined ? {} : { assertApprovedOwner }),
+  };
+  if (assertApprovedOwner !== undefined) {
+    approvedAuthority.assertApprovedOwner = assertApprovedOwner;
+  }
+  return {
+    ...approvedAuthority,
     async readCurrentOwnerNativeStore(context, binding) {
       return await readVerifiedOwnerNativeStore(
         {

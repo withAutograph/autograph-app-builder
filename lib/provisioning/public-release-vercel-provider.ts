@@ -168,13 +168,17 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
       throw fail();
     }
     url.searchParams.set("teamId", plan.project.teamId);
-    const response = await (deps.fetch ?? fetch)(url, {
+    const fetchRequest = deps.fetch ?? fetch;
+    const options: RequestInit = {
       method,
       headers: { authorization: `Bearer ${credential.token}`, "content-type": "application/json" },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      redirect: "error",
-      signal: invocation.signal,
-    });
+    };
+    if (body !== undefined) {
+      options.body = JSON.stringify(body);
+    }
+    options.redirect = "error";
+    options.signal = invocation.signal;
+    const response = await fetchRequest(url, options);
     await check(invocation, plan, approval);
     if (!response.ok) {
       const requestRef = vercelProvisionDiagnosticSchema.shape.requestRef.safeParse(

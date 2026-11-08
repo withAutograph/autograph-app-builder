@@ -159,18 +159,20 @@ export function attachPrototypePreviewUrl(
   if (url === undefined) {
     return result;
   }
-  return eveSessionResultSchema.parse({
-    ...result,
-    ...(result.prototype === undefined || result.prototypeRef !== undefined
-      ? {}
-      : { prototype: { ...result.prototype, previewUrl: url } }),
-    ...(result.prototypeRef === undefined
-      ? {}
-      : { prototypeRef: { ...result.prototypeRef, previewUrl: url } }),
-    ...(result.uiPreview === undefined
-      ? {}
-      : { uiPreview: { ...result.uiPreview, previewUrl: url } }),
-  });
+  const withPreviewUrl = (): EveSessionResult => {
+    const updated: EveSessionResult = { ...result };
+    if (result.prototype !== undefined && result.prototypeRef === undefined) {
+      updated.prototype = { ...result.prototype, previewUrl: url };
+    }
+    if (result.prototypeRef !== undefined) {
+      updated.prototypeRef = { ...result.prototypeRef, previewUrl: url };
+    }
+    if (result.uiPreview !== undefined) {
+      updated.uiPreview = { ...result.uiPreview, previewUrl: url };
+    }
+    return updated;
+  };
+  return eveSessionResultSchema.parse(withPreviewUrl());
 }
 
 export type PrototypePreviewResolver = (input: {

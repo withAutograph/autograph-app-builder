@@ -2852,24 +2852,35 @@ export function createHostedEveSessionService(input: {
         durable.status === "failed" && durable.resumability === "terminal"
           ? "failed"
           : metadata.status;
-      return eveSessionResultSchema.parse({
+      const resultDetails: Pick<z.input<typeof eveSessionResultSchema>, "cursor" | "events"> &
+        Partial<z.input<typeof eveSessionResultSchema>> = {
         cursor: page.cursor,
         events: page.events,
-        ...(metadata.inputRequests === undefined ? {} : { inputRequests: metadata.inputRequests }),
-        ...(metadata.prototype === undefined ? {} : { prototype: metadata.prototype }),
-        ...(metadata.prototypeRef === undefined ? {} : { prototypeRef: metadata.prototypeRef }),
+      };
+      if (metadata.inputRequests !== undefined) {
+        resultDetails.inputRequests = metadata.inputRequests;
+      }
+      if (metadata.prototype !== undefined) {
+        resultDetails.prototype = metadata.prototype;
+      }
+      if (metadata.prototypeRef !== undefined) {
+        resultDetails.prototypeRef = metadata.prototypeRef;
+      }
+      const resultStatus = {
+        ...resultDetails,
         sessionId,
         status: status === "working" && durable.resumability === "checkpoint" ? "waiting" : status,
-        ...(metadata.uiPreview === undefined ? {} : { uiPreview: metadata.uiPreview }),
-        ...(metadata.workingPreview === undefined
-          ? {}
-          : {
-              workingPreview:
-                status === "failed" || status === "cancelled"
-                  ? null
-                  : currentWorkingPreview(metadata.workingPreview),
-            }),
-      });
+      };
+      if (metadata.uiPreview !== undefined) {
+        resultStatus.uiPreview = metadata.uiPreview;
+      }
+      if (metadata.workingPreview !== undefined) {
+        resultStatus.workingPreview =
+          status === "failed" || status === "cancelled"
+            ? null
+            : currentWorkingPreview(metadata.workingPreview);
+      }
+      return eveSessionResultSchema.parse(resultStatus);
     }
     if (durable.checkpoint !== undefined) {
       return resultFromHostedCheckpoint(sessionId, durable.checkpoint, cursor, limit);
