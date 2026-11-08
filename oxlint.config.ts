@@ -198,7 +198,6 @@ export default defineConfig({
       files: [
         "app/ui/builder-connections.tsx",
         "app/ui/connections-section.stories.tsx",
-        "app/ui/use-builder-draft-autosave.test.tsx",
         additionalAuthFieldPath,
         "components/auth/auth-continuity.tsx",
         "components/auth/settings/account/change-avatar.tsx",

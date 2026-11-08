@@ -94,7 +94,9 @@ describe("useBuilderDraftAutosave", () => {
     const value = await render({
       onAcknowledged: ({ revision }) => {
         if (revision === 1) {
-          queueMicrotask(() => autosave?.schedule({ brief: "completion-window" }));
+          queueMicrotask(() => {
+            autosave?.schedule({ brief: "completion-window" });
+          });
         }
       },
       outbox,
