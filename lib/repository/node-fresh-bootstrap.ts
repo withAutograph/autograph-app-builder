@@ -1129,7 +1129,7 @@ const exactSourceTree = async (
       throw new Error(invalidBootstrapSourceEntryMessage);
     }
     const [, mode, type, blob, path] = match;
-    if (mode === "120000" || mode === "160000" || type !== "blob") {
+    if ((mode !== "100644" && mode !== "100755") || type !== "blob") {
       throw new Error(invalidBootstrapSourceEntryMessage);
     }
     if (
@@ -1153,8 +1153,7 @@ const exactSourceTree = async (
     files.push({
       blob,
       contentSha256: digest,
-      // SAFETY: The Git entry regex accepts only 100644 or 100755 after rejecting links and commits.
-      mode: mode as FreshBootstrapFile["mode"],
+      mode,
       path,
       readStream: verifiedFileReader(
         () =>

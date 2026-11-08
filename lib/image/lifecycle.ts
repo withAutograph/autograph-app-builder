@@ -358,10 +358,10 @@ interface ImageInspect {
   };
 }
 
-const hasExactKeys = <Value extends object>(
+const hasExactKeys = <Value extends object, Key extends string>(
   value: Value,
-  expected: readonly string[] & readonly (keyof Value | string)[],
-): boolean => {
+  expected: readonly Key[],
+): value is Value & Record<Key, unknown> => {
   const actual = Object.keys(value).toSorted();
   const wanted = [...expected].toSorted();
   return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
@@ -588,9 +588,8 @@ export const parseRemoteIndexInspection = (
     typeof annotations !== "object" ||
     annotations === null ||
     !hasExactKeys(annotations, ["vnd.docker.reference.digest", "vnd.docker.reference.type"]) ||
-    (annotations as Record<string, unknown>)["vnd.docker.reference.digest"] !==
-      platformEntry.digest ||
-    (annotations as Record<string, unknown>)["vnd.docker.reference.type"] !== "attestation-manifest"
+    annotations["vnd.docker.reference.digest"] !== platformEntry.digest ||
+    annotations["vnd.docker.reference.type"] !== "attestation-manifest"
   ) {
     throw new Error("Remote attestation manifest is not exactly bound to the platform image.");
   }
@@ -654,17 +653,18 @@ export const parseRemoteImageInspection = (
     !Array.isArray(layers) ||
     layers.length === 0 ||
     layers.some((layer) => {
+      const value: unknown = layer;
       if (
-        typeof layer !== "object" ||
-        layer === null ||
-        !hasExactKeys(layer, ["digest", "mediaType", "size"])
+        typeof value !== "object" ||
+        value === null ||
+        !hasExactKeys(value, ["digest", "mediaType", "size"])
       ) {
         return true;
       }
       return (
-        (layer as RemoteManifestDescriptor).mediaType !== ociLayerMediaType ||
-        !isExactDigest((layer as RemoteManifestDescriptor).digest) ||
-        !isPositiveSize((layer as RemoteManifestDescriptor).size)
+        value.mediaType !== ociLayerMediaType ||
+        !isExactDigest(value.digest) ||
+        !isPositiveSize(value.size)
       );
     })
   ) {

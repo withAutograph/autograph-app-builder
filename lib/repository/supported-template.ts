@@ -1410,13 +1410,13 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
         throw new Error("The reviewed Git tree contains an invalid entry.");
       }
       const { mode, type, objectId, path } = match.groups ?? {};
-      if (type !== "blob" || !["100644", "100755"].includes(mode ?? "") || path === undefined) {
+      if (type !== "blob" || (mode !== "100644" && mode !== "100755") || path === undefined) {
         throw new Error("The reviewed Git tree contains an unsupported entry.");
       }
       if (objectId === undefined || !safeSourcePath(path)) {
         throw new Error("The reviewed Git tree contains an unsupported entry.");
       }
-      treeEntries.push({ mode: mode as "100644" | "100755", objectId, path });
+      treeEntries.push({ mode, objectId, path });
     }
     await once(treeProcess, "close");
     if (treeProcess.exitCode !== 0) {
