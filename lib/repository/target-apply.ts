@@ -1054,12 +1054,10 @@ export async function executeProposalBoundApply(input: {
     applyRoot: overlay.applyRoot,
     command: {
       exitCode: command.exitCode,
-      name: ("operation" in input.proposal ? "iterate-existing-app" : "create-app") as
-        | "create-app"
-        | "iterate-existing-app",
+      name: "operation" in input.proposal ? "iterate-existing-app" : "create-app",
       stderrDigest: sha256(command.stderr),
       stdoutDigest: sha256(command.stdout),
-    },
+    } satisfies ApplyResultBase["command"],
     planningTreeDigest: planning.treeDigest,
     preTree: before.files,
     preTreeDigest: before.treeDigest,
