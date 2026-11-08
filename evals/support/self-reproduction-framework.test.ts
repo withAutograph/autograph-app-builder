@@ -8,7 +8,7 @@ import { runTrustedFrameworkEvidence } from "./self-reproduction-framework";
 import { frameworkMatrix } from "./self-reproduction-parity";
 
 const browser = () => {
-  const close = vi.fn(() => Promise.resolve());
+  const close = vi.fn<() => Promise<void>>().mockResolvedValue();
   const page = {};
   return {
     close,
@@ -62,7 +62,7 @@ describe("trusted framework evidence", () => {
   it("combines source and browser evidence and uses instant navigation", async () => {
     const outputRoot = await mkdtemp(path.join(tmpdir(), "self-reproduction-framework-"));
     const fixture = browser();
-    const runInstant = vi.fn(() => Promise.resolve());
+    const runInstant = vi.fn<() => Promise<void>>().mockResolvedValue();
     const result = await runTrustedFrameworkEvidence({
       adapters: { candidate: adapter },
       browser: fixture.value,
@@ -102,7 +102,7 @@ describe("trusted framework evidence", () => {
       },
       browser: fixture.value,
       outputRoot,
-      runInstant: vi.fn(() => Promise.resolve()),
+      runInstant: vi.fn<() => Promise<void>>().mockResolvedValue(),
     });
     expect(
       result.observations.candidate.find((row) => row.requirementId === "instant-navigation"),
@@ -151,7 +151,7 @@ it("keeps a missing browser fixture unassessed after a source review", async () 
     },
     browser: browser().value,
     outputRoot,
-    runInstant: vi.fn(() => Promise.resolve()),
+    runInstant: vi.fn<() => Promise<void>>().mockResolvedValue(),
   });
   expect(
     result.observations.candidate.find((row) => row.requirementId === "server-first"),

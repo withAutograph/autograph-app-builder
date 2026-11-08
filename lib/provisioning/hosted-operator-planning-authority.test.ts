@@ -364,7 +364,7 @@ describe("prepared Preview release planning", () => {
   });
   it("denies a foreign prepared target before artifact access", async () => {
     const f = preparedFixture();
-    const operator = f.row.record.operator;
+    const { operator } = f.row.record;
     if (operator === undefined) {
       throw new Error("Missing prepared operator");
     }
@@ -375,7 +375,7 @@ describe("prepared Preview release planning", () => {
   });
   it("allows compatible legacy app stage and harmless journal progress metadata", async () => {
     const f = preparedFixture();
-    const operator = f.row.record.operator;
+    const { operator } = f.row.record;
     if (operator === undefined) {
       throw new Error("Missing prepared operator");
     }
@@ -393,7 +393,7 @@ describe("prepared Preview release planning", () => {
   it("rechecks the exact prepared journal after immutable artifact reads", async () => {
     const f = preparedFixture();
     const result = await restore(f);
-    const operator = f.row.record.operator;
+    const { operator } = f.row.record;
     if (operator === undefined) {
       throw new Error("Missing prepared operator");
     }

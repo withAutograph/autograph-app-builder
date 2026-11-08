@@ -623,7 +623,7 @@ describe("independent application source review", () => {
     const evidence = applicationEvidence();
     const secret = "private-message-shape-sentinel";
     evidence.readRequirements = () => Promise.resolve({ text: secret.repeat(200) });
-    const readSource = evidence.readSource;
+    const { readSource } = evidence;
     evidence.readSource = async (request) => ({
       ...(await readSource(request)),
       content: secret.repeat(300),
@@ -943,7 +943,7 @@ describe("independent application source review", () => {
     const evidence = applicationEvidence();
     const text = "Primary evidence remains fully readable after context recovery. ".repeat(100);
     evidence.readRequirements = vi.fn(() => Promise.resolve({ text }));
-    const readSource = evidence.readSource;
+    const { readSource } = evidence;
     evidence.readSource = vi.fn(
       async (request: Parameters<ApplicationReviewEvidence["readSource"]>[0]) => ({
         ...(await readSource(request)),

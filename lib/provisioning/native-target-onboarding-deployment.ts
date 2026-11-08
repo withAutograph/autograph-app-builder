@@ -475,7 +475,7 @@ export const createNativeTargetOnboardingDeployment = (input: {
       proposal.appId,
       selectedConfiguration.sandbox.genericInstallerWorker,
     );
-    const nativeNeon = selectedConfiguration.nativeNeon;
+    const { nativeNeon } = selectedConfiguration;
     return nativeTargetOnboardingPlanSchema.parse({
       version: 1,
       appId: proposal.appId,

@@ -177,7 +177,7 @@ const workerFor = (
   if (attempt?.snapshotId === undefined) {
     throw unavailable();
   }
-  const plan = record.plan;
+  const { plan } = record;
   return {
     version: 1,
     kind: "tenant-export-worker",

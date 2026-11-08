@@ -343,7 +343,7 @@ describe("participant proposal identity continuity", () => {
 
   it("preserves a pending link when re-exposing its unchanged original plan", async () => {
     const f = preparedOwnerFixture(false);
-    const record = f.row().record;
+    const { record } = f.row();
     const link = record.operator?.identityLink;
     if (link === undefined) {
       throw new Error("Missing fixture link");
@@ -421,7 +421,7 @@ describe("participant proposal identity continuity", () => {
         normalActorProgram: proposal.normalActorProgram,
       });
       expect(result.status).toBe("planned");
-      const record = f.row().record;
+      const { record } = f.row();
       expect(record.operator?.identityLink).toEqual(
         ["unchanged", "observed-endpoint"].includes(scope) ? identityLink : undefined,
       );
