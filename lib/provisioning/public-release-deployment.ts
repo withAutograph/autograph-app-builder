@@ -78,6 +78,10 @@ import { reservePublicReleaseAuthSeed } from "./public-release-auth-seed";
 import type { OperatorAppMetadataScope } from "./hosted-operator-app-readiness";
 import { createHostedOperatorAppReadiness } from "./hosted-operator-app-readiness";
 
+const authBootstrapKind = "auth-bootstrap";
+const bindProductionRuntimeEffect = "bind-production-runtime";
+const fenceAppIntegrationAuthorityEffect = "fence-app-integration-authority";
+
 const standardRuntimeSchema = z.object({
   standardRuntime: z.object({
     profileId: z.string().min(1),
@@ -527,7 +531,7 @@ export const createPublicReleaseDeployment = (input: {
         await readSelectedIntegration(current, plan.integrationCapability);
       }
       if (
-        (plan.purpose === "auth-bootstrap" || plan.integrationRemoval !== undefined) &&
+        (plan.purpose === authBootstrapKind || plan.integrationRemoval !== undefined) &&
         !isDeepStrictEqual(
           await readRetainedIntegrations(current, plan),
           plan.retainedOptionalBindings === undefined
@@ -666,7 +670,7 @@ export const createPublicReleaseDeployment = (input: {
           // oxlint-disable-next-line unicorn/no-useless-undefined -- Unobserved native Auth leaves the selected deployment pending.
           return undefined;
         }
-        if ((plan.purpose ?? "application") === "auth-bootstrap") {
+        if ((plan.purpose ?? "application") === authBootstrapKind) {
           return { releaseId: plan.runtime.releaseId };
         }
         if (plan.integrationCapability !== undefined) {
@@ -776,8 +780,8 @@ export const createPublicReleaseDeployment = (input: {
           },
         };
         const originalSetup =
-          original.purpose === "auth-bootstrap" ? original.operator : original.record.retainedAuth;
-        if (originalSetup === undefined || originalSetup.plan.stage !== "auth-bootstrap") {
+          original.purpose === authBootstrapKind ? original.operator : original.record.retainedAuth;
+        if (originalSetup === undefined || originalSetup.plan.stage !== authBootstrapKind) {
           throw new PublicReleasePrerequisiteError("public_auth_enrollment_required");
         }
         const enrollment = await resolvePublicRealmEnrollment({
@@ -815,7 +819,7 @@ export const createPublicReleaseDeployment = (input: {
         }
         const integrations = await readSelectedIntegration(current);
         const retention =
-          original.purpose === "auth-bootstrap" ||
+          original.purpose === authBootstrapKind ||
           (original.purpose === "application" && original.description.integrations === undefined)
             ? await readRetainedIntegrations(current)
             : undefined;
@@ -893,10 +897,10 @@ export const createPublicReleaseDeployment = (input: {
           ...(integrationRemoval === undefined ? {} : { integrationRemoval }),
           effects:
             integrationRemoval === undefined
-              ? ["bind-production-runtime", "publish-release-source"]
+              ? [bindProductionRuntimeEffect, "publish-release-source"]
               : [
-                  "fence-app-integration-authority",
-                  "bind-production-runtime",
+                  fenceAppIntegrationAuthorityEffect,
+                  bindProductionRuntimeEffect,
                   "publish-release-source",
                 ],
         });
@@ -977,7 +981,7 @@ export const createPublicReleaseDeployment = (input: {
         ],
       }),
       reconcileEffect: async (effect) => {
-        if (effect.effect === "fence-app-integration-authority") {
+        if (effect.effect === fenceAppIntegrationAuthorityEffect) {
           return await requireIntegrationRemovalPorts(input.integrationRemoval).reconcile(
             removalContext(effect, false),
           );
@@ -986,17 +990,17 @@ export const createPublicReleaseDeployment = (input: {
           effect.plan.integrationRemoval !== undefined &&
           (await requireIntegrationRemovalPorts(input.integrationRemoval).reconcile({
             ...removalContext(effect, false),
-            effect: "fence-app-integration-authority",
+            effect: fenceAppIntegrationAuthorityEffect,
           })) !== "applied"
         ) {
           throw new PublicReleasePrerequisiteError("public_release_integration_removal_required");
         }
-        return effect.effect === "bind-production-runtime"
+        return effect.effect === bindProductionRuntimeEffect
           ? await vercel.reconcileBindings(effect)
           : await github.reconcile(effect);
       },
       applyEffect: async (effect) => {
-        if (effect.effect === "fence-app-integration-authority") {
+        if (effect.effect === fenceAppIntegrationAuthorityEffect) {
           await requireIntegrationRemovalPorts(input.integrationRemoval).apply(
             removalContext(effect, true),
           );
@@ -1006,12 +1010,12 @@ export const createPublicReleaseDeployment = (input: {
           effect.plan.integrationRemoval !== undefined &&
           (await requireIntegrationRemovalPorts(input.integrationRemoval).reconcile({
             ...removalContext(effect, false),
-            effect: "fence-app-integration-authority",
+            effect: fenceAppIntegrationAuthorityEffect,
           })) !== "applied"
         ) {
           throw new PublicReleasePrerequisiteError("public_release_integration_removal_required");
         }
-        await (effect.effect === "bind-production-runtime"
+        await (effect.effect === bindProductionRuntimeEffect
           ? vercel.bindRuntime(effect)
           : github.publish(effect));
       },

@@ -35,6 +35,10 @@ import { ExistingApplicationChangesRequiredError } from "./target-planning-error
 import type { ApplicationFileChange } from "./application-file-change";
 import { applicationFilePathSchema } from "./application-file-change";
 
+const microfrontendsConfigPath = "microfrontends.json";
+const repositoryWorkspacePath = "/workspace/repository";
+const targetIdentityPlanningMarker = "target-identity-and-planning";
+
 export {
   ExistingApplicationChangesRequiredError,
   ExistingAppChangePreimageError,
@@ -116,7 +120,7 @@ const targetCreationProposalSchemaForTopology = (topologyOwner: string) =>
     });
 
 export const targetCreationProposalSchema =
-  targetCreationProposalSchemaForTopology("microfrontends.json");
+  targetCreationProposalSchemaForTopology(microfrontendsConfigPath);
 
 const iterationChangeSchema = z
   .strictObject({
@@ -215,7 +219,7 @@ const targetIterationProposalSchemaForTopology = (topologyOwner: string) =>
     });
 
 export const targetIterationProposalSchema =
-  targetIterationProposalSchemaForTopology("microfrontends.json");
+  targetIterationProposalSchemaForTopology(microfrontendsConfigPath);
 
 export const targetProposalSchema = z.preprocess(
   (input) => {
@@ -416,7 +420,7 @@ export const sandboxTargetCommandExecutor =
         MISE_NOT_FOUND_AUTO_INSTALL: "false",
         MISE_TASK_RUN_AUTO_INSTALL: "false",
       },
-      workingDirectory: "/workspace/repository",
+      workingDirectory: repositoryWorkspacePath,
     };
     const result = await sandbox.run(request);
     if (
@@ -431,7 +435,7 @@ export const sandboxTargetCommandExecutor =
     await setBuilderSandboxNetworkPolicy(sandbox, "allow-all");
     const setup = await sandbox.run({
       command: "bun install --ignore-scripts --filter @autograph/platform-microfrontends",
-      workingDirectory: "/workspace/repository",
+      workingDirectory: repositoryWorkspacePath,
     });
     if (setup.exitCode !== 0) {
       return setup;
@@ -463,7 +467,7 @@ const creationPlan = (
     },
     topology: {
       assetRoute: `/${identity.appId}/_next/:path*`,
-      configPath: "microfrontends.json",
+      configPath: microfrontendsConfigPath,
       packageName: identity.packageName,
       projectName: identity.projectName,
       routes: identity.baseRoutes,
@@ -514,7 +518,7 @@ export const executeTargetIdentityAndPlanning = async (input: {
   environment?: Readonly<Record<string, string | undefined>>;
   onIdentity?: (identity: TargetIdentity) => void | Promise<void>;
 }) => {
-  planningMarker("target-identity-and-planning", "start");
+  planningMarker(targetIdentityPlanningMarker, "start");
   const privateCompute =
     input.privateCompute === undefined
       ? undefined
@@ -662,13 +666,13 @@ export const executeTargetIdentityAndPlanning = async (input: {
         ? undefined
         : await input.sandbox.run({
             command: `test -f /workspace/repository/${identity.schemaCuePath}`,
-            workingDirectory: "/workspace/repository",
+            workingDirectory: repositoryWorkspacePath,
           });
     const description =
       schemaChange === undefined && applicationSourceImport === undefined
         ? await describeSelectedApp({
             appId: identity.appId,
-            root: "/workspace/repository",
+            root: repositoryWorkspacePath,
             sandbox: input.sandbox,
           })
         : undefined;
@@ -678,7 +682,7 @@ export const executeTargetIdentityAndPlanning = async (input: {
         : importedSchema?.exitCode === 0;
     const hasSchema =
       schemaChange === undefined ? observedSchema : schemaChange.operation !== "delete";
-    const proposalSchema = targetIterationProposalSchemaForTopology("microfrontends.json");
+    const proposalSchema = targetIterationProposalSchemaForTopology(microfrontendsConfigPath);
     const proposalInput: z.input<typeof proposalSchema> = {
       ...creationPlan(identity, input.appSpecDigest, hasSchema),
       ...(frameworkUpgrade === undefined ? {} : { frameworkUpgrade }),
@@ -696,13 +700,13 @@ export const executeTargetIdentityAndPlanning = async (input: {
     }
     const proposal = proposalSchema.parse(proposalInput);
     const result = { identity, proposal, ...overlay };
-    planningMarker("target-identity-and-planning", "finish");
+    planningMarker(targetIdentityPlanningMarker, "finish");
     return result;
   }
   await input.onIdentity?.(identity);
   const cue = await input.sandbox.run({
     command: `test -f ${identity.cueSourcePath}`,
-    workingDirectory: "/workspace/repository",
+    workingDirectory: repositoryWorkspacePath,
   });
   const proposal = {
     ...(privateCompute === undefined ? {} : { privateCompute }),
@@ -710,6 +714,6 @@ export const executeTargetIdentityAndPlanning = async (input: {
     ...(frameworkUpgrade === undefined ? {} : { frameworkUpgrade }),
   };
   const result = { identity, proposal, ...overlay };
-  planningMarker("target-identity-and-planning", "finish");
+  planningMarker(targetIdentityPlanningMarker, "finish");
   return result;
 };

@@ -7,6 +7,10 @@ import type { ValidationLogReference, ValidationLogStore } from "../repository/v
 import { sanitizeValidationDiagnosticText } from "../repository/validation-output-sanitize";
 import type { TargetValidationFailureReceipt } from "../repository/target-validation";
 
+const bunInstallCommand = "bun install";
+const bunFrozenInstallCommand = "bun install --frozen-lockfile";
+const dependencyInstallOperation = "dependency-install";
+
 export interface DependencyAttemptResult {
   attemptDigest: string;
   command: "dependency-probe" | "dependency-install";
@@ -167,12 +171,12 @@ const dependencyDispatch = (
   if (command === "dependency-probe") {
     return { sandboxCommand: executionCommand, provenance: {} };
   }
-  if (executionCommand !== "bun install" && executionCommand !== "bun install --frozen-lockfile") {
+  if (executionCommand !== bunInstallCommand && executionCommand !== bunFrozenInstallCommand) {
     throw new Error("The checkout dependency install recipe is unsupported.");
   }
   const sandboxCommand = workspaceBinInstallCommand(
     root,
-    executionCommand === "bun install --frozen-lockfile",
+    executionCommand === bunFrozenInstallCommand,
   );
   return {
     sandboxCommand,
@@ -260,7 +264,7 @@ const dependencyAttempt = async (
   await input.onAttempt?.(attempt);
   if (
     attempt.completion === "interrupted" ||
-    (command === "dependency-install" && attempt.exitCode !== 0)
+    (command === dependencyInstallOperation && attempt.exitCode !== 0)
   ) {
     const cause =
       attempt.excerpt ||
@@ -323,7 +327,7 @@ export const repairCheckoutDependenciesAfterValidationFailure = async (
   }
   const alreadyRepaired = input.attempts.some((attempt) => {
     if (
-      attempt.command !== "dependency-install" ||
+      attempt.command !== dependencyInstallOperation ||
       attempt.completion !== "complete" ||
       attempt.exitCode !== 0
     ) {
@@ -342,7 +346,7 @@ export const repairCheckoutDependenciesAfterValidationFailure = async (
   await input.prepareInstall();
   input.signal?.throwIfAborted();
   input.assertCurrent();
-  await dependencyAttempt(input, "dependency-install", "bun install", failure);
+  await dependencyAttempt(input, dependencyInstallOperation, bunInstallCommand, failure);
   input.signal?.throwIfAborted();
   input.assertCurrent();
 };
@@ -360,7 +364,7 @@ export const ensureCheckoutDependencies = async (
     throw new Error("The required repository executable name is invalid.");
   }
   if (input.reconcileWorkspace === true) {
-    const install = await dependencyAttempt(input, "dependency-install", "bun install");
+    const install = await dependencyAttempt(input, dependencyInstallOperation, bunInstallCommand);
     input.signal?.throwIfAborted();
     input.assertCurrent?.();
     return { attempts: [install], status: "installed" };
@@ -377,7 +381,7 @@ export const ensureCheckoutDependencies = async (
     return { attempts, status: "reused" };
   }
   attempts.push(
-    await dependencyAttempt(input, "dependency-install", "bun install --frozen-lockfile"),
+    await dependencyAttempt(input, dependencyInstallOperation, bunFrozenInstallCommand),
   );
   return { attempts, status: "installed" };
 };

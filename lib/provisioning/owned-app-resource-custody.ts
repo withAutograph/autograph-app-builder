@@ -29,10 +29,13 @@ import {
 } from "./hosted-operator-resource-credentials";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 
+const OWNED_APP_RESOURCE_SOURCE_KIND = "owned-app-resource-source-v1";
+const SINGLE_PROJECT_RESOURCES_PREPARATION = "single-project-resources-v1";
+
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const fail = () => new HostedOperatorError("reconciliation_required");
 const recordSchema = z.strictObject({
-  kind: z.literal("owned-app-resource-source-v1"),
+  kind: z.literal(OWNED_APP_RESOURCE_SOURCE_KIND),
   scope: z.record(z.string(), z.unknown()),
   reference: ownedAppResourceSourceSchema,
 });
@@ -55,7 +58,7 @@ export const createOwnedAppResourceCustody = (deps: {
     const normal = deps.configuration.standardRuntime;
     if (
       normal === undefined ||
-      plan.runtimePreparation !== "single-project-resources-v1" ||
+      plan.runtimePreparation !== SINGLE_PROJECT_RESOURCES_PREPARATION ||
       plan.authAdoption !== undefined
     ) {
       throw fail();
@@ -70,7 +73,7 @@ export const createOwnedAppResourceCustody = (deps: {
       provisioningDigest: normal.provisioningDigest,
       resources: ownedAppResourceIdentity(plan),
     };
-    const digest = hash(JSON.stringify(["owned-app-resource-source-v1", scope]));
+    const digest = hash(JSON.stringify([OWNED_APP_RESOURCE_SOURCE_KIND, scope]));
     const requestId = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-5${digest.slice(13, 16)}-a${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
     return { scope, digest, requestId };
   };
@@ -136,7 +139,7 @@ export const createOwnedAppResourceCustody = (deps: {
           row.record.operator?.pendingEffectAttempt === undefined),
       isDeepStrictEqual(sourceContext.authority, context.authority),
       isDeepStrictEqual(ownedAppResourceIdentity(setup.plan), ownedAppResourceIdentity(plan)),
-      setup.plan.runtimePreparation === "single-project-resources-v1",
+      setup.plan.runtimePreparation === SINGLE_PROJECT_RESOURCES_PREPARATION,
       setup.plan.selection.projectId === context.target.projectId,
     ].every(Boolean);
     if (!same) {
@@ -205,7 +208,7 @@ export const createOwnedAppResourceCustody = (deps: {
         if (
           setup === undefined ||
           record.privateState === undefined ||
-          setup.plan.runtimePreparation !== "single-project-resources-v1"
+          setup.plan.runtimePreparation !== SINGLE_PROJECT_RESOURCES_PREPARATION
         ) {
           continue;
         }
@@ -266,7 +269,7 @@ export const createOwnedAppResourceCustody = (deps: {
         requestDigest: identity.digest,
         state: "settled",
         revision: 1,
-        record: { kind: "owned-app-resource-source-v1", scope: identity.scope, reference },
+        record: { kind: OWNED_APP_RESOURCE_SOURCE_KIND, scope: identity.scope, reference },
         createdAt: new Date(),
         updatedAt: new Date(),
       })

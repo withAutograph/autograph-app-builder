@@ -11,6 +11,10 @@ import { suffixedProviderName } from "./names";
 import type { StarterSource } from "./starter-source";
 import { runSequentiallyUntilAsync } from "../async-sequential.ts";
 
+const INVALID_RESPONSE = "invalid-response";
+const CREDENTIAL_REJECTED = "credential-rejected";
+const CREDENTIAL_UNAVAILABLE = "credential-unavailable";
+
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const decimal = z.string().regex(/^[1-9][0-9]*$/u);
@@ -51,7 +55,7 @@ function record(value: unknown): value is Record<string, unknown> {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function property(value: unknown, key: string) {
   if (!record(value) || !(key in value)) {
-    throw new TypeError("invalid-response");
+    throw new TypeError(INVALID_RESPONSE);
   }
   return value[key];
 }
@@ -60,7 +64,7 @@ function property(value: unknown, key: string) {
 function stringProperty(value: unknown, key: string) {
   const result = property(value, key);
   if (typeof result !== "string") {
-    throw new TypeError("invalid-response");
+    throw new TypeError(INVALID_RESPONSE);
   }
   return result;
 }
@@ -230,7 +234,7 @@ export async function provisionGitHubRepository(input: {
         input.recordRetryAfter?.(retryAfter);
       }
       if (status === 401) {
-        throw new Error("credential-rejected", { cause: error });
+        throw new Error(CREDENTIAL_REJECTED, { cause: error });
       }
       if (status === 429 || (status === 403 && retryAfter !== undefined)) {
         throw new Error("provider-rate-limited", { cause: error });
@@ -263,7 +267,7 @@ export async function provisionGitHubRepository(input: {
     const token = stringProperty(authentication, "token");
     const permissions = property(authentication, "permissions");
     if (token.length < 20 || token.length > 512) {
-      throw new Error("invalid-response");
+      throw new Error(INVALID_RESPONSE);
     }
     if (
       !record(permissions) ||
@@ -272,7 +276,7 @@ export async function provisionGitHubRepository(input: {
       permissions.contents !== "write" ||
       permissions.metadata !== "read"
     ) {
-      throw new Error("invalid-response");
+      throw new Error(INVALID_RESPONSE);
     }
     return token;
   }
@@ -304,7 +308,7 @@ export async function provisionGitHubRepository(input: {
         providerUserId: input.installation.accountId,
       });
       if (!credential?.active) {
-        throw new Error("credential-unavailable");
+        throw new Error(CREDENTIAL_UNAVAILABLE);
       }
       const expires = credential.tokens.accessTokenExpiresAt
         ? Date.parse(credential.tokens.accessTokenExpiresAt)
@@ -317,7 +321,7 @@ export async function provisionGitHubRepository(input: {
         !credential.tokens.refreshTokenExpiresAt ||
         Date.parse(credential.tokens.refreshTokenExpiresAt) <= now()
       ) {
-        throw new Error("credential-unavailable");
+        throw new Error(CREDENTIAL_UNAVAILABLE);
       }
       let authentication: unknown;
       try {
@@ -336,7 +340,7 @@ export async function provisionGitHubRepository(input: {
             now: new Date(now()),
             providerUserId: input.installation.accountId,
           });
-          throw new Error("credential-unavailable", { cause: error });
+          throw new Error(CREDENTIAL_UNAVAILABLE, { cause: error });
         }
         throw new Error("provider-unavailable", { cause: error });
       }
@@ -345,7 +349,7 @@ export async function provisionGitHubRepository(input: {
       const accessTokenExpiresAt = stringProperty(authentication, "expiresAt");
       const refreshTokenExpiresAt = stringProperty(authentication, "refreshTokenExpiresAt");
       if (Date.parse(accessTokenExpiresAt) <= now() || Date.parse(refreshTokenExpiresAt) <= now()) {
-        throw new Error("invalid-response");
+        throw new Error(INVALID_RESPONSE);
       }
       const refreshedAt = now();
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -385,13 +389,13 @@ export async function provisionGitHubRepository(input: {
         decimalProperty(user.body, "id") !== input.installation.accountId ||
         stringProperty(user.body, "login") !== input.installation.accountLogin
       ) {
-        throw new Error("credential-unavailable");
+        throw new Error(CREDENTIAL_UNAVAILABLE);
       }
     }
   } catch (error) {
     if (
       error instanceof Error &&
-      error.message === "credential-rejected" &&
+      error.message === CREDENTIAL_REJECTED &&
       input.installation.accountType === "User"
     ) {
       await input.credentialStore.deactivate({
@@ -518,7 +522,7 @@ export async function provisionGitHubRepository(input: {
     });
     const entries = property(tree.body, "tree");
     if (!Array.isArray(entries)) {
-      throw new TypeError("invalid-response");
+      throw new TypeError(INVALID_RESPONSE);
     }
     const completeEntries: unknown[] = [];
     if (property(tree.body, "truncated") === true) {
@@ -537,11 +541,11 @@ export async function provisionGitHubRepository(input: {
         }
         const pageEntries = property(page.body, "tree");
         if (!Array.isArray(pageEntries)) {
-          throw new TypeError("invalid-response");
+          throw new TypeError(INVALID_RESPONSE);
         }
         for (const entry of pageEntries) {
           if (!record(entry)) {
-            throw new TypeError("invalid-response");
+            throw new TypeError(INVALID_RESPONSE);
           }
           const path = `${directory.path}${stringProperty(entry, "path")}`;
           if (stringProperty(entry, "type") === "tree") {
@@ -556,7 +560,7 @@ export async function provisionGitHubRepository(input: {
         completeEntries.push(entry);
       }
     } else {
-      throw new TypeError("invalid-response");
+      throw new TypeError(INVALID_RESPONSE);
     }
     const observed = completeEntries
       .filter((entry) => record(entry) && entry.type === "blob")
@@ -760,7 +764,7 @@ export async function provisionGitHubRepository(input: {
     );
     return result ?? { code: "provider_unavailable", retryable: true, status: "failed" };
   } catch (error) {
-    if (error instanceof Error && error.message === "credential-rejected") {
+    if (error instanceof Error && error.message === CREDENTIAL_REJECTED) {
       await input.credentialStore.deactivate({
         authority: input.authority,
         now: new Date(now()),

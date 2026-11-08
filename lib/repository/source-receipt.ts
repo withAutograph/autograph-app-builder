@@ -6,6 +6,9 @@ import { SUPPORTED_TEMPLATE_ADAPTER, SUPPORTED_TEMPLATE_INPUT_PATHS } from "./su
 import type { SupportedTemplateSnapshot } from "./supported-template";
 import { captureProcessStdout } from "./captured-process-output";
 
+const invalidCanonicalCloneInspectionMessage = "Canonical template clone inspection is invalid.";
+const freshTemplateSourceKind = "fresh-template";
+
 export type SourceKind = "existing-repository" | "fresh-template";
 
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
@@ -139,7 +142,7 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
       "sourceTree",
     ])
   ) {
-    throw new Error("Canonical template clone inspection is invalid.");
+    throw new Error(invalidCanonicalCloneInspectionMessage);
   }
   if (
     value.sourcePath !== "/workspace/repository" ||
@@ -150,7 +153,7 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
     !isRecord(value.contents) ||
     !Array.isArray(value.contract)
   ) {
-    throw new Error("Canonical template clone inspection is invalid.");
+    throw new Error(invalidCanonicalCloneInspectionMessage);
   }
   const allowedContents = new Set([
     ...SUPPORTED_TEMPLATE_INPUT_PATHS,
@@ -161,12 +164,12 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
       ([path, content]) => !allowedContents.has(path) || typeof content !== "string",
     )
   ) {
-    throw new Error("Canonical template clone inspection is invalid.");
+    throw new Error(invalidCanonicalCloneInspectionMessage);
   }
   const contents = value.contents as Partial<Record<string, string>>;
   const contract = value.contract.map((entry) => {
     if (!isRecord(entry) || !hasExactKeys(entry, ["mode", "objectId", "path", "sha256"])) {
-      throw new TypeError("Canonical template clone inspection is invalid.");
+      throw new TypeError(invalidCanonicalCloneInspectionMessage);
     }
     if (
       typeof entry.path !== "string" ||
@@ -174,7 +177,7 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
       typeof entry.objectId !== "string" ||
       typeof entry.sha256 !== "string"
     ) {
-      throw new TypeError("Canonical template clone inspection is invalid.");
+      throw new TypeError(invalidCanonicalCloneInspectionMessage);
     }
     return {
       mode: entry.mode,
@@ -186,7 +189,7 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
   for (const entry of contract) {
     const content = contents[entry.path];
     if (content !== undefined && sha256(content) !== entry.sha256) {
-      throw new Error("Canonical template clone inspection is invalid.");
+      throw new Error(invalidCanonicalCloneInspectionMessage);
     }
   }
   return {
@@ -265,8 +268,8 @@ export const parseSourceReceiptEvidence = (value: unknown): SourceReceiptEvidenc
     throw new Error("Source receipt evidence is invalid or has an unsupported schema.");
   }
   if (
-    (value.sourceKind !== "existing-repository" && value.sourceKind !== "fresh-template") ||
-    (version === SOURCE_RECEIPT_VERSION && value.sourceKind !== "fresh-template") ||
+    (value.sourceKind !== "existing-repository" && value.sourceKind !== freshTemplateSourceKind) ||
+    (version === SOURCE_RECEIPT_VERSION && value.sourceKind !== freshTemplateSourceKind) ||
     !isGitObjectId(value.sourceSha) ||
     !isGitObjectId(value.sourceTree) ||
     value.adapter !== SUPPORTED_TEMPLATE_ADAPTER ||

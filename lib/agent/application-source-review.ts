@@ -26,6 +26,9 @@ import type {
 import { emptySourceReviewInvocation } from "./product-source-review-batches";
 import type { SourceReviewInvocation, SourceReviewRequest } from "./product-source-review-batches";
 
+const toolResultType = "tool-result";
+const reviewRedactionUnavailableMessage = "Primary review document redaction is unavailable.";
+
 export interface ApplicationSourceReadCursor {
   line: number;
   column: number;
@@ -225,7 +228,7 @@ const projectSourceReviewMessages = (
     return {
       ...message,
       content: message.content.map((part) => {
-        if (part.type === "tool-result" && part.output.type === "json") {
+        if (part.type === toolResultType && part.output.type === "json") {
           const read = reusableReads.get(part.toolCallId);
           if (read !== undefined && part.toolName === read.toolName) {
             const serialized = JSON.stringify(part.output.value);
@@ -290,7 +293,7 @@ const sourceReviewToolGroup = (
   part: SourceReviewToolPart,
   measurements: ApplicationSourceReviewMessageMeasurements,
 ): SourceReviewMessageGroup => {
-  if (part.type !== "tool-result") {
+  if (part.type !== toolResultType) {
     return "other";
   }
   if (part.toolName === "readRequirements") {
@@ -706,7 +709,7 @@ const canContinueReviewRound = (step?: ReviewRoundStep): boolean => {
   const calls = step?.toolCalls.filter((call) => call.providerExecuted !== true) ?? [];
   const returned = new Set(
     step?.content.flatMap((part) =>
-      part.type === "tool-result" || part.type === "tool-error" ? [part.toolCallId] : [],
+      part.type === toolResultType || part.type === "tool-error" ? [part.toolCallId] : [],
     ),
   );
   return calls.length > 0 && calls.every((call) => returned.has(call.toolCallId));
@@ -745,7 +748,7 @@ const settleIncompleteReviewRound = async (
   }
   const texts = await readRedactions();
   if (texts === undefined) {
-    return blocked("Primary review document redaction is unavailable.");
+    return blocked(reviewRedactionUnavailableMessage);
   }
   const recovery = JSON.stringify({
     sourceDigest: input.sourceDigest,
@@ -949,7 +952,7 @@ const preserveVerifiedFindings = async (
   }
   const texts = await context.readRedactions();
   if (texts === undefined) {
-    return context.blocked("Primary review document redaction is unavailable.");
+    return context.blocked(reviewRedactionUnavailableMessage);
   }
   const prior = context.prior;
   const hasPrior =
@@ -1104,7 +1107,7 @@ export const assessApplicationSourceRound = async (
     const completedReview = async () => {
       const texts = await readRedactions();
       if (texts === undefined) {
-        return blocked("Primary review document redaction is unavailable.");
+        return blocked(reviewRedactionUnavailableMessage);
       }
       if ((continuation?.priorReviewerEvidence?.findings.length ?? 0) > 0) {
         return await blockedWithVerifiedFindings(

@@ -7,6 +7,10 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { it } from "vitest";
 
+const LOGICAL_SESSION_ID = "logical-fixture";
+const SYNTHETIC_RUN_ID = "wrun-synthetic";
+const IDLE_OWNER_RUN_ID = "idle-owner";
+
 const require = createRequire(import.meta.url);
 const sdk = pathToFileURL(`${path.dirname(require.resolve("eve/package.json"))}/dist/src/`);
 const runtimeUrl = new URL("compiled/@workflow/core/runtime.js", sdk);
@@ -33,12 +37,12 @@ const { createDurableSessionState } = await import(
 const checkpoint = {
   version: 9,
   serializedContext: {
-    "eve.sessionId": "logical-fixture",
+    "eve.sessionId": LOGICAL_SESSION_ID,
     "eve.capabilities": { requestInput: true },
   },
   sessionState: createDurableSessionState({
     session: {
-      sessionId: "logical-fixture",
+      sessionId: LOGICAL_SESSION_ID,
       continuationToken: "fixture-continuation",
       history: [],
       state: { approval: "retained-fixture" },
@@ -55,7 +59,7 @@ const descriptor = {
   sourcePublicSessionId: "fixture-source",
   sourceOwnerRunId: "wrun-fixture-source",
   sourceAdapterGeneration: 1,
-  logicalSessionId: "logical-fixture",
+  logicalSessionId: LOGICAL_SESSION_ID,
   originalAuthoritySessionId: "fixture-source",
   parentCancellationRevision: 0,
 };
@@ -118,7 +122,7 @@ it("reproduces the member-step receiver failure through the real compiled Workfl
   const input = f.queuedArguments();
   assert.equal(input.thisVal, f.ports);
   await assert.rejects(
-    dehydrateStepArguments(input, "wrun-synthetic", undefined),
+    dehydrateStepArguments(input, SYNTHETIC_RUN_ID, undefined),
     (error) => error.name === "SerializationError" && error.message.includes(".thisVal.createHook"),
   );
   assert.deepEqual(f.calls, []);
@@ -139,8 +143,8 @@ it("serializes the actual terminal boot validation step without its function-bea
   );
   assert.ok(suspended instanceof Promise);
   const input = f.queuedArguments();
-  const encoded = await dehydrateStepArguments(input, "wrun-synthetic", undefined);
-  const decoded = await hydrateStepArguments(encoded, "wrun-synthetic", undefined);
+  const encoded = await dehydrateStepArguments(input, SYNTHETIC_RUN_ID, undefined);
+  const decoded = await hydrateStepArguments(encoded, SYNTHETIC_RUN_ID, undefined);
   assert.equal(input.thisVal, undefined);
   assert.equal(decoded.thisVal, undefined);
   assert.deepEqual(decoded.args, [{ checkpoint }]);
@@ -189,7 +193,7 @@ it("serializes the idle waiting step after activation without capturing recovery
       },
       dispose: () => Promise.resolve(),
     }),
-    getWorkflowMetadata: () => ({ workflowRunId: "idle-owner" }),
+    getWorkflowMetadata: () => ({ workflowRunId: IDLE_OWNER_RUN_ID }),
     getWritable: () => writable,
     validateCheckpoint: () => Promise.resolve(),
     emitIdleWaiting: waitingStep,
@@ -211,14 +215,14 @@ it("serializes the idle waiting step after activation without capturing recovery
   activate({
     kind: "activate-terminal-recovery",
     operationId: descriptor.operationId,
-    ownerRunId: "idle-owner",
+    ownerRunId: IDLE_OWNER_RUN_ID,
   });
   await queued;
   assert.equal(queue.size, 1);
   const [step] = queue.values();
   assert.equal(step.stepName, waitingStep.stepId);
   const input = { args: step.args, closureVars: step.closureVars, thisVal: step.thisVal };
-  await dehydrateStepArguments(input, "idle-owner", undefined);
+  await dehydrateStepArguments(input, IDLE_OWNER_RUN_ID, undefined);
   assert.equal(input.thisVal, undefined);
   assert.deepEqual(step.args, [
     {

@@ -68,6 +68,10 @@ import {
   sameOperatorSelection,
 } from "./hosted-operator-contract";
 
+const operatorRuntimePath = "/v1/runtime";
+const continuityReadAction = "continuity-read";
+const continuityBindingReadAction = "continuity-binding-read";
+
 /** Match the protected operator's function duration without changing unrelated fetches. */
 export const createHostedOperatorDispatcher = (factory?: Agent.Options["factory"]) =>
   new Agent({
@@ -208,7 +212,7 @@ export const createHostedOperatorClient = (input: {
     };
     let response: Response;
     try {
-      response = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
+      response = await (input.fetch ?? fetch)(new URL(operatorRuntimePath, url), options);
     } catch (error) {
       if (
         (body.action === "execute" || body.action === "status") &&
@@ -266,7 +270,7 @@ export const createHostedOperatorClient = (input: {
           sessionId: diagnosticSessionId,
           signal,
           token,
-          url: new URL("/v1/runtime", url),
+          url: new URL(operatorRuntimePath, url),
         });
       }
       throw new HostedOperatorError(
@@ -313,7 +317,7 @@ export const createHostedOperatorClient = (input: {
     };
     let result: Response;
     try {
-      result = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
+      result = await (input.fetch ?? fetch)(new URL(operatorRuntimePath, url), options);
     } catch (error) {
       if (body.action === "export" && !isCancellation(error, signal)) {
         throw new HostedOperatorTransportUnknown(error);
@@ -365,7 +369,7 @@ export const createHostedOperatorClient = (input: {
       let result: Response;
       stage = "client_transport";
       try {
-        result = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
+        result = await (input.fetch ?? fetch)(new URL(operatorRuntimePath, url), options);
       } catch (error) {
         if (body.action === "continuity" && !isCancellation(error, signal)) {
           throw new HostedOperatorTransportUnknown(error);
@@ -397,7 +401,7 @@ export const createHostedOperatorClient = (input: {
       if (blocked.success) {
         throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable", {
           continuityReadStage:
-            body.action === "continuity-read" || body.action === "continuity-binding-read"
+            body.action === continuityReadAction || body.action === continuityBindingReadAction
               ? "operator_response"
               : undefined,
           recoveryStage: blocked.data.recoveryStage,
@@ -421,7 +425,8 @@ export const createHostedOperatorClient = (input: {
         /* Diagnostic context lookup must preserve the original failure. */
       }
       if (
-        (request.action === "continuity-read" || request.action === "continuity-binding-read") &&
+        (request.action === continuityReadAction ||
+          request.action === continuityBindingReadAction) &&
         !isCancellation(error, signal)
       ) {
         const diagnostic = continuityReadDiagnosticStageSchema.safeParse(stage);
@@ -494,7 +499,7 @@ export const createHostedOperatorClient = (input: {
     async readContinuity(intentId: string, signal?: AbortSignal) {
       const ownerContext = exportOwner();
       const result = await sendContinuity(
-        { action: "continuity-read", intentId, ownerContext },
+        { action: continuityReadAction, intentId, ownerContext },
         continuityPlannedSchema,
         signal,
       );
@@ -538,7 +543,7 @@ export const createHostedOperatorClient = (input: {
     },
     async readContinuityBindings(intentId: string, signal?: AbortSignal) {
       return await sendContinuity(
-        { action: "continuity-binding-read", intentId, ownerContext: exportOwner() },
+        { action: continuityBindingReadAction, intentId, ownerContext: exportOwner() },
         appTenantBindingReadbackSchema,
         signal,
       );

@@ -5,6 +5,10 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { it } from "vitest";
 
+const HOOK_NOT_FOUND_MESSAGE = "hook-not-found";
+const REPLACEMENT_HOOK_ID = "replacement-hook";
+const REPLACEMENT_OWNER_ID = "replacement-owner";
+
 const require = createRequire(import.meta.url);
 const sdk = pathToFileURL(`${path.dirname(require.resolve("eve/package.json"))}/dist/src/`).href;
 const { closeNoncanonicalRecoveryInboxHolder } = await import(
@@ -89,7 +93,7 @@ const fixture = () => {
       reads.push({ kind: "token", requestedToken });
       const hook = hooksByToken.get(requestedToken);
       if (hook === undefined) {
-        throw new Error("hook-not-found");
+        throw new Error(HOOK_NOT_FOUND_MESSAGE);
       }
       return Promise.resolve(hook);
     },
@@ -97,7 +101,7 @@ const fixture = () => {
       reads.push({ kind: "id", requestedHookId });
       const byId = hooksById.get(requestedHookId);
       if (byId === undefined) {
-        throw new Error("hook-not-found");
+        throw new Error(HOOK_NOT_FOUND_MESSAGE);
       }
       return Promise.resolve(byId);
     },
@@ -129,7 +133,7 @@ const fixture = () => {
       }
       await onDispose(request);
     },
-    isHookNotFound: (error) => error?.message === "hook-not-found",
+    isHookNotFound: (error) => error?.message === HOOK_NOT_FOUND_MESSAGE,
   };
   return {
     auth,
@@ -396,11 +400,11 @@ it("refuses a changed hook ID or owner without targeting its new holder", async 
       const f = fixture();
       f.setOnProof(() => {
         if (change === "id") {
-          f.setById({ runId: f.holderOwnerRunId, hookId: "replacement-hook" });
+          f.setById({ runId: f.holderOwnerRunId, hookId: REPLACEMENT_HOOK_ID });
         } else {
           f.setHook({
-            runId: "replacement-owner",
-            hookId: "replacement-hook",
+            runId: REPLACEMENT_OWNER_ID,
+            hookId: REPLACEMENT_HOOK_ID,
             metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
           });
         }
@@ -408,7 +412,8 @@ it("refuses a changed hook ID or owner without targeting its new holder", async 
       await assert.rejects(f.close());
       assert.equal(
         f.effects.some(
-          (effect) => effect.runId === "replacement-owner" || effect.hookId === "replacement-hook",
+          (effect) =>
+            effect.runId === REPLACEMENT_OWNER_ID || effect.hookId === REPLACEMENT_HOOK_ID,
         ),
         false,
       );
@@ -476,8 +481,8 @@ it("preserves a replacement hook after the exact loser is cancelled", async () =
   const f = fixture();
   f.setOnCancel(() => {
     f.setHook({
-      runId: "replacement-owner",
-      hookId: "replacement-hook",
+      runId: REPLACEMENT_OWNER_ID,
+      hookId: REPLACEMENT_HOOK_ID,
       metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
     });
   });
@@ -488,7 +493,7 @@ it("preserves a replacement hook after the exact loser is cancelled", async () =
   );
   assert.equal(
     f.effects.some(
-      (effect) => effect.runId === "replacement-owner" || effect.hookId === "replacement-hook",
+      (effect) => effect.runId === REPLACEMENT_OWNER_ID || effect.hookId === REPLACEMENT_HOOK_ID,
     ),
     false,
   );
@@ -552,9 +557,9 @@ it("adopts an already committed receipt or a concurrent winner without entering 
       };
       const dependencies = {
         getHook: () => {
-          throw new Error("hook-not-found");
+          throw new Error(HOOK_NOT_FOUND_MESSAGE);
         },
-        isHookNotFound: (error) => error?.message === "hook-not-found",
+        isHookNotFound: (error) => error?.message === HOOK_NOT_FOUND_MESSAGE,
         async closeHolder(input) {
           invoked.push("closure");
           await input.authorizeCurrent();

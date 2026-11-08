@@ -399,14 +399,16 @@ export const createHostedOperatorNormalAuthClient = (options: {
       }
       let response: Response;
       try {
-        response = await (options.fetch ?? fetch)(url, {
+        const fetchRequest = options.fetch ?? fetch;
+        const requestOptions: RequestInit = {
           method: input === undefined ? "GET" : "POST",
           headers,
-          ...(body === undefined ? {} : { body }),
-          cache: "no-store",
-          redirect: "error",
-          signal,
-        });
+        };
+        if (body !== undefined) requestOptions.body = body;
+        requestOptions.cache = "no-store";
+        requestOptions.redirect = "error";
+        requestOptions.signal = signal;
+        response = await fetchRequest(url, requestOptions);
         if (
           response.redirected ||
           (response.url && new URL(response.url).origin !== origin.origin)

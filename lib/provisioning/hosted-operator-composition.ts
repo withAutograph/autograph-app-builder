@@ -117,6 +117,10 @@ import {
 } from "./hosted-operator-native-preview-recovery";
 import { createReadyReplacementNativeReader } from "./hosted-operator-ready-replacement-native";
 
+const singleProjectServicesComposition = "single-project-services";
+const appInstallEffectId = "app-install";
+const preparedPreviewReleaseIntent = "prepared-preview";
+
 const sharedHostProtectionPrerequisite = (
   record: HostedRuntimeJournalRecord | undefined,
   context: HostedOperatorContext,
@@ -204,7 +208,7 @@ const appTrustedSourcesForNewPlan = (
   base: HostedOperatorPlan,
   configuration: HostedOperatorSourceConfiguration,
 ): HostedOperatorPlan["appTrustedSources"] =>
-  configuration.composition === "single-project-services" ||
+  configuration.composition === singleProjectServicesComposition ||
   base.gatewayBindings === undefined ||
   base.deploymentBoundary === undefined
     ? undefined
@@ -247,7 +251,7 @@ const bootstrapCostDescription = (
   composition: HostedOperatorSourceConfiguration["composition"],
   adopting: boolean,
 ) => {
-  if (composition === "single-project-services") {
+  if (composition === singleProjectServicesComposition) {
     return "Prepare or verify only isolated app-owned databases, restricted roles and Auth schema. Public delivery requires a separate approved release.";
   }
   return adopting
@@ -912,7 +916,7 @@ const withRetainedAppInstallationTargets = async (
     ...appPlan,
     appInstallation: { customerIds },
     effects: appPlan.effects.map((effect) =>
-      effect.id === "app-install"
+      effect.id === appInstallEffectId
         ? {
             ...effect,
             description: `Install and independently observe release ${appPlan.release.id} for schema tenants ${customerIds.join(", ")}; existing actor and role grants are unchanged.`,
@@ -999,7 +1003,7 @@ const resolveParticipantPlan = async (
   const effects: HostedOperatorPlan["effects"] = [
     ...base.effects.filter((effect) => ![GATEWAY_BINDINGS, GATEWAY_DELIVERY].includes(effect.kind)),
     {
-      id: "app-install",
+      id: appInstallEffectId,
       kind: "install",
       description:
         "Install and independently observe the exact compiled app release and protected runtime scope.",
@@ -1258,7 +1262,7 @@ export const resolveFullPlan = async (
     {
       description:
         "Install and independently observe the exact compiled app release and protected runtime scope.",
-      id: "app-install",
+      id: appInstallEffectId,
       kind: "install",
     },
   ];
@@ -1640,14 +1644,14 @@ export const composeHostedOperatorDependencies = (
     // a completed app journal. Changed-source planning may use a recorded publication
     // before identity capture; missing publication is allowed, failed authority is not.
     const bootstrapSelection =
-      context.releaseIntent === "prepared-preview"
+      context.releaseIntent === preparedPreviewReleaseIntent
         ? await observe(
             "accepted_spec",
             async () => await readOwnedBootstrapPlanningSelection({ context, controlPlane }),
           )
         : undefined;
     const owned =
-      context.releaseIntent === "prepared-preview"
+      context.releaseIntent === preparedPreviewReleaseIntent
         ? undefined
         : await controlPlane.readCurrentPlanningOwner(context);
     const selectedForGateway =
@@ -1662,7 +1666,7 @@ export const composeHostedOperatorDependencies = (
       selectedForGateway?.selection,
     );
     const frozenPrerequisiteGatewaySource =
-      context.releaseIntent === "prepared-preview" &&
+      context.releaseIntent === preparedPreviewReleaseIntent &&
       currentPlan !== undefined &&
       frozenGatewaySource !== undefined
         ? frozenGatewayDeliverySource(currentPlan, frozenGatewaySource)
@@ -1670,7 +1674,7 @@ export const composeHostedOperatorDependencies = (
     const prerequisiteGatewaySource = publishedGatewaySource ?? frozenPrerequisiteGatewaySource;
     await selectedForGateway?.assertCurrent?.();
     const existingBootstrap =
-      configuration.composition === "single-project-services"
+      configuration.composition === singleProjectServicesComposition
         ? undefined
         : await readExistingAuthBootstrapPrerequisite(
             current,
@@ -1731,7 +1735,7 @@ export const composeHostedOperatorDependencies = (
           },
           context,
           phase: "bootstrap-planning",
-          ...(configuration.composition === "single-project-services"
+          ...(configuration.composition === singleProjectServicesComposition
             ? {}
             : { resolveGatewayByPublicOrigin: true as const }),
           resolveOperatorByConfiguredOrigin: true,
@@ -1874,7 +1878,7 @@ export const composeHostedOperatorDependencies = (
           maintenanceDatabase: native.maintenanceDatabase,
           role: native.maintenanceRole,
         },
-        ...(configuration.composition === "single-project-services"
+        ...(configuration.composition === singleProjectServicesComposition
           ? { runtimePreparation: "single-project-resources-v1" }
           : {}),
 
@@ -1888,8 +1892,8 @@ export const composeHostedOperatorDependencies = (
           owner: context.authority.ownerUserId,
         },
         deploymentBoundary: {
-          ...(configuration.composition === "single-project-services"
-            ? { composition: "single-project-services" }
+          ...(configuration.composition === singleProjectServicesComposition
+            ? { composition: singleProjectServicesComposition }
             : {}),
           app: {
             branch: inventory.app.branch,

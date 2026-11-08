@@ -27,6 +27,9 @@ import { infrastructureOnly } from "./hosted-operator-existing-auth-bootstrap";
 import { normalActorProgramDigest } from "./hosted-operator-normal-actor-program";
 import { inspectParticipantBootstrapPreparation } from "./hosted-operator-participant-bootstrap";
 
+const AUTH_BOOTSTRAP_STAGE = "auth-bootstrap";
+const CURRENT_ACCOUNT_SCOPE = "current-account";
+
 type Ports = Pick<ProtectedHostedOperatorDependencies, "assertAuthorized" | "readApproval"> & {
   store: Pick<ProtectedHostedOperatorDependencies["store"], "read" | "compareAndSet">;
 };
@@ -195,7 +198,7 @@ const assertCompatible = (
     record.step === "reserved",
     isDeepStrictEqual(record.request, context.target),
     current.plan.action === "prepare",
-    current.plan.stage === "auth-bootstrap",
+    current.plan.stage === AUTH_BOOTSTRAP_STAGE,
     infrastructureOnly(current.plan),
     account.action === "prepare",
     account.stage === "auth-participants",
@@ -262,8 +265,8 @@ const restorationDiagnosticSchema = z.strictObject({
   allPlanEffectsReceipted: z.boolean(),
   missingEffectKinds: operatorPreparationProgressSchema.shape.missingEffectKinds,
   executionState: z.enum(["absent", "running", "settled"]),
-  linkScope: z.enum(["absent", "current-account", "settled-or-historical", "unrelated"]),
-  wait: z.enum(["absent", "current-account", "old-adapter", "observed", "unrelated"]),
+  linkScope: z.enum(["absent", CURRENT_ACCOUNT_SCOPE, "settled-or-historical", "unrelated"]),
+  wait: z.enum(["absent", CURRENT_ACCOUNT_SCOPE, "old-adapter", "observed", "unrelated"]),
   continuation: z.enum([
     "absent",
     "old-accepted",
@@ -288,7 +291,7 @@ const diagnosticWait = (
     return "absent";
   }
   if (coordination.accountWait) {
-    return "current-account";
+    return CURRENT_ACCOUNT_SCOPE;
   }
   if (coordination.historicalWait) {
     return "old-adapter";
@@ -320,7 +323,7 @@ const diagnosticLinkScope = (
     return "absent";
   }
   if (coordination.accountLink) {
-    return "current-account";
+    return CURRENT_ACCOUNT_SCOPE;
   }
   return coordination.settledLink ? "settled-or-historical" : "unrelated";
 };
@@ -339,7 +342,7 @@ const reportRestorationCandidate = async (
     const preparation = record?.accountPreparation;
     if (
       record === undefined ||
-      operator?.plan.stage !== "auth-bootstrap" ||
+      operator?.plan.stage !== AUTH_BOOTSTRAP_STAGE ||
       preparation === undefined ||
       preparation.accountsCompletedAt !== undefined
     ) {
@@ -394,7 +397,7 @@ export const restorePendingAccountPreparation = async (
   for (;;) {
     const row = await deps.store.read(context);
     if (
-      row?.record.operator?.plan.stage !== "auth-bootstrap" ||
+      row?.record.operator?.plan.stage !== AUTH_BOOTSTRAP_STAGE ||
       row.record.accountPreparation === undefined
     ) {
       return null;

@@ -5,10 +5,14 @@ import { z } from "zod";
 import { managedRuntimeIdentitySchema } from "./managed-runtime-capabilities";
 import type { ManagedRuntimeIdentity } from "./managed-runtime-capabilities";
 
+const STOP_AND_WAIT = "stop-and-wait";
+const START_SAME_ENVIRONMENT = "start-same-environment";
+const RECONCILIATION_REQUIRED = "reconciliation-required";
+
 export const managedLifecycleCommandSchema = z.discriminatedUnion("operation", [
   z.strictObject({ operation: z.literal("status") }),
   z.strictObject({
-    operation: z.enum(["stop-and-wait", "start-same-environment", "observe-readiness"]),
+    operation: z.enum([STOP_AND_WAIT, START_SAME_ENVIRONMENT, "observe-readiness"]),
     commandId: z.uuid(),
   }),
 ]);
@@ -34,11 +38,11 @@ export const managedLifecycleReceiptSchema = z.strictObject({
     "stopping",
     "revoked",
     "expired",
-    "reconciliation-required",
+    RECONCILIATION_REQUIRED,
   ]),
   process: processSchema.optional(),
   commandId: z.uuid().optional(),
-  operation: z.enum(["status", "stop-and-wait", "start-same-environment", "observe-readiness"]),
+  operation: z.enum(["status", STOP_AND_WAIT, START_SAME_ENVIRONMENT, "observe-readiness"]),
 });
 export type ManagedChildExit = z.infer<typeof exitSchema>;
 export interface ManagedOwnedChild {
@@ -256,7 +260,7 @@ export const createManagedRuntimeSupervisor = (input: {
         try {
           await revoke();
         } catch {
-          state = "reconciliation-required";
+          state = RECONCILIATION_REQUIRED;
         }
       })();
     },
@@ -264,14 +268,14 @@ export const createManagedRuntimeSupervisor = (input: {
   );
   const perform = async (command: Exclude<ManagedLifecycleCommand, { operation: "status" }>) => {
     await assertCurrent();
-    if (command.operation === "stop-and-wait") {
+    if (command.operation === STOP_AND_WAIT) {
       state = "stopping";
       if (current) {
         current.observation.exit = await current.child.terminate();
       }
       await assertCurrent();
       state = "stopped";
-    } else if (command.operation === "start-same-environment") {
+    } else if (command.operation === START_SAME_ENVIRONMENT) {
       if (current && !current.observation.exit) {
         throw unavailable();
       }
@@ -291,7 +295,7 @@ export const createManagedRuntimeSupervisor = (input: {
         const exit = await child.closed;
         owned.observation.exit = exit;
         if (current === owned && !intentionalExit()) {
-          state = "reconciliation-required";
+          state = RECONCILIATION_REQUIRED;
         }
       })();
       try {
@@ -342,7 +346,7 @@ export const createManagedRuntimeSupervisor = (input: {
           return await perform(command);
         } catch {
           if (!signal.aborted) {
-            state = "reconciliation-required";
+            state = RECONCILIATION_REQUIRED;
           }
           throw unavailable();
         }
