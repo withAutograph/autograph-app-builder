@@ -122,10 +122,10 @@ const ready = (
   const time = "2026-10-21T15:00:00.000Z";
   const attemptId = "11111111-1111-4111-8111-111111111111";
   const projectSettings = {
+    buildCommand: "bun run build",
     framework: "nextjs" as const,
     rootDirectory: `apps/${appId}`,
     sourceFilesOutsideRootDirectory: true,
-    buildCommand: "bun run build",
   };
   const result: NativeTargetReadyRegistration = {
     kind: "native-target-onboarding",
@@ -142,13 +142,13 @@ const ready = (
       productRoles: [],
       worker: sourceCapture === undefined ? worker : { ...worker, sourceCapture },
       origin: {
-        publicSessionId: "original-session",
-        adapterSessionId: "original-adapter",
         adapterGeneration: 1,
+        adapterSessionId: "original-adapter",
         appSpecDigest: "b".repeat(64),
+        publicSessionId: "original-session",
         release: {
-          id: "release-original",
           artifactRef: "private-artifact",
+          id: "release-original",
           manifestSha256: "c".repeat(64),
           schemaSha256: "d".repeat(64),
         },
@@ -165,28 +165,28 @@ const ready = (
         nativeStore: configuration().nativeNeon.configuration.nativeStore,
         scope: configuration().nativeNeon.scope,
       },
-      cost: { ownership: "current-owner", description: "Approved native target" },
+      cost: { description: "Approved native target", ownership: "current-owner" },
       retention: { policy: "retain" },
       conflictPolicy: "stop-on-conflict",
     },
     approval: {
-      requestId: "request",
       callId: "call",
-      planDigest: "a".repeat(64),
-      responderPrincipalId: "owner",
-      publicSessionId: "original-session",
-      outcome: "approved",
       observedAt: time,
+      outcome: "approved",
+      planDigest: "a".repeat(64),
+      publicSessionId: "original-session",
+      requestId: "request",
+      responderPrincipalId: "owner",
     },
     attempt: {
       attemptId,
       candidateName: appId,
-      leaseId: attemptId,
       leaseExpiresAt: time,
+      leaseId: attemptId,
       startedAt: time,
     },
     dispatchAuthorizedAt: time,
-    acceptedCreation: { attemptId, projectId: `project-${appId}`, acceptedAt: time },
+    acceptedCreation: { acceptedAt: time, attemptId, projectId: `project-${appId}` },
     registration: {
       attemptId,
       observed: {
@@ -502,8 +502,8 @@ describe("owner-authorized native target configuration", () => {
     expect(resolveConfiguration).toHaveBeenCalledOnce();
     expect(incoming.bodyUsed).toBe(false);
     expect(openControlPlane).toHaveBeenCalledExactlyOnceWith({
-      request: incoming,
       environment: undefined,
+      request: incoming,
       sourceConfiguration: effective,
       workloadPolicy: effective.workloadPolicy,
     });
