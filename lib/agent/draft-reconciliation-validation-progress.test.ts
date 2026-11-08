@@ -128,6 +128,17 @@ const candidateInstallCalls = () =>
 const keyFor = (key: ValidationLogKey) =>
   JSON.stringify([key.sessionId, key.attemptDigest, key.command, key.channel, key.logId]);
 
+const encode = (text: string) =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      const bytes = new TextEncoder().encode(text);
+      const split = bytes.indexOf(0xc3) + 1;
+      controller.enqueue(bytes.slice(0, split));
+      controller.enqueue(bytes.slice(split));
+      controller.close();
+    },
+  });
+
 const candidateLogStore = () => {
   const manifests = new Map<string, ValidationLogReference>();
   const chunks = new Map<string, { content: string; digest: string }>();
@@ -1198,16 +1209,6 @@ describe("draft reconciliation command progress", () => {
     // Larger than both the provider response and durable chunk size, with a split UTF-8 character.
     const stdout = `catalog inspection started\n${"workspace package detail\n".repeat(4000)}catalog inspection finished\n`;
     const stderr = "catalog mismatch: missing café workspace entry\nBearer catalog-secret\n";
-    const encode = (text: string) =>
-      new ReadableStream<Uint8Array>({
-        start(controller) {
-          const bytes = new TextEncoder().encode(text);
-          const split = bytes.indexOf(0xc3) + 1;
-          controller.enqueue(bytes.slice(0, split));
-          controller.enqueue(bytes.slice(split));
-          controller.close();
-        },
-      });
     mocks.spawn.mockResolvedValueOnce({
       stdout: encode(stdout),
       stderr: encode(stderr),

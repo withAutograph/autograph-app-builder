@@ -144,25 +144,26 @@ const assertUndispatchedReplan = (
   }
 };
 
+const target = (plan: NativeTargetOnboardingPlan) => ({
+  appId: plan.appId,
+  project: plan.project,
+  branch: plan.branch,
+  productRoles: plan.productRoles,
+  release: plan.origin.release,
+  appSpecDigest: plan.origin.appSpecDigest,
+  publicSessionId: plan.origin.publicSessionId,
+  database: plan.appDatabase.database,
+  migratorRole: plan.appDatabase.migratorRole,
+  runtimeRole: plan.appDatabase.runtimeRole,
+  cost: plan.cost,
+  retention: plan.retention,
+  conflictPolicy: plan.conflictPolicy,
+});
+
 const assertPlannedScopeSupersession = (
   before: Extract<NativeTargetOnboardingRecord, { stage: "planned" }>,
   after: Extract<NativeTargetOnboardingRecord, { stage: "planned" }>,
 ) => {
-  const target = (plan: NativeTargetOnboardingPlan) => ({
-    appId: plan.appId,
-    project: plan.project,
-    branch: plan.branch,
-    productRoles: plan.productRoles,
-    release: plan.origin.release,
-    appSpecDigest: plan.origin.appSpecDigest,
-    publicSessionId: plan.origin.publicSessionId,
-    database: plan.appDatabase.database,
-    migratorRole: plan.appDatabase.migratorRole,
-    runtimeRole: plan.appDatabase.runtimeRole,
-    cost: plan.cost,
-    retention: plan.retention,
-    conflictPolicy: plan.conflictPolicy,
-  });
   const prior = after.priorPlannedScopes?.at(-1);
   if (
     before.previousAttempts.length !== 0 ||

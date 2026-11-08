@@ -80,6 +80,7 @@ import { createRepositoryProductionRuntimeBinding } from "./repository-productio
 
 const retrySetupAction = "retry-setup";
 const listMembersAction = "list-members";
+const key = (scope: RepositoryProductionScope) => repositoryProductionOperationRef(scope);
 
 /** Production composition opens only the ordinary Builder store and explicit repository profile. */
 const defined = <T>(value: T | undefined): T => {
@@ -175,7 +176,6 @@ export const createRepositoryProductionNativeHandler =
       const accessJournal = createPostgresAppAccessOperationStore(database);
       const builderOrigin = new URL(settings.issuer).origin;
       const records = new Map<string, Awaited<ReturnType<typeof resolve>>>();
-      const key = (scope: RepositoryProductionScope) => repositoryProductionOperationRef(scope);
       const readSession = (owner: RepositoryProductionRequestOwner) =>
         readCanonicalAppOwnerSession(ownerDeps, {
           authority: owner.ownerContext.authority,

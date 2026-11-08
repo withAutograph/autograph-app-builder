@@ -361,6 +361,36 @@ const normalizedPermissions = (value: unknown): PermissionSnapshot => {
 const requestId = (value: string): string =>
   /^[A-Za-z0-9_-]{1,128}$/u.test(value) ? value : sha256(value).slice(0, 32);
 
+const reconciliationMatchesDraft = (
+  proposal: ExistingDraftReconciliationProposal,
+  draft: ExistingDraftObservation,
+): boolean => {
+  if (
+    proposal.repositoryId !== draft.repositoryId ||
+    proposal.owner !== draft.owner ||
+    proposal.name !== draft.name ||
+    proposal.pullRequestNumber !== draft.number
+  ) {
+    return false;
+  }
+  if (
+    proposal.pullRequestId !== draft.pullRequestId ||
+    draft.headRepositoryId !== proposal.repositoryId ||
+    draft.baseRepositoryId !== proposal.repositoryId ||
+    !draft.draft
+  ) {
+    return false;
+  }
+  if (
+    draft.state !== "open" ||
+    draft.headBranch !== proposal.branchName ||
+    draft.baseBranch !== proposal.baseBranch
+  ) {
+    return false;
+  }
+  return draft.verifiedBuilderOrigin?.marker === proposal.originMarker;
+};
+
 // Keep provider helpers scoped to the provider factory's contract.
 // oxlint-disable-next-line unicorn/consistent-function-scoping
 export const createGitHubAppHttpProvider = (input: {
@@ -884,36 +914,6 @@ export const createGitHubAppHttpProvider = (input: {
     pullRequests: "write",
     variables: "read",
     workflows: "write",
-  };
-
-  const reconciliationMatchesDraft = (
-    proposal: ExistingDraftReconciliationProposal,
-    draft: ExistingDraftObservation,
-  ): boolean => {
-    if (
-      proposal.repositoryId !== draft.repositoryId ||
-      proposal.owner !== draft.owner ||
-      proposal.name !== draft.name ||
-      proposal.pullRequestNumber !== draft.number
-    ) {
-      return false;
-    }
-    if (
-      proposal.pullRequestId !== draft.pullRequestId ||
-      draft.headRepositoryId !== proposal.repositoryId ||
-      draft.baseRepositoryId !== proposal.repositoryId ||
-      !draft.draft
-    ) {
-      return false;
-    }
-    if (
-      draft.state !== "open" ||
-      draft.headBranch !== proposal.branchName ||
-      draft.baseBranch !== proposal.baseBranch
-    ) {
-      return false;
-    }
-    return draft.verifiedBuilderOrigin?.marker === proposal.originMarker;
   };
 
   const exactReconciliationHead = async (

@@ -342,6 +342,15 @@ const unchangedPollFixture = async () => {
   return { ...f, events, metadata, observation, observe, saved };
 };
 
+const retainedFixtureEvents = async function* retainedFixtureEvents() {
+  yield {
+    index: 0,
+    text: "retained",
+    turnId: "turn_1",
+    type: "assistant_message" as const,
+  };
+};
+
 describe("unchanged paged observation reuse", () => {
   it.each(["terminal", "live"] as const)(
     "preserves only canonical terminal failure when the same owner has an unchanged working checkpoint (resumability=%s)",
@@ -1966,14 +1975,7 @@ describe("send preflight dispatch classification", () => {
         throw new Error("Expected the owned durable session.");
       }
       const saved = await f.observeSessionPaged({
-        events: (async function* retainedEvents() {
-          yield {
-            index: 0,
-            text: "retained",
-            turnId: "turn_1",
-            type: "assistant_message" as const,
-          };
-        })(),
+        events: retainedFixtureEvents(),
         expectedCheckpointDigest: initial.checkpointDigest,
         metadata: {
           capturedAtEpochMs: 1000,

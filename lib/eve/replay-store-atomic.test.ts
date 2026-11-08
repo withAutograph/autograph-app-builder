@@ -12,6 +12,8 @@ import {
   nativeTargetRequiredProjectProtection,
 } from "../provisioning/native-target-onboarding-contract";
 
+const emptyReplayEvents = async function* emptyReplayEvents() {};
+
 const principal = {
   audience: "builder",
   issuer: "https://identity.example.test",
@@ -215,7 +217,7 @@ const fixture = () => {
       replayBinding,
       verifiedReplayReceipts: [receipt],
       metadata,
-      events: (async function* events() {})(),
+      events: emptyReplayEvents(),
       stage: session.stage,
       resumability: session.resumability,
       nowEpochMs: 2000,

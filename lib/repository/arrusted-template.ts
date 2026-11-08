@@ -85,6 +85,10 @@ try {
 } catch { process.exit(2); }
 `;
 const quoteAcquisitionProgram = (text: string) => `'${text.replaceAll("'", "'\"'\"'")}'`;
+const fail = () =>
+  new Error(
+    "Fresh canonical source must match the observed origin/main commit and tree. Preserve this checkout and select a new source acquisition; no saved receipt was changed.",
+  );
 const assertNewCanonicalMain = async (
   sandbox: SandboxSession,
   snapshot: { sourceSha: string; sourceTree: string },
@@ -93,10 +97,6 @@ const assertNewCanonicalMain = async (
     command: `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_NO_REPLACE_OBJECTS=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 node -e ${quoteAcquisitionProgram(canonicalMainAcquisitionProofProgram())}`,
     workingDirectory: "/workspace",
   });
-  const fail = () =>
-    new Error(
-      "Fresh canonical source must match the observed origin/main commit and tree. Preserve this checkout and select a new source acquisition; no saved receipt was changed.",
-    );
   if (result.exitCode !== 0) throw fail();
   let raw: unknown;
   try {

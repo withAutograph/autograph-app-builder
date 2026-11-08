@@ -34,6 +34,8 @@ const SINGLE_PROJECT_RESOURCES_PREPARATION = "single-project-resources-v1";
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const fail = () => new HostedOperatorError("reconciliation_required");
+const completed = (record: HostedRuntimeJournalRecord) =>
+  record.retainedAuth ?? retainedOperatorAuthFromJournal(record);
 const recordSchema = z.strictObject({
   kind: z.literal(OWNED_APP_RESOURCE_SOURCE_KIND),
   scope: z.record(z.string(), z.unknown()),
@@ -110,8 +112,6 @@ export const createOwnedAppResourceCustody = (deps: {
     }
     return { identity, reference: record.reference };
   };
-  const completed = (record: HostedRuntimeJournalRecord) =>
-    record.retainedAuth ?? retainedOperatorAuthFromJournal(record);
   const sourceInput = async (
     context: HostedOperatorContext,
     plan: HostedOperatorPlan,

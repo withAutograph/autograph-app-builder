@@ -34,6 +34,8 @@ import wire from "./fixtures/tenant-export-wire-v1.json";
 import type { ExportPlanningStage } from "./hosted-operator-consent-diagnostic";
 import { HostedOperatorError, operatorOwnerContextSchema } from "./hosted-operator-contract";
 
+const diagnosticRequest = () => new Request("https://operator.test/v1/runtime");
+
 const fixture = tenantExportWireFixtureSchema.parse(wire);
 const authority = {
   issuer: "https://builder.test/api/auth",
@@ -743,7 +745,6 @@ describe("export planning failure boundaries", () => {
     idempotencyKey: "diagnostic-request",
     ownerContext,
   };
-  const request = () => new Request("https://operator.test/v1/runtime");
 
   it.each([
     "dispatcher_workload_verification",
@@ -796,7 +797,7 @@ describe("export planning failure boundaries", () => {
         authorize: stage === "dispatcher_owner_authorization" ? reject : async () => context,
         authorizeRead: async (_request, selected) => selected,
       });
-      const outcome = dispatch(request(), input);
+      const outcome = dispatch(diagnosticRequest(), input);
       await (stage === "plan_reservation_match"
         ? expect(outcome).rejects.toThrow("resource_mismatch")
         : expect(outcome).rejects.toBe(failure));
@@ -853,7 +854,7 @@ describe("export planning failure boundaries", () => {
         authorizeRead: async (_request, selected) => selected,
       });
       await expect(
-        dispatch(request(), {
+        dispatch(diagnosticRequest(), {
           action: "export-status",
           ownerContext,
           exportId: "40000000-0000-4000-8000-000000000004",
@@ -881,14 +882,14 @@ describe("export planning failure boundaries", () => {
       authorizeRead: async (_request, selected) => selected,
     });
     try {
-      await expect(dispatch(request(), input)).rejects.toBe(failure);
+      await expect(dispatch(diagnosticRequest(), input)).rejects.toBe(failure);
       const hostileInput = {
         ...input,
         get ownerContext(): typeof ownerContext {
           throw new Error("invalid diagnostic context");
         },
       };
-      await expect(dispatch(request(), hostileInput)).rejects.toBe(failure);
+      await expect(dispatch(diagnosticRequest(), hostileInput)).rejects.toBe(failure);
     } finally {
       consoleSink.mockRestore();
     }

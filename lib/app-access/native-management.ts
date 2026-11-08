@@ -68,6 +68,13 @@ const operationId = (requestId: string, step: string) => {
   const hex = createHash("sha256").update(`${requestId}:${step}`).digest("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 };
+const readEffect = (assertCurrent: () => Promise<void>): AppAccessEffectContext => ({
+  operationRef: randomUUID(),
+  createdAt: new Date().toISOString(),
+  assertCurrent,
+  checkpoint: () => Promise.resolve(),
+  readCheckpoints: () => [],
+});
 
 /** Concrete access adapter over the same pinned Auth and generated-data workers as setup. */
 export const createRepositoryProductionManagement = (
@@ -183,13 +190,6 @@ export const createRepositoryProductionManagement = (
     const result = await deps.workers(scope).inspectAppAccess(context, { actorId, roles, active });
     return result.state === "not-applied" ? ("absent" as const) : result.state;
   };
-  const readEffect = (assertCurrent: () => Promise<void>): AppAccessEffectContext => ({
-    operationRef: randomUUID(),
-    createdAt: new Date().toISOString(),
-    assertCurrent,
-    checkpoint: () => Promise.resolve(),
-    readCheckpoints: () => [],
-  });
   const cancelMemberInvitations = async (
     scope: RepositoryProductionScope,
     member: { id: string; email: string },

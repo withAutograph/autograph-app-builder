@@ -90,6 +90,12 @@ import { appDescriptionSchema } from "../repository/app-description";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy only on the independent verified identity boundary.
 import * as realmIdentity from "./hosted-operator-auth-identity";
 
+const independentFixtureReceipt = (input: HostedOperatorEffectContext) => ({
+  effectId: input.effect.id,
+  observedAt: new Date().toISOString(),
+  resourceVersion: "independent-fixture-readback",
+});
+
 const request = () =>
   new Request("https://operator.example/v1/runtime", {
     body: "{}",
@@ -2956,11 +2962,6 @@ describe("existing populated Auth workflow planning", () => {
     let approved = false;
     let fence = 1;
     const executed: string[] = [];
-    const receipt = (input: HostedOperatorEffectContext) => ({
-      effectId: input.effect.id,
-      observedAt: new Date().toISOString(),
-      resourceVersion: "independent-fixture-readback",
-    });
     const store: ProtectedHostedOperatorDependencies["store"] = {
       read: async () => structuredClone(f.row),
       reserve: async () => structuredClone(f.row),
@@ -3022,7 +3023,7 @@ describe("existing populated Auth workflow planning", () => {
       reconcile: async (input) => {
         await input.assertCurrent();
         return ["resources", "install"].includes(input.effect.kind)
-          ? { status: "applied", receipt: receipt(input) }
+          ? { status: "applied", receipt: independentFixtureReceipt(input) }
           : { status: "absent" };
       },
       executeEffect: async (input) => {
@@ -3044,7 +3045,7 @@ describe("existing populated Auth workflow planning", () => {
             "new-gateway",
           );
         }
-        return receipt(input);
+        return independentFixtureReceipt(input);
       },
       verifyAuthReadiness: async (input) => {
         await input.assertCurrent();

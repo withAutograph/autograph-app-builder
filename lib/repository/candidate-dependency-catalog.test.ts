@@ -104,6 +104,14 @@ const fixture = (peerVersion = "1.2.3") => {
   return { root, run: normalize, plan: run, apply, read };
 };
 
+const stream = (bytes: Uint8Array) =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    },
+  });
+
 describe("candidate-bound same-version dependency catalog", () => {
   it("normalizes all declared consumers, preserves unrelated metadata, generates and stages the lock", () => {
     const f = fixture();
@@ -276,13 +284,6 @@ describe("candidate-bound same-version dependency catalog", () => {
             PATH: path.dirname(process.execPath) + path.delimiter + process.env.PATH,
           },
         });
-        const stream = (bytes: Uint8Array) =>
-          new ReadableStream<Uint8Array>({
-            start(controller) {
-              controller.enqueue(bytes);
-              controller.close();
-            },
-          });
         return {
           stdout: stream(result.stdout),
           stderr: stream(result.stderr),

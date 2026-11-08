@@ -92,6 +92,12 @@ describe("verified GitHub fetch recovery", () => {
   });
 });
 
+const appendedAdvisory = (error: Error, original: string) => {
+  expect(error.message.startsWith(original)).toBe(true);
+  const suffix = error.message.slice(original.length);
+  return z.json().parse(JSON.parse(suffix.slice(suffix.indexOf("{"))));
+};
+
 describe("preparation failure cleanup advisory", () => {
   const advisory: DraftWorktreeRetirementAdvisory = {
     status: "complete",
@@ -99,11 +105,6 @@ describe("preparation failure cleanup advisory", () => {
     retained: 2,
     reasons: { referenced: 1, private_state: 1 },
     capacity: { after: { bytes: { total: "4096", available: "0" } } },
-  };
-  const appendedAdvisory = (error: Error, original: string) => {
-    expect(error.message.startsWith(original)).toBe(true);
-    const suffix = error.message.slice(original.length);
-    return z.json().parse(JSON.parse(suffix.slice(suffix.indexOf("{"))));
   };
 
   it("preserves the actual command error identity and cause while adding sanitized maintenance evidence", async () => {

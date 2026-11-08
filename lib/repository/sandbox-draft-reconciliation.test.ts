@@ -214,6 +214,28 @@ const advanceFixtureBase = (
   return git(checkout, "rev-parse", "HEAD");
 };
 
+const executeWorkspaceTool = (cwd: string) =>
+  execFileSync(path.join(cwd, "node_modules/.bin/workspace-probe"), [], {
+    cwd,
+    encoding: "utf-8",
+  }).trim();
+const executeTool = (cwd: string) =>
+  execFileSync(path.join(cwd, "node_modules/.bin/probe"), [], {
+    cwd,
+    encoding: "utf-8",
+  }).trim();
+
+const importValue = (cwd: string) =>
+  execFileSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      'import { value } from "@fixture/probe"; console.log(value);',
+    ],
+    { cwd, encoding: "utf-8" },
+  ).trim();
+
 describe("isolated draft reconciliation", () => {
   const catalogCandidate = async () => {
     const f = fixture(false, true);
@@ -382,16 +404,6 @@ describe("isolated draft reconciliation", () => {
       path.join(checkout, "packages/probe/bin.cjs"),
       path.join(closure, ".bin/workspace-probe"),
     );
-    const executeWorkspaceTool = (cwd: string) =>
-      execFileSync(path.join(cwd, "node_modules/.bin/workspace-probe"), [], {
-        cwd,
-        encoding: "utf-8",
-      }).trim();
-    const executeTool = (cwd: string) =>
-      execFileSync(path.join(cwd, "node_modules/.bin/probe"), [], {
-        cwd,
-        encoding: "utf-8",
-      }).trim();
     mkdirSync(externalPackage, { recursive: true });
     mkdirSync(path.join(closure, "@fixture"), { recursive: true });
     writeFileSync(
@@ -408,16 +420,6 @@ describe("isolated draft reconciliation", () => {
     const installedMode = lstatSync(installedSource).mode;
     symlinkSync(path.join(checkout, "packages/probe"), path.join(closure, "@fixture/probe"));
     symlinkSync(closure, path.join(checkout, "node_modules"));
-    const importValue = (cwd: string) =>
-      execFileSync(
-        process.execPath,
-        [
-          "--input-type=module",
-          "--eval",
-          'import { value } from "@fixture/probe"; console.log(value);',
-        ],
-        { cwd, encoding: "utf-8" },
-      ).trim();
     expect(importValue(checkout)).toBe("initial:reused-external-config");
     expect(executeTool(checkout)).toBe("external-cached-tool");
     expect(executeWorkspaceTool(checkout)).toBe("initial-workspace-tool");

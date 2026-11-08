@@ -34,6 +34,20 @@ import {
 import { runAppBrowserTests } from "../agent/app-browser-test-runner";
 import { createContinuityCapabilityCustody } from "./hosted-operator-continuity-custody";
 
+const listen = async (server: Server) => {
+  // oxlint-disable-next-line promise/avoid-new -- Adapt the owned loopback listener event.
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    // oxlint-disable-next-line sonarjs/no-nested-functions -- Listener completion owns the corresponding error callback cleanup.
+    server.listen(0, "127.0.0.1", () => {
+      server.removeListener("error", reject);
+      resolve();
+    });
+  });
+  const address = z.object({ port: z.number() }).parse(server.address());
+  return address.port;
+};
+
 export const authority = {
   issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
@@ -390,19 +404,6 @@ export const installManagedAcceptanceSuite = (
             fence: current.fence,
             sandboxId: current.sandboxId,
             providerSessionId: current.providerSessionId,
-          };
-          const listen = async (server: Server) => {
-            // oxlint-disable-next-line promise/avoid-new -- Adapt the owned loopback listener event.
-            await new Promise<void>((resolve, reject) => {
-              server.once("error", reject);
-              // oxlint-disable-next-line sonarjs/no-nested-functions -- Listener completion owns the corresponding error callback cleanup.
-              server.listen(0, "127.0.0.1", () => {
-                server.removeListener("error", reject);
-                resolve();
-              });
-            });
-            const address = z.object({ port: z.number() }).parse(server.address());
-            return address.port;
           };
           const reservation = createServer();
           const appPort = await listen(reservation);

@@ -19,6 +19,9 @@ import {
 import { privateApplyDenialEvents } from "../eve/private-apply-denial.test-fixture";
 import { observePrivateApplyDenials } from "../eve/private-apply-denial-evidence";
 
+const observe = (values: ReturnType<typeof privateApplyDenialEvents>) =>
+  observePrivateApplyDenials({ sessionId: "owned", calls: ["denied-call"], events: values });
+
 const scope = {
   appId: "app",
   appSpecDigest: "spec",
@@ -106,8 +109,6 @@ describe("genuine private Build denial lifecycle", () => {
   });
   it("history catch-up rejects incomplete, contradictory and reordered outcomes", () => {
     const events = privateApplyDenialEvents();
-    const observe = (values: typeof events) =>
-      observePrivateApplyDenials({ sessionId: "owned", calls: ["denied-call"], events: values });
     expect(observe(events)).toHaveLength(1);
     expect(observe(events.filter((e) => e.type !== "input.resolved"))).toEqual([]);
     expect(observe(events.toReversed())).toEqual([]);

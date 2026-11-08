@@ -290,6 +290,8 @@ describe("connected GitHub workspace inspection", () => {
   });
 });
 
+const digest = (value: string) => createHash("sha256").update(value).digest("hex");
+
 const legacySourceFixture = () => {
   const receipt = inspectExistingRepositorySnapshotReceipt({
     contents: {},
@@ -299,7 +301,6 @@ const legacySourceFixture = () => {
     sourceSha: "a".repeat(40),
     sourceTree: "b".repeat(40),
   });
-  const digest = (value: string) => createHash("sha256").update(value).digest("hex");
   const manifest = [
     { mode: "100644", objectId: "c".repeat(40), path: "app.txt", sha256: digest("original app") },
   ];
