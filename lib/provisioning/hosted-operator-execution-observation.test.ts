@@ -181,7 +181,7 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
         physicalLeaseReleased = true;
       }
     },
-    reconcile: () => Promise.resolve({ status: "absent" }),
+    reconcile: async () => ({ status: "absent" }),
     executeEffect,
     verify: () =>
       Promise.resolve({
@@ -192,7 +192,7 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
         manifestSha256: plan.release.sha256,
         authenticatedBehavior: "unassessed",
       }),
-    bindings: () => Promise.resolve({}),
+    bindings: async () => ({}),
   };
   const handler = createProtectedHostedOperatorHandler(deps);
   const request = (

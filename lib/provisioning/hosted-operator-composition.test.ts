@@ -1519,10 +1519,10 @@ describe("participant plan resolution", () => {
       if (effect === undefined) {
         throw new Error("Fixture signup policy effect missing");
       }
-      const full = vi.fn<HostedOperatorEffectContext["assertCurrent"]>(() => Promise.resolve());
-      const observation = vi.fn<
-        NonNullable<HostedOperatorEffectContext["assertCurrentObservation"]>
-      >(() => Promise.resolve());
+      const full = vi.fn<HostedOperatorEffectContext["assertCurrent"]>().mockResolvedValue();
+      const observation = vi
+        .fn<NonNullable<HostedOperatorEffectContext["assertCurrentObservation"]>>()
+        .mockResolvedValue();
       const input: HostedOperatorWorkerEffectContext = {
         ...context,
         plan,
@@ -1533,7 +1533,7 @@ describe("participant plan resolution", () => {
         workerCheckpoints: [],
         assertCurrent: full,
         assertCurrentObservation: observation,
-        checkpoint: vi.fn<HostedOperatorWorkerEffectContext["checkpoint"]>(() => Promise.resolve()),
+        checkpoint: vi.fn<HostedOperatorWorkerEffectContext["checkpoint"]>().mockResolvedValue(),
         bindWorkerContext: vi
           .fn<HostedOperatorWorkerEffectContext["bindWorkerContext"]>()
           .mockResolvedValue(() => Promise.resolve()),
@@ -1568,7 +1568,9 @@ describe("participant plan resolution", () => {
         assertPlanningAuthorized: f.ports.assertPlanningAuthorized,
         readNormalActorPreparation: f.ports.readNormalActorPreparation,
         readNormalActorOrganizationProofs: f.ports.readNormalActorOrganizationProofs,
-        assertAuthorized: vi.fn(() => Promise.resolve()),
+        assertAuthorized: vi
+          .fn<ProtectedHostedOperatorDependencies["assertAuthorized"]>()
+          .mockResolvedValue(),
         readResourceBindings: vi.fn(() =>
           Promise.resolve({
             authDatabase: { migrationUrl: "private-auth", runtimeUrl: "private-auth-runtime" },
@@ -1594,7 +1596,7 @@ describe("participant plan resolution", () => {
       expect(base).toHaveBeenCalledTimes(2);
       expect(unused).not.toHaveBeenCalled();
       base
-        .mockImplementationOnce(() => Promise.resolve())
+        .mockResolvedValueOnce()
         .mockRejectedValueOnce(new HostedOperatorError("authorization_required"));
       await expect(guard()).rejects.toMatchObject({ code: "authorization_required" });
       const organization = f.state.organizations[0];

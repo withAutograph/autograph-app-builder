@@ -172,7 +172,7 @@ const fixture = () => {
     endpoint: "https://operator.example",
     ownerContext,
     sessionId: selection.sessionId,
-    token: () => Promise.resolve("synthetic-private"),
+    token: async () => "synthetic-private",
     fetch: (_url, init) => {
       const body = operatorRequestSchema.parse(JSON.parse(z.string().parse(init?.body)));
       calls.push(body.action);
@@ -326,7 +326,7 @@ describe("automatic observation of one approved execution", () => {
         },
         register: () => Promise.reject(new Error("No identity")),
         acknowledge: () => Promise.reject(new Error("No identity")),
-        sleepUntil: () => Promise.resolve(),
+        sleepUntil: async () => {},
         execution: {
           snapshot: f.snapshot,
           read: f.read,

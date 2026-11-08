@@ -44,7 +44,7 @@ const setup = () => {
     cmdId: "command-1",
     exitCode: null as number | null,
     kill: vi.fn(async () => {}),
-    wait: vi.fn(() => Promise.resolve()),
+    wait: vi.fn(async () => {}),
   };
   const provider = {
     currentSession: () => ({ sessionId: "provider-1" }),
@@ -430,7 +430,7 @@ describe("preview command termination", () => {
     const exited = Promise.withResolvers<null>();
     const command = {
       exitCode: null,
-      kill: vi.fn(() => Promise.resolve()),
+      kill: vi.fn(async () => {}),
       wait: vi.fn(() => exited.promise),
     };
     let settled = false;

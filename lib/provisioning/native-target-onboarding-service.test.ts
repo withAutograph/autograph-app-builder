@@ -194,12 +194,11 @@ const fixture = (workloadAuthorized = true, selectedPlan = plan) => {
       );
     },
     createProject,
-    observeProject: () =>
-      Promise.resolve({
-        status: "uncertain" as const,
-        projectId: "project-id",
-        reason: "provider_unavailable" as const,
-      }),
+    observeProject: async () => ({
+      status: "uncertain" as const,
+      projectId: "project-id",
+      reason: "provider_unavailable" as const,
+    }),
   };
   const readCapturedRelease = vi.spyOn(dependencies, "readCapturedRelease");
   const resolvePlan = vi.spyOn(dependencies, "resolvePlan");
@@ -320,12 +319,10 @@ describe("protected native target onboarding service", () => {
 
   it("does not inspect provider authorization during new planning or approval-history reads", async () => {
     const f = fixture();
-    const inspect = vi.fn(() =>
-      Promise.resolve({
-        status: "unavailable" as const,
-        failure: "request_failed" as const,
-      }),
-    );
+    const inspect = vi.fn(async () => ({
+      status: "unavailable" as const,
+      failure: "request_failed" as const,
+    }));
     f.dependencies.inspectProviderAuthorization = inspect;
     const planned = await f.planOnce();
     await f.send({
@@ -817,7 +814,7 @@ describe("retired attempt preparation with immutable initial approval", () => {
       const registry = createNativeTargetOnboardingRegistry({
         store: f.store,
         authorize: () => f.authorize(),
-        assertPlanOrigin: () => Promise.resolve(),
+        assertPlanOrigin: async () => {},
         readApproval: async (_owner, record) =>
           await readActualApproval(await f.authorize(), record, "old-call", {
             authorization: "Bearer verified-builder-token",

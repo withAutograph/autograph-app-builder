@@ -233,6 +233,12 @@ const canonicalAuthority = (authority: HostedTenantAuthority) =>
 
 const authorityDigest = (authority: HostedTenantAuthority) => sha256(canonicalAuthority(authority));
 
+const membershipInactive = "membership-inactive";
+const stateFormat = "state-format";
+const stateSchema = "state-schema";
+const invalidCallbackReason = "callback-shape";
+const callbackStateValidation = "callback-state-validation";
+const membershipStateConsumption = "membership-state-consumption";
 const invalidResponse = "invalid-response";
 const invalidToken = "invalid-token";
 
@@ -341,14 +347,14 @@ const verifyState = (input: {
   const diagnostic = { stateDigest: sha256(input.state) };
   if (input.state.length > 2048) {
     throw new GitHubStateValidationError({
-      substage: "state-format",
+      substage: stateFormat,
       ...diagnostic,
     });
   }
   const segments = input.state.split(".");
   if (segments.length !== 2) {
     throw new GitHubStateValidationError({
-      substage: "state-format",
+      substage: stateFormat,
       ...diagnostic,
     });
   }
@@ -362,7 +368,7 @@ const verifyState = (input: {
     provided = Buffer.from(providedSignature, "base64url");
   } catch {
     throw new GitHubStateValidationError({
-      substage: "state-format",
+      substage: stateFormat,
       ...diagnostic,
     });
   }
@@ -380,7 +386,7 @@ const verifyState = (input: {
     decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
   } catch {
     throw new GitHubStateValidationError({
-      substage: "state-schema",
+      substage: stateSchema,
       ...diagnostic,
     });
   }
@@ -389,7 +395,7 @@ const verifyState = (input: {
     parsed = statePayloadSchema.parse(decoded);
   } catch {
     throw new GitHubStateValidationError({
-      substage: "state-schema",
+      substage: stateSchema,
       ...diagnostic,
     });
   }
@@ -434,7 +440,7 @@ const callbackInput = (url: string) => {
   }
   const stateResult = z.string().min(1).max(2048).safeParse(query.get("state"));
   if (!stateResult.success) {
-    throw new GitHubCallbackParseError("state-format");
+    throw new GitHubCallbackParseError(stateFormat);
   }
   const state = stateResult.data;
   const code = query.get("code");
@@ -446,7 +452,7 @@ const callbackInput = (url: string) => {
       query.has("installation_id") ||
       query.has("setup_action")
     ) {
-      throw new GitHubCallbackParseError("callback-shape");
+      throw new GitHubCallbackParseError(invalidCallbackReason);
     }
     return {
       error: ["access_denied", "temporarily_unavailable", "server_error"].includes(oauthError)
@@ -464,7 +470,7 @@ const callbackInput = (url: string) => {
       (query.has("installation_id") &&
         (query.getAll("installation_id").length !== 1 || query.getAll("setup_action").length !== 1))
     ) {
-      throw new GitHubCallbackParseError("callback-shape");
+      throw new GitHubCallbackParseError(invalidCallbackReason);
     }
     if (code.length === 0) {
       throw new GitHubCallbackParseError("code-format");
@@ -486,7 +492,7 @@ const callbackInput = (url: string) => {
     query.getAll("installation_id").length !== 1 ||
     query.getAll("setup_action").length !== 1
   ) {
-    throw new GitHubCallbackParseError("callback-shape");
+    throw new GitHubCallbackParseError(invalidCallbackReason);
   }
   return {
     installationId: decimalSchema.parse(query.get("installation_id")),
@@ -859,7 +865,7 @@ export const createGitHubAppInstallationAuthorization = (input: {
     try {
       const authority = hostedTenantAuthoritySchema.parse(authorityInput);
       if (!(await input.membership.isActiveMember(authority))) {
-        throw new Error("membership-inactive");
+        throw new Error(membershipInactive);
       }
       const issuedAt = now();
       const state = signedState({
@@ -909,7 +915,7 @@ export const createGitHubAppInstallationAuthorization = (input: {
       try {
         const authority = hostedTenantAuthoritySchema.parse(authorityInput);
         if (!(await input.membership.isActiveMember(authority))) {
-          throw new Error("membership-inactive");
+          throw new Error(membershipInactive);
         }
         return await beginUserAuthorization({
           authority,
@@ -938,7 +944,7 @@ export const createGitHubAppInstallationAuthorization = (input: {
           authority = hostedTenantAuthoritySchema.parse(authorityInput);
         } catch {
           throw new GitHubInstallationAuthorizationError(
-            "callback-state-validation",
+            callbackStateValidation,
             undefined,
             undefined,
             callbackDiagnostic,
@@ -949,7 +955,7 @@ export const createGitHubAppInstallationAuthorization = (input: {
           callback = callbackInput(inputUrl);
         } catch (error) {
           throw new GitHubInstallationAuthorizationError(
-            "callback-state-validation",
+            callbackStateValidation,
             undefined,
             undefined,
             callbackDiagnostic,
@@ -970,13 +976,13 @@ export const createGitHubAppInstallationAuthorization = (input: {
           });
         } catch (error) {
           throw new GitHubInstallationAuthorizationError(
-            "callback-state-validation",
+            callbackStateValidation,
             undefined,
             undefined,
             callbackDiagnostic,
             error instanceof GitHubStateValidationError
               ? error.diagnostic
-              : { substage: "state-schema" },
+              : { substage: stateSchema },
           );
         }
         const current = now();
@@ -984,10 +990,10 @@ export const createGitHubAppInstallationAuthorization = (input: {
         try {
           activeMember = await input.membership.isActiveMember(authority);
         } catch {
-          throw new GitHubInstallationAuthorizationError("membership-state-consumption");
+          throw new GitHubInstallationAuthorizationError(membershipStateConsumption);
         }
         if (!activeMember) {
-          throw new GitHubInstallationAuthorizationError("membership-state-consumption");
+          throw new GitHubInstallationAuthorizationError(membershipStateConsumption);
         }
         let consumed: boolean;
         try {
@@ -998,11 +1004,11 @@ export const createGitHubAppInstallationAuthorization = (input: {
             stateDigest: state.stateDigest,
           });
         } catch {
-          throw new GitHubInstallationAuthorizationError("membership-state-consumption");
+          throw new GitHubInstallationAuthorizationError(membershipStateConsumption);
         }
         if (!consumed) {
           throw new GitHubInstallationAuthorizationError(
-            "membership-state-consumption",
+            membershipStateConsumption,
             undefined,
             state.returnState,
           );
@@ -1152,10 +1158,10 @@ export const createGitHubAppInstallationAuthorization = (input: {
         }
         try {
           if (!(await input.membership.isActiveMember(authority))) {
-            throw new Error("membership-inactive");
+            throw new Error(membershipInactive);
           }
         } catch {
-          throw new GitHubInstallationAuthorizationError("membership-state-consumption");
+          throw new GitHubInstallationAuthorizationError(membershipStateConsumption);
         }
 
         const appliedAt = new Date(now());
