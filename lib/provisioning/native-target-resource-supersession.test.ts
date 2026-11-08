@@ -128,13 +128,6 @@ const fixture = () => {
   });
   const read = () => store.read({ authority, appId: "requests-app" });
   return {
-    registry,
-    store,
-    read,
-    assertPlanOrigin,
-    setOwner: (next: NativeTargetCurrentOwner) => {
-      current = next;
-    },
     approve: (
       candidate: NativeTargetOnboardingPlan,
       outcome: "approved" | "cancelled" = "approved",
@@ -149,6 +142,13 @@ const fixture = () => {
         observedAt: time,
       };
     },
+    assertPlanOrigin,
+    read,
+    registry,
+    setOwner: (next: NativeTargetCurrentOwner) => {
+      current = next;
+    },
+    store,
   };
 };
 const rescope = (

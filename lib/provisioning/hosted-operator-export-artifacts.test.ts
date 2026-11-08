@@ -90,7 +90,7 @@ const dataset = (contents: Uint8Array[], worker: TenantExportWorkerInput = wire.
     readManifest: vi.fn(async () => await Promise.resolve(manifestBytes)),
     readMember,
   };
-  return { manifest, manifestBytes, source, readMember };
+  return { manifest, manifestBytes, readMember, source };
 };
 const artifactStorageKey = (owned: OperatorArtifactContext, ref: string, index: number) =>
   JSON.stringify([owned, ref, index]);
@@ -407,7 +407,7 @@ const completedFixture = async () => {
   const request = new Request(
     `https://builder.example/api/hosted-operator/exports/${worker.exportId}`,
   );
-  return { ...f, data, worker, record, reader, request, authenticate, readCompletion };
+  return { ...f, authenticate, data, readCompletion, reader, record, request, worker };
 };
 
 test("owner downloads only the completed private index, exact manifest and named data", async () => {

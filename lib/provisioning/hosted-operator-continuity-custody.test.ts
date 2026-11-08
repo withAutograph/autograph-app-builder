@@ -130,70 +130,70 @@ const capabilities = {
 };
 const changedAuthority: { label: string; change: (record: ContinuityRecord) => void }[] = [
   {
-    label: "owner",
     change: (record) => {
       record.plan.authority.ownerUserId = "foreign-owner";
     },
+    label: "owner",
   },
   {
-    label: "workspace",
     change: (record) => {
       record.plan.authority.workspaceId = "foreign-workspace";
     },
+    label: "workspace",
   },
   {
-    label: "issuer",
     change: (record) => {
       record.plan.authority.issuer = "https://foreign.example/auth";
     },
+    label: "issuer",
   },
   {
-    label: "audience",
     change: (record) => {
       record.plan.authority.audience = "https://foreign.example/mcp";
     },
+    label: "audience",
   },
   {
-    label: "session",
     change: (record) => {
       record.plan.target.sessionId = "foreign-session";
     },
+    label: "session",
   },
   {
-    label: "app",
     change: (record) => {
       record.plan.target.appId = "other-app";
     },
+    label: "app",
   },
   {
-    label: "intent",
     change: (record) => {
       record.requestId = "40000000-0000-4000-8000-000000000004";
     },
+    label: "intent",
   },
   {
-    label: "attempt",
     change: (record) => {
       record.attemptId = "50000000-0000-4000-8000-000000000005";
     },
+    label: "attempt",
   },
   {
-    label: "fence",
     change: (record) => {
       record.fence += 1;
     },
+    label: "fence",
   },
   {
-    label: "setup",
     change: (record) => {
       record.plan.originalSetup.operationRef = "60000000-0000-4000-8000-000000000006";
     },
+    label: "setup",
   },
   {
-    label: "plan",
     change: (record) => {
       record.planDigest = "e".repeat(64);
     },
+    label: "plan",
   },
 ];
 describe("managed continuity capability custody", () => {

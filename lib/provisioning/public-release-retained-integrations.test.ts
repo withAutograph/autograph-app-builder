@@ -189,27 +189,27 @@ const fixture = () => {
     readProviderBindings: vi.fn(async () => structuredClone(provider)),
   };
   const reader = createRetainedOptionalIntegrationReader({
-    publicReleases: publicStore,
     capabilities: capStore,
-    readPublicApproval: async ({ plan, owner, callId }) => {
-      expect(owner.sessionId).toBe(capPlan.selection.sessionId);
-      return await publicApproval(plan, callId);
-    },
+    publicReleases: publicStore,
     readCapabilityApproval: async ({ plan, owner, callId }) => {
       expect(owner.sessionId).toBe(capPlan.selection.sessionId);
       return await capApproval(plan, callId);
     },
+    readPublicApproval: async ({ plan, owner, callId }) => {
+      expect(owner.sessionId).toBe(capPlan.selection.sessionId);
+      return await publicApproval(plan, callId);
+    },
   });
   return {
+    cap,
+    capApproval,
+    capStore,
     input,
     provider,
-    source,
-    cap,
-    publicStore,
-    capStore,
     publicApproval,
-    capApproval,
+    publicStore,
     reader,
+    source,
   };
 };
 test("new-session Auth bootstrap retains only exact prior owned approved bindings without mutation", async () => {

@@ -643,10 +643,10 @@ describe("exact native Gateway sender", () => {
     );
     expect(verify).toHaveBeenCalledWith("signed.native.token", {
       audience: nativeSender.audience,
+      environment: nativeSender.environment,
       issuer: nativeSender.issuer,
       ownerId: nativeSender.ownerId,
       projectId: nativeSender.projectId,
-      environment: nativeSender.environment,
       subject: nativeSender.subject,
     });
   });

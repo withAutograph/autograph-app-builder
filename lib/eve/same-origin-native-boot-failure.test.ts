@@ -240,13 +240,13 @@ describe("verified native recovery boot failure", () => {
     const recovered = await service.start(resume);
     expect(recovered.sessionId).not.toBe(child.sessionId);
     expect(await store.getSession(principal, recovered.sessionId)).toMatchObject({
-      parentSessionId: child.sessionId,
       nativeRecoveryBinding: {
         logicalSessionId: "run_original",
         originalAuthoritySessionId: original.sessionId,
         provenance: { kind: "validated-recovery-input", resumePhase: "await-input" },
         sourceOwnerRunId: "run_boot",
       },
+      parentSessionId: child.sessionId,
     });
     expect(await store.getSession(principal, original.sessionId)).toEqual(originalRecord);
     await expect(service.start(resume)).resolves.toMatchObject({ sessionId: recovered.sessionId });

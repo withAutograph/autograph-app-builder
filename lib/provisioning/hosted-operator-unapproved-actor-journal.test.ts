@@ -113,18 +113,17 @@ describe("unapproved app capture continuity", () => {
     const checks: string[] = [];
     let revoked = "";
     const journal = createNormalActorJournal({
-      keyring,
-      now,
-      assertAuthorized: async () => {},
-      assertMutationAuthority: async () => {},
       assertAccountApproval: async (_context, preparation) => {
         checks.push(preparation.accountApprovalId);
         if (preparation.accountApprovalId === revoked) {
           throw new Error("approval_revoked");
         }
       },
+      assertAuthorized: async () => {},
+      assertMutationAuthority: async () => {},
+      keyring,
+      now,
       store: {
-        read: async () => structuredClone(row),
         compareAndSet: async (input) => {
           if (input.expectedRevision !== row.revision) {
             return undefined;
@@ -132,6 +131,7 @@ describe("unapproved app capture continuity", () => {
           row = { record: input.record, revision: row.revision + 1 };
           return structuredClone(row);
         },
+        read: async () => structuredClone(row),
       },
     });
     const input = {

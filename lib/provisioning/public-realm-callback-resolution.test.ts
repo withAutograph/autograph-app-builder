@@ -248,17 +248,17 @@ const fixture = () => {
     assertPublicApproval: vi.fn(async () => {}),
   };
   return {
+    candidate,
     context,
+    deps,
+    link,
     plan,
     record,
-    candidate,
-    values,
-    link,
-    deps,
     resolve: createPublicRealmCallbackResolver(deps),
     setRows: (v: PublicRealmCallbackCandidate[]) => {
       rows = v;
     },
+    values,
   };
 };
 it("requires unique READY approved public release, exact original Auth and sealed key evidence", async () => {

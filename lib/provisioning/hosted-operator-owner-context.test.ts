@@ -157,7 +157,6 @@ const fixture = (
   const diagnosticSink = vi.fn<HostedOperatorConsentDiagnosticSink>();
   const resolver = createHostedOperatorOwnerContextResolver({
     audience: authority.audience,
-    realmContinuation: overrides.realmContinuation,
     diagnosticSink,
     handoffs,
     isActiveMember: async () => {
@@ -165,6 +164,7 @@ const fixture = (
       return result;
     },
     issuer: authority.issuer,
+    realmContinuation: overrides.realmContinuation,
     sessions,
   });
   return { diagnosticSink, handoffs, resolver, sessions };
@@ -954,8 +954,8 @@ describe("approval history for recovered public grant authority", () => {
   ])("refuses %s before fetching private native history", async (change) => {
     const f = recovered("handoff");
     const request = {
-      principal,
       adapterSessionId: f.child.adapterSessionId,
+      principal,
       sessionId: f.source.sessionId,
     };
     if (change === "foreign-principal") {

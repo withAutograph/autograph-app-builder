@@ -35,7 +35,7 @@ const git = (root: string, ...args: string[]): string =>
 
 afterEach(() => {
   for (const root of roots.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { force: true, recursive: true });
   }
 });
 
