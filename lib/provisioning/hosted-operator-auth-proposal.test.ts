@@ -119,9 +119,7 @@ describe("private existing Auth proposal", () => {
   });
   it("stops on lost owner authority and still deletes the sandbox", async () => {
     const f = fixture();
-    f.assertCurrentOwner
-      .mockImplementationOnce(() => Promise.resolve())
-      .mockRejectedValueOnce(new Error("ownership lost"));
+    f.assertCurrentOwner.mockResolvedValueOnce().mockRejectedValueOnce(new Error("ownership lost"));
     await expect(
       f.propose({
         resource,

@@ -541,7 +541,7 @@ describe("final verifier entry diagnostics", () => {
       const assertAuthorized = vi.fn(() =>
         stage === "final_owner_authorization" ? Promise.reject(error) : Promise.resolve(),
       );
-      const read = vi.fn(() => Promise.reject(error));
+      const read = vi.fn<() => Promise<never>>().mockRejectedValue(error);
       const controlPlane = { ...f.controlPlane, assertAuthorized, store: { read } };
       const dependencies = composeHostedOperatorDependencies(
         f.configuration,

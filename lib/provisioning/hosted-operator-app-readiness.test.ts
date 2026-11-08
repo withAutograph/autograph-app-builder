@@ -688,8 +688,8 @@ it("withholds partial bindings when owner authorization changes during a snapsho
   const f = fixture();
   f.reader.readActorBinding = vi.fn(async () => "actor_active" as const);
   f.deps.assertAuthorized
-    .mockImplementationOnce(() => Promise.resolve())
-    .mockImplementationOnce(() => Promise.resolve())
+    .mockResolvedValueOnce()
+    .mockResolvedValueOnce()
     .mockRejectedValueOnce(new Error("owner revoked"));
   await expect(createHostedOperatorTenantBindingReadback(f.deps)(f.input)).rejects.toThrow(
     "owner revoked",

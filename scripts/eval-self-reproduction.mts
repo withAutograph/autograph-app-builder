@@ -313,7 +313,7 @@ const runConfiguredWorkflowAdapters = async (candidateRoot: string | undefined) 
   }
 };
 
-const loadProjectOidc = (): { token: string; teamId: string; projectId: string } => {
+const loadProjectOidc = () => {
   const token = parseLocalVercelOidcToken(
     readOwnerBoundLocalFile(join(root, ".env.local"), { confidential: true }),
   );

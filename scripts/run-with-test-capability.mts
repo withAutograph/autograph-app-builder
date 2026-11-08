@@ -59,7 +59,7 @@ const allowedEnvironment = [
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function childEnvironment(): NodeJS.ProcessEnv {
-  const environment: Record<string, string | undefined> = {
+  const environment: NodeJS.ProcessEnv = {
     PATH: testExecutablePath,
   };
   for (const name of allowedEnvironment) {
@@ -68,7 +68,7 @@ function childEnvironment(): NodeJS.ProcessEnv {
       environment[name] = value;
     }
   }
-  return environment as NodeJS.ProcessEnv;
+  return environment;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -288,7 +288,7 @@ export async function runWithTestCapability(options: {
       ) {
         throw new Error("Malformed authorization request.");
       }
-      const proof: Record<string, unknown> = {
+      const proof = {
         authorization: randomBytes(32).toString("hex"),
         capabilities: options.capabilities,
         context: request.context,
