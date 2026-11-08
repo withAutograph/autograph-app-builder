@@ -232,7 +232,10 @@ export function createAutographMcpHandler(
   service: EveSessionService,
   options: { requestUrl?: string; advertiseOauth?: boolean; appAccessOrigin?: string } = {},
 ) {
-  const toolAuthMeta = (_operation: string, meta: Record<string, unknown> = {}) => {
+  const toolAuthMeta = (
+    _operation: string,
+    meta: { ui?: { visibility: ("model" | "app")[] } } = {},
+  ) => {
     if (options.advertiseOauth === true) {
       return {
         _meta: {

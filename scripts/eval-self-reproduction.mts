@@ -117,10 +117,14 @@ const records: Record<string, unknown>[] = [];
 const started = Date.now();
 const captures: { label: string; files: string[]; status: string }[] = [];
 let generation: Record<string, unknown> = { status: "pending" };
+interface PreservedInputFile {
+  path: string;
+  sha256: string;
+}
 type InputEvidence =
   | { status: "pending" }
   | {
-      files: Record<string, unknown>;
+      files: Record<string, PreservedInputFile>;
       referenceSourceExposedToGenerator: false;
       status: "preserved";
     };
@@ -1047,7 +1051,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     };
     await jsonFile("revisions.json", revisions);
     await mkdir(join(output, "generator-input"), { mode: 0o700, recursive: true });
-    const inputs: Record<string, unknown> = {};
+    const inputs: Record<string, PreservedInputFile> = {};
     await Promise.all(
       ["brief.md", "answers.json"].map(async (file) => {
         const content = await readFile(join(root, "evals/self-reproduction", file), "utf-8");

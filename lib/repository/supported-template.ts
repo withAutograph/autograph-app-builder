@@ -831,10 +831,7 @@ const sandboxSourceArchivePath = ".app-builder/source-tree.tar.gz";
 
 const fixtureSandboxEnabled = () => hasTestCapability("simulated-target");
 
-const exactKeys = function exactKeys(
-  value: Record<string, unknown>,
-  expected: readonly string[],
-): boolean {
+const exactKeys = function exactKeys(value: object, expected: readonly string[]): boolean {
   const actual = Object.keys(value);
   const allowed = new Set(expected);
   return actual.length === allowed.size && actual.every((key) => allowed.has(key));
@@ -919,7 +916,7 @@ export const parsePreparedWorkspace = function parsePreparedWorkspace(
     typeof input !== "object" ||
     input === null ||
     Array.isArray(input) ||
-    !exactKeys(input as Record<string, unknown>, [
+    !exactKeys(input, [
       "workspaceId",
       "workspacePath",
       "sourcePath",
@@ -979,7 +976,7 @@ const parsePreparedSourceFiles = function parsePreparedSourceFiles(
       typeof candidate !== "object" ||
       candidate === null ||
       Array.isArray(candidate) ||
-      !exactKeys(candidate as Record<string, unknown>, ["mode", "objectId", "path", "sha256"])
+      !exactKeys(candidate, ["mode", "objectId", "path", "sha256"])
     ) {
       throw new Error(invalidWorkspaceManifestMessage);
     }
@@ -1154,10 +1151,7 @@ const verifySandboxWorkspaceBoundary = async function verifySandboxWorkspaceBoun
     typeof observed !== "object" ||
     observed === null ||
     Array.isArray(observed) ||
-    !exactKeys(
-      observed as Record<string, unknown>,
-      Object.keys(developmentWorkspaceInspectionReceipt),
-    )
+    !exactKeys(observed, Object.keys(developmentWorkspaceInspectionReceipt))
   ) {
     throw new Error(`The prepared ${kind} workspace escaped its sandbox boundary.`);
   }
