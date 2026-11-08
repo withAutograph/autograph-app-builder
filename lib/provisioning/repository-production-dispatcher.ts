@@ -5,6 +5,7 @@ import { z } from "zod";
 import { appAccessCommandSchema, appAccessSnapshotSchema } from "../app-access/contracts";
 import type { AppAccessCommand, AppAccessSnapshot } from "../app-access/contracts";
 import { repositoryProductionApprovalInput } from "./repository-production-approval";
+import { observeRepositoryProductionPhase } from "./repository-production-diagnostic";
 import { operatorOwnerContextSchema } from "./hosted-operator-contract";
 import type { OperatorOwnerContext } from "./hosted-operator-contract";
 import type {
@@ -170,12 +171,17 @@ export const createRepositoryProductionHandler =
       if (resolved.scope.appId !== body.appId || resolved.intent.sessionId !== body.sessionId) {
         return reply({ code: "app_access_denied" }, 403);
       }
-      const setup = await resolved.setup.prepare(resolved.scope, resolved.intent);
-      return reply({
-        version: 1,
-        ...appAccessSnapshotSchema.parse(await deps.management.read(owner)),
-        setup,
-      });
+      const setup = await observeRepositoryProductionPhase(
+        "setup_prepare",
+        "setup_unavailable",
+        () => resolved.setup.prepare(resolved.scope, resolved.intent),
+      );
+      const access = await observeRepositoryProductionPhase(
+        "setup_projection",
+        "setup_unavailable",
+        async () => appAccessSnapshotSchema.parse(await deps.management.read(owner)),
+      );
+      return reply({ version: 1, ...access, setup });
     } catch (error) {
       if (!authenticated) {
         return reply({ code: "app_access_denied" }, 403);

@@ -1,7 +1,13 @@
 /* oxlint-disable eslint/require-await, unicorn/no-await-expression-member -- Async fixture ports retain rejection semantics; assertions inspect their awaited outcomes directly. */
 import type { z } from "zod";
 import { RepositoryProductionDestinationRequiredError } from "./repository-production-destination";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createRepositoryProductionSetup } from "./repository-production-setup";
+import type { RepositoryProductionSetupPorts } from "./repository-production-setup";
+import {
+  initialRepositoryProductionRecord,
+  repositoryProductionOperationRef,
+} from "./repository-production-contract";
 import {
   createRepositoryProductionHandler,
   observeRepositoryProductionCompletion,
@@ -13,6 +19,8 @@ import type {
   RepositoryProductionScope,
   RepositoryProductionIntent,
 } from "./repository-production-contract";
+
+afterEach(() => vi.restoreAllMocks());
 
 const authority = {
   issuer: "https://builder.test/api/auth",
@@ -121,6 +129,93 @@ describe("protected repository Production dispatcher", () => {
     ).toBe(200);
     expect(f.prepared).toHaveBeenCalledOnce();
   });
+  it("observes an actual setup fence rejection before access projection", async () => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const f = fixture();
+    const failure = new Error("Protected resource lease fence is stale.", {
+      cause: "private-provider-token",
+    });
+    const unexpected = vi.fn(async () => {
+      throw new Error("unexpected effect");
+    });
+    const ports: RepositoryProductionSetupPorts = {
+      store: {
+        read: vi.fn(async () => ({
+          operationRef: repositoryProductionOperationRef(scope),
+          revision: 1,
+          record: initialRepositoryProductionRecord(scope, intent),
+        })),
+        reserve: unexpected,
+        compareAndSet: unexpected,
+      },
+      assertAuthorized: vi.fn(async () => {}),
+      withLease: async (_scope, run) =>
+        await run(async () => {
+          throw failure;
+        }),
+      reservePrivateState: unexpected,
+      readCreatorIdentity: unexpected,
+      reconcile: unexpected,
+      apply: unexpected,
+    };
+    vi.mocked(f.deps.resolveSetup).mockResolvedValue({
+      scope,
+      intent,
+      setup: createRepositoryProductionSetup(ports),
+    });
+    const response = await f.send({
+      version: 1,
+      ...owner,
+      action: "prepare",
+      approvedByCallId: "approved",
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ code: "app_access_unknown" });
+    expect(f.deps.management.read).not.toHaveBeenCalled();
+    expect(unexpected).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('"phase":"setup_prepare"'));
+    expect(log.mock.calls.flat().join("")).toContain('"reason":"lease_fence_stale"');
+    expect(log.mock.calls.flat().join("")).not.toContain("private-provider-token");
+  });
+
+  it("distinguishes projection rejection after successful setup and preserves sanitized 503", async () => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const f = fixture();
+    vi.mocked(f.deps.management.read).mockRejectedValue(
+      new Error("repository_production_owner_changed", { cause: "private-connection-url" }),
+    );
+    const response = await f.send({
+      version: 1,
+      ...owner,
+      action: "prepare",
+      approvedByCallId: "approved",
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ code: "app_access_unknown" });
+    expect(f.prepared).toHaveBeenCalledOnce();
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('"phase":"setup_projection"'));
+    const output = log.mock.calls.flat().join("");
+    expect(output).toContain('"reason":"authority_changed"');
+    expect(output).not.toContain('"phase":"setup_prepare"');
+    expect(output).not.toContain("private-connection-url");
+  });
+
+  it("classifies invalid access projection without leaking the rejected snapshot", async () => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const f = fixture();
+    vi.mocked(f.deps.management.read).mockResolvedValue({ ...snapshot, appId: "" });
+    const response = await f.send({
+      version: 1,
+      ...owner,
+      action: "prepare",
+      approvedByCallId: "approved",
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ code: "app_access_unknown" });
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('"reason":"schema_invalid"'));
+    expect(log.mock.calls.flat().join("")).toContain('"phase":"setup_projection"');
+  });
+
   it("reports missing saved destination without starting setup or hiding workload denial", async () => {
     const f = fixture();
     vi.mocked(f.deps.resolvePlan).mockRejectedValue(
