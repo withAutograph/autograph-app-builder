@@ -921,8 +921,12 @@ export function createLocalEveSessionService(
         } else if (["completed", "failed", "cancelled"].includes(result.status)) {
           resumability = "terminal";
         }
+        const app: Pick<EveSessionListResult["sessions"][number], "appId"> = {};
+        if (result.uiPreview?.appId !== undefined) {
+          app.appId = result.uiPreview.appId;
+        }
         return {
-          ...(result.uiPreview?.appId === undefined ? {} : { appId: result.uiPreview.appId }),
+          ...app,
           resumability,
           sessionId,
           stage,
@@ -1358,12 +1362,20 @@ export function createLocalEveSessionService(
     responses: Parameters<EveSessionService["respond"]>[0]["responses"],
   ): Promise<InternalSessionLimitResponse> => {
     const stoppedDecision = await localStoppedBuildDecision(sessionId, stopGuardOnly);
-    return {
+    const marker: Pick<
+      InternalSessionLimitResponse,
+      "adapterGeneration" | "adapterSessionId" | "batches" | "decision" | "stoppedBuildTurnId"
+    > = {
       adapterGeneration: 1,
       adapterSessionId: sessionId,
       batches: stopGuardOnly ? frameworkGuardBatches(inputs) : inputs.pending,
       decision: stopGuardOnly ? "stop" : "continue",
-      ...(stoppedDecision === undefined ? {} : { stoppedBuildTurnId: stoppedDecision.turnId }),
+    };
+    if (stoppedDecision !== undefined) {
+      marker.stoppedBuildTurnId = stoppedDecision.turnId;
+    }
+    return {
+      ...marker,
       responses: nativeResponses(responses),
     };
   };

@@ -33,10 +33,12 @@ import {
   targetExecutionBinding,
 } from "@/lib/repository/target-planning";
 
-const frameworkPlanningOptions = (fixture: boolean, requested?: "latest", accepted?: "latest") => ({
-  frameworkUpgradeRequested: (requested ?? accepted) === "latest",
-  ...(fixture ? {} : { resolveFrameworkVersions: resolveLatestFrameworkVersions }),
-});
+const frameworkPlanningOptions = (fixture: boolean, requested?: "latest", accepted?: "latest") => {
+  const frameworkUpgradeRequested = (requested ?? accepted) === "latest";
+  return fixture
+    ? { frameworkUpgradeRequested }
+    : { frameworkUpgradeRequested, resolveFrameworkVersions: resolveLatestFrameworkVersions };
+};
 
 // oxlint-disable-next-line eslint/complexity -- Preserve the existing phase protocol and explicit same-app repair boundary in one producer.
 export const prepareAppCreation = async (
@@ -71,9 +73,17 @@ export const prepareAppCreation = async (
     sandbox: sandboxForPlanning,
     ctx,
   });
-  const computeProfile = await preparePrivateComputePlanning({
+  const computePlanningFields: Pick<
+    Parameters<typeof preparePrivateComputePlanning>[0],
+    "state" | "repairChanges"
+  > = {
     state: planningState,
-    ...(repair === undefined ? {} : { repairChanges: existingAppChanges }),
+  };
+  if (repair !== undefined) {
+    computePlanningFields.repairChanges = existingAppChanges;
+  }
+  const computeProfile = await preparePrivateComputePlanning({
+    ...computePlanningFields,
     sandbox: sandboxForPlanning,
     requested: privateCompute,
     callId: ctx.callId,
@@ -192,13 +202,21 @@ export const prepareAppCreation = async (
         // Keep the settled workflow intact until the entire new proposal is ready.
         return;
       }
-      const identityState = {
+      const identityFields: Pick<
+        Extract<DependencyReadyState, { phase: "identity_resolved" }>,
+        "phase" | "preparedByCallId" | "sourceReceipt" | "version" | "workspace" | "githubSource"
+      > = {
         phase: "identity_resolved",
         preparedByCallId: current.preparedByCallId,
         sourceReceipt: current.sourceReceipt,
         version: APP_BUILDER_WORKFLOW_VERSION,
         workspace: current.workspace,
-        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+      };
+      if (current.githubSource !== undefined) {
+        identityFields.githubSource = current.githubSource;
+      }
+      const identityState = {
+        ...identityFields,
         appSpec: current.appSpec,
         artifacts: current.artifacts,
         dependencyReceipt: current.dependencyReceipt,
@@ -232,19 +250,29 @@ export const prepareAppCreation = async (
   updateExactWorkflow({
     expected: workflowBeforeProposal,
     operation: "target proposal recording",
-    transition: () => ({
-      phase: "planned",
-      preparedByCallId: current.preparedByCallId,
-      sourceReceipt: current.sourceReceipt,
-      version: APP_BUILDER_WORKFLOW_VERSION,
-      workspace: current.workspace,
-      ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-      appSpec: current.appSpec,
-      artifacts: current.artifacts,
-      dependencyReceipt: current.dependencyReceipt,
-      identityReceipt: recordedIdentity,
-      proposal,
-    }),
+    transition: () => {
+      const plannedFields: Pick<
+        Extract<DependencyReadyState, { phase: "planned" }>,
+        "phase" | "preparedByCallId" | "sourceReceipt" | "version" | "workspace" | "githubSource"
+      > = {
+        phase: "planned",
+        preparedByCallId: current.preparedByCallId,
+        sourceReceipt: current.sourceReceipt,
+        version: APP_BUILDER_WORKFLOW_VERSION,
+        workspace: current.workspace,
+      };
+      if (current.githubSource !== undefined) {
+        plannedFields.githubSource = current.githubSource;
+      }
+      return {
+        ...plannedFields,
+        appSpec: current.appSpec,
+        artifacts: current.artifacts,
+        dependencyReceipt: current.dependencyReceipt,
+        identityReceipt: recordedIdentity,
+        proposal,
+      };
+    },
   });
   if (repair?.approvedBase !== undefined) {
     existingAppRepairHistory.update((history) => [

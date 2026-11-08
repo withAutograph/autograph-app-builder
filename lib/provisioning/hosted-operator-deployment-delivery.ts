@@ -593,20 +593,39 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         projectName = project.name;
         scopeSlug = team.slug;
       }
-      return {
-        ...(saved?.gatewayAliasAttempted === undefined
-          ? {}
-          : { gatewayAliasAttempted: saved.gatewayAliasAttempted }),
+      const initial: Pick<OperatorDeploymentCandidate, "gatewayAliasAttempted"> = {};
+      if (saved?.gatewayAliasAttempted !== undefined) {
+        initial.gatewayAliasAttempted = saved.gatewayAliasAttempted;
+      }
+      const withProject: Pick<
+        OperatorDeploymentCandidate,
+        | "gatewayAliasAttempted"
+        | "branch"
+        | "deploymentId"
+        | "operationRef"
+        | "origin"
+        | "projectId"
+        | "projectName"
+      > = {
+        ...initial,
         branch: delivery.branch,
         deploymentId: observed.id,
         operationRef: input.operationRef,
         origin: origin.origin,
         projectId: delivery.projectId,
-        ...(projectName === undefined ? {} : { projectName }),
+      };
+      if (projectName !== undefined) {
+        withProject.projectName = projectName;
+      }
+      const candidate: OperatorDeploymentCandidate = {
+        ...withProject,
         readyState: observed.readyState,
         repoId: delivery.repoId,
-        ...(scopeSlug === undefined ? {} : { scopeSlug }),
       };
+      if (scopeSlug !== undefined) {
+        candidate.scopeSlug = scopeSlug;
+      }
+      return candidate;
     };
     const readCandidate = async (deploymentId: string, verifyProject = true) =>
       await readDeployment(deploymentId, verifyProject, true);
