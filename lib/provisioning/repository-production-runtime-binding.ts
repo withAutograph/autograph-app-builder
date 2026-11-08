@@ -2,6 +2,10 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { repositoryProductionOperationRef } from "./repository-production-contract";
+import {
+  observeRepositoryProductionPhase,
+  reportRepositoryProductionFailure,
+} from "./repository-production-diagnostic";
 import type {
   RepositoryProductionEffectContext,
   RepositoryProductionObservation,
@@ -22,6 +26,15 @@ const rowSchema = z.object({
   configurationId: z.string().nullable().optional(),
   customEnvironmentIds: z.array(z.string()).optional(),
 });
+const detailSchema = rowSchema.omit({ id: true, target: true }).extend({
+  id: z.string().optional(),
+  target: z
+    .union([z.array(z.string()), z.string()])
+    .transform((value) => (Array.isArray(value) ? value : [value]))
+    .optional(),
+  value: z.string(),
+  decrypted: z.boolean().optional(),
+});
 const checkpointSchema = z.object({
   kind: z.literal("repository-production-runtime-binding"),
   key: z.string(),
@@ -35,6 +48,11 @@ export const createRepositoryProductionRuntimeBinding = (input: {
   signal: AbortSignal;
   fetch?: typeof fetch;
 }) => {
+  const conflict = (phase: "runtime_binding_ownership" | "runtime_binding_value"): never => {
+    const error = new Error("repository_production_runtime_binding_conflict");
+    reportRepositoryProductionFailure(phase, "binding_unavailable", error, input.signal);
+    throw error;
+  };
   const request = async (
     context: RepositoryProductionEffectContext,
     path: string,
@@ -65,7 +83,9 @@ export const createRepositoryProductionRuntimeBinding = (input: {
     const response = await fetchRequest(url, options);
     if (!response.ok) {
       await response.body?.cancel();
-      throw new Error("repository_production_runtime_provider_failed");
+      throw Object.assign(new Error("repository_production_runtime_provider_failed"), {
+        status: response.status,
+      });
     }
     const value: unknown = await response.json();
     await context.assertCurrent();
@@ -86,14 +106,20 @@ export const createRepositoryProductionRuntimeBinding = (input: {
   const inspect = async (context: RepositoryProductionEffectContext, runtimeUrl: string) => {
     const expected = metadata(context, runtimeUrl);
     const project = encodeURIComponent(context.row.record.scope.projectId);
-    const rows = z
-      .object({ envs: z.array(rowSchema) })
-      .parse(await request(context, `/v10/projects/${project}/env`)).envs;
+    const { envs: rows } = await observeRepositoryProductionPhase(
+      "runtime_binding_list",
+      "binding_unavailable",
+      async () =>
+        z
+          .object({ envs: z.array(rowSchema) })
+          .parse(await request(context, `/v10/projects/${project}/env`)),
+      input.signal,
+    );
     const matches = rows.filter(
       (row) => row.key === expected.key && row.target.includes("production"),
     );
     if (matches.length > 1) {
-      throw new Error("repository_production_runtime_binding_conflict");
+      conflict("runtime_binding_ownership");
     }
     const [row] = matches;
     const checkpoints = context.row.record.workerCheckpoints.flatMap((value) => {
@@ -121,18 +147,42 @@ export const createRepositoryProductionRuntimeBinding = (input: {
       checkpoints.some((entry) => entry.rowId !== undefined && entry.rowId !== row.id) ||
       checkpoints.length === 0
     ) {
-      throw new Error("repository_production_runtime_binding_conflict");
+      conflict("runtime_binding_ownership");
     }
-    const detail = rowSchema
-      .extend({ value: z.string() })
-      .parse(await request(context, `/v1/projects/${project}/env/${encodeURIComponent(row.id)}`));
+    const detail = await observeRepositoryProductionPhase(
+      "runtime_binding_detail",
+      "binding_unavailable",
+      async () =>
+        detailSchema.parse(
+          await request(context, `/v1/projects/${project}/env/${encodeURIComponent(row.id)}`),
+        ),
+      input.signal,
+    );
+    if (detail.decrypted === false) {
+      const error = new Error("repository_production_runtime_value_unavailable");
+      reportRepositoryProductionFailure(
+        "runtime_binding_value",
+        "binding_unavailable",
+        error,
+        input.signal,
+      );
+      throw error;
+    }
     if (
-      detail.id !== row.id ||
+      (detail.id !== undefined && detail.id !== row.id) ||
       detail.key !== row.key ||
-      detail.comment !== expected.marker ||
-      hash(detail.value) !== expected.valueSha256
+      detail.type !== row.type ||
+      (detail.comment !== undefined && detail.comment !== expected.marker) ||
+      (detail.target !== undefined &&
+        (detail.target.length !== 1 || detail.target[0] !== "production")) ||
+      (detail.gitBranch !== undefined && detail.gitBranch !== null) ||
+      (detail.configurationId !== undefined && detail.configurationId !== null) ||
+      (detail.customEnvironmentIds?.length ?? 0) > 0
     ) {
-      throw new Error("repository_production_runtime_binding_conflict");
+      conflict("runtime_binding_ownership");
+    }
+    if (hash(detail.value) !== expected.valueSha256) {
+      conflict("runtime_binding_value");
     }
     return { dispatched: true, expected, row };
   };
@@ -147,16 +197,22 @@ export const createRepositoryProductionRuntimeBinding = (input: {
       }
       await context.checkpoint(current.expected);
       // The provider response is acknowledgement only; independent readback proves the binding.
-      await request(
-        context,
-        `/v10/projects/${encodeURIComponent(context.row.record.scope.projectId)}/env`,
-        {
-          key: current.expected.key,
-          value: runtimeUrl,
-          type: "encrypted",
-          target: ["production"],
-          comment: current.expected.marker,
-        },
+      await observeRepositoryProductionPhase(
+        "runtime_binding_write",
+        "provider_unavailable",
+        () =>
+          request(
+            context,
+            `/v10/projects/${encodeURIComponent(context.row.record.scope.projectId)}/env`,
+            {
+              key: current.expected.key,
+              value: runtimeUrl,
+              type: "encrypted",
+              target: ["production"],
+              comment: current.expected.marker,
+            },
+          ),
+        input.signal,
       );
     },
     async reconcile(
