@@ -68,22 +68,22 @@ const preparedPlan = hostedOperatorPlanSchema.parse({
   appDatabase: {
     database: "app_db",
     migratorRole: "app_migrator",
-    runtimeRole: "app_runtime",
     resourceId: "app-resource",
+    runtimeRole: "app_runtime",
   },
   authDatabase: {
     database: "auth_db",
     migratorRole: "auth_migrator",
-    runtimeRole: "auth_runtime",
     resourceId: "auth-resource",
+    runtimeRole: "auth_runtime",
   },
   contextId: "ordinary-planning-context",
   cost: { class: "shared-recovery-group", description: "Controlled fixture", owner: "Fixture" },
   effects: [
-    { id: "resources", kind: "resources", description: "Prepare resources" },
-    { id: "install", kind: "install", description: "Install app" },
-    { id: "access", kind: "access", description: "Authorize app" },
-    { id: "bindings", kind: "bindings", description: "Bind runtime" },
+    { description: "Prepare resources", id: "resources", kind: "resources" },
+    { description: "Install app", id: "install", kind: "install" },
+    { description: "Authorize app", id: "access", kind: "access" },
+    { description: "Bind runtime", id: "bindings", kind: "bindings" },
   ],
   installer: { reference: "shared-installer", sha256: "a".repeat(64) },
   neon: {
