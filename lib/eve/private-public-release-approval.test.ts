@@ -17,12 +17,12 @@ const input = {
   operationRef: publicReleaseOperationRef(plan),
 };
 const owner = operatorOwnerContextSchema.parse({
-  kind: "direct",
+  adapterGeneration: 1,
+  adapterSessionId: "native",
   authority,
+  kind: "direct",
   principal: { ...authority, scopes: ["autograph:send"] },
   sessionId: plan.selection.sessionId,
-  adapterSessionId: "native",
-  adapterGeneration: 1,
 });
 const request = (
   callId = "current-call",
