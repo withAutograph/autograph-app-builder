@@ -546,8 +546,8 @@ describe("legacy owner bootstrap public readiness", () => {
     const result = await f.client.request(request);
     expect(result).toMatchObject({
       authenticatedBehavior: "unassessed",
-      status: "prepared",
       operationRef: request.operationRef,
+      status: "prepared",
     });
     expect(result).not.toHaveProperty("appUrl");
     expect(result).not.toHaveProperty("nativePreview");
@@ -1292,9 +1292,9 @@ describe("protected hosted operator boundary", () => {
       }
     };
     expect(await f.client.request(request)).toMatchObject({
-      status: "planned",
       operationRef: first.operationRef,
       planDigest: first.planDigest,
+      status: "planned",
     });
     f.deps.assertAuthorized = async (input) => {
       await authorize(input);
@@ -2846,8 +2846,8 @@ describe("idle installer source successor planning", () => {
     originalApproved = true;
     const proposed = await f.client.request({ action: "plan", operation: "prepare", selection });
     expect(proposed).toMatchObject({
-      status: "planned",
       operationRef: originalRequest.operationRef,
+      status: "planned",
     });
     const proposedPlan = hostedOperatorPlanSchema.parse(proposed.plan);
     expect(proposedPlan).toEqual({
@@ -3019,7 +3019,7 @@ describe("approved retention renewal planning", () => {
       });
 
       const first = await f.client.request({ action: "plan", operation: "prepare", selection });
-      expect(first).toMatchObject({ status: "planned", operationRef });
+      expect(first).toMatchObject({ operationRef, status: "planned" });
       const firstPlan = first.plan;
       if (firstPlan === undefined) {
         throw new Error("The retention renewal response must include its frozen plan");
@@ -3056,8 +3056,8 @@ describe("approved retention renewal planning", () => {
           approvalId: "durable-human-decision",
           pendingEffectId,
           pendingEffectAttempt: {
-            id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
             contextDigest: "e".repeat(64),
+            id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
           },
           planDigest: operatorPlanDigest(oldPlan),
           receipts: oldReceipts,
@@ -3131,8 +3131,8 @@ describe("approved retention renewal planning", () => {
               kind: pendingKind,
               operationRef,
               pendingEffectAttempt: {
-                id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
                 contextDigest: "e".repeat(64),
+                id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
               },
               planDigest: operatorPlanDigest(oldPlan),
             });
@@ -3198,8 +3198,8 @@ describe("read-only configured Preview target resolution", () => {
     const result = await createProtectedHostedOperatorHandler(f.deps)(resolveRequest());
     expect(await result.json()).toMatchObject({
       appId: selection.appId,
-      status: "blocked",
       code: "protected_operator_required",
+      status: "blocked",
     });
   });
   it.each(["appId", "sessionId"] as const)(
@@ -3478,8 +3478,8 @@ describe("closed prepare pre-effect diagnostics", () => {
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           boundary: "operator",
+          executionFailure: { errorClass: "type_error", stage },
           stage: "operator_request",
-          executionFailure: { stage, errorClass: "type_error" },
         }),
       ]);
       expect(JSON.stringify(log.mock.calls)).not.toContain("planningFailure");
@@ -3852,11 +3852,11 @@ describe("canonical runtime proof through the production verifier and handler", 
         if (initialScenario !== "ready") {
           const denied = await f.client.request(execute);
           expect(denied).toMatchObject({
-            status: "blocked",
             code:
               initialScenario === "authority_denied"
                 ? "authorization_required"
                 : "operator_unavailable",
+            status: "blocked",
           });
           expect(f.row?.record.proof).toBeUndefined();
           expect(readRuntimeSnapshot).not.toHaveBeenCalled();
@@ -3876,9 +3876,9 @@ describe("canonical runtime proof through the production verifier and handler", 
         expect(richResult).toMatchObject({
           actors: 0,
           authenticatedBehavior: "unassessed",
-          source: "reviewed-plan-app-runtime",
-          resourceId: selectedPlan.appDatabase.resourceId,
           observations: [{ organizationId: "synthetic-org" }],
+          resourceId: selectedPlan.appDatabase.resourceId,
+          source: "reviewed-plan-app-runtime",
         });
         expect(richResult?.observedAt).toEqual(expect.any(String));
         expect(hostedRuntimeProofSchema.safeParse(richResult).success).toBe(false);
@@ -4067,8 +4067,8 @@ describe("closed prepare final verification diagnostics", () => {
       const log = vi.spyOn(console, "info").mockImplementation(() => {});
       try {
         expect(await execute()).toMatchObject({
-          status: "blocked",
           code: stage === "execution_settlement" ? "operator_unavailable" : "resource_mismatch",
+          status: "blocked",
         });
         expect(verify).not.toHaveBeenCalled();
         expect(f.deps.executeEffect).toHaveBeenCalledTimes(10);
@@ -4081,7 +4081,7 @@ describe("closed prepare final verification diagnostics", () => {
         expect(log.mock.calls).toContainEqual([
           "[builder:hosted-neon-consent]",
           expect.objectContaining({
-            executionFailure: { stage, errorClass: "operator_error", code: "resource_mismatch" },
+            executionFailure: { code: "resource_mismatch", errorClass: "operator_error", stage },
           }),
         ]);
         expect(JSON.stringify(log.mock.calls)).not.toContain("resource_lease");
@@ -4175,8 +4175,8 @@ describe("closed prepare final verification diagnostics", () => {
       const log = vi.spyOn(console, "info").mockImplementation(() => {});
       try {
         expect(await execute()).toMatchObject({
-          status: "blocked",
           code: releaseFails ? "resource_mismatch" : "operator_unavailable",
+          status: "blocked",
         });
         expect(f.row?.record.proof).toEqual(proof);
         expect(f.row?.record.leaseId !== undefined).toBe(releaseFails);
@@ -4451,10 +4451,10 @@ it("completes resource preparation without claiming a bound or deployed app", as
   f.approve();
   expect((await f.client.request(input)).status).toBe("prepared");
   expect(f.row?.record).toMatchObject({
-    status: "prepared",
-    step: "resource-ready",
     environmentBound: false,
     proof,
+    status: "prepared",
+    step: "resource-ready",
   });
   expect(f.deps.bindings).not.toHaveBeenCalled();
   expect(f.row?.record.operator?.receipts.map((receipt) => receipt.effectId)).toEqual(
@@ -4483,10 +4483,10 @@ it("completes resource preparation without claiming a bound or deployed app", as
   f.approve();
   expect((await f.client.request(input)).status).toBe("prepared");
   expect(f.row?.record).toMatchObject({
-    status: "prepared",
-    step: "resource-ready",
     environmentBound: false,
     proof,
+    status: "prepared",
+    step: "resource-ready",
   });
   expect(f.deps.bindings).not.toHaveBeenCalled();
   expect(f.row?.record.operator?.receipts.map((receipt) => receipt.effectId)).toEqual(

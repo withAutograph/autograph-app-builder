@@ -280,7 +280,7 @@ describe("protected native target onboarding service", () => {
       input: { ...f.prepared, operationRef: planned.operationRef },
     });
     expect(await denied.json()).toMatchObject({ reason: "permission_denied", status: "blocked" });
-    const retained = await f.store.read({ authority, appId: plan.appId });
+    const retained = await f.store.read({ appId: plan.appId, authority });
     expect(retained?.record.stage).toBe("approved");
     expect(retained?.record.previousAttempts.at(-1)?.reason).toBe("provider_permission_denied");
     return { f, create, retained, planned };
@@ -314,7 +314,7 @@ describe("protected native target onboarding service", () => {
     expect(inspect).toHaveBeenCalledTimes(1);
     expect(inspect.mock.calls[0]?.[0]).toMatchObject({ owner: current, plan });
     expect(create).toHaveBeenCalledTimes(1);
-    expect(await f.store.read({ authority, appId: plan.appId })).toEqual(retained);
+    expect(await f.store.read({ appId: plan.appId, authority })).toEqual(retained);
   });
 
   it("does not inspect provider authorization during new planning or approval-history reads", async () => {
@@ -342,7 +342,7 @@ describe("protected native target onboarding service", () => {
     };
     await expect(f.planOnce()).rejects.toThrow();
     expect(create).toHaveBeenCalledTimes(1);
-    expect(await f.store.read({ authority, appId: plan.appId })).toEqual(retained);
+    expect(await f.store.read({ appId: plan.appId, authority })).toEqual(retained);
   });
 
   it("does not return advisory evidence after caller cancellation", async () => {
@@ -362,7 +362,7 @@ describe("protected native target onboarding service", () => {
       ),
     ).rejects.toThrow("cancelled");
     expect(create).toHaveBeenCalledTimes(1);
-    expect(await f.store.read({ authority, appId: plan.appId })).toEqual(retained);
+    expect(await f.store.read({ appId: plan.appId, authority })).toEqual(retained);
   });
 
   it("discards observations when cancellation arrives during the final owner recheck", async () => {
@@ -385,7 +385,7 @@ describe("protected native target onboarding service", () => {
       ),
     ).rejects.toThrow("cancelled during owner recheck");
     expect(create).toHaveBeenCalledTimes(1);
-    expect(await f.store.read({ authority, appId: plan.appId })).toEqual(retained);
+    expect(await f.store.read({ appId: plan.appId, authority })).toEqual(retained);
   });
 
   it("never reads approval history when workload verification fails", async () => {
@@ -582,7 +582,7 @@ describe("protected retained native resource selection", () => {
   it("denies a changed owner or unavailable resource profile without altering retained scope", async () => {
     const f = fixture();
     await f.planOnce();
-    const key = { authority, appId: plan.appId };
+    const key = { appId: plan.appId, authority };
     const before = await f.store.read(key);
     f.resolvePlan.mockRejectedValue(new Error("profile-not-authorized"));
     const message = {
@@ -950,7 +950,7 @@ describe("side-effect-free approval peek with an incomplete durable tail", () =>
       const f = fixture();
       const planned = await f.planOnce();
       const prepared = { ...f.prepared, operationRef: planned.operationRef };
-      const row = await f.store.read({ authority, appId: plan.appId });
+      const row = await f.store.read({ appId: plan.appId, authority });
       if (row === undefined) {
         throw new Error("missing plan");
       }
@@ -1047,7 +1047,7 @@ describe("side-effect-free approval peek with an incomplete durable tail", () =>
       expect(saved.native.nextNativeIndex).toBe(3);
       expect(saved.native.capture.entries).toHaveLength(2);
       expect(saved.terminals).toHaveLength(1);
-      expect(await f.store.read({ authority, appId: plan.appId })).toEqual(row);
+      expect(await f.store.read({ appId: plan.appId, authority })).toEqual(row);
       await expect(f.send({ ...common, action: "native-target-prepare" })).rejects.toBeInstanceOf(
         HostedSessionReadTimeoutError,
       );
