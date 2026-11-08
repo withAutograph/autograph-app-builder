@@ -179,13 +179,13 @@ test("Sign In and Sign Up are passive, reciprocal, and geometrically identical",
   expect(passkeyRequests).toBe(0);
   expect(await authCounts()).toEqual(emptyAuthCounts);
 
-  if (!signUpHref) throw new Error("Sign Up link must have an href");
+  if (signUpHref === null || signUpHref === "") throw new Error("Sign Up link must have an href");
   const signUpURL = new URL(signUpHref, page.url());
   expect(signUpURL.searchParams.get("redirectTo")).toBe(
     "/auth/setting-up?callbackURL=%2Fdashboard%3Ftab%3Drecent%26tab%3Dsaved%23complete",
   );
   const signInHref = await signInLink.getAttribute("href");
-  if (!signInHref) throw new Error("Sign In link must have an href");
+  if (signInHref === null || signInHref === "") throw new Error("Sign In link must have an href");
   const signInURL = new URL(signInHref, page.url());
   expect(signInURL.searchParams.get("redirectTo")).toBe(signUpURL.searchParams.get("redirectTo"));
 });
@@ -277,7 +277,7 @@ test("passkey registration guards Sign Up and supports returning login", async (
   const authenticator = await VirtualAuthenticator.create(context, page);
   try {
     await page.addInitScript(() => {
-      if (!window.PublicKeyCredential) return;
+      if (window.PublicKeyCredential === undefined) return;
       Object.defineProperty(
         window.PublicKeyCredential,
         "isUserVerifyingPlatformAuthenticatorAvailable",
@@ -351,7 +351,7 @@ test("passkey registration keeps the alternate authenticator flow when platform 
 }) => {
   reportPasskeyFailures(page);
   await page.addInitScript(() => {
-    if (!window.PublicKeyCredential) return;
+    if (window.PublicKeyCredential === undefined) return;
     Object.defineProperty(
       window.PublicKeyCredential,
       "isUserVerifyingPlatformAuthenticatorAvailable",
@@ -735,7 +735,7 @@ test("a session created after context issuance blocks registration", async ({ co
   try {
     await page.route(/\/api\/auth\/passkey\/generate-register-options(?:\?|$)/u, async (route) => {
       const response = await route.fetch();
-      markOptionsGenerated();
+      markOptionsGenerated(undefined);
       await optionsResponseMayContinue;
       await route.fulfill({ response });
     });
@@ -753,7 +753,7 @@ test("a session created after context issuance blocks registration", async ({ co
     const verificationResponsePromise = page.waitForResponse(
       (response) => new URL(response.url()).pathname === "/api/auth/passkey/verify-registration",
     );
-    releaseOptionsResponse();
+    releaseOptionsResponse(undefined);
     await clickPromise;
     const verificationResponse = await verificationResponsePromise;
 
@@ -767,7 +767,7 @@ test("a session created after context issuance blocks registration", async ({ co
     const finalCounts = await authCounts();
     expect(finalCounts.passkeys).toBe(0);
   } finally {
-    releaseOptionsResponse();
+    releaseOptionsResponse(undefined);
     await sessionPage?.close();
     await authenticator.dispose();
   }

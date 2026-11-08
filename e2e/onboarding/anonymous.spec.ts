@@ -103,7 +103,7 @@ test("missing passkey keeps the permanent Sign Up link without entering setup", 
   const authenticator = await registerPasskey(context, page);
   await page.goto("/auth/sign-out");
   const [credential] = await authenticator.credentials();
-  if (!credential) {
+  if (credential === undefined) {
     throw new Error("Expected registered passkey credential");
   }
   await authenticator.removeCredential(credential.credentialId);

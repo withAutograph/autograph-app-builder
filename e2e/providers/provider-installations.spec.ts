@@ -109,7 +109,7 @@ test("GitHub return preserves edits made while its checkpoint is in flight", asy
       held ||
       request.method() !== "POST" ||
       !request.headers()["next-action"] ||
-      !request.postData()?.includes("clientMutationId")
+      request.postData()?.includes("clientMutationId") !== true
     ) {
       await route.continue();
       return;
@@ -211,7 +211,7 @@ for (const provider of emulatedProviders) {
           checkpointHeld ||
           request.method() !== "POST" ||
           !request.headers()["next-action"] ||
-          !request.postData()?.includes("clientMutationId")
+          request.postData()?.includes("clientMutationId") !== true
         ) {
           await route.continue();
           return;
@@ -367,7 +367,7 @@ test("provider substitution and malformed callback fail without a binding", asyn
   await page.getByRole("button", { name: "Continue with GitHub" }).click();
   const state = new URL(page.url()).searchParams.get("state");
   expect(state).toBeTruthy();
-  if (!state) throw new Error("Expected GitHub callback state");
+  if (state === null || state === "") throw new Error("Expected GitHub callback state");
 
   await page.goto(
     `/vercel/installations/callback?code=substituted&state=${encodeURIComponent(state)}`,

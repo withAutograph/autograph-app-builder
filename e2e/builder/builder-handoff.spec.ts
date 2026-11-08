@@ -112,7 +112,7 @@ test("a lost handoff action response retries its saved checkpoint without resavi
       !interrupted &&
       request.method() === "POST" &&
       new URL(request.url()).pathname === "/" &&
-      request.postData()?.includes("draftCheckpoint")
+      request.postData()?.includes("draftCheckpoint") === true
     ) {
       interrupted = true;
       // Complete the real server mutation before dropping only its response.

@@ -34,7 +34,7 @@ let callbackServer: Server | undefined;
 test.afterEach(async () => {
   const server = callbackServer;
   callbackServer = undefined;
-  if (server?.listening) {
+  if (server?.listening === true) {
     server.closeAllConnections();
     server.close();
   }
@@ -197,7 +197,8 @@ test("web login and both emulated connections survive Cursor consent, token refr
   });
   const handoffPath = new URL(page.url()).pathname;
   const handoffId = handoffPath.split("/").at(-1);
-  if (!handoffId) throw new Error("OAuth handoff URL did not include an ID.");
+  if (handoffId === undefined || handoffId === "")
+    throw new Error("OAuth handoff URL did not include an ID.");
   await page.getByText("Set up Autograph in Cursor", { exact: true }).click();
   await expect(page.getByRole("link", { name: "Add Autograph to Cursor" })).toBeVisible();
 
@@ -287,7 +288,9 @@ test("web login and both emulated connections survive Cursor consent, token refr
     if (
       !received ||
       received.searchParams.get("state") !== state ||
-      !code ||
+      code === null ||
+      code === undefined ||
+      code === "" ||
       received.searchParams.has("error")
     ) {
       throw new Error(
