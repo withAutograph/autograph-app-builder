@@ -57,6 +57,7 @@ function parseRow(row: typeof builderDrafts.$inferSelect): BuilderDraftRow {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function isUniqueViolation(error: unknown) {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
 }
 

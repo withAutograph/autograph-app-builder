@@ -152,6 +152,7 @@ export function createRemoteJwksAccessTokenVerifier(input: {
       const protectedHeader = decodeProtectedHeader(token);
       if (
         protectedHeader.alg !== config.algorithm ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof protectedHeader.kid !== "string" ||
         protectedHeader.kid.length === 0 ||
         protectedHeader.kid.length > 200
@@ -171,15 +172,19 @@ export function createRemoteJwksAccessTokenVerifier(input: {
       if (
         payload.iss !== config.issuer ||
         payload.aud !== config.audience ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof payload.sub !== "string" ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof exp !== "number"
       ) {
         throw new Error(invalidClaimsMessage);
       }
       const invalidIntegerTimes =
         !Number.isInteger(exp) ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof iat !== "number" ||
         !Number.isInteger(iat) ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof nbf !== "number";
       if (invalidIntegerTimes) {
         throw new Error(invalidClaimsMessage);
@@ -196,8 +201,10 @@ export function createRemoteJwksAccessTokenVerifier(input: {
       const invalidLifetime = exp - nbf > 300 || exp - iat > 300;
       if (
         invalidLifetime ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof payload.scope !== "string" ||
         !oauthScopeTokenPattern.test(payload.scope) ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof payload.workspace_id !== "string"
       ) {
         throw new Error(invalidClaimsMessage);

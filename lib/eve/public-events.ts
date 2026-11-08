@@ -119,6 +119,7 @@ const visibleOperationLabels = new Set([
 ]);
 
 const draftValidationCommandLabel = (value: unknown): string | undefined => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value !== "string") {
     return undefined;
   }
@@ -156,11 +157,13 @@ const draftValidationCommandLabel = (value: unknown): string | undefined => {
 };
 
 const recordStringField = (value: unknown, key: string): string | undefined => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value !== "object" || value === null || !(key in value)) {
     return undefined;
   }
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   const field = (value as Record<string, unknown>)[key];
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return typeof field === "string" ? field : undefined;
 };
 

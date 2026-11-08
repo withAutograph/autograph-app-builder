@@ -67,6 +67,7 @@ export function assertBoundGhcrPayload(
   } catch {
     throw new Error("GHCR provider returned malformed output.");
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("GHCR provider returned malformed output.");
   }
@@ -79,6 +80,7 @@ export function assertBoundGhcrPayload(
   ) {
     throw new Error("GHCR provider identity did not match approval.");
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof record.Secret !== "string" || !/^[A-Za-z0-9_]{20,4096}$/u.test(record.Secret)) {
     throw new Error("GHCR provider identity did not match approval.");
   }
@@ -112,6 +114,7 @@ export function assertVerifiedGhcrLoginPayload(
   } catch {
     throw new Error("GitHub keyring verification returned malformed output.");
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("GitHub keyring verification returned malformed output.");
   }
@@ -149,6 +152,7 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
     throw new Error(malformedAuthenticationStatus);
   }
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof parsed !== "object" ||
     parsed === null ||
     Array.isArray(parsed) ||
@@ -158,6 +162,7 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
   }
   const { hosts } = parsed as { hosts?: unknown };
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof hosts !== "object" ||
     hosts === null ||
     Array.isArray(hosts) ||
@@ -172,6 +177,7 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
   }
   // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
   const [record] = records;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof record !== "object" || record === null || Array.isArray(record)) {
     throw new Error(malformedAuthenticationStatus);
   }
@@ -189,6 +195,7 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
   if (value.host !== githubHost || value.login !== expectedUsername || value.state !== "success") {
     throw new Error(identityMismatch);
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (value.tokenSource !== "keyring" || typeof value.scopes !== "string") {
     throw new Error(identityMismatch);
   }

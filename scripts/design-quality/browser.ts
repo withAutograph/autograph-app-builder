@@ -29,6 +29,7 @@ const UNMATCHED_LITERAL = "unmatched-literal";
 const SEMANTIC_TOKEN_REFERENCE = "semantic-token-reference";
 const GENERATED_OVERRIDE = "generated-override";
 const INHERITED_SHARED = "inherited-shared";
+// oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
 const allStrings = (values: unknown[]) => values.every((value) => typeof value === "string");
 
 export const viewports = [
@@ -266,6 +267,7 @@ export function mappedSharedCssRule(input: {
     return;
   }
   const sourceContent = map.sourcesContent?.[mapped.sourceIndex];
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof sourceContent !== "string") {
     return;
   }
@@ -597,9 +599,9 @@ export async function measureStyles(
           allStrings(parsed.sources);
         if (
           hasValidSources &&
-          // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
+          // oxlint-disable-next-line typescript/no-unsafe-member-access, anti-slop/no-runtime-typeof -- Preserve the existing untyped input or fixture boundary; Preserve this runtime check and existing input handling.
           (parsed.sourceRoot === undefined || typeof parsed.sourceRoot === "string") &&
-          // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
+          // oxlint-disable-next-line typescript/no-unsafe-member-access, anti-slop/no-runtime-typeof -- Preserve the existing untyped input or fixture boundary; Preserve this runtime check and existing input handling.
           typeof parsed.mappings === "string"
         ) {
           // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
@@ -845,6 +847,7 @@ export async function measureStyles(
           declaration?.range ??
           ((rule?.style.cssProperties ?? []).filter(
             (entry) =>
+              // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
               entry.disabled !== true && entry.parsedOk !== false && typeof entry.text === "string",
           ).length === 1
             ? rule?.style.range
@@ -883,6 +886,7 @@ export async function measureStyles(
               (entry) =>
                 entry.disabled !== true &&
                 entry.parsedOk !== false &&
+                // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
                 typeof entry.text === "string",
             ),
           );

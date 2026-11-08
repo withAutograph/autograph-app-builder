@@ -34,6 +34,7 @@ type Fetch = typeof fetch;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requestUrl(resource: RequestInfo | URL): URL {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof resource === "string") {
     return new URL(resource);
   }
@@ -100,6 +101,7 @@ export function createGitHubOAuthApp(input: {
       url.origin === GITHUB_ORIGIN &&
       url.pathname === "/login/oauth/access_token"
     ) {
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (typeof init?.body !== "string") {
         throw new TypeError(invalidOAuthRequest);
       }
@@ -107,6 +109,7 @@ export function createGitHubOAuthApp(input: {
       try {
         const parsed = JSON.parse(init.body) as unknown;
         if (
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof parsed !== "object" ||
           parsed === null ||
           Array.isArray(parsed) ||

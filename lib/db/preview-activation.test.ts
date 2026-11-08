@@ -52,6 +52,7 @@ const activationDatabase = async () => {
     },
     apply(_target, _receiver, rawArguments: unknown[]) {
       const [segments, ...parameters] = rawArguments;
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (!Array.isArray(segments) || !segments.every((part) => typeof part === "string")) {
         throw new Error("Expected a parameterized SQL query");
       }
@@ -61,8 +62,11 @@ const activationDatabase = async () => {
           return value.toISOString();
         }
         if (
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof value === "string" ||
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof value === "number" ||
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof value === "bigint" ||
           value === null
         ) {

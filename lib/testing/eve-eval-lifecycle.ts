@@ -26,11 +26,13 @@ export type EveEvalPrewarmLockReceipt = Readonly<{
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function isErrno(error: unknown, code: string) {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return typeof error === "object" && error !== null && "code" in error && error.code === code;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ownerBound(info: Awaited<ReturnType<typeof lstat>>) {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof info.uid !== "number" || typeof info.mode !== "number") {
     return false;
   }
@@ -92,6 +94,7 @@ async function readLockOwner(lock: string) {
   const source = await readFile(ownerPath, "utf-8");
   const value = JSON.parse(source) as unknown;
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof value !== "object" ||
     value === null ||
     Object.keys(value).toSorted().join(",") !== "createdAt,pid"
@@ -100,6 +103,7 @@ async function readLockOwner(lock: string) {
   }
   const owner = value as { createdAt?: unknown; pid?: unknown };
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof owner.createdAt !== "string" ||
     !Number.isFinite(Date.parse(owner.createdAt)) ||
     !Number.isSafeInteger(owner.pid) ||

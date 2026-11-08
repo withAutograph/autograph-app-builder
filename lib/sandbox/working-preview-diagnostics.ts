@@ -41,6 +41,7 @@ export const workingPreviewDiagnosticExcerpt = (content: string | null): string 
   } catch {
     return "";
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof parsed !== "object" || parsed === null) {
     return "";
   }

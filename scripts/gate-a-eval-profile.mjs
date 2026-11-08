@@ -46,6 +46,7 @@ const fail = (field) => {
 };
 
 /** @param {unknown} value @returns {value is UnknownRecord} */
+// oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
 const isRecord = (value) => typeof value === "object" && value !== null;
 
 /** @param {unknown} value @param {string[]} keys @returns {value is UnknownRecord} */
@@ -60,6 +61,7 @@ const within = (root, candidate) => {
 
 /** @param {unknown} path @param {string} repositoryRoot @returns {RootIdentity} */
 const observeRoot = (path, repositoryRoot) => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof path !== "string" || !isAbsolute(path)) {
     fail("root");
   }
@@ -100,6 +102,7 @@ const observeReadOnlyRoot = (path, repositoryRoot) => {
   if (path === null) {
     return null;
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof path !== "string" || !isAbsolute(path)) {
     fail(sourceRootField);
   }
@@ -207,6 +210,7 @@ export const createGateAEvalProfile = (input, repositoryRoot) => {
   ) {
     if (
       input.image !== null &&
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       (typeof input.image !== "string" || !imagePattern.test(input.image))
     ) {
       fail("sandbox image");
@@ -224,6 +228,7 @@ export const createGateAEvalProfile = (input, repositoryRoot) => {
 
 /** @param {unknown} value @param {string} repositoryRoot @returns {GateAEvalProfile} */
 export const validateGateAEvalProfile = (value, repositoryRoot) => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value !== "object" || value === null || value.version !== 1) {
     fail("profile envelope");
   }
@@ -259,6 +264,7 @@ export const validateGateAEvalProfile = (value, repositoryRoot) => {
   ) {
     if (
       value.image !== null &&
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       (typeof value.image !== "string" || !imagePattern.test(value.image))
     ) {
       fail("sandbox image");

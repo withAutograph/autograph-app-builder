@@ -142,6 +142,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         navigate({ replace: true, to: resolvedRedirectTo });
         return;
       }
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (!response.ok || typeof body.context !== "string") {
         throw new Error("Passkey registration is unavailable.");
       }

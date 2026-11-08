@@ -33,6 +33,7 @@ export type HostedEngineSnapshot = z.infer<typeof hostedSnapshotSchema>;
 // eslint-disable-next-line eslint/func-style -- Keep the filtering iterator lazy for snapshot projection.
 function* internalEvents(candidates: readonly unknown[]): Generator<InternalEveEvent> {
   for (const candidate of candidates) {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     if (candidate !== null && typeof candidate === "object") {
       yield candidate as InternalEveEvent;
     }
@@ -42,6 +43,7 @@ function* internalEvents(candidates: readonly unknown[]): Generator<InternalEveE
 const publicEventFromCandidate = (
   candidate: unknown,
 ): z.infer<typeof publicEveEventSchema> | undefined => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (candidate === null || typeof candidate !== "object") {
     return undefined;
   }

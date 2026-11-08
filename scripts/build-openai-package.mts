@@ -62,6 +62,7 @@ if (portableServerNames.length !== 1 || portableServerNames[0] !== AUTOGRAPH_MCP
 const portableServer = portableMcp.mcpServers[AUTOGRAPH_MCP_SERVER_NAME];
 if (
   !portableServer ||
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   typeof portableServer !== "object" ||
   // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
   portableServer.type !== "streamable-http"

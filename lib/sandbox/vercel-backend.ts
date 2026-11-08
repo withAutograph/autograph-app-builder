@@ -26,6 +26,7 @@ function retryableProviderFailure(error: unknown): boolean {
     return false;
   }
   const { status } = error as Error & { status?: unknown };
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof status === "number" && (status === 429 || status >= 500)) {
     return true;
   }
@@ -40,9 +41,11 @@ function providerDiagnostic(error: unknown): string {
     return "unknown";
   }
   const { cause } = error as Error & { cause?: unknown };
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof cause !== "object" || cause === null || !("code" in cause)) {
     return "Vercel Sandbox request failed (provider_error)";
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   const code = typeof cause.code === "string" ? cause.code : "provider_error";
   return `Vercel Sandbox request failed (${code})`;
 }

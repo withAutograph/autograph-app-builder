@@ -291,6 +291,7 @@ export async function inspectOciCandidateArchive(path: string) {
   };
   if (
     manifest.schemaVersion !== 2 ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof manifest.config?.digest !== "string" ||
     !/^sha256:[0-9a-f]{64}$/u.test(manifest.config.digest)
   ) {

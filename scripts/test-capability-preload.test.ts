@@ -142,6 +142,7 @@ describe("test capability preload", () => {
       (process as unknown as { _getActiveHandles: () => readonly unknown[] })._getActiveHandles();
     // oxlint-disable-next-line unicorn/consistent-function-scoping
     const isMessagePort = (handle: unknown) =>
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof handle === "object" && handle !== null && handle.constructor.name === "MessagePort";
     const beforePorts = activeHandles().filter(isMessagePort).length;
     const timeoutWorker = new Worker(timeoutWorkerFixture, { execArgv: [] });

@@ -115,6 +115,7 @@ export function deriveSpendPreview(fixture: SpendFixture, mapping: SpendMapping)
     const sourceRef = mappedValue(row.source, mapping, "source_record_ref");
     return {
       amount:
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof amount === "number"
           ? new Intl.NumberFormat("en-US", {
               currency: String(currency),

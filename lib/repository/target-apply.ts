@@ -539,9 +539,11 @@ export async function inspectFixtureApplyOverlay(
   }
   const manifestEntries: unknown[] = parsed;
   const sourceFiles = manifestEntries.map((candidate) => {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     if (typeof candidate !== "object" || candidate === null || !("path" in candidate)) {
       throw new Error(invalidManifest);
     }
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     if (typeof candidate.path !== "string" || !safeSourcePath(candidate.path)) {
       throw new Error(invalidManifest);
     }

@@ -90,6 +90,7 @@ async function currentUser() {
 async function HomeContent({ searchParams }: PageProps) {
   await connection();
   const [query, user] = await Promise.all([searchParams, currentUser()]);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   const mode = typeof query.mode === "string" ? query.mode : undefined;
   const notices: ProviderConnectionNotice[] = [];
   for (const provider of ["vercel", "github"] as const) {

@@ -5,14 +5,17 @@ import postgres from "postgres";
 import { selfReproductionDraft } from "./self-reproduction-draft-fixture";
 
 const sessionUserId = (session: unknown): string | undefined => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (session === null || typeof session !== "object" || !("user" in session)) {
     return undefined;
   }
   const { user } = session;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (user === null || typeof user !== "object" || !("id" in user)) {
     return undefined;
   }
   const { id } = user;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return typeof id === "string" ? id : undefined;
 };
 
@@ -80,6 +83,7 @@ export const createReferenceCaptureFixture =
       await waitForBuilderReady(page);
       const session = await currentSession(page);
       const ownerId = sessionUserId(session);
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (typeof ownerId !== "string") {
         throw new TypeError("Emulated OAuth did not establish an owner.");
       }

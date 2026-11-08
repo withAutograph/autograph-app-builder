@@ -154,6 +154,7 @@ export const assertStandaloneGitMetadata = (isDirectory: boolean, label: string)
 };
 
 export const assertNoSecretMaterial = (value: unknown, receiptPath = "receipt"): void => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value === "string") {
     if (secretValue.test(value)) {
       throw new Error(`${receiptPath} contains secret-like material.`);
@@ -166,6 +167,7 @@ export const assertNoSecretMaterial = (value: unknown, receiptPath = "receipt"):
     }
     return;
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value !== "object" || value === null) {
     return;
   }
@@ -397,12 +399,13 @@ export const parseLocalImageInspection = (
   ) {
     throw new Error("Local image OCI provenance labels do not match.");
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof image.Id !== "string" || !/^sha256:[0-9a-f]{64}$/u.test(image.Id)) {
     throw new Error("Local image inspection did not return an exact image ID.");
   }
   const descriptor = image.Descriptor;
   if (
-    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
+    // oxlint-disable-next-line sonarjs/expression-complexity, anti-slop/no-runtime-typeof -- Preserve the existing conditions and their evaluation order; Preserve this runtime check and existing input handling.
     typeof descriptor !== "object" ||
     descriptor === null ||
     !hasExactKeys(descriptor, ["digest", "mediaType", "platform", "size"]) ||
@@ -410,6 +413,7 @@ export const parseLocalImageInspection = (
     descriptor.mediaType !== "application/vnd.oci.image.manifest.v1+json" ||
     !Number.isSafeInteger(descriptor.size) ||
     Number(descriptor.size) <= 0 ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof descriptor.platform !== "object" ||
     descriptor.platform === null ||
     JSON.stringify(descriptor.platform) !==
@@ -595,6 +599,7 @@ export const parseRemoteIndexInspection = (
     !isExactDigest(attestationEntry.digest) ||
     attestationEntry.digest === platformEntry.digest ||
     !isPositiveSize(attestationEntry.size) ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof annotations !== "object" ||
     annotations === null ||
     !hasExactKeys(annotations, ["vnd.docker.reference.digest", "vnd.docker.reference.type"]) ||
@@ -655,6 +660,7 @@ export const parseRemoteImageInspection = (
     manifest.schemaVersion !== 2 ||
     manifest.mediaType !== ociManifestMediaType ||
     selection.platformManifestSize !== Buffer.byteLength(manifestRaw) ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof config !== "object" ||
     config === null ||
     !hasExactKeys(config, ["digest", "mediaType", "size"]) ||
@@ -666,6 +672,7 @@ export const parseRemoteImageInspection = (
     layers.some((layer) => {
       const value: unknown = layer;
       if (
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof value !== "object" ||
         value === null ||
         !hasExactKeys(value, ["digest", "mediaType", "size"])

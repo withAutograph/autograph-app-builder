@@ -141,6 +141,7 @@ const candidatePackageName = (files: readonly SandboxProviderTargetFile[], appId
   if (manifest) {
     try {
       const parsed = JSON.parse(String(manifest.content)) as { name?: unknown };
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (typeof parsed.name === "string" && parsed.name.length > 0) {
         return parsed.name;
       }
@@ -374,7 +375,7 @@ export const evaluateCandidateRuntime = async (input: {
       });
       // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
       const routes = JSON.parse(manifest ?? "{}");
-      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-member-access, anti-slop/no-runtime-typeof -- Preserve the existing untyped input or fixture boundary; Preserve this runtime check and existing input handling.
       if (typeof routes.basePath === "string") {
         // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing untyped input or fixture boundary.; Preserve the existing dynamic value boundary.
         runtimeBasePath = routes.basePath;
@@ -411,6 +412,7 @@ export const evaluateCandidateRuntime = async (input: {
             write(chunk) {
               startup[stream] = excerpt(
                 startup[stream] +
+                  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
                   (typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true })),
               );
             },

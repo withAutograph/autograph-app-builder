@@ -133,6 +133,7 @@ function canonicalPublicResult(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalPublicResult).join(",")}]`;
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (value !== null && typeof value === "object") {
     return `{${Object.entries(value)
       .toSorted(([left], [right]) => {

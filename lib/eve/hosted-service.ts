@@ -465,6 +465,7 @@ function checkpointForSnapshot(
   let publicEventCount = 0;
   // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Project valid public events in their original order.
   for (const candidate of snapshot.events) {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     if (candidate === null || typeof candidate !== "object") {
       continue;
     }
@@ -683,6 +684,7 @@ async function spoolSnapshotEvents(snapshot: HostedEngineSnapshot): Promise<Page
     let eventCount = 0;
     // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Hash valid projected public events in their original order.
     for (const candidate of snapshot.events) {
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (candidate === null || typeof candidate !== "object") {
         continue;
       }
@@ -769,6 +771,7 @@ function* publicSnapshotEvents(snapshot: HostedEngineSnapshot) {
   let eventCount = 0;
   // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Yield valid public events with contiguous cursor indices.
   for (const candidate of snapshot.events) {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     if (candidate === null || typeof candidate !== "object") {
       continue;
     }

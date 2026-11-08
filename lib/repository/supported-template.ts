@@ -108,6 +108,7 @@ export const supportedValidationTestShards = (manifestContent: string): readonly
   if (test === undefined) {
     return [];
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof test !== "string" || test.trim() === "") {
     throw new Error("The selected app's declared test command must be a non-empty string.");
   }
@@ -115,6 +116,7 @@ export const supportedValidationTestShards = (manifestContent: string): readonly
   const ci = object.safeParse(autograph.success ? autograph.data.ci : undefined);
   const declared = ci.success ? ci.data.testShards : undefined;
   const shards = declared === undefined ? 1 : declared;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof shards !== "number" || !Number.isInteger(shards) || shards < 1) {
     throw new Error("The selected app's declared test shard count must be a positive integer.");
   }
@@ -351,6 +353,7 @@ export const inspectSupportedTemplateDependencyClosure =
 
 // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const configurationRecord = function configurationRecord(value: unknown): Record<string, unknown> {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
       (value as Record<string, unknown>)
@@ -529,6 +532,7 @@ const declaredNextRuntime = function declaredNextRuntime(
   const dependencies = configurationRecord(packageManifest.dependencies);
   const devDependencies = configurationRecord(packageManifest.devDependencies);
   const next = dependencies.next ?? devDependencies.next;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return typeof next === "string" && next.trim() !== "" ? "nextjs" : "unsupported";
 };
 
@@ -943,24 +947,29 @@ export const parsePreparedWorkspace = function parsePreparedWorkspace(
   }
   const record = input as Partial<PreparedSandboxWorkspace>;
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof record.workspaceId !== "string" ||
     record.workspaceId === "" ||
     record.workspacePath !== sandboxRepositoryPath ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof record.sourcePath !== "string"
   ) {
     throw new Error(invalidWorkspaceRecordMessage);
   }
   if (
     !nodePath.isAbsolute(record.sourcePath) ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof record.sourceSha !== "string" ||
     !/^[0-9a-f]{40}$/u.test(record.sourceSha)
   ) {
     throw new Error(invalidWorkspaceRecordMessage);
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof record.sourceTree !== "string" || !/^[0-9a-f]{40}$/u.test(record.sourceTree)) {
     throw new Error(invalidWorkspaceRecordMessage);
   }
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof record.workspaceDigest !== "string" ||
     !/^[0-9a-f]{64}$/u.test(record.workspaceDigest) ||
     record.adapter !== SUPPORTED_TEMPLATE_ADAPTER
@@ -968,6 +977,7 @@ export const parsePreparedWorkspace = function parsePreparedWorkspace(
     throw new Error(invalidWorkspaceRecordMessage);
   }
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof record.eligibilityDigest !== "string" ||
     !/^[0-9a-f]{64}$/u.test(record.eligibilityDigest)
   ) {
@@ -993,8 +1003,10 @@ const parsePreparedSourceFiles = function parsePreparedSourceFiles(
     const file = candidate as Partial<PreparedSourceFile>;
     if (
       !["100644", "100755"].includes(file.mode ?? "") ||
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof file.objectId !== "string" ||
       !/^[0-9a-f]{40}$/u.test(file.objectId) ||
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof file.path !== "string"
     ) {
       throw new Error(invalidWorkspaceManifestMessage);
@@ -1002,6 +1014,7 @@ const parsePreparedSourceFiles = function parsePreparedSourceFiles(
     if (
       !safeSourcePath(file.path) ||
       paths.has(file.path) ||
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof file.sha256 !== "string" ||
       !/^[0-9a-f]{64}$/u.test(file.sha256)
     ) {

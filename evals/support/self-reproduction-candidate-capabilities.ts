@@ -32,6 +32,7 @@ export const candidateCapabilities = (
 export const redactCandidateEvidence = <T>(value: T, secrets: readonly string[]): T => {
   // oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve arbitrary candidate evidence values during redaction.
   const redact = (item: unknown): unknown => {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     if (typeof item === "string") {
       let text = item;
       for (const secret of secrets) {
@@ -44,6 +45,7 @@ export const redactCandidateEvidence = <T>(value: T, secrets: readonly string[])
     if (Array.isArray(item)) {
       return item.map(redact);
     }
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     if (item && typeof item === "object") {
       return Object.fromEntries(Object.entries(item).map(([key, entry]) => [key, redact(entry)]));
     }

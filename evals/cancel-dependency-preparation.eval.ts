@@ -20,6 +20,7 @@ export default defineEval({
     t.check(
       recordedStatus,
       satisfies((reply) => {
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         if (typeof reply !== "string") {
           return false;
         }

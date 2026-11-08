@@ -777,6 +777,7 @@ const createInitialJournal = async function createInitialJournal(
 };
 
 const assertJournal = function assertJournal(journal: LocalPublicationJournal): void {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   const invalidJournalValue = journal === null || typeof journal !== "object";
   if (
     invalidJournalValue ||

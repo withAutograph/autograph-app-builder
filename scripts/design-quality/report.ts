@@ -177,6 +177,7 @@ export function renderReport(report: {
         }
         if (
           ![r.x, r.y, r.width, r.height, c.width, c.height].every(
+            // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
             (v) => typeof v === "number" && Number.isFinite(v),
           ) ||
           !c.width ||

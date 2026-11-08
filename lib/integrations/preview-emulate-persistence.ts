@@ -19,6 +19,7 @@ function validateState(state: string) {
   }
   if (
     Buffer.byteLength(state, "utf-8") > MAX_STATE_BYTES ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof parsed !== "object" ||
     parsed === null ||
     Array.isArray(parsed)

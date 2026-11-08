@@ -526,6 +526,7 @@ export function createRepositoryAccessRuntime(input: {
       });
       // Source intent may arrive after eager execution-lease acquisition created
       // the VM. Recover that same VM only when no existing checkout is present.
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       const sandbox = typeof value.sandbox === "function" ? await value.sandbox() : value.sandbox;
       const snapshot = await readSandboxGitHubSourceSnapshot(
         sandbox,
@@ -693,6 +694,7 @@ export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
     if (emulation) {
       configured.providerFetch = (resource, init) => {
         let resourceUrl: string;
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         if (typeof resource === "string") {
           resourceUrl = resource;
         } else if (resource instanceof URL) {

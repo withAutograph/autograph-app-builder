@@ -753,6 +753,7 @@ function exactContentFileState(value: unknown, includeBytes: boolean): boolean {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactContentChange(change: unknown): boolean {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (!record(change) || typeof change.path !== "string" || !safeSourcePath(change.path)) {
     return false;
   }
@@ -1219,6 +1220,7 @@ export function createRepositoryObservation(
     !isDigest(input.installationIdentityDigest) ||
     !exactKeys(input.releaseGate, ["name", "configured"]) ||
     input.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof input.releaseGate.configured !== "boolean";
   if (invalidRepositoryIdentity || invalidRepositoryRevision() || invalidInstallationOrGate()) {
     throw new Error("The repository observation is invalid.");
@@ -1634,6 +1636,7 @@ export function assertExactDraftPullRequestProposal(proposal: DraftPullRequestPr
   if (
     !isDigest(proposal.repositoryObservationDigest) ||
     proposal.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof proposal.releaseGate.configured !== "boolean" ||
     !isDigest(proposal.reviewDigest)
   ) {
@@ -1876,6 +1879,7 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
     value.version !== GITHUB_PUBLICATION_VERSION ||
     !isDigest(value.proposalDigest) ||
     !isDigest(value.idempotencyKey) ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof value.approvedByCallId !== "string"
   ) {
     throw new Error("GitHub mutation receipt bindings are invalid.");

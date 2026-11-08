@@ -63,6 +63,7 @@ export async function POST(request: Request, context: { params: Promise<{ provid
       Object.fromEntries(
         authorizationFields.map((name) => {
           const value = form.get(name);
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           return [name, typeof value === "string" ? value : undefined];
         }),
       ),

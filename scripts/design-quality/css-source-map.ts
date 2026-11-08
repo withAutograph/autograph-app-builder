@@ -52,7 +52,9 @@ export function originalCssSource(
     return;
   }
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     !map.sources.every((source) => typeof source === "string") ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     (map.sourceRoot !== undefined && typeof map.sourceRoot !== "string")
   ) {
     return;
@@ -113,6 +115,7 @@ export function originalCssSource(
     }
     if (line === generatedLine && candidate) {
       const path = map.sources[candidate.source];
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (typeof path !== "string" || !path) {
         return;
       }

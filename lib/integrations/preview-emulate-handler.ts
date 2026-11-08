@@ -133,6 +133,7 @@ export async function invokePreviewEmulateRequest(request: Request) {
   const path = url.pathname.slice(prefix.length).split("/").filter(Boolean);
   const method = request.method as keyof Handler;
   const selectedMethod = selected[method];
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof selectedMethod !== "function") {
     return new Response("Method not allowed", { status: 405 });
   }

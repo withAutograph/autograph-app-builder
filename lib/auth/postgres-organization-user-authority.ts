@@ -27,6 +27,7 @@ function resultRows<T>(input: readonly T[] | { rows: readonly T[] }): readonly T
   if (Array.isArray(input)) {
     return input as T[];
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof input === "object" && input !== null && "rows" in input && Array.isArray(input.rows)) {
     return input.rows as T[];
   }

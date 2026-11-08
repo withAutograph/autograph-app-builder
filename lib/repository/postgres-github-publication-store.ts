@@ -68,6 +68,7 @@ const hasExactStoredKeys = (value: GitHubPublicationProposal, keys: readonly str
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseProposal(input: unknown): GitHubPublicationProposal {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     throw new Error("GitHub publication proposal JSON is malformed.");
   }

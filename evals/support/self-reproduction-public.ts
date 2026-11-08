@@ -57,6 +57,7 @@ export const parsePublicStartFile = (contents: string): PublicStartInput =>
 
 // oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve untrusted observation values while redacting URLs.
 const redactObservationUrls = (entry: unknown): unknown => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof entry === "string") {
     return entry.replaceAll(/https?:\/\/[^\s"'<>`]+/giu, (value) => {
       try {
@@ -69,6 +70,7 @@ const redactObservationUrls = (entry: unknown): unknown => {
   if (Array.isArray(entry)) {
     return entry.map(redactObservationUrls);
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (entry !== null && typeof entry === "object") {
     return Object.fromEntries(
       Object.entries(entry).map(([key, item]) => [key, redactObservationUrls(item)]),
@@ -180,12 +182,14 @@ const redactTransportToken = (value: unknown, bearerToken: string | undefined): 
   if (bearerToken === undefined) {
     return value;
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value === "string") {
     return value.replaceAll(bearerToken, "[REDACTED TOKEN]");
   }
   if (Array.isArray(value)) {
     return value.map((entry) => redactTransportToken(entry, bearerToken));
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value).map(([key, entry]) => [

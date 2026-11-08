@@ -156,6 +156,7 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
     throw new Error(invalidCanonicalCloneInspectionMessage);
   }
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     value.dirtyPaths.some((path) => typeof path !== "string") ||
     !isRecord(value.contents) ||
     !Array.isArray(value.contract)
@@ -168,6 +169,7 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
   ]);
   if (
     Object.entries(value.contents).some(
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       ([path, content]) => !allowedContents.has(path) || typeof content !== "string",
     )
   ) {
@@ -179,9 +181,13 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
       throw new TypeError(invalidCanonicalCloneInspectionMessage);
     }
     if (
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof entry.path !== "string" ||
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof entry.mode !== "string" ||
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof entry.objectId !== "string" ||
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof entry.sha256 !== "string"
     ) {
       throw new TypeError(invalidCanonicalCloneInspectionMessage);
@@ -347,6 +353,7 @@ export const parseSourceReceipt = (value: unknown): SourceReceipt => {
   ) {
     throw new Error("Source receipt has an unsupported schema.");
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value.sourcePath !== "string" || !nodePath.isAbsolute(value.sourcePath)) {
     throw new Error("Source receipt diagnostic path is invalid.");
   }

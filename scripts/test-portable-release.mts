@@ -158,6 +158,7 @@ try {
   await runSequentially(
     [codexManifest.interface?.composerIcon, codexManifest.interface?.logo],
     async (reference) => {
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (typeof reference !== "string" || !reference.startsWith("./")) {
         throw new Error("Codex marketplace asset reference was invalid.");
       }

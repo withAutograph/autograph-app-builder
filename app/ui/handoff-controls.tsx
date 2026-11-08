@@ -31,8 +31,11 @@ function readStatus(value: HandoffControlData, handoffId: string): HandoffContro
     value.handoffId !== handoffId ||
     !["prepared", "continued", "expired"].includes(value.status) ||
     !["codex", "cursor"].includes(value.destination) ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof value.cursorInstallReady !== "boolean" ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof value.mcpUrl !== "string" ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof value.expiresAt !== "string" ||
     Number.isNaN(Date.parse(value.expiresAt))
   ) {

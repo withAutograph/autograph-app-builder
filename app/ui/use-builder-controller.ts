@@ -150,6 +150,7 @@ export function useBuilderController({
     (update: SetStateAction<BuilderForm>) => {
       localFormMutationVersion.current += 1;
       const { current } = formSnapshot;
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       const next = typeof update === "function" ? update(current) : update;
       formSnapshot.current = next;
       for (const field of Object.keys(next) as (keyof BuilderForm)[]) {

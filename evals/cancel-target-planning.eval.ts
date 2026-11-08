@@ -23,6 +23,7 @@ export default defineEval({
       turn1.message,
       satisfies(
         (reply) =>
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof reply === "string" &&
           !/canonical proposal|digest-bound|target identity|target mutation/iu.test(reply),
         "automatic planning stays product-facing",

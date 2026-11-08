@@ -1,3 +1,4 @@
+/* oxlint-disable anti-slop/no-runtime-typeof -- Preserve runtime input discrimination and existing fixture behavior. */
 /// <reference types="node" />
 import { parentPort, workerData } from "node:worker_threads";
 import { once } from "node:events";

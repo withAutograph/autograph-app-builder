@@ -244,6 +244,7 @@ function providerFetch(input?: {
     // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
     const url = String(request);
     let body: unknown;
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     if (typeof init.body === "string") {
       body = JSON.parse(init.body);
     }
@@ -325,6 +326,7 @@ function historicalProviderFetch(input?: {
     // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
     const url = String(request);
     const method = init.method ?? "GET";
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
     calls.push({ body, method, url });
     if (url.endsWith("/app/installations/456/access_tokens")) {
@@ -392,6 +394,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const provider = createProvider(async (request, init = {}) => {
       // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = String(request);
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
       calls.push({ body, method: init.method ?? "GET", url });
       if (url.endsWith("/access_tokens")) {
@@ -1385,6 +1388,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = String(request);
       const method = init.method ?? "GET";
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
       calls.push({ body, method, url });
       if (url.endsWith("/app/installations/456/access_tokens")) {
@@ -1739,6 +1743,7 @@ describe("existing draft update provider", () => {
       // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = String(request);
       const method = init.method ?? "GET";
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
       calls.push({ body, url });
       if (url.endsWith("/app")) {
@@ -1919,6 +1924,7 @@ describe("existing draft reconciliation provider", () => {
       // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const url = String(request);
       const method = init.method ?? "GET";
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
       calls.push({ body, url });
       if (url.endsWith("/app")) {

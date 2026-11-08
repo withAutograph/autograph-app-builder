@@ -1,3 +1,4 @@
+/* oxlint-disable anti-slop/no-runtime-typeof -- Preserve runtime discrimination within JSX or template expressions and existing input handling. */
 /** Accepted artifact phases in the ordinary local creation workflow. */
 const acceptedSpecPhases = new Set([
   "app_spec_accepted",

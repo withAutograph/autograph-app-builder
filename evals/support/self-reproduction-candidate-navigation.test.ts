@@ -39,6 +39,7 @@ it.each(["history", "local-state", "inert", "unknown", "unavailable"])(
     });
     const page = {
       getByRole: (_role: string, options: { name: string | RegExp }) =>
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         control(typeof options.name === "string" ? options.name : "back"),
       goBack: async () => {
         if (mode === "history") {

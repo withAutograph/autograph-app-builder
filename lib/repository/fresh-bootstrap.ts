@@ -712,15 +712,21 @@ export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJour
     (journal.status !== "pending" &&
       journal.status !== "failed" &&
       journal.status !== "succeeded") ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof journal.publishedByCallId !== "string" ||
     journal.publishedByCallId.length === 0 ||
     journal.publishedByCallId.length > 512 ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof journal.leaseMarkerDigest !== "string" ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     (journal.recoveryOfDigest !== undefined && typeof journal.recoveryOfDigest !== "string") ||
     (journal.previousLeaseMarkerDigest !== undefined &&
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof journal.previousLeaseMarkerDigest !== "string") ||
     ((journal.status === "pending" || journal.status === "failed") &&
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       (typeof journal.stageCreated !== "boolean" ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof journal.destinationPublished !== "boolean")) ||
     (journal.status === "failed" &&
       (![
@@ -731,14 +737,20 @@ export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJour
         "capability-disabled",
         "recovery-conflict",
       ].includes(journal.reason) ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof journal.failureMessage !== "string" ||
         journal.failureMessage.length === 0 ||
         journal.failureMessage.length > 4096)) ||
     (journal.status === "succeeded" &&
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       (typeof journal.headReference !== "string" ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof journal.headCommit !== "string" ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof journal.headTree !== "string" ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof journal.remoteDigest !== "string" ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof journal.worktreeDigest !== "string"))
   ) {
     throw new Error("The fresh-bootstrap journal is malformed.");

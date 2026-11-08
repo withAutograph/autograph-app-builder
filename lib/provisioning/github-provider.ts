@@ -63,6 +63,7 @@ function property(value: unknown, key: string) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function stringProperty(value: unknown, key: string) {
   const result = property(value, key);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof result !== "string") {
     throw new TypeError(INVALID_RESPONSE);
   }
@@ -72,6 +73,7 @@ function stringProperty(value: unknown, key: string) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function decimalProperty(value: unknown, key: string) {
   const result = property(value, key);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return decimal.parse(typeof result === "number" ? String(result) : result);
 }
 
@@ -92,6 +94,7 @@ function retryAfterMilliseconds(headers: unknown, now: number): number | undefin
     return undefined;
   }
   const raw = headers["retry-after"];
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof raw !== "string") {
     return undefined;
   }
@@ -244,6 +247,7 @@ export async function provisionGitHubRepository(input: {
       if (status === 403) {
         throw new Error("provider-permission-denied", { cause: error });
       }
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (typeof status === "number" && args.expected.includes(status)) {
         return {
           body: record(response) ? response.data : undefined,
@@ -601,6 +605,7 @@ export async function provisionGitHubRepository(input: {
     const isPrivate = property(repo.body, "private");
     if (
       owner !== input.installation.accountLogin ||
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof isPrivate !== "boolean" ||
       isPrivate !== input.private ||
       stringProperty(repo.body, "default_branch") !== "main"

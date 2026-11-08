@@ -178,6 +178,7 @@ const codexAssetReferences = [codexManifest.interface?.composerIcon, codexManife
 const codexMarketplaceAssetPaths = await Promise.all(
   [...new Set(codexAssetReferences)].map(async (reference) => {
     if (
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof reference !== "string" ||
       !reference.startsWith("./") ||
       reference.includes("\\") ||

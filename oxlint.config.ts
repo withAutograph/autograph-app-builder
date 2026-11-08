@@ -15,7 +15,6 @@ export default defineConfig({
   rules: {
     // Temporary migration baseline; remove these as findings are fixed.
     "typescript/promise-function-async": "off",
-    "anti-slop/no-runtime-typeof": "off",
     "anti-slop/no-unknown-parameters": "off",
     "anti-slop/require-safety-comment-for-type-assertion": "off",
     "sonarjs/cognitive-complexity": "off",

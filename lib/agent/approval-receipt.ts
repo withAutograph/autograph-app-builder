@@ -734,6 +734,7 @@ function otherPublicApprovalDescription(input: unknown, toolName?: string): stri
   }
   if (toolName === "accept_change_set") {
     const changeSet =
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof record.changeSet === "object" &&
       record.changeSet !== null &&
       !Array.isArray(record.changeSet)

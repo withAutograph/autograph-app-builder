@@ -261,9 +261,11 @@ const property = (value: unknown, key: string): unknown => {
 
 const decimalProperty = (value: unknown, key: string): string => {
   const candidate = property(value, key);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof candidate === "number" && Number.isSafeInteger(candidate) && candidate > 0) {
     return String(candidate);
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof candidate === "string" && decimalSchema.safeParse(candidate).success) {
     return candidate;
   }
@@ -272,6 +274,7 @@ const decimalProperty = (value: unknown, key: string): string => {
 
 const stringProperty = (value: unknown, key: string): string => {
   const candidate = property(value, key);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof candidate !== "string") {
     throw new TypeError(invalidResponse);
   }
@@ -280,6 +283,7 @@ const stringProperty = (value: unknown, key: string): string => {
 
 const nullableStringProperty = (value: unknown, key: string): string | null => {
   const candidate = property(value, key);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (candidate !== null && typeof candidate !== "string") {
     throw new Error(invalidResponse);
   }
@@ -588,14 +592,17 @@ const normalizedUserTokens = (authentication: unknown, now: number) => {
       throw new Error(invalidToken);
     }
     const expiresAt =
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof propertyOrUndefined(authentication, "expiresAt") === "string"
         ? String(propertyOrUndefined(authentication, "expiresAt"))
         : undefined;
     const refreshToken =
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof propertyOrUndefined(authentication, "refreshToken") === "string"
         ? String(propertyOrUndefined(authentication, "refreshToken"))
         : undefined;
     const refreshTokenExpiresAt =
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof propertyOrUndefined(authentication, "refreshTokenExpiresAt") === "string"
         ? String(propertyOrUndefined(authentication, "refreshTokenExpiresAt"))
         : undefined;
@@ -688,6 +695,7 @@ const accessibleInstallation = async (input: {
     const totalCount = property(body, "total_count");
     const installations = property(body, "installations");
     if (
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof totalCount !== "number" ||
       !Number.isSafeInteger(totalCount) ||
       totalCount < 0 ||
@@ -704,6 +712,7 @@ const accessibleInstallation = async (input: {
       const candidateAppId = propertyOrUndefined(value, "app_id");
       if (
         candidateAppId !== input.appId &&
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         (typeof candidateAppId !== "number" ||
           !Number.isSafeInteger(candidateAppId) ||
           String(candidateAppId) !== input.appId)
@@ -772,6 +781,7 @@ export const createGitHubAppInstallationAuthorization = (input: {
   const providerFetch: Fetch = input.emulation
     ? (resource, init) => {
         let resourceUrl: string;
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         if (typeof resource === "string") {
           resourceUrl = resource;
         } else if (resource instanceof URL) {
@@ -1099,6 +1109,7 @@ export const createGitHubAppInstallationAuthorization = (input: {
           let stage: GitHubInstallationAuthorizationFailureStage;
           if (category !== undefined && responseStatus === 200) {
             stage = "token-exchange-oauth-error";
+            // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           } else if (typeof status === "number") {
             stage = "token-exchange-non-2xx";
           } else {

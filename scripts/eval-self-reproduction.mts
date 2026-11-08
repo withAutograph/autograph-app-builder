@@ -210,6 +210,7 @@ const runConfiguredPairedCaptures = async () => {
     }) => Promise<Partial<Record<"reference" | "candidate", CaptureAdapter>>>;
   };
   const { createCaptureAdapters } = loaded;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof createCaptureAdapters !== "function") {
     throw new TypeError("Capture adapter must export createCaptureAdapters().");
   }
@@ -267,6 +268,7 @@ const runConfiguredWorkflowAdapters = async (candidateRoot: string | undefined) 
     createWorkflowAdapters?: WorkflowAdapterFactory;
   };
   const { createWorkflowAdapters } = loaded;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof createWorkflowAdapters !== "function") {
     throw new TypeError("Workflow adapter module must export createWorkflowAdapters().");
   }
@@ -413,6 +415,7 @@ const candidateAppId = (files: Awaited<ReturnType<typeof readSource>>): string =
   if (contract) {
     try {
       const parsed = JSON.parse(contract.content) as { appId?: unknown };
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (typeof parsed.appId === "string" && /^[a-z][a-z0-9-]*$/u.test(parsed.appId)) {
         return parsed.appId;
       }

@@ -61,6 +61,7 @@ const run = async (
     server.listen(0, "127.0.0.1", resolve);
   });
   const address = server.address();
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (address === null || typeof address === "string") {
     throw new Error("Missing server address");
   }
@@ -237,6 +238,7 @@ it("validates the complete streamed read even when an early marker matches", asy
       if (options?.method === "POST") {
         // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
         const submitted: unknown = JSON.parse(String(options.body));
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         if (typeof submitted !== "object" || submitted === null || !("value" in submitted)) {
           throw new Error("Invalid test request");
         }

@@ -37,6 +37,7 @@ function privateTemplateRepository(value: unknown) {
   if (!record(value)) {
     return false;
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value.id !== "number" || !Number.isSafeInteger(value.id)) {
     return false;
   }

@@ -51,12 +51,14 @@ export const sanitizePreviewEvidence = (value: string) =>
 
 // oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve arbitrary observation values during redaction.
 const sanitizeValue = (value: unknown): unknown => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value === "string") {
     return sanitizePreviewEvidence(value);
   }
   if (Array.isArray(value)) {
     return value.map(sanitizeValue);
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [key, sanitizeValue(item)]),
@@ -75,7 +77,9 @@ const previewProvenance = (
   receipt: PreviewReceipt,
 ): PreviewSourceProvenance => ({
   expiresAt: receipt.expiresAt,
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   sessionId: typeof sessionId === "string" ? sessionId : null,
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   sourceRevision: typeof sourceRevision === "string" ? sourceRevision : null,
   verifiedAt: receipt.verifiedAt,
 });
@@ -112,6 +116,7 @@ export const loadWorkingPreview = async (
     session?: { sessionId?: unknown; status?: string; workingPreview?: unknown };
   };
   const receipt = publicState?.session?.workingPreview;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (receipt === null || typeof receipt !== "object") {
     const finalWaiting =
       publicState.outcome === "waiting" && publicState.session?.status === "waiting";
@@ -124,8 +129,11 @@ export const loadWorkingPreview = async (
   }
   const candidate = receipt as Partial<PreviewReceipt>;
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof candidate.url !== "string" ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof candidate.expiresAt !== "string" ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof candidate.verifiedAt !== "string"
   ) {
     return { reason: "The delivered working-preview receipt is incomplete.", status: "invalid" };

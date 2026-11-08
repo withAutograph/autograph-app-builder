@@ -147,6 +147,7 @@ export async function acquireCanonicalArrustedTemplate(input: {
 }): Promise<SourceReceipt> {
   const reader = input.reader ?? deploymentArrustedTemplateReader();
   const access = await acquisitionStage("reader", () => reader.acquire());
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof input.sandbox === "function") {
     if (input.sessionId === undefined) {
       throw new Error("The App Builder session is unavailable.");
@@ -156,6 +157,7 @@ export async function acquireCanonicalArrustedTemplate(input: {
       source: { token: access.token, url: ARRUSTED_TEMPLATE_REPOSITORY, revision: "main" },
     });
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   const sandbox = typeof input.sandbox === "function" ? await input.sandbox() : input.sandbox;
   const snapshot = await acquisitionStage("sandbox_clone", () =>
     readSandboxGitHubSourceSnapshot(sandbox, { repository: ARRUSTED_TEMPLATE_REPOSITORY }, () =>

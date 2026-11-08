@@ -162,6 +162,7 @@ const canonicalRecordValue = (value: unknown): string => {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalRecordValue).join(",")}]`;
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (value !== null && typeof value === "object") {
     return `{${Object.entries(value)
       .toSorted(([left], [right]) => left.localeCompare(right))
@@ -177,6 +178,7 @@ const canonicalPersistedValue = (value: unknown): string => {
   if (Array.isArray(value)) {
     return `[${value.map((entry) => (entry === undefined ? "null" : canonicalPersistedValue(entry))).join(",")}]`;
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (value !== null && typeof value === "object") {
     return `{${Object.entries(value)
       .filter(([, entry]) => entry !== undefined)

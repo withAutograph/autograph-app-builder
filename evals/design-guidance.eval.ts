@@ -36,16 +36,18 @@ ${renewalReviewDesignPrompt}`);
           const files: unknown[] = value;
           return files.some(
             (file) =>
-              // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
+              // oxlint-disable-next-line sonarjs/expression-complexity, anti-slop/no-runtime-typeof -- Preserve the existing conditions and their evaluation order; Preserve this runtime check and existing input handling.
               typeof file === "object" &&
               file !== null &&
               "content" in file &&
+              // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
               typeof file.content === "string" &&
               file.content.includes("DataTableComposition") &&
               !file.content.includes("fetch("),
           );
         },
         manifest: (value) => {
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           if (typeof value !== "object" || value === null) {
             return false;
           }

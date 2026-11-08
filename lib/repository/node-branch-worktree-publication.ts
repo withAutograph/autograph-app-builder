@@ -900,6 +900,7 @@ export const readBranchWorktreePublicationJournal = async (
   proposalOrIdentity: BranchWorktreePublicationProposal | string,
 ): Promise<BranchWorktreePublicationJournal | undefined> => {
   const identity =
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof proposalOrIdentity === "string"
       ? proposalOrIdentity
       : proposalOrIdentity.publicationIdentityDigest;

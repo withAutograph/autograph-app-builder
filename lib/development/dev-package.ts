@@ -113,6 +113,7 @@ export const createDevelopmentPackage = async (input: {
       // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
     ) as Record<string, unknown>;
     const sourceInterface =
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof sourceManifest.interface === "object" && sourceManifest.interface !== null
         ? // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
           (sourceManifest.interface as Record<string, unknown>)

@@ -16,6 +16,7 @@ export interface ProviderConnectionReturn {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function first(value: string | string[] | undefined) {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return typeof value === "string" ? value : undefined;
 }
 

@@ -149,6 +149,7 @@ function packageVersion(packagePath: string): string {
   const manifest = JSON.parse(readFileSync(path.join(packagePath, "package.json"), "utf-8")) as {
     version?: string;
   };
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof manifest.version !== "string") {
     throw new TypeError("Dependency package version is missing.");
   }
@@ -188,6 +189,7 @@ function dependencyClosure(root: string): Map<string, string> {
       dependencies?: Record<string, string>;
       optionalDependencies?: Record<string, string>;
     };
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     if (typeof manifest.version !== "string") {
       throw new TypeError("Dependency package version is missing.");
     }

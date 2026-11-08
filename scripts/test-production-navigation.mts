@@ -107,6 +107,7 @@ const freePort = async () => {
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = server.address();
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (!address || typeof address === "string") {
     throw new Error("Missing loopback port.");
   }
@@ -152,6 +153,7 @@ try {
       // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       const info = await lstat(path.join(source, file)).catch((error: unknown) => {
         if (
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof error === "object" &&
           error !== null &&
           "code" in error &&
@@ -187,6 +189,7 @@ try {
       // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       const installed = await lstat(dependencyView).catch((error: unknown) => {
         if (
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof error === "object" &&
           error !== null &&
           "code" in error &&
@@ -281,6 +284,7 @@ try {
   tls.listen(0, "127.0.0.1");
   await once(tls, "listening");
   const address = tls.address();
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (!address || typeof address === "string") {
     throw new Error("Missing TLS port.");
   }
@@ -299,6 +303,7 @@ try {
         signal.throwIfAborted();
         if (error instanceof Error && "code" in error && "stderr" in error) {
           const killed = "killed" in error && error.killed === true;
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           if (typeof error.code === "number" && typeof error.stderr === "string" && !killed) {
             return { exitCode: error.code, stderr: error.stderr };
           }

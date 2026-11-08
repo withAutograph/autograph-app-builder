@@ -343,6 +343,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const acceptanceResults = toolResults.filter(({ name }) => name === "accept_app_spec");
     const latestAcceptance = acceptanceResults.at(-1);
     const repairDiagnostic = (() => {
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (latestAcceptance?.isError !== true || typeof latestAcceptance.output !== "string") {
         return;
       }
@@ -1145,6 +1146,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
     const output = latestStatus.output as Record<string, unknown>;
     const proposal = { ...output };
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     if (typeof proposal.proposalDigest === "string") {
       proposal.digest = proposal.proposalDigest;
     }
@@ -1178,6 +1180,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       if (output.status === "succeeded") {
         return "The separately approved recovery completed the exact durable branch-worktree intent without a commit, push, remote publication, provider, deployment, or release action.";
       }
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (typeof output.digest !== "string") {
         return "The exact durable recovery journal digest is unavailable.";
       }
@@ -1386,6 +1389,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
       ...(proposal.output as Record<string, unknown>),
     };
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     if (typeof publicationProposal.proposalDigest === "string") {
       publicationProposal.digest = publicationProposal.proposalDigest;
     }
@@ -1477,6 +1481,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         | undefined;
       return output?.path === artifact?.path &&
         output?.digest === artifact?.digest &&
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof output?.content === "string"
         ? "The exact content-addressed prototype artifact was read without a target command."
         : "The prototype artifact readback did not match its recorded receipt.";

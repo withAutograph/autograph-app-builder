@@ -35,6 +35,7 @@ export function testCapabilityEnabled(
   if (environment.APP_BUILDER_REAL_SANDBOX === "1" && capability !== mockModelCapability) {
     return false;
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof injected !== "object" || injected === null) {
     return false;
   }
@@ -43,6 +44,7 @@ export function testCapabilityEnabled(
     !Object.isFrozen(candidate) ||
     Object.keys(candidate).toSorted().join(",") !== "capabilities,id,version" ||
     candidate.version !== 1 ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof candidate.id !== "string"
   ) {
     return false;

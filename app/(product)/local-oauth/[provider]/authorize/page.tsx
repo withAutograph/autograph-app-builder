@@ -21,6 +21,7 @@ function scalarValues(values: Record<string, string | string[] | undefined>) {
   return Object.fromEntries(
     Object.entries(values).map(([key, value]) => [
       key,
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof value === "string" ? value : undefined,
     ]),
   );

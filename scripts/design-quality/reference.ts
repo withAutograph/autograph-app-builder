@@ -73,9 +73,11 @@ const walk = async (root: string, relative = ""): Promise<string[]> => {
 };
 
 const exportTargets = (value: unknown): string[] => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value === "string") {
     return [value];
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (value === null || typeof value !== "object") {
     return [];
   }
@@ -84,9 +86,11 @@ const exportTargets = (value: unknown): string[] => {
 };
 
 const packageEntryPoints = (pkg: PackageJson): { suffix: string; target: string }[] => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof pkg.exports === "string") {
     return [{ suffix: "", target: pkg.exports }];
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (pkg.exports && typeof pkg.exports === "object") {
     const exported: [string, unknown][] = Object.entries(pkg.exports);
     const entries = exported

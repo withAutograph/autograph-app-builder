@@ -86,6 +86,7 @@ builderActions.continueBuilderHandoff.mockImplementation(defaultContinuation);
 const draftFetch = vi.hoisted(() =>
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   vi.fn(async (_url: string, init?: RequestInit) => {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     if (typeof init?.body !== "string") {
       throw new TypeError("Expected a JSON draft request body.");
     }

@@ -35,6 +35,7 @@ const declaredReadiness = (lines: readonly string[]): boolean | undefined => {
   try {
     const parsed: unknown = JSON.parse(lines.join("\n"));
     if (
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof parsed === "object" &&
       parsed !== null &&
       !Array.isArray(parsed) &&

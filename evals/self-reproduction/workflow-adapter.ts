@@ -48,14 +48,17 @@ export interface WorkflowAdapterFactoryInput {
 }
 
 const sessionUserId = (session: unknown): string | undefined => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (session === null || typeof session !== "object" || !("user" in session)) {
     return undefined;
   }
   const { user } = session;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (user === null || typeof user !== "object" || !("id" in user)) {
     return undefined;
   }
   const { id } = user;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return typeof id === "string" ? id : undefined;
 };
 
@@ -220,6 +223,7 @@ const referenceAdapter = (
       if (workflowId === "authentication") {
         const ownerSession = await currentSession(page);
         const ownerId = sessionUserId(ownerSession);
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         if (typeof ownerId !== "string") {
           throw new TypeError("Reference OAuth did not establish an owner identity.");
         }
@@ -280,6 +284,7 @@ const referenceAdapter = (
           // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
           const body = await response.json();
           const isDistinctUser =
+            // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
             ownerCanRead && typeof strangerId === "string" && strangerId !== ownerId;
           otherUserDenied =
             isDistinctUser &&

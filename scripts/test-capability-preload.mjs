@@ -115,6 +115,7 @@ function canonical(proof) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactKeys(value, keys) {
   return (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof value === "object" &&
     value !== null &&
     Object.keys(value).toSorted().join(",") === [...keys].toSorted().join(",")
@@ -167,6 +168,7 @@ function requestAuthorization() {
   const context = contextForProcess();
   // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
   const port =
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     !isMainThread && workerData !== null && typeof workerData === "object"
       ? workerData[workerPortKey]
       : undefined;
@@ -175,6 +177,7 @@ function requestAuthorization() {
   }
   // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
   const delegatedPublicKey =
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     !isMainThread && workerData !== null && typeof workerData === "object"
       ? workerData[`${workerPortKey}PublicKey`]
       : undefined;
@@ -298,6 +301,7 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
       const channel = new MessageChannel();
       // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing assignment while its type remains unresolved.
       const existingData =
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof options.workerData === "object" && options.workerData !== null
           ? options.workerData
           : {};
@@ -368,7 +372,9 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
         if (
           invalidRequestEnvelope ||
           request.version !== 2 ||
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof request.nonce !== "string" ||
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof request.context !== "string"
         ) {
           cleanup();

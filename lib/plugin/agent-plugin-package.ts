@@ -139,6 +139,7 @@ const prepareSafeOutputParent = async (root: string, output: string) => {
 };
 
 const schemaVersion = (schema: unknown) => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof schema !== "string") {
     return;
   }
@@ -147,6 +148,7 @@ const schemaVersion = (schema: unknown) => {
 };
 
 export const assertAutographMcpEndpoint = (value: unknown, { release }: { release: boolean }) => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value !== "string") {
     throw new TypeError(`${AUTOGRAPH_MCP_SERVER_NAME} must use an absolute MCP URL.`);
   }
@@ -202,6 +204,7 @@ const requireString = ({
   max?: number;
 }) => {
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof value !== "string" ||
     value.length < min ||
     (max !== undefined && value.length > max)
@@ -301,6 +304,7 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
     const { metadata } = frontmatter;
     if (
       metadata === null ||
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof metadata !== "object" ||
       Array.isArray(metadata) ||
       Object.getPrototypeOf(metadata) !== Object.prototype
@@ -311,6 +315,7 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
     }
     if (
       Object.entries(metadata).some(
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         ([key, value]) => typeof key !== "string" || typeof value !== "string",
       )
     ) {

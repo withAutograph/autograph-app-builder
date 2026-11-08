@@ -91,10 +91,12 @@ const providerHttpStatus = (error: unknown): number | undefined => {
     return;
   }
   const cause: unknown = error.cause;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (cause === null || typeof cause !== "object" || !("status" in cause)) {
     return;
   }
   const { status } = cause;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof status !== "number" || !Number.isInteger(status)) {
     return;
   }
@@ -199,6 +201,7 @@ const property = (value: unknown, key: string): unknown => {
 
 const stringProperty = (value: unknown, key: string): string => {
   const result = property(value, key);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof result !== "string") {
     throw new TypeError(invalidResponseMessage);
   }
@@ -207,10 +210,12 @@ const stringProperty = (value: unknown, key: string): string => {
 
 const decimalProperty = (value: unknown, key: string): string => {
   const result = property(value, key);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof result === "number") {
     if (!Number.isSafeInteger(result) || result < 1) {
       throw new TypeError(invalidResponseMessage);
     }
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   } else if (typeof result !== "string" || !decimal.safeParse(result).success) {
     throw new TypeError(invalidResponseMessage);
   }
@@ -227,6 +232,7 @@ const safeRepositoryIdNumber = (value: string): number => {
 
 const booleanProperty = (value: unknown, key: string): boolean => {
   const result = property(value, key);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof result !== "boolean") {
     throw new TypeError(invalidResponseMessage);
   }
@@ -439,6 +445,7 @@ export const createGitHubAppHttpProvider = (input: {
     } catch (error) {
       const status = record(error) ? error.status : undefined;
       const response = record(error) ? error.response : undefined;
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (typeof status === "number" && requestInput.expected.includes(status)) {
         return {
           body: record(response) ? response.data : undefined,
@@ -1185,6 +1192,7 @@ export const createGitHubAppHttpProvider = (input: {
         "historical-source-pull-request-not-merged-in-repository";
       if (
         stringProperty(pull.body, "state") !== "closed" ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof property(pull.body, "merged_at") !== "string" ||
         decimalProperty(pull.body, "number") !== String(source.pullRequestNumber) ||
         decimalProperty(baseRepository, "id") !== repositoryId

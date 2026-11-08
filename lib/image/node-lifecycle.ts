@@ -287,6 +287,7 @@ export const withLifecycleLock = async function withLifecycleLock<T>(
       () => true,
       (error: unknown) => {
         if (
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof error === "object" &&
           error !== null &&
           "code" in error &&
@@ -1070,6 +1071,7 @@ const requireCurrentGhcrLogin = function requireCurrentGhcrLogin(provenance: Ima
   ];
   const invalidReceiptMessage =
     "GHCR login receipt does not match the current credential boundary.";
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof result !== "object" || result === null || !hasExactKeys(result, expectedResultKeys)) {
     throw new Error(invalidReceiptMessage);
   }
@@ -1096,6 +1098,7 @@ const requireCurrentGhcrLogin = function requireCurrentGhcrLogin(provenance: Ima
     throw new Error(invalidReceiptMessage);
   }
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof result.username !== "string" ||
     !/^[a-f0-9]{64}$/u.test(String(result.identityDigest))
   ) {
@@ -1511,6 +1514,7 @@ const inspectRemoteImageUnlocked = function inspectRemoteImageUnlocked(
   const login = requireCurrentGhcrLogin(provenance);
   // SAFETY: Receipt results come from JSON; these guards require a non-null object before reading unknown fields.
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof push.result !== "object" ||
     push.result === null ||
     (push.result as { localImageReceiptDigest?: unknown }).localImageReceiptDigest !==
@@ -1520,6 +1524,7 @@ const inspectRemoteImageUnlocked = function inspectRemoteImageUnlocked(
   ) {
     throw new Error("Image push receipt is not bound to the local image identity.");
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof local.result !== "object" || local.result === null) {
     throw new Error("Local image receipt has no exact image identity.");
   }
@@ -1583,6 +1588,7 @@ const preloadImageUnlocked = function preloadImageUnlocked(
   if (existing !== undefined) {
     // SAFETY: Receipt results come from JSON; these guards require a non-null object before reading unknown fields.
     if (
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof existing.result !== "object" ||
       existing.result === null ||
       (existing.result as { reference?: unknown }).reference !== reference
@@ -1599,6 +1605,7 @@ const preloadImageUnlocked = function preloadImageUnlocked(
   );
   // SAFETY: Receipt results come from JSON; these guards require a non-null object before reading unknown fields.
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof remote.result !== "object" ||
     remote.result === null ||
     (remote.result as { reference?: unknown }).reference !== reference
@@ -1614,6 +1621,7 @@ const preloadImageUnlocked = function preloadImageUnlocked(
   );
   // SAFETY: Receipt results come from JSON; these guards require a non-null object before reading unknown fields.
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof push.result !== "object" ||
     push.result === null ||
     (push.result as { ghcrLoginReceiptDigest?: unknown }).ghcrLoginReceiptDigest !==
@@ -1734,6 +1742,7 @@ const proveSandboxImageUnlocked = function proveSandboxImageUnlocked(
   if (existing !== undefined) {
     // SAFETY: Receipt results come from JSON; these guards require a non-null object before reading unknown fields.
     if (
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof existing.result !== "object" ||
       existing.result === null ||
       (existing.result as { reference?: unknown }).reference !== reference ||
@@ -1754,6 +1763,7 @@ const proveSandboxImageUnlocked = function proveSandboxImageUnlocked(
   );
   // SAFETY: Receipt results come from JSON; these guards require a non-null object before reading unknown fields.
   if (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     typeof preload.result !== "object" ||
     preload.result === null ||
     (preload.result as { reference?: unknown }).reference !== reference

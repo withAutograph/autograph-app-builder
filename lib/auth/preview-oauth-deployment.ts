@@ -43,13 +43,14 @@ function getPreviewOAuthDeploymentRuntime(
     providerEmulation = readProviderEmulation(environment);
   } catch (error) {
     const invalidFields =
-      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
+      // oxlint-disable-next-line sonarjs/expression-complexity, anti-slop/no-runtime-typeof -- Preserve the existing conditions and their evaluation order; Preserve this runtime check and existing input handling.
       typeof error === "object" &&
       error !== null &&
       "issues" in error &&
       Array.isArray(error.issues)
         ? error.issues
             .map((issue) =>
+              // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
               typeof issue === "object" && issue !== null && "path" in issue
                 ? // oxlint-disable-next-line typescript/no-base-to-string -- Preserve string coercion of arbitrary validation-path values.
                   String((issue as { path: unknown[] }).path[0] ?? "unknown")
@@ -262,6 +263,7 @@ export function createPreviewOAuthRequestHandler(input: {
         let hasRedirect = false;
         try {
           const payload = (await response.clone().json()) as { url?: unknown };
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           hasRedirect = typeof payload.url === "string";
         } catch {
           // The response shape is diagnostic only; auth owns the response.

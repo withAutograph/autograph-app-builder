@@ -163,6 +163,7 @@ describe("Preview Better Auth UI", () => {
     const clientPlugin = oauthProviderClient();
     const hooks = clientPlugin.fetchPlugins?.[0]?.hooks;
 
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     expect(typeof hooks?.onRequest).toBe("function");
     await hooks?.onRequest?.(request as never);
 

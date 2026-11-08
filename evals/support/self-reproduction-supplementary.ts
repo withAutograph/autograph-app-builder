@@ -173,6 +173,7 @@ export const writeSupplementaryAssessment = async (input: {
   for (const capture of originalReport.captures ?? []) {
     // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
     for (const path of capture.files ?? []) {
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       if (typeof path === "string") {
         await copy(parityRoot, path, "original");
       }
@@ -247,7 +248,7 @@ export const writeSupplementaryAssessment = async (input: {
           candidate,
           // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
           qualification:
-            // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
+            // oxlint-disable-next-line typescript/no-unsafe-member-access, anti-slop/no-runtime-typeof -- Preserve the existing parsed JSON boundary; Preserve this runtime check and existing input handling.
             typeof captureMetadata.comparisonQualification === "string"
               ? // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
                 captureMetadata.comparisonQualification

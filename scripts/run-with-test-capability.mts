@@ -72,6 +72,7 @@ function childEnvironment() {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function gateAEvalWorkflowBodyTimeout(profile: unknown): string | undefined {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof profile !== "object" || profile === null || !Object.isFrozen(profile)) {
     return undefined;
   }
@@ -289,8 +290,10 @@ export async function runWithTestCapability(options: {
         request.version === 2;
       if (
         !hasValidEnvelope ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof request.nonce !== "string" ||
         !/^[0-9a-f]{64}$/u.test(request.nonce) ||
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         typeof request.context !== "string"
       ) {
         throw new Error("Malformed authorization request.");

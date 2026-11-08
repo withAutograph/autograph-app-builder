@@ -224,14 +224,18 @@ async function exchangeLocalEmulatedOAuthCode(input: {
     scope?: unknown;
     id_token?: unknown;
   };
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof body.access_token !== "string" || body.access_token.length === 0) {
     throw new Error("Emulated OAuth token response is invalid.");
   }
   return {
     accessToken: body.access_token,
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     idToken: typeof body.id_token === "string" ? body.id_token : undefined,
     raw: body,
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     scopes: typeof body.scope === "string" ? body.scope.split(/\s+/u).filter(Boolean) : undefined,
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     tokenType: typeof body.token_type === "string" ? body.token_type : undefined,
   };
 }
@@ -257,6 +261,7 @@ export async function fetchVerifiedVercelUserInfo(
   } catch {
     return null;
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof tokenClaims.sub !== "string" || typeof tokenClaims.email !== "string") {
     return null;
   }
@@ -884,6 +889,7 @@ export function createPreviewOAuthServer(input: {
         if (
           !new Set(["github", "vercel"]).has(providerId) ||
           user.emailVerified !== true ||
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof user.email !== "string" ||
           user.email.trim().length === 0
         ) {

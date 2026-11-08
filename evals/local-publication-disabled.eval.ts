@@ -16,6 +16,7 @@ export default defineEval({
       turn.message,
       satisfies(
         (reply) =>
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
           typeof reply === "string" &&
           !/(?:local checkout publication is disabled|disabled on this host|host capability|APP_BUILDER_LOCAL_PUBLICATION)/iu.test(
             reply,

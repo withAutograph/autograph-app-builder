@@ -84,6 +84,7 @@ const availablePort = async (requestedPort = 0): Promise<number> => {
   }
   await listenDeferred.promise;
   const address = server.address();
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   const port = typeof address === "object" && address ? address.port : 0;
   const closeDeferred = Promise.withResolvers<null>();
   server.close(() => {

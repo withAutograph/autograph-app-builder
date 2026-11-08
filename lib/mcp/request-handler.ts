@@ -508,9 +508,11 @@ async function isPublicDiscoveryRequest(request: Request): Promise<boolean> {
     return (
       messages.length > 0 &&
       messages.every((message) => {
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         if (typeof message !== "object" || message === null || !("method" in message)) {
           return false;
         }
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
         return typeof message.method === "string" && publicDiscoveryMethods.has(message.method);
       })
     );
@@ -545,6 +547,7 @@ async function isToolCallRequest(request: Request): Promise<boolean> {
   try {
     const body: unknown = await request.clone().json();
     return (
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof body === "object" && body !== null && "method" in body && body.method === "tools/call"
     );
   } catch {
@@ -565,15 +568,17 @@ async function requiredScopesForRequest(request: Request): Promise<string[]> {
   try {
     const body: unknown = await request.clone().json();
     if (
-      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
+      // oxlint-disable-next-line sonarjs/expression-complexity, anti-slop/no-runtime-typeof -- Preserve the existing conditions and their evaluation order; Preserve this runtime check and existing input handling.
       typeof body === "object" &&
       body !== null &&
       "method" in body &&
       body.method === "tools/call" &&
       "params" in body &&
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof body.params === "object" &&
       body.params !== null &&
       "name" in body.params &&
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       typeof body.params.name === "string" &&
       hostedToolNames.has(body.params.name)
     ) {

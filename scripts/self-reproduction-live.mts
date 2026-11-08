@@ -45,6 +45,7 @@ const availableLoopbackPort = async (configured: string | undefined): Promise<nu
   const closed = once(server, "close");
   server.close();
   await closed;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (address === null || typeof address === "string") {
     throw new Error("A loopback port was unavailable.");
   }
