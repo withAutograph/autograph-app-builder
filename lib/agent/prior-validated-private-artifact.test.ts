@@ -32,9 +32,9 @@ const own = (operation: () => Promise<void>) =>
 const sign = <T extends object>(body: T) => ({ ...body, digest: sha256(JSON.stringify(body)) });
 
 const sourceFile = {
-  path: "apps/example/app/page.tsx",
-  mode: "644",
   digest: sha256("validated bytes"),
+  mode: "644",
+  path: "apps/example/app/page.tsx",
 };
 
 const seed = (
@@ -46,7 +46,7 @@ const seed = (
   }
   const appId = "example";
   const sessionId = "owned";
-  const appSpec = { appId, digest: "a".repeat(64), artifactPath: "app-spec.md" };
+  const appSpec = { appId, artifactPath: "app-spec.md", digest: "a".repeat(64) };
   const sourceReceipt = { digest: "c".repeat(64) };
   const workspace = {
     workspaceId: "sandbox",
@@ -71,11 +71,11 @@ const seed = (
       plannedByCallId: callId,
     });
   const common = {
-    version: 17,
     appSpec,
-    workspace,
-    sourceReceipt,
     identityReceipt: { identity: { appId } },
+    sourceReceipt,
+    version: 17,
+    workspace,
   };
   const current = {
     ...common,
@@ -107,26 +107,26 @@ const seed = (
   });
   const prior = {
     ...common,
+    applyReceipt,
     phase: "validated",
     proposal: priorProposal,
-    applyReceipt,
     validationReceipt,
   } as unknown as Extract<AppBuilderWorkflowState, { phase: "validated" }>;
   appBuilderWorkflowState.update(() => current);
   existingAppRepairHistory.update(() => [
     {
-      proposalDigest: current.proposal.digest,
-      sessionId,
-      requestDigest: "f".repeat(64),
-      previousWorkflow: prior,
       approvedBase: prior,
+      previousWorkflow: prior,
+      proposalDigest: current.proposal.digest,
+      requestDigest: "f".repeat(64),
+      sessionId,
     },
   ]);
   const scope = {
     appId,
     appSpecDigest: appSpec.digest,
-    workspaceId: workspace.workspaceId,
     sessionId,
+    workspaceId: workspace.workspaceId,
   };
   const previousScope = { ...scope, proposalDigest: priorProposal.digest };
   requestPrivateApplyApproval(previousScope, "approved");
@@ -154,21 +154,21 @@ const seed = (
   };
   const sandbox: SandboxSession & { id: string } = {
     id: workspace.workspaceId,
+    readBinaryFile: unexpectedSandboxOperation,
+    readFile: unexpectedSandboxOperation,
+    readTextFile: unexpectedSandboxOperation,
+    removePath: unexpectedSandboxOperation,
+    resolvePath: unexpectedSandboxOperation,
     run,
     spawn: unexpectedSandboxOperation,
-    readFile: unexpectedSandboxOperation,
-    readBinaryFile: unexpectedSandboxOperation,
-    readTextFile: unexpectedSandboxOperation,
-    writeFile: unexpectedSandboxOperation,
     writeBinaryFile: unexpectedSandboxOperation,
+    writeFile: unexpectedSandboxOperation,
     writeTextFile: unexpectedSandboxOperation,
-    resolvePath: unexpectedSandboxOperation,
-    removePath: unexpectedSandboxOperation,
   };
   return {
     current,
     currentScope,
-    input: { appId, sessionId, sandbox, state: current },
+    input: { appId, sandbox, sessionId, state: current },
     prior,
     result,
     run,

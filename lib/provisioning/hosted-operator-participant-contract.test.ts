@@ -264,9 +264,9 @@ describe("participant plan and approval contract", () => {
   it("carries the accepted program through the same internal planning request", () => {
     const request = operatorRequestSchema.parse({
       action: "plan",
+      normalActorProgram: program,
       operation: "prepare",
       selection: base.selection,
-      normalActorProgram: program,
     });
     expect(request.action).toBe("plan");
     expect("normalActorProgram" in request && request.normalActorProgram).toEqual(program);
@@ -280,8 +280,8 @@ describe("participant plan and approval contract", () => {
       operatorPublicResultSchema.parse({
         appId: program.appId,
         authenticatedBehavior: "unassessed",
-        status: "participants-prepared",
         plan,
+        status: "participants-prepared",
       }).status,
     ).toBe("participants-prepared");
   });
