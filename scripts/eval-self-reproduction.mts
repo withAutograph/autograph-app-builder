@@ -427,16 +427,30 @@ const revision = (directory: string | undefined) => {
 const requirementRow = (requirement: Assessment["rows"][number]) =>
   `<tr><td>${escape(requirement.status)}</td><th>${escape(requirement.side)}</th><td>${escape(requirement.requirementId)}</td><td>${escape(requirement.reason)}</td><td>${escape(requirement.artifacts.join(" "))}</td></tr>`;
 
+type ReportGap = Record<string, unknown>;
+
+const gapRow = (gap: ReportGap) =>
+  `<li><strong>${escape(String(gap.priority).toUpperCase())}: ${escape(String(gap.title))}</strong><p>${escape(String(gap.expected))}</p><p>${escape(String(gap.recommendation))}</p><small>${escape(String(gap.confirmed ? "Observed failure; see retained evidence" : "Incomplete assessment; see status and reason"))}</small></li>`;
+
+const captureFileLink = (item: { label: string }, file: string) => {
+  const link = `<a href="${escape(file)}">${escape(basename(file))}</a>`;
+  if (!/\.(?:png|jpe?g|webp)$/iu.test(file)) return link;
+  return `${link}<img src="${escape(file)}" alt="${escape(item.label)} ${escape(basename(file))}" style="display:block;max-width:100%;margin:12px 0">`;
+};
+
+const captureFileLinks = (item: { label: string; files: string[] }) =>
+  ` — ${item.files.map((file) => captureFileLink(item, file)).join(", ")}`;
+
 const reportHtml = (report: {
   createdAt: string;
   generation: Record<string, unknown>;
   requirements: Assessment["rows"];
-  gaps: Record<string, unknown>[];
+  gaps: ReportGap[];
   captures: { label: string; files: string[]; status: string }[];
 }) => {
   const rows = report.requirements.map(requirementRow).join("");
   const gaps = report.gaps.length
-    ? `<ol>${report.gaps.map((gap) => `<li><strong>${escape(String(gap.priority).toUpperCase())}: ${escape(String(gap.title))}</strong><p>${escape(String(gap.expected))}</p><p>${escape(String(gap.recommendation))}</p><small>${escape(String(gap.confirmed ? "Observed failure; see retained evidence" : "Incomplete assessment; see status and reason"))}</small></li>`).join("")}</ol>`
+    ? `<ol>${report.gaps.map(gapRow).join("")}</ol>`
     : "<p>No failed or blocked requirements were recorded.</p>";
   const diagnosticPairs = desktopViewports
     .map(({ name }) => {
@@ -455,7 +469,7 @@ const reportHtml = (report: {
   const captureItems = report.captures
     .map(
       (item) =>
-        `<li><strong>${escape(item.label)}</strong>: ${escape(item.status)}${item.files.length ? ` — ${item.files.map((file) => `<a href="${escape(file)}">${escape(basename(file))}</a>${/\.(?:png|jpe?g|webp)$/iu.test(file) ? `<img src="${escape(file)}" alt="${escape(item.label)} ${escape(basename(file))}" style="display:block;max-width:100%;margin:12px 0">` : ""}`).join(", ")}` : ""}</li>`,
+        `<li><strong>${escape(item.label)}</strong>: ${escape(item.status)}${item.files.length ? captureFileLinks(item) : ""}</li>`,
     )
     .join("");
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>App Builder self-reproduction eval</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1280px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td:first-child{text-transform:uppercase;font-weight:700}pre{white-space:pre-wrap;background:#f5f5f5;padding:16px}li{margin:14px 0}</style><main><h1>App Builder self-reproduction eval</h1><p>One unassisted baseline. Static evidence does not prove runtime behavior. Missing or unavailable evidence is never reported as success.</p><p>${escape(report.createdAt)} · <a href="report.json">JSON evidence</a> · <a href="report.md">Markdown summary</a></p><h2>Generation</h2><pre>${escape(JSON.stringify(report.generation, null, 2))}</pre><h2>Prioritized gaps</h2>${gaps}<h2>Requirements</h2><table><thead><tr><th>Status</th><th>Side</th><th>Requirement</th><th>Reason</th><th>Artifacts</th></tr></thead><tbody>${rows}</tbody></table><h2>Browser evidence</h2>${diagnosticPairs}<ul>${captureItems || "<li>Not captured.</li>"}</ul></main></html>`;

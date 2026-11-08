@@ -38,6 +38,10 @@ export function renderReport(report: {
 }) {
   const pretty = (v: unknown) =>
     `<pre>${escapeHtml(JSON.stringify(v, (key, value) => (key === "observations" && Array.isArray(value) ? { count: value.length, details: "Download report.json for individual observations" } : value), 2))}</pre>`;
+  const renderExcerpt = (excerpt: string | undefined) =>
+    (excerpt ?? "") === ""
+      ? "Source text not supplied; location only."
+      : `<pre>${escapeHtml(excerpt)}</pre>`;
   const { adherence } = report;
   // Keep report formatting helpers local to this artifact.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
@@ -65,9 +69,7 @@ export function renderReport(report: {
       o.source
         ? [
             `<details id="source-${index}"><summary>Source location: ${escapeHtml(o.source.path)}:${o.source.line}</summary>`,
-            (excerpt ?? "") === ""
-              ? "Source text not supplied; location only."
-              : `<pre>${escapeHtml(excerpt)}</pre>`,
+            renderExcerpt(excerpt),
             "</details>",
           ].join("")
         : "",
@@ -115,7 +117,7 @@ export function renderReport(report: {
             .slice(Math.max(0, diagnostic.line - 2), diagnostic.line + 1)
             .map((text, offset) => `${Math.max(1, diagnostic.line - 1) + offset}: ${text}`)
             .join("\n");
-          return `<article id="implementation-${index}"><strong>TypeScript ${escapeHtml(diagnostic.code)}</strong><p>${escapeHtml(diagnostic.message)}</p><small>Generated source · <a href="#implementation-source-${index}">${escapeHtml(diagnostic.path)}:${diagnostic.line}:${diagnostic.column}</a></small><details id="implementation-source-${index}"><summary>Source location</summary>${(excerpt ?? "") === "" ? "Source text not supplied; location only." : `<pre>${escapeHtml(excerpt)}</pre>`}</details></article>`;
+          return `<article id="implementation-${index}"><strong>TypeScript ${escapeHtml(diagnostic.code)}</strong><p>${escapeHtml(diagnostic.message)}</p><small>Generated source · <a href="#implementation-source-${index}">${escapeHtml(diagnostic.path)}:${diagnostic.line}:${diagnostic.column}</a></small><details id="implementation-source-${index}"><summary>Source location</summary>${renderExcerpt(excerpt)}</details></article>`;
         })
         .join("")}</details>`
     : "";

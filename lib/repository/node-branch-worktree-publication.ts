@@ -285,8 +285,10 @@ const gitOutput = async (
   const [status, signal] = (await once(child, "close")) as [number | null, NodeJS.Signals | null];
   if (status !== 0) {
     const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
+    const errorPrefix = `Git ${options.operation ?? args[0] ?? "command"} failed for ${root} (`;
+    const exitDescription = signal ?? `exit ${status}`;
     throw new Error(
-      `Git ${options.operation ?? args[0] ?? "command"} failed for ${root} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? unavailableDiagnosticLog}.`,
+      `${errorPrefix}${exitDescription}); sanitized stderr is available at ${logPath ?? unavailableDiagnosticLog}.`,
     );
   }
   await finishGitDiagnosticCapture(diagnosticCapture, false);
@@ -344,8 +346,10 @@ const gitNullRecords = async function* gitNullRecords(
     if (status !== 0) {
       const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
       diagnosticsFinished = true;
+      const errorPrefix = `Git ${operation} failed for ${root} (`;
+      const exitDescription = signal ?? `exit ${status}`;
       throw new Error(
-        `Git ${operation} failed for ${root} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? unavailableDiagnosticLog}.`,
+        `${errorPrefix}${exitDescription}); sanitized stderr is available at ${logPath ?? unavailableDiagnosticLog}.`,
       );
     }
     await finishGitDiagnosticCapture(diagnosticCapture, false);
@@ -397,8 +401,10 @@ export const hashBranchPublicationSourceBlob = async (
   const [status, signal] = await closed;
   if (status !== 0) {
     const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
+    const errorPrefix = `Git could not read source blob ${objectId} from ${root} (`;
+    const exitDescription = signal ?? `exit ${status}`;
     throw new Error(
-      `Git could not read source blob ${objectId} from ${root} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? unavailableDiagnosticLog}.`,
+      `${errorPrefix}${exitDescription}); sanitized stderr is available at ${logPath ?? unavailableDiagnosticLog}.`,
     );
   }
   await finishGitDiagnosticCapture(diagnosticCapture, false);
@@ -757,12 +763,13 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
   void (async () => {
     const outcome = await terminalPromise;
     clearTimeout(timeout);
+    if (outcome.kind === "error") {
+      rejectReady(outcome.error);
+      return;
+    }
+    const detail = stderr.trim() === "" ? "." : `: ${stderr.trim()}`;
     rejectReady(
-      outcome.kind === "error"
-        ? outcome.error
-        : new Error(
-            `A branch-worktree publication operation is already in progress${stderr.trim() === "" ? "." : `: ${stderr.trim()}`}`,
-          ),
+      new Error(`A branch-worktree publication operation is already in progress${detail}`),
     );
   })();
   holder.stdout.setEncoding("utf-8");
@@ -782,9 +789,9 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
         cause: terminal.error,
       });
     }
-    return new Error(
-      `The OS publication lock helper exited before release${terminal?.kind === "exit" && terminal.signal !== null ? ` (${terminal.signal})` : "."}`,
-    );
+    const detail =
+      terminal?.kind === "exit" && terminal.signal !== null ? ` (${terminal.signal})` : ".";
+    return new Error(`The OS publication lock helper exited before release${detail}`);
   };
   // This derived promise intentionally races the terminal lease signal.
   // oxlint-disable-next-line promise/prefer-await-to-then
@@ -1363,8 +1370,10 @@ const materializeAtomically = async (
           const [status, signal] = await closed;
           if (status !== 0) {
             const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
+            const errorPrefix = `Git could not materialize ${entry.path} from ${proposal.sourcePath} (`;
+            const exitDescription = signal ?? `exit ${status}`;
             throw new Error(
-              `Git could not materialize ${entry.path} from ${proposal.sourcePath} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? unavailableDiagnosticLog}.`,
+              `${errorPrefix}${exitDescription}); sanitized stderr is available at ${logPath ?? unavailableDiagnosticLog}.`,
             );
           }
           await finishGitDiagnosticCapture(diagnosticCapture, false);

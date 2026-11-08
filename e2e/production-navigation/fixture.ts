@@ -59,8 +59,10 @@ export const seedIdentity = async function seedIdentity(context: BrowserContext,
       // valid session. This synthetic identity has no provider credentials.
       await transaction`insert into account (id, issuer, account_id, provider_id, user_id, created_at, updated_at)
         values (${randomUUID()}, 'https://github.com', ${id}, 'github', ${id}, now(), now())`;
+      const organizationIssuer = `${fixture.origin}/api/auth`;
+      const organizationAudience = `${fixture.origin}/mcp`;
       await transaction`insert into organization (id, name, slug, created_at, issuer, audience, workspace_id)
-        values (${organization}, ${appName}, ${organization}, now(), ${`${fixture.origin}/api/auth`}, ${`${fixture.origin}/mcp`}, ${workspace})`;
+        values (${organization}, ${appName}, ${organization}, now(), ${organizationIssuer}, ${organizationAudience}, ${workspace})`;
       await transaction`insert into member (id, organization_id, user_id, role, created_at)
         values (${randomUUID()}, ${organization}, ${id}, 'owner', now())`;
       await transaction`insert into personal_workspace (user_id, organization_id, created_at)
@@ -94,8 +96,10 @@ export const seedIdentity = async function seedIdentity(context: BrowserContext,
         },
         version: 1,
       };
+      const draftIssuer = `${fixture.origin}/api/auth`;
+      const draftAudience = `${fixture.origin}/mcp`;
       await transaction`insert into builder_draft (issuer, audience, workspace_id, owner_user_id, draft_id, revision, record, created_at, updated_at)
-        values (${`${fixture.origin}/api/auth`}, ${`${fixture.origin}/mcp`}, ${workspace}, ${id}, ${randomUUID()}, 1, ${transaction.json(record)}, now(), now())`;
+        values (${draftIssuer}, ${draftAudience}, ${workspace}, ${id}, ${randomUUID()}, 1, ${transaction.json(record)}, now(), now())`;
     });
   } finally {
     await sql.end();
