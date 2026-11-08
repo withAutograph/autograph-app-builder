@@ -181,15 +181,14 @@ for (const day of await readdir(archiveRoot, { withFileTypes: true })) {
     }
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const saved = await readArchivedReport(path.join(archiveRoot, day.name, run.name));
-    if (saved === null) {
-      continue;
+    if (saved !== null) {
+      rows.push({
+        date: saved.createdAt,
+        name: saved.archive.name,
+        path: `${day.name}/${run.name}`,
+        score: saved.judge.subjectiveScore ?? "not scored",
+      });
     }
-    rows.push({
-      date: saved.createdAt,
-      name: saved.archive.name,
-      path: `${day.name}/${run.name}`,
-      score: saved.judge.subjectiveScore ?? "not scored",
-    });
   }
 }
 rows.sort((a, b) => b.date.localeCompare(a.date));
