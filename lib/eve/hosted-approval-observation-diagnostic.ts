@@ -31,14 +31,19 @@ const approvalReference = (
   value: Pick<PrivateResourceApprovalReceipt, "callId" | "requestId" | "toolInput">,
   source: ApprovalReference["source"],
   outcome?: ApprovalReference["outcome"],
-): ApprovalReference => ({
-  callHash: identifierHash(value.callId),
-  operationHash: identifierHash(value.toolInput.operationRef),
-  planDigest: value.toolInput.planDigest,
-  requestHash: identifierHash(value.requestId),
-  source,
-  ...(outcome === undefined ? {} : { outcome }),
-});
+): ApprovalReference => {
+  const reference: ApprovalReference = {
+    callHash: identifierHash(value.callId),
+    operationHash: identifierHash(value.toolInput.operationRef),
+    planDigest: value.toolInput.planDigest,
+    requestHash: identifierHash(value.requestId),
+    source,
+  };
+  if (outcome !== undefined) {
+    reference.outcome = outcome;
+  }
+  return reference;
+};
 
 const nativeInputObservations = (nativeState: NativeStateForDiagnostic | undefined) => {
   const nativePending = nativeState?.privateInputState?.pending.flatMap((batch) =>

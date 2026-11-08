@@ -87,11 +87,15 @@ export const readRepositoryProductionApproval = async (input: {
   }
   return await readPrivateOperatorApproval({
     ...input,
-    capture: (state) =>
-      createPrivateRepositoryProductionApprovalCapture({
+    capture: (state) => {
+      const captureInput: Parameters<typeof createPrivateRepositoryProductionApprovalCapture>[0] = {
         plan: input.plan,
         callId: input.callId,
-        ...(state === undefined ? {} : { state }),
-      }),
+      };
+      if (state !== undefined) {
+        captureInput.state = state;
+      }
+      return createPrivateRepositoryProductionApprovalCapture(captureInput);
+    },
   });
 };

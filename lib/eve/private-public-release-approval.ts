@@ -91,12 +91,16 @@ export const readPrivatePublicReleaseApproval = async (input: {
   return await readPrivateOperatorApproval({
     owner: input.owner,
     ...(input.observation === undefined ? {} : { observation: input.observation }),
-    capture: (state) =>
-      createPrivatePublicReleaseApprovalCapture({
+    capture: (state) => {
+      const captureInput: Parameters<typeof createPrivatePublicReleaseApprovalCapture>[0] = {
         plan: input.plan,
         callId: input.callId,
-        ...(state === undefined ? {} : { state }),
-      }),
+      };
+      if (state !== undefined) {
+        captureInput.state = state;
+      }
+      return createPrivatePublicReleaseApprovalCapture(captureInput);
+    },
     readHistory: input.readHistory,
     assertOwner: input.assertOwner,
   });

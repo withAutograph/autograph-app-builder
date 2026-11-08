@@ -93,12 +93,18 @@ export const readPrivateAppIntegrationCapabilityApproval = async (input: {
   return await readPrivateOperatorApproval({
     owner: input.owner,
     ...(input.observation === undefined ? {} : { observation: input.observation }),
-    capture: (state) =>
-      createPrivateAppIntegrationCapabilityApprovalCapture({
+    capture: (state) => {
+      const captureInput: Parameters<
+        typeof createPrivateAppIntegrationCapabilityApprovalCapture
+      >[0] = {
         plan: input.plan,
         callId: input.callId,
-        ...(state === undefined ? {} : { state }),
-      }),
+      };
+      if (state !== undefined) {
+        captureInput.state = state;
+      }
+      return createPrivateAppIntegrationCapabilityApprovalCapture(captureInput);
+    },
     readHistory: input.readHistory,
     assertOwner: input.assertOwner,
   });
