@@ -14,9 +14,13 @@ const silentConsole = new Proxy(console, {
       property === "debug" ||
       property === "info" ||
       property === "warn" ||
-      property === "error" ||
-      property === "log"
+      property === "error"
     ) {
+      return () => {
+        // The mocked request has no teardown.
+      };
+    }
+    if (property === "log") {
       return () => {
         // The mocked request has no teardown.
       };

@@ -315,7 +315,8 @@ export async function assessParity(
             : observation.method === "browser";
         const instant =
           requirement.id !== instantNavigation || observation.method === instantPlaywrightMethod;
-        if (complete && retained && screenshot && behavioral && instant) {
+        const hasRequiredEvidence = complete && retained && screenshot;
+        if (hasRequiredEvidence && behavioral && instant) {
           status = "passed";
           reasonCode = "observed-complete";
         } else {

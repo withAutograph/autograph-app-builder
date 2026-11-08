@@ -184,7 +184,11 @@ export function candidateExportFromEvidence(
         typeof path !== "string" ||
         typeof content !== "string" ||
         path.startsWith("/") ||
-        path.includes("\\") ||
+        path.includes("\\")
+      ) {
+        return undefined;
+      }
+      if (
         path.split("/").some((segment) => !segment || segment === "." || segment === "..") ||
         paths.has(path)
       ) {

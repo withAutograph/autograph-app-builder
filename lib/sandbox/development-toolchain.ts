@@ -153,7 +153,11 @@ function assertInput(input: DevelopmentVercelBootstrapInput) {
     !sha256Pattern.test(input.sourceFingerprint) ||
     !sha256Pattern.test(input.dependencyKey) ||
     !gitObjectPattern.test(input.sourceSha) ||
-    !gitObjectPattern.test(input.sourceTree) ||
+    !gitObjectPattern.test(input.sourceTree)
+  ) {
+    throw new Error("Development Vercel bootstrap identity was invalid.");
+  }
+  if (
     !sha256Pattern.test(input.sourceArchiveSha256) ||
     Object.values(input.lockfiles).some(
       (digest) => digest !== "absent" && !sha256Pattern.test(digest),

@@ -166,10 +166,10 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     input: Parameters<SandboxExecutionLeaseStore["assertCurrent"]>[0],
   ): Promise<SandboxExecutionLease> {
     const lease = this.leases.get(sandboxLeaseKey(input.principal, input.adapterSessionId));
+    const unavailable =
+      lease === undefined || lease.state !== "active" || lease.expiresAtEpochMs <= input.nowEpochMs;
     if (
-      lease === undefined ||
-      lease.state !== "active" ||
-      lease.expiresAtEpochMs <= input.nowEpochMs ||
+      unavailable ||
       lease.epoch !== input.epoch ||
       lease.providerSandboxId !== input.providerSandboxId ||
       lease.policyDigest !== input.policyDigest

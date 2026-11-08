@@ -39,17 +39,22 @@ export function testCapabilityEnabled(
     return false;
   }
   const candidate = injected as Partial<InjectedTestCapability>;
-  return (
-    Object.isFrozen(candidate) &&
-    Object.keys(candidate).toSorted().join(",") === "capabilities,id,version" &&
-    candidate.version === 1 &&
-    typeof candidate.id === "string" &&
-    /^[0-9a-f]{64}$/u.test(candidate.id) &&
-    environment.APP_BUILDER_TEST_CAPABILITY_ID === candidate.id &&
-    exactCapabilities(candidate.capabilities) &&
-    Object.isFrozen(candidate.capabilities) &&
-    candidate.capabilities.includes(capability)
-  );
+  if (
+    !Object.isFrozen(candidate) ||
+    Object.keys(candidate).toSorted().join(",") !== "capabilities,id,version" ||
+    candidate.version !== 1 ||
+    typeof candidate.id !== "string"
+  ) {
+    return false;
+  }
+  if (
+    !/^[0-9a-f]{64}$/u.test(candidate.id) ||
+    environment.APP_BUILDER_TEST_CAPABILITY_ID !== candidate.id ||
+    !exactCapabilities(candidate.capabilities)
+  ) {
+    return false;
+  }
+  return Object.isFrozen(candidate.capabilities) && candidate.capabilities.includes(capability);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

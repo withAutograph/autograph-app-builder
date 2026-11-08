@@ -67,7 +67,11 @@ function requireOwnedRecord(
   if (
     (expected.handoffId !== undefined && record.handoffId !== expected.handoffId) ||
     record.authority.issuer !== expected.authority.issuer ||
-    record.authority.audience !== expected.authority.audience ||
+    record.authority.audience !== expected.authority.audience
+  ) {
+    throw new BuilderHandoffUnavailableError();
+  }
+  if (
     record.authority.workspaceId !== expected.authority.workspaceId ||
     record.authority.ownerUserId !== expected.authority.ownerUserId
   ) {
