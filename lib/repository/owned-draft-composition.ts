@@ -61,7 +61,7 @@ const checked = async (sandbox: SandboxSession, operation: string, command: stri
   return result.stdout;
 };
 const git = (root: string, args: readonly string[]) =>
-  `git -c core.hooksPath=/dev/null -c commit.gpgsign=false -C ${quote(root)} ${args.map(quote).join(" ")}`;
+  `git --literal-pathspecs -c core.hooksPath=/dev/null -c commit.gpgsign=false -C ${quote(root)} ${args.map(quote).join(" ")}`;
 
 export const planOriginalPublicationRepair = async (input: {
   sandbox: SandboxSession;

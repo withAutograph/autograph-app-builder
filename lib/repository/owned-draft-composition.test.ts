@@ -63,7 +63,9 @@ const commit = (root: string, message: string) => {
   return git(root, "rev-parse", "HEAD");
 };
 
-const fixture = (options: { compositionChanged?: boolean; realBun?: boolean } = {}) => {
+const fixture = (
+  options: { compositionChanged?: boolean; realBun?: boolean; literalAddition?: boolean } = {},
+) => {
   const workspace = mkdtempSync(path.join(tmpdir(), "builder-owned-composition-"));
   temporary.push(workspace);
   const remote = path.join(workspace, "remote.git");
@@ -148,6 +150,9 @@ export const planMicrofrontendRegistration=(bytes,input)=>{
     }),
   );
   write(checkout, `apps/${appId}/app/page.tsx`, "export default 'accepted app implementation';\n");
+  if (options.literalAddition === true) {
+    write(checkout, ":(glob)docs/**", "an unwanted literal-path publication addition\n");
+  }
   // Intentionally different from the accepted app: content equality is not ownership proof.
   write(checkout, "app/page.tsx", "export default 'unintended root application';\n");
   if (options.compositionChanged !== false) {
@@ -182,7 +187,14 @@ export const planMicrofrontendRegistration=(bytes,input)=>{
     "Builder published its reviewed app and accidental root additions",
   );
   git(checkout, "push", "origin", headBranch);
-  const approvedPaths = git(checkout, "diff", "--name-only", originalBase, originalHead)
+  const approvedPaths = git(
+    checkout,
+    "diff",
+    "--no-renames",
+    "--name-only",
+    originalBase,
+    originalHead,
+  )
     .split("\n")
     .filter(Boolean)
     .toSorted();
@@ -409,6 +421,32 @@ describe("owned original publication composition repair", () => {
       "export default 'accepted app implementation';\n",
     );
     expect(git(f.checkout, "show", `${f.originalHead}:app/page.tsx`)).toContain("unintended root");
+  });
+
+  it("treats a proven metacharacter filename literally without restoring unrelated human files", async () => {
+    const f = fixture({ literalAddition: true });
+    const humanDocumentation = "newer human documentation must remain unchanged\n";
+    write(f.checkout, "docs/shared.md", humanDocumentation);
+    commit(f.checkout, "human updated unrelated documentation");
+    const beforeBlob = git(f.checkout, "rev-parse", ":docs/shared.md");
+    const literalPath = ":(glob)docs/**";
+    const plan = await planOriginalPublicationRepair({
+      ...f.request(),
+      repair: { discardAddedPaths: [literalPath] },
+    });
+    expect(plan.restorePaths).toContain(literalPath);
+    await stageOriginalPublicationRepair({
+      sandbox: f.session,
+      root: f.checkout,
+      originalBase: f.originalBase,
+      plan,
+    });
+    expect(readFileSync(path.join(f.checkout, "docs/shared.md"), "utf-8")).toBe(humanDocumentation);
+    expect(git(f.checkout, "rev-parse", ":docs/shared.md")).toBe(beforeBlob);
+    expect(existsSync(path.join(f.checkout, literalPath))).toBe(false);
+    expect(readFileSync(path.join(f.checkout, `apps/${appId}/app/page.tsx`), "utf-8")).toBe(
+      "export default 'accepted app implementation';\n",
+    );
   });
 
   it.each(["../escape", "apps/existing/app/page.tsx", "docs/unowned.md", "package.json"])(
