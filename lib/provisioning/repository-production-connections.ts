@@ -222,7 +222,7 @@ export const createRepositoryProductionConnectionReader =
       await assertCurrent();
       return value;
     };
-    const endpoint = z
+    const { endpoint } = z
       .object({
         endpoint: z.object({
           id: z.string(),
@@ -232,9 +232,7 @@ export const createRepositoryProductionConnectionReader =
           type: z.literal("read_write"),
         }),
       })
-      .parse(
-        await read(`${projectPath}/endpoints/${encodeURIComponent(scope.endpointId)}`),
-      ).endpoint;
+      .parse(await read(`${projectPath}/endpoints/${encodeURIComponent(scope.endpointId)}`));
     if (
       endpoint.id !== scope.endpointId ||
       endpoint.project_id !== scope.projectId ||

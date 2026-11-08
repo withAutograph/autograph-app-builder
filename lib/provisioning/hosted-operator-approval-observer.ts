@@ -109,7 +109,7 @@ export const createHostedOperatorApprovalObserver = (input: {
       }
       return async (request) => {
         capability.signal.throwIfAborted();
-        const observe = createSameOriginEveTransport({
+        const { observe } = createSameOriginEveTransport({
           ...options,
           workloadIdentity: { token: () => Promise.resolve(capability.token) },
           fetchImplementation: createBuilderApprovalStreamFetch({
@@ -118,7 +118,7 @@ export const createHostedOperatorApprovalObserver = (input: {
             signal: capability.signal,
             fetchImplementation: input.fetchImplementation ?? fetch,
           }),
-        }).observe;
+        });
         if (observe === undefined) {
           throw new HostedOperatorError("operator_unavailable");
         }

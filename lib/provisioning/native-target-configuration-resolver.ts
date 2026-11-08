@@ -263,7 +263,7 @@ export const createNativeTargetConfigurationResolver =
       try {
         stage = "resolver_owner";
         const selected = await selectedApp(parsed.data, request, resources);
-        const ownerContext = parsed.data.ownerContext;
+        const { ownerContext } = parsed.data;
         if (ownerContext === undefined || ownerContext.sessionId !== selected.sessionId) {
           throw new HostedOperatorError("authorization_required");
         }

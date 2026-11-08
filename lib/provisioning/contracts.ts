@@ -36,16 +36,18 @@ export function initialBuilderProvisionResponse(
     ...(request.deploymentAccess === undefined
       ? {}
       : { deploymentAccess: request.deploymentAccess }),
-    github: request.providers.githubInstallationId
-      ? { code: "provider_unavailable", retryable: true, status: "failed" }
-      : { code: "not_selected", retryable: false, status: "skipped" },
+    github:
+      request.providers.githubInstallationId === undefined
+        ? { code: "not_selected", retryable: false, status: "skipped" }
+        : { code: "provider_unavailable", retryable: true, status: "failed" },
     requestDigest: builderProvisionRequestDigest(request),
     requestId: request.requestId,
     status: "pending",
     updatedAt: now.toISOString(),
-    vercel: request.providers.vercelInstallationId
-      ? { code: "provider_unavailable", retryable: true, status: "failed" }
-      : { code: "not_selected", retryable: false, status: "skipped" },
+    vercel:
+      request.providers.vercelInstallationId === undefined
+        ? { code: "not_selected", retryable: false, status: "skipped" }
+        : { code: "provider_unavailable", retryable: true, status: "failed" },
     version: 1,
   });
 }
