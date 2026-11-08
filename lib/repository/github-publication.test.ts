@@ -87,7 +87,7 @@ const reviewedChange = (
       ["mode", postimage.mode],
       ["digest", postimage.digest],
     ]);
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This test constructs publication input with its existing shape and key order.
     return Object.fromEntries([
       ["path", change.path],
       ["kind", change.kind],
@@ -103,7 +103,7 @@ const reviewedChange = (
       ["mode", postimage.mode],
       ["digest", postimage.digest],
     ]);
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This test constructs publication input with its existing shape and key order.
     return Object.fromEntries([
       ["path", change.path],
       ["kind", change.kind],
@@ -111,7 +111,7 @@ const reviewedChange = (
       ["after", after],
     ]) as NormalizedChangeSet["changes"][number];
   }
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This test constructs publication input with its existing shape and key order.
   return Object.fromEntries([
     ["path", change.path],
     ["kind", change.kind],
@@ -573,9 +573,9 @@ describe("closed GitHub publication contract", () => {
     expect(() => {
       assertExactInstallationIdentity(identity);
     }).not.toThrow();
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This test constructs publication input with its existing shape and key order.
     const reordered = Object.fromEntries(Object.entries(identity).toReversed()) as typeof identity;
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This test constructs publication input with its existing shape and key order.
     reordered.permissions = Object.fromEntries(
       Object.entries(identity.permissions).toReversed(),
     ) as typeof identity.permissions;
@@ -655,9 +655,9 @@ describe("closed GitHub publication contract", () => {
     expect(() => {
       assertExactRepositoryObservation(active);
     }).not.toThrow();
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This test constructs publication input with its existing shape and key order.
     const reordered = Object.fromEntries(Object.entries(active).toReversed()) as typeof active;
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This test constructs publication input with its existing shape and key order.
     reordered.releaseGate = Object.fromEntries(
       Object.entries(active.releaseGate).toReversed(),
     ) as typeof active.releaseGate;
@@ -676,14 +676,14 @@ describe("closed GitHub publication contract", () => {
         name: "REPOSITORY_RELEASE_ENABLED" as const,
       },
     };
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This test constructs publication input with its existing shape and key order.
     delete (unsigned as Partial<typeof proposal>).digest;
     const releaseEnabled = {
       ...unsigned,
       digest: hash(unsigned),
     };
     expect(() => {
-      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This test constructs publication input with its existing shape and key order.
       assertExactFreshRepositoryProposal(releaseEnabled as never);
     }).toThrow(/malformed/u);
   });
@@ -716,7 +716,7 @@ describe("closed GitHub publication contract", () => {
       },
     );
     const canonicalReview = review(changes, {}, true);
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This test constructs publication input with its existing shape and key order.
     const reordered = {
       ...canonicalReview,
       changes: canonicalReview.changes.map((change) => ({
@@ -1702,7 +1702,7 @@ describe("existing draft PR updates", () => {
     repositoryId: "100",
     state: "open",
   };
-  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This test constructs publication input with its existing shape and key order.
   const priorPublication = {
     branchName: initial.headBranch,
     branchSha: initial.headSha,

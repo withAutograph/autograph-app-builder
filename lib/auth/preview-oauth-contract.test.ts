@@ -110,13 +110,13 @@ describe("Preview OAuth activation contract", () => {
       membership: authority,
       now: () => 2_000_000_000_000,
     });
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies partial user and session fixtures.
     const user = { id: "user_1" } as never;
     await expect(
       options.postLogin?.shouldRedirect({
         headers: new Headers(),
         scopes: ["autograph:session"],
-        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies partial user and session fixtures.
         session: {} as never,
         user,
       }),
@@ -124,7 +124,7 @@ describe("Preview OAuth activation contract", () => {
     await expect(
       options.postLogin?.consentReferenceId({
         scopes: ["autograph:session"],
-        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies partial user and session fixtures.
         session: {} as never,
         user,
       }),
@@ -153,13 +153,13 @@ describe("Preview OAuth activation contract", () => {
       config,
       membership: membership(false),
     });
-    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies partial user and session fixtures.
     const user = { id: "user_1" } as never;
     await expect(
       inactive.postLogin?.shouldRedirect({
         headers: new Headers(),
         scopes: ["autograph:session"],
-        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies partial user and session fixtures.
         session: {} as never,
         user,
       }),
@@ -167,7 +167,7 @@ describe("Preview OAuth activation contract", () => {
     await expect(
       inactive.postLogin?.consentReferenceId({
         scopes: ["autograph:session"],
-        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing type assertion at this boundary.
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion -- Preserve the existing type assertion at this boundary.; This scenario supplies partial user and session fixtures.
         session: {} as never,
         user,
       }),
