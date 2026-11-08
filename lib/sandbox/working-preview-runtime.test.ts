@@ -439,7 +439,9 @@ describe("preview command termination", () => {
     ).then(() => {
       settled = true;
     });
-    await vi.waitFor(() => expect(command.wait).toHaveBeenCalledOnce());
+    await vi.waitFor(() => {
+      expect(command.wait).toHaveBeenCalledOnce();
+    });
     expect(settled).toBe(false);
     exited.resolve(null);
     await cleanup;
@@ -481,7 +483,9 @@ describe("startup ownership recovery", () => {
         return error;
       }
     })();
-    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
+    await vi.waitFor(() => {
+      expect(fetcher).toHaveBeenCalledOnce();
+    });
     const mutations = provider.update.mock.calls.length;
     await expect(startWorkingPreview(options)).rejects.toThrow("still pending");
     expect(provider.update.mock.calls).toHaveLength(mutations);

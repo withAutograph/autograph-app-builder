@@ -105,7 +105,9 @@ test("stock menu and Appearance card share a persistent cross-tab preference", a
 test("explicit Dark remains active across anonymous, auth, builder, and account surfaces", async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem("theme", "dark"));
+  await page.addInitScript(() => {
+    localStorage.setItem("theme", "dark");
+  });
 
   await page.goto("/");
   await expectTheme(page, "dark", "dark");
