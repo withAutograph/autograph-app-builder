@@ -111,25 +111,25 @@ export const retainedPrivateApplyRecoveryFixture = async (
   };
   const collect = createTerminalRecoveryCandidateCollector({
     getWorld: async () => world,
-    resolveRunEncryptionKey: async () => {
-      /* This controlled World has no encryption key. */
-    },
     hydrateStepArguments: (value: unknown, run: string, key: unknown) =>
       serialization.hydrateStepArguments(value, run, key, []),
     hydrateStepReturnValue: (value: unknown, run: string, key: unknown) =>
       serialization.hydrateStepReturnValue(value, run, key),
+    now: () => 0,
     readDurableSession,
-    requireEventSlot: (id: string) => Number(id.slice(5)),
     async *readNativeEvents() {
       /* No native effect result exists for this pending call. */
     },
-    now: () => 0,
+    requireEventSlot: (id: string) => Number(id.slice(5)),
+    resolveRunEncryptionKey: async () => {
+      /* This controlled World has no encryption key. */
+    },
   });
   const collected = await collect({
-    binding,
     authorizeOwner: async () => {
       /* Controlled local World ownership; the real adapter ports are tested separately. */
     },
+    binding,
   });
   expect(collected.kind).toBe("candidate");
   const payload = readTerminalRecoveryCandidate(collected.candidate);
@@ -142,14 +142,14 @@ export const retainedPrivateApplyRecoveryFixture = async (
     repeatableCallIds,
   });
   return {
-    context,
-    collected,
-    repeatableCallIds,
-    reconciled,
     binding,
+    collected,
+    context,
     payload,
+    readDurableSession,
     reconcile: (ids: readonly string[]) =>
       reconcileTerminalRecoveryCandidate(collected.candidate, { repeatableCallIds: ids }),
-    readDurableSession,
+    reconciled,
+    repeatableCallIds,
   };
 };

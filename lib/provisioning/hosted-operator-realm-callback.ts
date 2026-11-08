@@ -727,7 +727,6 @@ export const createRealmIdentityCallbackDeploymentHandler =
             try {
               const canonical = await resolveOwnedStandardRuntimeConfiguration({
                 configuration,
-                resources: privateResources,
                 context: {
                   authority: selected.context.authority,
                   ownerContext: operatorOwnerContextSchema.parse(selected.context.ownerContext),
@@ -737,6 +736,7 @@ export const createRealmIdentityCallbackDeploymentHandler =
                   },
                 },
                 environment,
+                resources: privateResources,
               });
               resources = await openHostedOperatorConfigurationResources(canonical, environment);
               ({ configuration } = resources);
