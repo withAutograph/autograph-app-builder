@@ -10,6 +10,7 @@ import { AppAccessError, appAccessErrorStatus } from "./errors";
 import { createAppAccessOperatorClient } from "./operator-client";
 import { createAppAccessRouteHandler } from "./route";
 import { createAppAccessOwnerResolver } from "./owner";
+import { reportRepositoryProductionFailure } from "../provisioning/repository-production-diagnostic";
 
 const createDeployment = (environment: NodeJS.ProcessEnv) => {
   const config = readPreviewOAuthRuntimeConfig(environment);
@@ -68,6 +69,9 @@ export const handleBuilderAppAccess = async (
     handler ??= createDeployment(process.env);
     return await handler(request, sessionId);
   } catch (error) {
+    if (request.method === "GET") {
+      reportRepositoryProductionFailure("access_deployment", "binding_unavailable", error);
+    }
     const safe =
       error instanceof AppAccessError ? error : new AppAccessError("app_access_unavailable");
     return Response.json(

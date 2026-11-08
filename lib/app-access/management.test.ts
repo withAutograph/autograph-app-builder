@@ -1,6 +1,6 @@
 /* oxlint-disable eslint/require-await -- In-memory adapters implement asynchronous production ports. */
 import { randomUUID } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RepositoryProductionScope } from "../provisioning/repository-production-contract";
 import { AppAccessError } from "./errors";
 import { createAppAccessManagementService } from "./management";
@@ -40,6 +40,7 @@ const invite = () => ({
   email: "guest@example.test",
   roles: ["reader"],
 });
+afterEach(() => vi.restoreAllMocks());
 const setup = () => {
   const rows = new Map<string, AppAccessOperationRow>();
   const deps: AppAccessManagementDependencies = {
@@ -98,6 +99,37 @@ const setup = () => {
 };
 
 describe("managed app access", () => {
+  it.each(["resolve", "people"] as const)(
+    "reports the actual protected %s read boundary and preserves its rejection",
+    async (stage) => {
+      const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const f = setup();
+      const failure = new Error(
+        stage === "resolve" ? "repository_production_source_unavailable" : "private-provider-token",
+        { cause: "private-cause" },
+      );
+      if (stage === "resolve") {
+        f.deps.resolve = async () => {
+          throw failure;
+        };
+      }
+      if (stage === "people") {
+        f.deps.readPeople = async () => {
+          throw failure;
+        };
+      }
+      await expect(f.service.read(owner)).rejects.toBe(failure);
+      const output = log.mock.calls.flat().join("");
+      expect(output).toContain(
+        `"phase":"${stage === "resolve" ? "access_scope_resolve" : "access_people"}"`,
+      );
+      if (stage === "resolve") {
+        expect(output).toContain('"reason":"source_unavailable"');
+      }
+      expect(output).not.toContain("private");
+      expect(output).not.toContain("workspace");
+    },
+  );
   it("journals an invitation once and reuses its completed result", async () => {
     const { service, deps } = setup();
     const command = invite();

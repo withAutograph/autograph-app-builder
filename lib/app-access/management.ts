@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { observeRepositoryProductionPhase } from "../provisioning/repository-production-diagnostic";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { repositoryProductionScopeSchema } from "../provisioning/repository-production-contract";
@@ -124,10 +125,16 @@ export const appAccessOperationDigest = (
 /** Access changes use the existing app lock and journal; a lost response is never a new invitation. */
 export const createAppAccessManagementService = (deps: AppAccessManagementDependencies) => {
   const read = async (owner: AppAccessOwner, cursor?: string): Promise<AppAccessSnapshot> => {
-    const app = await deps.resolve(owner);
+    const app = await observeRepositoryProductionPhase(
+      "access_scope_resolve",
+      "binding_unavailable",
+      () => deps.resolve(owner),
+    );
     await deps.assertAuthorized(owner, app.scope, false);
     const people = app.canManage
-      ? await deps.readPeople(app.scope, cursor)
+      ? await observeRepositoryProductionPhase("access_people", "binding_unavailable", () =>
+          deps.readPeople(app.scope, cursor),
+        )
       : { members: [], invitations: [] };
     const pending = app.canManage ? await deps.journal.pending(app.scope) : [];
     const pendingCommand = pending.find((row) => row.record.state === "pending")?.record.command;
