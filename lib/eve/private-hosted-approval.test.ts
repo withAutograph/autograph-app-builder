@@ -827,6 +827,7 @@ const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold:
     },
   };
   const recovered = await createHostedEveSessionService({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     assertNativeRecoveryOwner: () => Promise.resolve(),
     now: () => 10,
     principal,

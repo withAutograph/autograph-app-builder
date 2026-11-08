@@ -1156,6 +1156,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       });
     },
 
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     recordCancellationIntent(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
       return database.transaction(async (transaction) => {

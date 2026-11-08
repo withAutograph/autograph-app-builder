@@ -1826,6 +1826,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     return structuredClone(updated);
   }
 
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   readUnsettledSendAcknowledgements: HostedEveStore["readUnsettledSendAcknowledgements"] = (
     input,
   ) => {

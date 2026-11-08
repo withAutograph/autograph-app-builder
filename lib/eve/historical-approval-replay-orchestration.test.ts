@@ -82,6 +82,7 @@ describe("historical approval replay orchestration", () => {
     await expect(
       runHistoricalApprovalReplay({
         ...f,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         observe: () =>
           Promise.resolve({
             nativeTail: { complete: false, nativeTailIndex: 4, nextNativeIndex: 3 },
@@ -91,6 +92,7 @@ describe("historical approval replay orchestration", () => {
     ).resolves.toEqual({ status: "partial" });
     expect(f.persistPartial).toHaveBeenCalledWith(first, checkpoint);
     expect(f.publishVerified).not.toHaveBeenCalled();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const observe = vi.fn((prior: ApprovalReplayProgress | undefined) => {
       expect(prior).toEqual(first);
       return Promise.resolve({
@@ -123,6 +125,7 @@ describe("historical approval replay orchestration", () => {
       await expect(
         runHistoricalApprovalReplay({
           ...f,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           observe: () =>
             Promise.resolve({
               nativeTail: { complete: true, nativeTailIndex: 4, nextNativeIndex: 5 },
@@ -138,6 +141,7 @@ describe("historical approval replay orchestration", () => {
     await expect(
       runHistoricalApprovalReplay({
         ...f,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         observe: () =>
           Promise.resolve({
             nativeTail: { complete: true, nativeTailIndex: 4, nextNativeIndex: 5 },
@@ -153,6 +157,7 @@ describe("historical approval replay orchestration", () => {
     await expect(
       runHistoricalApprovalReplay({
         ...f,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         observe: () =>
           Promise.resolve({
             nativeTail: { complete: true, nativeTailIndex: 4, nextNativeIndex: 5 },
@@ -167,6 +172,7 @@ describe("historical approval replay orchestration", () => {
     await expect(
       runHistoricalApprovalReplay({
         ...f,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         observe: () =>
           Promise.resolve({
             nativeTail: { complete: true, nativeTailIndex: 4, nextNativeIndex: 3 },

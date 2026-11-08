@@ -13,6 +13,7 @@ import { call, execute } from "./native-approval-compaction.test-fixture";
 const roots: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
 const fixture = async () => {
@@ -37,6 +38,7 @@ const fixture = async () => {
     logicalSessionId: publicId,
   });
   vi.spyOn(ClientSession.prototype, "snapshot").mockImplementation(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     function snapshot(this: ClientSession) {
       return Promise.resolve({
         session: { sessionId: this.state.sessionId, streamIndex: 1 },

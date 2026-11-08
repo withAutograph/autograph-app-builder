@@ -173,6 +173,7 @@ const replayProgress = (capture: ReturnType<typeof createPrivateHostedApprovalCa
     nativeObservationState: nativeState,
     privateApprovalCaptureState: capture.snapshot(),
   });
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const verify = (replayBinding = binding, replayEvents = publicEvents, complete = true) =>
   verifyHistoricalApprovalReplay({
     trustedBinding: binding,

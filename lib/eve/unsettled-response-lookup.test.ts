@@ -119,6 +119,7 @@ const postgresFixture = () => {
               a.operationId.localeCompare(b.operationId),
           );
         return {
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           orderBy: () => ({ limit: (limit: number) => Promise.resolve(matching.slice(0, limit)) }),
         };
       },
@@ -140,6 +141,7 @@ const memoryFixture = async () => {
 
 describe.each([
   ["memory", memoryFixture],
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   ["Postgres query", () => Promise.resolve(postgresFixture())],
 ] as const)("unsettled RESPOND lookup: %s", (_label, build) => {
   it("scopes by exact tenant, owner and session and paginates deterministically with equal timestamps", async () => {
@@ -148,6 +150,7 @@ describe.each([
       throw new Error("missing response reader");
     }
     const reader = store.readUnsettledResponseOperations.bind(store);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const read = (cursor?: { createdAtEpochMs: number; operationId: string }) => {
       const request: Parameters<typeof reader>[0] = {
         limit: 1,

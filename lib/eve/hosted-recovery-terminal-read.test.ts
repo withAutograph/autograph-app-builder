@@ -72,10 +72,13 @@ const fixture = async () => {
   } | null = null;
   const beforeRead = vi.fn<
     NonNullable<Parameters<typeof createHostedEveSessionService>[0]["beforeRead"]>
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   >(() => Promise.reject(new Error("beforeRead must stay fenced")));
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const assertNativeRecoveryOwner = vi.fn(() =>
     ownerAllowed ? Promise.resolve() : Promise.reject(new Error("Current owner revoked")),
   );
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const activateRecovery = vi.fn<NonNullable<HostedEveTransport["activateRecovery"]>>(() =>
     Promise.reject(new Error("Native activation HTTP 503")),
   );
@@ -133,6 +136,7 @@ const fixture = async () => {
     });
   const transport: HostedEveTransport = {
     activateRecovery,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     cancel: vi.fn(() => Promise.resolve({ events: [], status: "cancelled" as const })),
     get: vi.fn<() => Promise<HostedEngineSnapshot>>().mockResolvedValue(working),
     observe,
@@ -174,6 +178,7 @@ const fixture = async () => {
       ? publishedChild
       : await base.getSession(owner, sessionId);
   };
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const readCheckpointPage: NonNullable<HostedEveStore["readCheckpointPage"]> = (input) => {
     const current = page;
     if (current === null || current.id !== input.checkpointRef.id) {

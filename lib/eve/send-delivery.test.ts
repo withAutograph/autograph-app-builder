@@ -185,6 +185,7 @@ class PagedSendDiagnosticStore extends InMemoryHostedEveStore {
     });
     return this.paged;
   };
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   readCheckpointPage: NonNullable<HostedEveStore["readCheckpointPage"]> = (input) => {
     if (
       this.metadata === undefined ||
@@ -210,7 +211,9 @@ const attachPagedTransport = (f: Awaited<ReturnType<typeof fixture>>) => {
     async (input) =>
       await observeSameOriginEveStream({
         config: { baseUrl: "https://builder.example.test", timeoutMs: 1000 },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         workloadIdentity: { token: () => Promise.resolve("synthetic-oidc") },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         fetchImplementation: (url) => {
           const start = Number(
             new URL(url instanceof Request ? url.url : url).searchParams.get("startIndex") ?? 0,
@@ -450,6 +453,7 @@ describe("canonical SEND delivery acknowledgement", () => {
   it("does not backfill an older ACK baseline or project it over native waiting", async () => {
     const f = await queuedFixture();
     const record = f.store.recordSendDelivery.bind(f.store);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     vi.spyOn(f.store, "recordSendDelivery").mockImplementation((input) => {
       const { cancellationRevisionAtDispatch, ...legacy } = input;
       void cancellationRevisionAtDispatch;
@@ -485,6 +489,7 @@ describe("canonical SEND delivery acknowledgement", () => {
     if (read === undefined) {
       throw new Error("Missing ACK reader");
     }
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     f.store.readUnsettledSendAcknowledgements = () => Promise.reject(new Error("Unavailable"));
     await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     f.store.readUnsettledSendAcknowledgements = read;
@@ -1299,7 +1304,9 @@ describe("canonical SEND delivery acknowledgement", () => {
       }
       const result = await observeSameOriginEveStream({
         config: { baseUrl: "https://builder.example.test", timeoutMs: 1000 },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         workloadIdentity: { token: () => Promise.resolve("synthetic-oidc") },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         fetchImplementation: () =>
           Promise.resolve(
             new Response(`${events.map((event) => JSON.stringify(event)).join("\n")}\n`, {
@@ -1428,6 +1435,7 @@ describe("first protected callback after Stop", () => {
         workspaceId: principal.workspaceId,
         ownerUserId: principal.ownerUserId,
       };
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const resolver = (reconcile = true) =>
         readHostedOperatorCallbackSessions({
           store: f.store,

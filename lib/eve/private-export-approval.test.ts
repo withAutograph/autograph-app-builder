@@ -246,6 +246,7 @@ describe("approval history binding and cancellation", () => {
         prefix.proveComplete();
       }
       const save = vi.fn<() => Promise<void>>().mockResolvedValue();
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const history = vi.fn((startIndex: number, onEvent: (event: MessageStreamEvent) => void) => {
         expect(startIndex).toBe(0);
         onEvent(settled());
@@ -268,6 +269,7 @@ describe("approval history binding and cancellation", () => {
   it("does not promote a partial approval when replacement hides the unread old cancellation", async () => {
     const oldTail = [requested(), settled(), settled("owner", "cancelled")];
     let checkpoint: PrivateOperatorApprovalObservation | undefined;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const save = (value: PrivateOperatorApprovalObservation) => {
       checkpoint = structuredClone(value);
       return Promise.resolve();
@@ -282,6 +284,7 @@ describe("approval history binding and cancellation", () => {
       readPrivateOperatorApproval({
         ...shared,
         observation: { save },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         readHistory: (start, onEvent) => {
           expect(start).toBe(0);
           for (const event of oldTail.slice(0, 2)) {
@@ -303,6 +306,7 @@ describe("approval history binding and cancellation", () => {
       ...shared,
       owner: { ...owner, adapterSessionId: "replacement", adapterGeneration: 2 },
       observation: { save, state: checkpoint },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       readHistory: (start) => {
         expect(start).toBe(0);
         return Promise.resolve({ complete: true, nativeTailIndex: -1, nextNativeIndex: 0 });
@@ -313,6 +317,7 @@ describe("approval history binding and cancellation", () => {
   });
   it("retains a prior complete cancellation through a later partial read and replacement", async () => {
     let checkpoint: PrivateOperatorApprovalObservation | undefined;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const save = (value: PrivateOperatorApprovalObservation) => {
       checkpoint = structuredClone(value);
       return Promise.resolve();
@@ -326,6 +331,7 @@ describe("approval history binding and cancellation", () => {
     await readPrivateOperatorApproval({
       ...shared,
       observation: { save },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       readHistory: (_start, onEvent) => {
         onEvent(requested());
         onEvent(settled("owner", "cancelled"));
@@ -347,6 +353,7 @@ describe("approval history binding and cancellation", () => {
       readPrivateOperatorApproval({
         ...shared,
         observation: { save, state: checkpoint },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         readHistory: (start, onEvent) => {
           expect(start).toBe(2);
           onEvent(pending);
@@ -359,6 +366,7 @@ describe("approval history binding and cancellation", () => {
       readPrivateOperatorApproval({
         ...shared,
         observation: { save, state: checkpoint },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         readHistory: (start, onEvent) => {
           expect(start).toBe(4);
           onEvent(requested({ toolName: "unrelated-tool" }));
@@ -370,6 +378,7 @@ describe("approval history binding and cancellation", () => {
       ...shared,
       owner: { ...owner, adapterSessionId: "replacement", adapterGeneration: 2 },
       observation: { save, state: checkpoint },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       readHistory: (start) => {
         expect(start).toBe(0);
         return Promise.resolve({ complete: true, nativeTailIndex: -1, nextNativeIndex: 0 });
@@ -387,6 +396,7 @@ describe("approval history binding and cancellation", () => {
     "keeps partial cancellation sticky after a prior completed approval and replacement, other request=%s",
     async (otherRequest) => {
       let checkpoint: PrivateOperatorApprovalObservation | undefined;
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const save = (value: PrivateOperatorApprovalObservation) => {
         checkpoint = structuredClone(value);
         return Promise.resolve();
@@ -408,6 +418,7 @@ describe("approval history binding and cancellation", () => {
         await readPrivateOperatorApproval({
           ...shared,
           observation: { save },
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           readHistory: (_start, onEvent) => {
             onEvent(requested());
             onEvent(settled());
@@ -432,6 +443,7 @@ describe("approval history binding and cancellation", () => {
         readPrivateOperatorApproval({
           ...shared,
           observation: { save, state: checkpoint },
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           readHistory: (start, onEvent) => {
             expect(start).toBe(2);
             if (otherRequest) {
@@ -457,6 +469,7 @@ describe("approval history binding and cancellation", () => {
             ...(otherRequest ? {} : { callId: "export-call" }),
             state,
           }),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         readHistory: (start) => {
           expect(start).toBe(0);
           return Promise.resolve({ complete: true, nativeTailIndex: -1, nextNativeIndex: 0 });
@@ -471,6 +484,7 @@ describe("approval history binding and cancellation", () => {
           observation: { save, state: checkpoint },
           capture: (state) =>
             createPrivateTenantExportApprovalCapture({ ...options, callId: "export-call", state }),
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           readHistory: (start) => {
             expect(start).toBe(0);
             return Promise.resolve({ complete: true, nativeTailIndex: -1, nextNativeIndex: 0 });
@@ -482,6 +496,7 @@ describe("approval history binding and cancellation", () => {
   );
   it("does not grant an approval from a partial tail before a later cancellation", async () => {
     let checkpoint: PrivateOperatorApprovalObservation | undefined;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const save = (value: PrivateOperatorApprovalObservation) => {
       checkpoint = structuredClone(value);
       return Promise.resolve();
@@ -496,6 +511,7 @@ describe("approval history binding and cancellation", () => {
       readPrivateOperatorApproval({
         ...shared,
         observation: { save },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         readHistory: (_start, onEvent) => {
           onEvent(requested());
           onEvent(settled());
@@ -507,6 +523,7 @@ describe("approval history binding and cancellation", () => {
     const result = await readPrivateOperatorApproval({
       ...shared,
       observation: { save, state: checkpoint },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       readHistory: (start, onEvent) => {
         expect(start).toBe(2);
         onEvent(settled("owner", "cancelled"));
@@ -529,14 +546,17 @@ it("rechecks a quiet native tail without rewriting unchanged approval progress",
     adapterGeneration: 1,
   });
   let checkpoint: PrivateOperatorApprovalObservation | undefined;
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const save = vi.fn((value: PrivateOperatorApprovalObservation) => {
     checkpoint = structuredClone(value);
     return Promise.resolve();
   });
   const assertOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const readHistory = vi.fn(() =>
     Promise.resolve({ complete: true, nativeTailIndex: -1, nextNativeIndex: 0 }),
   );
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const read = () =>
     readPrivateOperatorApproval({
       owner,

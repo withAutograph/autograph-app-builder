@@ -1252,6 +1252,7 @@ export function createHostedEveSessionService(input: {
     const metadata = await readCheckpointMetadata(session);
     return metadata?.nativeObservationState?.nativeDeliveryState ?? metadata?.nativeDeliveryState;
   };
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const assertSendOwner = (session: HostedSessionRecord) =>
     (input.assertSendDeliveryOwner ?? assertHostedBuildDecisionOwner)(
       toDurableHostedSessionRecord(session),
@@ -4980,6 +4981,7 @@ export function createHostedEveSessionService(input: {
                 const spool = await spoolSnapshotEvents(response.snapshot);
                 return {
                   newSessionPaged: {
+                    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
                     cleanup: () => rm(spool.directory, { force: true, recursive: true }),
                     events: readSpoolEvents(spool),
                     metadata: checkpointMetadataForSnapshot(response.snapshot, timestamp),
@@ -5376,6 +5378,7 @@ export function createHostedEveSessionService(input: {
             const spool = await spoolSnapshotEvents(response.snapshot);
             return {
               newSessionPaged: {
+                // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
                 cleanup: () => rm(spool.directory, { force: true, recursive: true }),
                 events: readSpoolEvents(spool),
                 metadata: checkpointMetadataForSnapshot(response.snapshot, timestamp),

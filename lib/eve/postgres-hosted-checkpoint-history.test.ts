@@ -138,7 +138,7 @@ const historyFixture = () => {
           return query;
         },
         orderBy: () => query,
-        // oxlint-disable-next-line unicorn/no-thenable -- Drizzle query builders are awaitable as well as chainable.
+        // oxlint-disable-next-line unicorn/no-thenable, typescript/promise-function-async -- Drizzle query builders are awaitable as well as chainable. Preserve the returned promise and synchronous throw behavior.
         then: <Result>(resolve: (value: FixtureRow[]) => Result) => {
           const selected = (rows.get(name) ?? [])
             .filter((row) => matches(row, predicate))
@@ -165,6 +165,7 @@ const historyFixture = () => {
   });
   const fake = {
     delete: (table: Parameters<typeof getTableName>[0]) => ({
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       where: (predicate: SQL) => {
         const name = getTableName(table);
         const selected = (rows.get(name) ?? []).filter((row) => matches(row, predicate));
@@ -217,6 +218,7 @@ const historyFixture = () => {
     select,
     update: (table: Parameters<typeof getTableName>[0]) => ({
       set: (values: FixtureRow) => ({
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         where: (predicate: SQL) => {
           const name = getTableName(table);
           const selected = (rows.get(name) ?? []).filter((row) => matches(row, predicate));

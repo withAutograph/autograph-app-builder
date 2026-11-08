@@ -16,6 +16,7 @@ const principal: HostedPrincipal = {
   scopes: Object.values(hostedEveOperationScopes),
 };
 const config = { baseUrl: "https://builder.example", timeoutMs: 10_000 };
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const workloadIdentity = { token: () => Promise.resolve("fixture-workload") };
 interface BootStreamHeaders {
   [name: string]: string;
@@ -45,10 +46,12 @@ const stream = (
   }
   return new ResponseConstructor(body, { headers });
 };
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const observe = (response: () => Response, onEvent: (event: InternalEveEvent) => void = () => {}) =>
   observeSameOriginEveStream({
     config,
     workloadIdentity,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     fetchImplementation: () => Promise.resolve(response()),
     sessionId: "run_boot",
     onEvent,
@@ -77,6 +80,7 @@ describe("verified native recovery boot failure", () => {
     const transport = createSameOriginEveTransport({
       config,
       workloadIdentity,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       fetchImplementation: () => Promise.resolve(stream({ status: "failed" })),
     });
     await expect(transport.get({ adapterSessionId: "run_boot", principal })).resolves.toMatchObject(
@@ -130,6 +134,7 @@ describe("verified native recovery boot failure", () => {
       observeSameOriginEveStream({
         config,
         workloadIdentity,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         fetchImplementation: () => Promise.resolve(stream({ status: "failed" })),
         sessionId: "run_boot",
         nativeObservationState: retained,
@@ -195,6 +200,7 @@ describe("verified native recovery boot failure", () => {
       ...createSameOriginEveTransport({
         config,
         workloadIdentity,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         fetchImplementation: () =>
           Promise.resolve(stream({ status: failureReported ? "failed" : undefined })),
       }),
@@ -211,6 +217,7 @@ describe("verified native recovery boot failure", () => {
       principal,
       store,
       transport,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       assertNativeRecoveryOwner: () => Promise.resolve(),
     });
     const original = await service.start({ clientRequestId: "original", prompt: "Build this app" });

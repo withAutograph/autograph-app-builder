@@ -77,6 +77,7 @@ describe("real native compaction before the SDK approved-tool execution", () => 
     abort.abort(new Error("Cancelled before approval resumption"));
     const effect = vi.fn();
     const apply = vi.fn(
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       (_input: { proposalDigest: string }, options: { abortSignal?: AbortSignal }) => {
         options.abortSignal?.throwIfAborted();
         effect();

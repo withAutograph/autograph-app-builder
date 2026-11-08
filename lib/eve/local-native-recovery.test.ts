@@ -54,6 +54,7 @@ const fixture = async () => {
   const client = new Client({ host: "http://127.0.0.1:49999" });
   const snapshots = vi
     .spyOn(ClientSession.prototype, "snapshot")
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     .mockImplementation(function snapshot(this: ClientSession) {
       const events = this.state.sessionId === "wrun_original" ? [failed] : [waiting];
       return Promise.resolve({
@@ -124,6 +125,7 @@ describe("local native terminal recovery authority", () => {
     await f.recovery.recover(f.client, "wrun_original", "explicit-resume", f.post);
     const original = Promise.withResolvers<Awaited<ReturnType<ClientSession["snapshot"]>>>();
     const successorStarted = Promise.withResolvers<boolean>();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     f.snapshots.mockImplementation(function snapshot(this: ClientSession) {
       if (this.state.sessionId === "wrun_original") {
         return original.promise;
@@ -157,6 +159,7 @@ describe("local native terminal recovery authority", () => {
     const session = withLocalRecoveredSessions(f.client, f.recovery).sessions.attach(
       "wrun_original",
     );
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     f.snapshots.mockImplementation(function snapshot(this: ClientSession) {
       return Promise.resolve(
         this.state.sessionId === "wrun_original"
@@ -181,6 +184,7 @@ describe("local native terminal recovery authority", () => {
       isRecoveredSession: (id) => f.recovery.lineage(id).length > 1,
     });
 
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const get = () => service.get({ cursor: 0, limit: 100, sessionId: "wrun_original" });
     const first = await get();
     expect(first).toMatchObject({ cursor: 3, sessionId: "wrun_original", status: "waiting" });
@@ -217,6 +221,7 @@ describe("local native terminal recovery authority", () => {
   it("refreshes a native recovery tail that arrives after the activation reply", async () => {
     const f = await fixture();
     let childVisible = false;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     f.snapshots.mockImplementation(function snapshot(this: ClientSession) {
       let events: MessageStreamEvent[] = [];
       if (this.state.sessionId === "wrun_original") {
@@ -257,6 +262,7 @@ describe("local native terminal recovery authority", () => {
     const f = await fixture();
     await f.recovery.recover(f.client, "wrun_original", "recover-live-reader", f.post);
     const childEvents: MessageStreamEvent[] = [waiting];
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     f.snapshots.mockImplementation(function snapshot(this: ClientSession) {
       const events = this.state.sessionId === "wrun_original" ? [failed] : [...childEvents];
       return Promise.resolve({
@@ -272,8 +278,10 @@ describe("local native terminal recovery authority", () => {
           create: native.sessions.create,
           attach: (id, options) => ({
             ...native.sessions.attach(id, options),
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
             send: () =>
               Promise.resolve({
+                // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
                 cancel: () => Promise.resolve(),
                 async *[Symbol.asyncIterator]() {
                   const interim = { ...waiting, meta: { ...waiting.meta, id: "interim-wait" } };
@@ -349,6 +357,7 @@ describe("local native terminal recovery authority", () => {
       meta: { ...waiting.meta, id: `${id}-resolved` },
     });
     const childEvents = [waiting, question("old-input")];
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     f.snapshots.mockImplementation(function snapshot(this: ClientSession) {
       const events = this.state.sessionId === "wrun_original" ? [failed] : [...childEvents];
       return Promise.resolve({
@@ -357,8 +366,10 @@ describe("local native terminal recovery authority", () => {
       });
     });
     const { promise: oldReader, resolve: finishOldReader } = Promise.withResolvers<boolean>();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const respond = vi.fn((_input: readonly InputResponse[]) =>
       Promise.resolve({
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         cancel: () => Promise.resolve(),
         async *[Symbol.asyncIterator]() {
           if (respond.mock.calls.length === 1) {
@@ -383,6 +394,7 @@ describe("local native terminal recovery authority", () => {
       }),
     );
     const native = withLocalRecoveredSessions(f.client, f.recovery);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const cancel = vi.fn(() =>
       Promise.resolve({ sessionId: "wrun_original", status: "accepted" as const }),
     );
@@ -444,9 +456,11 @@ describe("local native terminal recovery authority", () => {
           create: native.sessions.create,
           attach: (id, options) => ({
             ...native.sessions.attach(id, options),
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
             send: () => {
               cursors.push(options?.streamIndex ?? 0);
               return Promise.resolve({
+                // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
                 cancel: () => Promise.resolve(),
                 async *[Symbol.asyncIterator]() {
                   yield { ...waiting, meta: { ...waiting.meta, id: "new-delivery-wait" } };
@@ -476,8 +490,10 @@ describe("local native terminal recovery authority", () => {
           create: native.sessions.create,
           attach: (id, options) => ({
             ...native.sessions.attach(id, options),
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
             send: () =>
               Promise.resolve({
+                // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
                 cancel: () => Promise.resolve(),
                 async *[Symbol.asyncIterator]() {
                   yield waiting;
@@ -511,6 +527,7 @@ describe("local native terminal recovery authority", () => {
     if (good === undefined) {
       throw new Error("Missing snapshot fixture");
     }
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     f.snapshots.mockImplementation(function snapshot(this: ClientSession) {
       return Promise.resolve({
         events: [],
@@ -538,6 +555,7 @@ describe("local native terminal recovery authority", () => {
       isRecoveredSession: () => true,
     });
     await service.get({ cursor: 0, limit: 100, sessionId: "wrun_original" });
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     f.snapshots.mockImplementation(function snapshot(this: ClientSession) {
       const events =
         this.state.sessionId === "wrun_original"
@@ -558,6 +576,7 @@ describe("local native terminal recovery authority", () => {
   it("dispatches controls to the logical session and observes only the accepted physical delivery", async () => {
     const f = await fixture();
     await f.recovery.recover(f.client, "wrun_original", "recover-controls", f.post);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const post = vi.fn<NonNullable<Parameters<typeof withLocalRecoveredSessions>[2]>>((logicalId) =>
       Promise.resolve({ sessionId: logicalId, deliveryId: "delivery-mine" }),
     );
@@ -577,6 +596,7 @@ describe("local native terminal recovery authority", () => {
     );
     const cancellations: string[] = [];
     vi.spyOn(ClientSession.prototype, "cancel").mockImplementation(
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       function cancel(this: ClientSession) {
         cancellations.push(this.state.sessionId);
         return Promise.resolve({ sessionId: this.state.sessionId, status: "accepted" });
@@ -622,6 +642,7 @@ describe("local native terminal recovery authority", () => {
   it("rejects a control receipt naming a different logical session", async () => {
     const f = await fixture();
     await f.recovery.recover(f.client, "wrun_original", "recover-wrong-control", f.post);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const post = vi.fn<NonNullable<Parameters<typeof withLocalRecoveredSessions>[2]>>(() =>
       Promise.resolve({ sessionId: "foreign-logical-session", deliveryId: "foreign-delivery" }),
     );
@@ -642,6 +663,7 @@ describe("local native terminal recovery authority", () => {
   });
   it("retains a failed submission reservation and uses its exact operation on explicit recovery", async () => {
     const f = await fixture();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const failedPost = vi.fn<Parameters<typeof f.recovery.recover>[3]>(() =>
       Promise.reject(new Error("connection lost")),
     );
@@ -688,6 +710,7 @@ describe("local native terminal recovery authority", () => {
   });
   it("denies a foreign principal even with an exact reserved descriptor", async () => {
     const f = await fixture();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const fail = vi.fn<Parameters<typeof f.recovery.recover>[3]>(() =>
       Promise.reject(new Error("offline")),
     );
@@ -696,6 +719,7 @@ describe("local native terminal recovery authority", () => {
     if (descriptor === undefined) {
       throw new Error("Missing reservation");
     }
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     expect(() =>
       f.recovery.ports.authorize({
         auth: { ...f.auth, principalType: "user", principalId: "customer" },
@@ -710,6 +734,7 @@ describe("local native terminal recovery authority", () => {
   });
   it("rejects a forged acceptance without a canonical native receipt", async () => {
     const f = await fixture();
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const forged = vi.fn<Parameters<typeof f.recovery.recover>[3]>((body) =>
       Promise.resolve({
         sessionId: "wrun_forged",

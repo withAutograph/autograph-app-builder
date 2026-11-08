@@ -561,6 +561,7 @@ describe("native recovery verification diagnostics", () => {
       });
       return { adapterSessionId: recoveryBinding.ownerRunId, recoveryBinding, snapshot };
     });
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const activate = vi.fn<NonNullable<HostedEveTransport["activateRecovery"]>>(({ recovery }) =>
       Promise.resolve(bindingFor(recovery)),
     );
@@ -571,6 +572,7 @@ describe("native recovery verification diagnostics", () => {
       transport,
       now: () => 100,
       onSubmissionDiagnostic: sink,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       assertNativeRecoveryOwner: () => Promise.resolve(),
     });
     const original = await service.start({
@@ -665,6 +667,7 @@ describe("native recovery verification diagnostics", () => {
   it("distinguishes an activation receipt mismatch and a missing canonical GET operation", async () => {
     const f = await recoveredFixture();
     const child = await f.service.start(f.recoveryRequest);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     f.activate.mockImplementation(({ recovery }) =>
       Promise.resolve({ ...bindingFor(recovery), ownerRunId: "different-private-owner" }),
     );

@@ -129,6 +129,7 @@ const cancelledSendFixture = () => {
     record: operation,
     sessionId: record.sessionId,
   };
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const selected = (table: PgTable) => {
     const rows = getTableName(table) === "agent_session" ? [row] : [sendRow];
     return Object.assign(Promise.resolve(rows), {
@@ -138,11 +139,13 @@ const cancelledSendFixture = () => {
   };
   const updates = vi.fn();
   const selectTable = (table: PgTable) => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const limit = () => selected(table);
     const where = () => ({ limit });
     return { where };
   };
   const updateValues = (values: typeof row) => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const returning = () => {
       updates(values);
       row = { ...row, ...values };
@@ -156,6 +159,7 @@ const cancelledSendFixture = () => {
     update: () => ({ set: updateValues }),
   };
   const database = {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     transaction: <T>(execute: (input: typeof transaction) => Promise<T>) => execute(transaction),
   };
   // SAFETY: The terminal double implements only the tenant-scoped locked reads and UPDATEs exercised below.
@@ -173,6 +177,7 @@ const cancelledSendFixture = () => {
       type: "turn.started",
     },
   ]);
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const observe = (explicit = true, stamped = true) => {
     if (store.observeSession === undefined) {
       throw new Error("Expected the PostgreSQL observation writer");
@@ -693,10 +698,12 @@ type CheckpointFixtureRow = Record<
   string | number | Date | null | HostedSessionRecord | readonly string[]
 >;
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const terminalReadRows = (rows: CheckpointFixtureRow[]) => {
   const result = Object.assign(Promise.resolve(rows), {
     // oxlint-disable-next-line eslint/require-await -- Terminal database double preserves the async read contract.
     limit: async (limit: number) => rows.slice(0, limit),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     orderBy: () => result,
   });
   return result;
@@ -747,6 +754,7 @@ const checkpointReadFixture = () => {
   });
   rows.set("agent_session_checkpoint_item", items);
   rows.set("agent_session_checkpoint_chunk", items);
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const selectRows = (table: PgTable, predicate: SQL) => {
     const query = dialect.sqlToQuery(predicate);
     queries.push(query);
@@ -787,6 +795,7 @@ const checkpointReadFixture = () => {
   const database = {
     select: () => ({
       from: (table: PgTable) => ({
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         where: (predicate: SQL) => selectRows(table, predicate),
       }),
     }),
@@ -1107,7 +1116,7 @@ const queuedSendFixture = () => {
             }
             return query;
           },
-          // oxlint-disable-next-line sonarjs/no-nested-functions -- Terminal SELECT double mirrors Drizzle fluent limit.
+          // oxlint-disable-next-line sonarjs/no-nested-functions, typescript/promise-function-async -- Terminal SELECT double mirrors Drizzle fluent limit. Preserve the returned promise and synchronous throw behavior.
           limit: (limit: number) => {
             const rows = selected.slice(0, limit);
             return Object.assign(Promise.resolve(rows), {
@@ -1128,7 +1137,7 @@ const queuedSendFixture = () => {
     update: (table: PgTable) => ({
       set: (values: Partial<SendFixtureOperationRow>) => ({
         where: (predicate: SQL) => ({
-          // oxlint-disable-next-line sonarjs/no-nested-functions -- Terminal UPDATE double mirrors Drizzle fluent returning.
+          // oxlint-disable-next-line sonarjs/no-nested-functions, typescript/promise-function-async -- Terminal UPDATE double mirrors Drizzle fluent returning. Preserve the returned promise and synchronous throw behavior.
           returning: () => {
             const rows = selectedRows(table, predicate);
             writes.push({ locks: [...locks], values });
@@ -1143,6 +1152,7 @@ const queuedSendFixture = () => {
   };
   const database = {
     ...transaction,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     transaction: <T>(execute: (input: typeof transaction) => Promise<T>) => execute(transaction),
   };
   // SAFETY: The terminal double interprets the real tenant/keyset predicates and row locks used by these source tests.
@@ -1183,6 +1193,7 @@ const queuedSendFixture = () => {
     requestDigest: operationRecord.requestDigest,
     sessionId: session.sessionId,
   };
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const acknowledge = (row: SendFixtureOperationRow, cancellationRevisionAtDispatch?: number) => {
     if (store.recordSendDelivery === undefined) {
       throw new Error("Expected ACK writer.");
@@ -1195,6 +1206,7 @@ const queuedSendFixture = () => {
       principal,
     });
   };
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const read = (
     input: {
       operationId?: string;
@@ -1401,6 +1413,7 @@ describe("PostgreSQL queued SEND acknowledgement sidecar", () => {
       sendDelivery: { ...f.delivery, sessionId: "another_session" },
     });
     const missingPages = await Promise.all(
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       (["issuer", "audience", "workspaceId", "ownerUserId"] as const).map((field) => {
         f.add({
           principal: { ...principal, [field]: `${principal[field]}/foreign` },

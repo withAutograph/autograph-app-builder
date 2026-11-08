@@ -143,6 +143,7 @@ describe("local Eve acceptance", () => {
         sessions: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           attach: vi.fn(() => session),
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           create: vi.fn(() => Promise.resolve({ response, session })),
         } as never,
       },
@@ -210,6 +211,7 @@ describe("local Eve acceptance", () => {
         sessions: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           attach,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           create: vi.fn(() => Promise.resolve({ response, session })),
         } as never,
       },
@@ -274,6 +276,7 @@ describe("local Eve acceptance", () => {
         sessions: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           attach,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           create: vi.fn(() => Promise.resolve({ response, session })),
         } as never,
       },
@@ -333,6 +336,7 @@ describe("local Eve acceptance", () => {
           sessions: {
             // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
             attach: vi.fn(() => session),
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
             create: vi.fn(() => Promise.resolve({ response, session })),
           } as never,
         },
@@ -392,6 +396,7 @@ describe("local Eve acceptance", () => {
         sessions: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           attach: vi.fn(() => session),
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           create: vi.fn(() => Promise.resolve({ response, session })),
         } as never,
       },
@@ -466,6 +471,7 @@ describe("local Eve acceptance", () => {
       respond: vi.fn(async () => response),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       send: vi.fn(async () => response),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       snapshot: vi.fn(() => Promise.reject(new ClientError(404, "Stored session unavailable"))),
       state: { sessionId: "wrun_previous_cycle" },
     };
@@ -473,6 +479,7 @@ describe("local Eve acceptance", () => {
       sessions: {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         attach: vi.fn(() => session),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         create: vi.fn(() => Promise.resolve({ response, session })),
       } as never,
     };
@@ -519,13 +526,16 @@ describe("local Eve acceptance", () => {
     const events = [{ data: { turnId: "old-turn" }, type: "step.started" }] as MessageStreamEvent[];
     const tailOpened = Promise.withResolvers<AbortSignal>();
     const response = {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       cancel: vi.fn(() => Promise.reject(new HostedCancellationUnsettledError())),
       async *[Symbol.asyncIterator]() {
         yield* events;
       },
     };
     const session = {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       cancel: vi.fn(() => Promise.resolve({ status: "accepted" })),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       snapshot: vi.fn(() =>
         Promise.resolve({ events, session: { sessionId: "tail-restart", streamIndex: 1 } }),
       ),
@@ -539,6 +549,7 @@ describe("local Eve acceptance", () => {
     const client = {
       sessions: {
         attach: vi.fn(() => session),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         create: vi.fn(() => Promise.resolve({ response, session })),
       } as never,
     };
@@ -612,6 +623,7 @@ describe("local Eve acceptance", () => {
       sessions: {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         attach,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         create: vi.fn(() => Promise.resolve({ response: oldResponse, session })),
       } as never,
     };
@@ -752,6 +764,7 @@ describe("local Eve acceptance", () => {
       sessions: {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         attach: vi.fn(() => session),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         create: vi.fn(() => Promise.resolve({ response: response(events), session })),
       } as never,
     });
@@ -883,7 +896,7 @@ describe("local Eve acceptance", () => {
       send: vi.fn(async () => response),
       state: { sessionId: "wrun_prompt_return" },
     };
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    // oxlint-disable-next-line eslint/require-await, typescript/promise-function-async -- preserve Promise-returning test double Preserve the returned promise and synchronous throw behavior.
     const create = vi.fn(() => Promise.resolve({ response, session }));
     const attach = vi.fn(() => session);
     const service = createLocalEveSessionService({
@@ -942,6 +955,7 @@ describe("local Eve acceptance", () => {
         respond: vi.fn(async () => response),
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         send: vi.fn(async () => response),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         snapshot: vi.fn(() =>
           Promise.resolve({
             events: durableEvents,
@@ -958,6 +972,7 @@ describe("local Eve acceptance", () => {
           sessions: {
             // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
             attach: vi.fn(() => session),
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
             create: vi.fn(() => Promise.resolve({ response, session })),
           } as never,
         },
@@ -1026,6 +1041,7 @@ describe("local Eve acceptance", () => {
           sessions: {
             // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
             attach: vi.fn(() => session),
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
             create: vi.fn(() => Promise.resolve({ response, session })),
           } as never,
         },
@@ -1079,6 +1095,7 @@ describe("local Eve acceptance", () => {
       sessions: {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         attach: vi.fn(() => session),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         create: vi.fn(() => Promise.resolve({ response, session })),
       } as never,
     });
@@ -1128,6 +1145,7 @@ describe("local Eve acceptance", () => {
     try {
       const { promise: never } = Promise.withResolvers<unknown>();
       const response = {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         cancel: vi.fn(() => never),
         async *[Symbol.asyncIterator]() {
           yield {
@@ -1150,6 +1168,7 @@ describe("local Eve acceptance", () => {
         sessions: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           attach: vi.fn(() => session),
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           create: vi.fn(() => Promise.resolve({ response, session })),
         } as never,
       });
@@ -1192,6 +1211,7 @@ describe("local Eve acceptance", () => {
       sessions: {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         attach: vi.fn(() => session),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         create: vi.fn(() => Promise.resolve({ response, session })),
       } as never,
     });
@@ -1265,6 +1285,7 @@ describe("local Eve acceptance", () => {
       sessions: {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         attach,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         create: vi.fn(() => Promise.resolve({ response: initial, session: created })),
       } as never,
     });
@@ -1352,6 +1373,7 @@ const recoveryWaitingEvents: MessageStreamEvent[] = [
 ];
 
 const recoveryResponseFor = (events: MessageStreamEvent[]) => ({
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   cancel: vi.fn(() => Promise.resolve({ status: "accepted" })),
   async *[Symbol.asyncIterator]() {
     yield* events;
@@ -1382,14 +1404,19 @@ describe("local public session recovery", () => {
     ];
     const sessionId = "wrun_lost_history";
     const session = {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       cancel: vi.fn(() => Promise.resolve({ status: "accepted" })),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       respond: vi.fn(() => Promise.resolve(recoveryResponseFor(recoveryWaitingEvents))),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       send: vi.fn(() => Promise.resolve(recoveryResponseFor(recoveryWaitingEvents))),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       snapshot: vi.fn(() =>
         Promise.resolve({ events: [], session: { sessionId, streamIndex: 0 } }),
       ),
       state: { sessionId },
     };
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const create = vi.fn(() => Promise.resolve({ response: recoveryResponseFor(events), session }));
     const client = {
       sessions: {
@@ -1458,6 +1485,7 @@ describe("local public session recovery", () => {
 
   it("reports a missing stored session instead of usable empty progress", async () => {
     const sessionId = "wrun_missing_worker";
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const snapshot = vi.fn(() =>
       Promise.resolve({ events: [], session: { sessionId, streamIndex: 0 } }),
     );
@@ -1486,6 +1514,7 @@ describe("local public session recovery", () => {
       send: vi.fn().mockRejectedValue(inactive),
       state: { sessionId },
     };
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const create = vi.fn(() =>
       Promise.resolve({ response: recoveryResponseFor(recoveryWaitingEvents), session }),
     );

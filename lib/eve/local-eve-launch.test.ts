@@ -304,6 +304,7 @@ it("the real child launch can retain private planning artifacts without a hosted
   };
   const artifacts = await createLocalOperatorArtifactStorage({
     authority,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     assertCurrentOwner: (current) => {
       expect(current).toEqual(context);
       return Promise.resolve();
@@ -339,6 +340,7 @@ it("the real child launch can retain private planning artifacts without a hosted
   };
   const artifacts = await createLocalOperatorArtifactStorage({
     authority,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     assertCurrentOwner: (current) => {
       expect(current).toEqual(context);
       return Promise.resolve();

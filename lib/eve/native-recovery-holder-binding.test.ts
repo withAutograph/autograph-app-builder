@@ -94,6 +94,7 @@ const fixture = () => {
   ]);
   const sessions = new Map<string, HostedSessionRecord>([[source.sessionId, source]]);
   const binding = createNativeRecoveryBinding({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     assertOwner: () => {
       if (!allowed) {
         throw new Error("current-owner-revoked");

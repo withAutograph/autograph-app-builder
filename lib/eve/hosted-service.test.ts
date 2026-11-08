@@ -33,6 +33,7 @@ import type {
 import type { EveSessionService } from "./service";
 
 const createHostedEveSessionService = (input: Parameters<typeof createHostedService>[0]) =>
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   createHostedService({ assertSendDeliveryOwner: () => Promise.resolve(), ...input });
 
 const principal: HostedPrincipal = {
@@ -180,6 +181,7 @@ describe("failed public session native recovery", () => {
       );
       const adapter = transport({
         activateRecovery,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         cancel: () => Promise.resolve({ events: [], status: "cancelled" }),
         start: vi
           .fn<HostedEveTransport["start"]>()
@@ -393,6 +395,7 @@ describe("failed public session native recovery", () => {
           };
         }),
     });
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const owner = { assertNativeRecoveryOwner: () => Promise.resolve() };
     const initial = createHostedEveSessionService({
       ...owner,
@@ -432,6 +435,7 @@ describe("failed public session native recovery", () => {
       getSession: base.getSession.bind(base),
       getStartOperation: base.getStartOperation.bind(base),
       listSessions: base.listSessions.bind(base),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       readCheckpointPage: vi.fn<NonNullable<HostedEveStore["readCheckpointPage"]>>(() =>
         Promise.reject(new Error("This settlement fixture does not read checkpoint pages.")),
       ),
@@ -842,6 +846,7 @@ describe("delayed durable session reads", () => {
     };
     const adapter = transport({
       get: vi.fn<() => Promise<HostedEngineSnapshot>>().mockResolvedValue(working),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       start: vi.fn(() => Promise.resolve({ adapterSessionId: "eve_build", snapshot: working })),
     });
     const { service, result } = await started({ now: () => now, transport: adapter });
@@ -1021,10 +1026,14 @@ describe("hosted Eve service core", () => {
         }
         return { ...withoutInlineCheckpoint, checkpointRef };
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       listSessions: (input) => baseStore.listSessions(input),
       readCheckpointPage,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       reserveOperation: (owner, candidate) => baseStore.reserveOperation(owner, candidate),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       settleSucceeded: (input) => baseStore.settleSucceeded(input),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       settleUnsuccessful: (input) => baseStore.settleUnsuccessful(input),
     };
     const assertNativeRecoveryOwner = vi.fn(async () => {
@@ -1675,7 +1684,9 @@ describe("hosted Eve service core", () => {
     const first = await started({
       store,
       transport: transport({
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         get: vi.fn(() => Promise.resolve({ ...snapshot, workingPreview: null })),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         start: vi.fn(() =>
           Promise.resolve({
             adapterSessionId: "working-preview",
@@ -1927,10 +1938,14 @@ describe("hosted Eve service core", () => {
           }
           return session === null ? null : { ...session, adapterSessionId: "eve_mismatched" };
         },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         listSessions: (request) => base.listSessions(request),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         reserveOperation: (requestPrincipal, candidate) =>
           base.reserveOperation(requestPrincipal, candidate),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         settleSucceeded: (settlement) => base.settleSucceeded(settlement),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         settleUnsuccessful: (settlement) => base.settleUnsuccessful(settlement),
       };
       const retry = createHostedEveSessionService({
@@ -2151,6 +2166,7 @@ describe("hosted Eve service core", () => {
     const store = new InMemoryHostedEveStore();
     const acceptedOperations = new Map<string, string>();
     let responseLost = true;
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const start = vi.fn<HostedEveTransport["start"]>(({ operationId }) => {
       const adapterSessionId = acceptedOperations.get(operationId) ?? "eve_original";
       acceptedOperations.set(operationId, adapterSessionId);
@@ -2185,7 +2201,9 @@ describe("hosted Eve service core", () => {
     let currentTime = 1000;
     const start = vi
       .fn<HostedEveTransport["start"]>()
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       .mockImplementationOnce(() => pending.promise)
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       .mockImplementationOnce(() =>
         Promise.resolve({
           adapterSessionId: "eve_original",
@@ -2280,10 +2298,14 @@ describe("hosted Eve service core", () => {
   ])("fails closed on an unsuccessful settlement %s mismatch", async (_label, transform) => {
     const base = new InMemoryHostedEveStore();
     const maliciousStore: HostedEveStore = {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       getSession: (requestPrincipal, sessionId) => base.getSession(requestPrincipal, sessionId),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       listSessions: (request) => base.listSessions(request),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       reserveOperation: (requestPrincipal, candidate) =>
         base.reserveOperation(requestPrincipal, candidate),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       settleSucceeded: (settlement) => base.settleSucceeded(settlement),
       async settleUnsuccessful(settlement) {
         const record = await base.settleUnsuccessful(settlement);
@@ -2319,7 +2341,9 @@ describe("hosted Eve service core", () => {
             ? { ...session, adapterSessionId: "eve_substituted" }
             : session;
         },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         listSessions: (request) => base.listSessions(request),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         reserveOperation: (requestPrincipal, candidate) =>
           base.reserveOperation(requestPrincipal, candidate),
         async settleSucceeded(settlement) {
@@ -2361,6 +2385,7 @@ describe("hosted Eve service core", () => {
           }
           return record;
         },
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         settleUnsuccessful: (settlement) => base.settleUnsuccessful(settlement),
       };
       const adapter = transport();
@@ -2533,11 +2558,14 @@ it("keeps acknowledged cancellation terminal when an already-pending read comple
   const pending = Promise.withResolvers<HostedEngineSnapshot>();
   const readStarted = Promise.withResolvers<null>();
   const adapter = transport({
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     cancel: () => Promise.resolve({ events: [], status: "cancelled" }),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     get: () => {
       readStarted.resolve(null);
       return pending.promise;
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     start: () =>
       Promise.resolve({
         adapterSessionId: "cancel-race",
@@ -2572,6 +2600,7 @@ it("keeps acknowledged cancellation terminal when an already-pending read comple
 describe("fallback mutation event pages", () => {
   it("rejects an unavailable legacy baseline before dispatch and permits a new request after recovery", async () => {
     const adapter = transport({
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       get: vi.fn(() => Promise.reject(new Error("native read unavailable"))),
     });
     const store = new InMemoryHostedEveStore();
@@ -2647,6 +2676,7 @@ describe("fallback mutation event pages", () => {
       clientRequestId: "fallback-start",
       prompt: "Build",
     });
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const submit = () =>
       kind === "send"
         ? service.send({

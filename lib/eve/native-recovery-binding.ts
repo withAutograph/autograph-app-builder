@@ -600,6 +600,7 @@ export function createNativeDraftReviewedLineageRecovery(
       ) {
         let found: HistoricalReviewCheckpoint | undefined;
         let conflicting = false;
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         await call.visitHistoricalCheckpoints((checkpoint) => {
           const { value } = checkpoint;
           const phase = z.object({ phase: z.string() }).safeParse(value);
@@ -649,12 +650,16 @@ export function createHostedNativeRecoveryBinding(
     return binding;
   };
   return {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     authorizeSourceObservation: (call: { auth: unknown; source: NativeSourceObservation }) =>
       get().authorizeSourceObservation(call),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     authorizeRecoveryHolderClosure: (call: RecoveryHolderClosureCall) =>
       get().authorizeRecoveryHolderClosure(call),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     observeRecoveryHolderBinding: (call: RecoveryHolderCall) =>
       get().observeRecoveryHolderBinding(call),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     authorizeRepeatableRecoveryCalls: (
       input: Parameters<typeof authorizeRepeatablePrivateApplyCalls>[0] & RecoveryCall,
     ) =>
@@ -665,18 +670,25 @@ export function createHostedNativeRecoveryBinding(
           expectedPrincipalId: principalFor(input).ownerUserId,
         }),
       ]),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     applicationStateRecovery: createNativeDraftReviewedLineageRecovery((call) =>
       get().authorize(call),
     ),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     observeCandidateFacts: (input: Parameters<typeof observePrivateApplyRecoveryCandidate>[0]) =>
       Promise.resolve(observePrivateApplyRecoveryCandidate(input)),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     authorize: (call: RecoveryCall) => get().authorize(call),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     visitRecoveryPredecessors: (
       call: RecoveryCall,
       visit: (window: RecoveryPredecessorWindow) => Promise<"continue" | "stop">,
     ) => get().visitRecoveryPredecessors(call, visit),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     authorizeActivation: (call: RecoveryCall) => get().authorizeActivation(call),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     readReceipt: (call: RecoveryCall) => get().readReceipt(call),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     commitReceipt: (call: RecoveryCall & { recoveryBinding: NativeRecoveryBinding }) =>
       get().commitReceipt(call),
   };

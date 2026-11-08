@@ -1651,6 +1651,7 @@ export function createSameOriginEveTransport(input: {
     workloadIdentity: input.workloadIdentity,
   };
   return {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     observeStarted(request) {
       // Public observation catches up to the opened durable tail; it never waits for a long-running turn.
       return observeSameOriginEveStream({
@@ -1899,6 +1900,7 @@ export function createSameOriginEveTransport(input: {
         throw new HostedCancellationUnsettledError();
       }
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     get: (request) =>
       readSnapshot({ ...common, readDeadline: true, sessionId: request.adapterSessionId }),
     async respond(request) {

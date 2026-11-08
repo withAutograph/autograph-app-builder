@@ -37,6 +37,7 @@ const fixture = async (id: string) => {
     start,
     observeRecovery,
     activateRecovery,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     get: vi.fn(() => Promise.resolve({ events: [], status: "failed" as const })),
     send: vi.fn(),
     respond: vi.fn(),
@@ -73,6 +74,7 @@ const fixture = async (id: string) => {
   if (getStart === undefined) {
     throw new Error("Expected public start lookup.");
   }
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const lookup = () => getStart({ clientRequestId, cursor: 0, limit: 20 });
   return { adapter, assertOwner, clientRequestId, lookup, observeRecovery, service, store };
 };
@@ -82,6 +84,7 @@ describe("normal public recovery observation", () => {
     const f = await fixture("coalesced");
     const before = await f.store.getStartOperation(principal, f.clientRequestId);
     await Promise.all(
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       [f.lookup(), f.lookup()].map((read) =>
         expect(read).rejects.toBeInstanceOf(HostedSubmissionUnknownError),
       ),
@@ -159,6 +162,7 @@ it("uses the authenticated existing observation route once without session start
     originalAuthoritySessionId: "public-parent",
     parentCancellationRevision: 0,
   };
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const request = vi.fn<typeof fetch>(() =>
     Promise.resolve(
       Response.json(
@@ -169,6 +173,7 @@ it("uses the authenticated existing observation route once without session start
   );
   const adapter = createSameOriginEveTransport({
     config: { baseUrl: "https://builder.example.test" },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     workloadIdentity: { token: () => Promise.resolve("synthetic-project-token") },
     fetchImplementation: request,
   });
@@ -196,6 +201,7 @@ it("observes exact source coordinates through the protected route without recove
     sourceAdapterGeneration: 1,
     cancellationRevision: 0,
   };
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const request = vi.fn<typeof fetch>(() =>
     Promise.resolve(
       Response.json({ ok: true, status: "accepted", sessionId: "anchor" }, { status: 202 }),
@@ -203,6 +209,7 @@ it("observes exact source coordinates through the protected route without recove
   );
   const adapter = createSameOriginEveTransport({
     config: { baseUrl: "https://builder.example.test" },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     workloadIdentity: { token: () => Promise.resolve("synthetic-project-token") },
     fetchImplementation: request,
   });
