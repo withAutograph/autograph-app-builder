@@ -386,6 +386,16 @@ prior repair. The original whole-app creation and other apps or platform paths
 are excluded. Current destination preimages and the current private bytes decide
 the new diff; unchanged or reverted paths add no publication change.
 
+A verified fresh publication records its canonical proposal as the saved app's
+current published subject after the same owner and exact workflow are rechecked.
+Older draft candidates and their private edits remain historical work; they do
+not replace this new publication. If an older session lacks that marker, repair
+may inspect its exact current seal in the tenant journal before reusing an older
+origin. Only the canonical successful publication and the requested owned PR's
+verified repository, installation and head complete recovery. A recorded pending,
+failed, foreign or unavailable outcome proves nothing, while a genuinely
+unpublished new seal still permits recovery of its existing older draft.
+
 A sealed-only proposal with no publication journal remains an initial
 publication and retains full-app completeness. An optional legacy publication
 marker neither proves a merge nor replaces the journal; a contradictory marker

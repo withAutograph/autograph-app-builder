@@ -2,6 +2,7 @@
 /* oxlint-disable eslint/require-await -- External provider boundaries use the production async signatures. */
 import { createHash } from "node:crypto";
 import type { ToolContext } from "eve/tools";
+import type { assertCurrentGitHubDraftProposal, assertExactWorkflowState } from "./workflow-state";
 import type {
   RepositoryAccessReceipt,
   repositoryAccessReceiptSchema,
@@ -12,6 +13,17 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { preparePublishedDraftReconciliation } from "./prepare-published-draft-repair";
+import {
+  createDraftPullRequestProposal,
+  createGitHubInstallationIdentity,
+  createRepositoryObservation,
+} from "../repository/github-publication";
+import type { DraftPullRequestProposal } from "../repository/github-publication";
+import {
+  createReviewedChangeSetReceipt,
+  deriveNormalizedChangeSet,
+} from "../repository/reviewed-change-set";
+import { createGitHubDestinationReviewBinding } from "../repository/github-destination-review";
 import { freshFixture, workflowKey } from "../eve/test-support/draft-reviewed-recovery";
 import type { DraftReconciliationCandidate } from "./draft-reconciliation-state";
 import type { PublishedDraftRepairSource } from "./published-draft-repair";
@@ -40,6 +52,18 @@ const signAccess = (
   ...unsigned,
   digest: createHash("sha256").update(JSON.stringify(unsigned)).digest("hex"),
 });
+
+const installation = (operation: "publish-draft-pull-request" | "resolve-existing-source") =>
+  createGitHubInstallationIdentity({
+    accountId: "20",
+    accountLogin: "owner",
+    accountType: "Organization",
+    installationId: "10",
+    operation,
+    repositorySelection: "selected",
+    selectedRepositoryIds: ["100"],
+  });
+
 interface PrepareRequest {
   previousCandidate: Candidate;
   replayPreviousCandidate?: boolean;
@@ -52,12 +76,17 @@ const mocks = vi.hoisted(() => ({
   access: undefined as unknown as RepositoryAccessReceipt,
   owned: undefined as unknown as Owned,
   onOwnedRead: undefined as undefined | (() => void),
+  classify: vi.fn<(proposal: DraftPullRequestProposal) => Promise<"recorded" | "unrecorded">>(),
   ownedProposalDigests: [] as string[],
   onSourceRead: undefined as undefined | (() => void),
   prepare: vi.fn<(request: PrepareRequest) => Promise<Candidate & { created: boolean }>>(),
 }));
 
-vi.mock("./workflow-state", () => ({
+vi.mock("./workflow-state", async (importOriginal) => ({
+  ...(await importOriginal<{
+    assertCurrentGitHubDraftProposal: typeof assertCurrentGitHubDraftProposal;
+    assertExactWorkflowState: typeof assertExactWorkflowState;
+  }>()),
   appBuilderWorkflowState: { get: () => mocks.workflow },
   updateExactWorkflow: ({
     expected,
@@ -111,15 +140,20 @@ vi.mock("./repository-access-state", async (importOriginal) => ({
 }));
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: async () => ({
+    inspectPriorAppPublication: mocks.classify,
     inspectExistingDraftReconciliationSource: async () => {
       mocks.onSourceRead?.();
       return { draft: mocks.owned.draft, base: { headSha: mocks.candidate.baseSha } };
     },
     inspectOwnedPublishedDraftRepairSource: async (request: {
       publishedProposalDigest: string;
+      expectedInstallationId: string;
     }) => {
       mocks.ownedProposalDigests.push(request.publishedProposalDigest);
       mocks.onOwnedRead?.();
+      if (request.expectedInstallationId !== "10") {
+        throw new Error("The owned publication belongs to another installation.");
+      }
       if (request.publishedProposalDigest !== mocks.owned.proposal.digest) {
         throw new Error("The original published draft proposal is unavailable in this tenant.");
       }
@@ -199,6 +233,7 @@ describe("owned fresh-template draft preparation after review recovery", () => {
       publication: scope.publication,
     };
     mocks.onOwnedRead = undefined;
+    mocks.classify.mockReset().mockResolvedValue("unrecorded");
     mocks.ownedProposalDigests = [];
     mocks.onSourceRead = undefined;
     mocks.prepare.mockReset();
@@ -225,6 +260,213 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     mocks.workflow = state;
     return state;
   };
+
+  const secondPublication = () => {
+    const state = reviewedNewBuild();
+    state.reviewReceipt = createReviewedChangeSetReceipt(
+      deriveNormalizedChangeSet(
+        state.applyReceipt,
+        state.validationReceipt,
+        state.reviewReceipt.contractDigest,
+      ),
+      "review-next-app-pr",
+    );
+    const publicationInstallation = installation("publish-draft-pull-request");
+    const readInstallation = installation("resolve-existing-source");
+    const { digest: _repositoryDigest, ...repositoryFields } = mocks.owned.source.repository;
+    void _repositoryDigest;
+    const repository = createRepositoryObservation({
+      ...repositoryFields,
+      installationIdentityDigest: publicationInstallation.digest,
+    });
+    const proposal = createDraftPullRequestProposal({
+      installation: publicationInstallation,
+      repository,
+      review: state.reviewReceipt,
+      changedPathsSinceBase: [],
+      title: "Next owned app revision",
+    });
+    const destination = createGitHubDestinationReviewBinding({
+      applyDigest: state.applyReceipt.digest,
+      validationDigest: state.validationReceipt.digest,
+      postTreeDigest: state.reviewReceipt.postTreeDigest,
+      candidatePaths: state.reviewReceipt.approvedPaths,
+      installation: readInstallation,
+      repository: createRepositoryObservation({
+        ...repositoryFields,
+        installationIdentityDigest: readInstallation.digest,
+      }),
+      preTree: state.applyReceipt.preTree.filter((file) =>
+        state.reviewReceipt.approvedPaths.includes(file.path),
+      ),
+    });
+    state.githubDestinationReview = destination;
+    state.githubDraftProposal = {
+      proposal,
+      sourceReceiptDigest: state.sourceReceipt.digest,
+      destinationReviewDigest: destination.digest,
+    };
+    const { digest: _publicationDigest, ...priorPublication } = mocks.owned.publication;
+    void _publicationDigest;
+    const unsignedPublication = {
+      ...priorPublication,
+      proposalDigest: proposal.digest,
+      idempotencyKey: proposal.idempotencyKey,
+      branchName: proposal.branchName,
+      reviewDigest: undefined,
+      changeSetDigest: proposal.changeSetDigest,
+      changedContentDigest: proposal.changedContentDigest,
+      normalizedChangedPaths: proposal.approvedPaths,
+      pullRequestNumber: 43,
+      pullRequestId: "401",
+      branchSha: "f".repeat(40),
+      branchTree: "e".repeat(40),
+    };
+    Reflect.deleteProperty(unsignedPublication, "reviewDigest");
+    const publication = {
+      ...unsignedPublication,
+      digest: createHash("sha256").update(JSON.stringify(unsignedPublication)).digest("hex"),
+    };
+    const sourceBody = {
+      ...mocks.owned.source,
+      repository: createRepositoryObservation({
+        ...repositoryFields,
+        headSha: publication.branchSha,
+        headTree: publication.branchTree,
+      }),
+      resolvedRef: `refs/heads/${proposal.branchName}`,
+      resolvedSha: publication.branchSha,
+      resolvedTree: publication.branchTree,
+    };
+    Reflect.deleteProperty(sourceBody, "digest");
+    const source = {
+      ...sourceBody,
+      digest: createHash("sha256").update(JSON.stringify(sourceBody)).digest("hex"),
+    };
+    mocks.owned = {
+      proposal,
+      publication,
+      source,
+      draft: {
+        ...mocks.owned.draft,
+        number: 43,
+        pullRequestId: "401",
+        headBranch: proposal.branchName,
+        headSha: publication.branchSha,
+        headTree: publication.branchTree,
+        verifiedBuilderOrigin: {
+          appId: "builder",
+          authorId: "builder",
+          marker: proposal.idempotencyKey,
+        },
+      },
+    };
+    mocks.classify.mockResolvedValue("recorded");
+    return state;
+  };
+
+  it("repairs the next published PR instead of the old retained merged PR", async () => {
+    const state = secondPublication();
+    const privateBefore = readFileSync(path.join(root, "candidate.txt"), "utf-8");
+    expect(mocks.candidate.pullRequestNumber).toBe(42);
+    await expect(
+      preparePublishedDraftReconciliation({ ctx, pullRequestNumber: 43, state }),
+    ).resolves.toMatchObject({ status: "ready_for_validation" });
+    expect(mocks.ownedProposalDigests).toContain(state.githubDraftProposal?.proposal.digest);
+    expect(mocks.workflow).toMatchObject({
+      publishedGitHubDraftProposalDigest: mocks.owned.proposal.digest,
+    });
+    expect(mocks.candidate.pullRequestNumber).toBe(43);
+    expect(readFileSync(path.join(root, "candidate.txt"), "utf-8")).toBe(privateBefore);
+  });
+
+  it.each(["pending", "rejected", "unknown", "moved-head"])(
+    "does not use a recorded current %s result as published proof or fall back to the old PR",
+    async (reason) => {
+      const state = secondPublication();
+      const oldCandidate = structuredClone(mocks.candidate);
+      mocks.onOwnedRead = () => {
+        throw new Error(`owned publication ${reason}`);
+      };
+      await expect(
+        preparePublishedDraftReconciliation({ ctx, pullRequestNumber: 43, state }),
+      ).rejects.toThrow(`owned publication ${reason}`);
+      expect(mocks.workflow).not.toHaveProperty("publishedGitHubDraftProposalDigest");
+      expect(mocks.candidate).toEqual(oldCandidate);
+      expect(mocks.prepare).not.toHaveBeenCalled();
+      expect(mocks.ownedProposalDigests).toEqual([mocks.owned.proposal.digest]);
+    },
+  );
+
+  it.each(["repository", "installation", "requested-pr"])(
+    "keeps the current published seal bound to verified %s access",
+    async (binding) => {
+      const state = secondPublication();
+      const oldCandidate = structuredClone(mocks.candidate);
+      if (binding === "repository") {
+        mocks.owned.draft = { ...mocks.owned.draft, repositoryId: "999" };
+      }
+      if (binding === "installation") {
+        const { digest: _digest, ...access } = mocks.access;
+        void _digest;
+        mocks.access = signAccess({ ...access, scope: { ...access.scope, installationId: "999" } });
+      }
+      await expect(
+        preparePublishedDraftReconciliation({
+          ctx,
+          pullRequestNumber: binding === "requested-pr" ? 42 : 43,
+          state,
+        }),
+      ).rejects.toThrow();
+      expect(mocks.workflow).not.toHaveProperty("publishedGitHubDraftProposalDigest");
+      expect(mocks.candidate).toEqual(oldCandidate);
+      expect(mocks.prepare).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not fall back to an old PR when current canonical lookup is unavailable", async () => {
+    const state = secondPublication();
+    mocks.classify.mockRejectedValue(new Error("canonical lookup unavailable"));
+    await expect(
+      preparePublishedDraftReconciliation({ ctx, pullRequestNumber: 43, state }),
+    ).rejects.toThrow("canonical lookup unavailable");
+    expect(mocks.ownedProposalDigests).toEqual([]);
+    expect(mocks.workflow).not.toHaveProperty("publishedGitHubDraftProposalDigest");
+    expect(mocks.prepare).not.toHaveBeenCalled();
+  });
+
+  it.each(["lookup", "owned-read"])(
+    "rechecks the exact current seal after %s before recording its marker",
+    async (phase) => {
+      const state = secondPublication();
+      const moveSeal = () => {
+        const sealed = state.githubDraftProposal;
+        if (sealed === undefined) {
+          throw new Error("Missing current seal fixture");
+        }
+        mocks.workflow = {
+          ...state,
+          githubDraftProposal: {
+            ...sealed,
+            proposal: { ...sealed.proposal, digest: "9".repeat(64) },
+          },
+        };
+      };
+      if (phase === "lookup") {
+        mocks.classify.mockImplementation(async () => {
+          moveSeal();
+          return "recorded";
+        });
+      } else {
+        mocks.onOwnedRead = moveSeal;
+      }
+      await expect(
+        preparePublishedDraftReconciliation({ ctx, pullRequestNumber: 43, state }),
+      ).rejects.toThrow("workflow changed concurrently");
+      expect(mocks.workflow).not.toHaveProperty("publishedGitHubDraftProposalDigest");
+      expect(mocks.prepare).not.toHaveBeenCalled();
+    },
+  );
 
   it("recovers a lost publication marker after a new Build without losing its accepted private fixes", async () => {
     const state = reviewedNewBuild();

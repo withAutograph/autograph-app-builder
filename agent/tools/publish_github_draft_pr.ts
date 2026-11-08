@@ -13,6 +13,7 @@ import { publicationContentSourceForReviewedWorkflow } from "@/lib/agent/github-
 import {
   appBuilderWorkflowState,
   assertCurrentGitHubDraftProposal,
+  updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
 import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { recordPublishedAppSourceForSession } from "@/lib/agent/published-app-source";
@@ -93,6 +94,20 @@ export default defineTool({
         review: state.reviewReceipt,
         publication,
       });
+      if (
+        publication.status === "succeeded" &&
+        publication.proposalDigest === state.githubDraftProposal.proposal.digest
+      ) {
+        ctx.abortSignal?.throwIfAborted();
+        updateExactWorkflow({
+          expected: state,
+          operation: "record the verified current draft publication",
+          transition: () => ({
+            ...state,
+            publishedGitHubDraftProposalDigest: publication.proposalDigest,
+          }),
+        });
+      }
       return { ...publication, appSourceRecording: { status: recording.status } };
     } catch {
       return {

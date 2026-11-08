@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 import type { ToolContext } from "eve/tools";
 import type { AppBuilderWorkflowState } from "./workflow-state";
-import { appBuilderWorkflowState, updateExactWorkflow } from "./workflow-state";
+import {
+  appBuilderWorkflowState,
+  updateExactWorkflow,
+  assertCurrentGitHubDraftProposal,
+  assertExactWorkflowState,
+} from "./workflow-state";
 import { getSourceBoundSandbox } from "./source-bound-sandbox";
 import { githubPublicationRuntimeForSession } from "./deployment-github-publication-runtime";
 import type { DraftInspectionRecoveryInput } from "./github-publication-runtime";
@@ -131,8 +136,8 @@ const acquireOwnedPublishedDraft = async (
 ) => {
   const { state, ctx } = input;
   assertCurrentOrigin(state, previous);
-  const recoveredOrigin = retainedPublishedDraftOriginForReview(state, previous);
-  const proposalDigest =
+  let recoveredOrigin = retainedPublishedDraftOriginForReview(state, previous);
+  let proposalDigest =
     state.publishedGitHubDraftProposalDigest ??
     recoveredOrigin?.publicationProposalDigest ??
     state.githubDraftProposal?.proposal.digest ??
@@ -146,6 +151,48 @@ const acquireOwnedPublishedDraft = async (
   const access = repositoryAccessReceiptSchema.parse(savedAccess);
   if (access.sessionId !== ctx.session.id) {
     throw new Error("The repository access belongs to another session.");
+  }
+  const runtime = await githubPublicationRuntimeForSession(ctx.session.auth, {
+    selectedInstallationId: access.scope.installationId,
+  });
+  assertCurrentOrigin(state, previous);
+  let selectedCurrentSeal = false;
+  const sealed = state.githubDraftProposal;
+  if (
+    state.publishedGitHubDraftProposalDigest === undefined &&
+    recoveredOrigin !== undefined &&
+    sealed !== undefined &&
+    sealed.proposal.digest !== recoveredOrigin.publicationProposalDigest
+  ) {
+    if (runtime.inspectPriorAppPublication === undefined) {
+      throw new Error(
+        "The publication runtime cannot inspect this app's current sealed publication.",
+      );
+    }
+    const classification = await runtime.inspectPriorAppPublication(sealed.proposal);
+    assertCurrentOrigin(state, previous);
+    if (classification === "recorded") {
+      assertExactWorkflowState(
+        resolveDraftReviewedWorkflow(appBuilderWorkflowState.get(), previous) ??
+          appBuilderWorkflowState.get(),
+        state,
+        "current publication lookup",
+      );
+      assertCurrentGitHubDraftProposal({
+        binding: sealed,
+        expectedProposalDigest: sealed.proposal.digest,
+        reviewDigest: state.reviewReceipt.digest,
+        changeSetDigest: state.reviewReceipt.changeSetDigest,
+        sourceReceiptDigest: state.sourceReceipt.digest,
+        githubSource: state.githubSource,
+        destinationReview: state.githubDestinationReview,
+      });
+      // Classification only selects the lookup. The canonical successful receipt
+      // and exact owned provider PR/head still have to be proved below.
+      proposalDigest = sealed.proposal.digest;
+      recoveredOrigin = undefined;
+      selectedCurrentSeal = true;
+    }
   }
   if (
     recoveredOrigin !== undefined &&
@@ -161,10 +208,6 @@ const acquireOwnedPublishedDraft = async (
       "The retained publication differs from this session's verified repository access.",
     );
   }
-  const runtime = await githubPublicationRuntimeForSession(ctx.session.auth, {
-    selectedInstallationId: access.scope.installationId,
-  });
-  assertCurrentOrigin(state, previous);
   if (runtime.inspectOwnedPublishedDraftRepairSource === undefined) {
     throw new Error("The publication runtime cannot prepare a same-session owned draft repair.");
   }
@@ -215,14 +258,23 @@ const acquireOwnedPublishedDraft = async (
     draft: owned.draft,
   });
   assertCurrentOrigin(state, previous);
-  if (recoveredOrigin === undefined) {
-    return { access, owned, repair, runtime, state };
+  if (selectedCurrentSeal) {
+    assertExactWorkflowState(
+      resolveDraftReviewedWorkflow(appBuilderWorkflowState.get(), previous) ??
+        appBuilderWorkflowState.get(),
+      state,
+      "verified current publication recovery",
+    );
   }
   if (
-    owned.proposal.digest !== recoveredOrigin.publicationProposalDigest ||
-    owned.publication.digest !== recoveredOrigin.publicationDigest
+    recoveredOrigin !== undefined &&
+    (owned.proposal.digest !== recoveredOrigin.publicationProposalDigest ||
+      owned.publication.digest !== recoveredOrigin.publicationDigest)
   ) {
     throw new Error("The verified original publication differs from the retained owned origin.");
+  }
+  if (state.publishedGitHubDraftProposalDigest === owned.proposal.digest) {
+    return { access, owned, repair, runtime, state };
   }
   ctx.abortSignal?.throwIfAborted();
   const recoveredState = { ...state, publishedGitHubDraftProposalDigest: owned.proposal.digest };
