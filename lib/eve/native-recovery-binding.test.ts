@@ -231,9 +231,11 @@ describe("read-only native source observation authority", () => {
       updatedAtEpochMs: 2,
       version: 2,
     });
-    const getPrivateOperation = vi.fn(() => Promise.resolve(null));
-    const commitNativeRecoveryReceipt = vi.fn(() => Promise.resolve(receipt));
-    const assertOwner = vi.fn(() => Promise.resolve());
+    const getPrivateOperation = vi.fn<() => Promise<null>>().mockResolvedValue(null);
+    const commitNativeRecoveryReceipt = vi
+      .fn<() => Promise<NativeRecoveryBinding>>()
+      .mockResolvedValue(receipt);
+    const assertOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
     const binding = createNativeRecoveryBinding({
       assertOwner,
       store: {

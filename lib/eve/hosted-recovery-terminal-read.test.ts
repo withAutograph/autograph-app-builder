@@ -134,10 +134,10 @@ const fixture = async () => {
   const transport: HostedEveTransport = {
     activateRecovery,
     cancel: vi.fn(() => Promise.resolve({ events: [], status: "cancelled" as const })),
-    get: vi.fn(() => Promise.resolve(working)),
+    get: vi.fn<() => Promise<HostedEngineSnapshot>>().mockResolvedValue(working),
     observe,
-    respond: vi.fn(() => Promise.resolve(working)),
-    send: vi.fn(() => Promise.resolve(working)),
+    respond: vi.fn<() => Promise<HostedEngineSnapshot>>().mockResolvedValue(working),
+    send: vi.fn<() => Promise<HostedEngineSnapshot>>().mockResolvedValue(working),
     start,
   };
   const seed = createHostedEveSessionService({

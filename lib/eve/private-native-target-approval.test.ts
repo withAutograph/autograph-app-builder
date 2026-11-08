@@ -284,7 +284,7 @@ describe("private native target terminal approval", () => {
       owner,
       record,
       historyOwner,
-      observation: { state: saved, save: vi.fn(() => Promise.resolve()) },
+      observation: { state: saved, save: vi.fn<() => Promise<void>>().mockResolvedValue() },
       readHistory,
       assertOwner: () => Promise.resolve(),
     };

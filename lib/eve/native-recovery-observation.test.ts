@@ -22,9 +22,9 @@ const principal: HostedPrincipal = {
 
 const fixture = async (id: string) => {
   const store = new InMemoryHostedEveStore();
-  const observeRecovery = vi.fn<NonNullable<HostedEveTransport["observeRecovery"]>>(() =>
-    Promise.resolve(),
-  );
+  const observeRecovery = vi
+    .fn<NonNullable<HostedEveTransport["observeRecovery"]>>()
+    .mockResolvedValue();
   const activateRecovery = vi.fn<NonNullable<HostedEveTransport["activateRecovery"]>>();
   const start = vi
     .fn<HostedEveTransport["start"]>()
@@ -42,7 +42,7 @@ const fixture = async (id: string) => {
     respond: vi.fn(),
     cancel: vi.fn(),
   };
-  const assertOwner = vi.fn(() => Promise.resolve());
+  const assertOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
   const service = createHostedEveSessionService({
     principal,
     store,
@@ -212,9 +212,9 @@ it("observes exact source coordinates through the protected route without recove
   expect(body).not.toHaveProperty("recovery");
 });
 it("coalesces identical source observations and re-inspects changed cancellation", async () => {
-  const observeSource = vi.fn<NonNullable<HostedEveTransport["observeSource"]>>(() =>
-    Promise.resolve(),
-  );
+  const observeSource = vi
+    .fn<NonNullable<HostedEveTransport["observeSource"]>>()
+    .mockResolvedValue();
   const source = {
     sourcePublicSessionId: "coalesced-source",
     sourceAdapterSessionId: "anchor",

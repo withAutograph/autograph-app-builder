@@ -816,7 +816,7 @@ describe("delayed durable session reads", () => {
       status: "working",
     };
     const adapter = transport({
-      get: vi.fn(() => Promise.resolve(working)),
+      get: vi.fn<() => Promise<HostedEngineSnapshot>>().mockResolvedValue(working),
       start: vi.fn(() => Promise.resolve({ adapterSessionId: "eve_build", snapshot: working })),
     });
     const { service, result } = await started({ now: () => now, transport: adapter });
@@ -2546,7 +2546,7 @@ describe("fallback mutation event pages", () => {
     const rejection = new HostedRejectedOperationError("send_preflight_unavailable");
     await expect(service.send(request)).rejects.toEqual(rejection);
     expect(adapter.send).not.toHaveBeenCalled();
-    adapter.get = vi.fn(() => Promise.resolve(snapshot));
+    adapter.get = vi.fn<() => Promise<HostedEngineSnapshot>>().mockResolvedValue(snapshot);
     await expect(service.send(request)).rejects.toEqual(rejection);
     expect(adapter.send).not.toHaveBeenCalled();
     await expect(
@@ -2592,8 +2592,12 @@ describe("fallback mutation event pages", () => {
       await input.onAccepted?.("fixture-delivery");
       return after;
     });
-    const respond = vi.fn(() => Promise.resolve(after));
-    const adapter = transport({ get: vi.fn(() => Promise.resolve(before)), send, respond });
+    const respond = vi.fn<() => Promise<HostedEngineSnapshot>>().mockResolvedValue(after);
+    const adapter = transport({
+      get: vi.fn<() => Promise<HostedEngineSnapshot>>().mockResolvedValue(before),
+      send,
+      respond,
+    });
     const store = new InMemoryHostedEveStore();
     const service = createHostedEveSessionService({ principal, store, transport: adapter });
     // The native history advanced since the saved session checkpoint.
@@ -2620,7 +2624,7 @@ describe("fallback mutation event pages", () => {
     expect(result.cursor).toBe(tail + Math.min(delta, 100));
     expect(await submit()).toEqual(result);
     expect(kind === "send" ? send : respond).toHaveBeenCalledOnce();
-    adapter.get = vi.fn(() => Promise.resolve(after));
+    adapter.get = vi.fn<() => Promise<HostedEngineSnapshot>>().mockResolvedValue(after);
     const remainder = await service.get({
       sessionId: initialSession.sessionId,
       cursor: result.cursor,
