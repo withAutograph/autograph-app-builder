@@ -27,7 +27,7 @@ const scope = {
   provisioningRequestId: "8b22a6b1-33b9-4bdd-a152-f00e5fa373d9",
   provisioningDigest: "a".repeat(64),
 };
-const expected = { adapterSessionId: "native", adapterGeneration: 1, cancellationRevision: 0 };
+const expected = { adapterGeneration: 1, adapterSessionId: "native", cancellationRevision: 0 };
 const input = {
   sessionId: "saved",
   scope,

@@ -229,7 +229,7 @@ describe("closed export tool pre-dispatch diagnostics", () => {
     expect(JSON.stringify(vi.mocked(console.info).mock.calls)).not.toContain(selection.projectId);
   };
   it.each([
-    [{ projectId: "private-other-project", customerId }, "tool_project_mismatch"],
+    [{ customerId, projectId: "private-other-project" }, "tool_project_mismatch"],
     [{ branch: "private-other-branch", customerId }, "tool_branch_mismatch"],
     [{}, "tool_missing_customer"],
   ] as const)("identifies the existing local guard %# without dispatch", async (hints, stage) => {
@@ -277,7 +277,7 @@ describe("closed export tool pre-dispatch diagnostics", () => {
     },
   );
   it("passes the explicit owner organization choice without guessing a customer ID", async () => {
-    const result = { status: "planned", retained: true };
+    const result = { retained: true, status: "planned" };
     hooks.export.mockResolvedValueOnce(result);
     expect(
       await planTool.execute({ ...exportInput, customerScope: "owner-organization" }, toolCtx),
@@ -305,7 +305,7 @@ describe("closed export tool pre-dispatch diagnostics", () => {
     });
   });
   it("preserves successful dispatch and produces no failure diagnostic", async () => {
-    const result = { status: "planned", retained: true };
+    const result = { retained: true, status: "planned" };
     hooks.export.mockResolvedValueOnce(result);
     expect(await planTool.execute({ ...exportInput, customerId }, toolCtx)).toBe(result);
     expect(hooks.resolve).toHaveBeenCalledOnce();
@@ -430,8 +430,8 @@ describe("saved continuity lookup tool", () => {
     });
   });
   it("routes saved checkpoint and verified actor reads without effects", async () => {
-    const checkpoint = { intentId, checkpoints: { suiteDispatch: "unrecorded" } };
-    const actors = { requestCorrelation: "not_established", actors: [] };
+    const checkpoint = { checkpoints: { suiteDispatch: "unrecorded" }, intentId };
+    const actors = { actors: [], requestCorrelation: "not_established" };
     hooks.readContinuityCheckpoints.mockResolvedValueOnce(checkpoint);
     hooks.readContinuityVerifiedActors.mockResolvedValueOnce(actors);
     await expect(
@@ -447,8 +447,8 @@ describe("saved continuity lookup tool", () => {
     const result = {
       bindings: [
         {
-          appId: "spend-review",
           actorId: "actor",
+          appId: "spend-review",
           organizationId: "org",
           role: "reviewer",
           status: "actor_active",
@@ -500,9 +500,9 @@ describe("saved continuity lookup tool", () => {
   it("preserves an operator-provided recovery stage and progress without replaying the intent", async () => {
     hooks.readContinuity.mockRejectedValueOnce(
       new HostedOperatorError("operator_unavailable", {
-        recoveryStage: "canonical_read",
-        recoveryProgressAdvanced: false,
         continuityReadStage: "client_response_validation",
+        recoveryProgressAdvanced: false,
+        recoveryStage: "canonical_read",
       }),
     );
     await expect(getTool.execute({ intentId, operation: "continuity" }, toolCtx)).resolves.toEqual({
