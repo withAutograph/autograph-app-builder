@@ -187,10 +187,10 @@ describe("Eve eval resource lifecycle", () => {
       signalCode: { value: null, writable: true },
     });
     const directSignals: (NodeJS.Signals | number | undefined)[] = [];
-    child.kill = ((signal?: NodeJS.Signals | number) => {
+    child.kill = (signal?: NodeJS.Signals | number) => {
       directSignals.push(signal);
       return true;
-    }) as ChildProcess["kill"];
+    };
     const groupSignals: Parameters<typeof process.kill>[1][] = [];
     const kill = vi.spyOn(process, "kill").mockImplementation((_pid, signal) => {
       groupSignals.push(signal);
@@ -227,7 +227,7 @@ describe("Eve eval resource lifecycle", () => {
       pid: { value: 54_590 },
       signalCode: { value: null, writable: true },
     });
-    child.kill = vi.fn(() => true) as ChildProcess["kill"];
+    child.kill = vi.fn(() => true);
     const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
 
     try {
