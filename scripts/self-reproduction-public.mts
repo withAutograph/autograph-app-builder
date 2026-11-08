@@ -179,7 +179,9 @@ save();
 try {
   const transport = await makePublicTransport(
     values.endpoint,
-    (record) => recordPublicObservation(output, record),
+    (record) => {
+      recordPublicObservation(output, record);
+    },
     timeoutMs,
     { bearerToken: process.env.APP_BUILDER_PUBLIC_MCP_TOKEN },
   );

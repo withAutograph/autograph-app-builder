@@ -201,7 +201,9 @@ const main = async () => {
     },
   );
   const developmentExited = once(development, "close");
-  development.once("close", () => controller.abort());
+  development.once("close", () => {
+    controller.abort();
+  });
   development.stdout.on("data", async (chunk: Buffer) => {
     await appendFile(transcriptPath, String(chunk));
   });

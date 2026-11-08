@@ -447,7 +447,7 @@ test("trusted Builder call contract flows through actual native prepare and reco
         Promise.resolve({ kind: "handoff", checkpoint: { sessionTimeoutMs: false } }),
       start: (input) => {
         starts += 1;
-        checkpoint = input.checkpoint;
+        ({ checkpoint } = input);
         hook = {
           runId: binding.ownerRunId,
           metadata: Promise.resolve({ recoveryBinding: binding }),

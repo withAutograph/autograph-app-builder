@@ -97,7 +97,9 @@ test("settles a finite border transition before style evidence", async ({ page }
     .panel { border-top: 4px solid rgb(41, 41, 41); transition: border-color 120ms linear; }
     .panel.selected { border-color: rgb(77, 95, 193); }
   </style><div class="panel">Stock</div>`);
-  await page.locator(".panel").evaluate((element) => element.classList.add("selected"));
+  await page.locator(".panel").evaluate((element) => {
+    element.classList.add("selected");
+  });
   const styles = await measureStyles(page, {
     "--color-action-primary-ink": SELECTED_BORDER_COLOR,
     "--color-border-subtle": "rgb(41, 41, 41)",
