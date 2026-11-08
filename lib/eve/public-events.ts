@@ -87,6 +87,8 @@ const authorizationRequestId = (data: unknown): string | undefined => {
 };
 
 const progressStates = new Set(["started", "completed", "failed"]);
+const isProgressState = (value: string): value is "started" | "completed" | "failed" =>
+  progressStates.has(value);
 const visibleOperations = new Map([
   ["apply_app_creation", "Building the app in its private workspace"],
   ["compile-app-schema-release", preparingAppDataModelLabel],
@@ -1839,7 +1841,7 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
         : null;
     }
     case "progress": {
-      if (!(event.label && event.state && progressStates.has(event.state))) {
+      if (!(event.label && event.state && isProgressState(event.state))) {
         return null;
       }
       const progress: Pick<
@@ -1848,7 +1850,7 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
       > = {
         index: event.index,
         label: event.label,
-        state: event.state as "started" | "completed" | "failed",
+        state: event.state,
       };
       if (event.turnId !== undefined) {
         progress.turnId = event.turnId;

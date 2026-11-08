@@ -329,6 +329,9 @@ export const dependencyTargetForWorkspace = function dependencyTargetForWorkspac
     : { sha: cache.manifest.target.sha, tree: cache.manifest.target.tree };
 };
 
+const invalidDependencyTargetMessage =
+  "The prepared source does not match the immutable dependency target.";
+
 export const assertExactDependencyTargetBinding =
   function assertExactDependencyTargetBinding(input: {
     workspace: ExactSourceBinding;
@@ -351,18 +354,29 @@ export const assertExactDependencyTargetBinding =
       input.workspace.sourceSha !== input.sourceReceipt.sourceSha ||
       input.workspace.sourceTree !== input.sourceReceipt.sourceTree ||
       input.workspace.sourceSha !== target.sha ||
-      input.workspace.sourceTree !== target.tree ||
-      (input.dependencyReceipt !== undefined &&
-        (input.dependencyReceipt.sourceSha !== input.workspace.sourceSha ||
-          input.dependencyReceipt.sourceTree !== input.workspace.sourceTree ||
-          input.sourceReceipt.digest === undefined ||
-          input.dependencyReceipt.sourceReceiptDigest !== input.sourceReceipt.digest ||
-          input.dependencyReceipt.targetSha !== target.sha ||
-          input.dependencyReceipt.targetTree !== target.tree))
+      input.workspace.sourceTree !== target.tree
     ) {
-      throw new Error("The prepared source does not match the immutable dependency target.");
+      throw new Error(invalidDependencyTargetMessage);
+    }
+    if (input.dependencyReceipt !== undefined) {
+      if (
+        input.dependencyReceipt.sourceSha !== input.workspace.sourceSha ||
+        input.dependencyReceipt.sourceTree !== input.workspace.sourceTree ||
+        input.sourceReceipt.digest === undefined ||
+        input.dependencyReceipt.sourceReceiptDigest !== input.sourceReceipt.digest
+      ) {
+        throw new Error(invalidDependencyTargetMessage);
+      }
+      if (
+        input.dependencyReceipt.targetSha !== target.sha ||
+        input.dependencyReceipt.targetTree !== target.tree
+      ) {
+        throw new Error(invalidDependencyTargetMessage);
+      }
     }
   };
+
+const invalidLiveTemplateCacheMessage = "The live template dependency cache binding drifted.";
 
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
@@ -1214,16 +1228,24 @@ const assertExactLiveTemplateManifest = function assertExactLiveTemplateManifest
     manifest.platform !== identity.platform ||
     manifest.dependencyKey !== identity.dependencyKey ||
     JSON.stringify(manifest.dependencyInputs) !== JSON.stringify(identity.dependencyInputs) ||
-    JSON.stringify(manifest.runtime) !== JSON.stringify(identity.runtime) ||
+    JSON.stringify(manifest.runtime) !== JSON.stringify(identity.runtime)
+  ) {
+    throw new Error(invalidLiveTemplateCacheMessage);
+  }
+  if (
     manifest.bootstrapVersion !== identity.bootstrapVersion ||
     manifest.closure.nodeModulesPath !== expectedLiveTemplateNodeModulesPath(identity) ||
-    manifest.closure.cargoHomePath !== expectedLiveTemplateCargoHomePath(identity) ||
+    manifest.closure.cargoHomePath !== expectedLiveTemplateCargoHomePath(identity)
+  ) {
+    throw new Error(invalidLiveTemplateCacheMessage);
+  }
+  if (
     manifest.closure.workspaceNodeModules.some(
       (entry) => entry.nodeModulesPath !== `${sourceRoot}/${entry.path}`,
     ) ||
     manifest.closure.workspaceLinks.some((entry) => entry.path === entry.sourcePath)
   ) {
-    throw new Error("The live template dependency cache binding drifted.");
+    throw new Error(invalidLiveTemplateCacheMessage);
   }
 };
 

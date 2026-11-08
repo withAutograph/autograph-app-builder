@@ -1407,6 +1407,13 @@ it.each([
     const error = new HostedOperatorError("operator_unavailable");
     const projected = projectAuthStartupDiagnostic(advisory);
     expect(projected).toEqual(expected);
+    const execution: NonNullable<Parameters<typeof observeOperatorExecutionStage>[4]> = {
+      stage: "worker_protocol",
+      workerFailure: "startup_rejected",
+    };
+    if (projected !== undefined) {
+      execution.authStartup = projected;
+    }
     await expect(
       observeOperatorExecutionStage(
         secret,
@@ -1415,11 +1422,7 @@ it.each([
           throw error;
         },
         sink,
-        {
-          stage: "worker_protocol",
-          workerFailure: "startup_rejected",
-          ...(projected === undefined ? {} : { authStartup: projected }),
-        },
+        execution,
       ),
     ).rejects.toBe(error);
     expect(sink.mock.calls[0]?.[0].executionFailure?.workerFailure).toBe("startup_rejected");

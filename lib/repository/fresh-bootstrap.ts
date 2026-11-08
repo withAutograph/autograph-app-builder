@@ -548,7 +548,11 @@ export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapPropos
       "lockStrategy",
       "lockHelper",
       "lockHelperIdentity",
-    ]) ||
+    ])
+  ) {
+    throw new Error(invalidProposal);
+  }
+  if (
     ![
       proposal.capability.stateRoot,
       proposal.capability.allowedRoot,
@@ -562,7 +566,11 @@ export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapPropos
       proposal.capability.systemPythonIdentity,
       proposal.capability.systemNodeIdentity,
       proposal.capability.lockHelperIdentity,
-    ].every((value) => hasExactKeys(value, executableIdentityKeys)) ||
+    ].every((value) => hasExactKeys(value, executableIdentityKeys))
+  ) {
+    throw new Error(invalidProposal);
+  }
+  if (
     !hasExactKeys(
       proposal.destinationPrestate,
       proposal.destinationPrestate.kind === "absent"
@@ -575,22 +583,38 @@ export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapPropos
       "authorEmail",
       "commitMessage",
       "commitTimestamp",
-    ]) ||
+    ])
+  ) {
+    throw new Error(invalidProposal);
+  }
+  if (
     !proposal.exactTree.every((file) => hasExactKeys(file, ["path", "mode", "blob"])) ||
     proposal.version !== FRESH_BOOTSTRAP_VERSION ||
     proposal.githubOutcome !== "unavailable" ||
-    proposal.releaseEnabled !== false ||
+    proposal.releaseEnabled !== false
+  ) {
+    throw new Error(invalidProposal);
+  }
+  if (
     !/^[0-9a-f]{64}$/u.test(proposal.atomicAdapterDigest) ||
     !/^[0-9a-f]{64}$/u.test(proposal.materializeAdapterDigest) ||
     proposal.destinationLockDigest !==
       stableDigest({
         allowedRoot: proposal.capability.allowedRoot,
         destinationPath: proposal.destinationPath,
-      }) ||
+      })
+  ) {
+    throw new Error(invalidProposal);
+  }
+  if (
     proposal.lockPath !==
       `${proposal.capability.stateRoot.path}/locks/${proposal.destinationLockDigest}.lock` ||
     dirnameForComparison(proposal.stagingPath) !== dirnameForComparison(proposal.destinationPath) ||
-    proposal.exactTreeDigest !== stableDigest(proposal.exactTree) ||
+    proposal.exactTreeDigest !== stableDigest(proposal.exactTree)
+  ) {
+    throw new Error(invalidProposal);
+  }
+  if (
     proposal.expectedGitTree !== gitTreeId(proposal.exactTree) ||
     proposal.expectedInitialCommit !==
       initialCommitId({

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { betterAuth } from "better-auth";
 import { organization } from "better-auth/plugins";
 import { generateKeyPair, SignJWT, jwtVerify } from "jose";
-import type { JWTVerifyOptions } from "jose";
+import type { JWTPayload, JWTVerifyOptions } from "jose";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
@@ -305,7 +305,7 @@ const fixture = async (publicRelease?: {
       return new Response(null, { status: 401 });
     }
     cookies.set(actual.session.id, request.headers.get("cookie") ?? "");
-    const proof = await new SignJWT({
+    const proofPayload: JWTPayload = {
       purpose: "realm-operator-link-v1",
       sessionId: actual.session.id,
       organizationId: null,
@@ -316,16 +316,15 @@ const fixture = async (publicRelease?: {
         .update(values.get("nonce") ?? "")
         .digest("hex"),
       resource,
-      ...(values.has("publicEnrollmentRef")
-        ? {
-            publicRelease: {
-              enrollmentRef: values.get("publicEnrollmentRef"),
-              operationRef: values.get("publicOperationRef"),
-              planDigest: values.get("publicPlanDigest"),
-            },
-          }
-        : {}),
-    })
+    };
+    if (values.has("publicEnrollmentRef")) {
+      proofPayload.publicRelease = {
+        enrollmentRef: values.get("publicEnrollmentRef"),
+        operationRef: values.get("publicOperationRef"),
+        planDigest: values.get("publicPlanDigest"),
+      };
+    }
+    const proof = await new SignJWT(proofPayload)
       .setProtectedHeader({
         alg: "EdDSA",
         kid: "fixture-key",

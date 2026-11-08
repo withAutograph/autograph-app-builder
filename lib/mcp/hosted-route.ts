@@ -141,24 +141,28 @@ export function createDeploymentMcpRequestHandler(input: {
                 const resumeRepositoryAccess =
                   input.resumeRepositoryAccess ??
                   repositoryRuntime.resumeAuthorizedRepositoryAccessForSession;
-                await resumeRepositoryAccess({
+                const repositoryAccessInput: Parameters<typeof resumeRepositoryAccess>[0] = {
                   sessionAuth: forwardedSessionAuth(principal, sourceHandoffId),
                   sessionId: adapterSessionId,
-                  ...(input.fetchImplementation === undefined
-                    ? {}
-                    : { fetchImplementation: input.fetchImplementation }),
-                });
+                };
+                if (input.fetchImplementation !== undefined) {
+                  repositoryAccessInput.fetchImplementation = input.fetchImplementation;
+                }
+                await resumeRepositoryAccess(repositoryAccessInput);
               } catch {
                 // A lost callback notification is recoverable. Repository
                 // access remains parked and the ordinary session read still
                 // returns its exact outstanding authorization request.
               }
-              await resumeRealmContinuation({
+              const continuationInput: Parameters<typeof resumeRealmContinuation>[0] = {
                 principal,
                 sessionId,
                 adapterSessionId,
-                ...(sourceHandoffId === undefined ? {} : { sourceHandoffId }),
-              });
+              };
+              if (sourceHandoffId !== undefined) {
+                continuationInput.sourceHandoffId = sourceHandoffId;
+              }
+              await resumeRealmContinuation(continuationInput);
             },
             handoffs: {
               ...handoffService,

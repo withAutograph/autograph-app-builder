@@ -179,8 +179,26 @@ export interface PreviewActivationStore {
 const digest = (value: string): `sha256:${string}` =>
   `sha256:${createHash("sha256").update(value).digest("hex")}`;
 
+interface SecretDigests {
+  authSecret?: `sha256:${string}`;
+  password?: `sha256:${string}`;
+}
+
+type ActivationAuthority =
+  | { roleName: string }
+  | { issuer: string; resource: string }
+  | {
+      email: string;
+      githubAccountId: string;
+      githubLogin: string;
+      issuer: string;
+      resource: string;
+      userId: string;
+      workspaceId: string;
+    };
+
 const canonicalRequest = (request: PreviewActivationPlanRequest) => {
-  let secret: Record<string, `sha256:${string}`> = {};
+  let secret: SecretDigests = {};
   if (request.action === oauthInitializeAction) {
     secret = { authSecret: digest(request.authSecret) };
   } else if (request.action === runtimeRoleAction) {
@@ -195,7 +213,7 @@ const canonicalRequest = (request: PreviewActivationPlanRequest) => {
 export const planPreviewActivation = (input: unknown) => {
   const request = previewActivationPlanRequestSchema.parse(input);
   const canonical = canonicalRequest(request);
-  let authority: Record<string, string>;
+  let authority: ActivationAuthority;
   if (request.action === runtimeRoleAction) {
     authority = { roleName: request.roleName };
   } else if (request.action === oauthInitializeAction) {
