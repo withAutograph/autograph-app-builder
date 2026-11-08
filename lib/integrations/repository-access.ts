@@ -278,7 +278,7 @@ export async function classifyGitHubRepositoryAccess(input: {
     });
   }
   const [match] = matches;
-  if (match) {
+  if (match !== undefined) {
     const selectedScope = scope(match.binding);
     return repositoryAccessResultSchema.parse({
       accessDigest: sha256({
@@ -396,7 +396,7 @@ export async function classifyGitHubRepositoryAccessWithTargetProof(input: {
       status: SCOPE_SELECTION_REQUIRED,
     });
   }
-  if (matches[0]) {
+  if (matches[0] !== undefined) {
     return matches[0];
   }
   if (providerFailures === active.length) {

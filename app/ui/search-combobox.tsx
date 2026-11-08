@@ -61,7 +61,7 @@ export function SearchCombobox({
     : options;
   useEffect(() => {
     const close = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      if (rootRef.current?.contains(event.target as Node) !== true) {
         setOpen(false);
       }
     };

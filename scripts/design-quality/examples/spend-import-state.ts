@@ -97,7 +97,10 @@ function mappedValue(
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function deriveSpendPreview(fixture: SpendFixture, mapping: SpendMapping): SpendPreview {
-  const complete = requiredTargets.every((target) => sourceFor(mapping, target));
+  const complete = requiredTargets.every((target) => {
+    const source = sourceFor(mapping, target);
+    return source !== undefined && source !== "";
+  });
   const representativeBaselineReady = fixture.representativeRows.filter(
     ({ issue }) => !issue,
   ).length;

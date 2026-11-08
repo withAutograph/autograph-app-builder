@@ -56,7 +56,7 @@ const sanitizeValue = (value: unknown): unknown => {
   if (Array.isArray(value)) {
     return value.map(sanitizeValue);
   }
-  if (value && typeof value === "object") {
+  if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [key, sanitizeValue(item)]),
     );
@@ -109,7 +109,7 @@ export const loadWorkingPreview = async (
     session?: { sessionId?: unknown; status?: string; workingPreview?: unknown };
   };
   const receipt = publicState?.session?.workingPreview;
-  if (!receipt || typeof receipt !== "object") {
+  if (receipt === null || typeof receipt !== "object") {
     const finalWaiting =
       publicState.outcome === "waiting" && publicState.session?.status === "waiting";
     return {
