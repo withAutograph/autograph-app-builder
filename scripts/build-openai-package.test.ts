@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 interface FixtureMcpServers {
   "app-builder": { type: string; url: string };
@@ -75,11 +76,22 @@ describe("OpenAI package generator", () => {
       const endpoint = "https://preview.autograph.dev/mcp";
       await runGenerator(root, endpoint);
 
-      const portable = JSON.parse(await readFile(path.join(root, "mcp.json"), "utf-8"));
-      const codex = JSON.parse(await readFile(path.join(root, ".mcp.json"), "utf-8"));
-      const manifest = JSON.parse(
-        await readFile(path.join(root, ".codex-plugin/plugin.json"), "utf-8"),
-      );
+      const portable = z
+        .object({ mcpServers: z.looseObject({ "app-builder": z.object({ url: z.unknown() }) }) })
+        .parse(JSON.parse(await readFile(path.join(root, "mcp.json"), "utf-8")));
+      const codex = z
+        .object({
+          mcpServers: z.looseObject({
+            "app-builder": z.object({ oauth_resource: z.unknown(), url: z.unknown() }),
+          }),
+        })
+        .parse(JSON.parse(await readFile(path.join(root, ".mcp.json"), "utf-8")));
+      const manifest = z
+        .object({
+          interface: z.looseObject({ defaultPrompt: z.array(z.string()) }),
+          version: z.unknown(),
+        })
+        .parse(JSON.parse(await readFile(path.join(root, ".codex-plugin/plugin.json"), "utf-8")));
       expect(portable.mcpServers["app-builder"].url).toBe(endpoint);
       expect(Object.keys(portable.mcpServers)).toEqual(["app-builder"]);
       expect(codex.mcpServers["app-builder"].url).toBe(endpoint);

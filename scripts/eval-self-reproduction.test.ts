@@ -68,9 +68,9 @@ function run(script: string, reportOnly = false) {
     );
   }
   expect(existsSync(nodePath.join(output, "runtime-source"))).toBe(false);
-  expect(
-    JSON.parse(readFileSync(nodePath.join(output, "revisions.json"), "utf-8")).arrusted.status,
-  ).toBe("unavailable");
+  expect(JSON.parse(readFileSync(nodePath.join(output, "revisions.json"), "utf-8"))).toMatchObject({
+    arrusted: { status: "unavailable" },
+  });
   return { output, report, result };
 }
 
