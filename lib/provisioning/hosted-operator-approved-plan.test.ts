@@ -173,7 +173,7 @@ const setup = () => {
   });
   const run = async (proposed = replacementPlan) =>
     await recoverOriginalApprovedPlan(
-      { store: { read, compareAndSet }, readApprovedPlan, assertAuthorized },
+      { assertAuthorized, readApprovedPlan, store: { compareAndSet, read } },
       { authority, target, ownerContext },
       { action: "plan", operation: "prepare", selection },
       selection.appId,
@@ -188,14 +188,14 @@ const setup = () => {
     return current;
   };
   return {
-    run,
+    assertAuthorized,
+    compareAndSet,
+    operator,
+    readApprovedPlan,
     get row() {
       return row;
     },
-    operator,
-    readApprovedPlan,
-    compareAndSet,
-    assertAuthorized,
+    run,
   };
 };
 describe("original approved plan recovery", () => {

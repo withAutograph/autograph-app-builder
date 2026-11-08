@@ -19,7 +19,7 @@ const fixture = async () => {
   return root;
 };
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
 
 it("carries the budget through the actual Next/Eve generated Services command", async () => {
@@ -42,7 +42,7 @@ await nextConfig("phase-production-server", {});`;
   const output = z
     .object({
       services: z.object({
-        eve: z.object({ framework: z.literal("eve"), buildCommand: z.string() }),
+        eve: z.object({ buildCommand: z.string(), framework: z.literal("eve") }),
       }),
     })
     .parse(
@@ -75,7 +75,7 @@ console.log(JSON.stringify({heapLimit:v8.getHeapStatistics().heap_size_limit,arg
     encoding: "utf-8",
   });
   const observed = z
-    .object({ heapLimit: z.number().positive(), args: z.array(z.string()), options: z.string() })
+    .object({ args: z.array(z.string()), heapLimit: z.number().positive(), options: z.string() })
     .parse(JSON.parse(result));
   expect(observed.args).toEqual(["build"]);
   expect(observed.options).toContain("--no-warnings");

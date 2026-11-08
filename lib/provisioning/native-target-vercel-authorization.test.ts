@@ -64,8 +64,8 @@ describe("read-only installation authorization metadata", () => {
       expect(result.status).toBe("observed");
       const key = {
         id: "installationMatches",
-        teamId: "teamMatches",
         ownerId: "ownerMatches",
+        teamId: "teamMatches",
       } as const;
       expect(result[key[field]]).toBe(false);
       expect(result).not.toHaveProperty("authorized");

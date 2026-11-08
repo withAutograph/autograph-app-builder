@@ -48,7 +48,7 @@ it("retains source only in its actual local cycle and exact originating session"
     });
     const response = await handler(
       new Request(`http://127.0.0.1:3400/application-source/owner/${saved.manifestDigest}`),
-      { sessionId: "owner", digest: saved.manifestDigest },
+      { digest: saved.manifestDigest, sessionId: "owner" },
     );
     expect(response.headers.get("content-type")).toBe("application/octet-stream");
     expect(response.headers.get("content-disposition")).toContain("attachment;");
@@ -58,7 +58,7 @@ it("retains source only in its actual local cycle and exact originating session"
     ).toBe("owner");
     const foreignOrigin = await handler(
       new Request(`https://foreign.example/application-source/owner/${saved.manifestDigest}`),
-      { sessionId: "owner", digest: saved.manifestDigest },
+      { digest: saved.manifestDigest, sessionId: "owner" },
     );
     expect(foreignOrigin.status).toBe(404);
     const observed = await store.read("owner", saved.manifestDigest);
@@ -70,6 +70,6 @@ it("retains source only in its actual local cycle and exact originating session"
       createLocalApplicationSourceStore({ ...environment, EVE_HOSTED_ADAPTER: "1" }),
     ).toThrow();
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { force: true, recursive: true });
   }
 });

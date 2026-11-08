@@ -505,22 +505,6 @@ it("prepared review resumes in the original acceptance context without a second 
     let preparedCalls = 0;
     let finalizedCalls = 0;
     const tool = createChangeSetAcceptanceTool({
-      async observeChangeSet() {
-        return await Promise.resolve({
-          changeSet: deriveNormalizedChangeSet(apply, validation, "contract"),
-          observed: { files: apply.postTree, treeDigest: apply.postTreeDigest },
-        });
-      },
-      async reviewSource() {
-        directCalls += 1;
-        await Promise.resolve();
-        throw new Error("Direct paid loop must not run");
-      },
-      async prepareSourceReview(input) {
-        preparedCalls += 1;
-        expect(input.sessionId).toBe("local-session");
-        return await Promise.resolve({ reference });
-      },
       async finalizeSourceReview(input) {
         finalizedCalls += 1;
         expect(input.reference).toEqual(reference);
@@ -541,6 +525,22 @@ it("prepared review resumes in the original acceptance context without a second 
           ),
         );
       },
+      async observeChangeSet() {
+        return await Promise.resolve({
+          changeSet: deriveNormalizedChangeSet(apply, validation, "contract"),
+          observed: { files: apply.postTree, treeDigest: apply.postTreeDigest },
+        });
+      },
+      async prepareSourceReview(input) {
+        preparedCalls += 1;
+        expect(input.sessionId).toBe("local-session");
+        return await Promise.resolve({ reference });
+      },
+      async reviewSource() {
+        directCalls += 1;
+        await Promise.resolve();
+        throw new Error("Direct paid loop must not run");
+      },
     });
     const ordinary = await tool.execute({}, context("ordinary-acceptance"));
     expect(ordinary).toMatchObject({
@@ -552,7 +552,7 @@ it("prepared review resumes in the original acceptance context without a second 
       preparedCalls: 0,
     });
     const pending = await tool.execute({ runSourceReview: true }, context("prepare-review"));
-    expect(pending).toMatchObject({ status: "source_review_pending", sourceReview: reference });
+    expect(pending).toMatchObject({ sourceReview: reference, status: "source_review_pending" });
     expect(appBuilderWorkflowState.get().phase).toBe("reviewed");
     const accepted = await tool.execute({ sourceReview: reference }, context("finish-review"));
     expect(accepted).toMatchObject({
@@ -655,6 +655,6 @@ it("captures parent evidence and finalizes a private durable outcome without rer
     });
   } finally {
     vi.unstubAllEnvs();
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { force: true, recursive: true });
   }
 });

@@ -100,18 +100,18 @@ const fixture = () => {
   });
   return {
     destination,
-    reader,
-    plan,
-    invocation,
-    mint,
-    revoke: () => {
-      authorized = false;
-    },
     disconnect: () => {
       active = false;
     },
+    invocation,
+    mint,
+    plan,
     race: () => {
       revokeDuringMint = true;
+    },
+    reader,
+    revoke: () => {
+      authorized = false;
     },
   };
 };

@@ -13,7 +13,7 @@ import {
 
 const roots: string[] = [];
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
 const fixture = async () => {
   const parent = await realpath(await mkdtemp(path.join(tmpdir(), "workspace-inspection-")));
@@ -155,8 +155,8 @@ describe("actual selected workspace entry program", () => {
       },
     });
     expect(resultSchema.parse(JSON.parse(output))).toMatchObject({
+      entries: [{ kind: "file", path: `/workspace/repository/${relativePath}/actual.js` }],
       kind: "workspace-directory",
-      entries: [{ path: `/workspace/repository/${relativePath}/actual.js`, kind: "file" }],
     });
   });
 });

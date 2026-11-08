@@ -71,12 +71,12 @@ describe("imported application registration planning", () => {
 
 it("reviews every imported app file against its absent acquired-platform base", () => {
   const snapshot = {
-    treeDigest: "prior",
     files: [
       { path: "apps/invoice-app/public/data.bin", digest: "a".repeat(64), mode: "100644" },
       { path: "apps/other-app/keep.ts", digest: "b".repeat(64), mode: "100644" },
       { path: "microfrontends.json", digest: "c".repeat(64), mode: "100644" },
     ],
+    treeDigest: "prior",
   };
   const baseline = applicationImportBaselineSnapshot(snapshot, "apps/invoice-app");
   expect(baseline.files.map((file) => file.path)).toEqual([
