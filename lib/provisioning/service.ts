@@ -103,14 +103,15 @@ export async function executeBuilderProvisioning(input: {
     update(current) {
       const operation = current.operations[request.operation];
       if (
-        operation.leaseId &&
-        operation.leaseExpiresAt &&
-        Date.parse(operation.leaseExpiresAt) > now()
+        !(
+          operation.leaseId &&
+          operation.leaseExpiresAt &&
+          Date.parse(operation.leaseExpiresAt) > now()
+        )
       ) {
-        return current;
+        operation.leaseId = leaseId;
+        operation.leaseExpiresAt = new Date(now() + LEASE_MS).toISOString();
       }
-      operation.leaseId = leaseId;
-      operation.leaseExpiresAt = new Date(now() + LEASE_MS).toISOString();
       return current;
     },
   });

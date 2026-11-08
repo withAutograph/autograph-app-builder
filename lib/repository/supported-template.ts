@@ -831,7 +831,13 @@ const sandboxSourceArchivePath = ".app-builder/source-tree.tar.gz";
 
 const fixtureSandboxEnabled = () => hasTestCapability("simulated-target");
 
-const exactKeys = function exactKeys(value: object, expected: readonly string[]): boolean {
+const isPreparedRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const exactKeys = function exactKeys(
+  value: Record<string, unknown>,
+  expected: readonly string[],
+): boolean {
   const actual = Object.keys(value);
   const allowed = new Set(expected);
   return actual.length === allowed.size && actual.every((key) => allowed.has(key));
@@ -913,9 +919,7 @@ export const parsePreparedWorkspace = function parsePreparedWorkspace(
   input: unknown,
 ): PreparedSandboxWorkspace {
   if (
-    typeof input !== "object" ||
-    input === null ||
-    Array.isArray(input) ||
+    !isPreparedRecord(input) ||
     !exactKeys(input, [
       "workspaceId",
       "workspacePath",
@@ -973,9 +977,7 @@ const parsePreparedSourceFiles = function parsePreparedSourceFiles(
   const paths = new Set<string>();
   return input.map((candidate) => {
     if (
-      typeof candidate !== "object" ||
-      candidate === null ||
-      Array.isArray(candidate) ||
+      !isPreparedRecord(candidate) ||
       !exactKeys(candidate, ["mode", "objectId", "path", "sha256"])
     ) {
       throw new Error(invalidWorkspaceManifestMessage);
@@ -1148,16 +1150,14 @@ const verifySandboxWorkspaceBoundary = async function verifySandboxWorkspaceBoun
     throw new Error(`The prepared ${kind} workspace escaped its sandbox boundary.`);
   }
   if (
-    typeof observed !== "object" ||
-    observed === null ||
-    Array.isArray(observed) ||
+    !isPreparedRecord(observed) ||
     !exactKeys(observed, Object.keys(developmentWorkspaceInspectionReceipt))
   ) {
     throw new Error(`The prepared ${kind} workspace escaped its sandbox boundary.`);
   }
   if (
     Object.entries(developmentWorkspaceInspectionReceipt).some(
-      ([key, expected]) => (observed as Record<string, unknown>)[key] !== expected,
+      ([key, expected]) => observed[key] !== expected,
     )
   ) {
     throw new Error(`The prepared ${kind} workspace escaped its sandbox boundary.`);

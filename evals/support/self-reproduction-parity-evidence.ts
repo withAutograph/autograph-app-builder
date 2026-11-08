@@ -95,8 +95,15 @@ export const parityEvidenceFromReceipts = (input: ParityReceiptInput): ParityEvi
   }
   for (const raw of input.captureReceipts ?? []) {
     const receipt = captureReceiptSchema.parse(raw);
-    const { side: receiptSide, viewport: _viewport, state: _state, ...observation } = receipt;
-    observations[receiptSide].push(observation);
+    const observation: Observation = {
+      artifacts: receipt.artifacts,
+      assertions: receipt.assertions,
+      disposition: receipt.disposition,
+      method: receipt.method,
+      reason: receipt.reason,
+      requirementId: receipt.requirementId,
+    };
+    observations[receipt.side].push(observation);
   }
   return parityEvidenceSchema.parse({
     candidate: { ...input.candidate, observations: observations.candidate },

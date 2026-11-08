@@ -36,7 +36,7 @@ import type { ProviderConnectionNotice } from "../../lib/integrations/provider-c
 import { createBuilderDraftOutbox } from "./builder-draft-outbox";
 import { useBuilderDraftAutosave } from "./use-builder-draft-autosave";
 
-import { comingSoonConnections } from "./builder-connections";
+import { comingSoonConnections } from "./builder-connection-availability";
 import type { ConnectionFlow } from "./builder-connections";
 import {
   appNameFromBrief,

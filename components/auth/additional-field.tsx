@@ -9,7 +9,7 @@ import { useRef, useState } from "react";
 import type { ComponentType } from "react";
 import { toast } from "sonner";
 
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import {

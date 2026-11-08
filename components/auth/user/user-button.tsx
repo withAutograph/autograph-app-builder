@@ -6,7 +6,7 @@ import { useSetActiveSession } from "@better-auth-ui/react/plugins/multi-session
 import { ChevronsUpDown, LogIn, LogOut, Settings, UserPlus2 } from "lucide-react";
 import Link from "next/link";
 
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import {
   DropdownMenu,
   DropdownMenuContent,

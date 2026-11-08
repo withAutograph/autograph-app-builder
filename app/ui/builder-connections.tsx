@@ -7,6 +7,7 @@ import { SiQuickbooks, SiSage, SiXero } from "react-icons/si";
 import { SectionShell } from "../../components/create-app/choice-card";
 import autographIcon from "../../assets/autograph-icon.png";
 import styles from "./app-builder.module.css";
+import { comingSoonConnections } from "./builder-connection-availability";
 
 export type ConnectionStage = "connect" | "configure" | "customize";
 export interface ConnectionFlow {
@@ -23,7 +24,6 @@ const featuredConnections = [
 ] as const;
 
 const allConnectionNames = featuredConnections.map(([name]) => name);
-export const comingSoonConnections = new Set(["Ramp", "NetSuite", "Xero", "Sage Intacct"]);
 
 const connectionKind = new Map<string, string>(featuredConnections);
 
