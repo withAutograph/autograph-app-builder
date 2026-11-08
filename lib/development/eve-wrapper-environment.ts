@@ -31,7 +31,7 @@ export const prepareDevelopmentEveWrapperEnvironment = async (input: {
     // The unselected default footprint needs no resource-change observation.
   }
   input.signal.throwIfAborted();
-  return {
+  const initial: NodeJS.ProcessEnv = {
     HOME: input.runtimeHome,
     LANG: input.environment.LANG ?? "C",
     LC_ALL: input.environment.LC_ALL ?? "C",
@@ -40,7 +40,12 @@ export const prepareDevelopmentEveWrapperEnvironment = async (input: {
     TMPDIR: input.environment.TMPDIR ?? "/tmp",
     TZ: input.environment.TZ ?? "UTC",
     ...input.closed,
-    ...(limits === undefined ? {} : { APP_BUILDER_PRIVATE_COMPUTE_LIMITS: JSON.stringify(limits) }),
+  };
+  if (limits !== undefined) {
+    initial.APP_BUILDER_PRIVATE_COMPUTE_LIMITS = JSON.stringify(limits);
+  }
+  return {
+    ...initial,
     APP_BUILDER_LOCAL_EVE_CYCLE_FILE: input.cycleFile,
     APP_BUILDER_DEV_EVE_ROOT: input.applicationRoot,
     APP_BUILDER_DEV_RUNS_ROOT: input.runsRoot,

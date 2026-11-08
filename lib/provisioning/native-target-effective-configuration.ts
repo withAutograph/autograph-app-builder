@@ -85,7 +85,7 @@ export const resolveNativeTargetEffectiveConfiguration = async <Invocation>(inpu
   ) {
     throw new HostedOperatorError("resource_mismatch");
   }
-  const observed = registration.observed;
+  const { observed } = registration;
   const targetMatches = [
     ready.appId === input.appId,
     plan.appId === input.appId,
@@ -100,8 +100,14 @@ export const resolveNativeTargetEffectiveConfiguration = async <Invocation>(inpu
   const existing = configuration.applications[input.appId];
   // Retain optional static publication/policy metadata only for the same actual target.
   const sameTarget = existing?.projectId === observed.projectId && existing.branch === plan.branch;
-  configuration.applications[input.appId] = {
-    ...(sameTarget ? existing : {}),
+  const { applications } = configuration;
+  const { appId } = input;
+  let retained: Partial<HostedOperatorSourceConfiguration["applications"][string]> = {};
+  if (sameTarget) {
+    retained = { ...existing };
+  }
+  applications[appId] = {
+    ...retained,
     nativeTargetRegistration: true,
     accessRoles: structuredClone(plan.productRoles),
     appDatabase: structuredClone(plan.appDatabase),

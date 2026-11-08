@@ -31,6 +31,8 @@ import type {
   OperatorArtifactStore,
 } from "./hosted-operator-artifact-store";
 
+const REALM_OPERATOR_PROOF_MEDIA_TYPE = "application/vnd.realm-operator-proof+json";
+
 export interface NormalActorRealmProofBinding extends Omit<
   NormalActorOrganizationProofBinding,
   "browserOrigin"
@@ -69,9 +71,9 @@ const proofSchema = z
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const cookieHeader = (storage: NormalBrowserStorageState, origin: string, path: string) => {
   const jar = new CookieJar(undefined, {
+    allowSpecialUseDomain: false,
     prefixSecurity: "strict",
     rejectPublicSuffixes: true,
-    allowSpecialUseDomain: false,
   });
   for (const cookie of storage.cookies) {
     const domain = cookie.domain.startsWith(".") ? cookie.domain.slice(1) : cookie.domain;
@@ -169,7 +171,7 @@ const readProof = async ({
     }
     // Browser-session correlation would invoke the separate human capture callback; this nonce is already bound to the approved retained organization candidate.
     const cookie = cookieHeader(storageState, origin, path);
-    observe({ stage: "proof_request", cookiePresent: cookie !== "" });
+    observe({ cookiePresent: cookie !== "", stage: "proof_request" });
     if (cookie === "") {
       throw unavailable();
     }
@@ -180,31 +182,26 @@ const readProof = async ({
       headers: {
         origin,
         "content-type": "application/x-www-form-urlencoded",
-        accept: "application/vnd.realm-operator-proof+json",
+        accept: REALM_OPERATOR_PROOF_MEDIA_TYPE,
         cookie,
       },
       redirect: "error",
       cache: "no-store",
       signal: AbortSignal.timeout(20_000),
     });
-    const responseFacts = {
-      cookiePresent: cookie !== "",
-      httpStatus: response.status,
-      redirected: response.redirected,
-      contentTypeValid:
-        response.headers
-          .get("content-type")
-          ?.startsWith("application/vnd.realm-operator-proof+json") === true,
-    };
+    const cookiePresent = cookie !== "";
+    const httpStatus = response.status;
+    const { redirected } = response;
+    const contentTypeValid =
+      response.headers.get("content-type")?.startsWith(REALM_OPERATOR_PROOF_MEDIA_TYPE) === true;
+    const responseFacts = { contentTypeValid, cookiePresent, httpStatus, redirected };
     observe({ stage: "proof_response", ...responseFacts });
     if (
       ![
         response.status === 200,
         !response.redirected,
         response.url === "" || new URL(response.url).origin === origin,
-        response.headers
-          .get("content-type")
-          ?.startsWith("application/vnd.realm-operator-proof+json") === true,
+        response.headers.get("content-type")?.startsWith(REALM_OPERATOR_PROOF_MEDIA_TYPE) === true,
       ].every(Boolean)
     ) {
       throw unavailable();
@@ -279,7 +276,7 @@ const selectedOwner = (input: CollectorInput, retained: RetainedActors) => {
   ) {
     throw mismatch();
   }
-  return { organization, candidate, actor };
+  return { actor, candidate, organization };
 };
 const assertRealmBinding = (
   input: HostedOperatorContext,
@@ -347,9 +344,9 @@ export const createHostedOperatorNormalActorProofCollector = (
         origin: preparation.program.origin,
       });
       const normal = createHostedOperatorNormalAuthClient({
+        fetch,
         origin: preparation.program.origin,
         storageState: candidate.storageState,
-        fetch,
       });
       const session = await normal.getSession();
       if (
@@ -367,7 +364,7 @@ export const createHostedOperatorNormalActorProofCollector = (
       const binding = await deps.resolveRealmBinding({ context: input, preparation });
       if (binding.bootstrap !== undefined) {
         completedParticipantBootstrapSchema.parse(binding.bootstrap);
-        assertBootstrapCurrent = binding.assertBootstrapCurrent;
+        ({ assertBootstrapCurrent } = binding);
         if (assertBootstrapCurrent === undefined) {
           throw mismatch();
         }
@@ -377,25 +374,42 @@ export const createHostedOperatorNormalActorProofCollector = (
       }
       assertRealmBinding(input, preparation, binding);
       observe({ stage: "proof_preparation" });
-      const pending = await journal.prepareOrganizationProof(input, {
-        organizationId: organization.organizationId,
-        ownerActorKey: organization.ownerActorKey,
-        owner: candidate.session,
-        ...(binding.bootstrap === undefined || assertBootstrapCurrent === undefined
-          ? {}
-          : { bootstrap: binding.bootstrap, assertBootstrapCurrent }),
-        binding: {
+      const proofInput = () => {
+        const owner: Pick<
+          Parameters<typeof journal.prepareOrganizationProof>[1],
+          "organizationId" | "ownerActorKey" | "owner" | "bootstrap" | "assertBootstrapCurrent"
+        > = {
+          organizationId: organization.organizationId,
+          ownerActorKey: organization.ownerActorKey,
+          owner: candidate.session,
+        };
+        if (binding.bootstrap !== undefined && assertBootstrapCurrent !== undefined) {
+          owner.bootstrap = binding.bootstrap;
+          owner.assertBootstrapCurrent = assertBootstrapCurrent;
+        }
+        const scope: Pick<
+          NormalActorOrganizationProofBinding,
+          "audience" | "authResourceId" | "bootstrapPlanDigest" | "publicRelease"
+        > = {
           audience: binding.audience,
           authResourceId: binding.authResourceId,
           bootstrapPlanDigest: binding.bootstrapPlanDigest,
-          ...(binding.publicRelease === undefined ? {} : { publicRelease: binding.publicRelease }),
-
-          browserOrigin: preparation.program.origin,
-          endpointOrigin: binding.endpointOrigin,
-          issuer: binding.issuer,
-          transportSource: binding.transportSource,
-        },
-      });
+        };
+        if (binding.publicRelease !== undefined) {
+          scope.publicRelease = binding.publicRelease;
+        }
+        return {
+          ...owner,
+          binding: {
+            ...scope,
+            browserOrigin: preparation.program.origin,
+            endpointOrigin: binding.endpointOrigin,
+            issuer: binding.issuer,
+            transportSource: binding.transportSource,
+          },
+        };
+      };
+      const pending = await journal.prepareOrganizationProof(input, proofInput());
       observe({ stage: "artifact_context" });
       const artifacts = await deps.ownedArtifacts(input);
       if ("kind" in artifacts.context.authority) {
@@ -413,16 +427,19 @@ export const createHostedOperatorNormalActorProofCollector = (
       ) {
         throw mismatch();
       }
+      const { record, nonce } = pending;
+      const storageState = normal.exportStorageState();
+      const { origin } = preparation.program;
       const proof = await readProof({
-        record: pending.record,
-        nonce: pending.nonce,
         artifacts,
+        assertCurrent,
         context: input,
         fetch,
-        storageState: normal.exportStorageState(),
-        origin: preparation.program.origin,
-        assertCurrent,
+        nonce,
         observe,
+        origin,
+        record,
+        storageState,
       });
       observe({ stage: "proof_verify" });
       const verified = await readVerifiedRealmAccess({
@@ -436,11 +453,8 @@ export const createHostedOperatorNormalActorProofCollector = (
         readback: async (request) => {
           observe({ stage: "proof_readback_request" });
           const response = await binding.readback(request);
-          observe({
-            stage: "proof_readback_response",
-            httpStatus: response.status,
-            redirected: response.redirected,
-          });
+          const { status: httpStatus, redirected } = response;
+          observe({ httpStatus, redirected, stage: "proof_readback_response" });
           return response;
         },
       });

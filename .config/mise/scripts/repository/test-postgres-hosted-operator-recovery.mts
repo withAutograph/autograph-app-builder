@@ -613,12 +613,12 @@ try {
       planDigest,
     );
     return {
-      selection,
-      target,
-      plan: frozenPlan,
       operationRef,
+      plan: frozenPlan,
       planDigest,
       row: finalRow,
+      selection,
+      target,
     };
   };
 
@@ -916,5 +916,5 @@ try {
       process.stderr.write(`Fixture admin shutdown failed: ${String(error)}\n`);
     }
   }
-  await rm(scratch, { recursive: true, force: true });
+  await rm(scratch, { force: true, recursive: true });
 }

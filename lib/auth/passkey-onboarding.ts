@@ -15,17 +15,15 @@ const TOKEN_VERSION = 1;
 const TOKEN_TTL_SECONDS = 5 * 60;
 const INTERNAL_EMAIL_DOMAIN = "passkey.autograph.invalid";
 
-const tokenPayloadSchema = z
-  .object({
-    deploymentId: z.string().min(1).max(256),
-    expiresAt: z.number().int().positive(),
-    nonce: z.string().uuid(),
-    origin: z.string().url(),
-    rpId: z.string().min(1).max(253),
-    userHandle: z.string().uuid(),
-    version: z.literal(TOKEN_VERSION),
-  })
-  .strict();
+const tokenPayloadSchema = z.strictObject({
+  deploymentId: z.string().min(1).max(256),
+  expiresAt: z.number().int().positive(),
+  nonce: z.uuid(),
+  origin: z.url(),
+  rpId: z.string().min(1).max(253),
+  userHandle: z.uuid(),
+  version: z.literal(TOKEN_VERSION),
+});
 
 export interface PasskeyOnboardingConfig {
   origin: string;
@@ -64,7 +62,7 @@ export function readPasskeyOnboardingConfig(
   }
 
   const secret = environment.BETTER_AUTH_SECRET?.trim();
-  if (!secret || secret.length < 32 || /[\0\r\n]/u.test(secret)) {
+  if (secret === undefined || secret === "" || secret.length < 32 || /[\0\r\n]/u.test(secret)) {
     throw new Error("Passkey onboarding requires BETTER_AUTH_SECRET.");
   }
 
@@ -86,10 +84,12 @@ export function readPasskeyOnboardingConfig(
     }
     const deploymentId = environment.VERCEL_DEPLOYMENT_ID?.trim();
     const deploymentHostname = environment.VERCEL_URL?.trim();
+    const invalidDeploymentId =
+      deploymentId === undefined || deploymentId === "" || deploymentId.length > 256;
     if (
-      !deploymentId ||
-      deploymentId.length > 256 ||
-      !deploymentHostname ||
+      invalidDeploymentId ||
+      deploymentHostname === undefined ||
+      deploymentHostname === "" ||
       !origin.startsWith("https://")
     ) {
       throw new Error("Preview passkey onboarding requires exact Vercel deployment metadata.");
@@ -100,13 +100,17 @@ export function readPasskeyOnboardingConfig(
       }
     } else {
       const canonical = new URL(options.previewCanonicalOrigin);
-      if (
+      const invalidCanonicalLocation =
         environment.APP_BUILDER_PREVIEW_PROVIDER_EMULATION !== "1" ||
         canonical.protocol !== "https:" ||
-        canonical.pathname !== "/" ||
-        canonical.search ||
-        canonical.hash ||
-        canonical.username ||
+        canonical.pathname !== "/";
+      const invalidCanonicalMetadata =
+        invalidCanonicalLocation ||
+        canonical.search !== "" ||
+        canonical.hash !== "" ||
+        canonical.username !== "";
+      if (
+        invalidCanonicalMetadata ||
         canonical.password ||
         canonical.origin !== origin ||
         environment.VERCEL_BRANCH_URL?.trim() !== canonical.hostname
@@ -134,17 +138,16 @@ export function readPasskeyOnboardingConfig(
   const localAuthEmulation = environment.APP_BUILDER_LOCAL_AUTH_EMULATION === "1";
   const localPort = environment.APP_BUILDER_LOCAL_PORT ?? "3001";
   const isHttps = origin.startsWith("https://");
-  if (
-    (!origin.startsWith("http://") && !isHttps) ||
-    (isHttps &&
-      (!/^\d{2,5}$/u.test(localPort) ||
-        origin !== `https://localhost:${localPort}` ||
-        !localProviderEmulation ||
-        !localAuthEmulation))
-  ) {
-    throw new Error(
-      "HTTPS loopback passkey onboarding requires explicit local provider and authentication emulation gates.",
-    );
+  const invalidLoopbackOrigin =
+    "HTTPS loopback passkey onboarding requires explicit local provider and authentication emulation gates.";
+  if (!origin.startsWith("http://") && !isHttps) {
+    throw new Error(invalidLoopbackOrigin);
+  }
+  if (isHttps && (!/^\d{2,5}$/u.test(localPort) || origin !== `https://localhost:${localPort}`)) {
+    throw new Error(invalidLoopbackOrigin);
+  }
+  if (isHttps && (!localProviderEmulation || !localAuthEmulation)) {
+    throw new Error(invalidLoopbackOrigin);
   }
   return {
     deploymentId: "local",
@@ -206,7 +209,7 @@ export function verifyPasskeyOnboardingToken(
   config: PasskeyOnboardingConfig,
   now = new Date(),
 ) {
-  if (!token || token.length > 4096) {
+  if (token === null || token === undefined || token === "" || token.length > 4096) {
     return null;
   }
   const [encodedPayload, signature, extra] = token.split(".");
@@ -306,10 +309,10 @@ export function authenticatedPasskeyRegistration(
   userId: string | null | undefined,
   context: string | null | undefined,
 ) {
-  if (!userId) {
+  if (userId === null || userId === undefined || userId === "") {
     return null;
   }
-  if (context) {
+  if (context !== null && context !== undefined && context !== "") {
     throw onboardingAlreadyAuthenticated();
   }
   return { name: "Additional passkey", userId };
@@ -327,7 +330,7 @@ export function createPasskeyOnboardingPlugin(input: {
       createPasskeyOnboardingContext: createAuthEndpoint(
         "/passkey/onboarding-context",
         {
-          body: z.object({}).strict(),
+          body: z.strictObject({}),
           metadata: { noStore: true },
           method: "POST",
         },

@@ -37,17 +37,19 @@ const assertJournalMatchesWorkflow = (
   expectedReviewDigest: string,
   journal: NonNullable<Awaited<ReturnType<typeof readLocalPublicationJournal>>>,
 ) => {
-  if (
+  const destinationMismatch =
     destinationPath !== workflow.sourceReceipt.sourcePath ||
     destinationPath !== journal.destinationPath ||
-    expectedReviewDigest !== workflow.reviewReceipt.digest ||
+    expectedReviewDigest !== workflow.reviewReceipt.digest;
+  const receiptMismatch = () =>
     journal.sourceReceiptDigest !== workflow.sourceReceipt.digest ||
     journal.reviewDigest !== workflow.reviewReceipt.digest ||
-    journal.changeSetDigest !== workflow.reviewReceipt.changeSetDigest ||
+    journal.changeSetDigest !== workflow.reviewReceipt.changeSetDigest;
+  const sourceMismatch = () =>
     journal.baseSha !== workflow.sourceReceipt.sourceSha ||
     journal.sourceTree !== workflow.sourceReceipt.sourceTree ||
-    journal.contractDigest !== workflow.sourceReceipt.contractDigest
-  ) {
+    journal.contractDigest !== workflow.sourceReceipt.contractDigest;
+  if (destinationMismatch || receiptMismatch() || sourceMismatch()) {
     throw new Error(
       "The durable local-publication journal does not belong to the current workflow.",
     );
@@ -95,10 +97,12 @@ export const exactLocalPublicationProposal = async (input: {
     review: workflow.reviewReceipt,
     sourceReceipt: workflow.sourceReceipt,
   });
-  if (
+  const proposalSourceMismatch =
     proposal.destinationPath !== workflow.sourceReceipt.sourcePath ||
     proposal.sourceReceiptDigest !== workflow.sourceReceipt.digest ||
-    proposal.baseSha !== workflow.sourceReceipt.sourceSha ||
+    proposal.baseSha !== workflow.sourceReceipt.sourceSha;
+  if (
+    proposalSourceMismatch ||
     workflow.workspace.sourceTree !== workflow.sourceReceipt.sourceTree ||
     workflow.workspace.sourceSha !== workflow.sourceReceipt.sourceSha
   ) {

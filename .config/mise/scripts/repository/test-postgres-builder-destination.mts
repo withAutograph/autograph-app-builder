@@ -30,7 +30,7 @@ import type { BuilderDestinationEpoch } from "../../../../lib/provisioning/build
 
 // An owned loopback cluster only. Never consumes DATABASE_URL or provider credentials.
 const repositoryRoot = path.resolve(import.meta.dirname, "../../../..");
-const postgresBin = process.argv[2];
+const [, , postgresBin] = process.argv;
 assert.ok(
   postgresBin && path.isAbsolute(postgresBin),
   "Supply an absolute installed PostgreSQL bin directory",
@@ -263,8 +263,8 @@ try {
       adapterGeneration: 1,
       appSpecDigest: "a".repeat(64),
       release: {
-        id: "release-original",
         artifactRef: "artifact-original",
+        id: "release-original",
         manifestSha256: "b".repeat(64),
         schemaSha256: "c".repeat(64),
       },
@@ -282,9 +282,9 @@ try {
     },
     branch: "main",
     appDatabase: {
-      resourceId: "requests-resource",
       database: "requests_data",
       migratorRole: "requests_migrator",
+      resourceId: "requests-resource",
       runtimeRole: "requests_runtime",
     },
     productRoles: [],
@@ -296,22 +296,22 @@ try {
         sourceProjectId: "source-project",
       },
       scope: {
-        projectId: "neon-project",
         branchId: "neon-branch",
         endpointId: "neon-endpoint",
         hostname: "ep-fixture.neon.tech",
         maintenanceDatabase: "maintenance",
         maintenanceRole: "installer",
+        projectId: "neon-project",
       },
     },
     worker: {
-      id: "generic-installer",
       executablePath: "/trusted/generic-worker",
-      sha256: "d".repeat(64),
+      id: "generic-installer",
       operationScope: "generated-app-release-install-v1",
+      sha256: "d".repeat(64),
       subcommand: "protected-generated-app-install",
     },
-    cost: { ownership: "current-owner", description: "Separate app target" },
+    cost: { description: "Separate app target", ownership: "current-owner" },
     retention: { policy: "Until approved cleanup" },
     conflictPolicy: "stop-on-conflict",
   });
@@ -385,5 +385,5 @@ try {
   if (started) {
     command("pg_ctl", ["-D", data, "-m", "immediate", "-w", "stop"]);
   }
-  await rm(scratch, { recursive: true, force: true });
+  await rm(scratch, { force: true, recursive: true });
 }

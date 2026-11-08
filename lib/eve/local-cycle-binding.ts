@@ -41,15 +41,18 @@ export async function rotateLocalEveCycleBinding(path: string) {
   canonicalCyclePath(path);
   const parent = pathModule.dirname(path);
   const parentInfo = lstatSync(parent);
+  const unsafeDirectory = "The local Eve cycle binding directory was not owner-only.";
   if (
     realpathSync(parent) !== parent ||
     !parentInfo.isDirectory() ||
     parentInfo.isSymbolicLink() ||
-    parentInfo.uid !== process.getuid?.() ||
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (parentInfo.mode & 0o077) !== 0
+    parentInfo.uid !== process.getuid?.()
   ) {
-    throw new Error("The local Eve cycle binding directory was not owner-only.");
+    throw new Error(unsafeDirectory);
+  }
+  // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
+  if ((parentInfo.mode & 0o077) !== 0) {
+    throw new Error(unsafeDirectory);
   }
   const generation = randomBytes(32).toString("hex");
   const temporary = `${path}.${process.pid}.${generation}.tmp`;

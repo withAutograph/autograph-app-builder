@@ -8,6 +8,7 @@ import type {
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 
+const GATEWAY_BINDINGS_KIND = "gateway-bindings";
 const RENEWAL_WINDOW_MS = 24 * 60 * 60 * 1000;
 const RENEWED_BINDINGS_DESCRIPTION =
   "Bind app-owned runtime URL and public verification context, and allow the configured Gateway Preview to reach this app Preview.";
@@ -136,7 +137,7 @@ const renewalPlanFrom = (prior: HostedOperatorPlan, expiresAt: string) => {
       if (effect.kind === "bindings") {
         return { ...effect, description: RENEWED_BINDINGS_DESCRIPTION };
       }
-      if (effect.kind === "gateway-bindings") {
+      if (effect.kind === GATEWAY_BINDINGS_KIND) {
         return { ...effect, description: RENEWED_GATEWAY_BINDINGS_DESCRIPTION };
       }
       return effect;
@@ -221,7 +222,7 @@ export const retentionRenewalBindingProvenance = (
     if (
       prior.pendingEffectId !== effectId ||
       prior.pendingEffectAttempt === undefined ||
-      (effect?.kind !== "bindings" && effect?.kind !== "gateway-bindings")
+      (effect?.kind !== "bindings" && effect?.kind !== GATEWAY_BINDINGS_KIND)
     ) {
       continue;
     }
@@ -252,8 +253,8 @@ export const isRetentionRenewalSuccessor = (
   if (record === undefined || operator === undefined || !isExactRenewalPlan(operator.plan, plan)) {
     return false;
   }
-  let pendingEffectId = operator.pendingEffectId;
-  let pendingEffectAttempt = operator.pendingEffectAttempt;
+  let { pendingEffectId } = operator;
+  let { pendingEffectAttempt } = operator;
   if (pendingEffectId === undefined) {
     const firstUnreceipted = operator.plan.effects.find(
       (effect) => !operator.receipts.some((receipt) => receipt.effectId === effect.id),
@@ -261,8 +262,8 @@ export const isRetentionRenewalSuccessor = (
     if (firstUnreceipted !== undefined) {
       const inherited = retentionRenewalBindingProvenance(record, firstUnreceipted.id);
       if (inherited !== undefined) {
-        pendingEffectId = inherited.effectId;
-        pendingEffectAttempt = inherited.pendingEffectAttempt;
+        ({ effectId: pendingEffectId } = inherited);
+        ({ pendingEffectAttempt } = inherited);
       }
     }
   }
@@ -276,6 +277,19 @@ export const isRetentionRenewalSuccessor = (
   const newExpiry = Date.parse(plan.retention.expiresAt);
   const leaseExpiry =
     record.leaseExpiresAt === undefined ? Number.NaN : Date.parse(record.leaseExpiresAt);
+  const isPendingRecoveryEffect = () => {
+    if (pendingEffectId === undefined || pending === undefined) {
+      return false;
+    }
+    if (["bindings", GATEWAY_BINDINGS_KIND, "gateway-delivery"].includes(pending.kind)) {
+      return true;
+    }
+    return (
+      pending.kind === "delivery" &&
+      operator.plan.hostProtection !== undefined &&
+      operator.plan.appDeliveryReplacement !== undefined
+    );
+  };
   return [
     Number.isFinite(now),
     isExpiredAt(oldExpiry, now),
@@ -286,12 +300,7 @@ export const isRetentionRenewalSuccessor = (
     hasText(operator.approvalId),
     isRealApprovalCall(record.approvedByCallId),
     operator.planDigest === operatorPlanDigest(operator.plan),
-    pendingEffectId !== undefined &&
-      pending !== undefined &&
-      (["bindings", "gateway-bindings", "gateway-delivery"].includes(pending.kind) ||
-        (pending.kind === "delivery" &&
-          operator.plan.hostProtection !== undefined &&
-          operator.plan.appDeliveryReplacement !== undefined)),
+    isPendingRecoveryEffect(),
     pending?.kind === "gateway-delivery" || pendingEffectAttempt !== undefined,
     receiptsPrecedePending(operator, previousEffectIds, receiptIds, pendingEffectId),
     hasNoActiveLease(record, leaseExpiry, now),
@@ -378,6 +387,30 @@ export const readPendingRetentionRenewalPlan = (
     : undefined;
 };
 
+const renewalDeliveryProvenanceEntry = (
+  approvedByCallId: string,
+  prior: HostedOperatorRecord & { approvalId: string },
+): RetentionRenewalDeliveryProvenance => {
+  const entry: Omit<RetentionRenewalDeliveryProvenance, "plan" | "planDigest"> = {
+    approvedByCallId,
+    approvalId: prior.approvalId,
+    deliveryCandidates: (prior.deliveryCandidates ?? []).filter(
+      (candidate) => candidate.operationRef === prior.operationRef,
+    ),
+    gatewayDeliveryCandidates: (prior.gatewayDeliveryCandidates ?? []).filter(
+      (candidate) => candidate.operationRef === prior.operationRef,
+    ),
+    operationRef: prior.operationRef,
+  };
+  if (prior.pendingEffectId !== undefined) {
+    entry.pendingEffectId = prior.pendingEffectId;
+  }
+  if (prior.pendingEffectAttempt !== undefined) {
+    entry.pendingEffectAttempt = structuredClone(prior.pendingEffectAttempt);
+  }
+  return { ...entry, plan: prior.plan, planDigest: prior.planDigest };
+};
+
 /** Historical app/Gateway candidates remain paired with their original approved source metadata. */
 export const retentionRenewalDeliveryProvenance = (
   record: HostedRuntimeJournalRecord | undefined,
@@ -392,23 +425,7 @@ export const retentionRenewalDeliveryProvenance = (
       continue;
     }
     const { approvedByCallId, operator: prior } = retained;
-    provenance.push({
-      approvedByCallId,
-      approvalId: prior.approvalId,
-      deliveryCandidates: (prior.deliveryCandidates ?? []).filter(
-        (candidate) => candidate.operationRef === prior.operationRef,
-      ),
-      gatewayDeliveryCandidates: (prior.gatewayDeliveryCandidates ?? []).filter(
-        (candidate) => candidate.operationRef === prior.operationRef,
-      ),
-      operationRef: prior.operationRef,
-      ...(prior.pendingEffectId === undefined ? {} : { pendingEffectId: prior.pendingEffectId }),
-      ...(prior.pendingEffectAttempt === undefined
-        ? {}
-        : { pendingEffectAttempt: structuredClone(prior.pendingEffectAttempt) }),
-      plan: prior.plan,
-      planDigest: prior.planDigest,
-    });
+    provenance.push(renewalDeliveryProvenanceEntry(approvedByCallId, prior));
   }
   return provenance;
 };

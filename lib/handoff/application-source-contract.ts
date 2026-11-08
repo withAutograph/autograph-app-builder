@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+const runtimeStateOmission = "runtime-state";
+const dependencyCacheOmission = "dependency-cache";
+
 const compareSourcePath = (left: string, right: string) => {
   if (left < right) {
     return -1;
@@ -21,7 +24,11 @@ const sourcePath = z
       value.split("/").every((part) => part !== "" && part !== "." && part !== ".."),
     "An unambiguous repository-relative source path is required",
   );
-const sourceOmissionKindSchema = z.enum(["credential", "runtime-state", "dependency-cache"]);
+const sourceOmissionKindSchema = z.enum([
+  "credential",
+  runtimeStateOmission,
+  dependencyCacheOmission,
+]);
 const credentialPathSegments = new Set([
   ".npmrc",
   ".pypirc",
@@ -61,13 +68,13 @@ export const applicationSourceOmissionReason = (
       ].includes(part),
     )
   ) {
-    return "runtime-state";
+    return runtimeStateOmission;
   }
   if (
     parts.some((part) => ["node_modules", ".turbo", ".cache"].includes(part)) ||
     [".next", "coverage", "dist", "build"].includes(parts[0] ?? "")
   ) {
-    return "dependency-cache";
+    return dependencyCacheOmission;
   }
   return undefined;
 };
@@ -90,8 +97,8 @@ export const applicationSourceManifestSchema = z
         path: sourcePath,
         reason: z.enum([
           "credential",
-          "runtime-state",
-          "dependency-cache",
+          runtimeStateOmission,
+          dependencyCacheOmission,
           "symlink",
           "unsupported",
         ]),

@@ -342,6 +342,15 @@ const unchangedPollFixture = async () => {
   return { ...f, events, metadata, observation, observe, saved };
 };
 
+const retainedFixtureEvents = async function* retainedFixtureEvents() {
+  yield {
+    index: 0,
+    text: "retained",
+    turnId: "turn_1",
+    type: "assistant_message" as const,
+  };
+};
+
 describe("unchanged paged observation reuse", () => {
   it.each(["terminal", "live"] as const)(
     "preserves only canonical terminal failure when the same owner has an unchanged working checkpoint (resumability=%s)",
@@ -409,13 +418,13 @@ describe("unchanged paged observation reuse", () => {
     });
     vi.mocked(f.adapter.start).mockClear();
     const result = await f.service.get({ cursor: 3, limit: 10, sessionId: f.sessionId });
-    expect(result).toMatchObject({ status: "input_required", cursor: 4, inputRequests: [request] });
+    expect(result).toMatchObject({ cursor: 4, inputRequests: [request], status: "input_required" });
     expect(result.events.map((event) => event.index)).toEqual([3]);
     const stored = await f.getSession(principal, f.sessionId);
     expect(stored).toMatchObject({
-      status: "input_required",
-      resumability: "live",
       adapterSessionId: "adapter_1",
+      resumability: "live",
+      status: "input_required",
     });
     expect(f.adapter.start).not.toHaveBeenCalled();
     expect(f.adapter.send).not.toHaveBeenCalled();
@@ -629,7 +638,7 @@ describe("unchanged paged observation reuse", () => {
           winner = durableHostedSessionRecordSchema.parse({
             ...f.saved,
             ...(change === "cancellation"
-              ? { cancellationRevision: 1, status: "cancelled", stage: "needs_attention" }
+              ? { cancellationRevision: 1, stage: "needs_attention", status: "cancelled" }
               : { adapterGeneration: 2, adapterSessionId: "adapter_replacement" }),
           });
           f.getSession.mockImplementation(
@@ -871,10 +880,10 @@ describe("paged hosted session observation", () => {
   );
 
   it.each([
-    { unchanged: false, failure: "none" },
-    { unchanged: true, failure: "none" },
-    { unchanged: true, failure: "post" },
-    { unchanged: true, failure: "accepted-readback" },
+    { failure: "none", unchanged: false },
+    { failure: "none", unchanged: true },
+    { failure: "post", unchanged: true },
+    { failure: "accepted-readback", unchanged: true },
   ])("passes the owner-checked native response preflight (%j)", async ({ unchanged, failure }) => {
     const question = {
       allowFreeform: true,
@@ -1510,7 +1519,7 @@ describe("paged hosted session observation", () => {
         };
       };
       const f = await fixture(observe);
-      await f.service.get({ sessionId: f.sessionId, cursor: 0, limit: 1 });
+      await f.service.get({ cursor: 0, limit: 1, sessionId: f.sessionId });
       const sendAccepted = vi.fn<NonNullable<HostedEveTransport["sendAccepted"]>>(async (input) => {
         accepted = true;
         await input.onAccepted?.("fixture-delivery");
@@ -1528,15 +1537,15 @@ describe("paged hosted session observation", () => {
         kind === "send"
           ? f.service.send({
               clientRequestId: requestId,
-              sessionId: f.sessionId,
               message: "Continue",
+              sessionId: f.sessionId,
             })
           : f.service.respond({
               clientRequestId: requestId,
-              sessionId: f.sessionId,
               responses: [
                 { requestId: question.requestId, response: { kind: "answer", value: "Preview" } },
               ],
+              sessionId: f.sessionId,
             });
       const result = await submit();
       expect(result.events.map((event) => event.index)).toEqual(
@@ -1546,14 +1555,14 @@ describe("paged hosted session observation", () => {
       expect(await submit()).toEqual(result);
       expect(kind === "send" ? sendAccepted : respondAccepted).toHaveBeenCalledOnce();
       const remainder = await f.service.get({
-        sessionId: f.sessionId,
         cursor: result.cursor,
         limit: 100,
+        sessionId: f.sessionId,
       });
       expect(remainder.events.map((event) => event.index)).toEqual(
         Array.from({ length: Math.max(0, delta - 100) }, (_, index) => baseline + 100 + index),
       );
-      const history = await f.service.get({ sessionId: f.sessionId, cursor: 0, limit: 1 });
+      const history = await f.service.get({ cursor: 0, limit: 1, sessionId: f.sessionId });
       expect(history.events[0]).toMatchObject({ index: 0, text: "history 0" });
     },
   );
@@ -1966,14 +1975,7 @@ describe("send preflight dispatch classification", () => {
         throw new Error("Expected the owned durable session.");
       }
       const saved = await f.observeSessionPaged({
-        events: (async function* retainedEvents() {
-          yield {
-            index: 0,
-            text: "retained",
-            turnId: "turn_1",
-            type: "assistant_message" as const,
-          };
-        })(),
+        events: retainedFixtureEvents(),
         expectedCheckpointDigest: initial.checkpointDigest,
         metadata: {
           capturedAtEpochMs: 1000,
@@ -2028,12 +2030,12 @@ describe("send preflight dispatch classification", () => {
         const result = await service.send(request);
         expect(result).toMatchObject({ cursor: 1, events: [], status: "waiting" });
         expect(await f.base.getPrivateOperation(principal, operationId)).toMatchObject({
-          state: "succeeded",
           sendDelivery: {
-            deliveryId: "fixture-delivery",
-            adapterSessionId: "adapter_1",
             adapterGeneration: initial.adapterGeneration,
+            adapterSessionId: "adapter_1",
+            deliveryId: "fixture-delivery",
           },
+          state: "succeeded",
         });
         expect(await service.send(request)).toEqual(result);
       } else {

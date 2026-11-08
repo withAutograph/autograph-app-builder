@@ -28,11 +28,11 @@ const identity: ManagedRuntimeIdentity = {
   intentId: "10000000-0000-4000-8000-000000000001",
   approvalRef: "approved-suite",
   owner: {
-    issuer: "https://builder.example/api/auth",
     audience: "https://builder.example/mcp",
-    workspaceId: "workspace",
+    issuer: "https://builder.example/api/auth",
     ownerUserId: "owner",
     sessionId: "saved-session",
+    workspaceId: "workspace",
   },
   appId: "orchard",
   runtimeAttemptId: "20000000-0000-4000-8000-000000000002",
@@ -183,25 +183,25 @@ const processFixture = async () => {
           const raw: unknown = JSON.parse(await readFile(observation, "utf-8"));
           expect(z.object({ pid: z.number() }).parse(raw).pid).toBe(pid);
         },
-        { timeout: 2000, interval: 10 },
+        { interval: 10, timeout: 2000 },
       );
       return true;
     },
   });
   return {
-    supervisor,
-    owner,
+    close: async () => {
+      await supervisor.close();
+      await rm(directory, { force: true, recursive: true });
+    },
     environment,
-    observation,
-    script,
-    source,
     loseOwnership: () => {
       authorized = false;
     },
-    close: async () => {
-      await supervisor.close();
-      await rm(directory, { recursive: true, force: true });
-    },
+    observation,
+    owner,
+    script,
+    source,
+    supervisor,
   };
 };
 
@@ -210,37 +210,37 @@ test("owned process replacement retains launch environment and idempotent comman
   try {
     const commandId = randomUUID();
     const [first, retry] = await Promise.all([
-      f.supervisor.execute({ operation: "start-same-environment", commandId }),
-      f.supervisor.execute({ operation: "start-same-environment", commandId }),
+      f.supervisor.execute({ commandId, operation: "start-same-environment" }),
+      f.supervisor.execute({ commandId, operation: "start-same-environment" }),
     ]);
     expect(first).toEqual(retry);
     expect(first.process?.generation).toBe(1);
-    await f.supervisor.execute({ operation: "observe-readiness", commandId: randomUUID() });
+    await f.supervisor.execute({ commandId: randomUUID(), operation: "observe-readiness" });
     const stopped = await f.supervisor.execute({
-      operation: "stop-and-wait",
       commandId: randomUUID(),
+      operation: "stop-and-wait",
     });
     expect(stopped.process?.exit?.observedAt).toBeDefined();
     expect(stopped.state).toBe("stopped");
     f.environment.APP_FIXTURE_VALUE = "caller-mutated-after-capture";
     await writeFile(f.script, f.source("two"));
     const next = await f.supervisor.execute({
-      operation: "start-same-environment",
       commandId: randomUUID(),
+      operation: "start-same-environment",
     });
     expect(next.process?.generation).toBe(2);
     const ready = await f.supervisor.execute({
-      operation: "observe-readiness",
       commandId: randomUUID(),
+      operation: "observe-readiness",
     });
     expect(ready.state).toBe("ready");
     const raw: unknown = JSON.parse(await readFile(f.observation, "utf-8"));
     expect(raw).toMatchObject({
-      value: "same-approved-environment",
-      revision: "two",
       pid: ready.process?.pid,
+      revision: "two",
+      value: "same-approved-environment",
     });
-    await expect(f.supervisor.execute({ operation: "stop-and-wait", commandId })).rejects.toThrow();
+    await expect(f.supervisor.execute({ commandId, operation: "stop-and-wait" })).rejects.toThrow();
     const current = await f.supervisor.execute({ operation: "status" });
     expect(current.process?.generation).toBe(2);
     expect(current.state).toBe("ready");
@@ -289,35 +289,35 @@ test("owned wrapper replacement waits for its TERM-resistant server descendant a
           const response = await exchange({ port });
           expect(JSON.parse(response.body.toString())).toMatchObject({ generation });
         },
-        { timeout: 2000, interval: 25 },
+        { interval: 25, timeout: 2000 },
       );
       return true;
     },
   });
   try {
-    await supervisor.execute({ operation: "start-same-environment", commandId: randomUUID() });
-    await supervisor.execute({ operation: "observe-readiness", commandId: randomUUID() });
+    await supervisor.execute({ commandId: randomUUID(), operation: "start-same-environment" });
+    await supervisor.execute({ commandId: randomUUID(), operation: "observe-readiness" });
     const before = z
       .object({ generation: z.number(), pid: z.number() })
       .parse(JSON.parse(await readFile(observation, "utf-8")));
     const stopped = await supervisor.execute({
-      operation: "stop-and-wait",
       commandId: randomUUID(),
+      operation: "stop-and-wait",
     });
     expect(stopped.state).toBe("stopped");
     expect(() => process.kill(before.pid, 0)).toThrow();
     await expect(exchange({ port })).rejects.toThrow();
-    await supervisor.execute({ operation: "start-same-environment", commandId: randomUUID() });
+    await supervisor.execute({ commandId: randomUUID(), operation: "start-same-environment" });
     const ready = await supervisor.execute({
-      operation: "observe-readiness",
       commandId: randomUUID(),
+      operation: "observe-readiness",
     });
     expect(ready.state).toBe("ready");
     const response = await exchange({ port });
     expect(JSON.parse(response.body.toString())).toMatchObject({ generation: 2 });
   } finally {
     await supervisor.close();
-    await rm(directory, { recursive: true, force: true });
+    await rm(directory, { force: true, recursive: true });
   }
 });
 
@@ -325,8 +325,8 @@ test("private IPC requires its own capability, rejects arbitrary lifecycle input
   const f = await processFixture();
   const capabilities = createPrivateManagedRuntimeCapabilities();
   const ipc = await startManagedRuntimeIpc({
-    supervisor: f.supervisor,
     lifecycleSha256: capabilities.lifecycleSha256,
+    supervisor: f.supervisor,
   });
   try {
     const socketInfo = await stat(ipc.socketPath);
@@ -334,31 +334,31 @@ test("private IPC requires its own capability, rejects arbitrary lifecycle input
     const mode = socketInfo.mode & 0o777;
     expect(mode).toBe(0o600);
     const invalid = createManagedRuntimeIpcClient({
-      socketPath: ipc.socketPath,
       lifecycleCapability: capabilities.private.suiteSelector,
+      socketPath: ipc.socketPath,
     });
     await expect(
-      invalid.execute({ operation: "start-same-environment", commandId: randomUUID() }),
+      invalid.execute({ commandId: randomUUID(), operation: "start-same-environment" }),
     ).rejects.toThrow();
     const client = createManagedRuntimeIpcClient({
-      socketPath: ipc.socketPath,
       lifecycleCapability: capabilities.private.lifecycle,
+      socketPath: ipc.socketPath,
     });
     const commandId = randomUUID();
-    const first = await client.execute({ operation: "start-same-environment", commandId });
-    expect(await client.execute({ operation: "start-same-environment", commandId })).toEqual(first);
+    const first = await client.execute({ commandId, operation: "start-same-environment" });
+    expect(await client.execute({ commandId, operation: "start-same-environment" })).toEqual(first);
     expect(
       managedLifecycleCommandSchema.safeParse({
-        operation: "stop-and-wait",
         commandId: randomUUID(),
+        operation: "stop-and-wait",
         pid: 1,
       }).success,
     ).toBe(false);
     expect(
       managedLifecycleCommandSchema.safeParse({
-        operation: "start-same-environment",
         commandId: randomUUID(),
         env: { ARBITRARY: "value" },
+        operation: "start-same-environment",
       }).success,
     ).toBe(false);
     f.owner.abort();
@@ -372,14 +372,14 @@ test("private IPC requires its own capability, rejects arbitrary lifecycle input
 test("lost ownership refuses further lifecycle effects and a closed supervisor cannot relaunch", async () => {
   const f = await processFixture();
   try {
-    await f.supervisor.execute({ operation: "start-same-environment", commandId: randomUUID() });
+    await f.supervisor.execute({ commandId: randomUUID(), operation: "start-same-environment" });
     f.loseOwnership();
     await expect(
-      f.supervisor.execute({ operation: "start-same-environment", commandId: randomUUID() }),
+      f.supervisor.execute({ commandId: randomUUID(), operation: "start-same-environment" }),
     ).rejects.toThrow();
     await f.supervisor.close();
     await expect(
-      f.supervisor.execute({ operation: "start-same-environment", commandId: randomUUID() }),
+      f.supervisor.execute({ commandId: randomUUID(), operation: "start-same-environment" }),
     ).rejects.toThrow();
   } finally {
     await f.close();
@@ -475,18 +475,18 @@ const bridgeFixture = async () => {
   });
   const port = await listen(bridge.server);
   return {
-    bridge,
     app,
-    port,
+    bridge,
     capabilities,
-    current,
-    owner,
-    received,
-    verifyRequest,
     close: async () => {
       await bridge.close();
       await closeServer(app);
     },
+    current,
+    owner,
+    port,
+    received,
+    verifyRequest,
   };
 };
 
@@ -554,13 +554,13 @@ test("bridge rejects wrong capability, verifier denial, foreign runtime scope an
       ),
     ).toBe(403);
     f.current.fence = 2;
-    expect(await statusOf(exchange({ port: f.port, headers }))).toBe(403);
+    expect(await statusOf(exchange({ headers, port: f.port }))).toBe(403);
     f.current.fence = 1;
     f.current.state = "revoked";
-    expect(await statusOf(exchange({ port: f.port, headers }))).toBe(403);
+    expect(await statusOf(exchange({ headers, port: f.port }))).toBe(403);
     f.current.state = "ready";
     f.current.leaseExpiresAt = new Date(0).toISOString();
-    expect(await statusOf(exchange({ port: f.port, headers }))).toBe(403);
+    expect(await statusOf(exchange({ headers, port: f.port }))).toBe(403);
     expect(f.received).toEqual([]);
   } finally {
     await f.close();

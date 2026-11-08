@@ -21,7 +21,7 @@ import { requestPrivateApplyApproval } from "./private-apply-authority";
 import hook from "../../agent/hooks/continue-preapproval-authoring";
 import acceptAppSpec from "../../agent/tools/accept_app_spec";
 
-const mocks = vi.hoisted(() => ({ prepare: vi.fn(), record: vi.fn(), projection: vi.fn() }));
+const mocks = vi.hoisted(() => ({ prepare: vi.fn(), projection: vi.fn(), record: vi.fn() }));
 vi.mock("eve/hooks", () => ({ defineHook: <T>(value: T) => value }));
 vi.mock("eve/tools", () => ({ defineTool: <T>(value: T) => value }));
 vi.mock("./prepare-app-creation", () => ({ prepareAppCreation: mocks.prepare }));
@@ -82,10 +82,10 @@ const seed = async () => {
   appBuilderWorkflowState.update(() => state);
   mocks.prepare.mockResolvedValue(null);
   await acceptAppSpec.execute({ appId: "inventory" }, {
-    session: ctx.session,
     callId: "actual-accept",
     getSandbox: vi.fn(),
     getSkill: vi.fn(),
+    session: ctx.session,
   } as unknown as Parameters<typeof acceptAppSpec.execute>[1]);
   expect(appBuilderWorkflowState.get().phase).toBe("app_spec_accepted");
 };
@@ -115,8 +115,8 @@ describe("native preapproval drafting lifecycle", () => {
       expect(diagnosticAuthoringDecisionState.get()).toMatchObject({
         decision: "runnable",
         scope: {
-          authoritySessionId: "original-logical",
           acceptedByCallId: "actual-accept",
+          authoritySessionId: "original-logical",
           workspaceId: "same-sandbox",
         },
       });

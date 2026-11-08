@@ -32,6 +32,9 @@ import { assertExactToolDiscovery, parseReviewedProof } from "../lib/release/pro
 import { verifyPortableProofArtifact } from "./portable-proof-artifact";
 import { releaseEndpoint, TOOL_NAMES } from "./portable-release";
 
+const VERCEL_PROJECT_BINDING_PATH = ".vercel/project.json";
+const VERCEL_OUTPUT_PATH = ".vercel/output";
+
 const execFileAsync = promisify(execFile);
 const repositoryRoot = await realpath(path.resolve("."));
 
@@ -45,9 +48,11 @@ function parseArguments(args: readonly string[]) {
       name === undefined ||
       value === undefined ||
       !name.startsWith("--") ||
-      value.startsWith("--") ||
-      values.has(name)
+      value.startsWith("--")
     ) {
+      throw new Error("Release proof arguments must be unique --name value pairs.");
+    }
+    if (values.has(name)) {
       throw new Error("Release proof arguments must be unique --name value pairs.");
     }
     values.set(name, value);
@@ -99,10 +104,10 @@ async function run(
     env: options.environment ?? process.env,
     maxBuffer: 32 * 1024 * 1024,
   });
-  if (!options.capture && result.stdout.trim() !== "") {
+  if (options.capture !== true && result.stdout.trim() !== "") {
     process.stdout.write(result.stdout);
   }
-  if (!options.capture && result.stderr.trim() !== "") {
+  if (options.capture !== true && result.stderr.trim() !== "") {
     process.stderr.write(result.stderr);
   }
   return result.stdout;
@@ -131,7 +136,7 @@ if (arrusted.commit !== ARRUSTED_IMAGE_TARGET_SHA || arrusted.tree !== ARRUSTED_
   throw new Error("Arrusted release source does not match the source-bound image target.");
 }
 const projectBinding = await ownerBoundFile(
-  path.join(repositoryRoot, ".vercel/project.json"),
+  path.join(repositoryRoot, VERCEL_PROJECT_BINDING_PATH),
   "Vercel release project binding",
 );
 const outputParent = await realpath(path.dirname(args.output));
@@ -266,7 +271,7 @@ try {
     mode: 0o700,
     recursive: true,
   });
-  await writeFile(path.join(temporaryBuilder, ".vercel/project.json"), projectBinding, {
+  await writeFile(path.join(temporaryBuilder, VERCEL_PROJECT_BINDING_PATH), projectBinding, {
     mode: 0o600,
   });
   await run(vercel, ["build", "--prod", "--yes"], {
@@ -278,15 +283,15 @@ try {
     recursive: true,
   });
   await cp(
-    path.join(temporaryBuilder, ".vercel/output"),
-    path.join(deploymentRoot, ".vercel/output"),
+    path.join(temporaryBuilder, VERCEL_OUTPUT_PATH),
+    path.join(deploymentRoot, VERCEL_OUTPUT_PATH),
     {
       recursive: true,
     },
   );
   await copyFile(
-    path.join(temporaryBuilder, ".vercel/project.json"),
-    path.join(deploymentRoot, ".vercel/project.json"),
+    path.join(temporaryBuilder, VERCEL_PROJECT_BINDING_PATH),
+    path.join(deploymentRoot, VERCEL_PROJECT_BINDING_PATH),
   );
 
   const packageReceiptBytes = await readFile(path.join(packageRoot, "release-receipt.json"));
@@ -334,7 +339,7 @@ try {
       tree: builder.tree,
     },
     deployment: {
-      outputTreeSha256: await immutableTreeDigest(path.join(deploymentRoot, ".vercel/output")),
+      outputTreeSha256: await immutableTreeDigest(path.join(deploymentRoot, VERCEL_OUTPUT_PATH)),
       projectBindingSha256: sha256(projectBinding),
       root: "deployment",
     },

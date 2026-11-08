@@ -1,12 +1,10 @@
 /* oxlint-disable eslint/complexity, sonarjs/expression-complexity, unicorn/no-useless-undefined -- CAS transitions validate every retained authority/effect binding; absent rows intentionally return undefined. */
 import { isDeepStrictEqual } from "node:util";
 import { and, eq, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { builderProvisioningJournals } from "../db/schema";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Drizzle uses the complete existing schema as its database type.
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import { builderAppIdSchema } from "./names";
 import {
   nativeTargetAcceptedCreationSchema,
@@ -146,25 +144,26 @@ const assertUndispatchedReplan = (
   }
 };
 
+const target = (plan: NativeTargetOnboardingPlan) => ({
+  appId: plan.appId,
+  project: plan.project,
+  branch: plan.branch,
+  productRoles: plan.productRoles,
+  release: plan.origin.release,
+  appSpecDigest: plan.origin.appSpecDigest,
+  publicSessionId: plan.origin.publicSessionId,
+  database: plan.appDatabase.database,
+  migratorRole: plan.appDatabase.migratorRole,
+  runtimeRole: plan.appDatabase.runtimeRole,
+  cost: plan.cost,
+  retention: plan.retention,
+  conflictPolicy: plan.conflictPolicy,
+});
+
 const assertPlannedScopeSupersession = (
   before: Extract<NativeTargetOnboardingRecord, { stage: "planned" }>,
   after: Extract<NativeTargetOnboardingRecord, { stage: "planned" }>,
 ) => {
-  const target = (plan: NativeTargetOnboardingPlan) => ({
-    appId: plan.appId,
-    project: plan.project,
-    branch: plan.branch,
-    productRoles: plan.productRoles,
-    release: plan.origin.release,
-    appSpecDigest: plan.origin.appSpecDigest,
-    publicSessionId: plan.origin.publicSessionId,
-    database: plan.appDatabase.database,
-    migratorRole: plan.appDatabase.migratorRole,
-    runtimeRole: plan.appDatabase.runtimeRole,
-    cost: plan.cost,
-    retention: plan.retention,
-    conflictPolicy: plan.conflictPolicy,
-  });
   const prior = after.priorPlannedScopes?.at(-1);
   if (
     before.previousAttempts.length !== 0 ||
@@ -262,12 +261,12 @@ const assertTransition = (
     NativeTargetOnboardingRecord["stage"],
     readonly NativeTargetOnboardingRecord["stage"][]
   > = {
-    planned: ["approved", "cancelled"],
     approved: ["creating", "cancelled"],
-    creating: ["creating", "unknown", "ready", "approved", "cancelled"],
-    unknown: ["unknown", "ready", "approved", "cancelled"],
-    ready: [],
     cancelled: [],
+    creating: ["creating", "unknown", "ready", "approved", "cancelled"],
+    planned: ["approved", "cancelled"],
+    ready: [],
+    unknown: ["unknown", "ready", "approved", "cancelled"],
   };
   if (!allowed[before.stage].includes(after.stage)) {
     throw conflict();
@@ -351,7 +350,6 @@ export const createInMemoryNativeTargetOnboardingStore = (): NativeTargetOnboard
   };
 };
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 const predicate = (key: NativeTargetOnboardingKey) =>
   and(
     eq(builderProvisioningJournals.issuer, key.authority.issuer),
@@ -375,7 +373,7 @@ const parseRow = (
     nativeTargetOnboardingRecordSchema.parse(raw.record),
   );
   if (
-    raw.requestId !== identity({ authority, appId: record.appId }) ||
+    raw.requestId !== identity({ appId: record.appId, authority }) ||
     raw.requestDigest !== record.planDigest ||
     raw.state !== nativeTargetOnboardingTableState(record)
   ) {
@@ -518,7 +516,7 @@ export const createNativeTargetOnboardingRegistry = <Invocation>(
   const current = async (invocation: Invocation, appId: string) => {
     const owner = await ports.authorize(invocation, builderAppIdSchema.parse(appId));
     const authority = hostedTenantAuthoritySchema.parse(owner.authority);
-    return { owner: { ...owner, authority }, key: { authority, appId } };
+    return { key: { appId, authority }, owner: { ...owner, authority } };
   };
   const load = async (invocation: Invocation, appId: string) => {
     const result = await current(invocation, appId);

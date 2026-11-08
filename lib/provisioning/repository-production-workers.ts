@@ -34,6 +34,8 @@ import type {
   ResourceBootstrapContextWire,
 } from "./hosted-operator-sandbox-launcher";
 
+const AUTH_MEMBERSHIP_EFFECT = "auth-membership";
+
 const sha256 = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
 const sealedSchema = z.strictObject({
   encryptedToken: z.string(),
@@ -131,15 +133,34 @@ export interface RepositoryProductionWorkerDependencies {
 }
 const associatedData = (row: RepositoryProductionRow) =>
   `repository-production-credentials-v1:${repositoryProductionOperationRef(row.record.scope)}:${repositoryProductionDigest(row.record.scope)}`;
+const assertCurrent = (context: RepositoryProductionEffectContext) =>
+  observeRepositoryProductionPhase("worker_authority", "authorization_unavailable", () =>
+    context.assertCurrent(),
+  );
+
+const observe = (
+  value: Awaited<ReturnType<typeof runRepositoryProductionFileSpool>>,
+): RepositoryProductionObservation => {
+  if (value?.status === "applied") {
+    return { receipt: z.json().parse(value), state: "applied" };
+  }
+  if (value?.status === "absent" || value?.status === "retryable") {
+    return { state: "not-applied" };
+  }
+  return { state: "unknown" };
+};
 export const createRepositoryProductionWorkers = (deps: RepositoryProductionWorkerDependencies) => {
   const privateCredentials = (row: RepositoryProductionRow) => {
     try {
+      const sealed = sealedSchema.parse(row.record.privateState);
+      const config = deps.keyring;
+      const credentialAssociatedData = associatedData(row);
       return credentialsSchema.parse(
         JSON.parse(
           decryptVersionedVercelToken({
-            ...sealedSchema.parse(row.record.privateState),
-            config: deps.keyring,
-            associatedData: associatedData(row),
+            ...sealed,
+            associatedData: credentialAssociatedData,
+            config,
           }),
         ),
       );
@@ -150,7 +171,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
     }
   };
   const appConnections = (row: RepositoryProductionRow) => {
-    const resource = row.record.resource;
+    const { resource } = row.record;
     if (!resource) {
       throw new Error("repository_production_storage_unavailable");
     }
@@ -167,10 +188,6 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       appRuntime: url(resource.runtimeRole, credentials.runtimePassword),
     };
   };
-  const assertCurrent = (context: RepositoryProductionEffectContext) =>
-    observeRepositoryProductionPhase("worker_authority", "authorization_unavailable", () =>
-      context.assertCurrent(),
-    );
   const creator = async (context: RepositoryProductionEffectContext) => {
     await assertCurrent(context);
     const proof = await deps.readCreator(context.row);
@@ -243,7 +260,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
             identityCapture: proof.identityCapture,
             identityVerification: proof.identityVerification,
           };
-    const plan = {
+    const planStart = {
       version: 1,
       kind: "repository-production-setup-v1",
       action: managedAccess?.active === false ? "cleanup" : "prepare",
@@ -268,8 +285,14 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       },
       appInstallation: { customerIds: [scope.organizationId] },
       access,
-      effects: [{ id: "auth-membership", kind: "auth-membership" }],
-      ...(membership === undefined ? {} : { authMembership: membership }),
+      effects: [{ id: AUTH_MEMBERSHIP_EFFECT, kind: AUTH_MEMBERSHIP_EFFECT }],
+    };
+    const planWithMembership: typeof planStart & { authMembership?: typeof membership } = planStart;
+    if (membership !== undefined) {
+      planWithMembership.authMembership = membership;
+    }
+    const plan = {
+      ...planWithMembership,
       deploymentBoundary: {
         teamId: deps.profile.operator.teamId,
         operator: deps.profile.operator,
@@ -337,7 +360,11 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
     if (operation === "membership" && proof !== undefined && !("kind" in proof)) {
       startupFiles["operator-plan.json"] = planBytes;
       startupFiles["membership-effect.json"] = Buffer.from(
-        JSON.stringify({ version: 1, effectId: "auth-membership", kind: "auth-membership" }),
+        JSON.stringify({
+          version: 1,
+          effectId: AUTH_MEMBERSHIP_EFFECT,
+          kind: AUTH_MEMBERSHIP_EFFECT,
+        }),
       );
       startupFiles["auth-database-resource.json"] = Buffer.from(
         JSON.stringify({
@@ -360,7 +387,14 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       );
     }
     await assertCurrent(context);
-    const workerInput: Parameters<typeof runRepositoryProductionFileSpool>[1] = {
+    const runWorker = deps.runWorker ?? runRepositoryProductionFileSpool;
+    const { sandbox } = deps.profile;
+    type WorkerInput = Parameters<typeof runRepositoryProductionFileSpool>[1];
+    const workerPrefix: Pick<
+      WorkerInput,
+      "operation" | "worker" | "context" | "startupFiles" | "directDatabaseUrl"
+    > &
+      Partial<Pick<WorkerInput, "resourceCredentialBytes" | "generatedRelease">> = {
       operation,
       worker,
       context: workerContext,
@@ -371,40 +405,29 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
           : operation === "membership"
             ? connections.authOperator
             : urls.appMigrator,
-      ...(operation === "storage" ? { resourceCredentialBytes } : {}),
-      ...(operation === "schema" || operation === "access"
-        ? { generatedRelease: await deps.readGeneratedRelease(row) }
-        : {}),
+    };
+    if (operation === "storage") {
+      workerPrefix.resourceCredentialBytes = resourceCredentialBytes;
+    }
+    if (operation === "schema" || operation === "access") {
+      workerPrefix.generatedRelease = await deps.readGeneratedRelease(row);
+    }
+    const workerInput: WorkerInput = {
+      ...workerPrefix,
       readOnly,
       runId: readOnly
         ? randomUUID()
         : (row.record.effects[context.effect].attemptId ?? randomUUID()),
       signal: deps.signal,
       assertCurrent: context.assertCurrent,
-      ...(readOnly
-        ? {}
-        : {
-            recordCheckpoint: async (frame) => {
-              await context.checkpoint(z.json().parse(frame));
-            },
-          }),
     };
+    if (!readOnly) {
+      workerInput.recordCheckpoint = async (frame) => {
+        await context.checkpoint(z.json().parse(frame));
+      };
+    }
     reportRepositoryProductionProgress("worker_input", "completed");
-    return await (deps.runWorker ?? runRepositoryProductionFileSpool)(
-      deps.profile.sandbox,
-      workerInput,
-    );
-  };
-  const observe = (
-    value: Awaited<ReturnType<typeof runRepositoryProductionFileSpool>>,
-  ): RepositoryProductionObservation => {
-    if (value?.status === "applied") {
-      return { state: "applied", receipt: z.json().parse(value) };
-    }
-    if (value?.status === "absent" || value?.status === "retryable") {
-      return { state: "not-applied" };
-    }
-    return { state: "unknown" };
+    return await runWorker(sandbox, workerInput);
   };
   const invokeAuthManagement = async (
     context: RepositoryProductionEffectContext,
@@ -465,6 +488,8 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       installer: { id: worker.id, sha256: worker.sha256 },
       tenant_targets: [scope.organizationId],
     };
+    const runWorker = deps.runWorker ?? runRepositoryProductionFileSpool;
+    const { sandbox } = deps.profile;
     const workerInput: Parameters<typeof runRepositoryProductionFileSpool>[1] = {
       operation: "auth-management",
       worker,
@@ -480,19 +505,14 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       },
       signal: deps.signal,
       assertCurrent: context.assertCurrent,
-      ...(readOnly
-        ? {}
-        : {
-            recordCheckpoint: async (frame) => {
-              await context.checkpoint(z.json().parse(frame));
-            },
-          }),
     };
+    if (!readOnly) {
+      workerInput.recordCheckpoint = async (frame) => {
+        await context.checkpoint(z.json().parse(frame));
+      };
+    }
     reportRepositoryProductionProgress("worker_input", "completed");
-    return await (deps.runWorker ?? runRepositoryProductionFileSpool)(
-      deps.profile.sandbox,
-      workerInput,
-    );
+    return await runWorker(sandbox, workerInput);
   };
   const managedAuth = async (
     context: RepositoryProductionEffectContext,
@@ -563,7 +583,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       row: RepositoryProductionRow,
     ): Promise<RepositoryProductionIdentity> => {
       const result = await deps.readCreator(row);
-      return "state" in result ? result : { state: "verified", actorId: result.actorId };
+      return "state" in result ? result : { actorId: result.actorId, state: "verified" };
     },
     async apply(context: RepositoryProductionEffectContext) {
       if (context.effect === "bind-runtime") {
@@ -620,8 +640,8 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
           }
           if (context.row.record.intent.storage.kind === "none") {
             return {
-              state: "applied",
               receipt: { actorId: proof.actorId, invitationId: proof.invitationId },
+              state: "applied",
             } as const;
           }
         } else {

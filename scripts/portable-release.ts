@@ -19,11 +19,10 @@ export const sha256 = (value: Uint8Array | string) =>
 export function hasCanonicalFetchRemote(remoteOutput: string, expectedRepository: string) {
   return remoteOutput.split("\n").some((line) => {
     const fields = line.trim().split(/\s+/u);
-    if (
-      (fields.length !== 3 && fields.length !== 4) ||
-      fields[2] !== "(fetch)" ||
-      (fields.length === 4 && fields[3] !== "[blob:none]")
-    ) {
+    if ((fields.length !== 3 && fields.length !== 4) || fields[2] !== "(fetch)") {
+      return false;
+    }
+    if (fields.length === 4 && fields[3] !== "[blob:none]") {
       return false;
     }
     const [, remoteUrl] = fields;
@@ -37,18 +36,20 @@ export function releaseEndpoint(value: string | undefined) {
     throw new Error("Usage: --endpoint https://agent.example.com");
   }
   const endpoint = new URL(value);
+  const invalidEndpoint = "Endpoint must be a credential-free, deployed, literal HTTPS origin.";
   if (
     endpoint.protocol !== "https:" ||
     endpoint.username ||
     endpoint.password ||
-    endpoint.pathname !== "/" ||
-    endpoint.search ||
-    endpoint.hash ||
-    endpoint.hostname.endsWith(".") ||
-    isReservedPublicReleaseHostname(endpoint.hostname) ||
-    value !== endpoint.origin
+    endpoint.pathname !== "/"
   ) {
-    throw new Error("Endpoint must be a credential-free, deployed, literal HTTPS origin.");
+    throw new Error(invalidEndpoint);
+  }
+  if (endpoint.search || endpoint.hash || endpoint.hostname.endsWith(".")) {
+    throw new Error(invalidEndpoint);
+  }
+  if (isReservedPublicReleaseHostname(endpoint.hostname) || value !== endpoint.origin) {
+    throw new Error(invalidEndpoint);
   }
   return endpoint.origin;
 }

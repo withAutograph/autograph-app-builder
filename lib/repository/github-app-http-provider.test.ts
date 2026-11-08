@@ -2,6 +2,7 @@ import { createHash, generateKeyPairSync } from "node:crypto";
 
 import { decodeJwt, decodeProtectedHeader } from "jose";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import {
   createGitHubAppPublicationAdapter,
@@ -23,18 +24,27 @@ import type { GitHubDraftPullRequestContent, FreshRepositoryProposal } from "./g
 import { createReviewedChangeSetReceipt } from "./reviewed-change-set";
 import type { NormalizedChangeSet } from "./reviewed-change-set";
 import { compareOverlayPaths } from "./target-apply";
-import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./github-draft-update";
+import type { ExistingDraftUpdateProposal } from "./github-draft-update";
 import type {
   ExistingDraftReconciliationProposal,
   ReconciliationContent,
 } from "./github-draft-reconciliation";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();
+const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" });
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 const sourceSha = "1".repeat(40);
 const sourceTree = "2".repeat(40);
+
+interface ExpectedTokenPermissions {
+  actions_variables: "read";
+  administration?: "write";
+  contents?: "read" | "write";
+  metadata?: "read";
+  pull_requests?: "write";
+  workflows?: "write";
+}
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function unicodeDraftMaterial(
@@ -68,6 +78,7 @@ function unicodeDraftMaterial(
         kind: includePreimages ? ("modified" as const) : ("added" as const),
         path,
       };
+      // SAFETY: The reconstructed entries retain path, kind, optional before, and both after fields from change.
       return preserveOverlayOrder
         ? change
         : (Object.fromEntries([
@@ -154,6 +165,7 @@ function unicodeDraftMaterial(
     review,
     title: "Add demo",
   });
+  // SAFETY: Each change is built above with before exactly when modified; this adds bytes to its reviewed after value.
   const content: GitHubDraftPullRequestContent = {
     approvedPaths: review.approvedPaths,
     changeSetDigest: review.changeSetDigest,
@@ -229,12 +241,12 @@ function providerFetch(input?: {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const implementation: typeof fetch = async (request, init = {}) => {
     const url = String(request);
-    let body;
+    let body: unknown;
     if (typeof init.body === "string") {
-      body = JSON.parse(init.body) as unknown;
+      body = JSON.parse(init.body);
     }
     calls.push({ body, init, url });
-    if (input?.fail) {
+    if (input?.fail ?? false) {
       return json({ message: "private-key-material" }, 500);
     }
     if (url.endsWith("/app/installations/456")) {
@@ -245,13 +257,16 @@ function providerFetch(input?: {
       });
     }
     if (url.endsWith("/app/installations/456/access_tokens")) {
-      const requested = (body as { permissions: Record<string, string> }).permissions;
+      const requested = z
+        .object({ permissions: z.record(z.string(), z.string()) })
+        .parse(body).permissions;
+      const permissions = { ...requested };
+      if (input?.extraPermission ?? false) {
+        permissions.issues = "write";
+      }
       return json(
         {
-          permissions: {
-            ...requested,
-            ...(input?.extraPermission ? { issues: "write" } : {}),
-          },
+          permissions,
           token: "ghs_operation_scoped_installation_token",
         },
         201,
@@ -307,7 +322,7 @@ function historicalProviderFetch(input?: {
   const implementation: typeof fetch = async (request, init = {}) => {
     const url = String(request);
     const method = init.method ?? "GET";
-    const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
+    const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
     calls.push({ body, method, url });
     if (url.endsWith("/app/installations/456/access_tokens")) {
       return json(
@@ -373,12 +388,13 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     // oxlint-disable-next-line eslint/require-await -- mocked HTTP transport
     const provider = createProvider(async (request, init = {}) => {
       const url = String(request);
-      const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
+      const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
       calls.push({ body, method: init.method ?? "GET", url });
       if (url.endsWith("/access_tokens")) {
         return json(
           {
-            permissions: (body as { permissions: Record<string, string> }).permissions,
+            permissions: z.object({ permissions: z.record(z.string(), z.string()) }).parse(body)
+              .permissions,
             token: "ghs_source_only_destination_token",
           },
           201,
@@ -701,16 +717,19 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         throw new Error("Expected JWT expiration and issued-at claims");
       }
       expect(claims.exp - claims.iat).toBe(600);
-      expect(tokenCall?.body).toEqual({
-        permissions: {
-          actions_variables: "read",
-          ...(administration === undefined ? {} : { administration }),
-          contents,
-          metadata: "read",
-          ...(pullRequests === undefined ? {} : { pull_requests: pullRequests }),
-          ...(workflows === "write" ? { workflows } : {}),
-        },
-      });
+      const permissions: ExpectedTokenPermissions = { actions_variables: "read" };
+      if (administration !== undefined) {
+        permissions.administration = administration;
+      }
+      permissions.contents = contents;
+      permissions.metadata = "read";
+      if (pullRequests !== undefined) {
+        permissions.pull_requests = pullRequests;
+      }
+      if (workflows === "write") {
+        permissions.workflows = workflows;
+      }
+      expect(tokenCall?.body).toEqual({ permissions });
       const publicRequestSurface = mock.calls.map(({ url, body }) => ({
         body,
         url,
@@ -775,10 +794,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     });
     const adapter = createGitHubAppPublicationAdapter(createProvider(mock.implementation));
 
-    await expect(adapter.inspectInstallation("resolve-existing-source")).resolves.toMatchObject({
-      repositorySelection: "all",
-      selectedRepositoryIds: expect.arrayContaining(["1", "500", "501"]),
-    });
+    const observed = await adapter.inspectInstallation("resolve-existing-source");
+    expect(observed).toMatchObject({ repositorySelection: "all" });
+    expect(observed.selectedRepositoryIds).toEqual(expect.arrayContaining(["1", "500", "501"]));
     expect(
       mock.calls.filter(({ url }) => url.includes("/installation/repositories?")),
     ).toHaveLength(6);
@@ -879,7 +897,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       const request: typeof fetch = async (input, init) => {
         const url = new URL(String(input));
         if (url.pathname === "/app/installations/456/access_tokens") {
-          const body = JSON.parse(String(init?.body)) as { permissions: unknown };
+          const body = z
+            .looseObject({ permissions: z.unknown() })
+            .parse(JSON.parse(String(init?.body)));
           tokenRequests.push(body);
           return json(
             {
@@ -894,14 +914,14 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         }
         if (url.pathname === "/repos/withAutograph/example-app/pulls/7") {
           return json({
-            number: 7,
-            node_id: "PR_node",
-            state: "open",
-            draft: false,
-            merged: false,
-            merge_commit_sha: null,
-            head: { sha: head, ref: "builder", repo: { id: 100 } },
             base: { ref: "main", repo: { id: 100 } },
+            draft: false,
+            head: { ref: "builder", repo: { id: 100 }, sha: head },
+            merge_commit_sha: null,
+            merged: false,
+            node_id: "PR_node",
+            number: 7,
+            state: "open",
           });
         }
         if (url.pathname === "/graphql") {
@@ -915,11 +935,11 @@ describe("GitHub App fixed-origin HTTP provider", () => {
           return json({
             data: {
               node: {
-                headRefOid: head,
+                baseChanges: { nodes: [] },
                 baseRefName: "main",
+                headRefOid: head,
                 isDraft: false,
                 timelineItems: { nodes: [] },
-                baseChanges: { nodes: [] },
               },
             },
           });
@@ -927,15 +947,15 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         throw new Error("unexpected request");
       };
       const result = createProvider(request).prDelivery.inspect({
-        repositoryId: "100",
-        owner: "withAutograph",
-        name: "example-app",
-        pullRequestNumber: 7,
-        headSha: head,
         baseBranch: "main",
+        headSha: head,
+        name: "example-app",
+        owner: "withAutograph",
+        pullRequestNumber: 7,
+        repositoryId: "100",
       });
       await (repositoryId === 100
-        ? expect(result).resolves.toMatchObject({ state: "open", checks: "pending" })
+        ? expect(result).resolves.toMatchObject({ checks: "pending", state: "open" })
         : expect(result).rejects.toThrow("repository-identity-changed"));
       expect(tokenRequests).toEqual([
         {
@@ -961,14 +981,14 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       }
       if (url.pathname === "/repos/withAutograph/example-app/pulls/7") {
         return json({
-          number: 7,
-          node_id: "PR_node",
-          state: "open",
-          draft: true,
-          merged: false,
-          merge_commit_sha: null,
-          head: { sha: head, ref: "builder", repo: { id: 100 } },
           base: { ref: "main", repo: { id: 100 } },
+          draft: true,
+          head: { ref: "builder", repo: { id: 100 }, sha: head },
+          merge_commit_sha: null,
+          merged: false,
+          node_id: "PR_node",
+          number: 7,
+          state: "open",
         });
       }
       if (url.pathname === "/graphql") {
@@ -977,12 +997,12 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       return await mock.implementation(input, init);
     };
     const result = createProvider(request).prDelivery.markReady({
-      repositoryId: "100",
-      owner: "withAutograph",
-      name: "example-app",
-      pullRequestNumber: 7,
-      headSha: head,
       baseBranch: "main",
+      headSha: head,
+      name: "example-app",
+      owner: "withAutograph",
+      pullRequestNumber: 7,
+      repositoryId: "100",
     });
     await expect(result).rejects.toThrow(
       status === 403 ? "github-delivery-provider-rejected" : "github-request-failed",
@@ -1054,9 +1074,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       const url = String(request);
       calls.push(url);
       if (url.endsWith("/app/installations/456/access_tokens")) {
-        const body = JSON.parse(String(init.body)) as {
-          permissions: Record<string, string>;
-        };
+        const body = z
+          .looseObject({ permissions: z.record(z.string(), z.string()) })
+          .parse(JSON.parse(String(init.body)));
         return json(
           {
             permissions: body.permissions,
@@ -1197,7 +1217,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const provider = createProvider(async (request, init = {}) => {
       const url = String(request);
       if (url.endsWith("/app/installations/456/access_tokens")) {
-        const body = JSON.parse(String(init.body)) as { permissions: Record<string, string> };
+        const body = z
+          .looseObject({ permissions: z.record(z.string(), z.string()) })
+          .parse(JSON.parse(String(init.body)));
         return json(
           { permissions: body.permissions, token: "ghs_operation_scoped_token_value" },
           201,
@@ -1256,7 +1278,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         const url = String(request);
         calls.push({ method: init.method ?? "GET", url });
         if (url.endsWith("/app/installations/456/access_tokens")) {
-          const body = JSON.parse(String(init.body)) as { permissions: Record<string, string> };
+          const body = z
+            .looseObject({ permissions: z.record(z.string(), z.string()) })
+            .parse(JSON.parse(String(init.body)));
           return json(
             { permissions: body.permissions, token: "ghs_operation_scoped_installation_token" },
             201,
@@ -1342,10 +1366,12 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const implementation: typeof fetch = async (request, init = {}) => {
       const url = String(request);
       const method = init.method ?? "GET";
-      const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
+      const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
       calls.push({ body, method, url });
       if (url.endsWith("/app/installations/456/access_tokens")) {
-        const tokenRequest = body as { permissions: Record<string, string> };
+        const tokenRequest = z
+          .object({ permissions: z.record(z.string(), z.string()) })
+          .parse(body);
         return json(
           {
             permissions: tokenRequest.permissions,
@@ -1390,11 +1416,13 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         return json({ sha: "f".repeat(40) }, 201);
       }
       if (url.endsWith("/git/trees") && method === "POST") {
-        createdTreeBody = body as { base_tree?: string };
+        createdTreeBody = z.looseObject({ base_tree: z.string().optional() }).parse(body);
         return json({ sha: "e".repeat(40) }, 201);
       }
       if (url.endsWith("/git/commits") && method === "POST") {
-        createdCommitBody = body as { parents: string[]; tree: string };
+        createdCommitBody = z
+          .looseObject({ parents: z.array(z.string()), tree: z.string() })
+          .parse(body);
         return json({ sha: "9".repeat(40) }, 201);
       }
       if (url.endsWith("/git/refs") && method === "POST") {
@@ -1437,7 +1465,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       calls.push(url);
       const method = init.method ?? "GET";
       if (url.endsWith("/app/installations/456/access_tokens")) {
-        const body = JSON.parse(String(init.body)) as { permissions: Record<string, string> };
+        const body = z
+          .looseObject({ permissions: z.record(z.string(), z.string()) })
+          .parse(JSON.parse(String(init.body)));
         return json(
           { permissions: body.permissions, token: "ghs_operation_scoped_installation_token" },
           201,
@@ -1522,7 +1552,9 @@ describe("existing draft publication origin", () => {
         return json({ id: overrides.appId ?? 123, slug: "autograph-app-builder" });
       }
       if (url.endsWith("/app/installations/456/access_tokens")) {
-        const tokenRequest = JSON.parse(String(init.body)) as { permissions: unknown };
+        const tokenRequest = z
+          .looseObject({ permissions: z.unknown() })
+          .parse(JSON.parse(String(init.body)));
         return json(
           {
             permissions: tokenRequest.permissions,
@@ -1576,12 +1608,12 @@ describe("existing draft publication origin", () => {
       }
       throw new Error(`Unexpected URL: ${url}`);
     };
-    return (await createProvider(implementation).inspectExistingDraft({
+    return await createProvider(implementation).inspectExistingDraft({
       name: "example-app",
       number: 1500,
       owner: "withAutograph",
       repositoryId: "100",
-    })) as ExistingDraftObservation;
+    });
   };
 
   it.each([
@@ -1683,7 +1715,7 @@ describe("existing draft update provider", () => {
     const implementation: typeof fetch = async (request, init = {}) => {
       const url = String(request);
       const method = init.method ?? "GET";
-      const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
+      const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
       calls.push({ body, url });
       if (url.endsWith("/app")) {
         return json({ id: 123, slug: "autograph-app-builder" });
@@ -1691,7 +1723,7 @@ describe("existing draft update provider", () => {
       if (url.endsWith("/app/installations/456/access_tokens")) {
         return json(
           {
-            permissions: (body as { permissions: unknown }).permissions,
+            permissions: z.object({ permissions: z.unknown() }).parse(body).permissions,
             token: "ghs_operation_scoped_installation_token",
           },
           201,
@@ -1774,10 +1806,9 @@ describe("existing draft update provider", () => {
       requestId: "REQUEST_1",
       status: "accepted",
     });
-    const graphql = calls.find(({ url }) => url.endsWith("/graphql"))?.body as {
-      query: string;
-      variables: Record<string, string>;
-    };
+    const graphql = z
+      .object({ query: z.string(), variables: z.record(z.string(), z.string()) })
+      .parse(calls.find(({ url }) => url.endsWith("/graphql"))?.body);
     expect(graphql.query).toContain("updateRefs");
     expect(graphql.variables).toEqual({
       afterOid: newCommit,
@@ -1786,12 +1817,12 @@ describe("existing draft update provider", () => {
       repositoryId: "REPO_NODE",
     });
     observedHead = newCommit;
-    const observed = (await provider.inspectExistingDraft({
+    const observed = await provider.inspectExistingDraft({
       name: proposal.name,
       number: proposal.pullRequestNumber,
       owner: proposal.owner,
       repositoryId: proposal.repositoryId,
-    })) as ExistingDraftObservation;
+    });
     expect(observed.verifiedBuilderOrigin).toEqual({
       appId: "123",
       authorId: "900",
@@ -1863,13 +1894,13 @@ describe("existing draft reconciliation provider", () => {
     const implementation: typeof fetch = async (request, init = {}) => {
       const url = String(request);
       const method = init.method ?? "GET";
-      const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
+      const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
       calls.push({ body, url });
       if (url.endsWith("/app")) return json({ id: 123, slug: "autograph-app-builder" });
       if (url.endsWith("/app/installations/456/access_tokens"))
         return json(
           {
-            permissions: (body as { permissions: unknown }).permissions,
+            permissions: z.object({ permissions: z.unknown() }).parse(body).permissions,
             token: "ghs_operation_scoped_installation_token",
           },
           201,
@@ -1889,9 +1920,9 @@ describe("existing draft reconciliation provider", () => {
           base: { ref: "main", repo: { id: 100 } },
           body: `<!-- App-Builder-Idempotency: ${"d".repeat(64)} -->`,
           draft: !merged,
-          merged,
           head: { ref: branchName, repo: { id: 100 }, sha: merged ? liveRef : observedHead },
           id: 150_000,
+          merged,
           number: 1500,
           state: merged ? "closed" : "open",
           user: { id: 900, login: "autograph-app-builder[bot]", type: "Bot" },
@@ -1943,15 +1974,11 @@ describe("existing draft reconciliation provider", () => {
       requestId: "REQUEST_1",
       status: "accepted",
     });
-    const mergeBody = calls.find(({ url }) => url.endsWith("/git/commits"))?.body as {
-      parents: string[];
-      tree: string;
-    };
+    const mergeBody = calls.find(({ url }) => url.endsWith("/git/commits"))?.body;
     expect(mergeBody).toMatchObject({ parents: [head, base], tree: resolvedTree });
-    const graphql = calls.find(({ url }) => url.endsWith("/graphql"))?.body as {
-      query: string;
-      variables: Record<string, string>;
-    };
+    const graphql = z
+      .object({ query: z.string(), variables: z.record(z.string(), z.string()) })
+      .parse(calls.find(({ url }) => url.endsWith("/graphql"))?.body);
     expect(graphql.query).toContain("force: false");
     expect(graphql.variables).toMatchObject({
       afterOid: mergeCommit,
@@ -1971,20 +1998,20 @@ describe("existing draft reconciliation provider", () => {
     await expect(provider.inspectExistingDraft(inspection)).rejects.toThrow(
       "pull-request-head-out-of-date",
     );
-    const observed = (await provider.inspectExistingDraft({
+    const observed = await provider.inspectExistingDraft({
       ...inspection,
       reconciliation: proposal,
-    })) as ExistingDraftObservation;
+    });
     expect(observed).toMatchObject({ headSha: mergeCommit, headTree: resolvedTree });
     await expect(provider.inspectAppliedDraftReconciliation(proposal, observed)).resolves.toBe(
       true,
     );
     merged = true;
-    const mergedPull = (await provider.inspectExistingDraft({
+    const mergedPull = await provider.inspectExistingDraft({
       ...inspection,
       reconciliation: proposal,
-    })) as ExistingDraftObservation;
-    expect(mergedPull).toMatchObject({ state: "closed", draft: false, headSha: mergeCommit });
+    });
+    expect(mergedPull).toMatchObject({ draft: false, headSha: mergeCommit, state: "closed" });
     await expect(provider.inspectAppliedDraftReconciliation(proposal, mergedPull)).resolves.toBe(
       true,
     );

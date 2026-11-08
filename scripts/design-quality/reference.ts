@@ -76,10 +76,11 @@ const exportTargets = (value: unknown): string[] => {
   if (typeof value === "string") {
     return [value];
   }
-  if (!value || typeof value !== "object") {
+  if (value === null || typeof value !== "object") {
     return [];
   }
-  return Object.values(value as Record<string, unknown>).flatMap(exportTargets);
+  const values: unknown[] = Object.values(value);
+  return values.flatMap(exportTargets);
 };
 
 const packageEntryPoints = (pkg: PackageJson): { suffix: string; target: string }[] => {
@@ -87,7 +88,8 @@ const packageEntryPoints = (pkg: PackageJson): { suffix: string; target: string 
     return [{ suffix: "", target: pkg.exports }];
   }
   if (pkg.exports && typeof pkg.exports === "object") {
-    const entries = Object.entries(pkg.exports as Record<string, unknown>)
+    const exported: [string, unknown][] = Object.entries(pkg.exports);
+    const entries = exported
       .filter(([key]) => key === "." || key.startsWith("./"))
       .flatMap(([key, value]) =>
         exportTargets(value).map((target) => ({
@@ -159,13 +161,11 @@ const literalValues = (type: ts.Type): string[] | undefined => {
   );
   const values = members
     .map((member) => {
-      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-      if (member.flags & ts.TypeFlags.StringLiteral) {
-        return (member as ts.StringLiteralType).value;
+      if (member.isStringLiteral()) {
+        return member.value;
       }
-      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-      if (member.flags & ts.TypeFlags.NumberLiteral) {
-        return String((member as ts.NumberLiteralType).value);
+      if (member.isNumberLiteral()) {
+        return String(member.value);
       }
       return null;
     })
@@ -204,7 +204,7 @@ const primitiveKinds = (type: ts.Type): PublicProp["primitiveKinds"] => {
       return undefined;
     }
   }
-  return [...kinds].toSorted() as PublicProp["primitiveKinds"];
+  return [...kinds].toSorted();
 };
 
 const propsForExport = (
@@ -215,7 +215,7 @@ const propsForExport = (
   const type = checker.getTypeOfSymbolAtLocation(symbol, location);
   const [signature] = checker.getSignaturesOfType(type, ts.SignatureKind.Call);
   const parameter = signature?.getParameters()[0];
-  if (!parameter) {
+  if (parameter === undefined) {
     return {};
   }
   const propsType = checker.getTypeOfSymbolAtLocation(parameter, location);
@@ -225,12 +225,18 @@ const propsForExport = (
     const propertyType = checker.getTypeOfSymbolAtLocation(property, declaration);
     const values = literalValues(propertyType);
     const primitive = values ? undefined : primitiveKinds(propertyType);
-    props[property.getName()] = {
+    const name = property.getName();
+    const prop: PublicProp = {
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       required: !(property.flags & ts.SymbolFlags.Optional),
-      ...(values ? { values } : {}),
-      ...(primitive ? { primitiveKinds: primitive } : {}),
     };
+    if (values !== undefined) {
+      prop.values = values;
+    }
+    if (primitive !== undefined) {
+      prop.primitiveKinds = primitive;
+    }
+    props[name] = prop;
   }
   return Object.keys(props).length ? { props } : {};
 };
@@ -295,7 +301,7 @@ export const readReference = async (arrustedRoot: string): Promise<Reference> =>
     }
   }
   for (const entry of entryPoints) {
-    if (modules[entry.module]) {
+    if (modules[entry.module] !== undefined) {
       continue;
     }
     const program = ts.createProgram([entry.path], {
@@ -460,14 +466,18 @@ const finiteLiteralEvidence = (
     const declaration = symbol?.valueDeclaration;
     const declarations = symbol?.declarations;
     const list = declaration?.parent;
+    if (!symbol || seen.has(symbol) || declarations?.length !== 1) {
+      return undefined;
+    }
     if (
-      !symbol ||
-      seen.has(symbol) ||
-      declarations?.length !== 1 ||
       !declaration ||
       !ts.isVariableDeclaration(declaration) ||
       !declaration.initializer ||
-      declaration.getSourceFile() !== expression.getSourceFile() ||
+      declaration.getSourceFile() !== expression.getSourceFile()
+    ) {
+      return undefined;
+    }
+    if (
       !list ||
       !ts.isVariableDeclarationList(list) ||
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -492,7 +502,7 @@ const finiteLiteralEvidence = (
     const actual = checker.getTypeAtLocation(expression);
     return expected.types.some(
       (member) =>
-        finiteLiteralEvidence(expression, member, checker, depth + 1, seen) &&
+        finiteLiteralEvidence(expression, member, checker, depth + 1, seen) === true &&
         checker.isTypeAssignableTo(actual, member),
     )
       ? true
@@ -542,7 +552,7 @@ const finiteLiteralEvidence = (
       } else if (ts.isStringLiteral(property.name) || ts.isNumericLiteral(property.name)) {
         name = property.name.text;
       }
-      if (!name) {
+      if (name === undefined || name === "") {
         return undefined;
       }
       const symbol = checker.getPropertyOfType(expected, name);
@@ -563,10 +573,12 @@ const finiteLiteralEvidence = (
     }
     return true;
   }
-  if (
+  const isTextOrNumericLiteral =
     ts.isStringLiteral(expression) ||
     ts.isNoSubstitutionTemplateLiteral(expression) ||
-    ts.isNumericLiteral(expression) ||
+    ts.isNumericLiteral(expression);
+  if (
+    isTextOrNumericLiteral ||
     expression.kind === ts.SyntaxKind.TrueKeyword ||
     expression.kind === ts.SyntaxKind.FalseKeyword
   ) {
@@ -598,7 +610,7 @@ const jsxAttributeExpectedType = (
   const parameter = checker
     .getSignaturesOfType(component, ts.SignatureKind.Call)[0]
     ?.getParameters()[0];
-  if (!parameter) {
+  if (parameter === undefined) {
     return undefined;
   }
   const props = checker.getTypeOfSymbolAtLocation(parameter, opening);
@@ -622,6 +634,12 @@ const requiresFiniteIdentifierEvidence = (
   return members.some((member) => member.flags & ts.TypeFlags.Object);
 };
 
+interface JsxAttributeCheckResult {
+  attributes: TypedJsxAttribute[];
+  limitations: string[];
+  implementationDiagnostics: ImplementationDiagnostic[];
+}
+
 /**
  * Type-check generated JSX through a virtual, read-only host configured from
  * the selected Arrusted checkout. This proves assignability only, never render
@@ -633,11 +651,7 @@ export const checkJsxAttributes = ({
 }: {
   arrustedRoot: string;
   files: { path: string; content: string }[];
-}): {
-  attributes: TypedJsxAttribute[];
-  limitations: string[];
-  implementationDiagnostics: ImplementationDiagnostic[];
-} => {
+}): JsxAttributeCheckResult => {
   const limitations: string[] = [];
   const config = ts.readConfigFile(nodePath.join(arrustedRoot, "tsconfig.json"), ts.sys.readFile);
   if (config.error) {

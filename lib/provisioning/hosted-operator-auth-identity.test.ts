@@ -87,7 +87,7 @@ describe("private Realm identity bridge", () => {
         typ: "platform-realm-operator-link+jwt",
       })
       .sign(keys.privateKey);
-    const bound = { ...f, proof, pending: { ...f.pending, browserSession } };
+    const bound = { ...f, pending: { ...f.pending, browserSession }, proof };
     expect((await verifyRealmIdentityLinkProof(bound)).browserSession).toMatchObject(
       browserSession,
     );
@@ -316,7 +316,7 @@ it("uses the immutable consumed receipt for an expired transport proof while fre
       transportOrigin,
     }),
   ).resolves.toMatchObject({
-    claims: { sub: f.claims.sub, sessionId: f.claims.sessionId, iss: f.pending.issuer },
+    claims: { iss: f.pending.issuer, sessionId: f.claims.sessionId, sub: f.claims.sub },
     identity: { actorId: f.claims.sub },
   });
   expect(pending.endpointOrigin).toBe(f.pending.endpointOrigin);
@@ -347,7 +347,7 @@ it("uses the immutable consumed receipt for an expired transport proof while fre
 it("verifies an expired historical owner capture without requiring a live old session", async () => {
   const f = await fixture();
   const issued = Math.floor(Date.now() / 1000) - 600;
-  const proof = await new SignJWT({ ...f.claims, iat: issued, exp: issued + 240 })
+  const proof = await new SignJWT({ ...f.claims, exp: issued + 240, iat: issued })
     .setProtectedHeader({
       alg: "EdDSA",
       kid: "actual-native-key",
@@ -361,8 +361,8 @@ it("verifies an expired historical owner capture without requiring a live old se
     proofSha256: createHash("sha256").update(proof).digest("hex"),
   };
   expect(await verifyCapturedRealmIdentityProof({ ...f, pending, proof })).toMatchObject({
-    sub: f.claims.sub,
     organizationId: null,
+    sub: f.claims.sub,
   });
   await expect(
     verifyCapturedRealmIdentityProof({ ...f, pending, proof: `${proof}tampered` }),
@@ -408,8 +408,8 @@ it("requires the fresh public release binding in addition to the original normal
     await expect(
       verifyRealmIdentityLinkProof({
         ...f,
-        proof,
         pending: { ...pending, publicRelease: { ...publicRelease, [field]: changed } },
+        proof,
       }),
     ).rejects.toThrow("auth_identity_required");
   }
@@ -450,8 +450,8 @@ it("requires the fresh public release binding in addition to the original normal
     await expect(
       verifyRealmIdentityLinkProof({
         ...f,
-        proof,
         pending: { ...pending, publicRelease: { ...publicRelease, [field]: changed } },
+        proof,
       }),
     ).rejects.toThrow("auth_identity_required");
   }

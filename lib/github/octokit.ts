@@ -2,6 +2,7 @@ import { App } from "@octokit/app";
 import { Octokit } from "@octokit/core";
 import { OAuthApp } from "@octokit/oauth-app";
 
+const invalidOAuthRequest = "github-oauth-request-invalid";
 const GITHUB_ORIGIN = "https://github.com";
 const GITHUB_API_ORIGIN = "https://api.github.com";
 const GITHUB_API_VERSION = "2026-03-10";
@@ -13,9 +14,13 @@ const silentConsole = new Proxy(console, {
       property === "debug" ||
       property === "info" ||
       property === "warn" ||
-      property === "error" ||
-      property === "log"
+      property === "error"
     ) {
+      return () => {
+        // The mocked request has no teardown.
+      };
+    }
+    if (property === "log") {
       return () => {
         // The mocked request has no teardown.
       };
@@ -96,7 +101,7 @@ export function createGitHubOAuthApp(input: {
       url.pathname === "/login/oauth/access_token"
     ) {
       if (typeof init?.body !== "string") {
-        throw new TypeError("github-oauth-request-invalid");
+        throw new TypeError(invalidOAuthRequest);
       }
       let body: string;
       try {
@@ -114,12 +119,12 @@ export function createGitHubOAuthApp(input: {
         if (error instanceof SyntaxError) {
           const parsed = new URLSearchParams(init.body);
           if (parsed.has("code_verifier")) {
-            throw new Error("github-oauth-request-invalid", { cause: error });
+            throw new Error(invalidOAuthRequest, { cause: error });
           }
           parsed.set("code_verifier", input.codeVerifier);
           body = parsed.toString();
         } else {
-          throw new TypeError("github-oauth-request-invalid", { cause: error });
+          throw new TypeError(invalidOAuthRequest, { cause: error });
         }
       }
       return request(resource, { ...init, body });

@@ -55,7 +55,7 @@ describe("owned previous local preview Auth origin", () => {
       expect(run(link).status).not.toBe(0);
       expect(readFileSync(file, "utf-8")).toBe(JSON.stringify(contents));
     } finally {
-      rmSync(directory, { recursive: true, force: true });
+      rmSync(directory, { force: true, recursive: true });
     }
   });
   it("binds a bounded provider read to the server-derived state path and cancellation", async () => {

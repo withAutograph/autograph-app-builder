@@ -200,9 +200,9 @@ const membershipInspectionFixture = () => {
     operator: {
       ...original,
       approvalId: "current-request",
+      fenceGeneration: 7,
       plan: currentPlan,
       planDigest: operatorPlanDigest(currentPlan),
-      fenceGeneration: 7,
       receipts: [],
       retainedInstallerOperations: [{ approvedByCallId: approval.callId, operator: original }],
     },
@@ -229,8 +229,10 @@ const membershipInspectionFixture = () => {
     version: 2,
   });
   const eve: Pick<HostedEveStore, "getSession" | "recordPrivateApprovalReceipts"> = {
-    getSession: vi.fn(() => Promise.resolve(session)),
-    recordPrivateApprovalReceipts: vi.fn(() => Promise.resolve()),
+    getSession: vi.fn<HostedEveStore["getSession"]>().mockResolvedValue(session),
+    recordPrivateApprovalReceipts: vi
+      .fn<NonNullable<HostedEveStore["recordPrivateApprovalReceipts"]>>()
+      .mockResolvedValue(),
   };
   const observe = vi.fn(() =>
     Promise.resolve({
@@ -332,7 +334,7 @@ describe("retained membership inspection owner approval", () => {
 
 const approvedInspectionFixture = () => {
   const f = membershipInspectionFixture();
-  const operator = f.record.operator;
+  const { operator } = f.record;
   const effect = operator?.plan.effects.find((candidate) => candidate.kind === "auth-membership");
   if (operator === undefined || effect === undefined) {
     throw new Error("Missing fixture effect");
@@ -341,8 +343,8 @@ const approvedInspectionFixture = () => {
     authority: f.context.authority,
     ownerContext: f.context.ownerContext,
     target: f.context.target,
-    assertCurrent: vi.fn(() => Promise.resolve()),
-    checkpoint: vi.fn(() => Promise.resolve()),
+    assertCurrent: vi.fn<HostedOperatorEffectContext["assertCurrent"]>().mockResolvedValue(),
+    checkpoint: vi.fn<HostedOperatorEffectContext["checkpoint"]>().mockResolvedValue(),
     effect,
     fenceGeneration: operator.fenceGeneration ?? 7,
     leaseId: "3e38466d-46fd-4277-a9f7-432e13447354",
@@ -351,7 +353,7 @@ const approvedInspectionFixture = () => {
     workerCheckpoints: [],
   };
   const readApproval = vi.fn(f.readApproval);
-  const readCurrentRecord = vi.fn(() => Promise.resolve(f.record));
+  const readCurrentRecord = vi.fn<() => Promise<typeof f.record>>().mockResolvedValue(f.record);
   return { ...f, context, readApproval, readCurrentRecord };
 };
 
@@ -377,10 +379,10 @@ const selectedInspectionFixture = () => {
     origin: current.plan.publicGateway?.origin,
     actors: [
       {
+        account: "capture-existing",
         actorKey: "owner",
         email: "owner@example.test",
         name: "Owner",
-        account: "capture-existing",
       },
     ],
     organizations: organizations.map((organization) => ({
@@ -390,13 +392,13 @@ const selectedInspectionFixture = () => {
       ownerActorKey: "owner",
     })),
     memberships: organizations.map(({ organizationId }) => ({
-      organizationId,
       actorKey: "owner",
+      organizationId,
       role: "owner",
     })),
     appAccess: organizations.map(({ organizationId }) => ({
-      organizationId,
       actorKey: "owner",
+      organizationId,
       roles: ["member"],
     })),
   });
@@ -405,10 +407,10 @@ const selectedInspectionFixture = () => {
     authMembership: { kind: "create-owned-organizations", organizations },
     normalActorProgram: program,
     normalActorPreparation: {
-      accountOperationRef: "33333333-3333-4333-8333-333333333333",
-      accountPlanDigest: "a".repeat(64),
       accountApprovalId: "account-approval",
       accountApprovedByCallId: "account-call",
+      accountOperationRef: "33333333-3333-4333-8333-333333333333",
+      accountPlanDigest: "a".repeat(64),
       programDigest: normalActorProgramDigest(program),
     },
     effects: current.plan.effects.flatMap((effect) =>
@@ -567,7 +569,9 @@ describe("approved retained membership inspection", () => {
   it("propagates a current owner authorization failure without classifying it as an old approval denial", async () => {
     const f = selectedInspectionFixture();
     const failure = new HostedOperatorError("authorization_required");
-    f.context.assertCurrent = vi.fn(() => Promise.reject(failure));
+    f.context.assertCurrent = vi
+      .fn<HostedOperatorEffectContext["assertCurrent"]>()
+      .mockRejectedValue(failure);
     await expect(
       readApprovedRetainedMembershipInspections({
         effect: f.context,
@@ -661,7 +665,9 @@ describe("approved retained membership inspection", () => {
   it("checks the live execution lease before looking up historical approval", async () => {
     const f = approvedInspectionFixture();
     const failure = new Error("Current execution lease was revoked");
-    f.context.assertCurrent = vi.fn(() => Promise.reject(failure));
+    f.context.assertCurrent = vi
+      .fn<HostedOperatorEffectContext["assertCurrent"]>()
+      .mockRejectedValue(failure);
     await expect(
       readApprovedRetainedMembershipInspection({
         effect: f.context,

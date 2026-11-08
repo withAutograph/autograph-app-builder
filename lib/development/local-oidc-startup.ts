@@ -9,6 +9,8 @@ import {
   validateLocalVercelOidcClaims,
 } from "../eve/local-vercel-oidc";
 
+const localEnvironmentFile = ".env.local";
+
 const MINIMUM_TOKEN_LIFETIME_SECONDS = 300;
 
 export interface LocalOidcStartupInvocation {
@@ -39,7 +41,7 @@ function requiredEnvironmentValue(environment: NodeJS.ProcessEnv, name: "HOME" |
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function commandEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  return {
+  const commandEnv: NodeJS.ProcessEnv = {
     CI: environment.CI ?? "",
     HOME: requiredEnvironmentValue(environment, "HOME"),
     LANG: environment.LANG ?? "C",
@@ -48,11 +50,12 @@ function commandEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     PATH: requiredEnvironmentValue(environment, "PATH"),
     TMPDIR: environment.TMPDIR ?? "/tmp",
     TZ: environment.TZ ?? "",
-    // Vercel CLI resolves its existing login/configuration under its XDG data directory.
-    ...(environment.XDG_DATA_HOME === undefined
-      ? {}
-      : { XDG_DATA_HOME: environment.XDG_DATA_HOME }),
   };
+  // Vercel CLI resolves its existing login/configuration under its XDG data directory.
+  if (environment.XDG_DATA_HOME !== undefined) {
+    commandEnv.XDG_DATA_HOME = environment.XDG_DATA_HOME;
+  }
+  return commandEnv;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -98,20 +101,22 @@ function installedOidcNeedsRefresh(input: {
   }
   let environment: string;
   try {
-    environment = readOwnerBoundLocalFile(path.resolve(input.repositoryRoot, ".env.local"), {
-      confidential: true,
-    });
+    environment = readOwnerBoundLocalFile(
+      path.resolve(input.repositoryRoot, localEnvironmentFile),
+      {
+        confidential: true,
+      },
+    );
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return true;
     }
-    const credentialPath = path.resolve(input.repositoryRoot, ".env.local");
+    const credentialPath = path.resolve(input.repositoryRoot, localEnvironmentFile);
     const stat = lstatSync(credentialPath);
     const ownerId = process.getuid?.();
+    const isRegularSingleLinkFile = stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1;
     if (
-      stat.isFile() &&
-      !stat.isSymbolicLink() &&
-      stat.nlink === 1 &&
+      isRegularSingleLinkFile &&
       ownerId !== undefined &&
       stat.uid === ownerId &&
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -167,7 +172,7 @@ export function ensureLocalDevelopmentOidc(input: {
   environment?: NodeJS.ProcessEnv;
   nowEpochSeconds?: number;
   runCommand?: LocalOidcStartupCommandRunner;
-}): { refreshed: boolean } {
+}) {
   const environment = input.environment ?? process.env;
   assertNoStaticCredential(environment);
 
@@ -202,7 +207,7 @@ export function ensureLocalDevelopmentOidc(input: {
   }
   try {
     runCommand({
-      args: ["env", "pull", ".env.local", "--environment=development", "--yes"],
+      args: ["env", "pull", localEnvironmentFile, "--environment=development", "--yes"],
       cwd: repositoryRoot,
       environment: childEnvironment,
       executable: input.vercelExecutable,

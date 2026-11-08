@@ -11,6 +11,8 @@ import {
 } from "../integrations/vercel-installation";
 import type { VercelTokenKeyringConfig } from "../integrations/vercel-installation";
 
+const PUBLIC_RELEASE_AUTH_SEED_V2 = "public-release-auth-seed-v2";
+
 const id = z.string().min(1);
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const scopeSchema = z.strictObject({
@@ -31,7 +33,7 @@ const seedSchema = z.strictObject({
 });
 export type PublicReleaseAuthSeed = z.infer<typeof seedSchema>;
 const recordSchema = z.strictObject({
-  kind: z.enum(["public-release-auth-seed-v1", "public-release-auth-seed-v2"]),
+  kind: z.enum(["public-release-auth-seed-v1", PUBLIC_RELEASE_AUTH_SEED_V2]),
   scope: scopeSchema,
   sealed: z.strictObject({ encryptedToken: id, tokenIv: id, tokenTag: id, keyVersion: id }),
 });
@@ -66,8 +68,8 @@ const associatedDataFor = (scope: PublicReleaseAuthSeedScope, version: 1 | 2) =>
 };
 export const createFreshPublicAuthSeed = (): PublicReleaseAuthSeed => {
   const key = generateKeyPairSync("ed25519", {
-    privateKeyEncoding: { type: "pkcs8", format: "pem" },
-    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { format: "pem", type: "pkcs8" },
+    publicKeyEncoding: { format: "pem", type: "spki" },
   });
   return {
     BETTER_AUTH_SECRET: randomBytes(32).toString("base64url"),
@@ -109,7 +111,7 @@ export const reservePublicReleaseAuthSeed = async (input: {
     }
     const record = recordSchema.parse(row.record);
     if (
-      record.kind !== "public-release-auth-seed-v2" ||
+      record.kind !== PUBLIC_RELEASE_AUTH_SEED_V2 ||
       row.requestDigest !== digest ||
       !isDeepStrictEqual(appScope(record.scope), appScope(scope))
     ) {
@@ -186,11 +188,13 @@ export const reservePublicReleaseAuthSeed = async (input: {
       throw unavailable();
     }
   }
+  const { tokenKey } = input.keyring;
+  const token = JSON.stringify(seed);
   const sealed = {
     ...encryptVercelToken({
-      key: input.keyring.tokenKey,
-      token: JSON.stringify(seed),
       associatedData,
+      key: tokenKey,
+      token,
     }),
     keyVersion: input.keyring.tokenKeyVersion,
   };
@@ -202,7 +206,7 @@ export const reservePublicReleaseAuthSeed = async (input: {
       ...scope.authority,
       requestId: ref,
       requestDigest: digest,
-      record: recordSchema.parse({ kind: "public-release-auth-seed-v2", scope, sealed }),
+      record: recordSchema.parse({ kind: PUBLIC_RELEASE_AUTH_SEED_V2, scope, sealed }),
       revision: 1,
       state: "pending",
       createdAt: now,

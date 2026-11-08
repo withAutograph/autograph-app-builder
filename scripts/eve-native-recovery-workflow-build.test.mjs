@@ -29,7 +29,7 @@ it("builds the actual recovery workflow graph with server-only validation behind
     const artifact = await stat(path.join(directory, "output", "workflows.mjs"));
     assert.ok(artifact.size > 0);
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    await rm(directory, { force: true, recursive: true });
   }
 }, 0);
 

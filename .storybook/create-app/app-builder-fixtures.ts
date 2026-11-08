@@ -2,6 +2,10 @@ import type { BuilderForm } from "@/app/ui/builder-types";
 import type { BuilderIntegrationState } from "@/lib/integrations/builder-state";
 import type { BuilderProvisionResponse } from "@/lib/provisioning/contracts";
 
+const storyDefaultModelId = "openai/gpt-5.6-sol";
+const storyVercelInstallationId = "vercel-autograph";
+const storyAppId = "vendor-portal";
+
 export const storyIntegrations = {
   github: {
     scopes: [
@@ -22,11 +26,11 @@ export const storyIntegrations = {
   },
   models: {
     cached: false,
-    defaultModelId: "openai/gpt-5.6-sol",
+    defaultModelId: storyDefaultModelId,
     entries: [
       {
         capabilities: ["tool-use"],
-        id: "openai/gpt-5.6-sol",
+        id: storyDefaultModelId,
         name: "GPT 5.6 Sol",
         provider: "openai",
         zdr: "all",
@@ -45,7 +49,7 @@ export const storyIntegrations = {
     scopes: [
       {
         displayName: "Autograph",
-        installationId: "vercel-autograph",
+        installationId: storyVercelInstallationId,
         plan: "Pro",
         slug: "autograph",
         status: "connected",
@@ -68,21 +72,21 @@ export const storyForm: BuilderForm = {
   buildDestination: "codex",
   connections: ["QuickBooks"],
   githubInstallationId: "101",
-  modelId: "openai/gpt-5.6-sol",
+  modelId: storyDefaultModelId,
   privateRepository: true,
-  repository: "vendor-portal",
-  vercelInstallationId: "vercel-autograph",
+  repository: storyAppId,
+  vercelInstallationId: storyVercelInstallationId,
 };
 
 export const storyProvisioning = {
-  appId: "vendor-portal",
+  appId: storyAppId,
   github: {
     defaultBranch: "main",
     fullName: "withAutograph/vendor-portal",
     headSha: "a".repeat(40),
     headTree: "b".repeat(40),
     installationId: "101",
-    name: "vendor-portal",
+    name: storyAppId,
     owner: "withAutograph",
     repositoryId: "202",
     scope: { id: "88", login: "withAutograph", type: "organization" },
@@ -104,7 +108,7 @@ export const storyProvisioning = {
   vercel: {
     dashboardUrl: "https://vercel.com/autograph/apps-vendor-portal",
     framework: "nextjs",
-    installationId: "vercel-autograph",
+    installationId: storyVercelInstallationId,
     linkedGitHubRepository: "withAutograph/vendor-portal",
     name: "apps-vendor-portal",
     projectId: "prj_123",

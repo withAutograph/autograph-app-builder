@@ -1,9 +1,8 @@
 import { and, asc, eq, or, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { builderProvisioningJournals } from "../db/schema";
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import { builderProvisionRequestDigest } from "./contracts";
 import {
   builderProvisionJournalRecordSchema,
@@ -14,8 +13,6 @@ import type {
   BuilderProvisionJournalRow,
   BuilderProvisionJournalStore,
 } from "./journal";
-
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function predicate(authority: BuilderProvisionAuthority, requestId: string) {

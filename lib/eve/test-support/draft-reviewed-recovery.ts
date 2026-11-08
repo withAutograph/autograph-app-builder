@@ -58,6 +58,9 @@ const serialization = await load("compiled/@workflow/core/serialization.js");
 export const workflowKey = "autograph-app-builder.workflow.v17";
 export const logical = "physical-ancestor";
 export const owner = "physical-source";
+const ORCHARD_PACKAGE_NAME = "@fixture/orchard";
+const ORCHARD_WORKSPACE_PATH = "apps/orchard";
+const TOPOLOGY_CONFIG_PATH = "microfrontends.json";
 const d = "a".repeat(64);
 const sha = "b".repeat(40);
 export const fixture = () => {
@@ -79,11 +82,11 @@ export const fixture = () => {
     appSpecSourcePath: appSpecPath,
     baseRoutes: ["/orchard"],
     cueSourcePath: appSpecPath,
-    packageName: "@fixture/orchard",
+    packageName: ORCHARD_PACKAGE_NAME,
     projectName: "orchard",
     schemaCuePath: "apps/orchard/schema/index.cue",
     title: "Orchard",
-    workspacePath: "apps/orchard",
+    workspacePath: ORCHARD_WORKSPACE_PATH,
   });
   const target = targetCreationProposalSchema.parse({
     blockers: [],
@@ -92,14 +95,14 @@ export const fixture = () => {
     plan: {
       product: { appSpec: { path: appSpecPath, sha256: d } },
       source: {
-        packageName: "@fixture/orchard",
+        packageName: ORCHARD_PACKAGE_NAME,
         runtime: "nextjs",
         schema: { kind: "none" },
-        workspacePath: "apps/orchard",
+        workspacePath: ORCHARD_WORKSPACE_PATH,
       },
       topology: {
-        configPath: "microfrontends.json",
-        packageName: "@fixture/orchard",
+        configPath: TOPOLOGY_CONFIG_PATH,
+        packageName: ORCHARD_PACKAGE_NAME,
         projectName: "orchard",
         routes: ["/orchard"],
       },
@@ -120,12 +123,12 @@ export const fixture = () => {
     proposalDigest: d,
     targetReceipt: {
       appId: "orchard",
-      mutations: ["apps/orchard", "microfrontends.json"],
+      mutations: [ORCHARD_WORKSPACE_PATH, TOPOLOGY_CONFIG_PATH],
       omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
       recovered: false,
-      topology: { path: "microfrontends.json", oldDigest: d, newDigest: d },
+      topology: { path: TOPOLOGY_CONFIG_PATH, oldDigest: d, newDigest: d },
       version: 1,
-      workspacePath: "apps/orchard",
+      workspacePath: ORCHARD_WORKSPACE_PATH,
     },
     planningTreeDigest: d,
     preparedTreeDigest: d,
@@ -319,8 +322,19 @@ export const fixture = () => {
     selectedOrigin: current.origin,
     serializedContext: currentContext,
   };
-  return { input, reviewed, candidate, currentContext, old, current };
+  return { candidate, current, currentContext, input, old, reviewed };
 };
+
+const installation = (operation: "resolve-existing-source" | "publish-draft-pull-request") =>
+  createGitHubInstallationIdentity({
+    accountId: "20",
+    accountLogin: "owner",
+    accountType: "Organization",
+    installationId: "10",
+    operation,
+    repositorySelection: "selected",
+    selectedRepositoryIds: ["100"],
+  });
 
 /** Construct real provider-bound owned-publication receipts against a controlled provider. */
 export const freshFixture = async () => {
@@ -357,16 +371,6 @@ export const freshFixture = async () => {
   delete f.reviewed.githubSource;
   const current = f.currentContext[workflowKey];
   delete current.githubSource;
-  const installation = (operation: "resolve-existing-source" | "publish-draft-pull-request") =>
-    createGitHubInstallationIdentity({
-      accountId: "20",
-      accountLogin: "owner",
-      accountType: "Organization",
-      installationId: "10",
-      operation,
-      repositorySelection: "selected",
-      selectedRepositoryIds: ["100"],
-    });
   const publicationInstallation = installation("publish-draft-pull-request");
   const resolutionInstallation = installation("resolve-existing-source");
   const repository = (installationIdentityDigest: string) =>
@@ -427,16 +431,16 @@ export const freshFixture = async () => {
     throw new Error("Unexpected provider effect");
   };
   const adapter: GitHubPublicationAdapter = {
+    createPrivateFreshHistoryRepository: unavailable,
+    inspectDestination: unavailable,
+    inspectDraftPublication: async () => readBack,
+    inspectExistingDraft: unavailable,
+    inspectFreshRepositoryOutcome: unavailable,
     inspectInstallation: async (operation) =>
       operation === "resolve-existing-source" ? resolutionInstallation : publicationInstallation,
     inspectRepository: async () => resolutionRepository,
-    inspectDraftPublication: async () => readBack,
-    inspectExistingDraft: unavailable,
-    updateExistingDraft: unavailable,
-    inspectDestination: unavailable,
-    inspectFreshRepositoryOutcome: unavailable,
-    createPrivateFreshHistoryRepository: unavailable,
     publishDraftPullRequest: unavailable,
+    updateExistingDraft: unavailable,
   };
   const [publication, source] = await Promise.all([
     publishApprovedDraftPullRequest({
@@ -629,7 +633,7 @@ export const nativeFixture = async (
     options.priorOwnerReview === true && index < priorEntries.length;
   const steps = await Promise.all(
     entries.map(async (entry, index) => ({
-      runId: priorEntry(index) ? "physical-ancestor" : owner,
+      runId: priorEntry(index) ? logical : owner,
       stepId: entry.origin.stepId,
       stepName:
         options.live === true ? "step//eve//turnStep" : "step//eve//terminateChildSessionsStep",
@@ -644,7 +648,7 @@ export const nativeFixture = async (
                 sessionState: createDurableSessionState({ session }),
                 serializedContext: entry.serializedContext,
               },
-              priorEntry(index) ? "physical-ancestor" : owner,
+              priorEntry(index) ? logical : owner,
             ),
           }
         : {
@@ -658,7 +662,7 @@ export const nativeFixture = async (
                 ],
                 closureVars: [],
               },
-              priorEntry(index) ? "physical-ancestor" : owner,
+              priorEntry(index) ? logical : owner,
             ),
           }),
     })),
@@ -670,6 +674,11 @@ export const nativeFixture = async (
     eventType: "step_completed",
     eventData: { stepName: step.stepName },
   }));
+  interface RecoveryFixturePage<T> {
+    cursor?: string;
+    data: T[];
+    hasMore: boolean;
+  }
   const paginate = <T>(
     values: T[],
     runId: string,
@@ -678,25 +687,28 @@ export const nativeFixture = async (
     const ordered = pagination?.sortOrder === "desc" ? values.toReversed() : values;
     const offset = pagination?.cursor === undefined ? 0 : Number(pagination.cursor);
     const limit =
-      options.paginateAncestor === true && runId === "physical-ancestor"
+      options.paginateAncestor === true && runId === logical
         ? 1
         : (pagination?.limit ?? ordered.length);
     const data = ordered.slice(offset, offset + limit);
     const next = offset + data.length;
-    return {
-      data,
-      hasMore: next < ordered.length,
-      ...(next < ordered.length ? { cursor: String(next) } : {}),
-    };
+    const page: RecoveryFixturePage<T> = { data, hasMore: next < ordered.length };
+    if (next < ordered.length) {
+      page.cursor = String(next);
+    }
+    return page;
   };
   const world = {
-    runs: {
-      get: async (runId: string) => ({
-        runId,
-        status: runId === owner ? nativeStatus : "cancelled",
-      }),
-    },
     events: {
+      get: async (runId: string, eventId: string) => {
+        const event = nativeEvents.find(
+          (entry) => entry.runId === runId && entry.eventId === eventId,
+        );
+        if (event === undefined) {
+          throw new Error("Unknown native event");
+        }
+        return event;
+      },
       list: async ({
         runId,
         pagination,
@@ -709,15 +721,6 @@ export const nativeFixture = async (
           runId,
           pagination,
         ),
-      get: async (runId: string, eventId: string) => {
-        const event = nativeEvents.find(
-          (entry) => entry.runId === runId && entry.eventId === eventId,
-        );
-        if (event === undefined) {
-          throw new Error("Unknown native event");
-        }
-        return event;
-      },
       listByCorrelationId: async ({
         runId,
         correlationId,
@@ -734,6 +737,12 @@ export const nativeFixture = async (
           runId,
           pagination,
         ),
+    },
+    runs: {
+      get: async (runId: string) => ({
+        runId,
+        status: runId === owner ? nativeStatus : "cancelled",
+      }),
     },
     steps: {
       get: async (runId: string, step: string) =>
@@ -758,36 +767,36 @@ export const nativeFixture = async (
   };
   const collectorPorts = {
     getWorld: async () => world,
-    resolveRunEncryptionKey: async () => {
-      /* Controlled fixture checkpoints are not encrypted. */
-    },
     hydrateStepArguments: (value: unknown, run: string, key: unknown) =>
       serialization.hydrateStepArguments(value, run, key, []),
     hydrateStepReturnValue: (value: unknown, run: string, key: unknown) =>
       serialization.hydrateStepReturnValue(value, run, key),
+    now: () => 0,
     readDurableSession,
-    requireEventSlot: (id: string) => Number(id.slice(5)),
     async *readNativeEvents() {
       yield* [];
     },
-    now: () => 0,
+    requireEventSlot: (id: string) => Number(id.slice(5)),
+    resolveRunEncryptionKey: async () => {
+      /* Controlled fixture checkpoints are not encrypted. */
+    },
   };
   const { createHistoricalCheckpointVisitor } = await load(
     "execution/session/historical-checkpoints.js",
   );
   const historicalPorts = {
     ...collectorPorts,
-    hydrateWorkflowArguments: (value: unknown, run: string, key: unknown) =>
-      serialization.hydrateWorkflowArguments(value, run, key),
-    hydrateHookPayload: async (value: unknown, _run: string, key: unknown) =>
-      serialization.deserializePreparedReplayPayload(
-        await serialization.prepareReplayPayload(value, key),
-      ),
     guardWorld: (value: typeof world) => value,
     guardedDependencies: (_authorize: unknown, value: typeof world) => ({
       ...collectorPorts,
       getWorld: async () => value,
     }),
+    hydrateHookPayload: async (value: unknown, _run: string, key: unknown) =>
+      serialization.deserializePreparedReplayPayload(
+        await serialization.prepareReplayPayload(value, key),
+      ),
+    hydrateWorkflowArguments: (value: unknown, run: string, key: unknown) =>
+      serialization.hydrateWorkflowArguments(value, run, key),
   };
   const visitHistoricalCheckpoints = createHistoricalCheckpointVisitor(historicalPorts);
   const collect = createTerminalRecoveryCandidateCollector(collectorPorts);
@@ -796,43 +805,48 @@ export const nativeFixture = async (
   let denied = false;
   const starts: unknown[] = [];
   const ports = {
-    authorize: async () => {
-      if (denied) {
-        throw new Error("owner revoked");
-      }
-    },
-    readReceipt: async () => receipt,
-    commitReceipt: async ({ recoveryBinding }: { recoveryBinding: unknown }) => {
-      receipt = recoveryBinding;
-      return recoveryBinding;
-    },
-    authorizeActivation: async () => {
-      throw new Error("unexpected activation");
-    },
     applicationStateRecovery: {
       contextKey: draftReviewedLineageContextKey,
       field: "reviewedLineage",
       recover: async (input: Parameters<typeof recoverDraftReviewedLineage>[0]) =>
         recoverDraftReviewedLineage(input),
     },
+    authorize: async () => {
+      if (denied) {
+        throw new Error("owner revoked");
+      }
+    },
+    authorizeActivation: async () => {
+      throw new Error("unexpected activation");
+    },
+    commitReceipt: async ({ recoveryBinding }: { recoveryBinding: unknown }) => {
+      receipt = recoveryBinding;
+      return recoveryBinding;
+    },
+    readReceipt: async () => receipt,
   };
   const stopReceipts = new Set<string>();
   const activatedHooks = new Set<string>();
+  const collectLineagePreflight = createOwnedLineagePreflightCollector(collectorPorts);
   const deps = {
     collect,
-    visitHistoricalCheckpoints,
-    collectLineagePreflight: createOwnedLineagePreflightCollector(collectorPorts),
-    readLineagePreflight: readOwnedLineagePreflight,
-    reconcileLineagePreflight: reconcileOwnedLineagePreflight,
-    inspectSource: async (id: string) => await inspectNativeRecoverySource(world, id),
-    stopSource: async (id: string, reason: string) => {
-      if (id !== owner) {
-        throw new Error("Foreign owner stop");
+    collectLineagePreflight,
+    getHook: async () => {
+      if (hook === undefined) {
+        throw new Error("missing hook");
       }
-      nativeStatus = "cancelled";
-      stopReceipts.add(reason);
+      return hook;
     },
-    readStopReceipt: async (id: string, reason: string) => id === owner && stopReceipts.has(reason),
+    inspectSource: async (id: string) => await inspectNativeRecoverySource(world, id),
+    isHookNotFound: (error: Error) => error.message === "missing hook",
+    now: () => 0,
+    readCandidate: readTerminalRecoveryCandidate,
+    readEntry: async () => ({
+      kind: "initial",
+      serializedContext: { "eve.capabilities": { original: true } },
+      sessionTimeoutMs: false,
+    }),
+    readLineagePreflight: readOwnedLineagePreflight,
     readLogicalInboxOwner: async (): Promise<
       { runId: string; logicalSessionId: string } | undefined
     > => {
@@ -844,16 +858,12 @@ export const nativeFixture = async (
       }
       return undefined;
     },
+    readStopReceipt: async (id: string, reason: string) => id === owner && stopReceipts.has(reason),
+    reconcile: reconcileTerminalRecoveryCandidate,
+    reconcileLineagePreflight: reconcileOwnedLineagePreflight,
     resumeHook: async (token: string) => {
       activatedHooks.add(token);
     },
-    readCandidate: readTerminalRecoveryCandidate,
-    reconcile: reconcileTerminalRecoveryCandidate,
-    readEntry: async () => ({
-      kind: "initial",
-      serializedContext: { "eve.capabilities": { original: true } },
-      sessionTimeoutMs: false,
-    }),
     start: async (input: { descriptor: typeof f.input.descriptor; provenance: unknown }) => {
       starts.push(input);
       hook = {
@@ -867,34 +877,34 @@ export const nativeFixture = async (
         }),
       };
     },
-    getHook: async () => {
-      if (hook === undefined) {
-        throw new Error("missing hook");
+    stopSource: async (id: string, reason: string) => {
+      if (id !== owner) {
+        throw new Error("Foreign owner stop");
       }
-      return hook;
+      nativeStatus = "cancelled";
+      stopReceipts.add(reason);
     },
-    isHookNotFound: (error: Error) => error.message === "missing hook",
-    now: () => 0,
+    visitHistoricalCheckpoints,
     wait: async () => {
       throw new Error("unexpected wait");
     },
   };
   return {
     ...f,
-    ports,
-    deps,
-    starts,
-    world,
-    stopReceipts,
     activations: () => activatedHooks.size,
+    deps,
+    ports,
+    revoke: () => {
+      denied = true;
+    },
     setEffectConflict: (value: boolean) => {
       effectConflict = value;
     },
     setNativeStatus: (value: string) => {
       nativeStatus = value;
     },
-    revoke: () => {
-      denied = true;
-    },
+    starts,
+    stopReceipts,
+    world,
   };
 };

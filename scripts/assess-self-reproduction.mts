@@ -18,7 +18,7 @@ const { values } = parseArgs({
     "schema-only": { type: "boolean" },
   },
 });
-if (!values["output-dir"]) {
+if (values["output-dir"] === undefined || values["output-dir"] === "") {
   throw new Error("Supply an external --output-dir for parity artifacts.");
 }
 const output = path.resolve(values["output-dir"]);
@@ -35,8 +35,8 @@ await writeFile(
   path.resolve(output, "parity-matrix.json"),
   JSON.stringify({ desktopViewports, requirements, workflowMatrix }, null, 2),
 );
-if (!values["schema-only"]) {
-  if (!values.evidence) {
+if (values["schema-only"] !== true) {
+  if (values.evidence === undefined || values.evidence === "") {
     throw new Error(
       "Supply evaluator-owned --evidence; candidate workflow-results files are not trusted.",
     );

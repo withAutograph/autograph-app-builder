@@ -31,7 +31,7 @@ import {
 } from "../agent/local-build-continuation";
 import { reportApprovedBuildNoProgress } from "../agent/approved-build-continuation";
 import { Client, ClientError, parseInputResponses } from "eve/client";
-import type { ClientSession, MessageStreamEvent } from "eve/client";
+import type { ClientSession, InputResponse, MessageStreamEvent } from "eve/client";
 import { setTimeout as delay } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
 
@@ -57,6 +57,9 @@ import {
   localSessionRecoveryError,
   LocalSessionRecoveryUnavailableError,
 } from "./local-session-recovery";
+
+const CONTINUATION_ALREADY_ACTIVE_MESSAGE =
+  "Another continuation is already active for this session.";
 
 const DEVELOPMENT_BUNDLE = "local-development";
 const DEVELOPMENT_MODE = "development";
@@ -179,7 +182,7 @@ export function toEveInputResponse(
     | { kind: "approve" }
     | { kind: "deny" }
     | { kind: "answer"; value: string; optionId?: string },
-): { requestId: string; optionId?: string; text?: string } {
+): InputResponse {
   if (response.kind === "approve") {
     return { optionId: "approve", requestId };
   }
@@ -388,20 +391,21 @@ function resultForEvents(
   const prototype = latestInstalledPrototype(snapshotEvents);
   const uiPreview = latestInstalledUiPreview(snapshotEvents);
   const workingPreview = latestInstalledWorkingPreview(snapshotEvents);
-  return {
+  const result: EveSessionResult = {
     cursor: Math.min(cursor + events.length, projected.length),
     events,
     sessionId,
     status: options.status ?? deriveInstalledEveStatus(snapshotEvents),
-    ...(inputRequests.length === 0 || options.suppressInputRequests === true
-      ? {}
-      : { inputRequests }),
-    ...(applicationSource === undefined ? {} : { applicationSource }),
-    ...(prototype === undefined ? {} : { prototype }),
-    ...(uiPreview === undefined ? {} : { uiPreview }),
-    ...(workingPreview === undefined ? {} : { workingPreview }),
-    ...(options.error === undefined ? {} : { error: options.error }),
   };
+  if (inputRequests.length !== 0 && options.suppressInputRequests !== true) {
+    result.inputRequests = inputRequests;
+  }
+  if (applicationSource !== undefined) result.applicationSource = applicationSource;
+  if (prototype !== undefined) result.prototype = prototype;
+  if (uiPreview !== undefined) result.uiPreview = uiPreview;
+  if (workingPreview !== undefined) result.workingPreview = workingPreview;
+  if (options.error !== undefined) result.error = options.error;
+  return result;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -413,16 +417,17 @@ function acceptedResult(
   const prototype = latestInstalledPrototype(snapshotEvents);
   const uiPreview = latestInstalledUiPreview(snapshotEvents);
   const workingPreview = latestInstalledWorkingPreview(snapshotEvents);
-  return {
+  const result: EveSessionResult = {
     cursor: 0,
     events: [],
     sessionId,
     status: "working",
-    ...(applicationSource === undefined ? {} : { applicationSource }),
-    ...(prototype === undefined ? {} : { prototype }),
-    ...(uiPreview === undefined ? {} : { uiPreview }),
-    ...(workingPreview === undefined ? {} : { workingPreview }),
   };
+  if (applicationSource !== undefined) result.applicationSource = applicationSource;
+  if (prototype !== undefined) result.prototype = prototype;
+  if (uiPreview !== undefined) result.uiPreview = uiPreview;
+  if (workingPreview !== undefined) result.workingPreview = workingPreview;
+  return result;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -547,6 +552,21 @@ function consumeResponse(
     }
   })();
 }
+
+// GET has already reconciled canonical history. A decision is only an
+// eligibility hint here; the dispatch path still observes native state
+// and the controller rereads the durable decision.
+const hasRunnableLocalContinuation = async (sessionId: string) => {
+  const approved = await readLocalBuildDecision(sessionId);
+  if (approved?.decision === "runnable" && approved.scope !== undefined) {
+    return true;
+  }
+  if (!localAuthoringConfigured()) {
+    return false;
+  }
+  const authoring = await readLocalAuthoringDecision(sessionId);
+  return authoring?.decision === "runnable" && authoring.scope !== undefined;
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createLocalEveSessionService(
@@ -778,7 +798,9 @@ export function createLocalEveSessionService(
     consumeResponse(state, sessionId, response, modelTurnTimeoutMs, {
       cancelTurn: async (turnId) =>
         await sessionFor(sessionId).cancel(turnId === undefined ? undefined : { turnId }),
-      consumeDurableTail: (observeEvent) => consumeDurableTail(sessionId, observeEvent),
+      consumeDurableTail: (observeEvent) => {
+        consumeDurableTail(sessionId, observeEvent);
+      },
       appendEvent: (events, event) => appendLocalEvent(sessionId, events, event),
     });
   }
@@ -804,20 +826,19 @@ export function createLocalEveSessionService(
       };
     }
     const interruption = state.modelInterruptions.get(sessionId);
-    return {
+    const result: { status: "waiting" | undefined; error?: EveSessionResult["error"] } = {
       status:
         interruption !== undefined || state.restartInterrupted.has(sessionId)
           ? ("waiting" as const)
           : undefined,
-      ...(interruption === undefined
-        ? {}
-        : {
-            error: {
-              code: "model_turn_interrupted",
-              message: interruption.message,
-            },
-          }),
     };
+    if (interruption !== undefined) {
+      result.error = {
+        code: "model_turn_interrupted",
+        message: interruption.message,
+      };
+    }
+    return result;
   }
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -842,7 +863,7 @@ export function createLocalEveSessionService(
       if (resumeSessionId === undefined || options.recoverTerminal === undefined)
         throw new LocalSessionRecoveryUnavailableError();
       if (localActiveResponses.has(resumeSessionId) || state.continuationPumps.has(resumeSessionId))
-        throw new Error("Another continuation is already active for this session.");
+        throw new Error(CONTINUATION_ALREADY_ACTIVE_MESSAGE);
       await options.recoverTerminal(resumeSessionId, clientRequestId);
       state.unavailableSessions.delete(resumeSessionId);
       state.recoveryRequired.delete(resumeSessionId);
@@ -915,8 +936,12 @@ export function createLocalEveSessionService(
         } else if (["completed", "failed", "cancelled"].includes(result.status)) {
           resumability = "terminal";
         }
+        const app: Pick<EveSessionListResult["sessions"][number], "appId"> = {};
+        if (result.uiPreview?.appId !== undefined) {
+          app.appId = result.uiPreview.appId;
+        }
         return {
-          ...(result.uiPreview?.appId === undefined ? {} : { appId: result.uiPreview.appId }),
+          ...app,
           resumability,
           sessionId,
           stage,
@@ -938,21 +963,6 @@ export function createLocalEveSessionService(
       async () => await sessionAtBufferedTail(sessionId).send(message, { turnPolicy: "queue" }),
     );
     consumeSessionResponse(sessionId, response);
-  };
-
-  // GET has already reconciled canonical history. A decision is only an
-  // eligibility hint here; the dispatch path still observes native state
-  // and the controller rereads the durable decision.
-  const hasRunnableLocalContinuation = async (sessionId: string) => {
-    const approved = await readLocalBuildDecision(sessionId);
-    if (approved?.decision === "runnable" && approved.scope !== undefined) {
-      return true;
-    }
-    if (!localAuthoringConfigured()) {
-      return false;
-    }
-    const authoring = await readLocalAuthoringDecision(sessionId);
-    return authoring?.decision === "runnable" && authoring.scope !== undefined;
   };
 
   const continueLocalApprovedWork = async (sessionId: string): Promise<boolean> => {
@@ -993,7 +1003,9 @@ export function createLocalEveSessionService(
       }
       const approved = await continueApprovedLocalBuild({
         active: status === "working",
-        dispatch: async (message) => await dispatchLocalBuildMessage(sessionId, message),
+        dispatch: async (message) => {
+          await dispatchLocalBuildMessage(sessionId, message);
+        },
         pendingInput: outstandingInstalledEveRequests(snapshot.events).length > 0,
         sessionId,
       });
@@ -1005,7 +1017,9 @@ export function createLocalEveSessionService(
         sessionId,
         active: status !== "waiting",
         pendingInput: outstandingInstalledEveRequests(snapshot.events).length > 0,
-        dispatch: async (message) => await dispatchLocalBuildMessage(sessionId, message),
+        dispatch: async (message) => {
+          await dispatchLocalBuildMessage(sessionId, message);
+        },
         assertCurrent: async (decision) => {
           const fresh = await readLocalSnapshot(sessionId);
           const unavailable =
@@ -1270,7 +1284,7 @@ export function createLocalEveSessionService(
   service.send = async ({ sessionId, message, clientRequestId }) => {
     await refreshRecoveredTail(sessionId);
     if (state.continuationPumps.has(sessionId)) {
-      throw new Error("Another continuation is already active for this session.");
+      throw new Error(CONTINUATION_ALREADY_ACTIVE_MESSAGE);
     }
     if (state.unavailableSessions.has(sessionId)) {
       throw new LocalSessionRecoveryUnavailableError();
@@ -1348,12 +1362,20 @@ export function createLocalEveSessionService(
     responses: Parameters<EveSessionService["respond"]>[0]["responses"],
   ): Promise<InternalSessionLimitResponse> => {
     const stoppedDecision = await localStoppedBuildDecision(sessionId, stopGuardOnly);
-    return {
+    const marker: Pick<
+      InternalSessionLimitResponse,
+      "adapterGeneration" | "adapterSessionId" | "batches" | "decision" | "stoppedBuildTurnId"
+    > = {
       adapterGeneration: 1,
       adapterSessionId: sessionId,
       batches: stopGuardOnly ? frameworkGuardBatches(inputs) : inputs.pending,
       decision: stopGuardOnly ? "stop" : "continue",
-      ...(stoppedDecision === undefined ? {} : { stoppedBuildTurnId: stoppedDecision.turnId }),
+    };
+    if (stoppedDecision !== undefined) {
+      marker.stoppedBuildTurnId = stoppedDecision.turnId;
+    }
+    return {
+      ...marker,
       responses: nativeResponses(responses),
     };
   };
@@ -1365,7 +1387,7 @@ export function createLocalEveSessionService(
     let responses = requestedResponses;
     await refreshRecoveredTail(sessionId);
     if (state.continuationPumps.has(sessionId)) {
-      throw new Error("Another continuation is already active for this session.");
+      throw new Error(CONTINUATION_ALREADY_ACTIVE_MESSAGE);
     }
     if (state.unavailableSessions.has(sessionId)) {
       throw new LocalSessionRecoveryUnavailableError();
@@ -1494,20 +1516,18 @@ export function createLocalEveSessionService(
       result,
       privateInputForEvents(localSessionEvents.get(result.sessionId) ?? []),
     );
-  return {
+  const wrapped: EveSessionService = {
     ...service,
     cancel: async (request) => present(await service.cancel(request)),
     get: async (request) => present(await service.get(request)),
-    ...(getStart === undefined
-      ? {}
-      : {
-          getStart: async (request: Parameters<NonNullable<EveSessionService["getStart"]>>[0]) =>
-            present(await getStart(request)),
-        }),
-    respond: async (request) => present(await service.respond(request)),
-    send: async (request) => present(await service.send(request)),
-    start: async (request) => present(await service.start(request)),
   };
+  if (getStart !== undefined) {
+    wrapped.getStart = async (request) => present(await getStart(request));
+  }
+  wrapped.respond = async (request) => present(await service.respond(request));
+  wrapped.send = async (request) => present(await service.send(request));
+  wrapped.start = async (request) => present(await service.start(request));
+  return wrapped;
 }
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
@@ -1528,7 +1548,7 @@ export function createEveSessionService(
     }
     const client = new Client({ host: url.origin, redirect: "error" });
     const recovery = createLocalNativeRecovery(environment);
-    return createLocalEveSessionService(
+    const localClient =
       recovery === undefined
         ? client
         : withLocalRecoveredSessions(client, recovery, async (sessionId, body) => {
@@ -1553,31 +1573,30 @@ export function createEveSessionService(
               );
             }
             return localRecoveredControlReceiptSchema.parse(value);
-          }),
-      {
-        restartGeneration: localEveRestartGeneration(environment),
-        stateGeneration: localCycleGeneration(environment),
-        ...(recovery === undefined
-          ? {}
-          : {
-              isRecoveredSession: (sessionId: string) => recovery.lineage(sessionId).length > 1,
-              cancelRecovery: async (sessionId: string) => {
-                await recovery.cancel(sessionId);
-              },
-              recoverTerminal: async (sessionId: string, requestId: string) =>
-                await recovery.recover(client, sessionId, requestId, async (body) => {
-                  const response = await fetch(new URL("/eve/v1/session", url.origin), {
-                    method: "POST",
-                    redirect: "error",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify(body),
-                  });
-                  if (!response.ok) throw new LocalSessionRecoveryUnavailableError();
-                  return localRecoveryResponseSchema.parse(await response.json());
-                }),
-            }),
-      },
-    );
+          });
+    const options: NonNullable<Parameters<typeof createLocalEveSessionService>[1]> = {
+      restartGeneration: localEveRestartGeneration(environment),
+      stateGeneration: localCycleGeneration(environment),
+    };
+    if (recovery !== undefined) {
+      options.isRecoveredSession = (sessionId) => recovery.lineage(sessionId).length > 1;
+      options.cancelRecovery = async (sessionId) => {
+        await recovery.cancel(sessionId);
+      };
+      options.recoverTerminal = async (sessionId, requestId) => {
+        await recovery.recover(client, sessionId, requestId, async (body) => {
+          const response = await fetch(new URL("/eve/v1/session", url.origin), {
+            method: "POST",
+            redirect: "error",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (!response.ok) throw new LocalSessionRecoveryUnavailableError();
+          return localRecoveryResponseSchema.parse(await response.json());
+        });
+      };
+    }
+    return createLocalEveSessionService(localClient, options);
   }
   return {
     cancel: notConfigured,

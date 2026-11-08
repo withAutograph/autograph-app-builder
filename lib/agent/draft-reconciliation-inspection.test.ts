@@ -7,9 +7,9 @@ import inspectReconciliation from "../../agent/tools/inspect_github_draft_pr_rec
 const digest = "a".repeat(64);
 const mocks = vi.hoisted(() => ({
   candidate: null as Record<string, unknown> | null,
-  workflow: null as Record<string, unknown> | null,
   readDiff: vi.fn(),
   sandbox: vi.fn(),
+  workflow: null as Record<string, unknown> | null,
 }));
 vi.mock("eve/tools", () => ({ defineTool: <T>(value: T): T => value }));
 vi.mock("./draft-reconciliation-state", () => ({
@@ -68,11 +68,11 @@ describe("optional reconciliation inspection", () => {
     await expect(
       inspectReconciliation.execute({ kind: "changes", against: "head" }, context),
     ).resolves.toMatchObject({
+      appOwnedFiles: 0,
+      changes: [expect.objectContaining({ path: "docs/platform.md" })],
+      nonAppFiles: 1,
       status: "changes",
       totalFiles: 1,
-      appOwnedFiles: 0,
-      nonAppFiles: 1,
-      changes: [expect.objectContaining({ path: "docs/platform.md" })],
     });
     expect(mocks.readDiff).not.toHaveBeenCalled();
     expect(mocks.sandbox).not.toHaveBeenCalled();

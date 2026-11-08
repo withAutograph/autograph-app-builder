@@ -83,5 +83,7 @@ export function appendReviewQuestions(brief: string, questions: string[]) {
   if (questions.length === 0) {
     return brief;
   }
-  return `${brief.trimEnd()}\n\n---\n\nReview questions for this case:\n${questions.map((question) => `- ${question}`).join("\n")}`;
+  const introduction = brief.trimEnd();
+  const questionList = questions.map((question) => `- ${question}`).join("\n");
+  return `${introduction}\n\n---\n\nReview questions for this case:\n${questionList}`;
 }

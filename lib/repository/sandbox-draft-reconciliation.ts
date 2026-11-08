@@ -634,11 +634,15 @@ const outsideCandidateChanges = async (
   root: string,
 ): Promise<boolean> => {
   const dependencyCatalog = retainedDependencyCatalog(input, root);
-  const catalogPaths = await inspectDependencyCatalog(input.sandbox, {
+  const { sandbox } = input;
+  const catalogInput: Parameters<typeof inspectDependencyCatalog>[1] = {
     root,
     appId: input.appId,
-    ...(dependencyCatalog === undefined ? {} : { dependencyCatalog }),
-  });
+  };
+  if (dependencyCatalog !== undefined) {
+    catalogInput.dependencyCatalog = dependencyCatalog;
+  }
+  const catalogPaths = await inspectDependencyCatalog(sandbox, catalogInput);
   if (input.ownedPublication !== undefined) {
     const scope = retainedPublicationScope(input, root);
     if (
@@ -1216,17 +1220,36 @@ export const prepareDraftReconciliation = async (
     workspaceRoot,
   });
   const conflicts = await readCandidateConflicts(input, root);
-  return {
+  const initial: Pick<
+    Awaited<ReturnType<typeof prepareDraftReconciliation>>,
+    | "appId"
+    | "baseSha"
+    | "baseTree"
+    | "conflicts"
+    | "created"
+    | "publicationScope"
+    | "dependencyCatalog"
+    | "preservedCandidateRoot"
+    | "replayedAppChanges"
+  > = {
     appId: input.appId,
     baseSha: input.baseSha,
     baseTree: await inspectRevision(sandbox, checkout, input.baseSha),
     conflicts,
     created,
-    ...(publicationScope === undefined ? {} : { publicationScope }),
-    ...(!created && retainedDependencyCatalog(input, root) !== undefined
-      ? { dependencyCatalog: retainedDependencyCatalog(input, root) }
-      : {}),
-    ...(preservedCandidateRoot === undefined ? {} : { preservedCandidateRoot, replayedAppChanges }),
+  };
+  if (publicationScope !== undefined) {
+    initial.publicationScope = publicationScope;
+  }
+  if (!created && retainedDependencyCatalog(input, root) !== undefined) {
+    initial.dependencyCatalog = retainedDependencyCatalog(input, root);
+  }
+  if (preservedCandidateRoot !== undefined) {
+    initial.preservedCandidateRoot = preservedCandidateRoot;
+    initial.replayedAppChanges = replayedAppChanges;
+  }
+  return {
+    ...initial,
     headSha: input.headSha,
     headTree: await inspectRevision(sandbox, checkout, input.headSha),
     root,

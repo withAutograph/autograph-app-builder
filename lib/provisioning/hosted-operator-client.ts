@@ -68,13 +68,21 @@ import {
   sameOperatorSelection,
 } from "./hosted-operator-contract";
 
+const operatorRuntimePath = "/v1/runtime";
+const continuityReadAction = "continuity-read";
+const continuityBindingReadAction = "continuity-binding-read";
+
 /** Match the protected operator's function duration without changing unrelated fetches. */
-export const createHostedOperatorDispatcher = (factory?: Agent.Options["factory"]) =>
-  new Agent({
+export const createHostedOperatorDispatcher = (factory?: Agent.Options["factory"]) => {
+  const options: Agent.Options = {
     bodyTimeout: 1_800_000,
     headersTimeout: 1_800_000,
-    ...(factory === undefined ? {} : { factory }),
-  });
+  };
+  if (factory !== undefined) {
+    options.factory = factory;
+  }
+  return new Agent(options);
+};
 const operatorDispatcher = createHostedOperatorDispatcher();
 
 const bindingSchema = z.strictObject({
@@ -93,14 +101,19 @@ const bindingSchema = z.strictObject({
   proof: hostedRuntimeProofSchema,
 });
 const operatorSuccessSchemas = {
-  plan: operatorPublicResultSchema,
-  status: operatorPublicResultSchema,
-  execute: operatorPublicResultSchema,
-  bindings: bindingSchema,
   "auth-identity-input": operatorAuthIdentityInputSchema,
+  bindings: bindingSchema,
+  execute: operatorPublicResultSchema,
   "neon-authorization": neonAuthorizationResultSchema,
+  plan: operatorPublicResultSchema,
   "resolve-preview-target": operatorSelectionSchema,
+  status: operatorPublicResultSchema,
 } satisfies Record<OperatorRequest["action"], z.ZodType>;
+interface OperatorRequestHeaders extends Record<string, string> {
+  authorization: string;
+  "content-type": string;
+  "x-vercel-trusted-oidc-idp-token": string;
+}
 const operatorResponseDiagnostic = (
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Each action's closed success schema is applied before diagnostics are projected.
   value: unknown,
@@ -110,12 +123,17 @@ const operatorResponseDiagnostic = (
 } => {
   const blocked = operatorPublicResultSchema.safeParse(value);
   if (blocked.success && blocked.data.status === "blocked") {
-    return {
+    const diagnostic: Pick<HostedOperatorConsentMetadata, "operatorResponse" | "operatorCode"> & {
+      accessClass: NonNullable<HostedOperatorConsentMetadata["accessClass"]>;
+    } = {
       accessClass:
         blocked.data.code === "authorization_required" ? "application_auth_denied" : "other_failed",
       operatorResponse: "blocked",
-      ...(blocked.data.code === undefined ? {} : { operatorCode: blocked.data.code }),
     };
+    if (blocked.data.code !== undefined) {
+      diagnostic.operatorCode = blocked.data.code;
+    }
+    return diagnostic;
   }
   if (operatorSuccessSchemas[action].safeParse(value).success) {
     return { accessClass: "ok" };
@@ -188,27 +206,27 @@ export const createHostedOperatorClient = (input: {
       operatorAction: body.action,
     });
     const token = await input.token();
+    const serializedBody = JSON.stringify(body);
+    const headers: OperatorRequestHeaders = {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+      "x-vercel-trusted-oidc-idp-token": token,
+    };
+    if (body.action === "status" || body.action === "execute") {
+      headers[OPERATOR_EXECUTION_OBSERVATION_HEADER] = OPERATOR_EXECUTION_OBSERVATION_PREFERENCE;
+      headers[OPERATOR_PREPARATION_PROGRESS_HEADER] = OPERATOR_PREPARATION_PROGRESS_PREFERENCE;
+    }
     const options: RequestInit & { dispatcher: Agent } = {
-      body: JSON.stringify(body),
+      body: serializedBody,
       dispatcher: operatorDispatcher,
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-        "x-vercel-trusted-oidc-idp-token": token,
-        ...(body.action === "status" || body.action === "execute"
-          ? {
-              [OPERATOR_EXECUTION_OBSERVATION_HEADER]: OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
-              [OPERATOR_PREPARATION_PROGRESS_HEADER]: OPERATOR_PREPARATION_PROGRESS_PREFERENCE,
-            }
-          : {}),
-      },
+      headers,
       method: "POST",
       redirect: "error",
       signal,
     };
     let response: Response;
     try {
-      response = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
+      response = await (input.fetch ?? fetch)(new URL(operatorRuntimePath, url), options);
     } catch (error) {
       if (
         (body.action === "execute" || body.action === "status") &&
@@ -266,7 +284,7 @@ export const createHostedOperatorClient = (input: {
           sessionId: diagnosticSessionId,
           signal,
           token,
-          url: new URL("/v1/runtime", url),
+          url: new URL(operatorRuntimePath, url),
         });
       }
       throw new HostedOperatorError(
@@ -313,7 +331,7 @@ export const createHostedOperatorClient = (input: {
     };
     let result: Response;
     try {
-      result = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
+      result = await (input.fetch ?? fetch)(new URL(operatorRuntimePath, url), options);
     } catch (error) {
       if (body.action === "export" && !isCancellation(error, signal)) {
         throw new HostedOperatorTransportUnknown(error);
@@ -365,7 +383,7 @@ export const createHostedOperatorClient = (input: {
       let result: Response;
       stage = "client_transport";
       try {
-        result = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
+        result = await (input.fetch ?? fetch)(new URL(operatorRuntimePath, url), options);
       } catch (error) {
         if (body.action === "continuity" && !isCancellation(error, signal)) {
           throw new HostedOperatorTransportUnknown(error);
@@ -397,7 +415,7 @@ export const createHostedOperatorClient = (input: {
       if (blocked.success) {
         throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable", {
           continuityReadStage:
-            body.action === "continuity-read" || body.action === "continuity-binding-read"
+            body.action === continuityReadAction || body.action === continuityBindingReadAction
               ? "operator_response"
               : undefined,
           recoveryStage: blocked.data.recoveryStage,
@@ -421,28 +439,30 @@ export const createHostedOperatorClient = (input: {
         /* Diagnostic context lookup must preserve the original failure. */
       }
       if (
-        (request.action === "continuity-read" || request.action === "continuity-binding-read") &&
+        (request.action === continuityReadAction ||
+          request.action === continuityBindingReadAction) &&
         !isCancellation(error, signal)
       ) {
         const diagnostic = continuityReadDiagnosticStageSchema.safeParse(stage);
         if (diagnostic.success) {
-          throw new HostedOperatorError(
-            error instanceof HostedOperatorError ? error.code : "operator_unavailable",
-            {
-              cause: error,
-              continuityReadStage:
-                error instanceof HostedOperatorError && error.continuityReadStage !== undefined
-                  ? error.continuityReadStage
-                  : diagnostic.data,
-              ...(error instanceof HostedOperatorError && error.recoveryStage !== undefined
-                ? { recoveryStage: error.recoveryStage }
-                : {}),
-              ...(error instanceof HostedOperatorError &&
-              error.recoveryProgressAdvanced !== undefined
-                ? { recoveryProgressAdvanced: error.recoveryProgressAdvanced }
-                : {}),
-            },
-          );
+          const code = error instanceof HostedOperatorError ? error.code : "operator_unavailable";
+          const options: NonNullable<ConstructorParameters<typeof HostedOperatorError>[1]> = {
+            cause: error,
+            continuityReadStage:
+              error instanceof HostedOperatorError && error.continuityReadStage !== undefined
+                ? error.continuityReadStage
+                : diagnostic.data,
+          };
+          if (error instanceof HostedOperatorError && error.recoveryStage !== undefined) {
+            options.recoveryStage = error.recoveryStage;
+          }
+          if (
+            error instanceof HostedOperatorError &&
+            error.recoveryProgressAdvanced !== undefined
+          ) {
+            options.recoveryProgressAdvanced = error.recoveryProgressAdvanced;
+          }
+          throw new HostedOperatorError(code, options);
         }
       }
       throw error;
@@ -494,7 +514,7 @@ export const createHostedOperatorClient = (input: {
     async readContinuity(intentId: string, signal?: AbortSignal) {
       const ownerContext = exportOwner();
       const result = await sendContinuity(
-        { action: "continuity-read", intentId, ownerContext },
+        { action: continuityReadAction, intentId, ownerContext },
         continuityPlannedSchema,
         signal,
       );
@@ -538,7 +558,7 @@ export const createHostedOperatorClient = (input: {
     },
     async readContinuityBindings(intentId: string, signal?: AbortSignal) {
       return await sendContinuity(
-        { action: "continuity-binding-read", intentId, ownerContext: exportOwner() },
+        { action: continuityBindingReadAction, intentId, ownerContext: exportOwner() },
         appTenantBindingReadbackSchema,
         signal,
       );

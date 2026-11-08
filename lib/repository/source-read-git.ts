@@ -1,8 +1,10 @@
 import { existsSync } from "node:fs";
 import { captureProcessStdout, streamProcessStdout } from "./captured-process-output";
 
+const systemGitPath = "/usr/bin/git";
+
 export const git = function git(path: string, args: string[]): string {
-  const executable = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
+  const executable = existsSync(systemGitPath) ? systemGitPath : "/bin/git";
   return captureProcessStdout(
     executable,
     [
@@ -52,7 +54,7 @@ export const gitByteInvocation = (path: string, args: string[]) => ({
     path,
     ...args,
   ],
-  command: existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git",
+  command: existsSync(systemGitPath) ? systemGitPath : "/bin/git",
   options: {
     env: {
       GIT_ATTR_NOSYSTEM: "1",

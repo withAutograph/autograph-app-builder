@@ -85,7 +85,7 @@ describe("durable application review workflow orchestration", () => {
       .fn<Steps["round"]>()
       .mockResolvedValueOnce({ continuation: first })
       .mockResolvedValueOnce({ continuation: second })
-      .mockResolvedValueOnce({ continuation: second, assessment });
+      .mockResolvedValueOnce({ assessment, continuation: second });
     const save = vi.fn<Steps["save"]>().mockResolvedValue(outcome);
     expect(await continueApplicationReviewWorkflow(reference, ctx, { load, round, save })).toEqual(
       outcome,
@@ -164,7 +164,7 @@ describe("durable application review workflow orchestration", () => {
       .fn<Steps["round"]>()
       .mockResolvedValueOnce({ continuation: first })
       .mockResolvedValueOnce({ continuation: second })
-      .mockResolvedValueOnce({ continuation: second, assessment });
+      .mockResolvedValueOnce({ assessment, continuation: second });
     const save = vi.fn<Steps["save"]>().mockResolvedValue(outcome);
     expect(await continueApplicationReviewWorkflow(reference, ctx, { round, save })).toEqual(
       outcome,
@@ -215,7 +215,7 @@ describe("durable application review workflow orchestration", () => {
     const stopped = new Error("Stopped during the round.");
     const round = vi.fn<Steps["round"]>(() => {
       controller.abort(stopped);
-      return Promise.resolve({ continuation: checkpoint(1), assessment });
+      return Promise.resolve({ assessment, continuation: checkpoint(1) });
     });
     const save = vi.fn<Steps["save"]>();
     await expect(

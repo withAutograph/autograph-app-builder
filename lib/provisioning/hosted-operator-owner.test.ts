@@ -1,3 +1,4 @@
+import type { NativeRecoveryDescriptor } from "../eve/native-recovery-contract";
 /* oxlint-disable sonarjs/no-identical-functions -- Distinct original-owner and recovered-owner fixtures intentionally assert the same authorization boundary without sharing mutable session state. */
 import { recordRepositoryAccessReceipt } from "../agent/repository-access-state";
 import { initialBuilderProvisionJournalRecord } from "./journal";
@@ -291,8 +292,9 @@ const makeFixture = (
     },
   };
   const handoffs: Pick<BuilderHandoffStore, "read"> = {
-    // oxlint-disable-next-line eslint/require-await -- this in-memory store seam has no asynchronous work.
-    read: vi.fn(async () => (missingHandoff ? undefined : handoff)),
+    read: vi
+      .fn<BuilderHandoffStore["read"]>()
+      .mockResolvedValue(missingHandoff ? undefined : handoff),
   };
   const membership: HostedWorkspaceMembership = {
     // oxlint-disable-next-line eslint/require-await -- this in-memory membership seam has no asynchronous work.
@@ -345,8 +347,8 @@ const makeFixture = (
     keyResolver,
     listVercelInstallations,
     membership,
-    readVercelCredential,
     readReadyNativeTarget,
+    readVercelCredential,
     workloadPolicy,
   });
   return {
@@ -357,8 +359,8 @@ const makeFixture = (
     handoffs,
     listVercelInstallations,
     membership,
-    readVercelCredential,
     readReadyNativeTarget,
+    readVercelCredential,
   };
 };
 
@@ -366,10 +368,10 @@ const readyNativeHandoffTarget = (): NativeTargetReadyRegistration => {
   const at = "2026-10-21T15:00:00.000Z";
   const attemptId = "11111111-1111-4111-8111-111111111111";
   const projectSettings = {
+    buildCommand: "bun run build",
     framework: "nextjs" as const,
     rootDirectory: "apps/vendor-onboarding",
     sourceFilesOutsideRootDirectory: true,
-    buildCommand: "bun run build",
   };
   const plan = {
     version: 1 as const,
@@ -381,23 +383,23 @@ const readyNativeHandoffTarget = (): NativeTargetReadyRegistration => {
       adapterGeneration: 1,
       appSpecDigest: "a".repeat(64),
       release: {
-        id: "release-1",
         artifactRef: "artifact-1",
+        id: "release-1",
         manifestSha256: "b".repeat(64),
         schemaSha256: "c".repeat(64),
       },
     },
     project: {
-      name: "vendor-onboarding",
-      teamId: "team_1",
       installationId: "icfg_1",
+      name: "vendor-onboarding",
       projectSettings,
       protection: nativeTargetRequiredProjectProtection,
+      teamId: "team_1",
     },
     appDatabase: {
-      resourceId: "app-resource",
       database: "vendor_app",
       migratorRole: "vendor_migrator",
+      resourceId: "app-resource",
       runtimeRole: "vendor_runtime",
     },
     productRoles: [],
@@ -408,22 +410,22 @@ const readyNativeHandoffTarget = (): NativeTargetReadyRegistration => {
         sourceProjectId: "source-project",
       },
       scope: {
-        projectId: "neon-project",
         branchId: "neon-branch",
         endpointId: "neon-endpoint",
         hostname: "neon.example",
         maintenanceDatabase: "neondb",
         maintenanceRole: "neondb_owner",
+        projectId: "neon-project",
       },
     },
     worker: {
-      id: "trusted-installer",
       executablePath: "/trusted/installer",
-      sha256: "d".repeat(64),
+      id: "trusted-installer",
       operationScope: "generated-app-release-install-v1" as const,
+      sha256: "d".repeat(64),
       subcommand: "protected-generated-app-install" as const,
     },
-    cost: { ownership: "current-owner" as const, description: "Preview usage" },
+    cost: { description: "Preview usage", ownership: "current-owner" as const },
     retention: { policy: "Retain until approved deletion" },
     conflictPolicy: "stop-on-conflict" as const,
   };
@@ -453,7 +455,7 @@ const readyNativeHandoffTarget = (): NativeTargetReadyRegistration => {
       startedAt: at,
     },
     dispatchAuthorizedAt: at,
-    acceptedCreation: { attemptId, projectId: "prj_native", acceptedAt: at },
+    acceptedCreation: { acceptedAt: at, attemptId, projectId: "prj_native" },
     registration: {
       attemptId,
       observed: {
@@ -711,6 +713,7 @@ const retainedProjectSettingsApprovalFixture = () => {
     approvalId: approval.requestId,
     mode: "protected-operator-v1" as const,
     operationRef,
+    pendingEffectId: "delivery",
     plan: oldPlan,
     planDigest: oldPlanDigest,
     receipts: oldPlan.effects.slice(0, -1).map((effect) => ({
@@ -718,7 +721,6 @@ const retainedProjectSettingsApprovalFixture = () => {
       observedAt: "2026-10-16T00:00:00.000Z",
       resourceVersion: "a".repeat(64),
     })),
-    pendingEffectId: "delivery",
   };
   const record = hostedRuntimeJournalRecordSchema.parse({
     approvedByCallId: "settings-successor-call",
@@ -752,8 +754,8 @@ const retainedProjectSettingsApprovalFixture = () => {
     callId,
     fixture,
     journal,
-    oldPlanDigest,
     observe,
+    oldPlanDigest,
     readApproval: createHostedOperatorReadApproval({ eve: fixture.eve, journal, observe }),
     target,
   };
@@ -867,6 +869,7 @@ const retainedRenewalApprovalFixture = () => {
     approvalId: approval.requestId,
     mode: "protected-operator-v1" as const,
     operationRef,
+    pendingEffectId: "gateway-delivery",
     plan: priorPlan,
     planDigest: oldPlanDigest,
     receipts: priorPlan.effects.slice(0, -1).map((effect) => ({
@@ -874,7 +877,6 @@ const retainedRenewalApprovalFixture = () => {
       observedAt: "2026-10-16T00:00:00.000Z",
       resourceVersion: "a".repeat(64),
     })),
-    pendingEffectId: "gateway-delivery",
   };
   const oldRecord = hostedRuntimeJournalRecordSchema.parse({
     approvedByCallId: callId,
@@ -929,8 +931,8 @@ const retainedRenewalApprovalFixture = () => {
     fixture,
     record,
     journal,
-    oldPlanDigest,
     observe,
+    oldPlanDigest,
     readApproval: createHostedOperatorReadApproval({ eve: fixture.eve, journal, observe }),
     target,
   };
@@ -1040,7 +1042,7 @@ const retainedReadyApprovalFixture = () => {
   ) {
     throw new Error("Expected an approved original and its saved renewal.");
   }
-  const operationRef = original.operationRef;
+  const { operationRef } = original;
   original.deliveryCandidates = [
     {
       branch: original.plan.delivery.branch,
@@ -1077,15 +1079,15 @@ const retainedReadyApprovalFixture = () => {
       mode: "externally-managed-trusted-sources",
       teamId: "team",
       appPreview: {
+        from: "preview",
         sourceProjectId: "prj_gateway",
         targetProjectId: selection.projectId,
-        from: "preview",
         to: "preview",
       },
       gatewayPreview: {
+        from: "preview",
         sourceProjectId: selection.projectId,
         targetProjectId: "prj_gateway",
-        from: "preview",
         to: "preview",
       },
       observedAt: "2026-10-19T14:31:17Z",
@@ -1097,10 +1099,10 @@ const retainedReadyApprovalFixture = () => {
     appDeliveryReplacement: {
       version: 1,
       predecessor: {
-        operationRef,
-        planDigest: original.planDigest,
         appDeploymentId: "original-ready-app",
         gatewayDeploymentId: "original-ready-gateway",
+        operationRef,
+        planDigest: original.planDigest,
       },
     },
     retention: { ...parent.plan.retention, expiresAt: "2027-01-01T00:00:00Z" },
@@ -1280,7 +1282,7 @@ const recoveredOwnerFixture = async (kind: "direct" | "handoff" = "direct") => {
     source: ReturnType<typeof toDurableHostedSessionRecord>,
     childId: string,
   ) => {
-    const descriptor = {
+    const descriptor: NativeRecoveryDescriptor = {
       version: 1 as const,
       operationId: `${childId}-operation`,
       sourcePublicSessionId: source.sessionId,
@@ -1289,17 +1291,19 @@ const recoveredOwnerFixture = async (kind: "direct" | "handoff" = "direct") => {
       logicalSessionId: original.adapterSessionId,
       originalAuthoritySessionId: original.sessionId,
       parentCancellationRevision: source.cancellationRevision ?? 0,
-      ...(source.sourceHandoffId === undefined ? {} : { sourceHandoffId: source.sourceHandoffId }),
     };
+    if (source.sourceHandoffId !== undefined) {
+      descriptor.sourceHandoffId = source.sourceHandoffId;
+    }
     const binding = {
       ...descriptor,
       ownerRunId: `${childId}-physical`,
       provenance: {
+        checkpointVersion: 1 as const,
         kind: "failed-turn-input" as const,
-        sourceStepId: "step",
         sourceEventId: "event",
         sourceSlot: 1,
-        checkpointVersion: 1 as const,
+        sourceStepId: "step",
       },
     };
     const operation = {
@@ -1314,9 +1318,9 @@ const recoveredOwnerFixture = async (kind: "direct" | "handoff" = "direct") => {
     await store.reserveOperation(principal, operation);
     await store.commitNativeRecoveryReceipt({
       descriptor,
+      nowEpochMs: 2,
       principal,
       recoveryBinding: binding,
-      nowEpochMs: 2,
     });
     const child = durableHostedSessionRecordSchema.parse({
       ...source,
@@ -1372,7 +1376,7 @@ const recoveredOwnerFixture = async (kind: "direct" | "handoff" = "direct") => {
       scopeType: "team",
     }),
   };
-  return { fixture, store, original, child, owner, authority, context, recover };
+  return { authority, child, context, fixture, original, owner, recover, store };
 };
 
 describe("recovered operator owner authority", () => {
@@ -1416,9 +1420,9 @@ describe("recovered operator owner authority", () => {
     async (cancelled) => {
       const f = await recoveredOwnerFixture();
       await f.store.recordCancellationIntent({
+        nowEpochMs: 4,
         principal,
         sessionId: cancelled === "source" ? f.original.sessionId : f.child.sessionId,
-        nowEpochMs: 4,
       });
       await expect(f.authority.assertArtifactAuthorized(f.context)).rejects.toThrow();
       const source = await f.store.getSession(principal, f.original.sessionId);
@@ -1430,9 +1434,9 @@ describe("recovered operator owner authority", () => {
   it("admits only a proved explicit resume and fences the next Stop immediately", async () => {
     const f = await recoveredOwnerFixture();
     await f.store.recordCancellationIntent({
+      nowEpochMs: 4,
       principal,
       sessionId: f.child.sessionId,
-      nowEpochMs: 4,
     });
     await f.store.observeSession({
       principal,
@@ -1466,9 +1470,9 @@ describe("recovered operator owner authority", () => {
     });
     const proof = nativeDeliveryForEvents([
       {
-        type: "turn.started",
         data: { sequence: 1, turnId: "resumed-turn" },
-        meta: { at: "2026-10-21T00:00:00Z", id: "resume-event", deliveryIds: ["resume-delivery"] },
+        meta: { at: "2026-10-21T00:00:00Z", deliveryIds: ["resume-delivery"], id: "resume-event" },
+        type: "turn.started",
       },
     ]);
     const observation = {
@@ -1478,9 +1482,9 @@ describe("recovered operator owner authority", () => {
       checkpoint: {
         capturedAtEpochMs: 5,
         events: [],
+        nativeDeliveryState: proof,
         status: "working" as const,
         version: 1 as const,
-        nativeDeliveryState: proof,
       },
       stage: "planning" as const,
       resumability: "live" as const,
@@ -1496,9 +1500,9 @@ describe("recovered operator owner authority", () => {
     await f.store.observeSession({ ...observation, nowEpochMs: 6 });
     await f.authority.assertArtifactAuthorized(f.context);
     await f.store.recordCancellationIntent({
+      nowEpochMs: 7,
       principal,
       sessionId: f.child.sessionId,
-      nowEpochMs: 7,
     });
     await expect(f.authority.assertArtifactAuthorized(f.context)).rejects.toThrow();
     expect(await f.store.getSession(principal, f.child.sessionId)).toMatchObject({
@@ -1615,16 +1619,17 @@ it("blocks new legacy target effects after selecting a standard destination whil
   const current = directSessionRecord();
   current.builderDestination = {
     appId: selection.appId,
-    requestId: "d16f6dd2-157a-42dc-8dfc-253ce9005502",
     requestDigest: "a".repeat(64),
+    requestId: "d16f6dd2-157a-42dc-8dfc-253ce9005502",
   };
   const f = makeFixture(current);
+  const { eve, handoffs, membership } = f;
   const reader = createHostedOperatorAppOwnerAuthority({
-    eve: f.eve,
-    handoffs: f.handoffs,
-    membership: f.membership,
-    workloadPolicy,
+    eve,
+    handoffs,
     keyResolver,
+    membership,
+    workloadPolicy,
   });
   const context = {
     authority: directOwnerContext.authority,
@@ -1642,16 +1647,17 @@ it("blocks new legacy target effects after selecting a standard destination whil
   const current = directSessionRecord();
   current.builderDestination = {
     appId: selection.appId,
-    requestId: "d16f6dd2-157a-42dc-8dfc-253ce9005502",
     requestDigest: "a".repeat(64),
+    requestId: "d16f6dd2-157a-42dc-8dfc-253ce9005502",
   };
   const f = makeFixture(current);
+  const { eve, handoffs, membership } = f;
   const reader = createHostedOperatorAppOwnerAuthority({
-    eve: f.eve,
-    handoffs: f.handoffs,
-    membership: f.membership,
-    workloadPolicy,
+    eve,
+    handoffs,
     keyResolver,
+    membership,
+    workloadPolicy,
   });
   const context = {
     authority: directOwnerContext.authority,
@@ -1832,20 +1838,20 @@ const narrowedGatewayApprovalFixture = () => {
     resourcesInstaller: plan.installer,
     effects: [
       {
+        description: "Auth resources",
         id: "auth-resources",
         kind: "resources",
-        description: "Auth resources",
         resourceId: plan.authDatabase.resourceId,
       },
       {
+        description: "App resources",
         id: "app-resources",
         kind: "resources",
-        description: "App resources",
         resourceId: plan.appDatabase.resourceId,
       },
-      { id: "auth-schema", kind: "install", description: "Install Auth" },
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind Gateway" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Deliver Gateway" },
+      { description: "Install Auth", id: "auth-schema", kind: "install" },
+      { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Deliver Gateway", id: "gateway-delivery", kind: "gateway-delivery" },
     ],
     deploymentBoundary: {
       authority: ownerContext.authority,
@@ -1865,8 +1871,8 @@ const narrowedGatewayApprovalFixture = () => {
       operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
       verification: {
         gatewayOrigin: "https://gateway.example",
-        publicOrigin: "https://gateway.example",
         jwksUrl: "https://gateway.example/_platform/jwks.json",
+        publicOrigin: "https://gateway.example",
       },
     },
     publicGateway: {
@@ -1888,15 +1894,15 @@ const narrowedGatewayApprovalFixture = () => {
         subject: "fixture",
       },
       trustedSources: {
-        builderProduction: { projectId: "prj_builder", from: "production", to: "preview" },
-        operatorPreview: { projectId: "prj_operator", from: "preview", to: "preview" },
+        builderProduction: { from: "production", projectId: "prj_builder", to: "preview" },
+        operatorPreview: { from: "preview", projectId: "prj_operator", to: "preview" },
       },
     },
     gatewayDelivery: {
       branch: selection.branch,
+      gitSha: "1".repeat(40),
       projectId: "prj_gateway",
       repoId: "fixture-repo",
-      gitSha: "1".repeat(40),
     },
   });
   const narrowed = hostedOperatorPlanSchema.parse({
@@ -1940,7 +1946,7 @@ const retainedAppGatewaySourceApprovalFixture = async () => {
   const f = retainedProjectSettingsApprovalFixture();
   const context = { authority: ownerContext.authority, ownerContext, target: f.target };
   const gatewayPlan = narrowedGatewayApprovalFixture().prepareReceipt.toolInput.plan;
-  const gatewayDelivery = gatewayPlan.gatewayDelivery;
+  const { gatewayDelivery } = gatewayPlan;
   if (gatewayDelivery === undefined) {
     throw new Error("Missing native Gateway source fixture");
   }
@@ -2036,7 +2042,7 @@ describe("owner project access diagnostics", () => {
       );
       const response = Response.json(
         { privateToken: "never-log-response", uri: "postgres://private-password@private-host/db" },
-        { status, headers: { "private-header": "never-log-header" } },
+        { headers: { "private-header": "never-log-header" }, status },
       );
       const readJson = vi.spyOn(response, "json");
       const readText = vi.spyOn(response, "text");
@@ -2063,7 +2069,7 @@ describe("owner project access diagnostics", () => {
         expect.arrayContaining([
           expect.objectContaining({
             httpStatus: status,
-            planningFailure: { stage: "plan_owner_authorization", errorClass: "unexpected" },
+            planningFailure: { errorClass: "unexpected", stage: "plan_owner_authorization" },
           }),
         ]),
       );
@@ -2134,7 +2140,7 @@ describe("owner project access diagnostics", () => {
       expect(diagnostics).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            planningFailure: { stage: "plan_owner_authorization", errorClass: "type_error" },
+            planningFailure: { errorClass: "type_error", stage: "plan_owner_authorization" },
           }),
         ]),
       );
@@ -2157,8 +2163,8 @@ describe("hosted operator owner authority", () => {
       }
       await expect(f.readApproval(f.prepareInput)).resolves.toEqual({
         action: "prepare",
-        approved: true,
         approvalId: f.approval.requestId,
+        approved: true,
         callId: f.callId,
         planDigest: f.prepareInput.planDigest,
       });
@@ -2219,8 +2225,8 @@ describe("hosted operator owner authority", () => {
     const retained = narrowedGatewayApprovalFixture();
     await expect(retained.readApproval(retained.prepareInput)).resolves.toEqual({
       action: "prepare",
-      approved: true,
       approvalId: retained.prepareReceipt.requestId,
+      approved: true,
       callId: retained.prepareReceipt.callId,
       planDigest: retained.prepareReceipt.toolInput.planDigest,
     });
@@ -2301,10 +2307,10 @@ describe("hosted operator owner authority", () => {
       origin: "https://apps.example.test",
       actors: [
         {
+          account: "capture-existing" as const,
           actorKey: "owner",
           email: "owner@example.test",
           name: "Owner",
-          account: "capture-existing" as const,
         },
       ],
       organizations: [],
@@ -2345,9 +2351,9 @@ describe("hosted operator owner authority", () => {
       },
       effects: [
         {
+          description: "Connect approved accounts",
           id: "normal-accounts",
           kind: "normal-accounts",
-          description: "Connect approved accounts",
         },
       ],
     });
@@ -2367,8 +2373,8 @@ describe("hosted operator owner authority", () => {
       captures: [],
     };
     await expect(retained.readApproval(retained.prepareInput)).resolves.toMatchObject({
-      approved: true,
       approvalId: retained.prepareReceipt.requestId,
+      approved: true,
       planDigest,
     });
     retained.record.accountPreparation.accountOperationRef =
@@ -2611,14 +2617,14 @@ describe("hosted operator owner authority", () => {
     await expect(
       fixture.authority.authorize(
         request(),
-        { ...selection, projectId: "prj_native", branch: "other" },
+        { ...selection, branch: "other", projectId: "prj_native" },
         ownerContext,
       ),
     ).rejects.toThrow();
     await expect(
       fixture.authority.authorize(
         request(),
-        { ...selection, projectId: "prj_native", appId: "another-app" },
+        { ...selection, appId: "another-app", projectId: "prj_native" },
         ownerContext,
       ),
     ).rejects.toThrow();
@@ -2957,18 +2963,17 @@ describe("canonical original approved plan reader", () => {
     const f = makeFixture();
     f.currentSession.privateApprovalReceipts = [receipt];
     const context = await f.authority.authorize(request(), selection, ownerContext);
-    const read = createHostedOperatorReadApprovedPlan({
-      eve: f.eve,
-      assertCanonicalOwner: f.authority.assertArtifactAuthorized,
-    });
+    const { eve } = f;
+    const { assertArtifactAuthorized: assertCanonicalOwner } = f.authority;
+    const read = createHostedOperatorReadApprovedPlan({ assertCanonicalOwner, eve });
     const proposed = {
       ...plan,
       retention: { ...plan.retention, expiresAt: "2099-12-31T23:59:59Z" },
     };
     return {
       f,
-      read,
       input: { ...context, plan: proposed, now: Date.parse("2026-10-14T00:00:00Z") },
+      read,
     };
   };
   it("selects the actual original owner approval without extending its expiry", async () => {
@@ -3017,9 +3022,9 @@ describe("Realm delegation at operator effect boundaries", () => {
   const service = readRealmContinuationServiceIdentity({
     EVE_HOSTED_ADAPTER: "1",
     EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
-    VERCEL_ENV: "preview",
     EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
     EVE_HOSTED_VERCEL_TEAM_SLUG: "withautograph",
+    VERCEL_ENV: "preview",
   });
   const operationRef = "a5c2b20f-0c08-49a8-a34f-cce64c72cc8c";
   const setup = (expired = false) => {
@@ -3035,7 +3040,7 @@ describe("Realm delegation at operator effect boundaries", () => {
     const planDigest = operatorPlanDigest(selectedPlan);
     const expiresAt = "2026-10-01T00:00:00.000Z";
     const reason: RealmContinuationAuthority["reason"] = expired
-      ? { kind: "expired-technical-wait", expiresAt }
+      ? { expiresAt, kind: "expired-technical-wait" }
       : { kind: "consumed-proof", proofRef: "private-proof", proofSha256: "f".repeat(64) };
     const sealedAuthority = mintRealmContinuationAuthority({
       config,
@@ -3090,9 +3095,9 @@ describe("Realm delegation at operator effect boundaries", () => {
           assetSha256: "b".repeat(64),
           catalogFingerprint: "c".repeat(64),
           database: selectedPlan.authDatabase.database,
+          observedAt: "2026-10-01T00:00:00.000Z",
           runtimeRole: selectedPlan.authDatabase.runtimeRole,
           targetDigest: "e".repeat(64),
-          observedAt: "2026-10-01T00:00:00.000Z",
         },
         identityLink: {
           audience: "https://builder.example",
@@ -3143,7 +3148,7 @@ describe("Realm delegation at operator effect boundaries", () => {
 
   it("rejects an old sealed notification while its identity link is absent and after a fresh nonce replaces it", async () => {
     const f = setup();
-    const operator = f.record.operator;
+    const { operator } = f.record;
     if (operator?.identityLink === undefined) {
       throw new Error("Fixture identity link missing");
     }
@@ -3272,7 +3277,7 @@ describe("hosted operator Sandbox ownership", () => {
         scopeType: "team",
       }),
     };
-    return { ...fixture, session, decision, context };
+    return { ...fixture, context, decision, session };
   };
 
   it.each(["direct", "handoff"] as const)(
@@ -3417,7 +3422,7 @@ describe("hosted operator Sandbox ownership", () => {
 describe("normal Builder destination authority", () => {
   const read = (f: ReturnType<typeof makeFixture>, owner: OperatorOwnerContext = ownerContext) =>
     readStandardBuilderDestination(
-      { ...f, workloadPolicy, apiOrigin: "https://vercel.example" },
+      { ...f, apiOrigin: "https://vercel.example", workloadPolicy },
       {
         authority: owner.authority,
         ownerContext: owner,
@@ -3431,18 +3436,18 @@ describe("normal Builder destination authority", () => {
       async () =>
         await Promise.resolve(
           Response.json({
-            id: selection.projectId,
             accountId: "team_1",
-            name: "apps-vendor-onboarding",
             framework: "services",
+            id: selection.projectId,
+            name: "apps-vendor-onboarding",
             rootDirectory: ".",
           }),
         ),
     );
     await expect(read(f)).resolves.toMatchObject({
+      installationId: "icfg_1",
       projectId: selection.projectId,
       teamId: "team_1",
-      installationId: "icfg_1",
     });
     expect(f.fetch).toHaveBeenCalledOnce();
     expect(f.currentSession.appId).toBe(selection.appId);
@@ -3490,10 +3495,10 @@ describe("normal Builder destination authority", () => {
       };
       return await Promise.resolve(
         Response.json({
-          id: selection.projectId,
           accountId: "team_1",
-          name: "apps-vendor-onboarding",
           framework: "services",
+          id: selection.projectId,
+          name: "apps-vendor-onboarding",
           rootDirectory: ".",
         }),
       );
@@ -3523,10 +3528,10 @@ describe("normal Builder destination authority", () => {
       };
       return await Promise.resolve(
         Response.json({
-          id: selection.projectId,
           accountId: "team_1",
-          name: "apps-vendor-onboarding",
           framework: "services",
+          id: selection.projectId,
+          name: "apps-vendor-onboarding",
           rootDirectory: ".",
         }),
       );
@@ -3540,10 +3545,10 @@ describe("normal Builder destination authority", () => {
       f.membership.isMember = vi.fn().mockResolvedValue(false);
       return await Promise.resolve(
         Response.json({
-          id: selection.projectId,
           accountId: "team_1",
-          name: "apps-vendor-onboarding",
           framework: "services",
+          id: selection.projectId,
+          name: "apps-vendor-onboarding",
           rootDirectory: ".",
         }),
       );
@@ -3592,17 +3597,17 @@ describe("attached direct-session standard destination", () => {
     if (revision) {
       delete f.currentSession.builderDestination;
       row.record.response.github = {
-        status: "succeeded",
         defaultBranch: "main",
         fullName: "owned/vendor-onboarding",
+        headSha: "1".repeat(40),
+        headTree: "2".repeat(40),
+        installationId: "10",
         name: "vendor-onboarding",
         owner: "owned",
         repositoryId: "200",
-        installationId: "10",
-        headSha: "1".repeat(40),
-        headTree: "2".repeat(40),
         scope: { id: "20", login: "owned", type: "organization" },
         starter: { sourceSha: "1".repeat(40), sourceTree: "2".repeat(40) },
+        status: "succeeded",
         url: "https://github.com/owned/vendor-onboarding",
         visibility: "private",
       };
@@ -3634,28 +3639,28 @@ describe("attached direct-session standard destination", () => {
       f.currentSession.privateBuildDecision = {
         adapterSessionId: f.currentSession.adapterSessionId,
         decision: "working",
+        existingRepositorySource,
         turnId: "revision-turn",
         turnSequence: 1,
-        workflowPhase: "app_spec_accepted",
         version: 1,
-        existingRepositorySource,
+        workflowPhase: "app_spec_accepted",
       };
     }
     const findProvisioningForAppRepository = vi.fn(async () => await Promise.resolve([row]));
     if (revision) {
       delete f.currentSession.builderDestination;
       row.record.response.github = {
-        status: "succeeded",
         defaultBranch: "main",
         fullName: "owned/vendor-onboarding",
+        headSha: "1".repeat(40),
+        headTree: "2".repeat(40),
+        installationId: "10",
         name: "vendor-onboarding",
         owner: "owned",
         repositoryId: "200",
-        installationId: "10",
-        headSha: "1".repeat(40),
-        headTree: "2".repeat(40),
         scope: { id: "20", login: "owned", type: "organization" },
         starter: { sourceSha: "1".repeat(40), sourceTree: "2".repeat(40) },
+        status: "succeeded",
         url: "https://github.com/owned/vendor-onboarding",
         visibility: "private",
       };
@@ -3687,11 +3692,11 @@ describe("attached direct-session standard destination", () => {
       f.currentSession.privateBuildDecision = {
         adapterSessionId: f.currentSession.adapterSessionId,
         decision: "working",
+        existingRepositorySource,
         turnId: "revision-turn",
         turnSequence: 1,
-        workflowPhase: "app_spec_accepted",
         version: 1,
-        existingRepositorySource,
+        workflowPhase: "app_spec_accepted",
       };
     }
 
@@ -3700,10 +3705,10 @@ describe("attached direct-session standard destination", () => {
       readStandardBuilderDestination(
         {
           ...f,
-          workloadPolicy,
-          readProvisioning,
-          findProvisioningForAppRepository,
           apiOrigin: "https://vercel.example",
+          findProvisioningForAppRepository,
+          readProvisioning,
+          workloadPolicy,
         },
         {
           authority: ownerContext.authority,
@@ -3720,19 +3725,19 @@ describe("attached direct-session standard destination", () => {
             name: "apps-vendor-onboarding",
             framework: "services",
             rootDirectory: ".",
-            ...(revision ? { link: { type: "github", repoId: 200 } } : {}),
+            ...(revision ? { link: { repoId: 200, type: "github" } } : {}),
           }),
         ),
     );
-    return { f, row, read, readProvisioning, findProvisioningForAppRepository };
+    return { f, findProvisioningForAppRepository, read, readProvisioning, row };
   };
 
   it("uses the actual attached normal receipt without rewriting source handoff or history", async () => {
     const x = await fixture();
     await expect(x.read()).resolves.toMatchObject({
+      installationId: "icfg_1",
       projectId: selection.projectId,
       teamId: "team_1",
-      installationId: "icfg_1",
     });
     expect(x.f.currentSession.sourceHandoffId).toBeUndefined();
     expect(x.f.handoffs.read).toHaveBeenCalledOnce();
@@ -3756,10 +3761,10 @@ describe("attached direct-session standard destination", () => {
     const x = await fixture(true);
     const before = structuredClone(x.f.currentSession);
     await expect(x.read()).resolves.toMatchObject({
-      projectId: selection.projectId,
-      repositoryId: "200",
       githubInstallationId: "10",
+      projectId: selection.projectId,
       provisioningRequestId: x.row.requestId,
+      repositoryId: "200",
     });
     expect(x.findProvisioningForAppRepository).toHaveBeenCalledWith({
       authority: ownerContext.authority,
@@ -3786,7 +3791,7 @@ describe("attached direct-session standard destination", () => {
     "refuses a mismatched recovered %s receipt",
     async (field) => {
       const x = await fixture(true);
-      const github = x.row.record.response.github;
+      const { github } = x.row.record.response;
       if (github.status !== "succeeded") {
         throw new Error("missing github");
       }
@@ -3812,20 +3817,20 @@ describe("attached direct-session standard destination", () => {
     },
   );
   it.each([
-    { type: "github", repoId: 201 },
-    { type: "gitlab", repoId: 200 },
+    { repoId: 201, type: "github" },
+    { repoId: 200, type: "gitlab" },
   ])(
     "refuses live provider linkage drift before returning the recovered destination",
     async (link) => {
       const x = await fixture(true);
       x.f.fetch.mockResolvedValue(
         Response.json({
-          id: selection.projectId,
           accountId: "team_1",
-          name: "apps-vendor-onboarding",
           framework: "services",
-          rootDirectory: ".",
+          id: selection.projectId,
           link,
+          name: "apps-vendor-onboarding",
+          rootDirectory: ".",
         }),
       );
       await expect(x.read()).rejects.toMatchObject({ code: "resource_mismatch" });
@@ -3837,7 +3842,7 @@ describe("attached direct-session standard destination", () => {
 describe("normal Builder destination authority", () => {
   const read = (f: ReturnType<typeof makeFixture>, owner: OperatorOwnerContext = ownerContext) =>
     readStandardBuilderDestination(
-      { ...f, workloadPolicy, apiOrigin: "https://vercel.example" },
+      { ...f, apiOrigin: "https://vercel.example", workloadPolicy },
       {
         authority: owner.authority,
         ownerContext: owner,
@@ -3851,18 +3856,18 @@ describe("normal Builder destination authority", () => {
       async () =>
         await Promise.resolve(
           Response.json({
-            id: selection.projectId,
             accountId: "team_1",
-            name: "apps-vendor-onboarding",
             framework: "services",
+            id: selection.projectId,
+            name: "apps-vendor-onboarding",
             rootDirectory: ".",
           }),
         ),
     );
     await expect(read(f)).resolves.toMatchObject({
+      installationId: "icfg_1",
       projectId: selection.projectId,
       teamId: "team_1",
-      installationId: "icfg_1",
     });
     expect(f.fetch).toHaveBeenCalledOnce();
     expect(f.currentSession.appId).toBe(selection.appId);
@@ -3894,10 +3899,10 @@ describe("normal Builder destination authority", () => {
       f.membership.isMember = vi.fn().mockResolvedValue(false);
       return await Promise.resolve(
         Response.json({
-          id: selection.projectId,
           accountId: "team_1",
-          name: "apps-vendor-onboarding",
           framework: "services",
+          id: selection.projectId,
+          name: "apps-vendor-onboarding",
           rootDirectory: ".",
         }),
       );

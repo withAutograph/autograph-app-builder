@@ -85,7 +85,7 @@ export function publicationContentSourceForReviewedWorkflow(input: {
           return {
             bytes,
             digest: file.sha256,
-            mode: file.mode as "100644" | "100755",
+            mode: file.mode,
             objectId: file.objectId,
             path: file.path,
           };

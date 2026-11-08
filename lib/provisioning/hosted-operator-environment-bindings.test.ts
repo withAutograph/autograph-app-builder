@@ -171,7 +171,7 @@ const fixture = (configurationId?: string | null) => {
   let failedPatchCode: string | undefined;
   let failedPatchTarget: "environment_row" | "project_settings" | undefined;
   let failedDeleteId: string | undefined;
-  const assertCurrent = vi.fn(async () => {});
+  const assertCurrent = vi.fn<() => Promise<void>>().mockResolvedValue();
   const checkpointManagedEnvironment = vi.fn(
     async (next: readonly ManagedOperatorEnvironmentRow[]) => {
       journal = structuredClone([...next]);
@@ -181,7 +181,7 @@ const fixture = (configurationId?: string | null) => {
   const input: HostedOperatorManagedEnvironmentContext = {
     assertCurrent,
     authority,
-    checkpoint: vi.fn(async () => {}),
+    checkpoint: vi.fn<() => Promise<void>>().mockResolvedValue(),
     checkpointManagedEnvironment,
     effect: plan.effects.find((item) => item.kind === "bindings")!,
     fenceGeneration: 1,
@@ -284,7 +284,7 @@ const fixture = (configurationId?: string | null) => {
     },
     token: "private-oauth",
   }));
-  const assertAuthorized = vi.fn(async () => {});
+  const assertAuthorized = vi.fn<() => Promise<void>>().mockResolvedValue();
   const diagnosticSink: HostedOperatorConsentDiagnosticSink = (diagnostic) => {
     diagnostics.push(diagnostic);
   };
@@ -297,13 +297,13 @@ const fixture = (configurationId?: string | null) => {
   return {
     assertAuthorized,
     assertCurrent,
-    diagnostics,
     checkpointManagedEnvironment,
+    diagnostics,
     fetcher,
     input,
+    project,
     readCredential,
     requests,
-    project,
     rows,
     setFailedDelete: (id: string) => {
       failedDeleteId = id;
@@ -477,10 +477,10 @@ it("reports a bounded Git-reference rejection without exposing provider details"
   await Promise.resolve();
   const failure = f.diagnostics[0]?.hostedEnvironmentBindingFailure;
   expect(failure).toEqual({
-    stage: "create_post",
-    reason: "git_reference_rejection",
-    providerCode: "other",
     httpStatus: 400,
+    providerCode: "other",
+    reason: "git_reference_rejection",
+    stage: "create_post",
   });
   expect(JSON.stringify(f.diagnostics)).not.toContain("private repository details");
   expect(JSON.stringify(f.diagnostics)).not.toContain("private-oauth");
@@ -491,10 +491,10 @@ it("bounds a stalled provider error body and still reports the HTTP rejection", 
   f.setSlowProviderErrorPost();
   await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
   expect(f.diagnostics[0]?.hostedEnvironmentBindingFailure).toEqual({
-    stage: "create_post",
-    reason: "provider_rejected",
-    providerCode: "other",
     httpStatus: 400,
+    providerCode: "other",
+    reason: "provider_rejected",
+    stage: "create_post",
   });
 }, 2000);
 it.each(["integration", "foreign", "duplicate"])(
@@ -641,7 +641,7 @@ it("cannot delete unjournaled current-operation rows", async () => {
 
 it("does not depend on checkpoint mutating the copied effect context", async () => {
   const f = fixture();
-  f.input.checkpointManagedEnvironment = vi.fn(async () => {});
+  f.input.checkpointManagedEnvironment = vi.fn<() => Promise<void>>().mockResolvedValue();
   const result = await f.writer.bind(f.input, values);
   expect(result.rows).toHaveLength(5);
   expect(f.input.managedEnvironment).toBeUndefined();
@@ -719,12 +719,12 @@ const historicalCleanupFixture = () => {
     action: "cleanup",
     appEnvironmentCleanup: saved,
     effects: [
-      { id: "revoke", kind: "revoke", description: "Revoke access" },
-      { id: "remove", kind: "remove-bindings", description: "Remove exact saved rows" },
+      { description: "Revoke access", id: "revoke", kind: "revoke" },
+      { description: "Remove exact saved rows", id: "remove", kind: "remove-bindings" },
       {
+        description: "Retire owned resources",
         id: "retire",
         kind: "retire",
-        description: "Retire owned resources",
       },
     ],
   });
@@ -903,8 +903,8 @@ const approveAppTrustedSource = (f: ReturnType<typeof fixture>) => {
     },
     effects: [
       ...f.input.plan.effects,
-      { id: "app-delivery", kind: "delivery", description: "Deliver approved app" },
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind Gateway" },
+      { description: "Deliver approved app", id: "app-delivery", kind: "delivery" },
+      { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
     ],
     gatewayBindings: {
       authBrowserOrigin: "https://auth-preview.example.test",
@@ -921,7 +921,7 @@ const approveAppTrustedSource = (f: ReturnType<typeof fixture>) => {
       },
     },
     appTrustedSources: {
-      gatewayPreview: { projectId: "prj_gateway", from: "preview", to: "preview" },
+      gatewayPreview: { from: "preview", projectId: "prj_gateway", to: "preview" },
     },
   });
 };
@@ -1131,14 +1131,14 @@ it.each([
     f.setFailedPatch("project_settings", "not_found");
     await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
     expect(f.diagnostics.at(-1)?.hostedEnvironmentBindingFailure).toEqual({
-      stage: "update_patch",
-      requestTarget: "project_settings",
-      reason: "provider_rejected",
-      providerCode: "not_found",
-      httpStatus: 404,
-      trustedSourcesVisibility,
-      approvedSourcePresent,
       approvedPairCovered: false,
+      approvedSourcePresent,
+      httpStatus: 404,
+      providerCode: "not_found",
+      reason: "provider_rejected",
+      requestTarget: "project_settings",
+      stage: "update_patch",
+      trustedSourcesVisibility,
     });
     expect(JSON.stringify(f.diagnostics)).not.toContain("private PATCH rejection");
     expect(JSON.stringify(f.diagnostics)).not.toContain("prj_gateway");
@@ -1161,11 +1161,11 @@ it("retains current app policy coverage when a later checkpoint fails without a 
   f.checkpointManagedEnvironment.mockRejectedValue(new Error("private checkpoint failure"));
   expect(await f.writer.reconcile(f.input, values)).toEqual({ status: "unknown" });
   expect(f.diagnostics.at(-1)?.hostedEnvironmentBindingFailure).toMatchObject({
-    stage: "checkpoint",
-    reason: "checkpoint_failed",
-    trustedSourcesVisibility: "present",
-    approvedSourcePresent: true,
     approvedPairCovered: true,
+    approvedSourcePresent: true,
+    reason: "checkpoint_failed",
+    stage: "checkpoint",
+    trustedSourcesVisibility: "present",
   });
   expect(appPolicyWrites(f)).toEqual([]);
 });
@@ -1355,8 +1355,8 @@ it("adds the missing Preview pair alongside the Gateway's existing explicit rule
     trustedSources: {
       projects: {
         prj_gateway: {
-          label: "existing explicit scope",
           customAllow: [prior, { from: { slugs: ["preview"] }, to: { slugs: ["preview"] } }],
+          label: "existing explicit scope",
         },
       },
     },
@@ -1429,9 +1429,9 @@ it.each([
     const protection =
       requestTarget === "project_settings"
         ? {
-            trustedSourcesVisibility: "absent",
-            approvedSourcePresent: false,
             approvedPairCovered: false,
+            approvedSourcePresent: false,
+            trustedSourcesVisibility: "absent",
           }
         : {};
     expect(f.diagnostics[0]?.hostedEnvironmentBindingFailure).toEqual({
@@ -1475,9 +1475,9 @@ it("clears the PATCH target when the subsequent readback request fails", async (
   });
   await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
   expect(f.diagnostics[0]?.hostedEnvironmentBindingFailure).toEqual({
-    stage: "readback",
-    reason: "provider_rejected",
-    providerCode: "other",
     httpStatus: 500,
+    providerCode: "other",
+    reason: "provider_rejected",
+    stage: "readback",
   });
 });

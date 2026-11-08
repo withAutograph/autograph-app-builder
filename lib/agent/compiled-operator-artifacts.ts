@@ -44,6 +44,8 @@ import type {
 import { describeSelectedApp } from "../repository/app-description";
 import type { AppDescription } from "../repository/app-description";
 
+const RELEASE_NOT_REQUIRED = "not-required";
+
 /** Validates an internal approved root before adapting the fixed repository-relative capture API. */
 export const compiledArtifactSandboxRelativePath = (root: string): string => {
   if (
@@ -179,7 +181,7 @@ const resolveCompiledArtifactSession = async (
         workspaceId: state.workspace.workspaceId,
       };
     } else {
-      privateApplyScope = completion.compilation.privateApplyScope;
+      ({ privateApplyScope } = completion.compilation);
     }
     assertCurrentOwner = async (current) => {
       assertCompilation();
@@ -218,11 +220,13 @@ const resolveCompiledArtifactSession = async (
     throw operatorArtifactUnavailable();
   }
   await assertCurrentOwner(context);
-  const captureAuthority = {
+  const captureAuthority: Pick<ReconciliationCompilation, "context" | "privateApplyScope"> = {
     context,
-    ...(privateApplyScope === undefined ? {} : { privateApplyScope }),
   };
-  return { assertCurrentOwner, context, localAuthority, captureAuthority };
+  if (privateApplyScope !== undefined) {
+    captureAuthority.privateApplyScope = privateApplyScope;
+  }
+  return { assertCurrentOwner, captureAuthority, context, localAuthority };
 };
 
 const openCompiledArtifactStorage = async (
@@ -362,7 +366,7 @@ export const recordPublishedReconciliationSourceForSession = async (input: {
     await binding.assertCurrentOwner(binding.context);
     const { release } = completion.compilation;
     const storage = await openCompiledArtifactStorage(binding);
-    if (release.status === "not-required") {
+    if (release.status === RELEASE_NOT_REQUIRED) {
       if (storage.selections.recordDestination === undefined) {
         throw operatorArtifactUnavailable();
       }
@@ -530,8 +534,8 @@ export const publishCompiledOperatorArtifactsForSession = async (
           await import("../provisioning/captured-app-description");
         database ??= openArtifactDatabase();
         const descriptions = createCapturedAppDescriptionStore({
-          database: await database,
           assertCurrentOwner,
+          database: await database,
         });
         await descriptions.record(context, input.appSpecDigest, input.callId, description);
       }
@@ -539,7 +543,7 @@ export const publishCompiledOperatorArtifactsForSession = async (
         status: "not-required" as const,
         compilation: {
           ...binding.captureAuthority,
-          release: { status: "not-required" as const },
+          release: { status: RELEASE_NOT_REQUIRED },
         } satisfies ReconciliationCompilation,
       };
     }

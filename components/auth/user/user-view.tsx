@@ -36,12 +36,12 @@ export interface UserViewProps {
 export function UserView({ className, isPending, hideSubtitle = false, user }: UserViewProps) {
   const { authClient } = useAuth<UsernameAuthClient>();
   const { data: session, isPending: sessionPending } = useSession(authClient, {
-    enabled: !user && !isPending,
+    enabled: !user && !(isPending ?? false),
   });
 
   const resolvedUser = user ?? session?.user;
 
-  if ((isPending || sessionPending) && !user) {
+  if (((isPending ?? false) || sessionPending) && !user) {
     return (
       <div className={cn("flex items-center gap-2 min-w-0", className)}>
         <UserAvatar isPending />

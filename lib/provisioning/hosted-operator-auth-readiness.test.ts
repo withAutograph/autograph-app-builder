@@ -188,8 +188,8 @@ describe("restricted Auth schema publication readiness", () => {
   it("reports the actual prior publication without claiming the approved target is installed", async () => {
     const f = upgradeFixture();
     expect(await f.reader.verifyPublication(f.input)).toMatchObject({
-      targetDigest: "e".repeat(64),
       assetSha256: "f".repeat(64),
+      targetDigest: "e".repeat(64),
     });
     await expect(f.reader.verify(f.input)).rejects.toMatchObject({ code: "operator_unavailable" });
   });

@@ -9,26 +9,34 @@ import {
   AUTOGRAPH_PACKAGE_VERSION,
 } from "../lib/plugin/agent-plugin-package.ts";
 
+interface CodexOAuthOptions {
+  oauth?: { callback_url: string; client_id: string };
+}
+
 const portable = JSON.parse(await readFile(path.resolve("plugin.json"), "utf-8"));
 const connectionIndex = process.argv.indexOf("--connection-id");
 const connectionId = connectionIndex === -1 ? undefined : process.argv[connectionIndex + 1];
 const endpointIndex = process.argv.indexOf("--endpoint");
 const suppliedEndpoint = endpointIndex === -1 ? undefined : process.argv[endpointIndex + 1];
+const hasConnectionId = connectionId !== null && connectionId !== undefined && connectionId !== "";
+const hasSuppliedEndpoint =
+  suppliedEndpoint !== null && suppliedEndpoint !== undefined && suppliedEndpoint !== "";
 const endpoint =
-  suppliedEndpoint ?? (connectionId ? undefined : AUTOGRAPH_DEVELOPMENT_MCP_ENDPOINT);
+  suppliedEndpoint ?? (hasConnectionId ? undefined : AUTOGRAPH_DEVELOPMENT_MCP_ENDPOINT);
+const hasEndpoint = endpoint !== null && endpoint !== undefined && endpoint !== "";
 
-if (connectionIndex === -1 || connectionId) {
+if (connectionIndex === -1 || hasConnectionId) {
   // The option is absent or has a value.
 } else {
   throw new Error("Missing value for --connection-id.");
 }
-if (endpointIndex === -1 || suppliedEndpoint) {
+if (endpointIndex === -1 || hasSuppliedEndpoint) {
   // The option is absent or has a value.
 } else {
   throw new Error("Missing value for --endpoint.");
 }
 
-if (connectionId && suppliedEndpoint) {
+if (hasConnectionId && hasSuppliedEndpoint) {
   throw new Error("Pass either --connection-id or --endpoint, not both.");
 }
 
@@ -36,7 +44,7 @@ if (portable.version !== AUTOGRAPH_PACKAGE_VERSION) {
   throw new Error(`plugin.json version must be exactly ${AUTOGRAPH_PACKAGE_VERSION}.`);
 }
 
-if (suppliedEndpoint) {
+if (hasSuppliedEndpoint) {
   assertAutographMcpEndpoint(suppliedEndpoint, { release: true });
 }
 
@@ -56,7 +64,7 @@ if (
 }
 assertAutographMcpEndpoint(portableServer.url, { release: false });
 
-const manifest = {
+const manifestBase = {
   author: portable.author,
   description: portable.description,
   homepage: portable.homepage,
@@ -85,31 +93,39 @@ const manifest = {
   repository: portable.repository,
   skills: "./skills/",
   version: portable.version,
-  ...(connectionId ? { apps: "./.app.json" } : {}),
-  ...(endpoint ? { mcpServers: "./.mcp.json" } : {}),
 };
-const apps = connectionId ? { apps: { "app-builder": { id: connectionId } } } : { apps: {} };
+const manifest: typeof manifestBase & { apps?: string; mcpServers?: string } = manifestBase;
+if (hasConnectionId) {
+  manifest.apps = "./.app.json";
+}
+if (hasEndpoint) {
+  manifest.mcpServers = "./.mcp.json";
+}
+const apps = hasConnectionId ? { apps: { "app-builder": { id: connectionId } } } : { apps: {} };
 await mkdir(path.resolve(".codex-plugin"), { recursive: true });
 await writeFile(
   path.resolve(".codex-plugin/plugin.json"),
   await formatWithOxfmt(".codex-plugin/plugin.json", JSON.stringify(manifest)),
 );
-if (endpoint) {
+if (hasEndpoint) {
   portableServer.url = endpoint;
   await writeFile(
     portableMcpPath,
     await formatWithOxfmt(portableMcpPath, JSON.stringify(portableMcp)),
   );
+  const codexMcpPath = path.resolve(".mcp.json");
+  const oauthOptions: CodexOAuthOptions = {};
+  if (hasSuppliedEndpoint) {
+    oauthOptions.oauth = { callback_url: codexRedirectUri, client_id: codexClientId };
+  }
   await writeFile(
-    path.resolve(".mcp.json"),
+    codexMcpPath,
     await formatWithOxfmt(
       ".mcp.json",
       JSON.stringify({
         mcpServers: {
           [AUTOGRAPH_MCP_SERVER_NAME]: {
-            ...(suppliedEndpoint
-              ? { oauth: { callback_url: codexRedirectUri, client_id: codexClientId } }
-              : {}),
+            ...oauthOptions,
             oauth_resource: endpoint,
             type: "http",
             url: endpoint,
@@ -125,9 +141,9 @@ await writeFile(
 );
 let completionMessage =
   "Generated the skill-only OpenAI adapter; pass --connection-id after registering MCP.";
-if (connectionId) {
+if (hasConnectionId) {
   completionMessage = "Generated the OpenAI adapter with its registered MCP connection.";
-} else if (endpoint) {
+} else if (hasEndpoint) {
   completionMessage = `Generated the OpenAI adapter for ${endpoint}.`;
 }
 console.log(completionMessage);

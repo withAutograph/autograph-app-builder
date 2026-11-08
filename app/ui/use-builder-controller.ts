@@ -178,7 +178,7 @@ export function useBuilderController({
   // marker while RHF already holds a user-entered name; that acknowledgement
   // must not turn the next brief edit into an instruction to replace it.
   const generatedAppName = useRef<string | undefined>(
-    initialDraft?.appNameEditedByUser ? undefined : initialForm.appName,
+    (initialDraft?.appNameEditedByUser ?? false) ? undefined : initialForm.appName,
   );
   const repositoryEditedByUser = useRef(initialDraft?.repositoryEditedByUser ?? false);
   const [initialActiveDraftId] = useState(() => resumeKey ?? durableDraftId ?? crypto.randomUUID());
@@ -481,7 +481,7 @@ export function useBuilderController({
       expectedLocalMutationVersion?: number,
       signal?: AbortSignal,
     ) => {
-      if (signal?.aborted) {
+      if (signal?.aborted ?? false) {
         return;
       }
       // A polling request can begin before a user edit and return a server
@@ -497,7 +497,7 @@ export function useBuilderController({
         return;
       }
       await discardSupersededByRemoteRevision(remote.revision);
-      if (signal?.aborted) {
+      if (signal?.aborted ?? false) {
         return;
       }
       // A newer server snapshot or save acknowledgement can settle while

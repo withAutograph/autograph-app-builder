@@ -26,9 +26,9 @@ async function readOwnerOnlyRequest(path: string): Promise<unknown> {
     throw new Error("Request path must be canonical and unsymlinked.");
   }
   const metadata = await stat(path);
+  const invalidOwnerOrFile = !metadata.isFile() || metadata.uid !== process.getuid?.();
   if (
-    !metadata.isFile() ||
-    metadata.uid !== process.getuid?.() ||
+    invalidOwnerOrFile ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (metadata.mode & 0o077) !== 0 ||
     metadata.size === 0 ||

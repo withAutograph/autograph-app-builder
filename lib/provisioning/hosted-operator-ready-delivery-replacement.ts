@@ -22,13 +22,20 @@ export interface ReadyDeliveryReplacementPredecessor {
   gatewayCandidate?: OperatorDeploymentCandidate;
 }
 
-const hasApproval = (operator: HostedOperatorRecordBase, approvedByCallId: string) =>
-  approvedByCallId.length > 0 &&
-  approvedByCallId !== "operator:unapproved-plan" &&
-  operator.approvalId !== undefined &&
-  operator.approvalId.length > 0 &&
-  hostedOperatorPlanSchema.safeParse(operator.plan).success &&
-  operator.planDigest === operatorPlanDigest(operator.plan);
+const hasApproval = (operator: HostedOperatorRecordBase, approvedByCallId: string) => {
+  if (
+    approvedByCallId.length === 0 ||
+    approvedByCallId === "operator:unapproved-plan" ||
+    operator.approvalId === undefined ||
+    operator.approvalId.length === 0
+  ) {
+    return false;
+  }
+  return (
+    hostedOperatorPlanSchema.safeParse(operator.plan).success &&
+    operator.planDigest === operatorPlanDigest(operator.plan)
+  );
+};
 
 const resourceIdentity = (plan: HostedOperatorPlan) => ({
   appDatabase: plan.appDatabase,
@@ -85,13 +92,35 @@ const sameOwnership = (prior: HostedOperatorPlan, next: HostedOperatorPlan) => {
   ].every(Boolean);
 };
 
-const matchesRequest = (record: HostedRuntimeJournalRecord, plan: HostedOperatorPlan) =>
-  record.request.environment === "preview" &&
-  record.request.sessionId === plan.selection.sessionId &&
-  record.request.appId === plan.selection.appId &&
-  record.request.projectId === plan.selection.projectId &&
-  record.request.scopeType === "team" &&
-  record.request.scopeId === plan.deploymentBoundary?.teamId;
+const matchesRequest = (record: HostedRuntimeJournalRecord, plan: HostedOperatorPlan) => {
+  if (
+    record.request.environment !== "preview" ||
+    record.request.sessionId !== plan.selection.sessionId ||
+    record.request.appId !== plan.selection.appId
+  ) {
+    return false;
+  }
+  return (
+    record.request.projectId === plan.selection.projectId &&
+    record.request.scopeType === "team" &&
+    record.request.scopeId === plan.deploymentBoundary?.teamId
+  );
+};
+
+const matchesReadyDelivery = (
+  candidate: OperatorDeploymentCandidate,
+  operator: HostedOperatorRecordBase,
+  delivery: NonNullable<HostedOperatorPlan["delivery"]>,
+): boolean => {
+  if (candidate.readyState !== "READY" || candidate.operationRef !== operator.operationRef) {
+    return false;
+  }
+  return (
+    candidate.projectId === delivery.projectId &&
+    candidate.branch === delivery.branch &&
+    candidate.repoId === delivery.repoId
+  );
+};
 
 const ownedReadyCandidate = (
   candidates: readonly OperatorDeploymentCandidate[] | undefined,
@@ -103,11 +132,7 @@ const ownedReadyCandidate = (
   const candidate = matches?.length === 1 ? matches[0] : undefined;
   return candidate !== undefined &&
     delivery !== undefined &&
-    candidate.readyState === "READY" &&
-    candidate.operationRef === operator.operationRef &&
-    candidate.projectId === delivery.projectId &&
-    candidate.branch === delivery.branch &&
-    candidate.repoId === delivery.repoId
+    matchesReadyDelivery(candidate, operator, delivery)
     ? candidate
     : undefined;
 };
@@ -123,9 +148,11 @@ export const resolveReadyDeliveryReplacementPredecessor = (
     record === undefined ||
     current === undefined ||
     !parsedIntent.success ||
-    !hasApproval(current, record.approvedByCallId) ||
-    !matchesRequest(record, current.plan)
+    !hasApproval(current, record.approvedByCallId)
   ) {
+    return undefined;
+  }
+  if (!matchesRequest(record, current.plan)) {
     return undefined;
   }
   const named = parsedIntent.data.predecessor;
@@ -149,7 +176,7 @@ export const resolveReadyDeliveryReplacementPredecessor = (
     ),
   ];
   for (const origin of origins) {
-    const operator = origin.operator;
+    const { operator } = origin;
     if (
       operator.operationRef !== named.operationRef ||
       operator.planDigest !== named.planDigest ||

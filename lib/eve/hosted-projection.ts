@@ -18,17 +18,15 @@ import {
 } from "./public-events";
 import type { InternalEveEvent } from "./public-events";
 
-const hostedSnapshotSchema = z
-  .object({
-    events: z.array(z.unknown()),
-    nativeDeliveryState: nativeDeliveryStateSchema.optional(),
-    privateInputState: privateInputStateSchema.optional(),
-    prototype: publicPrototypeSchema.optional(),
-    status: sessionStatusSchema,
-    uiPreview: publicUiPreviewSchema.optional(),
-    workingPreview: publicWorkingPreviewSchema.nullable().optional(),
-  })
-  .strict();
+const hostedSnapshotSchema = z.strictObject({
+  events: z.array(z.unknown()),
+  nativeDeliveryState: nativeDeliveryStateSchema.optional(),
+  privateInputState: privateInputStateSchema.optional(),
+  prototype: publicPrototypeSchema.optional(),
+  status: sessionStatusSchema,
+  uiPreview: publicUiPreviewSchema.optional(),
+  workingPreview: publicWorkingPreviewSchema.nullable().optional(),
+});
 
 export type HostedEngineSnapshot = z.infer<typeof hostedSnapshotSchema>;
 
@@ -75,21 +73,26 @@ export function projectHostedSnapshot(
     }
   }
   const inputRequests = outstandingInternalEveRequests(internalEvents(snapshot.events));
-  return eveSessionResultSchema.parse({
+  const result: EveSessionResult = {
     cursor: Math.min(cursor + events.length, publicEventCount),
     events,
     sessionId,
     status: snapshot.status,
-    ...(inputRequests.length === 0 ? {} : { inputRequests }),
-    ...(snapshot.prototype === undefined ? {} : { prototype: snapshot.prototype }),
-    ...(snapshot.uiPreview === undefined ? {} : { uiPreview: snapshot.uiPreview }),
-    ...(snapshot.workingPreview === undefined
-      ? {}
-      : {
-          workingPreview:
-            snapshot.status === "cancelled" || snapshot.status === "failed"
-              ? null
-              : currentWorkingPreview(snapshot.workingPreview),
-        }),
-  });
+  };
+  if (inputRequests.length !== 0) {
+    result.inputRequests = inputRequests;
+  }
+  if (snapshot.prototype !== undefined) {
+    result.prototype = snapshot.prototype;
+  }
+  if (snapshot.uiPreview !== undefined) {
+    result.uiPreview = snapshot.uiPreview;
+  }
+  if (snapshot.workingPreview !== undefined) {
+    result.workingPreview =
+      snapshot.status === "cancelled" || snapshot.status === "failed"
+        ? null
+        : currentWorkingPreview(snapshot.workingPreview);
+  }
+  return eveSessionResultSchema.parse(result);
 }

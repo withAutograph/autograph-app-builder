@@ -39,6 +39,25 @@ export const createAppAccessOperatorClient = (input: {
   ): Promise<AppAccessSnapshot> => {
     // Token acquisition is before dispatch: its failure is a known no-op.
     const token = await input.token();
+    const requestBody = () => {
+      const body: AppAccessOwner & {
+        version: number;
+        action: "access-status" | "access-command";
+        command?: AppAccessCommand;
+        cursor?: string;
+      } = {
+        version: 1,
+        ...owner,
+        action: command === undefined ? "access-status" : "access-command",
+      };
+      if (command !== undefined) {
+        body.command = command;
+      }
+      if (cursor !== undefined) {
+        body.cursor = cursor;
+      }
+      return body;
+    };
     let response: Response;
     try {
       response = await (input.fetch ?? fetch)(new URL("/v1/repository-production", endpoint), {
@@ -49,13 +68,7 @@ export const createAppAccessOperatorClient = (input: {
           "content-type": "application/json",
           "x-vercel-trusted-oidc-idp-token": token,
         },
-        body: JSON.stringify({
-          version: 1,
-          ...owner,
-          action: command === undefined ? "access-status" : "access-command",
-          ...(command === undefined ? {} : { command }),
-          ...(cursor === undefined ? {} : { cursor }),
-        }),
+        body: JSON.stringify(requestBody()),
         cache: "no-store",
       });
     } catch {

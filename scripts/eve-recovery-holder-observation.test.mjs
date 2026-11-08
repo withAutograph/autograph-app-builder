@@ -6,6 +6,9 @@ import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { it } from "vitest";
 
+const TERMINAL_RECOVERY_KIND = "terminal-recovery";
+const HOOK_NOT_FOUND_MESSAGE = "hook-not-found";
+
 const require = createRequire(import.meta.url);
 const sdk = pathToFileURL(`${path.dirname(require.resolve("eve/package.json"))}/dist/src/`).href;
 const { observeRecoveryInboxHolder } = await import(
@@ -50,14 +53,14 @@ const fixture = () => {
   const auth = { authenticator: "fixture", principalId: "fixture-owner" };
   const token = sessionInboxHookToken(sessionCommandHookToken(descriptor.logicalSessionId));
   const summaries = [];
-  const seen = { tokens: [], reads: [], bindings: [] };
+  const seen = { bindings: [], reads: [], tokens: [] };
   let currentRejection = null;
   let hook = {
-    runId: holderOwnerRunId,
     metadata: Promise.resolve({ sessionId: descriptor.logicalSessionId }),
+    runId: holderOwnerRunId,
   };
   let entry = {
-    kind: "terminal-recovery",
+    kind: TERMINAL_RECOVERY_KIND,
     descriptor: holderDescriptor,
     checkpoint: {
       serializedContext: { "eve.sessionId": descriptor.logicalSessionId },
@@ -67,18 +70,18 @@ const fixture = () => {
   let onRead = () => Promise.resolve();
   let onBinding = () => Promise.resolve();
   const facts = {
-    operationFound: true,
+    committedChildMatches: false,
     descriptorMatches: true,
-    sourceBound: true,
-    operationSucceeded: false,
+    operationFound: true,
+    operationRejected: false,
     operationReserved: true,
     operationSubmissionUnknown: false,
-    operationRejected: false,
-    sourceCancelled: false,
-    sourceCancellationMatches: true,
-    receiptPresent: false,
+    operationSucceeded: false,
     receiptOwnerMatches: false,
-    committedChildMatches: false,
+    receiptPresent: false,
+    sourceBound: true,
+    sourceCancellationMatches: true,
+    sourceCancelled: false,
   };
   const ports = {
     async observeRecoveryHolderBinding(input) {
@@ -92,33 +95,33 @@ const fixture = () => {
       seen.tokens.push(requestedToken);
       assert.equal(requestedToken, token);
       if (hook === undefined) {
-        throw new Error("hook-not-found");
+        throw new Error(HOOK_NOT_FOUND_MESSAGE);
       }
       return Promise.resolve(hook);
     },
-    isHookNotFound: (error) => error?.message === "hook-not-found",
+    isHookNotFound: (error) => error?.message === HOOK_NOT_FOUND_MESSAGE,
+    now: () => 1,
     async readRunEntry(runId) {
       seen.reads.push(runId);
       assert.equal(runId, holderOwnerRunId);
       await onRead();
-      return { runId, status: "failed", entry };
+      return { entry, runId, status: "failed" };
     },
     record(summary) {
       summaries.push(summary);
     },
-    now: () => 1,
   };
   const input = {
     auth,
-    descriptor,
-    receipt,
-    ports,
     authorizeCurrent() {
       if (currentRejection !== null) {
         throw new Error(`current-${currentRejection}-canary`);
       }
       return Promise.resolve();
     },
+    descriptor,
+    ports,
+    receipt,
   };
   return {
     auth,
@@ -128,26 +131,26 @@ const fixture = () => {
     holderDescriptor,
     holderOwnerRunId,
     input,
-    receipt,
-    seen,
-    summaries,
-    token,
     observe: async () => await observeRecoveryInboxHolder(input, deps),
+    receipt,
+    rejectCurrent: (reason) => {
+      currentRejection = reason;
+    },
+    seen,
     setEntry: (next) => {
       entry = next;
     },
     setHook: (next) => {
       hook = next;
     },
-    setOnRead: (effect) => {
-      onRead = effect;
-    },
     setOnBinding: (effect) => {
       onBinding = effect;
     },
-    rejectCurrent: (reason) => {
-      currentRejection = reason;
+    setOnRead: (effect) => {
+      onRead = effect;
     },
+    summaries,
+    token,
   };
 };
 
@@ -170,8 +173,8 @@ it("observes a real occupied logical inbox held by a distinct physical owner wit
       isDeepStrictEqual(binding, {
         auth: f.auth,
         descriptor: f.descriptor,
-        holderOwnerRunId: f.holderOwnerRunId,
         holderDescriptor: f.holderDescriptor,
+        holderOwnerRunId: f.holderOwnerRunId,
       }),
     ),
     true,
@@ -180,10 +183,10 @@ it("observes a real occupied logical inbox held by a distinct physical owner wit
     f.seen.bindings.every((binding) => binding.holderOwnerRunId === f.holderOwnerRunId),
     true,
   );
-  const summary = f.summaries[0];
+  const [summary] = f.summaries;
   assert.equal(summary.event, "eve.terminal_recovery_inbox_holder");
   assert.equal(summary.outcome, "observed");
-  assert.equal(summary.entryKind, "terminal-recovery");
+  assert.equal(summary.entryKind, TERMINAL_RECOVERY_KIND);
   assert.equal(summary.nativeStatus, "failed");
   assert.equal(summary.holderIsLogicalOwner, false);
   assert.equal(summary.holderIsSourceOwner, false);
@@ -205,7 +208,7 @@ it("reports a matching committed holder and a missing canonical receipt distinct
   const committed = fixture();
   committed.input.receipt = { ...committed.receipt, ownerRunId: committed.holderOwnerRunId };
   committed.setEntry({
-    kind: "terminal-recovery",
+    kind: TERMINAL_RECOVERY_KIND,
     descriptor: committed.descriptor,
     checkpoint: {
       serializedContext: { "eve.sessionId": committed.descriptor.logicalSessionId },
@@ -234,7 +237,7 @@ it("does not hydrate a holder whose hook metadata lacks the exact logical sessio
   await Promise.all(
     [{}, { sessionId: "foreign-logical" }].map(async (metadata) => {
       const f = fixture();
-      f.setHook({ runId: f.holderOwnerRunId, metadata: Promise.resolve(metadata) });
+      f.setHook({ metadata: Promise.resolve(metadata), runId: f.holderOwnerRunId });
       await f.observe();
       assert.deepEqual(f.seen.reads, []);
       assert.deepEqual(f.seen.bindings, []);
@@ -279,8 +282,8 @@ it("suppresses stale facts when the logical inbox changes owner during inspectio
   const f = fixture();
   f.setOnRead(() => {
     f.setHook({
-      runId: "new-physical-owner",
       metadata: Promise.resolve({ sessionId: f.descriptor.logicalSessionId }),
+      runId: "new-physical-owner",
     });
   });
   await assert.rejects(f.observe(), /owner changed/u);
@@ -299,11 +302,11 @@ it("a missing holder stays read only and cannot emit stale absence after a new c
   changed.deps.getHook = () => {
     lookups += 1;
     if (lookups === 1) {
-      throw new Error("hook-not-found");
+      throw new Error(HOOK_NOT_FOUND_MESSAGE);
     }
     return Promise.resolve({
-      runId: changed.holderOwnerRunId,
       metadata: Promise.resolve({ sessionId: changed.descriptor.logicalSessionId }),
+      runId: changed.holderOwnerRunId,
     });
   };
   await assert.rejects(changed.observe(), /owner changed/u);

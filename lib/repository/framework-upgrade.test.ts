@@ -111,14 +111,7 @@ const registry = (overrides: Record<string, RegistryMetadata> = {}) => {
   return vi.fn(read);
 };
 
-interface FixtureSandboxPorts {
-  run?: (input: {
-    command: string;
-  }) => Promise<{ exitCode: number; stdout: string; stderr: string }>;
-  readBinaryFile?: (input: { path: string }) => Promise<Uint8Array | null>;
-  readTextFile?: (input: { path: string }) => Promise<string | null>;
-  writeTextFile?: ReturnType<typeof vi.fn> | (() => Promise<void>);
-  removePath?: () => Promise<void>;
+interface FixtureSandboxPorts extends Partial<SandboxSession> {
   setNetworkPolicy?: () => Promise<void>;
 }
 const fixtureCommandExit = (command: string, existing: boolean) => {
@@ -127,10 +120,23 @@ const fixtureCommandExit = (command: string, existing: boolean) => {
   }
   return command.startsWith("test -f") ? 1 : 0;
 };
-const sandboxFixture = (ports: FixtureSandboxPorts): SandboxSession =>
-  // SAFETY: Each fixture implements the exact SandboxSession I/O members used by the exercised planning/apply path; no real provider authority is manufactured.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- Intentional partial external port fixture; absent members fail if the implementation starts using them.
-  ports as unknown as SandboxSession;
+const unexpectedSandboxOperation = () =>
+  Promise.reject(new Error("Unexpected sandbox operation in framework upgrade fixture"));
+const sandboxFixture = (ports: FixtureSandboxPorts): SandboxSession => ({
+  readBinaryFile: unexpectedSandboxOperation,
+  readFile: unexpectedSandboxOperation,
+  readTextFile: unexpectedSandboxOperation,
+  removePath: unexpectedSandboxOperation,
+  resolvePath: () => {
+    throw new Error("Unexpected sandbox operation in framework upgrade fixture");
+  },
+  run: unexpectedSandboxOperation,
+  spawn: unexpectedSandboxOperation,
+  writeBinaryFile: unexpectedSandboxOperation,
+  writeFile: unexpectedSandboxOperation,
+  writeTextFile: unexpectedSandboxOperation,
+  ...ports,
+});
 
 describe("framework upgrade planning and apply", () => {
   it("resolves stable peer-compatible releases and matches React DOM to React", async () => {
@@ -186,7 +192,6 @@ describe("framework upgrade planning and apply", () => {
     const sandbox = sandboxFixture({
       readBinaryFile: async () => null,
       readTextFile: async () => null,
-      writeTextFile: async () => {},
       removePath: async () => {},
       run: async ({ command }: { command: string }) => ({
         exitCode: fixtureCommandExit(command, existing),
@@ -197,13 +202,14 @@ describe("framework upgrade planning and apply", () => {
               backend: { kind: "static" },
               validation: {
                 check: { task: "check" },
-                test: { task: "test", shards: 1 },
+                test: { shards: 1, task: "test" },
                 browser: null,
               },
             })
           : "",
         stderr: "",
       }),
+      writeTextFile: async () => {},
     });
     const input = {
       sandbox,
@@ -222,15 +228,15 @@ describe("framework upgrade planning and apply", () => {
       frameworkUpgradeRequested: true,
     });
     expect(iteration.proposal).toMatchObject({
-      operation: "iterate-existing-app",
-      iteration: { changes: [] },
       frameworkUpgrade: { versions },
+      iteration: { changes: [] },
+      operation: "iterate-existing-app",
     });
     expect(resolver).toHaveBeenCalledTimes(2);
     const ordinary = await executeTargetIdentityAndPlanning({
       ...input,
       existingAppChanges: [
-        { path: "apps/example/app/page.tsx", content: "Existing product feature edit" },
+        { content: "Existing product feature edit", path: "apps/example/app/page.tsx" },
       ],
     });
     expect(ordinary.proposal.frameworkUpgrade).toBeUndefined();
@@ -240,7 +246,6 @@ describe("framework upgrade planning and apply", () => {
     const sandbox = sandboxFixture({
       readBinaryFile: async () => null,
       readTextFile: async () => null,
-      writeTextFile: async () => {},
       removePath: async () => {},
       run: async ({ command }: { command: string }) => ({
         exitCode: fixtureCommandExit(command, true),
@@ -252,12 +257,13 @@ describe("framework upgrade planning and apply", () => {
               backend: { kind: "static" },
               validation: {
                 check: { task: "check" },
-                test: { task: "test", shards: 1 },
+                test: { shards: 1, task: "test" },
                 browser: null,
               },
             })
           : "",
       }),
+      writeTextFile: async () => {},
     });
     const sourceReceipt = {
       adapter: "arrusted-development-v0" as const,
@@ -299,9 +305,9 @@ describe("framework upgrade planning and apply", () => {
     };
     const result = await executeTargetIdentityAndPlanning(input);
     expect(result.proposal).toMatchObject({
+      iteration: { changes: [] },
       operation: "iterate-existing-app",
       sourceReconciliation: localSourceReconciliation,
-      iteration: { changes: [] },
     });
     expect(result.proposal.frameworkUpgrade).toBeUndefined();
     await expect(executeTargetIdentityAndPlanning({ ...input, environment: {} })).rejects.toThrow(
@@ -330,7 +336,7 @@ describe("framework upgrade planning and apply", () => {
     const sandbox = sandboxFixture({
       readBinaryFile: async ({ path }: { path: string }) =>
         path.endsWith("package.json") ? Buffer.from("old package") : null,
-      run: async () => ({ exitCode: 0, stdout: "644", stderr: "" }),
+      run: async () => ({ exitCode: 0, stderr: "", stdout: "644" }),
     });
     const planned = await planFrameworkUpgrade(sandbox, versions);
     const changed = {
@@ -342,7 +348,7 @@ describe("framework upgrade planning and apply", () => {
     };
     expect(
       overlayChanges(iterationBaselineSnapshot(changed, planned.baseline), changed).map(
-        ({ path, kind }) => ({ path, kind }),
+        ({ path, kind }) => ({ kind, path }),
       ),
     ).toEqual([
       { kind: "added", path: "bun.lock" },
@@ -355,10 +361,10 @@ describe("framework upgrade planning and apply", () => {
       setNetworkPolicy: async () => {},
       run: async ({ command }: { command: string }) => {
         calls.push(command);
-        return { exitCode: 0, stdout: "{}", stderr: "" };
+        return { exitCode: 0, stderr: "", stdout: "{}" };
       },
-      writeTextFile: vi.fn(),
-      readBinaryFile: vi.fn(),
+      writeTextFile: vi.fn<SandboxSession["writeTextFile"]>(),
+      readBinaryFile: vi.fn<SandboxSession["readBinaryFile"]>(),
     });
     const result = await sandboxApplyCommandExecutor()({
       sandbox,
@@ -376,14 +382,14 @@ describe("framework upgrade planning and apply", () => {
     const calls: string[] = [];
     let fail = true;
     const sandbox = sandboxFixture({
-      setNetworkPolicy: async () => {},
       run: async ({ command }: { command: string }) => {
         calls.push(command);
         if (command.includes("repository:upgrade-framework") && fail) {
-          return { exitCode: 1, stdout: "", stderr: "network timeout" };
+          return { exitCode: 1, stderr: "network timeout", stdout: "" };
         }
-        return { exitCode: 0, stdout: "{}", stderr: "" };
+        return { exitCode: 0, stderr: "", stdout: "{}" };
       },
+      setNetworkPolicy: async () => {},
     });
     const apply = () =>
       sandboxApplyCommandExecutor()({
@@ -408,11 +414,11 @@ describe("framework upgrade planning and apply", () => {
     p.iteration.changes = [];
     const calls: string[] = [];
     const sandbox = sandboxFixture({
-      setNetworkPolicy: async () => {},
       run: async ({ command }: { command: string }) => {
         calls.push(command);
-        return { exitCode: 0, stdout: "{}", stderr: "" };
+        return { exitCode: 0, stderr: "", stdout: "{}" };
       },
+      setNetworkPolicy: async () => {},
     });
     await sandboxApplyCommandExecutor()({
       sandbox,
@@ -425,10 +431,10 @@ describe("framework upgrade planning and apply", () => {
   });
   it("exports approved shared framework files for both ordinary and baseline app review", () => {
     const changes = [
-      { path: "apps/example/app/page.tsx", kind: "modified" as const },
-      { path: "package.json", kind: "modified" as const },
-      { path: "bun.lock", kind: "modified" as const },
-      { path: "apps/other/app/page.tsx", kind: "modified" as const },
+      { kind: "modified" as const, path: "apps/example/app/page.tsx" },
+      { kind: "modified" as const, path: "package.json" },
+      { kind: "modified" as const, path: "bun.lock" },
+      { kind: "modified" as const, path: "apps/other/app/page.tsx" },
     ];
     const reviewed = reviewableChanges(changes, "example", true, true);
     expect(reviewed.map(({ path }) => path)).toEqual([
@@ -496,8 +502,8 @@ it("plans an unchanged imported application under its own fresh Build proposal",
     ...base,
     applicationSourceImport: {
       appId: "example",
-      manifestDigest: "c".repeat(64),
       importedSessionId: "new-authenticated-session",
+      manifestDigest: "c".repeat(64),
       registration: {
         oldDigest: "d".repeat(64),
         newDigest: "e".repeat(64),

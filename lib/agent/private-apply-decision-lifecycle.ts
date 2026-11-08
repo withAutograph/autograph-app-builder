@@ -35,7 +35,7 @@ export const observePrivateApplyDecisionEvent = (
       ) {
         continue;
       }
-      const callId = request.action.callId;
+      const { callId } = request.action;
       if (
         !authority.pending.some(
           (entry) => entry.callId === callId && entry.scope.sessionId === sessionId,

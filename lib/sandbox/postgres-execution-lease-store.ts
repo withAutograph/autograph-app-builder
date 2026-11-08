@@ -1,7 +1,5 @@
 import { and, eq, inArray, lte, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { sandboxExecutionLeases } from "../db/schema";
 import { hostedPrincipalSchema } from "../eve/hosted-auth";
 import type { HostedPrincipal } from "../eve/hosted-auth";
@@ -13,8 +11,9 @@ import type {
 } from "./execution-lease";
 import { sandboxExecutionPolicyDigest } from "./execution-policy";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+const staleLeaseMessage = "The sandbox execution lease is stale or unavailable.";
 
 export const sandboxLeaseAdvisoryKey = (principal: HostedPrincipal, adapterSessionId: string) =>
   JSON.stringify([
@@ -71,21 +70,26 @@ const leaseValues = (lease: SandboxExecutionLease) => ({
 export const parseSandboxExecutionLeaseRow = (input: unknown) => {
   const row = input as ReturnType<typeof leaseValues>;
   const lease = sandboxExecutionLeaseSchema.parse(row.record);
-  if (
+  const authorityMismatch =
     row.issuer !== lease.principal.issuer ||
     row.audience !== lease.principal.audience ||
     row.workspaceId !== lease.principal.workspaceId ||
-    row.ownerUserId !== lease.principal.ownerUserId ||
+    row.ownerUserId !== lease.principal.ownerUserId;
+  const leaseMismatch =
+    authorityMismatch ||
     row.adapterSessionId !== lease.adapterSessionId ||
     row.providerSandboxId !== lease.providerSandboxId ||
-    row.epoch !== lease.epoch ||
+    row.epoch !== lease.epoch;
+  const recordMismatch =
+    leaseMismatch ||
     row.state !== lease.state ||
     row.policyDigest !== lease.policyDigest ||
-    row.acquiredAt.getTime() !== lease.acquiredAtEpochMs ||
+    row.acquiredAt.getTime() !== lease.acquiredAtEpochMs;
+  const timestampsMismatch =
+    recordMismatch ||
     row.heartbeatAt.getTime() !== lease.heartbeatAtEpochMs ||
-    row.expiresAt.getTime() !== lease.expiresAtEpochMs ||
-    (row.releasedAt?.getTime() ?? undefined) !== lease.releasedAtEpochMs
-  ) {
+    row.expiresAt.getTime() !== lease.expiresAtEpochMs;
+  if (timestampsMismatch || (row.releasedAt?.getTime() ?? undefined) !== lease.releasedAtEpochMs) {
     throw new Error("Sandbox execution lease row is not canonically bound.");
   }
   return lease;
@@ -179,15 +183,15 @@ export const createPostgresSandboxExecutionLeaseStore = (
     return database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
       const lease = await exactLease(transaction, input.principal, input.adapterSessionId);
+      if (lease === null || lease.state !== "active" || lease.expiresAtEpochMs <= nowEpochMs) {
+        throw new Error(staleLeaseMessage);
+      }
       if (
-        lease === null ||
-        lease.state !== "active" ||
-        lease.expiresAtEpochMs <= nowEpochMs ||
         lease.epoch !== input.epoch ||
         lease.providerSandboxId !== input.providerSandboxId ||
         lease.policyDigest !== input.policyDigest
       ) {
-        throw new Error("The sandbox execution lease is stale or unavailable.");
+        throw new Error(staleLeaseMessage);
       }
       return lease;
     });
@@ -246,7 +250,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
         current.epoch !== input.epoch ||
         current.expiresAtEpochMs <= nowEpochMs
       ) {
-        throw new Error("The sandbox execution lease is stale or unavailable.");
+        throw new Error(staleLeaseMessage);
       }
       const lease = sandboxExecutionLeaseSchema.parse({
         ...current,

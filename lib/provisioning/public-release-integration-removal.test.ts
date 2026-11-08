@@ -11,27 +11,27 @@ const fixture = () => {
   const ports: PublicReleaseIntegrationRemovalPorts = {
     readPreflight: vi.fn(async () => structuredClone(removal)),
     reconcile: vi.fn<PublicReleaseIntegrationRemovalPorts["reconcile"]>(async () => "unknown"),
-    apply: vi.fn(async () => {}),
+    apply: vi.fn<() => Promise<void>>().mockResolvedValue(),
   };
   return {
     ports,
     invocation: {
       authority: plan.authority,
-      sessionId: plan.selection.sessionId,
       callId: "current-call",
+      sessionId: plan.selection.sessionId,
       signal: new AbortController().signal,
     },
     sourceCapability,
-    assertCurrent: vi.fn(async () => {}),
+    assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
   };
 };
 test("explicit removal plan preserves two rows without adding integration writes or readiness", () => {
   const value = publicReleasePlanSchema.parse({
     ...plan,
-    purpose: "application",
-    integrationRemoval: removal,
-    retainedOptionalBindings: retained,
     effects: ["fence-app-integration-authority", ...plan.effects],
+    integrationRemoval: removal,
+    purpose: "application",
+    retainedOptionalBindings: retained,
   });
   expect(value.environment.some((entry) => entry.key.startsWith("APP_INTEGRATIONS_"))).toBe(false);
   expect(value.integrationCapability).toBeUndefined();
@@ -51,10 +51,10 @@ test("explicit removal plan preserves two rows without adding integration writes
 });
 test("stopped preflight is source-bound and read-only; retry carries original frozen intent", async () => {
   const f = fixture();
-  const expected = { removal, operationRef: "11111111-1111-4111-a111-111111111111" };
+  const expected = { operationRef: "11111111-1111-4111-a111-111111111111", removal };
   await expect(readPublicReleaseIntegrationRemoval({ ...f, expected })).resolves.toEqual(removal);
   expect(f.ports.readPreflight).toHaveBeenCalledWith(
-    expect.objectContaining({ sourceCapability, expected }),
+    expect.objectContaining({ expected, sourceCapability }),
   );
   expect(f.assertCurrent).toHaveBeenCalledTimes(2);
   expect(f.ports.apply).not.toHaveBeenCalled();

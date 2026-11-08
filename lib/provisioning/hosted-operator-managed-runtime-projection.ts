@@ -152,7 +152,7 @@ export const createHostedManagedRuntimeProjection = (deps: {
     parseContinuityPlanForOwner(record.plan, context);
     const { gateway, preparedPlan } = record.plan;
     const delivery = preparedPlan.gatewayDelivery;
-    const publicGateway = preparedPlan.publicGateway;
+    const { publicGateway } = preparedPlan;
     if (publicGateway === undefined || delivery === undefined) {
       throw mismatch();
     }
@@ -320,13 +320,13 @@ export const createHostedManagedRuntimeProjection = (deps: {
       const savedRows = new Map(record.environmentRows.map((row) => [row.id, row]));
       const pendingWrites = new Map(record.environmentWrites.map((write) => [write.key, write]));
       for (const row of selected) {
-        const value = z
+        const { value } = z
           .object({ value: z.string() })
           .parse(
             await request(
               `/v1/projects/${encodeURIComponent(gateway.projectId)}/env/${encodeURIComponent(row.id)}`,
             ),
-          ).value;
+          );
         const saved = savedRows.get(row.id);
         const pending = pendingWrites.get(row.key);
         if (
@@ -337,7 +337,7 @@ export const createHostedManagedRuntimeProjection = (deps: {
         values.set(row.id, value);
       }
       await guard();
-      return { rows: selected, values, gitBranch };
+      return { gitBranch, rows: selected, values };
     };
     const references = (
       observed: Awaited<ReturnType<typeof inspect>>,

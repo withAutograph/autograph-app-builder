@@ -164,16 +164,27 @@ export default defineTool({
     updateExactWorkflow({
       expected: current,
       operation: "UI preview recording",
-      transition: () => ({
-        artifacts: recorded.artifacts,
-        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-        phase: "ui_previewed",
-        preparedByCallId: current.preparedByCallId,
-        sourceReceipt: current.sourceReceipt,
-        uiPreview,
-        version: APP_BUILDER_WORKFLOW_VERSION,
-        workspace: current.workspace,
-      }),
+      transition: () => {
+        type PreviewState = Extract<
+          ReturnType<typeof appBuilderWorkflowState.get>,
+          { phase: "ui_previewed" }
+        >;
+        const source: Pick<PreviewState, "artifacts" | "githubSource"> = {
+          artifacts: recorded.artifacts,
+        };
+        if (current.githubSource !== undefined) {
+          source.githubSource = current.githubSource;
+        }
+        return {
+          ...source,
+          phase: "ui_previewed",
+          preparedByCallId: current.preparedByCallId,
+          sourceReceipt: current.sourceReceipt,
+          uiPreview,
+          version: APP_BUILDER_WORKFLOW_VERSION,
+          workspace: current.workspace,
+        };
+      },
     });
     uiPreviewTransferState.update(() => null);
     if (durableResult !== undefined) {

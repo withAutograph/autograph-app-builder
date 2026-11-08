@@ -80,7 +80,7 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
       (!publicClient.isPending && session && !client));
   const canRespond = Boolean(request?.clientId && session && client && !consent.isPending);
 
-  if (invalidRequest) {
+  if (invalidRequest === true) {
     return (
       <Card className={cn("w-full max-w-md", className)}>
         <CardHeader>
@@ -187,9 +187,9 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
           </div>
         </div>
 
-        {policyUrl || termsUrl ? (
+        {policyUrl === undefined && termsUrl === undefined ? null : (
           <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
-            {policyUrl ? (
+            {policyUrl === undefined ? null : (
               <a
                 className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
                 href={policyUrl}
@@ -198,8 +198,8 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
               >
                 {localization.privacyPolicy}
               </a>
-            ) : null}
-            {termsUrl ? (
+            )}
+            {termsUrl === undefined ? null : (
               <a
                 className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
                 href={termsUrl}
@@ -208,22 +208,29 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
               >
                 {localization.termsOfService}
               </a>
-            ) : null}
+            )}
           </div>
-        ) : null}
+        )}
       </CardContent>
 
       <CardFooter className="grid grid-cols-2 gap-2">
         <Button
           disabled={!canRespond}
           variant="outline"
-          onClick={() => consent.mutate({ accept: false })}
+          onClick={() => {
+            consent.mutate({ accept: false });
+          }}
         >
           {consent.isPending && consent.variables?.accept === false ? <Spinner /> : null}
           {localization.cancel}
         </Button>
-        <Button disabled={!canRespond} onClick={() => consent.mutate({ accept: true })}>
-          {consent.isPending && consent.variables?.accept === true ? <Spinner /> : null}
+        <Button
+          disabled={!canRespond}
+          onClick={() => {
+            consent.mutate({ accept: true });
+          }}
+        >
+          {consent.isPending && consent.variables?.accept ? <Spinner /> : null}
           {localization.allow}
         </Button>
       </CardFooter>

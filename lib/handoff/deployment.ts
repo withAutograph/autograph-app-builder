@@ -3,6 +3,7 @@ import { createSourceCandidateValidator } from "./source-candidate-validation";
 import { z } from "zod";
 
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "../auth/preview-oauth-deployment";
+import type { isCursorClientReady } from "../auth/cursor-client";
 import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
@@ -10,6 +11,7 @@ import { deriveBuilderAppId } from "../provisioning/names";
 import { createPostgresBuilderProvisionJournalStore } from "../provisioning/postgres-journal";
 import type { BuilderProvisionJournalStore } from "../provisioning/journal";
 import { createPostgresBuilderHandoffStore } from "./postgres-store";
+import type { BuilderHandoffStore } from "./service";
 import { activeBuilderModelIdSchema } from "../integrations/active-model";
 import { builderHandoffDestinationSchema } from "./contracts";
 import type { BuilderHandoffIntent } from "./contracts";
@@ -68,36 +70,33 @@ async function readBoundedJson(request: Request) {
     offset += chunk.byteLength;
   }
   try {
-    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body));
+    const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body));
+    return parsed;
   } catch {
     throw new BuilderHandoffRequestError();
   }
 }
 
-export const builderHandoffCreateRequestSchema = z
-  .object({
-    appName: z.string().trim().min(1).max(120),
-    brief: z.string().trim().min(1).max(32_000),
-    connections: z.array(z.string().trim().min(1).max(100)).max(50),
-    creationRequestId: z.string().uuid(),
-    destination: builderHandoffDestinationSchema.optional(),
-    sourceCandidate: sourceCandidateReferenceSchema.optional(),
-    modelId: activeBuilderModelIdSchema,
-    provisioningRequestId: z.string().uuid().optional(),
-    repository: z
-      .object({
-        name: z
-          .string()
-          .trim()
-          .min(1)
-          .max(100)
-          .regex(/^[A-Za-z0-9._-]+$/u),
-        private: z.boolean(),
-      })
-      .strict(),
-    version: z.literal(1),
-  })
-  .strict();
+export const builderHandoffCreateRequestSchema = z.strictObject({
+  appName: z.string().trim().min(1).max(120),
+  brief: z.string().trim().min(1).max(32_000),
+  connections: z.array(z.string().trim().min(1).max(100)).max(50),
+  creationRequestId: z.uuid(),
+  destination: builderHandoffDestinationSchema.optional(),
+  sourceCandidate: sourceCandidateReferenceSchema.optional(),
+  modelId: activeBuilderModelIdSchema,
+  provisioningRequestId: z.uuid().optional(),
+  repository: z.strictObject({
+    name: z
+      .string()
+      .trim()
+      .min(1)
+      .max(100)
+      .regex(/^[A-Za-z0-9._-]+$/u),
+    private: z.boolean(),
+  }),
+  version: z.literal(1),
+});
 
 type Authority = z.infer<typeof hostedTenantAuthoritySchema>;
 type HandoffService = ReturnType<typeof createBuilderHandoffService>;
@@ -135,7 +134,8 @@ export function createBuilderHandoffRouteHandler(input: {
       }
       const contentLength = request.headers.get("content-length");
       if (
-        contentLength &&
+        contentLength !== null &&
+        contentLength !== "" &&
         (!/^\d+$/u.test(contentLength) || Number(contentLength) > maximumRequestBytes)
       ) {
         return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });
@@ -148,47 +148,61 @@ export function createBuilderHandoffRouteHandler(input: {
         );
       }
       const body = builderHandoffCreateRequestSchema.parse(await readBoundedJson(request));
-      const provision = body.provisioningRequestId
-        ? await input.journal.read({
-            authority,
-            requestId: body.provisioningRequestId,
-          })
-        : undefined;
-      if (body.provisioningRequestId && !provision) {
+      const provision =
+        body.provisioningRequestId === undefined
+          ? undefined
+          : await input.journal.read({
+              authority,
+              requestId: body.provisioningRequestId,
+            });
+      if (body.provisioningRequestId !== undefined && !provision) {
         return Response.json({ error: "handoff_unavailable" }, { headers: noStore, status: 404 });
       }
       const github = provision?.record.response.github;
       const appName = provision?.record.request.appName ?? body.appName;
       const repository = provision?.record.request.repository ?? body.repository;
-      const created = await input.handoffs.create({
+      const { handoffs } = input;
+      const create = handoffs.create.bind(handoffs);
+      const creation = {
         authority,
         creationRequestId: body.creationRequestId,
-        intent: {
-          ...(body.destination === undefined ? {} : { destination: body.destination }),
-          appId:
-            provision?.record.response.appId ??
-            body.sourceCandidate?.appId ??
-            deriveBuilderAppId(appName),
-          ...(body.sourceCandidate === undefined ? {} : { sourceCandidate: body.sourceCandidate }),
-          appName,
-          brief: body.brief,
-          connections: body.connections,
-          modelId: body.modelId,
-          repository: {
-            private: repository.private,
-            requestedName: repository.name,
-            ...(github?.status === "succeeded" ? { resolvedFullName: github.fullName } : {}),
-          },
-          ...(provision === undefined
-            ? {}
-            : {
-                providers: provision.record.request.providers,
-                provisioning: provision.record.response,
-                provisioningRequestDigest: provision.requestDigest,
-                provisioningRequestId: provision.requestId,
-              }),
-        },
-      });
+      };
+      const destination: Pick<BuilderHandoffIntent, "destination"> = {};
+      if (body.destination !== undefined) {
+        destination.destination = body.destination;
+      }
+      const identified: Pick<BuilderHandoffIntent, "destination" | "appId" | "sourceCandidate"> = {
+        ...destination,
+        appId:
+          provision?.record.response.appId ??
+          body.sourceCandidate?.appId ??
+          deriveBuilderAppId(appName),
+      };
+      if (body.sourceCandidate !== undefined) {
+        identified.sourceCandidate = body.sourceCandidate;
+      }
+      const intentPrefix = {
+        ...identified,
+        appName,
+        brief: body.brief,
+        connections: body.connections,
+        modelId: body.modelId,
+      };
+      const intentRepository: BuilderHandoffIntent["repository"] = {
+        private: repository.private,
+        requestedName: repository.name,
+      };
+      if (github?.status === "succeeded") {
+        intentRepository.resolvedFullName = github.fullName;
+      }
+      const intent: BuilderHandoffIntent = { ...intentPrefix, repository: intentRepository };
+      if (provision !== undefined) {
+        intent.providers = provision.record.request.providers;
+        intent.provisioning = provision.record.response;
+        intent.provisioningRequestDigest = provision.requestDigest;
+        intent.provisioningRequestId = provision.requestId;
+      }
+      const created = await create({ ...creation, intent });
       return Response.json(
         {
           expiresAt: created.expiresAt.toISOString(),
@@ -258,7 +272,8 @@ export function createBuilderHandoffRenewRouteHandler(input: {
       }
       const contentLength = request.headers.get("content-length");
       if (
-        contentLength &&
+        contentLength !== null &&
+        contentLength !== "" &&
         (!/^\d+$/u.test(contentLength) || Number(contentLength) > maximumRequestBytes)
       ) {
         throw new BuilderHandoffRequestError();
@@ -271,8 +286,7 @@ export function createBuilderHandoffRenewRouteHandler(input: {
         );
       }
       const body = z
-        .object({ creationRequestId: z.string().uuid() })
-        .strict()
+        .strictObject({ creationRequestId: z.uuid() })
         .parse(await readBoundedJson(request));
       const renewed = await input.handoffs.renew({
         authority,
@@ -296,17 +310,43 @@ export function createBuilderHandoffRenewRouteHandler(input: {
 type Environment = NodeJS.ProcessEnv | Record<string, string | undefined>;
 const deploymentDatabases = new Map<string, ReturnType<typeof openHostedPostgresDatabase>>();
 
+export interface BuilderHandoffPageDependencies {
+  databases: Map<string, ReturnType<typeof openHostedPostgresDatabase>>;
+  readConfig: (environment: Environment) => {
+    databaseUrl: string;
+    issuer: string;
+    resource: string;
+  };
+  openDatabase: typeof openHostedPostgresDatabase;
+  session: (input: {
+    environment: Environment;
+    headers: Headers;
+  }) => Promise<{ user: { id: string }; organization: { workspaceId: string } } | undefined>;
+  createStore: (database: ReturnType<typeof openHostedPostgresDatabase>) => BuilderHandoffStore;
+  loadCursorClient: () => Promise<{ isCursorClientReady: typeof isCursorClientReady }>;
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function deploymentContext(environment: Environment) {
-  const preview = readPreviewOAuthRuntimeConfig(environment);
-  let database = deploymentDatabases.get(preview.databaseUrl);
+function deploymentContext(
+  environment: Environment,
+  dependencies?: BuilderHandoffPageDependencies,
+) {
+  const preview = dependencies
+    ? dependencies.readConfig(environment)
+    : readPreviewOAuthRuntimeConfig(environment);
+  const databases = dependencies?.databases ?? deploymentDatabases;
+  let database = databases.get(preview.databaseUrl);
   if (!database) {
-    database = openHostedPostgresDatabase(preview.databaseUrl);
-    deploymentDatabases.set(preview.databaseUrl, database);
+    database = dependencies
+      ? dependencies.openDatabase(preview.databaseUrl)
+      : openHostedPostgresDatabase(preview.databaseUrl);
+    databases.set(preview.databaseUrl, database);
   }
   return {
     async authorityForHeaders(headers: Headers) {
-      const session = await ensurePreviewOAuthDeploymentSessionOrganization({
+      const session = await (
+        dependencies?.session ?? ensurePreviewOAuthDeploymentSessionOrganization
+      )({
         environment,
         headers,
       });
@@ -321,7 +361,9 @@ function deploymentContext(environment: Environment) {
     },
     database,
     handoffs: createBuilderHandoffService({
-      store: createPostgresBuilderHandoffStore(database),
+      store: dependencies
+        ? dependencies.createStore(database)
+        : createPostgresBuilderHandoffStore(database),
       validateSourceCandidate: createSourceCandidateValidator(database),
     }),
     preview,
@@ -329,12 +371,11 @@ function deploymentContext(environment: Environment) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function getBuilderHandoffPageData(input: {
-  environment: Environment;
-  headers: Headers;
-  handoffId: string;
-}): Promise<BuilderHandoffPageData | undefined> {
-  const context = deploymentContext(input.environment);
+export async function getBuilderHandoffPageData(
+  input: { environment: Environment; headers: Headers; handoffId: string },
+  dependencies?: BuilderHandoffPageDependencies,
+): Promise<BuilderHandoffPageData | undefined> {
+  const context = deploymentContext(input.environment, dependencies);
   const authority = await context.authorityForHeaders(input.headers);
   if (!authority) {
     return undefined;
@@ -343,14 +384,18 @@ export async function getBuilderHandoffPageData(input: {
     authority,
     handoffId: input.handoffId,
   });
-  const currentProvisioning = record.intent.provisioningRequestId
-    ? await createPostgresBuilderProvisionJournalStore(context.database).read({
-        authority,
-        requestId: record.intent.provisioningRequestId,
-      })
-    : undefined;
-  const { isCursorClientReady } = await import("../auth/cursor-client");
-  return {
+  const { provisioningRequestId } = record.intent;
+  const currentProvisioning =
+    provisioningRequestId !== undefined && provisioningRequestId !== ""
+      ? await createPostgresBuilderProvisionJournalStore(context.database).read({
+          authority,
+          requestId: provisioningRequestId,
+        })
+      : undefined;
+  const { isCursorClientReady } = dependencies
+    ? await dependencies.loadCursorClient()
+    : await import("../auth/cursor-client");
+  const page: BuilderHandoffPageData = {
     cursorInstallReady: await isCursorClientReady(context.database, context.preview.resource),
     destination: record.intent.destination ?? "codex",
     expiresAt: record.expiresAt.toISOString(),
@@ -361,8 +406,11 @@ export async function getBuilderHandoffPageData(input: {
     mcpUrl: context.preview.resource,
     status,
     version: 1,
-    ...(currentProvisioning ? { provisioningRevision: currentProvisioning.revision } : {}),
   };
+  if (currentProvisioning) {
+    page.provisioningRevision = currentProvisioning.revision;
+  }
+  return page;
 }
 
 /**
@@ -371,11 +419,11 @@ export async function getBuilderHandoffPageData(input: {
  * handoffs deliberately return users to a fresh builder.
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function findAuthenticatedPendingBuilderHandoff(input: {
-  environment: Environment;
-  headers: Headers;
-}): Promise<{ handoffId: string } | undefined> {
-  const context = deploymentContext(input.environment);
+export async function findAuthenticatedPendingBuilderHandoff(
+  input: { environment: Environment; headers: Headers },
+  dependencies?: BuilderHandoffPageDependencies,
+): Promise<{ handoffId: string } | undefined> {
+  const context = deploymentContext(input.environment, dependencies);
   const authority = await context.authorityForHeaders(input.headers);
   if (!authority) {
     return undefined;
@@ -385,14 +433,13 @@ export async function findAuthenticatedPendingBuilderHandoff(input: {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function getBuilderHandoffStatusDeploymentHandler(environment: Environment) {
+export function getBuilderHandoffStatusDeploymentHandler(
+  environment: Environment,
+  dependencies?: BuilderHandoffPageDependencies,
+) {
   return createBuilderHandoffStatusRouteHandler({
     pageData: (request, handoffId) =>
-      getBuilderHandoffPageData({
-        environment,
-        handoffId,
-        headers: request.headers,
-      }),
+      getBuilderHandoffPageData({ environment, handoffId, headers: request.headers }, dependencies),
   });
 }
 

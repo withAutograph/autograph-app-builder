@@ -54,9 +54,6 @@ export const importPreparedApplicationSource = async (
     throw new Error("This session already owns a different application source import.");
   }
   await materializeApplicationSource({
-    sandbox,
-    validated,
-    receipt: binding,
     abortSignal: ctx.abortSignal,
     assertCurrent: async () => {
       ctx.abortSignal.throwIfAborted();
@@ -65,6 +62,9 @@ export const importPreparedApplicationSource = async (
         throw new Error("Application source owner changed.");
       }
     },
+    receipt: binding,
+    sandbox,
+    validated,
   });
   // Owner and current membership are rechecked after the private write and before accepting it.
   const after = await readPreparedHandoffContext(ctx.session.auth);

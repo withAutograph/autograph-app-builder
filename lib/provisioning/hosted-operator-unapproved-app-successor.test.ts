@@ -127,7 +127,7 @@ describe("unapproved app successor eligibility", () => {
         retainedParticipantGateway: record.retainedParticipantGateway,
       },
     ];
-    const auth = before.bootstrap.auth;
+    const { auth } = before.bootstrap;
     const next = hostedOperatorPlanSchema.parse({
       ...before.account.accountPlan,
       normalActorProgram: added,
@@ -158,12 +158,17 @@ describe("unapproved app successor eligibility", () => {
     completion.plan = operator.plan;
     completion.planDigest = operatorPlanDigest(completion.plan);
     completion.fenceGeneration = 1;
-    completion.receipts = completion.plan.effects.map((effect) => ({
-      effectId: effect.id,
-      observedAt,
-      resourceVersion: "actual-readback",
-      ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
-    }));
+    completion.receipts = completion.plan.effects.map((effect) => {
+      const receipt: (typeof completion.receipts)[number] = {
+        effectId: effect.id,
+        observedAt,
+        resourceVersion: "actual-readback",
+      };
+      if (effect.kind === "access") {
+        receipt.fenceGeneration = 1;
+      }
+      return receipt;
+    });
     const candidate = {
       ...requiredFixture(operator.gatewayDeliveryCandidates?.[0]),
       operationRef: completion.operationRef,
@@ -191,8 +196,8 @@ describe("unapproved app successor eligibility", () => {
         retainedParticipantGateway: record.retainedParticipantGateway,
       },
     ];
-    const auth = found.bootstrap.auth;
-    const gateway = found.bootstrap.gateway;
+    const { auth } = found.bootstrap;
+    const { gateway } = found.bootstrap;
     const next = hostedOperatorPlanSchema.parse({
       ...found.account.accountPlan,
       normalActorProgram: added,

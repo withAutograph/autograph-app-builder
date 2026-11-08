@@ -55,7 +55,9 @@ async function click(text: string) {
     throw new Error(`Button not found: ${text}`);
   }
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  await act(async () => button.click());
+  await act(async () => {
+    button.click();
+  });
 }
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function visibility(value: "visible" | "hidden") {
@@ -207,21 +209,27 @@ describe("durable handoff controls", () => {
     expect(request).not.toHaveBeenCalled();
     expect(open).not.toHaveBeenCalled();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => visibility("visible"));
+    await act(async () => {
+      visibility("visible");
+    });
     expect(request).toHaveBeenCalledOnce();
     await click("Open in Codex");
     expect(open).toHaveBeenCalledOnce();
     expect(container.textContent).toContain("Launch requested");
     expect(container.textContent).not.toContain("Continued in your app");
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => visibility("hidden"));
+    await act(async () => {
+      visibility("hidden");
+    });
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
     expect(request).toHaveBeenCalledOnce();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     request.mockImplementation(async () => Response.json({ ...initial, status: "continued" }));
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await act(async () => visibility("visible"));
+    await act(async () => {
+      visibility("visible");
+    });
     expect(container.textContent).toContain("Continued in your app");
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     await act(async () => vi.advanceTimersByTimeAsync(20_000));

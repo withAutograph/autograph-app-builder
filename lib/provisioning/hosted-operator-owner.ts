@@ -180,7 +180,7 @@ const readCurrentOwnedSession = async (
     if (!linked || binding === undefined) {
       throw unavailable();
     }
-    logicalSessionId = binding.logicalSessionId;
+    ({ logicalSessionId } = binding);
   }
   const current = await readCurrentBuildSession.call(deps.eve, {
     principal,
@@ -671,8 +671,8 @@ export const readCanonicalAppOwnerSession = async (
 };
 
 const standardRepository = (receipt: BuilderProvisionResponse) => {
-  const github = receipt.github;
-  const vercel = receipt.vercel;
+  const { github } = receipt;
+  const { vercel } = receipt;
   return github.status === "succeeded" &&
     vercel.status === "succeeded" &&
     github.fullName === vercel.linkedGitHubRepository
@@ -759,7 +759,7 @@ const readDirectStandardBuilderDestination = async (
   if (project.scope.type !== "team") {
     throw resourceMismatch();
   }
-  const access = await readOwnerVercelProjectAccess({
+  const accessInput: Parameters<typeof readOwnerVercelProjectAccess>[0] = {
     authority: input.authority,
     projectId: project.projectId,
     installationId: project.installationId,
@@ -768,9 +768,14 @@ const readDirectStandardBuilderDestination = async (
     requirePublicAppConfiguration: options.requirePublicAppConfiguration,
     requireExpectedRepositoryId: standardRepository(row.record.response).repositoryId,
     readCredential: deps.readVercelCredential,
-    ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
-    ...(deps.apiOrigin === undefined ? {} : { apiOrigin: deps.apiOrigin }),
-  });
+  };
+  if (deps.fetch !== undefined) {
+    accessInput.fetch = deps.fetch;
+  }
+  if (deps.apiOrigin !== undefined) {
+    accessInput.apiOrigin = deps.apiOrigin;
+  }
+  const access = await readOwnerVercelProjectAccess(accessInput);
   if (access.status !== "ready" || access.project?.id !== project.projectId) {
     throw resourceMismatch();
   }
@@ -853,16 +858,21 @@ export const readStandardBuilderDestination = async (
   if (receipt.appId !== input.target.appId || project.scope.type !== "team") {
     throw resourceMismatch();
   }
-  const access = await readPreparedVercelAccess({
+  const accessInput: Parameters<typeof readPreparedVercelAccess>[0] = {
     authority: owner.authority,
     intent: handoff.intent,
     requireServicesRoot: true,
     requirePublicAppConfiguration: options.requirePublicAppConfiguration,
     requireExpectedRepositoryId: standardRepository(receipt).repositoryId,
     readCredential: deps.readVercelCredential,
-    ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
-    ...(deps.apiOrigin === undefined ? {} : { apiOrigin: deps.apiOrigin }),
-  });
+  };
+  if (deps.fetch !== undefined) {
+    accessInput.fetch = deps.fetch;
+  }
+  if (deps.apiOrigin !== undefined) {
+    accessInput.apiOrigin = deps.apiOrigin;
+  }
+  const access = await readPreparedVercelAccess(accessInput);
   if (access.status !== "ready" || access.project?.id !== project.projectId) {
     throw resourceMismatch();
   }

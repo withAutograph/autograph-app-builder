@@ -72,6 +72,9 @@ const assessment = (value = prepared()): ProductSourceAssessment => ({
     freshUsage: { inputTokens: 10, outputTokens: 3, totalTokens: 13 },
   },
 });
+const key = (current: OperatorArtifactContext, ref: string, index: number) =>
+  JSON.stringify([current.authority, current.target, ref, index]);
+
 const fixture = () => {
   let owned = true;
   const rows = new Map<string, string>();
@@ -82,8 +85,6 @@ const fixture = () => {
       throw new Error("owner revoked");
     }
   });
-  const key = (current: OperatorArtifactContext, ref: string, index: number) =>
-    JSON.stringify([current.authority, current.target, ref, index]);
   const store: OperatorArtifactStore = {
     async put(current, chunk) {
       await Promise.resolve();
@@ -100,21 +101,21 @@ const fixture = () => {
   };
   const factory = (current = context, abortSignal?: AbortSignal) =>
     createApplicationReviewContextStore({
-      store,
-      context: current,
-      assertCurrentOwner,
       abortSignal,
+      assertCurrentOwner,
+      context: current,
+      store,
     });
   return {
-    rows,
-    writes,
-    key,
-    store,
-    factory,
     assertCurrentOwner,
+    factory,
+    key,
     revoke: () => {
       owned = false;
     },
+    rows,
+    store,
+    writes,
   };
 };
 const roots: string[] = [];
@@ -155,9 +156,9 @@ describe("private prepared application-review context and outcomes", () => {
     };
     const outcomeRef = await store.publishOutcome(contextRef, advisory);
     expect(await f.factory().readOutcome(outcomeRef)).toEqual({
+      assessment: advisory,
       contextRef,
       reviewKey: value.reviewKey,
-      assessment: advisory,
     });
     await expect(store.readContext(outcomeRef)).rejects.toThrow();
     await expect(store.readOutcome(contextRef)).rejects.toThrow();
@@ -218,7 +219,7 @@ describe("private prepared application-review context and outcomes", () => {
 
   it("keeps an interrupted partial context unavailable without completion metadata", async () => {
     const f = fixture();
-    const put = f.store.put;
+    const { put } = f.store;
     f.store.put = async (current, chunk) => {
       if (chunk.chunkIndex === 0) {
         throw new Error("completion interrupted");
@@ -262,7 +263,7 @@ describe("private prepared application-review context and outcomes", () => {
   it("requires current ownership before I/O and after a private chunk read", async () => {
     const f = fixture();
     const ref = await f.factory().publishContext(prepared());
-    const read = f.store.read;
+    const { read } = f.store;
     f.store.read = async (current, value, index) => {
       const result = await read(current, value, index);
       f.revoke();
@@ -277,7 +278,7 @@ describe("private prepared application-review context and outcomes", () => {
   it("honors Stop before and after a chunk write without publishing a completion", async () => {
     const f = fixture();
     const controller = new AbortController();
-    const put = f.store.put;
+    const { put } = f.store;
     f.store.put = async (current, chunk) => {
       await put(current, chunk);
       controller.abort(new Error("Stop"));
@@ -301,9 +302,9 @@ describe("private prepared application-review context and outcomes", () => {
     const assertCurrentOwner = async () => {
       await Promise.resolve();
     };
-    const { store } = await createLocalOperatorArtifactStorage({ authority, assertCurrentOwner });
+    const { store } = await createLocalOperatorArtifactStorage({ assertCurrentOwner, authority });
     const adapter = () =>
-      createApplicationReviewContextStore({ store, context: owned, assertCurrentOwner });
+      createApplicationReviewContextStore({ assertCurrentOwner, context: owned, store });
     const ref = await adapter().publishContext(prepared());
     const restored = await adapter().readContext(ref);
     expect(restored.sandboxName).toBe(prepared().sandboxName);

@@ -283,8 +283,8 @@ describe("published source selection persistence", () => {
         operationId: "original-proposal",
       };
       expect(await associate(f.context, input)).toEqual({
-        status: "recorded",
         selection: { ...approved, publishedSource: source },
+        status: "recorded",
       });
       const [owned] = await readdir(path.join(f.stateRoot, "operator-artifacts"));
       if (owned === undefined) {
@@ -298,8 +298,8 @@ describe("published source selection persistence", () => {
       );
       const beforeRetry = await readdir(frames);
       expect(await associate(f.context, input)).toEqual({
-        status: "recorded",
         selection: { ...approved, publishedSource: source },
+        status: "recorded",
       });
       expect(new Set(await readdir(frames))).toEqual(new Set(beforeRetry));
       expect(await storage.selections.read(f.context, approved.appSpecDigest)).toEqual({

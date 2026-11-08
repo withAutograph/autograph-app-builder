@@ -44,8 +44,8 @@ const fixture = () => {
     expect(url.pathname).toBe("/app/installations/456/access_tokens");
     expect(init?.method).toBe("POST");
     expect(JSON.parse(z.string().parse(init?.body))).toEqual({
-      repository_ids: [123],
       permissions: { contents: "write", metadata: "read" },
+      repository_ids: [123],
     });
     if (revokeDuringMint) {
       active = false;
@@ -100,26 +100,26 @@ const fixture = () => {
   });
   return {
     destination,
-    reader,
-    plan,
-    invocation,
-    mint,
-    revoke: () => {
-      authorized = false;
-    },
     disconnect: () => {
       active = false;
     },
+    invocation,
+    mint,
+    plan,
     race: () => {
       revokeDuringMint = true;
+    },
+    reader,
+    revoke: () => {
+      authorized = false;
     },
   };
 };
 it("mints only for the current owner's selected installation and exact repository", async () => {
   const f = fixture();
   expect(await f.reader(f.invocation, f.plan)).toMatchObject({
-    repositoryId: "123",
     installationId: "456",
+    repositoryId: "123",
   });
   expect(f.mint).toHaveBeenCalledOnce();
 });

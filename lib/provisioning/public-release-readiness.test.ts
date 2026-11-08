@@ -41,7 +41,7 @@ const read = (records: ReturnType<typeof bootstrap>[]) => {
     database,
     owner: operatorOwnerContextSchema.parse(context.ownerContext),
     target: context.target,
-    assertCurrentOwner: vi.fn(() => Promise.resolve()),
+    assertCurrentOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
   });
 };
 describe("public bootstrap runtime staging", () => {

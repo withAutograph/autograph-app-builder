@@ -91,13 +91,13 @@ it("accepts additive source and selection metadata without changing exact releas
     ...selected,
     advisory: "Release label",
     publishedSource: {
+      advisory: { label: "Published source" },
       branch: "codex/reviewed-app",
       changeSetDigest: "b".repeat(64),
       gitSha: "c".repeat(40),
       gitTree: "d".repeat(40),
       repositoryId: "owned-repository",
       reviewDigest: "e".repeat(64),
-      advisory: { label: "Published source" },
     },
   };
   const parsed = compiledOperatorReleaseSelectionSchema.parse(input);

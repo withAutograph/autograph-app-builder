@@ -252,7 +252,7 @@ export async function executeBuilderProvisioning(input: {
         authority: input.authority,
         installationId: vercelInstallationId,
       });
-      if (credential?.binding.active) {
+      if (credential !== undefined && credential !== null && credential.binding.active) {
         result = await provisionVercelProject({
           appId: current.record.response.appId,
           deploymentAccess: current.record.request.deploymentAccess,
@@ -363,11 +363,12 @@ export function projectBuilderProvisioning(row: BuilderProvisionJournalRow) {
   for (const operation of ["github", "vercel"] as const) {
     const state = row.record.operations[operation];
     const result = row.record.response[operation];
-    const expiredLease =
+    const expiredLease = Boolean(
       state.leaseId &&
       state.leaseExpiresAt &&
       Date.parse(state.leaseExpiresAt) <= Date.now() &&
-      !state.attempted;
+      !state.attempted,
+    );
     if ((!state.attempted || result.status !== "failed") && !expiredLease) {
       continue;
     }
@@ -390,10 +391,10 @@ export function projectBuilderProvisioning(row: BuilderProvisionJournalRow) {
       outcomeKnown: state.outcomeKnown ?? false,
       provider: operation,
       recoveryAction,
-      ...(state.lastProviderDiagnostic === undefined
-        ? {}
-        : { lastProviderDiagnostic: state.lastProviderDiagnostic }),
     };
+    if (state.lastProviderDiagnostic !== undefined) {
+      diagnostic.lastProviderDiagnostic = state.lastProviderDiagnostic;
+    }
     if (state.nextRetryAt) {
       diagnostic.nextRetryAt = state.nextRetryAt;
     }

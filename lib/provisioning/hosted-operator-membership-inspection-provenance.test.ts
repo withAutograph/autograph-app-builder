@@ -18,36 +18,19 @@ import {
 } from "./hosted-operator-membership-inspection-provenance";
 
 const originalPlan = hostedOperatorPlanSchema.parse({
-  version: 1,
-  action: "prepare",
-  stage: "app",
-  selection: {
-    appId: "fixture-app",
-    branch: "preview",
-    environment: "preview",
-    projectId: "prj_app",
-    sessionId: "owner-session",
-  },
-  contextId: "owned-context",
   access: [{ actorId: "owner", organizationId: "org_fixture", roles: ["owner"] }],
+  action: "prepare",
   appDatabase: {
     database: "app",
-    resourceId: "app-resource",
     migratorRole: "app_owner",
+    resourceId: "app-resource",
     runtimeRole: "app_runtime",
   },
   authDatabase: {
     database: "shared_auth",
-    resourceId: "auth-resource",
     migratorRole: "auth_owner",
+    resourceId: "auth-resource",
     runtimeRole: "auth_runtime",
-  },
-  neon: {
-    projectId: "neon-fixture",
-    branchId: "br_fixture",
-    endpoint: "ep-fixture.neon.tech",
-    connectionRef: "owned-connection",
-    source: "synthetic-only",
   },
   authMembership: {
     kind: "create-owned-organization",
@@ -65,46 +48,63 @@ const originalPlan = hostedOperatorPlanSchema.parse({
       jwksUrl: "https://gateway.example.test/_platform/jwks.json",
       transportSource: {
         audience: "https://operator.example.test",
+        environment: "preview",
         issuer: "https://oidc.vercel.com",
         ownerId: "team_fixture",
         projectId: "prj_operator",
-        environment: "preview",
       },
     },
   },
+  contextId: "owned-context",
   cost: { class: "shared-recovery-group", description: "Synthetic fixture", owner: "Fixture" },
-  effects: [
-    { id: "resources", kind: "resources", description: "Observe resources" },
-    { id: "install", kind: "install", description: "Install app" },
-    { id: "membership", kind: "auth-membership", description: "Create owned organization" },
-    { id: "access", kind: "access", description: "Grant access" },
-    { id: "bindings", kind: "bindings", description: "Bind app" },
-  ],
-  installer: { reference: "fixture-installer", sha256: "d".repeat(64) },
-  release: { id: "fixture-release", artifactRef: "fixture-artifact", sha256: "e".repeat(64) },
-  retention: { expiresAt: "2030-01-01T00:00:00.000Z", policy: "Retain owned fixture" },
-  publicGateway: {
-    branch: "preview",
-    projectId: "prj_gateway",
-    origin: "https://apps.example.test",
-  },
   deploymentBoundary: {
+    app: { branch: "preview", environment: "preview", projectId: "prj_app" },
     authority: {
       audience: "https://builder.example.test/mcp",
       issuer: "https://builder.example.test/api/auth",
       ownerUserId: "owner",
       workspaceId: "workspace",
     },
-    teamId: "team_fixture",
-    app: { branch: "preview", environment: "preview", projectId: "prj_app" },
     gateway: { branch: "preview", environment: "preview", projectId: "prj_gateway" },
     operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
+    teamId: "team_fixture",
     verification: {
-      publicOrigin: "https://apps.example.test",
       gatewayOrigin: "https://gateway.example.test",
       jwksUrl: "https://gateway.example.test/_platform/jwks.json",
+      publicOrigin: "https://apps.example.test",
     },
   },
+  effects: [
+    { description: "Observe resources", id: "resources", kind: "resources" },
+    { description: "Install app", id: "install", kind: "install" },
+    { description: "Create owned organization", id: "membership", kind: "auth-membership" },
+    { description: "Grant access", id: "access", kind: "access" },
+    { description: "Bind app", id: "bindings", kind: "bindings" },
+  ],
+  installer: { reference: "fixture-installer", sha256: "d".repeat(64) },
+  neon: {
+    branchId: "br_fixture",
+    connectionRef: "owned-connection",
+    endpoint: "ep-fixture.neon.tech",
+    projectId: "neon-fixture",
+    source: "synthetic-only",
+  },
+  publicGateway: {
+    branch: "preview",
+    origin: "https://apps.example.test",
+    projectId: "prj_gateway",
+  },
+  release: { artifactRef: "fixture-artifact", id: "fixture-release", sha256: "e".repeat(64) },
+  retention: { expiresAt: "2030-01-01T00:00:00.000Z", policy: "Retain owned fixture" },
+  selection: {
+    appId: "fixture-app",
+    branch: "preview",
+    environment: "preview",
+    projectId: "prj_app",
+    sessionId: "owner-session",
+  },
+  stage: "app",
+  version: 1,
 });
 const currentPlan = hostedOperatorPlanSchema.parse({
   ...originalPlan,
@@ -124,16 +124,16 @@ const makeOperator = (plan: HostedOperatorPlan): HostedOperatorRecordBase => {
   }
   const planDigest = operatorPlanDigest(plan);
   const marker = canonical({
-    version: 1,
-    purpose: "protected-owned-organization-v1",
-    planDigest,
-    ownerSessionId: plan.selection.sessionId,
-    identityProofSha256: spec.identityProof.sha256,
     actorId: spec.actorId,
+    identityProofSha256: spec.identityProof.sha256,
+    ownerSessionId: plan.selection.sessionId,
+    planDigest,
+    purpose: "protected-owned-organization-v1",
+    version: 1,
   });
   return {
-    mode: "protected-operator-v1",
     approvalId: "original-approval",
+    mode: "protected-operator-v1",
     operationRef: "11111111-1111-4111-8111-111111111111",
     plan,
     planDigest,
@@ -176,7 +176,7 @@ const fixture = () => {
     },
     operator,
   };
-  return { record, operator, original };
+  return { operator, original, record };
 };
 
 const participantPlan = (plan: HostedOperatorPlan) => {
@@ -194,10 +194,10 @@ const participantPlan = (plan: HostedOperatorPlan) => {
     origin: plan.publicGateway?.origin,
     actors: [
       {
+        account: "capture-existing",
         actorKey: "owner",
         email: "owner@example.test",
         name: "Owner",
-        account: "capture-existing",
       },
     ],
     organizations: organizations.map((organization) => ({
@@ -207,13 +207,13 @@ const participantPlan = (plan: HostedOperatorPlan) => {
       ownerActorKey: "owner",
     })),
     memberships: organizations.map(({ organizationId }) => ({
-      organizationId,
       actorKey: "owner",
+      organizationId,
       role: "owner",
     })),
     appAccess: organizations.map(({ organizationId }) => ({
-      organizationId,
       actorKey: "owner",
+      organizationId,
       roles: ["owner"],
     })),
   });
@@ -221,10 +221,10 @@ const participantPlan = (plan: HostedOperatorPlan) => {
     ...plan,
     normalActorProgram: program,
     normalActorPreparation: {
-      accountOperationRef: "33333333-3333-4333-8333-333333333333",
-      accountPlanDigest: "a".repeat(64),
       accountApprovalId: "account-approval",
       accountApprovedByCallId: "account-call",
+      accountOperationRef: "33333333-3333-4333-8333-333333333333",
+      accountPlanDigest: "a".repeat(64),
       programDigest: normalActorProgramDigest(program),
     },
     authMembership: { kind: "create-owned-organizations", organizations },
@@ -282,9 +282,9 @@ describe("retained membership inspection provenance", () => {
           assetSha256: "7".repeat(64),
           catalogFingerprint: "8".repeat(64),
           database: completedPlan.authDatabase.database,
+          observedAt: "2028-01-01T00:01:00.000Z",
           runtimeRole: completedPlan.authDatabase.runtimeRole,
           targetDigest: completedPlan.authSchema?.targetDigest,
-          observedAt: "2028-01-01T00:01:00.000Z",
         },
         receipts: completedPlan.effects.map((effect) => ({
           effectId: effect.id,
@@ -321,9 +321,9 @@ describe("retained membership inspection provenance", () => {
     ).toMatchObject({
       approvedByCallId: "completed-participant-call",
       operator: {
+        approvalId: "completed-participant-approval",
         mode: "protected-operator-v1",
         operationRef,
-        approvalId: "completed-participant-approval",
         plan: completedPlan,
       },
     });
@@ -365,7 +365,7 @@ describe("retained membership inspection provenance", () => {
     };
     operator.plan = plan;
     operator.planDigest = operatorPlanDigest(plan);
-    const candidate = retainedMembershipInspectionProvenance(record, plan, "org_second")[0];
+    const [candidate] = retainedMembershipInspectionProvenance(record, plan, "org_second");
     expect(candidate?.effect.id).toBe("auth-membership:org_second");
     expect(candidate?.operator.plan).toBe(prior);
   });
@@ -376,7 +376,7 @@ describe("retained membership inspection provenance", () => {
     if (plan.authMembership?.kind !== "create-owned-organizations") {
       throw new Error("Expected participant organizations");
     }
-    const current = plan.authMembership.organizations[0];
+    const [current] = plan.authMembership.organizations;
     if (current === undefined) {
       throw new Error("Expected owner organization");
     }
@@ -388,11 +388,11 @@ describe("retained membership inspection provenance", () => {
     operator.plan = hostedOperatorPlanSchema.parse(plan);
     operator.planDigest = operatorPlanDigest(operator.plan);
     original.operator.receipts = [];
-    const candidate = retainedMembershipInspectionProvenance(
+    const [candidate] = retainedMembershipInspectionProvenance(
       record,
       operator.plan,
       "org_fixture",
-    )[0];
+    );
     expect(candidate?.operator.plan.authMembership).toEqual(originalPlan.authMembership);
   });
 
@@ -554,14 +554,14 @@ describe("retained membership inspection provenance", () => {
       appDatabase: { ...currentPlan.appDatabase, database: "revised_app" },
       installer: { reference: "revised-layout-installer", sha256: "1".repeat(64) },
       delivery: {
-        projectId: "prj_app",
         branch: "preview",
-        repoId: "revised-repo",
         gitSha: "2".repeat(40),
+        projectId: "prj_app",
+        repoId: "revised-repo",
       },
       effects: [
         ...currentPlan.effects,
-        { id: "delivery", kind: "delivery", description: "Deliver revised app" },
+        { description: "Deliver revised app", id: "delivery", kind: "delivery" },
       ],
       deploymentBoundary: {
         ...currentPlan.deploymentBoundary,
@@ -711,7 +711,7 @@ describe("retained membership inspection provenance", () => {
     [
       "actual ownership readback",
       ({ original }) => {
-        const receipt = original.operator.receipts[0];
+        const [receipt] = original.operator.receipts;
         if (receipt === undefined) {
           throw new Error("Expected the original ownership receipt");
         }

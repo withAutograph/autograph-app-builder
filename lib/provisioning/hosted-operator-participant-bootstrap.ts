@@ -186,7 +186,7 @@ const inspectPlanningGateway = (
   desired: HostedOperatorPlan,
   record: HostedRuntimeJournalRecord,
 ): ParticipantGateway | undefined => {
-  const operator = record.operator;
+  const { operator } = record;
   if (
     operator === undefined ||
     desired.gatewayDelivery === undefined ||
@@ -333,13 +333,16 @@ const inspectParticipantBootstrap = (
       inspectParticipantBootstrapPreparation(desired, record).gatewayPrepared,
   ].every(Boolean);
   const candidate = gateway?.candidate ?? deliveredGatewayCandidate(operator);
-  return sameScope && candidate !== undefined
-    ? completedParticipantBootstrapSchema.parse({
-        auth,
-        candidate,
-        ...(gateway === undefined ? {} : { gateway: gateway.completion }),
-      })
-    : undefined;
+  if (!sameScope || candidate === undefined) {
+    return undefined;
+  }
+  const bootstrapSchema = completedParticipantBootstrapSchema;
+  const parseBootstrap = bootstrapSchema.parse.bind(bootstrapSchema);
+  const bootstrap: CompletedParticipantBootstrap = { auth, candidate };
+  if (gateway !== undefined) {
+    bootstrap.gateway = gateway.completion;
+  }
+  return parseBootstrap(bootstrap);
 };
 
 /** Preserve the original pending/reserved handoff contract for existing consumers. */

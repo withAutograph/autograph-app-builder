@@ -50,14 +50,14 @@ const databaseUrlSchema = z
 
 const vercelUserInfoSchema = z
   .object({
-    email: z.string().email().max(320),
+    email: z.email().max(320),
     email_verified: z.literal(true),
     name: z.string().min(1).max(512).optional(),
-    picture: z.string().url().max(2048).nullable().optional(),
+    picture: z.url().max(2048).nullable().optional(),
     preferred_username: z.string().min(1).max(512).optional(),
     sub: z.string().min(1).max(512),
   })
-  .passthrough();
+  .loose();
 
 const vercelUserInfoEndpoint = "https://api.vercel.com/login/oauth/userinfo";
 const githubUserInfoEndpoint = "https://api.github.com/user";
@@ -65,22 +65,22 @@ const githubEmailsEndpoint = "https://api.github.com/user/emails";
 
 const githubProfileSchema = z
   .object({
-    avatar_url: z.string().url().max(2048).nullable().optional(),
+    avatar_url: z.url().max(2048).nullable().optional(),
     id: z.union([z.string().min(1), z.number().int().positive()]),
     login: z.string().min(1).max(256),
     name: z.string().min(1).max(512).nullable().optional(),
   })
-  .passthrough();
+  .loose();
 
 const githubEmailsSchema = z
   .array(
     z
       .object({
-        email: z.string().email().max(320),
+        email: z.email().max(320),
         primary: z.boolean(),
         verified: z.boolean(),
       })
-      .passthrough(),
+      .loose(),
   )
   .max(100);
 
@@ -94,7 +94,7 @@ interface GitHubOAuthTokens {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function readBoundedJson(response: Response, limit: number): Promise<unknown | null> {
+async function readBoundedJson(response: Response, limit: number): Promise<unknown> {
   if (!response.ok) {
     return null;
   }
@@ -308,7 +308,7 @@ export async function fetchVerifiedVercelUserInfo(
 }
 
 const previewOAuthRuntimeConfigSchema = z
-  .object({
+  .strictObject({
     databaseUrl: databaseUrlSchema,
     environment: z.union([
       hostedDeploymentEnvironmentSchema,
@@ -328,16 +328,16 @@ const previewOAuthRuntimeConfigSchema = z
       .refine((value) => !/[\0\r\n]/u.test(value))
       .optional(),
     hostedAdapter: z.enum(["0", "1"]),
-    issuer: z.string().url(),
+    issuer: z.url(),
     localDevelopmentEmulation: z.literal(true).optional(),
     passkeyOnboarding: z.custom<PasskeyOnboardingConfig>().nullable(),
-    resource: z.string().url(),
+    resource: z.url(),
     secret: z
       .string()
       .min(32)
       .max(512)
       .refine((value) => !/[\0\r\n]/u.test(value)),
-    trustedOrigins: z.array(z.string().url()).min(1).max(3).optional(),
+    trustedOrigins: z.array(z.url()).min(1).max(3).optional(),
     vercelClientId: z
       .string()
       .min(1)
@@ -351,27 +351,22 @@ const previewOAuthRuntimeConfigSchema = z
       .refine((value) => !/[\0\r\n]/u.test(value))
       .optional(),
   })
-  .strict()
   .superRefine((config, context) => {
     const issuer = new URL(config.issuer);
     const resource = new URL(config.resource);
-    if (
-      issuer.pathname !== "/api/auth" ||
-      issuer.search ||
-      issuer.hash ||
-      issuer.username ||
-      issuer.password
-    ) {
+    const invalidIssuerLocation =
+      issuer.pathname !== "/api/auth" || issuer.search !== "" || issuer.hash !== "";
+    if (invalidIssuerLocation || issuer.username || issuer.password) {
       context.addIssue({
         code: "custom",
         message: "Preview OAuth issuer must be the exact /api/auth URL.",
         path: ["issuer"],
       });
     }
+    const invalidResourceLocation =
+      resource.pathname !== "/mcp" || resource.search !== "" || resource.hash !== "";
     if (
-      resource.pathname !== "/mcp" ||
-      resource.search ||
-      resource.hash ||
+      invalidResourceLocation ||
       resource.username ||
       resource.password ||
       resource.origin !== issuer.origin
@@ -430,19 +425,27 @@ const previewOAuthRuntimeConfigSchema = z
         path: ["hostedAdapter"],
       });
     }
-    if (
-      config.passkeyOnboarding === null &&
-      (!config.githubClientId ||
-        !config.githubClientSecret ||
-        !config.vercelClientId ||
-        !config.vercelClientSecret)
-    ) {
-      context.addIssue({
-        code: "custom",
-        message:
-          "Hosted auth without passkey onboarding requires all GitHub and Vercel credentials.",
-        path: ["passkeyOnboarding"],
-      });
+    if (config.passkeyOnboarding === null) {
+      let missingCredentials =
+        config.githubClientId === undefined ||
+        config.githubClientId === "" ||
+        config.githubClientSecret === undefined ||
+        config.githubClientSecret === "";
+      if (!missingCredentials) {
+        missingCredentials =
+          config.vercelClientId === undefined ||
+          config.vercelClientId === "" ||
+          config.vercelClientSecret === undefined ||
+          config.vercelClientSecret === "";
+      }
+      if (missingCredentials) {
+        context.addIssue({
+          code: "custom",
+          message:
+            "Hosted auth without passkey onboarding requires all GitHub and Vercel credentials.",
+          path: ["passkeyOnboarding"],
+        });
+      }
     }
   });
 
@@ -563,7 +566,8 @@ export function readPreviewOAuthRuntimeConfig(
       ? `https://${environment.VERCEL_URL}/api/auth`
       : undefined);
   const resource =
-    environment.MCP_RESOURCE_URL ?? (issuer ? `${new URL(issuer).origin}/mcp` : undefined);
+    environment.MCP_RESOURCE_URL ??
+    (issuer !== undefined && issuer !== "" ? `${new URL(issuer).origin}/mcp` : undefined);
   return previewOAuthRuntimeConfigSchema.parse({
     databaseUrl: environment.DATABASE_URL,
     environment: deploymentEnvironment,
@@ -596,11 +600,22 @@ export function createPreviewOAuthServer(input: {
   const resourceOrigin = new URL(config.resource).origin;
   const localEmulation = readProviderEmulation(process.env);
   const { githubClientId, githubClientSecret, vercelClientId, vercelClientSecret } = config;
-  if (
-    localEmulation &&
-    (!githubClientId || !githubClientSecret || !vercelClientId || !vercelClientSecret)
-  ) {
-    throw new Error("Local provider emulation requires GitHub and Vercel OAuth credentials.");
+  if (localEmulation) {
+    let missingCredentials =
+      githubClientId === undefined ||
+      githubClientId === "" ||
+      githubClientSecret === undefined ||
+      githubClientSecret === "";
+    if (!missingCredentials) {
+      missingCredentials =
+        vercelClientId === undefined ||
+        vercelClientId === "" ||
+        vercelClientSecret === undefined ||
+        vercelClientSecret === "";
+    }
+    if (missingCredentials) {
+      throw new Error("Local provider emulation requires GitHub and Vercel OAuth credentials.");
+    }
   }
   const localGithubClientId = githubClientId ?? "";
   const localGithubClientSecret = githubClientSecret ?? "";
@@ -795,7 +810,7 @@ export function createPreviewOAuthServer(input: {
               if (localEmulation) {
                 return [genericOAuth({ config: localProviderConfigs })];
               }
-              if (!config.vercelClientId || !config.vercelClientSecret) {
+              if (config.vercelClientId === undefined || config.vercelClientSecret === undefined) {
                 return [];
               }
               return [
@@ -831,7 +846,7 @@ export function createPreviewOAuthServer(input: {
       if (localEmulation) {
         return {};
       }
-      if (!config.githubClientId || !config.githubClientSecret) {
+      if (config.githubClientId === undefined || config.githubClientSecret === undefined) {
         return {};
       }
       return {

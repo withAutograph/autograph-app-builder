@@ -58,7 +58,7 @@ export const prepareValidationPrivateComputeRepair = (
   if (supplied === undefined || supplied.operation === "delete") {
     return undefined;
   }
-  const appId = state.appSpec.appId;
+  const { appId } = state.appSpec;
   if (
     profile.checkPolicy.path !== `apps/${appId}/.config/mise/tasks/check` ||
     state.proposal.target.contract.appId !== appId ||

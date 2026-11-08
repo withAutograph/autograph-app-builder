@@ -4,6 +4,8 @@ import path from "node:path";
 import type { UiPreviewInput } from "../../../lib/agent/ui-preview";
 import { validateUiPreview } from "../../../lib/agent/ui-preview";
 
+const compositionPackage = "@autograph/compositions";
+
 export type DesignQualityExampleId = "spend-import-review" | "compensation-planning";
 
 interface ExampleConfig {
@@ -14,6 +16,9 @@ interface ExampleConfig {
   stateSource: string;
   stateTarget: string;
 }
+
+const fixtureStateImport = (stateTarget: string) =>
+  `./${stateTarget.split("/").at(-1)?.replace(/\.ts$/u, "")}`;
 
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 async function text(root: string, relativePath: string) {
@@ -77,7 +82,7 @@ const exampleManifests: Record<
     productionComponents: ["Button", "Card", "PageHeader", "StatusPill", "Typography"].map(
       (name) => ({ name, source: "@autograph/components" as const }),
     ),
-    productionCompositions: [{ name: "SchemaFormComposition", source: "@autograph/compositions" }],
+    productionCompositions: [{ name: "SchemaFormComposition", source: compositionPackage }],
   },
   "spend-import-review": {
     assumptions: [
@@ -125,8 +130,8 @@ const exampleManifests: Record<
       "Typography",
     ].map((name) => ({ name, source: "@autograph/components" as const })),
     productionCompositions: [
-      { name: "DataTableComposition", source: "@autograph/compositions" },
-      { name: "RecordDetailPanel", source: "@autograph/compositions" },
+      { name: "DataTableComposition", source: compositionPackage },
+      { name: "RecordDetailPanel", source: compositionPackage },
     ],
   },
 };
@@ -153,7 +158,7 @@ export async function loadDesignQualityExample(
       { content: source, path: config.entry },
       { content: stateSource, path: config.stateTarget },
       {
-        content: `import type { ${id === "spend-import-review" ? "SpendFixture" : "CompensationFixture"} as Fixture } from ${JSON.stringify(`./${config.stateTarget.split("/").at(-1)?.replace(/\.ts$/u, "")}`)};\nconst fixture: Fixture = ${fixtureSource.trim()};\nexport default fixture;\n`,
+        content: `import type { ${id === "spend-import-review" ? "SpendFixture" : "CompensationFixture"} as Fixture } from ${JSON.stringify(fixtureStateImport(config.stateTarget))};\nconst fixture: Fixture = ${fixtureSource.trim()};\nexport default fixture;\n`,
         path: "src/fixture.ts",
       },
     ],

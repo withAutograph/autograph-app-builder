@@ -31,6 +31,8 @@ import type {
 } from "./central-integration-host-checkpoint";
 import type { PublicReleaseInvocation } from "./public-release-handler";
 
+const CENTRAL_HOST_SETUP_KIND = "central-integration-host-setup-v1";
+
 type Plan = CentralHostSetupPlan | CentralHostCallerPlan;
 export const centralHostSelectionSchema = z.strictObject({
   operationRef: z.uuid(),
@@ -178,7 +180,7 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
     if ((row.record.approvalReceipts?.length ?? 0) === 0) {
       throw fail();
     }
-    if (row.record.plan.kind === "central-integration-host-setup-v1") {
+    if (row.record.plan.kind === CENTRAL_HOST_SETUP_KIND) {
       const native = row.record.nativeDeployment;
       if (native?.status === "conflict") {
         throw new Error("central_host_native_deployment_conflict");
@@ -245,7 +247,7 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
       const plan = await ports.resolvePlan(invocation, request);
       await authorize(invocation, plan);
       if (
-        (request.kind === "setup") !== (plan.kind === "central-integration-host-setup-v1") ||
+        (request.kind === "setup") !== (plan.kind === CENTRAL_HOST_SETUP_KIND) ||
         request.appId !== plan.selection.initiatingAppId
       ) {
         throw fail();
@@ -360,7 +362,7 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
           const bindingState = async (key: string) => {
             await assertCurrent();
             if (
-              row.record.plan.kind !== "central-integration-host-setup-v1" ||
+              row.record.plan.kind !== CENTRAL_HOST_SETUP_KIND ||
               !row.record.plan.environment.some((entry) => entry.key === key) ||
               effect !== "bind-central-preview-runtime"
             ) {
@@ -411,7 +413,7 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
             bindings: {
               read: async () => {
                 await assertCurrent();
-                return row.record.plan.kind === "central-integration-host-setup-v1"
+                return row.record.plan.kind === CENTRAL_HOST_SETUP_KIND
                   ? Object.fromEntries(
                       row.record.plan.environment.map((entry) => [
                         entry.key,

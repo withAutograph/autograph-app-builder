@@ -131,17 +131,17 @@ export function materializeSanitizedGitTree(
         throw new Error("Sanitized context contains an unsupported Git entry.");
       }
       const [, mode, type, objectId, path] = match;
+      const unsafePath = "Sanitized context contains an unsafe Git path.";
+      if (type !== "blob" || path === undefined || path.includes("\\") || path.includes("\uFFFD")) {
+        throw new Error(unsafePath);
+      }
       if (
-        type !== "blob" ||
-        path === undefined ||
-        path.includes("\\") ||
-        path.includes("\uFFFD") ||
         path.split("/").some((part) => part === "" || part === "." || part === "..") ||
         path === ".git" ||
         path.startsWith(".git/") ||
         path === ".app-builder-source-manifest.json"
       ) {
-        throw new Error("Sanitized context contains an unsafe Git path.");
+        throw new Error(unsafePath);
       }
       if (mode !== "100644" && mode !== "100755" && mode !== "120000") {
         throw new Error("Sanitized context contains an unsupported Git mode.");
@@ -163,9 +163,11 @@ export function materializeSanitizedGitTree(
           target === "" ||
           target.includes("\0") ||
           target.includes("\uFFFD") ||
-          nodePath.isAbsolute(target) ||
-          !containsPath(destinationRoot, nodePath.resolve(parent, target))
+          nodePath.isAbsolute(target)
         ) {
+          throw new Error(`Sanitized context symlink ${path} is unsafe.`);
+        }
+        if (!containsPath(destinationRoot, nodePath.resolve(parent, target))) {
           throw new Error(`Sanitized context symlink ${path} is unsafe.`);
         }
         symlinkSync(target, absolute);

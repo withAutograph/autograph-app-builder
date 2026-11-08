@@ -122,7 +122,11 @@ export function createBuilderDraftRouteHandler(input: {
         return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });
       }
       const length = request.headers.get("content-length");
-      if (length && (!/^\d+$/u.test(length) || Number(length) > maximumRequestBytes)) {
+      if (
+        length !== null &&
+        length !== "" &&
+        (!/^\d+$/u.test(length) || Number(length) > maximumRequestBytes)
+      ) {
         return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });
       }
       const authority = await input.authorityForRequest(request);

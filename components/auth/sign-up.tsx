@@ -121,7 +121,7 @@ export function SignUp({
       resetFetchOptions();
     },
     onSuccess: (_data, { email }) => {
-      if (emailAndPassword?.requireEmailVerification) {
+      if (emailAndPassword?.requireEmailVerification === true) {
         sessionStorage.setItem("better-auth-ui.verify-email", email);
         navigate({
           to: getAuthLinkURL(`${basePaths.auth}/${viewPaths.auth.verifyEmail}`, redirectTo),
@@ -153,7 +153,7 @@ export function SignUp({
     const name = (formData.get("name") as string | null) ?? "";
     const email = formData.get("email") as string;
 
-    if (emailAndPassword?.confirmPassword && password !== confirmPassword) {
+    if (emailAndPassword?.confirmPassword === true && password !== confirmPassword) {
       toast.error(localization.auth.passwordsDoNotMatch);
       setPassword("");
       setConfirmPassword("");
@@ -163,7 +163,7 @@ export function SignUp({
     const additionalFieldValues: Record<string, unknown> = {};
 
     for (const field of additionalFields ?? []) {
-      if (!field.signUp || field.readOnly) {
+      if (!field.signUp || field.readOnly === true) {
         continue;
       }
       const value = parseAdditionalFieldValue(field, formData.get(field.name) as string | null);
@@ -220,7 +220,7 @@ export function SignUp({
                   <ProviderButtons socialLayout={socialLayout} view="signUp" />
                 )}
 
-                {showSeparator && (
+                {showSeparator === true && (
                   <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card text-xs flex items-center">
                     {localization.auth.or}
                   </FieldSeparator>
@@ -232,7 +232,7 @@ export function SignUp({
               <form onSubmit={handleSubmit}>
                 <FieldGroup>
                   {emailAndPassword.name !== false && (
-                    <Field data-invalid={!!fieldErrors.name}>
+                    <Field data-invalid={(fieldErrors.name ?? "") !== ""}>
                       <FieldLabel htmlFor="name">{localization.auth.name}</FieldLabel>
 
                       <Input
@@ -257,14 +257,14 @@ export function SignUp({
                             name: localization.auth.fieldRequired,
                           }));
                         }}
-                        aria-invalid={!!fieldErrors.name}
+                        aria-invalid={(fieldErrors.name ?? "") !== ""}
                       />
 
                       <FieldError>{fieldErrors.name}</FieldError>
                     </Field>
                   )}
 
-                  <Field data-invalid={!!fieldErrors.email}>
+                  <Field data-invalid={(fieldErrors.email ?? "") !== ""}>
                     <FieldLabel htmlFor="email">{localization.auth.email}</FieldLabel>
 
                     <Input
@@ -293,7 +293,7 @@ export function SignUp({
                           email: msg,
                         }));
                       }}
-                      aria-invalid={!!fieldErrors.email}
+                      aria-invalid={(fieldErrors.email ?? "") !== ""}
                     />
 
                     <FieldError>{fieldErrors.email}</FieldError>
@@ -312,7 +312,7 @@ export function SignUp({
                       ),
                   )}
 
-                  <Field data-invalid={!!fieldErrors.password}>
+                  <Field data-invalid={(fieldErrors.password ?? "") !== ""}>
                     <FieldLabel htmlFor="password">{localization.auth.password}</FieldLabel>
 
                     <InputGroup>
@@ -351,7 +351,7 @@ export function SignUp({
                             password: msg,
                           }));
                         }}
-                        aria-invalid={!!fieldErrors.password}
+                        aria-invalid={(fieldErrors.password ?? "") !== ""}
                       />
 
                       <InputGroupAddon align="inline-end">
@@ -381,8 +381,8 @@ export function SignUp({
                     <PasswordStrengthMeter password={password} />
                   </Field>
 
-                  {emailAndPassword?.confirmPassword && (
-                    <Field data-invalid={!!fieldErrors.confirmPassword}>
+                  {emailAndPassword?.confirmPassword === true && (
+                    <Field data-invalid={(fieldErrors.confirmPassword ?? "") !== ""}>
                       <FieldLabel htmlFor="confirmPassword">
                         {localization.auth.confirmPassword}
                       </FieldLabel>
@@ -424,7 +424,7 @@ export function SignUp({
                               confirmPassword: msg,
                             }));
                           }}
-                          aria-invalid={!!fieldErrors.confirmPassword}
+                          aria-invalid={(fieldErrors.confirmPassword ?? "") !== ""}
                         />
 
                         <InputGroupAddon align="inline-end">
@@ -440,7 +440,9 @@ export function SignUp({
                                 ? localization.auth.hidePassword
                                 : localization.auth.showPassword
                             }
-                            onClick={() => setIsConfirmPasswordVisible((visible) => !visible)}
+                            onClick={() => {
+                              setIsConfirmPasswordVisible((visible) => !visible);
+                            }}
                           >
                             {isConfirmPasswordVisible ? <EyeOff /> : <Eye />}
                           </InputGroupButton>
@@ -478,7 +480,7 @@ export function SignUp({
 
             {socialPosition === "bottom" && (
               <>
-                {showSeparator && (
+                {showSeparator === true && (
                   <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card text-xs flex items-center">
                     {localization.auth.or}
                   </FieldSeparator>

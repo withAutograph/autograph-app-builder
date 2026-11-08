@@ -18,6 +18,8 @@ import type {
   PreparedRuntimeExecutionContext,
 } from "@/lib/agent/prepared-runtime-execution";
 
+const GENERATED_POSTGRES_BACKEND = "generated-postgres";
+
 export { localRuntimeEnvironmentPath } from "@/lib/repository/runtime-environment";
 
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
@@ -35,7 +37,7 @@ export const appDeclaresLocalSetup = async (input: {
   sandbox: Pick<SandboxSession, "run">;
 }): Promise<boolean> => {
   const description = await describeSelectedApp(input);
-  return description.backend.kind === "generated-postgres";
+  return description.backend.kind === GENERATED_POSTGRES_BACKEND;
 };
 
 export const localPreviewExecutionCommand = localPreviewSetupCommand;
@@ -98,8 +100,8 @@ export const prepareAppLocalPreview = async (input: {
       signal: input.signal,
     });
     const roles =
-      description.backend.kind === "generated-postgres" ? description.backend.roles : [];
-    if (description.backend.kind === "generated-postgres") {
+      description.backend.kind === GENERATED_POSTGRES_BACKEND ? description.backend.roles : [];
+    if (description.backend.kind === GENERATED_POSTGRES_BACKEND) {
       command = `${sourceDeclaredToolchainActivationCommand()}\n${command}`;
     }
     const env: LocalPreviewEnvironment = {
@@ -119,14 +121,18 @@ export const prepareAppLocalPreview = async (input: {
         .regex(/^(?:http:\/\/localhost:3000|https:\/\/[a-z0-9-]+\.vercel\.run)$/u)
         .parse(input.expectedPreviousAuthOrigin);
     }
+    const { sandbox } = input;
+    const options: Parameters<typeof runSandboxCommandWithExcerpt>[0]["options"] = {
+      command,
+      env,
+      workingDirectory: input.root,
+    };
+    if (input.signal !== undefined) {
+      options.abortSignal = input.signal;
+    }
     const result = await runSandboxCommandWithExcerpt({
-      sandbox: input.sandbox,
-      options: {
-        command,
-        env,
-        workingDirectory: input.root,
-        ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
-      },
+      sandbox,
+      options,
       sanitize: safeOutput,
     });
     const stdout = safeOutput(result.stdout);
@@ -136,7 +142,7 @@ export const prepareAppLocalPreview = async (input: {
         command,
         exitCode: result.exitCode,
         problem:
-          description.backend.kind === "generated-postgres" &&
+          description.backend.kind === GENERATED_POSTGRES_BACKEND &&
           roles.length === 0 &&
           `${stderr}\n${stdout}`.includes("Authenticated runtime requires schema-declared roles")
             ? "The selected app's authenticated runtime rejected its checked schema release because it declares no application roles. Repair this app's CUE authorization roles and model/operation grants from the accepted access requirements through the ordinary implementation repair flow, then regenerate its checked release and retry validation. Use the compiler's canonical role IDs. AppSpec prose or role strings in application code do not declare database authorization; do not inject APP_RUNTIME_ROLES or grant a default role to bypass the missing policy."
@@ -196,7 +202,7 @@ export default defineTool({
       resolveRoot: async ({ appId, root }) =>
         await resolveAcceptanceRuntimeRoot({ appId, fallbackRoot: root, sandbox, state, ctx }),
     });
-    const root = selected.root;
+    const { root } = selected;
     return await prepareAppLocalPreview({
       appId: selected.appId,
       execution: {

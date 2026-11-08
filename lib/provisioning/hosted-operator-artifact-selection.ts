@@ -1,10 +1,8 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { and, desc, eq, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- The owned Drizzle schema defines this existing table.
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { prototypeArtifactChunks } from "../db/schema";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import {
@@ -17,6 +15,9 @@ import type {
 } from "./hosted-operator-artifact-store";
 import { createOperatorArtifactPublication } from "./hosted-operator-artifacts";
 
+const selectionChangedStatus = "selection-changed";
+
+const GENERATED_RELEASE_KIND = "generated-release";
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 export const publishedAppSourceSchema = z.object({
@@ -46,6 +47,18 @@ export const historicalAppPublication = (
   mode === "initial" &&
   current?.publishedSource.repositoryId === destination.publishedSource.repositoryId &&
   current.publishedSource.branch === destination.publishedSource.branch;
+
+const publicationDestinationForStorage = (
+  mode: AppPublicationSelectionMode,
+  destination: AppPublicationDestination,
+  current: AppPublicationDestination | undefined,
+): AppPublicationDestination & { historicalOnly?: true } => {
+  const stored: AppPublicationDestination & { historicalOnly?: true } = { ...destination };
+  if (historicalAppPublication(mode, destination, current)) {
+    stored.historicalOnly = true;
+  }
+  return stored;
+};
 
 export type PublishedAppSourceLookup = Pick<
   PublishedAppSource,
@@ -235,7 +248,7 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 const scoped = (
   context: OperatorArtifactContext,
   appSpecDigest: string,
-  kind: "generated-release" | "app-publication" = "generated-release",
+  kind: "generated-release" | "app-publication" = GENERATED_RELEASE_KIND,
 ) => ({
   ...hostedTenantAuthoritySchema.parse(context.authority),
   path: `_protected-operator/selections/${kind}/${appId.parse(context.target.appId)}/${digest.parse(appSpecDigest)}`,
@@ -261,16 +274,14 @@ const selectedDestinationPredicate = (scope: ReturnType<typeof scoped>) =>
 
 /** Completion markers are immutable per trusted tool call and written only after every release member is durably readable. */
 export const createPostgresOperatorArtifactSelections = (input: {
-  database: PostgresJsDatabase<typeof databaseSchema>;
+  database: HostedDatabase;
   assertCurrentOwner: (context: OperatorArtifactContext) => Promise<void>;
 }): OperatorArtifactSelections => {
   // Every selection writer shares this lock, so recovery cannot hide a concurrent capture.
   const writeSelection = async <T>(
     context: OperatorArtifactContext,
     scope: ReturnType<typeof scoped>,
-    write: (
-      database: Pick<PostgresJsDatabase<typeof databaseSchema>, "select" | "insert">,
-    ) => Promise<T>,
+    write: (database: Pick<HostedDatabase, "select" | "insert">) => Promise<T>,
   ): Promise<T> => {
     await input.assertCurrentOwner(context);
     return await input.database.transaction(async (transaction) => {
@@ -347,12 +358,9 @@ export const createPostgresOperatorArtifactSelections = (input: {
             : appPublicationDestinationSchema.parse(JSON.parse(prior.content));
         // A new currently selected proposal has its own sealed branch. Recovery
         // can retain its initial receipt, but cannot undo a same-branch reconciliation.
-        const content = JSON.stringify({
-          ...destination,
-          ...(historicalAppPublication(selectionMode, destination, current)
-            ? { historicalOnly: true }
-            : {}),
-        });
+        const content = JSON.stringify(
+          publicationDestinationForStorage(selectionMode, destination, current),
+        );
         await database
           .insert(prototypeArtifactChunks)
           .values({
@@ -424,7 +432,7 @@ export const createPostgresOperatorArtifactSelections = (input: {
       const pathPrefix = `_protected-operator/selections/generated-release/${selectedApp}/`;
       if (
         "artifactRef" in lookup &&
-        (lookup.artifactRef.split("/")[2] !== "generated-release" ||
+        (lookup.artifactRef.split("/")[2] !== GENERATED_RELEASE_KIND ||
           lookup.artifactRef.split("/")[3] !== selectedApp)
       ) {
         throw operatorArtifactUnavailable();
@@ -533,7 +541,7 @@ export const createPostgresOperatorArtifactSelections = (input: {
       const scope = scoped(context, selection.appSpecDigest);
       if (
         selection.appId !== context.target.appId ||
-        selection.artifactRef.split("/")[2] !== "generated-release" ||
+        selection.artifactRef.split("/")[2] !== GENERATED_RELEASE_KIND ||
         selection.artifactRef.split("/")[3] !== selection.appId
       ) {
         throw operatorArtifactUnavailable();
@@ -592,19 +600,19 @@ export const createPostgresOperatorArtifactSelections = (input: {
             )
             .limit(1);
           if (latest === undefined) {
-            return { status: "selection-changed" };
+            return { status: selectionChangedStatus };
           }
           if (latest.chunkDigest !== hash(latest.content)) {
             throw operatorArtifactUnavailable();
           }
           const current = compiledOperatorReleaseSelectionSchema.parse(JSON.parse(latest.content));
           if (!isEquivalentCompiledOperatorRelease(current, approved)) {
-            return { status: "selection-changed" };
+            return { status: selectionChangedStatus };
           }
           if (current.publishedSource !== undefined) {
             return isDeepStrictEqual(current.publishedSource, source)
               ? { status: "recorded", selection: current }
-              : { status: "selection-changed" };
+              : { status: selectionChangedStatus };
           }
           const selection = { ...current, publishedSource: source };
           const content = JSON.stringify(selection);

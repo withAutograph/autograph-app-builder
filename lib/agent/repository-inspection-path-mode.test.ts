@@ -38,17 +38,17 @@ vi.mock("./app-baseline-state", () => ({ appBaselineState: { get: vi.fn() } }));
 
 // SAFETY: Only the listed immutable coordinates are consumed; all Sandbox and host I/O ports are mocked in this namespace-routing test.
 const ctx = {
-  callId: "inspection",
-  session: { id: "logical", auth: {}, turn: { id: "turn" } },
   abortSignal: new AbortController().signal,
+  callId: "inspection",
+  session: { auth: {}, id: "logical", turn: { id: "turn" } },
 } as unknown as ToolContext;
 const input = (path: string) => ({
-  path,
-  paths: undefined,
-  pathIndex: undefined,
-  offsetBytes: undefined,
   directoryOffset: undefined,
   mode: undefined,
+  offsetBytes: undefined,
+  path,
+  pathIndex: undefined,
+  paths: undefined,
 });
 beforeEach(() => {
   vi.clearAllMocks();
@@ -56,7 +56,7 @@ beforeEach(() => {
   mocks.state.mockReturnValue({ phase: "prepared" });
   mocks.sandbox.mockResolvedValue({ run: vi.fn(), readTextFile: vi.fn() });
   mocks.host.mockResolvedValue({ source: "host" });
-  mocks.entry.mockResolvedValue({ kind: "workspace-directory", entries: [] });
+  mocks.entry.mockResolvedValue({ entries: [], kind: "workspace-directory" });
   mocks.receipt.mockResolvedValue({ sourcePath: "/owned/source" });
 });
 describe("repository host versus virtual workspace path modes", () => {
@@ -95,7 +95,7 @@ describe("repository host versus virtual workspace path modes", () => {
   it("does not silently apply a directory cursor to a host overview or file batch", async () => {
     const requests = [
       { ...input("/owned/source"), directoryOffset: 2 },
-      { ...input("/workspace/repository/packages"), paths: ["README.md"], directoryOffset: 2 },
+      { ...input("/workspace/repository/packages"), directoryOffset: 2, paths: ["README.md"] },
     ];
     await Promise.all(
       requests.map(async (value) => {

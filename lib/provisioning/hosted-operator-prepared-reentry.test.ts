@@ -139,7 +139,7 @@ const fixture = () => {
     ...plan,
     effects: [
       ...plan.effects,
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind shared Gateway" },
+      { description: "Bind shared Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
     ],
     gatewayBindings: {
       authBrowserOrigin: "https://auth-preview.example.test",
@@ -166,6 +166,16 @@ const fixture = () => {
     }
   >();
   const store: HostedRuntimeJournalStore = {
+    async compareAndSet(input) {
+      const matches = row?.revision === input.expectedRevision;
+      if (matches) {
+        row = {
+          revision: input.expectedRevision + 1,
+          record: hostedRuntimeJournalRecordSchema.parse(input.record),
+        };
+      }
+      return matches ? structuredClone(row) : undefined;
+    },
     async read() {
       return row ? structuredClone(row) : undefined;
     },
@@ -183,16 +193,6 @@ const fixture = () => {
         }),
       };
       return structuredClone(row);
-    },
-    async compareAndSet(input) {
-      const matches = row?.revision === input.expectedRevision;
-      if (matches) {
-        row = {
-          revision: input.expectedRevision + 1,
-          record: hostedRuntimeJournalRecordSchema.parse(input.record),
-        };
-      }
-      return matches ? structuredClone(row) : undefined;
     },
     async reserveFenceGeneration(input) {
       const current = row;
@@ -279,11 +279,11 @@ const fixture = () => {
     deps,
     observedRows,
     request,
-    revokeOwner: () => {
-      authorized = false;
-    },
     revokeApproval: () => {
       approved = false;
+    },
+    revokeOwner: () => {
+      authorized = false;
     },
     get row() {
       return row;
@@ -349,8 +349,8 @@ describe("prepared operation reentry through the actual service lease", () => {
       }
       const before = structuredClone(f.row);
       expect(await f.request(execute)).toMatchObject({
-        status: "blocked",
         code: guard === "active-lease" ? "operation_in_progress" : "authorization_required",
+        status: "blocked",
       });
       expect(f.deps.verify).toHaveBeenCalledOnce();
       expect(f.deps.executeEffect).toHaveBeenCalledTimes(plan.effects.length + 1);

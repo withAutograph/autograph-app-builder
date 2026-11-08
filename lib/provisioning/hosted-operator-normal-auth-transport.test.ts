@@ -19,8 +19,8 @@ const configuration: NormalAuthTransportConfiguration = {
       appDatabase: {
         database: "app_db",
         migratorRole: "app_migrator",
-        runtimeRole: "app_runtime",
         resourceId: "app-resource",
+        runtimeRole: "app_runtime",
       },
       branch: "feature",
       projectId: "app-project",
@@ -37,10 +37,10 @@ const configuration: NormalAuthTransportConfiguration = {
     configuration: {
       operator: {
         audience: "https://vercel.com/team",
+        environment: "preview",
         issuer: "https://oidc.vercel.com/team",
         ownerId: "team",
         projectId: "operator-project",
-        environment: "preview",
       },
     },
   },
@@ -55,10 +55,10 @@ const authority = {
 const context: HostedOperatorContext = {
   authority,
   ownerContext: {
-    kind: "direct",
     adapterGeneration: 1,
     adapterSessionId: "adapter",
     authority,
+    kind: "direct",
     principal: { ...authority, scopes: ["autograph:get"] },
     sessionId: "session",
   },
@@ -100,9 +100,9 @@ const dependencies = () => ({
   }),
 });
 const requestHeaders = {
-  origin,
   accept: "application/json",
   cookie: "normal-session=private-cookie",
+  origin,
 };
 const getSession = `${origin}/api/auth/get-session?disableRefresh=true&disableCookieCache=true`;
 
@@ -111,10 +111,10 @@ describe("private Realm readback native transport", () => {
   const readback = `${endpointOrigin}/api/auth/platform/operator-identity/readback`;
   const builderWorkload = {
     audience: "https://vercel.com/team",
+    environment: "production" as const,
     issuer: "https://oidc.vercel.com/team",
     ownerId: "team",
     projectId: "builder-project",
-    environment: "production" as const,
     subject: "owner:team:project:builder:environment:production",
   };
   // SAFETY: The private transport reads only gatewayOrigin and the two native workload policies supplied here.
@@ -148,9 +148,9 @@ describe("private Realm readback native transport", () => {
     const owner = dependencies();
     const reader = createHostedOperatorPublicJwksReader(
       {
-        configuration: realmConfiguration,
-        assertPlanningAuthorized: owner.assertPlanningAuthorized,
         assertCurrentOwner: owner.assertCurrentOwner,
+        assertPlanningAuthorized: owner.assertPlanningAuthorized,
+        configuration: realmConfiguration,
       },
       native,
     );
@@ -197,9 +197,9 @@ describe("private Realm readback native transport", () => {
     const owner = dependencies();
     const reader = createHostedOperatorPublicJwksReader(
       {
-        configuration: realmConfiguration,
-        assertPlanningAuthorized: owner.assertPlanningAuthorized,
         assertCurrentOwner: owner.assertCurrentOwner,
+        assertPlanningAuthorized: owner.assertPlanningAuthorized,
+        configuration: realmConfiguration,
       },
       native,
     );
@@ -213,9 +213,9 @@ describe("private Realm readback native transport", () => {
     owner.assertCurrentOwner.mockRejectedValue(new Error("Owner revoked"));
     const reader = createHostedOperatorPublicJwksReader(
       {
-        configuration: realmConfiguration,
-        assertPlanningAuthorized: owner.assertPlanningAuthorized,
         assertCurrentOwner: owner.assertCurrentOwner,
+        assertPlanningAuthorized: owner.assertPlanningAuthorized,
+        configuration: realmConfiguration,
       },
       native,
     );
@@ -256,8 +256,8 @@ describe("private Realm readback native transport", () => {
         endpointOrigin,
       );
       const headers = new Headers({
-        "content-type": "application/x-www-form-urlencoded",
         authorization: "Bearer untrusted-caller-value",
+        "content-type": "application/x-www-form-urlencoded",
       });
       if (callerOrigin !== undefined) {
         headers.set("origin", callerOrigin);
@@ -329,8 +329,8 @@ describe("private Realm readback native transport", () => {
     );
     await expect(
       transport(readback, {
-        method: "POST",
         headers: { cookie: "normal-session=private-cookie" },
+        method: "POST",
       }),
     ).rejects.toThrow();
     expect(native.fetch).not.toHaveBeenCalled();
@@ -369,17 +369,17 @@ describe("normal Auth native transport", () => {
     const native = io();
     const builderWorkload = {
       audience: "https://vercel.com/team",
+      environment: "production" as const,
       issuer: "https://oidc.vercel.com/team",
       ownerId: "team",
       projectId: "builder-project",
-      environment: "production" as const,
       subject: "owner:team:project:builder:environment:production",
     };
     const transport = await createHostedOperatorNormalAuthTransport(
       {
         ...dependencies(),
-        sourceHost: "builder",
         configuration: { ...configuration, workloadPolicy: builderWorkload },
+        sourceHost: "builder",
       },
       native,
     );
@@ -393,10 +393,10 @@ describe("normal Auth native transport", () => {
     });
     expect(native.verifyOidc).toHaveBeenCalledWith("private-native-token", {
       audience: builderWorkload.audience,
+      environment: builderWorkload.environment,
       issuer: builderWorkload.issuer,
       ownerId: builderWorkload.ownerId,
       projectId: builderWorkload.projectId,
-      environment: builderWorkload.environment,
     });
   });
   it("requires a configured Builder workload rather than borrowing Operator identity", async () => {
@@ -463,9 +463,9 @@ describe("normal Auth native transport", () => {
     const transport = await createHostedOperatorNormalAuthTransport(dependencies(), calls);
     await expect(
       transport(url, {
-        method: "POST",
-        headers: { ...requestHeaders, "content-type": "application/json" },
         body: "{}",
+        headers: { ...requestHeaders, "content-type": "application/json" },
+        method: "POST",
       }),
     ).rejects.toThrow("resource_mismatch");
     expect(calls.getOidc).not.toHaveBeenCalled();
@@ -514,9 +514,9 @@ describe("normal Auth native transport", () => {
     expect(sent.redirect).toBe("error");
     await expect(
       transport(`${origin}/api/auth/platform/operator-link?callback=https://other.example.com`, {
-        method: "POST",
-        headers: requestHeaders,
         body: form,
+        headers: requestHeaders,
+        method: "POST",
       }),
     ).rejects.toThrow("resource_mismatch");
     expect(calls.fetch).toHaveBeenCalledTimes(1);
@@ -585,7 +585,7 @@ describe("normal Auth native transport", () => {
     async (method, route, accept) => {
       const calls = io();
       const transport = await createHostedOperatorNormalAuthTransport(dependencies(), calls);
-      await transport(`${origin}${route}`, { method, headers: { ...requestHeaders, accept } });
+      await transport(`${origin}${route}`, { headers: { ...requestHeaders, accept }, method });
       const sent = new Headers(calls.fetch.mock.calls[0]?.[1]?.headers);
       expect(sent.has("authorization")).toBe(false);
       expect(sent.get("cookie")).toBe(requestHeaders.cookie);
@@ -604,12 +604,12 @@ describe("normal Auth native transport", () => {
       const transport = await createHostedOperatorNormalAuthTransport(dependencies(), calls);
       await expect(
         transport(`${origin}/api/auth/platform/operator-link`, {
-          method: "POST",
           headers: {
             ...requestHeaders,
             accept: "application/vnd.realm-operator-proof+json",
             [name]: value,
           },
+          method: "POST",
         }),
       ).rejects.toThrow("resource_mismatch");
       expect(calls.getOidc).not.toHaveBeenCalled();
@@ -623,8 +623,8 @@ describe("normal Auth native transport", () => {
     const transport = await createHostedOperatorNormalAuthTransport(dependencies(), calls);
     await expect(
       transport(`${origin}/api/auth/platform/operator-link`, {
-        method: "POST",
         headers: { ...requestHeaders, accept: "application/vnd.realm-operator-proof+json" },
+        method: "POST",
       }),
     ).rejects.toThrow("native_source_mismatch");
     expect(calls.fetch).not.toHaveBeenCalled();

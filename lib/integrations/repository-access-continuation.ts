@@ -11,27 +11,23 @@ const VERCEL_PROTECTION_BYPASS_QUERY = "x-vercel-protection-bypass";
 const continuationIdSchema = z.string().uuid();
 const opaqueRuntimeId = z.string().min(1).max(255);
 
-export const repositoryAccessContinuationSchema = z
-  .object({
-    authority: hostedTenantAuthoritySchema,
-    authorizedAt: z.date().optional(),
-    callbackUrl: z.string().url().max(4096),
-    consumedAt: z.date().optional(),
-    continuationDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-    createdAt: z.date(),
-    expiresAt: z.date(),
-    repository: z
-      .object({
-        fullName: z.string().min(3).max(201),
-        name: z.string().min(1).max(100),
-        owner: z.string().min(1).max(100),
-      })
-      .strict(),
-    requestId: opaqueRuntimeId,
-    selectedInstallationId: decimal.optional(),
-    sessionId: opaqueRuntimeId,
-  })
-  .strict();
+export const repositoryAccessContinuationSchema = z.strictObject({
+  authority: hostedTenantAuthoritySchema,
+  authorizedAt: z.date().optional(),
+  callbackUrl: z.string().url().max(4096),
+  consumedAt: z.date().optional(),
+  continuationDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+  createdAt: z.date(),
+  expiresAt: z.date(),
+  repository: z.strictObject({
+    fullName: z.string().min(3).max(201),
+    name: z.string().min(1).max(100),
+    owner: z.string().min(1).max(100),
+  }),
+  requestId: opaqueRuntimeId,
+  selectedInstallationId: decimal.optional(),
+  sessionId: opaqueRuntimeId,
+});
 
 export type RepositoryAccessContinuation = z.infer<typeof repositoryAccessContinuationSchema>;
 
@@ -81,17 +77,18 @@ function exactEveAuthorizationCallback(input: {
     callback.origin === input.callbackOrigin ||
     (callback.protocol === "http:" && loopback.has(callback.hostname));
   const bypass = callback.searchParams.getAll(VERCEL_PROTECTION_BYPASS_QUERY);
-  const allowedQuery =
-    callback.search === "" ||
-    (input.protectionBypassSecret !== undefined &&
+  let allowedQuery = callback.search === "";
+  if (!allowedQuery) {
+    allowedQuery =
+      input.protectionBypassSecret !== undefined &&
       bypass.length === 1 &&
       bypass[0] === input.protectionBypassSecret &&
-      [...callback.searchParams.keys()].length === 1);
+      [...callback.searchParams.keys()].length === 1;
+  }
+  if (!allowedOrigin || callback.username || callback.password || callback.hash) {
+    throw new Error("repository-access-callback-invalid");
+  }
   if (
-    !allowedOrigin ||
-    callback.username ||
-    callback.password ||
-    callback.hash ||
     !allowedQuery ||
     !/^\/eve\/v1\/connections\/[^/]+\/callback\/[^/]+\/[^/]+$/u.test(callback.pathname)
   ) {
@@ -176,19 +173,23 @@ export function createRepositoryAccessContinuationService(input: {
       selectedInstallationId?: string;
     }) {
       const continuationId = continuationIdSchema.parse(value.continuationId);
-      return input.store.consume({
-        authority: hostedTenantAuthoritySchema.parse(value.authority),
-        continuationDigest: continuationDigest(continuationId),
-        now: now(),
-        repository: parseRepositoryReference(value.repository),
-        requestId: opaqueRuntimeId.parse(value.requestId),
-        ...(value.selectedInstallationId
-          ? {
-              selectedInstallationId: decimal.parse(value.selectedInstallationId),
-            }
-          : {}),
-        sessionId: opaqueRuntimeId.parse(value.sessionId),
-      });
+      const consumeInput = () => {
+        const selection: Omit<
+          Parameters<RepositoryAccessContinuationStore["consume"]>[0],
+          "sessionId"
+        > = {
+          authority: hostedTenantAuthoritySchema.parse(value.authority),
+          continuationDigest: continuationDigest(continuationId),
+          now: now(),
+          repository: parseRepositoryReference(value.repository),
+          requestId: opaqueRuntimeId.parse(value.requestId),
+        };
+        if (value.selectedInstallationId) {
+          selection.selectedInstallationId = decimal.parse(value.selectedInstallationId);
+        }
+        return { ...selection, sessionId: opaqueRuntimeId.parse(value.sessionId) };
+      };
+      return input.store.consume(consumeInput());
     },
 
     async create(value: {
@@ -211,21 +212,22 @@ export function createRepositoryAccessContinuationService(input: {
       const continuationId = continuationIdSchema.parse(createId());
       const createdAt = now();
       const expiresAt = new Date(createdAt.getTime() + lifetimeMs);
-      const record = repositoryAccessContinuationSchema.parse({
-        authority,
-        callbackUrl: callback.toString(),
-        continuationDigest: continuationDigest(continuationId),
-        createdAt,
-        expiresAt,
-        repository,
-        requestId: value.requestId,
-        ...(value.selectedInstallationId
-          ? {
-              selectedInstallationId: decimal.parse(value.selectedInstallationId),
-            }
-          : {}),
-        sessionId: value.sessionId,
-      });
+      const recordInput = () => {
+        const selection: Omit<RepositoryAccessContinuation, "sessionId"> = {
+          authority,
+          callbackUrl: callback.toString(),
+          continuationDigest: continuationDigest(continuationId),
+          createdAt,
+          expiresAt,
+          repository,
+          requestId: value.requestId,
+        };
+        if (value.selectedInstallationId) {
+          selection.selectedInstallationId = decimal.parse(value.selectedInstallationId);
+        }
+        return { ...selection, sessionId: value.sessionId };
+      };
+      const record = repositoryAccessContinuationSchema.parse(recordInput());
       await input.store.create(record);
       return { continuationId, expiresAt };
     },
@@ -243,12 +245,12 @@ export function createRepositoryAccessContinuationService(input: {
       if (!record) {
         return;
       }
-      return {
-        repository: record.repository,
-        ...(record.selectedInstallationId
-          ? { selectedInstallationId: record.selectedInstallationId }
-          : {}),
-      };
+      const response: Pick<RepositoryAccessContinuation, "repository" | "selectedInstallationId"> =
+        { repository: record.repository };
+      if (record.selectedInstallationId) {
+        response.selectedInstallationId = record.selectedInstallationId;
+      }
+      return response;
     },
   };
 }

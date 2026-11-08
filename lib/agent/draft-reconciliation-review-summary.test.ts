@@ -40,13 +40,13 @@ describe("reconciliation review metadata pages", () => {
       deleted("apps/custom-app-old/removed.ts"),
     ];
     expect(summarizeReconciliationChanges(changes, "custom-app")).toEqual({
+      appOwnedFiles: 1,
+      changes,
+      counts: { added: 1, deleted: 1, modified: 1 },
       cursor: 0,
       nextCursor: null,
-      totalFiles: 3,
-      appOwnedFiles: 1,
       nonAppFiles: 2,
-      counts: { added: 1, modified: 1, deleted: 1 },
-      changes,
+      totalFiles: 3,
     });
   });
 
@@ -64,11 +64,11 @@ describe("reconciliation review metadata pages", () => {
     const first = summarizeReconciliationChanges(changes, "custom-app");
     expect(first.changes.length).toBeLessThan(changes.length);
     expect(first).toMatchObject({
-      cursor: 0,
-      totalFiles: 12_000,
       appOwnedFiles: 6000,
+      counts: { added: 4000, deleted: 4000, modified: 4000 },
+      cursor: 0,
       nonAppFiles: 6000,
-      counts: { added: 4000, modified: 4000, deleted: 4000 },
+      totalFiles: 12_000,
     });
     expect(readInventory(changes, "custom-app")).toEqual(changes);
   });
@@ -93,15 +93,15 @@ describe("reconciliation review metadata pages", () => {
     const base = [modified("apps/custom-app/server/action.ts")];
     const head = [added("packages/platform/new.ts"), ...base];
     expect(summarizeReconciliationChanges(base, "custom-app")).toMatchObject({
-      totalFiles: 1,
-      nonAppFiles: 0,
       changes: base,
+      nonAppFiles: 0,
+      totalFiles: 1,
     });
     expect(summarizeReconciliationChanges(head, "custom-app")).toMatchObject({
-      totalFiles: 2,
       appOwnedFiles: 1,
-      nonAppFiles: 1,
       changes: head,
+      nonAppFiles: 1,
+      totalFiles: 2,
     });
   });
 
@@ -111,16 +111,16 @@ describe("reconciliation review metadata pages", () => {
     );
     expect(readInventory(changes, "custom-app")).toEqual(changes);
     expect(summarizeReconciliationChanges(changes, "custom-app", changes.length)).toMatchObject({
+      changes: [],
       cursor: changes.length,
       nextCursor: null,
-      changes: [],
     });
     expect(summarizeReconciliationChanges([], "custom-app")).toMatchObject({
-      totalFiles: 0,
       appOwnedFiles: 0,
-      nonAppFiles: 0,
       changes: [],
       nextCursor: null,
+      nonAppFiles: 0,
+      totalFiles: 0,
     });
   });
 

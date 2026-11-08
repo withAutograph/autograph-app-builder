@@ -18,6 +18,7 @@ import { createVercelSdkSession } from "./vercel-sdk-session";
 import { materializeVercelGitSource } from "./vercel-git-source";
 
 const PROVIDER_RETRY_DELAY_MS = 250;
+const SANDBOX_WORKSPACE = "/workspace";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function retryableProviderFailure(error: unknown): boolean {
@@ -29,7 +30,7 @@ function retryableProviderFailure(error: unknown): boolean {
     return true;
   }
   return /fetch failed|network|timed? ?out|econnreset|eai_again|socket/iu.test(
-    `${error.message} ${(error as Error & { cause?: unknown }).cause instanceof Error ? (error as Error & { cause: Error }).cause.message : ""}`,
+    `${error.message} ${error.cause instanceof Error ? error.cause.message : ""}`,
   );
 }
 
@@ -39,10 +40,10 @@ function providerDiagnostic(error: unknown): string {
     return "unknown";
   }
   const { cause } = error as Error & { cause?: unknown };
-  const code =
-    cause && typeof cause === "object" && "code" in cause && typeof cause.code === "string"
-      ? cause.code
-      : "provider_error";
+  if (typeof cause !== "object" || cause === null || !("code" in cause)) {
+    return "Vercel Sandbox request failed (provider_error)";
+  }
+  const code = typeof cause.code === "string" ? cause.code : "provider_error";
   return `Vercel Sandbox request failed (${code})`;
 }
 
@@ -125,7 +126,7 @@ const ambiguousCreateFailure = (error: unknown): boolean => {
     if (!(error instanceof APIError)) {
       return retryableProviderFailure(error);
     }
-    const status = error.response.status;
+    const { status } = error.response;
     // Vercel reports an existing named sandbox as HTTP 400 as well as 409.
     if (
       (status === 400 &&
@@ -186,11 +187,11 @@ const initializeSeeds = async (input: {
   };
   for (const file of input.files) {
     const destination = path.posix.resolve(
-      "/workspace",
+      SANDBOX_WORKSPACE,
       file.path.replace(/^\$HOME(?=\/|$)/u, input.homePath),
     );
     const preserveExisting =
-      input.recovered || destination === "/workspace" || destination.startsWith("/workspace/");
+      input.recovered || destination === SANDBOX_WORKSPACE || destination.startsWith("/workspace/");
     // Preserve the original sequential first-seed-wins behavior for retained paths.
     if (preserveExisting && initialized.has(destination)) continue;
     if (!(await shouldInitializeSeed(input.native, destination, preserveExisting))) continue;
@@ -430,7 +431,7 @@ export const createBuilderVercelProvider = (
         sandboxName: native.name,
       };
       try {
-        await native.fs.mkdir("/workspace", { recursive: true });
+        await native.fs.mkdir(SANDBOX_WORKSPACE, { recursive: true });
         const home = await native.runCommand({ args: ["HOME"], cmd: "printenv" });
         if (home.exitCode !== 0)
           throw new Error("Vercel Sandbox did not expose its managed home directory.");

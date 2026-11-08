@@ -3,6 +3,9 @@ import { once } from "node:events";
 import { createConnection } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
 
+type DevelopmentChild = NodeJS.EventEmitter &
+  Pick<ChildProcess, "exitCode" | "signalCode" | "pid" | "kill">;
+
 type DevelopmentSignal = "SIGINT" | "SIGTERM";
 
 type SignalTarget = Readonly<{
@@ -47,7 +50,7 @@ export function waitForDevelopmentShutdown(signal: AbortSignal, exitCode: () => 
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function developmentChildExit(child: ChildProcess) {
+export function developmentChildExit(child: DevelopmentChild) {
   if (child.exitCode !== null) {
     return Promise.resolve(child.exitCode);
   }
@@ -59,7 +62,7 @@ export function developmentChildExit(child: ChildProcess) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function stopDevelopmentChild(
-  child: ChildProcess,
+  child: DevelopmentChild,
   options: Readonly<{
     processGroup?: boolean;
     gracefulTimeoutMs?: number;
@@ -69,10 +72,11 @@ export async function stopDevelopmentChild(
   // The wrapper can exit before Eve's local server finishes its shutdown
   // handshake. Still signal this task-owned process group on restart; Eve's
   // separately detached server receives its shutdown request from the CLI.
-  if (childExited && !options.processGroup) {
+  if (childExited && !(options.processGroup ?? false)) {
     return;
   }
-  const gracefulTimeoutMs = options.gracefulTimeoutMs ?? (options.processGroup ? 1100 : 5000);
+  const gracefulTimeoutMs =
+    options.gracefulTimeoutMs ?? ((options.processGroup ?? false) ? 1100 : 5000);
   const exited = developmentChildExit(child);
   const signalProcessGroup = (value: NodeJS.Signals) => {
     if (child.pid === undefined || process.platform === "win32") {
@@ -87,7 +91,7 @@ export async function stopDevelopmentChild(
       }
     }
   };
-  if (options.processGroup && child.pid !== undefined && process.platform !== "win32") {
+  if ((options.processGroup ?? false) && child.pid !== undefined && process.platform !== "win32") {
     // Signal the wrapper only while it is alive. It forwards this signal once
     // to Eve. Signalling the whole group here would also hit Eve directly,
     // making the wrapper's forward a second signal that bypasses Eve's orderly

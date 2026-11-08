@@ -113,7 +113,9 @@ export function waitForDevelopmentRuntimeChange(input: {
       }
       resolve(changed);
     };
-    handlers.aborted = () => finish(false);
+    handlers.aborted = () => {
+      finish(false);
+    };
     const check = async () => {
       if (checking) {
         pending = true;

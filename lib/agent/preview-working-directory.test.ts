@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DependencyAttemptResult } from "./checkout-dependencies";
-import startAppPreview from "../../agent/tools/start_app_preview";
+import { createStartAppPreview } from "../../agent/tools/start_app_preview";
 import {
   previewWorkingDirectorySchema,
   resolvePreviewWorkingDirectory,
@@ -28,10 +28,10 @@ const mocks = vi.hoisted(() => {
     invalidate: vi.fn(),
     nativeBindings: vi.fn().mockResolvedValue(null),
     nativePreview: vi.fn(),
-    prior: vi.fn(),
     prepare: vi.fn().mockResolvedValue({ status: "prepared" }),
     previewStateUpdate:
       vi.fn<(transition: (state: { commandId: string } | null) => null) => void>(),
+    prior: vi.fn(),
     runtime: vi.fn().mockResolvedValue(null),
     start: vi
       .fn()
@@ -66,7 +66,6 @@ vi.mock("./prepared-runtime-execution", () => ({
   resolvePreparedRuntimeExecution: mocks.runtime,
   resolveProtectedRuntimeBindings: mocks.nativeBindings,
 }));
-vi.mock("./native-working-preview", () => ({ nativeWorkingPreview: mocks.nativePreview }));
 vi.mock("./checkout-dependencies", () => ({
   ensureCheckoutDependencies: mocks.dependencies,
 }));
@@ -94,6 +93,8 @@ vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
   },
   prepareAppLocalPreview: mocks.prepare,
 }));
+
+const startAppPreview = createStartAppPreview({ nativePreview: mocks.nativePreview });
 
 const parseDirectory = (value?: string) => previewWorkingDirectorySchema.parse(value);
 
@@ -216,7 +217,7 @@ describe("preview command working directory", () => {
         attempts: [],
       });
       mocks.start.mockClear();
-      const signal = new AbortController().signal;
+      const { signal } = new AbortController();
       const result = startAppPreview.execute(
         {
           artifact: "prior-validated",
@@ -248,7 +249,7 @@ describe("preview command working directory", () => {
         dependencies: { status: ready ? "reused" : "installed" },
       });
       expect(mocks.dependencies).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({ root: "/workspace/repository", checkoutIdentity: "prior-apply" }),
+        expect.objectContaining({ checkoutIdentity: "prior-apply", root: "/workspace/repository" }),
       );
       expect(mocks.dependencies).not.toHaveBeenCalledWith(
         expect.objectContaining({ reconcileWorkspace: true }),
@@ -258,8 +259,8 @@ describe("preview command working directory", () => {
       expect(verifyCurrent).toHaveBeenCalledBefore(mocks.start);
       expect(mocks.start).toHaveBeenCalledWith(
         expect.objectContaining({
-          cwd: "/workspace/repository",
           command: { args: ["run", "preview"], executable: "pnpm" },
+          cwd: "/workspace/repository",
         }),
       );
       expect(mocks.workflowState).toBe(saved);

@@ -87,9 +87,9 @@ describe("Vercel project provisioning", () => {
       expect(writes).toHaveLength(1);
       expect(writes[0]).toMatchObject({
         framework: "services",
+        oidcTokenConfig: { enabled: true, issuerMode: "team" },
         rootDirectory: ".",
         ssoProtection: { deploymentType: "prod_deployment_urls_and_all_previews" },
-        oidcTokenConfig: { enabled: true, issuerMode: "team" },
       });
       expect(request.mock.calls.every(([, init]) => init?.method !== "PATCH")).toBe(true);
     },
@@ -99,14 +99,14 @@ describe("Vercel project provisioning", () => {
     [
       JSON.stringify({ error: { code: "forbidden", message: "secret" } }),
       "iad1::failure_123",
-      { statusCode: 403, code: "forbidden", requestRef: "iad1::failure_123" },
+      { code: "forbidden", requestRef: "iad1::failure_123", statusCode: 403 },
     ],
     [
       JSON.stringify({ error: { code: "secret", message: "secret" }, token: "secret" }),
       "https://secret.example",
       { statusCode: 403 },
     ],
-    ["not-json", "iad1::failure_123", { statusCode: 403, requestRef: "iad1::failure_123" }],
+    ["not-json", "iad1::failure_123", { requestRef: "iad1::failure_123", statusCode: 403 }],
   ])("retains only allowlisted provider failure facts", async (body, requestRef, diagnostic) => {
     // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
     const request = vi.fn<typeof fetch>(async (_url, init) => {
@@ -126,9 +126,9 @@ describe("Vercel project provisioning", () => {
       token: "secret",
     });
     expect(result).toMatchObject({
-      status: "failed",
       code: "provider_permission_denied",
       providerDiagnostic: diagnostic,
+      status: "failed",
     });
     expect(JSON.stringify(result)).not.toContain("secret");
     expect(request.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
@@ -180,9 +180,9 @@ describe("Vercel project provisioning", () => {
       expect(writes).toHaveLength(1);
       expect(writes[0]).toMatchObject({
         framework: "services",
+        oidcTokenConfig: { enabled: true, issuerMode: "team" },
         rootDirectory: ".",
         ssoProtection: { deploymentType: "prod_deployment_urls_and_all_previews" },
-        oidcTokenConfig: { enabled: true, issuerMode: "team" },
       });
       expect(request.mock.calls.every(([, init]) => init?.method !== "PATCH")).toBe(true);
     },
@@ -192,14 +192,14 @@ describe("Vercel project provisioning", () => {
     [
       { error: { code: "forbidden", message: "secret" } },
       "iad1::failure_123",
-      { statusCode: 403, code: "forbidden", requestRef: "iad1::failure_123" },
+      { code: "forbidden", requestRef: "iad1::failure_123", statusCode: 403 },
     ],
     [
       { error: { code: "secret", message: "secret" }, token: "secret" },
       "https://secret.example",
       { statusCode: 403 },
     ],
-    ["not-json", "iad1::failure_123", { statusCode: 403, requestRef: "iad1::failure_123" }],
+    ["not-json", "iad1::failure_123", { requestRef: "iad1::failure_123", statusCode: 403 }],
   ])("retains only allowlisted provider failure facts", async (body, requestRef, diagnostic) => {
     // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
     const request = vi.fn<typeof fetch>(async (_url, init) => {
@@ -222,9 +222,9 @@ describe("Vercel project provisioning", () => {
       token: "secret",
     });
     expect(result).toMatchObject({
-      status: "failed",
       code: "provider_permission_denied",
       providerDiagnostic: diagnostic,
+      status: "failed",
     });
     expect(JSON.stringify(result)).not.toContain("secret");
     expect(request.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
@@ -390,7 +390,7 @@ describe("Vercel project provisioning", () => {
         expect(value.pathname).not.toContain("deployments");
         if (init?.method === "POST") {
           created = true;
-          const body = JSON.parse(String(init.body));
+          const body: unknown = JSON.parse(String(init.body));
           expect(body).not.toHaveProperty("ssoProtection");
           expect(body).not.toHaveProperty("oidcTokenConfig");
           expect(body).toMatchObject({

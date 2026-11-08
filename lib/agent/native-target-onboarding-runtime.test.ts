@@ -25,10 +25,10 @@ import {
 const fixture = () => {
   const time = new Date("2026-10-21T16:00:00Z");
   const authority = {
-    issuer: "https://builder.example/api/auth",
     audience: "https://builder.example/mcp",
-    workspaceId: "workspace",
+    issuer: "https://builder.example/api/auth",
     ownerUserId: "owner",
+    workspaceId: "workspace",
   };
   const owner = {
     authority,
@@ -64,9 +64,9 @@ const fixture = () => {
     },
     branch: "preview",
     appDatabase: {
-      resourceId: "app-resource",
       database: "invoice_data",
       migratorRole: "invoice_migrator",
+      resourceId: "app-resource",
       runtimeRole: "invoice_runtime",
     },
     productRoles: [],
@@ -78,12 +78,12 @@ const fixture = () => {
         sourceProjectId: "source-project",
       },
       scope: {
-        projectId: "neon-project",
         branchId: "neon-branch",
         endpointId: "endpoint",
         hostname: "db.example",
         maintenanceDatabase: "neondb",
         maintenanceRole: "maintenance",
+        projectId: "neon-project",
       },
     },
     worker: {
@@ -93,13 +93,13 @@ const fixture = () => {
       operationScope: "generated-app-release-install-v1",
       subcommand: "protected-generated-app-install",
     },
-    cost: { ownership: "current-owner", description: "Dedicated Preview project" },
+    cost: { description: "Dedicated Preview project", ownership: "current-owner" },
     retention: { policy: "Retain until owner cleanup" },
     conflictPolicy: "stop-on-conflict",
   };
   const state: NativeTargetSelectedAppState = {
-    phase: "app_spec_accepted",
     appSpec: { appId: plan.appId, digest: plan.origin.appSpecDigest },
+    phase: "app_spec_accepted",
   };
   const ctx = {
     session: { id: "adapter", auth: {} },
@@ -116,11 +116,11 @@ const fixture = () => {
     return Promise.resolve(owner);
   };
   const registry = createNativeTargetOnboardingRegistry({
-    store,
-    authorize,
     assertPlanOrigin: () => Promise.resolve(),
-    readApproval: () => Promise.resolve(receipt),
+    authorize,
     now: () => time,
+    readApproval: () => Promise.resolve(receipt),
+    store,
   });
   const read = async () => {
     await authorize();
@@ -174,12 +174,12 @@ const fixture = () => {
           validation: {
             browser: null,
             check: { task: "check" },
-            test: { task: "test", shards: 1 },
+            test: { shards: 1, task: "test" },
           },
         },
       }),
     ),
-    resolvePlan: vi.fn(() => Promise.resolve(plan)),
+    resolvePlan: vi.fn<NativeTargetOnboardingRuntimePorts["resolvePlan"]>().mockResolvedValue(plan),
     readSettledApproval: vi.fn(async () => {
       await authorize();
       return receipt;
@@ -229,24 +229,24 @@ const fixture = () => {
     };
   };
   return {
-    plan,
-    state,
-    ctx,
-    ports,
-    runtime,
-    proposal,
-    planned,
     approve,
-    read,
     cancel: () => {
       if (receipt === null) {
         throw new Error("missing receipt");
       }
       receipt = { ...receipt, outcome: "cancelled" };
     },
+    ctx,
+    plan,
+    planned,
+    ports,
+    proposal,
+    read,
     revoke: () => {
       allowed = false;
     },
+    runtime,
+    state,
   };
 };
 
@@ -357,9 +357,9 @@ describe("native target workflow runtime", () => {
         await request.authorizeAttempt();
         await request.acceptProjectId("retained-project");
         return {
-          status: "uncertain",
           projectId: "retained-project",
           reason: "provider_unavailable",
+          status: "uncertain",
         };
       },
     );
@@ -381,7 +381,7 @@ describe("native target workflow runtime", () => {
         f.revoke();
         await request.authorizeAttempt();
         posts += 1;
-        return { status: "uncertain", reason: "unknown_write" };
+        return { reason: "unknown_write", status: "uncertain" };
       },
     );
     await expect(f.runtime.prepare(input, f.ctx)).rejects.toThrow();
@@ -447,8 +447,8 @@ describe("native target workflow runtime", () => {
     await f.planned();
     await expect(
       f.runtime.plan(f.proposal, f.ctx, {
-        phase: "prepared",
         appSpec: { appId: "other-app", digest: "a".repeat(64) },
+        phase: "prepared",
       }),
     ).rejects.toThrow();
     await expect(
@@ -488,7 +488,7 @@ describe("native target workflow runtime", () => {
     f.ports.createProject = vi.fn<NativeTargetOnboardingRuntimePorts["createProject"]>(
       async (_ctx, request) => {
         await request.authorizeAttempt();
-        return { status: "rejected", reason: "collision" };
+        return { reason: "collision", status: "rejected" };
       },
     );
     const result = await f.runtime.prepare(input, f.ctx);
@@ -520,7 +520,7 @@ describe("native target workflow runtime", () => {
         names.push(request.candidateName);
         if (names.length === 1) {
           await request.authorizeAttempt();
-          return { status: "rejected", reason: "collision" };
+          return { reason: "collision", status: "rejected" };
         }
         return await realCreate(ctx, request);
       },
@@ -540,7 +540,7 @@ describe("native target workflow runtime", () => {
       async (_ctx, request) => {
         await request.authorizeAttempt();
         names.push(request.candidateName);
-        return { status: "rejected", reason: "rate_limited" };
+        return { reason: "rate_limited", status: "rejected" };
       },
     );
     await f.runtime.prepare(input, f.ctx);
@@ -559,8 +559,8 @@ describe("native target workflow runtime", () => {
         await request.authorizeAttempt();
         names.push(request.candidateName);
         return names.length === 1
-          ? { status: "rejected", reason: "collision" }
-          : { status: "rejected", reason: "rate_limited" };
+          ? { reason: "collision", status: "rejected" }
+          : { reason: "rate_limited", status: "rejected" };
       },
     );
     await f.runtime.prepare(input, f.ctx);

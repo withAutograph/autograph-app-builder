@@ -30,6 +30,12 @@ interface LocalPlanningSourceBaseState {
     | "applyRoot"
   >;
 }
+interface LocalPlanningBase {
+  sourceSha: string;
+  workspaceDigest: string;
+  workspaceId: string;
+  sourceOverlay?: { sourceSha: string; workspaceDigest: string };
+}
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 /** Saved proposal/apply provenance survives later live workspace overlays. Never use mixed candidate files as an old base. */
 export const localPlanningSourceBase = (
@@ -83,17 +89,16 @@ export const localPlanningSourceBase = (
       }
     }
   }
-  return {
+  const result: LocalPlanningBase = {
     sourceSha: base.sourceSha,
     workspaceDigest: base.workspaceDigest,
     workspaceId: current.workspace.workspaceId,
-    ...(transported.workspaceDigest === base.workspaceDigest
-      ? {}
-      : {
-          sourceOverlay: {
-            sourceSha: transported.sourceSha,
-            workspaceDigest: transported.workspaceDigest,
-          },
-        }),
   };
+  if (transported.workspaceDigest !== base.workspaceDigest) {
+    result.sourceOverlay = {
+      sourceSha: transported.sourceSha,
+      workspaceDigest: transported.workspaceDigest,
+    };
+  }
+  return result;
 };

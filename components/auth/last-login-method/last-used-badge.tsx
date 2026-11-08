@@ -26,16 +26,18 @@ export function LastUsedBadge({ method, compact, floating }: LastUsedBadgeProps)
     return null;
   }
 
+  const shortLabel = (compact ?? false) || (floating ?? false);
+
   return (
     <Badge
       className={
-        floating
+        (floating ?? false)
           ? "pointer-events-none absolute top-0 right-0 z-10 translate-x-1/4 -translate-y-1/2 shadow-sm"
           : undefined
       }
       variant="secondary"
     >
-      {compact || floating ? localization.lastUsedShort : localization.lastUsed}
+      {shortLabel ? localization.lastUsedShort : localization.lastUsed}
     </Badge>
   );
 }

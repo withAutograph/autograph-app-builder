@@ -9,6 +9,8 @@ export const IMAGE_VERSION = "sandbox-v2";
 export const ARRUSTED_IMAGE_TARGET_SHA = "d378904a05e1bc2c0896886e6fbd3b816babaee2";
 export const ARRUSTED_IMAGE_TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0d39";
 
+const dockerBuildx = "docker-buildx";
+
 const sha40 = /^[0-9a-f]{40}$/u;
 const sha256 = /^[0-9a-f]{64}$/u;
 const secretKey = /(?<key>authorization|cookie|credential|password|secret|token)/iu;
@@ -36,7 +38,7 @@ export const IMAGE_TOOL_VERSIONS = {
 export type ImageTool = keyof typeof IMAGE_TOOL_VERSIONS;
 
 export const imageToolVersionCommand = (tool: ImageTool): CommandSpec => ({
-  args: tool === "docker-buildx" ? ["version"] : ["--version"],
+  args: tool === dockerBuildx ? ["version"] : ["--version"],
   program: tool,
 });
 
@@ -47,7 +49,7 @@ export const assertExactImageToolVersion = (tool: ImageTool, output: string): vo
   let valid: boolean;
   if (tool === "docker") {
     valid = new RegExp(`^Docker version ${escaped},`, "u").test(normalized);
-  } else if (tool === "docker-buildx") {
+  } else if (tool === dockerBuildx) {
     valid = new RegExp(`\\bv${escaped}(?:\\s|$)`, "u").test(normalized);
   } else if (tool === "msb") {
     valid = normalized === `msb ${expected}` || normalized === `Microsandbox CLI v${expected}`;
@@ -260,7 +262,7 @@ export const imageBuildCommand = (
       "--load",
       provenance.builder.root,
     ],
-    program: "docker-buildx",
+    program: dockerBuildx,
   };
 };
 
@@ -289,22 +291,22 @@ export const exactDigestReference = (reference: string): string => {
 
 export const remoteIndexCommand = (reference: string): CommandSpec => ({
   args: ["imagetools", "inspect", "--raw", exactDigestReference(reference)],
-  program: "docker-buildx",
+  program: dockerBuildx,
 });
 
 export const remoteDescriptorCommand = (provenance: ImageProvenance): CommandSpec => ({
   args: ["imagetools", "inspect", provenance.image.tag, "--format", "{{json .Manifest}}"],
-  program: "docker-buildx",
+  program: dockerBuildx,
 });
 
 export const remoteManifestCommand = (reference: string): CommandSpec => ({
   args: ["imagetools", "inspect", "--raw", exactDigestReference(reference)],
-  program: "docker-buildx",
+  program: dockerBuildx,
 });
 
 export const remoteImageCommand = (reference: string): CommandSpec => ({
   args: ["imagetools", "inspect", exactDigestReference(reference), "--format", "{{json .Image}}"],
-  program: "docker-buildx",
+  program: dockerBuildx,
 });
 
 export const imagePreloadCommand = (reference: string): CommandSpec => ({
@@ -356,10 +358,10 @@ interface ImageInspect {
   };
 }
 
-const hasExactKeys = <Value extends object>(
+const hasExactKeys = <Value extends object, Key extends string>(
   value: Value,
-  expected: readonly string[] & readonly (keyof Value | string)[],
-): boolean => {
+  expected: readonly Key[],
+): value is Value & Record<Key, unknown> => {
   const actual = Object.keys(value).toSorted();
   const wanted = [...expected].toSorted();
   return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
@@ -375,7 +377,7 @@ export const parseLocalImageInspection = (
   imageId: string;
   rootFsLayers: readonly string[];
 }> => {
-  const parsed = JSON.parse(raw) as unknown;
+  const parsed: unknown = JSON.parse(raw);
   if (!Array.isArray(parsed) || parsed.length !== 1) {
     throw new Error("Local image inspection returned an unexpected image set.");
   }
@@ -416,7 +418,10 @@ export const parseLocalImageInspection = (
   if (
     !Array.isArray(rootFsLayers) ||
     rootFsLayers.length === 0 ||
-    rootFsLayers.some((layer) => typeof layer !== "string" || !/^sha256:[0-9a-f]{64}$/u.test(layer))
+    !rootFsLayers.every(
+      (layer: unknown): layer is string =>
+        typeof layer === "string" && /^sha256:[0-9a-f]{64}$/u.test(layer),
+    )
   ) {
     throw new Error("Local image inspection did not return exact rootfs layers.");
   }
@@ -424,7 +429,7 @@ export const parseLocalImageInspection = (
     imageId: image.Id,
     platform: IMAGE_PLATFORM,
     revision: provenance.builder.commit,
-    rootFsLayers: rootFsLayers as string[],
+    rootFsLayers,
     tag: provenance.image.tag,
   };
 };
@@ -495,9 +500,11 @@ export const parseRemoteIndexDescriptor = (
   if (!isExactDigest(descriptor.digest)) {
     throw new Error("Remote registry inspection did not return an exact manifest digest.");
   }
-  if (
+  const invalidDescriptor =
     !hasExactKeys(descriptor, ["digest", "manifests", "mediaType", "schemaVersion", "size"]) ||
-    descriptor.schemaVersion !== 2 ||
+    descriptor.schemaVersion !== 2;
+  if (
+    invalidDescriptor ||
     descriptor.mediaType !== ociIndexMediaType ||
     !isPositiveSize(descriptor.size) ||
     !Array.isArray(descriptor.manifests)
@@ -581,22 +588,19 @@ export const parseRemoteIndexInspection = (
     typeof annotations !== "object" ||
     annotations === null ||
     !hasExactKeys(annotations, ["vnd.docker.reference.digest", "vnd.docker.reference.type"]) ||
-    (annotations as Record<string, unknown>)["vnd.docker.reference.digest"] !==
-      platformEntry.digest ||
-    (annotations as Record<string, unknown>)["vnd.docker.reference.type"] !== "attestation-manifest"
+    annotations["vnd.docker.reference.digest"] !== platformEntry.digest ||
+    annotations["vnd.docker.reference.type"] !== "attestation-manifest"
   ) {
     throw new Error("Remote attestation manifest is not exactly bound to the platform image.");
   }
   const indexReference = exactDigestReference(`${IMAGE_REPOSITORY}@${descriptor.digest}`);
-  const platformReference = exactDigestReference(
-    `${IMAGE_REPOSITORY}@${platformEntry.digest as string}`,
-  );
+  const platformReference = exactDigestReference(`${IMAGE_REPOSITORY}@${platformEntry.digest}`);
   return {
     attestationManifestDigest: attestationEntry.digest,
     indexDigest: descriptor.digest,
     indexReference,
-    platformManifestDigest: platformEntry.digest as string,
-    platformManifestSize: platformEntry.size as number,
+    platformManifestDigest: platformEntry.digest,
+    platformManifestSize: platformEntry.size,
     platformReference,
   };
 };
@@ -619,10 +623,12 @@ export const parseRemoteImageInspection = (
   attestationPolicy: "descriptor-bound-not-trusted";
   revision: string;
 }> => {
-  if (
+  const identityMismatch =
     !isExactDigest(local.imageId) ||
     selection.platformManifestDigest !== local.imageId ||
-    selection.platformReference !== exactDigestReference(`${IMAGE_REPOSITORY}@${local.imageId}`) ||
+    selection.platformReference !== exactDigestReference(`${IMAGE_REPOSITORY}@${local.imageId}`);
+  if (
+    identityMismatch ||
     !Array.isArray(local.rootFsLayers) ||
     local.rootFsLayers.length === 0 ||
     local.rootFsLayers.some((digest) => !isExactDigest(digest))
@@ -646,15 +652,21 @@ export const parseRemoteImageInspection = (
     !isPositiveSize(config.size) ||
     !Array.isArray(layers) ||
     layers.length === 0 ||
-    layers.some(
-      (layer) =>
-        typeof layer !== "object" ||
-        layer === null ||
-        !hasExactKeys(layer, ["digest", "mediaType", "size"]) ||
-        (layer as RemoteManifestDescriptor).mediaType !== ociLayerMediaType ||
-        !isExactDigest((layer as RemoteManifestDescriptor).digest) ||
-        !isPositiveSize((layer as RemoteManifestDescriptor).size),
-    )
+    layers.some((layer) => {
+      const value: unknown = layer;
+      if (
+        typeof value !== "object" ||
+        value === null ||
+        !hasExactKeys(value, ["digest", "mediaType", "size"])
+      ) {
+        return true;
+      }
+      return (
+        value.mediaType !== ociLayerMediaType ||
+        !isExactDigest(value.digest) ||
+        !isPositiveSize(value.size)
+      );
+    })
   ) {
     throw new Error("Remote platform reference did not return the exact OCI image manifest.");
   }

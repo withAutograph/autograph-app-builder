@@ -161,14 +161,14 @@ const fixture = () => {
     effect: "bind-production-runtime",
     priorPhase: "idle",
     bindings: {
-      async read() {
-        return structuredClone(states);
-      },
       async claim(key) {
         if (states[key].state === "idle") {
           states[key] = { ...states[key], state: "pending" };
         }
         return states[key];
+      },
+      async read() {
+        return structuredClone(states);
       },
       async recordAccepted(key, acceptedEnvId) {
         expect(states[key].state).toBe("pending");
@@ -204,7 +204,7 @@ const fixture = () => {
 it("persists a per-key dispatch before creating and independently reading an encrypted Production binding", async () => {
   const f = fixture();
   await f.provider.bindRuntime(f.context);
-  expect(f.states.INVOICE_APP_DATABASE_URL).toEqual({ state: "applied", acceptedEnvId: "new-env" });
+  expect(f.states.INVOICE_APP_DATABASE_URL).toEqual({ acceptedEnvId: "new-env", state: "applied" });
   expect(await f.provider.reconcileBindings({ ...f.context, priorPhase: "applied" })).toBe(
     "applied",
   );
@@ -277,12 +277,12 @@ it("observes only the provider-active Production binding and delivered release",
   const f = fixture();
   const result = await f.provider.observe(f.invocation, f.plan);
   expect(result).toEqual({
-    status: "ready",
     deploymentId: "active-deployment",
-    projectId: f.plan.project.projectId,
     environment: "production",
+    projectId: f.plan.project.projectId,
     publicOrigin: f.plan.publicOrigin,
     releaseId: f.plan.runtime.releaseId,
+    status: "ready",
   });
   expect(JSON.stringify(result)).not.toContain("synthetic-private");
   expect(
@@ -381,7 +381,7 @@ it.each([
   [
     JSON.stringify({ error: { code: "forbidden", message: "private-token-should-never-persist" } }),
     "iad1::request_123",
-    { statusCode: 403, code: "forbidden", requestRef: "iad1::request_123" },
+    { code: "forbidden", requestRef: "iad1::request_123", statusCode: 403 },
   ],
   [
     JSON.stringify({
@@ -393,22 +393,22 @@ it.each([
   [
     "not-json-private-token-should-never-persist",
     "iad1::request_123",
-    { statusCode: 403, requestRef: "iad1::request_123" },
+    { requestRef: "iad1::request_123", statusCode: 403 },
   ],
-  ["x".repeat(20_000), "iad1::request_123", { statusCode: 403, requestRef: "iad1::request_123" }],
+  ["x".repeat(20_000), "iad1::request_123", { requestRef: "iad1::request_123", statusCode: 403 }],
 ])(
   "projects only bounded allowlisted facts from a provider rejection",
   async (body, requestRef, diagnostic) => {
     const f = fixture();
     f.fetcher.mockResolvedValue(
       new Response(body, {
-        status: 403,
         headers: { "x-vercel-id": requestRef },
+        status: 403,
       }),
     );
     await expect(f.provider.observe(f.invocation, f.plan)).rejects.toMatchObject({
-      name: "PublicReleaseProviderError",
       diagnostic,
+      name: "PublicReleaseProviderError",
     });
   },
 );
@@ -427,26 +427,23 @@ it("persists the actual adapter rejection with the pending key and never retries
       return Response.json(
         { error: { code: "forbidden", message: "private-provider-payload" } },
         {
-          status: 403,
           headers: { "x-vercel-id": "iad1::denial_123" },
+          status: 403,
         },
       );
     }
     return await originalFetch(url, init);
   });
   const handler = createPublicReleaseHandler({
+    applyEffect: async (context) => {
+      await f.provider.bindRuntime(context);
+    },
+    assertApproved: async () => {},
+    assertAuthorized: async () => {},
+    observe: async () => ({ status: "pending" }),
+    reconcileEffect: async (context) => await f.provider.reconcileBindings(context),
+    resolve: async () => f.plan,
     store: {
-      async reserve(plan) {
-        row ??= {
-          operationRef: publicReleaseOperationRef(plan),
-          revision: 1,
-          record: initialPublicReleaseRecord(plan),
-        };
-        return structuredClone(row);
-      },
-      async read() {
-        return row === undefined ? undefined : structuredClone(row);
-      },
       async compareAndSet(prior, record) {
         if (row?.revision !== prior.revision) {
           // oxlint-disable-next-line unicorn/no-useless-undefined -- A stale durable compare-and-set returns no record.
@@ -455,16 +452,19 @@ it("persists the actual adapter rejection with the pending key and never retries
         row = { ...row, record, revision: row.revision + 1 };
         return structuredClone(row);
       },
+      async read() {
+        return row === undefined ? undefined : structuredClone(row);
+      },
+      async reserve(plan) {
+        row ??= {
+          operationRef: publicReleaseOperationRef(plan),
+          revision: 1,
+          record: initialPublicReleaseRecord(plan),
+        };
+        return structuredClone(row);
+      },
     },
-    resolve: async () => f.plan,
-    assertAuthorized: async () => {},
-    assertApproved: async () => {},
     withTargetLease: async (_invocation, _plan, run) => await run(),
-    reconcileEffect: async (context) => await f.provider.reconcileBindings(context),
-    applyEffect: async (context) => {
-      await f.provider.bindRuntime(context);
-    },
-    observe: async () => ({ status: "pending" }),
   });
   const selected = await handler.plan(f.invocation, f.plan.selection.appId);
   await expect(
@@ -474,8 +474,8 @@ it("persists the actual adapter rejection with the pending key and never retries
     bindings: { INVOICE_APP_DATABASE_URL: { state: "pending" } },
     effects: { "bind-production-runtime": "pending", "publish-release-source": "idle" },
     lastProviderFailure: {
+      diagnostic: { code: "forbidden", requestRef: "iad1::denial_123", statusCode: 403 },
       phase: "bind-production-runtime",
-      diagnostic: { statusCode: 403, code: "forbidden", requestRef: "iad1::denial_123" },
     },
   });
   expect(JSON.stringify(row)).not.toContain("private-provider-payload");
@@ -517,8 +517,8 @@ it("reads only bounded prior binding facts for new plan construction, without re
     assertCurrent: async () => {
       await f.deps.assertCurrent(f.invocation, f.plan, false);
     },
-    readCredential: async () => await f.deps.readCredential(f.invocation, f.plan),
     fetch: f.fetcher,
+    readCredential: async () => await f.deps.readCredential(f.invocation, f.plan),
   });
   const snapshot = await read({
     ...f.plan.project,
@@ -527,8 +527,8 @@ it("reads only bounded prior binding facts for new plan construction, without re
   });
   expect(snapshot).toEqual([
     {
-      key: "INVOICE_APP_DATABASE_URL",
       id: "new-env",
+      key: "INVOICE_APP_DATABASE_URL",
       operationRef: f.context.operationRef,
       sha256: f.plan.environment[0].sha256,
     },
@@ -549,8 +549,8 @@ it("refuses foreign production binding scope while planning before decrypting or
     assertCurrent: async () => {
       await f.deps.assertCurrent(f.invocation, f.plan, false);
     },
-    readCredential: async () => await f.deps.readCredential(f.invocation, f.plan),
     fetch: f.fetcher,
+    readCredential: async () => await f.deps.readCredential(f.invocation, f.plan),
   });
   await expect(
     read({ ...f.plan.project, keys: ["INVOICE_APP_DATABASE_URL"], signal: f.invocation.signal }),
@@ -568,8 +568,8 @@ it("takes a current owner-bound active deployment snapshot without selecting or 
   const f = fixture();
   const read = createPublicReleaseVercelActiveDeploymentSnapshot({
     assertCurrent: () => f.deps.assertCurrent(f.invocation, f.plan, false),
-    readCredential: () => f.deps.readCredential(f.invocation, f.plan),
     fetch: f.fetcher,
+    readCredential: () => f.deps.readCredential(f.invocation, f.plan),
   });
   const scope = {
     ...f.plan.project,
@@ -587,8 +587,8 @@ it("records absent Production activation explicitly rather than inventing a depl
   f.fetcher.mockResolvedValueOnce(Response.json({ ...f.project, targets: { production: null } }));
   const read = createPublicReleaseVercelActiveDeploymentSnapshot({
     assertCurrent: () => f.deps.assertCurrent(f.invocation, f.plan, false),
-    readCredential: () => f.deps.readCredential(f.invocation, f.plan),
     fetch: f.fetcher,
+    readCredential: () => f.deps.readCredential(f.invocation, f.plan),
   });
   expect(
     await read({
@@ -611,8 +611,8 @@ it("can reuse the provider active deployment when every approved runtime value i
     },
   }));
   expect(await f.provider.observe(f.invocation, f.plan)).toMatchObject({
-    status: "ready",
     deploymentId: "active-deployment",
+    status: "ready",
   });
 });
 it("requires a newly reviewed snapshot for changed-runtime plans with no retained activation fence", async () => {

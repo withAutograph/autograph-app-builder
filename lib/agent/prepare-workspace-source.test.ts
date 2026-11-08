@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { repositoryAccessReceiptSchema } from "./repository-access-state";
 import prepareWorkspace from "../../agent/tools/prepare_workspace";
+import type { ImmutableGitHubSourceReceipt } from "../repository/github-publication";
+import type { SourceReceipt } from "../repository/source-receipt";
+import type { PreparedSandboxWorkspace } from "../repository/supported-template";
+
+type SourceReceiptFixture = Partial<Omit<SourceReceipt, "version">> & { version?: number };
+type GitHubSourceFixture = Partial<Omit<ImmutableGitHubSourceReceipt, "repository">> & {
+  repository?: Partial<ImmutableGitHubSourceReceipt["repository"]>;
+};
 
 const mocks = vi.hoisted(() => ({
   acquire: vi.fn(),
@@ -10,15 +18,15 @@ const mocks = vi.hoisted(() => ({
   repositoryAccess: vi.fn(),
   source: { phase: "empty" } as {
     phase: string;
-    receipt?: Record<string, unknown>;
-    githubSource?: Record<string, unknown>;
+    receipt?: SourceReceiptFixture;
+    githubSource?: GitHubSourceFixture;
   },
   update: vi.fn(),
   workflow: { phase: "empty" } as {
     phase: string;
-    githubSource?: Record<string, unknown>;
-    sourceReceipt?: Record<string, unknown>;
-    workspace?: Record<string, unknown>;
+    githubSource?: GitHubSourceFixture;
+    sourceReceipt?: SourceReceiptFixture;
+    workspace?: Partial<PreparedSandboxWorkspace>;
   },
   workspace: { workspaceId: "sandbox", workspacePath: "/workspace/repository" },
 }));

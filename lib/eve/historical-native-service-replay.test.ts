@@ -17,6 +17,12 @@ import {
   nativeTargetRequiredProjectProtection,
 } from "../provisioning/native-target-onboarding-contract";
 
+interface ReplayReceiptUpdate {
+  privateApprovalReceipts?: Parameters<
+    NonNullable<HostedEveStore["observeSessionPaged"]>
+  >[0]["verifiedReplayReceipts"];
+}
+
 const principal = {
   audience: "autograph-app-builder",
   issuer: "https://identity.example.test",
@@ -28,33 +34,33 @@ const nativePlan = nativeTargetOnboardingPlanSchema.parse({
   version: 1,
   appId: "requests-app",
   origin: {
-    publicSessionId: "session_fixture",
-    adapterSessionId: "adapter_1",
     adapterGeneration: 1,
+    adapterSessionId: "adapter_1",
     appSpecDigest: "a".repeat(64),
+    publicSessionId: "session_fixture",
     release: {
-      id: "release",
       artifactRef: "artifact",
+      id: "release",
       manifestSha256: "b".repeat(64),
       schemaSha256: "c".repeat(64),
     },
   },
   project: {
-    name: "requests-app",
-    teamId: "team",
     installationId: "installation",
+    name: "requests-app",
     projectSettings: {
       framework: "nextjs",
       rootDirectory: "apps/requests",
       sourceFilesOutsideRootDirectory: true,
     },
     protection: nativeTargetRequiredProjectProtection,
+    teamId: "team",
   },
   branch: "preview",
   appDatabase: {
-    resourceId: "resource",
     database: "requests_data",
     migratorRole: "requests_owner",
+    resourceId: "resource",
     runtimeRole: "requests_runtime",
   },
   productRoles: [],
@@ -62,22 +68,22 @@ const nativePlan = nativeTargetOnboardingPlanSchema.parse({
     approvalReference: "scope",
     nativeStore: { configurationId: "config", resourceId: "store", sourceProjectId: "source" },
     scope: {
-      projectId: "project",
       branchId: "branch",
       endpointId: "endpoint",
       hostname: "ep-fixture.neon.tech",
       maintenanceDatabase: "maintenance",
       maintenanceRole: "installer",
+      projectId: "project",
     },
   },
   worker: {
-    id: "worker",
     executablePath: "/trusted/worker",
-    sha256: "d".repeat(64),
+    id: "worker",
     operationScope: "generated-app-release-install-v1",
+    sha256: "d".repeat(64),
     subcommand: "protected-generated-app-install",
   },
-  cost: { ownership: "current-owner", description: "Preview usage" },
+  cost: { description: "Preview usage", ownership: "current-owner" },
   retention: { policy: "Until approved cleanup" },
   conflictPolicy: "stop-on-conflict",
 });
@@ -299,14 +305,17 @@ describe("service recovery of historical native approval", () => {
             eventCount += 1;
           }
           expect(eventCount).toBe(0);
-          metadata = input.metadata;
+          ({ metadata } = input);
           revision += 1;
           const next = `sha256:${revision.toString(16).padStart(64, "0")}`;
+          const previous = { ...current };
+          const receiptUpdate: ReplayReceiptUpdate = {};
+          if (input.verifiedReplayReceipts !== undefined) {
+            receiptUpdate.privateApprovalReceipts = input.verifiedReplayReceipts;
+          }
           current = durableHostedSessionRecordSchema.parse({
-            ...current,
-            ...(input.verifiedReplayReceipts === undefined
-              ? {}
-              : { privateApprovalReceipts: input.verifiedReplayReceipts }),
+            ...previous,
+            ...receiptUpdate,
             checkpointDigest: next,
             checkpointRef: { ...current.checkpointRef, digest: next },
             updatedAtEpochMs: input.nowEpochMs,
@@ -326,6 +335,8 @@ describe("service recovery of historical native approval", () => {
       const store: HostedEveStore = {
         getSession,
         listSessions: base.listSessions.bind(base),
+        observeSessionPaged,
+        readCheckpointPage,
         reserveOperation: vi.fn(() =>
           Promise.resolve({ disposition: "existing" as const, operation }),
         ),
@@ -339,14 +350,12 @@ describe("service recovery of historical native approval", () => {
           ),
         ),
         settleUnsuccessful: vi.fn(),
-        observeSessionPaged,
-        readCheckpointPage,
       };
       const service = createHostedEveSessionService({
+        assertSendDeliveryOwner: () => Promise.resolve(),
+        now: () => 50,
         principal,
         store,
-        now: () => 50,
-        assertSendDeliveryOwner: () => Promise.resolve(),
         transport: {
           observe,
           get: vi.fn(),

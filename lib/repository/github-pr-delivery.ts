@@ -204,9 +204,9 @@ const runMatchesPull = (
 
 const readReadyHistory = async (request: Request, pull: z.infer<typeof pullSchema>) => {
   const response = await request({
+    body: { query: readyQuery, variables: { id: pull.node_id } },
     method: "POST",
     path: "/graphql",
-    body: { query: readyQuery, variables: { id: pull.node_id } },
   });
   return readySchema.parse(response).data.node;
 };
@@ -223,7 +223,7 @@ const readReadyCycle = async (request: Request, pull: z.infer<typeof pullSchema>
     return null;
   }
   const baseChangedAt = cycle.baseChanges.nodes[0]?.createdAt ?? readyAt;
-  return { readyAt, earliestRunAt: Math.max(Date.parse(readyAt), Date.parse(baseChangedAt)) };
+  return { earliestRunAt: Math.max(Date.parse(readyAt), Date.parse(baseChangedAt)), readyAt };
 };
 
 const checkJobs = async (request: Request, prefix: string, runId: number) => {
@@ -270,7 +270,7 @@ const checkReadyRun = async (
     : [];
   // GitHub lists newest runs first. An unresolved association for the newest
   // plausible run is pending instead of qualifying an older successful run.
-  const run = candidates[0];
+  const [run] = candidates;
   if (run === undefined || !runMatchesPull(run, pull, windows)) {
     return { checks: "pending", readyAt };
   }
@@ -283,20 +283,17 @@ const checkReadyRun = async (
         job.head_sha !== run.head_sha,
     )
   ) {
-    return { checks: "pending", readyAt, checkRunId: run.id };
+    const checkRunId = run.id;
+    return { checkRunId, checks: "pending", readyAt };
   }
   if (jobs.length !== 1 || jobs[0]?.status !== "completed") {
-    return {
-      checks: run.status === "completed" ? "failed" : "pending",
-      readyAt,
-      checkRunId: run.id,
-    };
+    const checks = run.status === "completed" ? "failed" : "pending";
+    const checkRunId = run.id;
+    return { checkRunId, checks, readyAt };
   }
-  return {
-    checks: jobs[0].conclusion === "success" ? "passed" : "failed",
-    readyAt,
-    checkRunId: run.id,
-  };
+  const checks = jobs[0].conclusion === "success" ? "passed" : "failed";
+  const checkRunId = run.id;
+  return { checkRunId, checks, readyAt };
 };
 
 export const createGitHubPrDeliveryProvider = (
@@ -323,10 +320,10 @@ export const createGitHubPrDeliveryProvider = (
       headSha: pull.head.sha,
       baseBranch: pull.base.ref,
       checks: "pending",
-      ...(pull.merged && pull.merge_commit_sha !== null
-        ? { mergeCommitSha: pull.merge_commit_sha }
-        : {}),
     };
+    if (pull.merged && pull.merge_commit_sha !== null) {
+      result.mergeCommitSha = pull.merge_commit_sha;
+    }
     if (
       state !== "closed" &&
       !pull.draft &&
@@ -372,10 +369,10 @@ export const createGitHubPrDeliveryProvider = (
       }
       assertMutationActive(signal);
       const payload = await request({
+        body: { query: readyMutation, variables: { id: before.pull.node_id } },
+        effect: "ready",
         method: "POST",
         path: "/graphql",
-        effect: "ready",
-        body: { query: readyMutation, variables: { id: before.pull.node_id } },
       });
       const rejection = z
         .object({

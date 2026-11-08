@@ -249,7 +249,7 @@ const latestReviewedCheckpoint = (
   let latest: z.infer<typeof checkpointSchema> | undefined;
   let conflicting = false;
   for (const entry of candidates) {
-    const slot = entry.origin.slot;
+    const { slot } = entry.origin;
     if (
       slot >= selectedSlot ||
       !z.object({ phase: z.literal("reviewed") }).safeParse(entry.serializedContext[workflowKey])
@@ -326,7 +326,7 @@ const recoveryContext = (input: DraftReviewedLineageRecoveryInput): RecoveryCont
   ) {
     return undefined;
   }
-  return { payload, selected, context };
+  return { context, payload, selected };
 };
 
 const hasCurrentReview = (context: RecoveryContext): boolean =>

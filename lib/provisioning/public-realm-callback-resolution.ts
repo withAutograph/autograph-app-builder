@@ -233,6 +233,16 @@ export const createPostgresPublicRealmCallbackResolver = (input: {
 }) =>
   createPublicRealmCallbackResolver({
     ...input,
+    readEnrollment: async (context, enrollmentRef) =>
+      await readPublicRealmLinkConfiguration({
+        database: input.database,
+        keyring: input.keyring,
+        authority: context.authority,
+        enrollmentRef,
+        assertCurrentOwner: async () => {
+          await input.assertCurrentOwner(context);
+        },
+      }),
     readReleases: async (context, binding) =>
       await input.database
         .select({
@@ -259,16 +269,6 @@ export const createPostgresPublicRealmCallbackResolver = (input: {
           ),
         )
         .limit(2),
-    readEnrollment: async (context, enrollmentRef) =>
-      await readPublicRealmLinkConfiguration({
-        database: input.database,
-        keyring: input.keyring,
-        authority: context.authority,
-        enrollmentRef,
-        assertCurrentOwner: async () => {
-          await input.assertCurrentOwner(context);
-        },
-      }),
     readValues: async (context, plan) => {
       const store = createPublicReleaseRuntimeConfigurationStore({
         database: input.database,
@@ -283,7 +283,7 @@ export const createPostgresPublicRealmCallbackResolver = (input: {
           await input.assertCurrentOwner(context);
         },
       });
-      const scope = {
+      const scope: Parameters<typeof store.read>[0] = {
         authority: context.authority,
         appId: context.target.appId,
         sessionId: context.target.sessionId,
@@ -292,10 +292,10 @@ export const createPostgresPublicRealmCallbackResolver = (input: {
         runtimePlanDigest: plan.runtime.planDigest,
         releaseId: plan.runtime.releaseId,
         publicOrigin: plan.publicOrigin,
-        ...(plan.runtime.realmEnrollmentRef === undefined
-          ? {}
-          : { realmEnrollmentRef: plan.runtime.realmEnrollmentRef }),
       };
+      if (plan.runtime.realmEnrollmentRef !== undefined) {
+        scope.realmEnrollmentRef = plan.runtime.realmEnrollmentRef;
+      }
       if (store.reference(scope) !== plan.runtime.configurationRef) {
         throw unavailable();
       }

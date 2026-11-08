@@ -20,26 +20,26 @@ const required = <T>(value: T | undefined): T => {
 };
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const authority = {
-  issuer: "https://builder.fixture.test/api/auth",
   audience: "https://builder.fixture.test/mcp",
+  issuer: "https://builder.fixture.test/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
 const target = {
   appId: "orchard",
-  sessionId: "session",
   branch: "feature",
   environment: "preview" as const,
-  projectId: "prj_app",
   installationId: "installation",
+  projectId: "prj_app",
   scopeId: "team",
   scopeType: "team" as const,
+  sessionId: "session",
 };
 const context: HostedOperatorContext = { authority, target };
 const gateway = {
-  projectId: "prj_gateway",
-  ownerId: "team",
   environment: "preview" as const,
+  ownerId: "team",
+  projectId: "prj_gateway",
   publicOrigin: "https://gateway.fixture.test",
 };
 const sha = "a".repeat(40);
@@ -49,10 +49,10 @@ const preparedPlan = hostedOperatorPlanSchema.parse({
   contextId: "accepted-spec",
   selection: {
     appId: target.appId,
-    sessionId: target.sessionId,
     branch: target.branch,
     environment: target.environment,
     projectId: target.projectId,
+    sessionId: target.sessionId,
   },
   access: [{ actorId: "actor", organizationId: "org", roles: ["ordinary_role"] }],
   appDatabase: {
@@ -79,39 +79,39 @@ const preparedPlan = hostedOperatorPlanSchema.parse({
   release: { artifactRef: "private-release", id: "release", sha256: "c".repeat(64) },
   retention: { expiresAt: "2099-01-01T00:00:00Z", policy: "owned cleanup" },
   publicGateway: {
-    projectId: gateway.projectId,
     branch: "gateway-main",
     origin: gateway.publicOrigin,
+    projectId: gateway.projectId,
   },
   gatewayDelivery: {
-    projectId: gateway.projectId,
     branch: "gateway-main",
-    repoId: "gateway-repo",
     gitSha: sha,
+    projectId: gateway.projectId,
+    repoId: "gateway-repo",
   },
-  delivery: { projectId: target.projectId, branch: target.branch, repoId: "app-repo", gitSha: sha },
+  delivery: { branch: target.branch, gitSha: sha, projectId: target.projectId, repoId: "app-repo" },
   deploymentBoundary: {
     authority,
     teamId: "team",
-    app: { projectId: target.projectId, branch: target.branch, environment: "preview" },
-    gateway: { projectId: gateway.projectId, branch: "gateway-main", environment: "preview" },
-    operator: { projectId: "prj_operator", deploymentId: "dpl_operator", environment: "preview" },
+    app: { branch: target.branch, environment: "preview", projectId: target.projectId },
+    gateway: { branch: "gateway-main", environment: "preview", projectId: gateway.projectId },
+    operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
     verification: {
       gatewayOrigin: gateway.publicOrigin,
-      publicOrigin: gateway.publicOrigin,
       jwksUrl: `${gateway.publicOrigin}/_platform/jwks.json`,
+      publicOrigin: gateway.publicOrigin,
     },
   },
   effects: [
-    { id: "resources", kind: "resources", description: "resources" },
-    { id: "install", kind: "install", description: "install" },
-    { id: "access", kind: "access", description: "access" },
-    { id: "bindings", kind: "bindings", description: "bindings" },
-    { id: "delivery", kind: "delivery", description: "delivery" },
+    { description: "resources", id: "resources", kind: "resources" },
+    { description: "install", id: "install", kind: "install" },
+    { description: "access", id: "access", kind: "access" },
+    { description: "bindings", id: "bindings", kind: "bindings" },
+    { description: "delivery", id: "delivery", kind: "delivery" },
     {
+      description: "Deliver approved managed route",
       id: "gateway-delivery",
       kind: "gateway-delivery",
-      description: "Deliver approved managed route",
     },
   ],
 });
@@ -160,19 +160,19 @@ const fixture = () => {
     authority,
     target,
     originalSetup: {
-      operationRef: randomUUID(),
-      planDigest: "d".repeat(64),
       approvalId: "original-approval",
       approvedByCallId: "original-call",
+      operationRef: randomUUID(),
+      planDigest: "d".repeat(64),
     },
     preparedPlan,
     runtime: {
-      sandboxId: "sandbox",
-      root: "/owned/source",
-      projectId: "prj_builder",
-      ownerId: "team",
       appPort: 3000,
       bridgePort: 3443,
+      ownerId: "team",
+      projectId: "prj_builder",
+      root: "/owned/source",
+      sandboxId: "sandbox",
     },
     gateway,
     actors: [{ actorId: "actor", organizationId: "org" }],
@@ -244,10 +244,10 @@ const fixture = () => {
       attemptId,
       rootDirectory: "/private/attempt",
       worker: {
-        id: "managed-app-runtime-v1",
         executablePath: "/opt/worker",
-        sha256: "e".repeat(64),
+        id: "managed-app-runtime-v1",
         operationScope: "managed-app-runtime-v1",
+        sha256: "e".repeat(64),
         subcommand: "protected-managed-app-runtime",
       },
     },
@@ -257,12 +257,12 @@ const fixture = () => {
   });
   const rows: Row[] = [
     {
+      comment: "native",
       id: "native",
       key: "PLATFORM_GATEWAY_PROJECT_BINDINGS",
-      value: "native-private-config",
-      type: "encrypted",
       target: ["preview"],
-      comment: "native",
+      type: "encrypted",
+      value: "native-private-config",
     },
     {
       id: "sibling",
@@ -277,19 +277,19 @@ const fixture = () => {
   const calls: { method: string; path: string }[] = [];
   const checkpoints: Partial<ContinuityRecord>[] = [];
   const faults = {
-    losePost: false,
-    rejectPost: false,
-    loseDeployment: false,
-    hideDeployment: false,
-    loseDelete: false,
-    rejectDelete: false,
-    hideRows: false,
-    wrongTeam: false,
-    wrongScope: false,
     denied: false,
     denyAfterPost: false,
     failCheckpoint: false,
+    hideDeployment: false,
+    hideRows: false,
+    loseDelete: false,
+    loseDeployment: false,
+    losePost: false,
     productionBranch: "gateway-main",
+    rejectDelete: false,
+    rejectPost: false,
+    wrongScope: false,
+    wrongTeam: false,
   };
   let alias: string | null = null;
   const assertCurrent = async () => {
@@ -474,8 +474,8 @@ it("publishes the exact per-intent pair privately and refreshes the normal Gatew
     f.rows.find((r) => r.key === `PLATFORM_GATEWAY_MANAGED_TARGET_${suffix}`),
   );
   expect(JSON.parse(targetRow.value)).toEqual({
-    projection: f.record.projection,
     current: f.record.current,
+    projection: f.record.projection,
   });
   expect(f.rows.find((r) => r.key === `PLATFORM_GATEWAY_MANAGED_TRANSPORT_${suffix}`)?.value).toBe(
     f.capabilities.transport,
@@ -525,12 +525,12 @@ it("does not repeat an unknown unobserved environment POST or adopt a foreign va
   expect(f.calls.filter((c) => c.method === "POST")).toHaveLength(1);
   const key = f.record.environmentWrites[0].key;
   f.rows.push({
+    comment: `App Builder managed runtime ${f.record.requestId}`,
     id: "foreign",
     key,
-    value: "foreign",
-    type: "encrypted",
     target: ["preview"],
-    comment: `App Builder managed runtime ${f.record.requestId}`,
+    type: "encrypted",
+    value: "foreign",
   });
   await expect(f.publish()).rejects.toMatchObject({ code: "reconciliation_required" });
   expect(f.calls.filter((c) => c.method === "POST")).toHaveLength(1);

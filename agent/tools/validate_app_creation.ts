@@ -48,6 +48,7 @@ import {
   fixtureValidationCommandExecutor,
   sandboxValidationCommandExecutor,
 } from "@/lib/repository/target-validation";
+import type { TargetValidationCommandReceipt } from "@/lib/repository/target-validation";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 import { validationLogStoreForSession } from "@/lib/agent/validation-log-store-for-session";
 import { productionReadinessHandoff } from "@/lib/agent/production-readiness-handoff";
@@ -56,15 +57,32 @@ import {
   currentProductBehaviorEvidence,
 } from "@/lib/agent/product-behavior-state";
 
+interface ValidationCommandSummary {
+  logs?: ReturnType<typeof validationLogsWithReadInputs>;
+  name: TargetValidationCommandReceipt["name"];
+}
+
+interface ValidationPhaseEvent {
+  callId: string;
+  event: "app_builder.validation_phase";
+  phase: string;
+  detail?: string | boolean;
+}
+
+const validationPhaseEvent = (
+  callId: string,
+  phase: string,
+  detail?: string | boolean,
+): ValidationPhaseEvent => {
+  const event: ValidationPhaseEvent = { callId, event: "app_builder.validation_phase", phase };
+  if (detail !== undefined) {
+    event.detail = detail;
+  }
+  return event;
+};
+
 const validationPhase = (callId: string, phase: string, detail?: string | boolean): void => {
-  console.info(
-    JSON.stringify({
-      callId,
-      event: "app_builder.validation_phase",
-      phase,
-      ...(detail === undefined ? {} : { detail }),
-    }),
-  );
+  console.info(JSON.stringify(validationPhaseEvent(callId, phase, detail)));
 };
 
 const describeValidationApp = async (
@@ -114,20 +132,20 @@ const prepareBackendValidationRuntime = async (
   signal?: AbortSignal,
 ) => {
   if (description?.backend.kind !== GENERATED_BACKEND || description.validation.browser === null) {
-    return { runtime: null, failure: null };
+    return { failure: null, runtime: null };
   }
   try {
-    return { runtime: await resolvePreparedRuntimeExecution(execution()), failure: null };
+    return { failure: null, runtime: await resolvePreparedRuntimeExecution(execution()) };
   } catch (error) {
     signal?.throwIfAborted();
     return {
-      runtime: null,
       failure: {
         problem:
           error instanceof Error ? error.message : "Authenticated runtime preparation failed.",
         reason: "authenticated-runtime-preparation",
         status: "blocked" as const,
       },
+      runtime: null,
     };
   }
 };
@@ -205,13 +223,11 @@ export const createAppValidationTool = (
           ctx,
         );
       }
-      if (
-        current.phase !== "applied" &&
-        current.phase !== "validation_pending" &&
-        current.phase !== "validation_failed" &&
-        current.phase !== "validated" &&
-        current.phase !== "reviewed"
-      ) {
+      const hasStartedValidation =
+        current.phase === "applied" ||
+        current.phase === "validation_pending" ||
+        current.phase === "validation_failed";
+      if (!hasStartedValidation && current.phase !== "validated" && current.phase !== "reviewed") {
         throw new Error("Apply the requested changes before running the repository checks.");
       }
       if (input.repairOnly === true) {
@@ -264,18 +280,32 @@ export const createAppValidationTool = (
       const priorPublishedGitHubDraftProposalDigest =
         current.publishedGitHubDraftProposalDigest ??
         (current.phase === "reviewed" ? current.githubDraftProposal?.proposal.digest : undefined);
-      let base = {
+      type AppliedState = Extract<
+        ReturnType<typeof appBuilderWorkflowState.get>,
+        { phase: "applied" }
+      >;
+      const applied = {
         appSpec: current.appSpec,
         applyReceipt: current.applyReceipt,
         artifacts: current.artifacts,
-        ...(priorPublishedGitHubDraftProposalDigest === undefined
-          ? {}
-          : { publishedGitHubDraftProposalDigest: priorPublishedGitHubDraftProposalDigest }),
-        dependencyReceipt: current.dependencyReceipt,
-        ...(current.checkoutDependencyAttempts === undefined
-          ? {}
-          : { checkoutDependencyAttempts: current.checkoutDependencyAttempts }),
-        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+      };
+      const publication: Pick<AppliedState, "publishedGitHubDraftProposalDigest"> = {};
+      if (priorPublishedGitHubDraftProposalDigest !== undefined) {
+        publication.publishedGitHubDraftProposalDigest = priorPublishedGitHubDraftProposalDigest;
+      }
+      const dependency = { dependencyReceipt: current.dependencyReceipt };
+      const checkout: Pick<AppliedState, "checkoutDependencyAttempts" | "githubSource"> = {};
+      if (current.checkoutDependencyAttempts !== undefined) {
+        checkout.checkoutDependencyAttempts = current.checkoutDependencyAttempts;
+      }
+      if (current.githubSource !== undefined) {
+        checkout.githubSource = current.githubSource;
+      }
+      let base = {
+        ...applied,
+        ...publication,
+        ...dependency,
+        ...checkout,
         identityReceipt: current.identityReceipt,
         preparedByCallId: current.preparedByCallId,
         proposal: current.proposal,
@@ -549,7 +579,7 @@ export const createAppValidationTool = (
         }),
         ctx.abortSignal,
       );
-      const runtime = preparedBackend.runtime;
+      const { runtime } = preparedBackend;
       // A rejected protected reference never falls back to repository-local browser execution.
       const backendValidation =
         preparedBackend.failure ??
@@ -594,14 +624,13 @@ export const createAppValidationTool = (
         attemptDigest: result.receipt.attemptDigest,
         backendValidation,
         commandCount: result.receipt.commands.length,
-        logs: result.receipt.commands.map((command) => ({
-          name: command.name,
-          ...(command.logs === undefined
-            ? {}
-            : {
-                logs: validationLogsWithReadInputs(result.receipt.attemptDigest, command),
-              }),
-        })),
+        logs: result.receipt.commands.map((command) => {
+          const summary: ValidationCommandSummary = { name: command.name };
+          if (command.logs !== undefined) {
+            summary.logs = validationLogsWithReadInputs(result.receipt.attemptDigest, command);
+          }
+          return summary;
+        }),
         productAcceptance: productAcceptanceObligations(
           current.appSpec,
           evidence,

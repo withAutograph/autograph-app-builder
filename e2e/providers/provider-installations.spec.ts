@@ -93,7 +93,9 @@ function expectGitHubControlAndNoOAuthLeak(page: Page, rawValues: readonly strin
 }
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-test.beforeEach(async () => resetApplicationState());
+test.beforeEach(async () => {
+  await resetApplicationState();
+});
 
 test("GitHub return preserves edits made while its checkpoint is in flight", async ({ page }) => {
   await finishOAuth(page, "GitHub");
@@ -107,9 +109,11 @@ test("GitHub return preserves edits made while its checkpoint is in flight", asy
       held ||
       request.method() !== "POST" ||
       !request.headers()["next-action"] ||
-      !request.postData()?.includes("clientMutationId")
-    )
-      return route.continue();
+      request.postData()?.includes("clientMutationId") !== true
+    ) {
+      await route.continue();
+      return;
+    }
     held = true;
     checkpointIntercepted = true;
     const response = await route.fetch();
@@ -207,9 +211,11 @@ for (const provider of emulatedProviders) {
           checkpointHeld ||
           request.method() !== "POST" ||
           !request.headers()["next-action"] ||
-          !request.postData()?.includes("clientMutationId")
-        )
-          return route.continue();
+          request.postData()?.includes("clientMutationId") !== true
+        ) {
+          await route.continue();
+          return;
+        }
         checkpointHeld = true;
         // Exercise the real durable save while delaying its acknowledgement
         // beyond the default five-second assertion budget. Callback query
@@ -361,7 +367,7 @@ test("provider substitution and malformed callback fail without a binding", asyn
   await page.getByRole("button", { name: "Continue with GitHub" }).click();
   const state = new URL(page.url()).searchParams.get("state");
   expect(state).toBeTruthy();
-  if (!state) throw new Error("Expected GitHub callback state");
+  if (state === null || state === "") throw new Error("Expected GitHub callback state");
 
   await page.goto(
     `/vercel/installations/callback?code=substituted&state=${encodeURIComponent(state)}`,

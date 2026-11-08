@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 
 import { activeBuilderModelId } from "../integrations/active-model";
 import type { BuilderProvisionJournalStore } from "../provisioning/journal";
@@ -68,11 +69,11 @@ function route(input: { authenticated?: boolean } = {}) {
     },
   });
   const journal = {
-    compareAndSet: vi.fn(),
+    compareAndSet: vi.fn<BuilderProvisionJournalStore["compareAndSet"]>(),
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    read: vi.fn(async () => {}),
-    reserve: vi.fn(),
-  } as unknown as BuilderProvisionJournalStore;
+    read: vi.fn<BuilderProvisionJournalStore["read"]>(async (): Promise<undefined> => {}),
+    reserve: vi.fn<BuilderProvisionJournalStore["reserve"]>(),
+  } satisfies BuilderProvisionJournalStore;
   return {
     clock,
     handler: createBuilderHandoffRouteHandler({
@@ -200,7 +201,9 @@ describe("builder handoff deployment", () => {
     const retry = await renew(request({ creationRequestId: randomUUID() }), handoffId);
     expect(first.status).toBe(200);
     expect(first.headers.get("cache-control")).toBe("no-store");
-    const reference = await first.json();
+    const reference = z
+      .looseObject({ expiresAt: z.string(), handoffId: z.string() })
+      .parse(await first.json());
     expect(reference).toEqual(await retry.json());
     expect(Object.keys(reference).toSorted()).toEqual(["expiresAt", "handoffId", "version"]);
     expect(reference.handoffId).toBe(handoffId);
@@ -275,7 +278,7 @@ describe("builder handoff deployment", () => {
     const pageData = vi.fn();
     const status = createBuilderHandoffStatusRouteHandler({ pageData });
     const get = new Request(`${origin}/api/builder/handoffs/${handoffId}`);
-    pageData.mockImplementation(() => Promise.resolve());
+    pageData.mockResolvedValue(undefined);
     const unauthenticated = await status(get, handoffId);
     expect(unauthenticated.status).toBe(401);
     pageData.mockRejectedValue(new Error("database secret"));

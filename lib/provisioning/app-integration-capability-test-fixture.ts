@@ -2,15 +2,17 @@ import { appIntegrationReadObjectsDigest } from "../repository/app-integration-m
 import { appIntegrationCapabilityPlanSchema } from "./app-integration-capability-contract";
 import { authority } from "./public-release-test-fixture";
 
+const ISOLATED_READS_DESTINATION = "isolated-reads";
+
 const resource = (name: string) => ({
-  resourceId: `${name}-resource`,
+  database: name,
   environment: "preview" as const,
   hostname: "ep-owned.neon.tech",
-  port: 5432 as const,
-  database: name,
-  schema: "public" as const,
-  runtimeRole: `${name}_runtime`,
   migratorRole: `${name}_migrator`,
+  port: 5432 as const,
+  resourceId: `${name}-resource`,
+  runtimeRole: `${name}_runtime`,
+  schema: "public" as const,
 });
 export const integrationCapabilityPlan = appIntegrationCapabilityPlanSchema.parse({
   version: 1,
@@ -18,11 +20,11 @@ export const integrationCapabilityPlan = appIntegrationCapabilityPlanSchema.pars
   authority,
   selection: { appId: "invoice-app", sessionId: "saved-session" },
   project: {
-    projectId: "owned-project",
-    teamId: "team",
     installationId: "installation",
-    provisioningRequestId: "11111111-1111-4111-a111-111111111111",
+    projectId: "owned-project",
     provisioningDigest: "a".repeat(64),
+    provisioningRequestId: "11111111-1111-4111-a111-111111111111",
+    teamId: "team",
   },
   release: {
     id: "release",
@@ -36,9 +38,9 @@ export const integrationCapabilityPlan = appIntegrationCapabilityPlanSchema.pars
     planDigest: "d".repeat(64),
     appDatabase: resource("invoice_app"),
     neon: {
-      projectId: "owned-neon",
       branchId: "isolated-branch",
       endpointId: "owned-endpoint",
+      projectId: "owned-neon",
       source: "synthetic-only",
     },
   },
@@ -46,12 +48,12 @@ export const integrationCapabilityPlan = appIntegrationCapabilityPlanSchema.pars
   profileDigest: "e".repeat(64),
   publicOrigin: "https://invoice-app.example",
   workload: {
-    issuer: "https://oidc.vercel.com/team",
     audience: "https://vercel.com/team",
-    subject: "owner:team:project:owned-project:environment:production",
     environment: "production",
-    projectId: "owned-project",
+    issuer: "https://oidc.vercel.com/team",
     ownerId: "team",
+    projectId: "owned-project",
+    subject: "owner:team:project:owned-project:environment:production",
   },
   readinessPath: "/invoice-app/api/integrations/readiness",
   control: {
@@ -60,9 +62,9 @@ export const integrationCapabilityPlan = appIntegrationCapabilityPlanSchema.pars
     registrationIdentitySha256: "8".repeat(64),
     database: resource("development_integrations"),
     neon: {
-      projectId: "control-neon",
       branchId: "control-development-branch",
       endpointId: "control-endpoint",
+      projectId: "control-neon",
       source: "synthetic-only",
     },
     centralHostSetup: {
@@ -86,7 +88,7 @@ export const integrationCapabilityPlan = appIntegrationCapabilityPlanSchema.pars
     recipeId: "quickbooks-read",
     recipeVersion: "1",
     readObjectsSha256: appIntegrationReadObjectsDigest({
-      Vendor: { objectName: "Vendor", destination: "isolated-reads" },
+      Vendor: { objectName: "Vendor", destination: ISOLATED_READS_DESTINATION },
     }),
     authorizationOrigins: ["https://sandbox-authorize.example"],
     payloadHosts: ["sandbox-data.example"],
@@ -97,15 +99,15 @@ export const integrationCapabilityPlan = appIntegrationCapabilityPlanSchema.pars
     connectionProviderKey: "quickbooks-sandbox",
     recipeId: "quickbooks-read",
     recipeVersion: "1",
-    readObjects: { Vendor: { objectName: "Vendor", destination: "isolated-reads" } },
+    readObjects: { Vendor: { objectName: "Vendor", destination: ISOLATED_READS_DESTINATION } },
     readObjectsSha256: appIntegrationReadObjectsDigest({
-      Vendor: { objectName: "Vendor", destination: "isolated-reads" },
+      Vendor: { objectName: "Vendor", destination: ISOLATED_READS_DESTINATION },
     }),
   },
   serviceMemberships: [
     {
-      organizationId: "owned-development-organization",
       actorId: "owned-service-actor",
+      organizationId: "owned-development-organization",
       role: "integration_writer",
     },
   ],

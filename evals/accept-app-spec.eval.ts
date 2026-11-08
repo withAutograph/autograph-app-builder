@@ -6,6 +6,8 @@ import path from "node:path";
 import { BUILD_READY_APP_SPEC } from "./support/app-spec";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
 
+const inputRequestedEvent = "input.requested";
+
 export default defineEval({
   description:
     "Internal product-plan validation and fixed read-only planning are automatic while target mutation remains approval-bound.",
@@ -87,14 +89,14 @@ export default defineEval({
     const retryApply = await session.send("Retry target apply after a lost response.");
 
     t.succeeded();
-    retryApply.notEvent("input.requested");
+    retryApply.notEvent(inputRequestedEvent);
     retryApply.calledTool("apply_app_creation", { count: 1 });
     t.check(retryApply.message, includes("prepared app is unchanged"));
 
     const validation = await session.send("Validate the applied creation.");
 
     t.succeeded();
-    validation.notEvent("input.requested");
+    validation.notEvent(inputRequestedEvent);
     t.check(validation.message, includes("quality checks"));
     t.check(validation.message, includes("ready for review"));
     t.notCalledTool("bash");
@@ -103,7 +105,7 @@ export default defineEval({
     const retryValidation = await session.send("Retry target validation after a lost response.");
 
     t.succeeded();
-    retryValidation.notEvent("input.requested");
+    retryValidation.notEvent(inputRequestedEvent);
     t.check(retryValidation.message, includes("passed its local quality checks"));
     t.check(retryValidation.message, includes("ready for review"));
     retryValidation.calledTool("validate_app_creation", {
@@ -125,7 +127,7 @@ export default defineEval({
     const review = await session.send("Accept the displayed change set.");
 
     t.succeeded();
-    review.notEvent("input.requested");
+    review.notEvent(inputRequestedEvent);
     t.check(review.message, includes("completed app changes are ready for review"));
     t.check(review.message, includes("draft pull request"));
     t.notCalledTool("bash");
@@ -134,7 +136,7 @@ export default defineEval({
     const retryReview = await session.send("Retry change-set acceptance after a lost response.");
 
     t.succeeded();
-    retryReview.notEvent("input.requested");
+    retryReview.notEvent(inputRequestedEvent);
     t.check(retryReview.message, includes("same completed app changes remain ready"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");

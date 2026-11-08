@@ -21,10 +21,10 @@ import type { HostedContinuityDependencies } from "./hosted-operator-continuity"
 import { createContinuityCapabilityCustody } from "./hosted-operator-continuity-custody";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 const context: HostedOperatorContext = {
   authority,
@@ -32,11 +32,11 @@ const context: HostedOperatorContext = {
     appId: "orchard",
     branch: "preview",
     environment: "preview",
-    projectId: "app-project",
-    sessionId: "saved-session",
     installationId: "installation",
+    projectId: "app-project",
     scopeId: "team",
     scopeType: "team",
+    sessionId: "saved-session",
   },
 };
 const preparedPlan = hostedOperatorPlanSchema.parse({
@@ -46,22 +46,22 @@ const preparedPlan = hostedOperatorPlanSchema.parse({
   appDatabase: {
     database: "app_db",
     migratorRole: "app_migrator",
-    runtimeRole: "app_runtime",
     resourceId: "app-resource",
+    runtimeRole: "app_runtime",
   },
   authDatabase: {
     database: "auth_db",
     migratorRole: "auth_migrator",
-    runtimeRole: "auth_runtime",
     resourceId: "auth-resource",
+    runtimeRole: "auth_runtime",
   },
   contextId: "ordinary-planning-context",
   cost: { class: "shared-recovery-group", description: "Controlled fixture", owner: "Fixture" },
   effects: [
-    { id: "resources", kind: "resources", description: "Prepare resources" },
-    { id: "install", kind: "install", description: "Install app" },
-    { id: "access", kind: "access", description: "Authorize app" },
-    { id: "bindings", kind: "bindings", description: "Bind runtime" },
+    { description: "Prepare resources", id: "resources", kind: "resources" },
+    { description: "Install app", id: "install", kind: "install" },
+    { description: "Authorize app", id: "access", kind: "access" },
+    { description: "Bind runtime", id: "bindings", kind: "bindings" },
   ],
   installer: { reference: "shared-installer", sha256: "a".repeat(64) },
   neon: {
@@ -94,17 +94,17 @@ const selection = {
   },
   preparedPlan,
   runtime: {
-    sandboxId: "owned-sandbox",
-    root: "/controlled/source",
-    projectId: "builder-project",
-    ownerId: "team",
     appPort: 3000,
     bridgePort: 3100,
+    ownerId: "team",
+    projectId: "builder-project",
+    root: "/controlled/source",
+    sandboxId: "owned-sandbox",
   },
   gateway: {
-    projectId: "gateway-project",
-    ownerId: "team",
     environment: "preview" as const,
+    ownerId: "team",
+    projectId: "gateway-project",
     publicOrigin: "https://gateway.example",
   },
   actors: [{ actorId: "actor-one", organizationId: "organization-one" }],
@@ -137,6 +137,16 @@ const setup = () => {
   });
   const deps: HostedContinuityDependencies = {
     store: {
+      async compareAndSet(input) {
+        if (rejectCas || row?.revision !== input.expectedRevision) {
+          rejectCas = false;
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional CAS absence is the supported conflict result.
+          return undefined;
+        }
+        row = continuityRecordSchema.parse(structuredClone(input.record));
+        records.push(read());
+        return read();
+      },
       async read(input) {
         return row !== undefined &&
           input.intentId === row.requestId &&
@@ -146,16 +156,6 @@ const setup = () => {
       },
       async reserve(input) {
         row ??= continuityRecordSchema.parse(structuredClone(input.record));
-        records.push(read());
-        return read();
-      },
-      async compareAndSet(input) {
-        if (rejectCas || row?.revision !== input.expectedRevision) {
-          rejectCas = false;
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional CAS absence is the supported conflict result.
-          return undefined;
-        }
-        row = continuityRecordSchema.parse(structuredClone(input.record));
         records.push(read());
         return read();
       },
@@ -334,16 +334,16 @@ it("projects retained checkpoints for the owner without resuming an uncertain at
   const result = await f.operations.readPlan(context, planned.plan.intentId);
   expect(result.status).not.toHaveProperty("checkpoints");
   expect(continuityCheckpointSchema.parse(continuityCheckpoints(retained)).checkpoints).toEqual({
+    environmentWrite: "unrecorded",
+    outcome: "unrecorded",
     pendingStage: "runtime",
-    runtimeLocator: "recorded",
-    runtimeDispatch: "unrecorded",
-    runtimeCommand: "unrecorded",
     publicationAttempt: "unrecorded",
     publicationCandidate: "unrecorded",
-    environmentWrite: "unrecorded",
-    suiteDispatch: "unrecorded",
+    runtimeCommand: "unrecorded",
+    runtimeDispatch: "unrecorded",
+    runtimeLocator: "recorded",
     suiteCommand: "unrecorded",
-    outcome: "unrecorded",
+    suiteDispatch: "unrecorded",
   });
   expect(f.read()).toEqual(retained);
   expect(f.events).toEqual(eventsBefore);
@@ -370,12 +370,12 @@ it("projects recorded dispatch markers without revealing private command or capa
   );
   const status = continuityCheckpointSchema.parse(continuityCheckpoints(retained));
   expect(status.checkpoints).toMatchObject({
-    runtimeDispatch: "recorded",
-    runtimeCommand: "recorded",
-    publicationAttempt: "recorded",
-    suiteDispatch: "recorded",
-    suiteCommand: "recorded",
     outcome: "unrecorded",
+    publicationAttempt: "recorded",
+    runtimeCommand: "recorded",
+    runtimeDispatch: "recorded",
+    suiteCommand: "recorded",
+    suiteDispatch: "recorded",
   });
   expect(JSON.stringify(status)).not.toContain("private-runtime-command");
   expect(JSON.stringify(status)).not.toContain("private-suite-command");
@@ -492,7 +492,7 @@ describe("approved managed app continuity service", () => {
   it("reads back a committed session pair after response loss without changing the attempt or duplicating dispatch", async () => {
     const f = setup();
     const { planned, retained } = await retainPreDispatchAttempt(f);
-    const compareAndSet = f.deps.store.compareAndSet;
+    const { compareAndSet } = f.deps.store;
     let responseLost = false;
     f.deps.store.compareAndSet = async (input) => {
       const saved = await compareAndSet(input);
@@ -705,7 +705,7 @@ describe("approved managed app continuity service", () => {
     expect(result.state).toBe("settled");
     expect(result.outcome?.exitCode).toBe(0);
     expect(f.events.indexOf("close")).toBeLessThan(f.events.indexOf("revoke-owned-rows"));
-    const started = vi.mocked(f.deps.runtime.start).mock.calls[0];
+    const [started] = vi.mocked(f.deps.runtime.start).mock.calls;
     if (started === undefined) {
       throw new Error("Runtime did not start");
     }
@@ -984,6 +984,14 @@ describe("continuity recovery preserves frozen plans", () => {
     const f = setup();
     const rows = new Map<string, ContinuityRecord>();
     f.deps.store = {
+      compareAndSet: async ({ record, expectedRevision }) => {
+        if (rows.get(record.requestId)?.revision !== expectedRevision) {
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS conflicts explicitly return no row.
+          return undefined;
+        }
+        rows.set(record.requestId, structuredClone(record));
+        return structuredClone(record);
+      },
       read: async ({ intentId }) => structuredClone(rows.get(intentId)),
       reserve: async ({ record }) => {
         if (!rows.has(record.requestId)) {
@@ -995,14 +1003,6 @@ describe("continuity recovery preserves frozen plans", () => {
         }
         return structuredClone(saved);
       },
-      compareAndSet: async ({ record, expectedRevision }) => {
-        if (rows.get(record.requestId)?.revision !== expectedRevision) {
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS conflicts explicitly return no row.
-          return undefined;
-        }
-        rows.set(record.requestId, structuredClone(record));
-        return structuredClone(record);
-      },
     };
     return { ...f, rows, operations: createHostedContinuityOperations(f.deps) };
   };
@@ -1012,7 +1012,7 @@ describe("continuity recovery preserves frozen plans", () => {
     const runtime = {
       ...selection.runtime,
       root: "/workspace/recovered",
-      browserSelection: { testName: "@acceptance", workers: 1, retries: 0, maxFailures: 1 },
+      browserSelection: { maxFailures: 1, retries: 0, testName: "@acceptance", workers: 1 },
     };
     const next = await f.operations.plan(context, runtime, "recovery", {
       predecessorIntentId: old.plan.intentId,

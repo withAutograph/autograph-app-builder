@@ -17,10 +17,10 @@ describe("acceptance workspace recovery", () => {
     const recover = vi.fn();
     await expect(
       resolveCompatibleAcceptanceRoot({
-        roots: ["/candidate-with-edits", "/old"],
-        releaseId: "v3",
         describe: async (root) => (root.includes("candidate") ? "v3" : "v1"),
         recover,
+        releaseId: "v3",
+        roots: ["/candidate-with-edits", "/old"],
       }),
     ).resolves.toBe("/candidate-with-edits");
     expect(recover).not.toHaveBeenCalled();
@@ -29,13 +29,13 @@ describe("acceptance workspace recovery", () => {
     const describeRelease = vi.fn(async (root: string) =>
       root === "/missing" ? undefined : root === "/old" ? "v1" : "v3",
     );
-    const recover = vi.fn(async () => "/separate-recovered");
+    const recover = vi.fn<() => Promise<string>>().mockResolvedValue("/separate-recovered");
     await expect(
       resolveCompatibleAcceptanceRoot({
-        roots: ["/missing", "/old"],
-        releaseId: "v3",
         describe: describeRelease,
         recover,
+        releaseId: "v3",
+        roots: ["/missing", "/old"],
       }),
     ).resolves.toBe("/separate-recovered");
     expect(recover).toHaveBeenCalledOnce();
@@ -48,30 +48,28 @@ describe("acceptance workspace recovery", () => {
   it("keeps an actual recovery failure visible", async () => {
     await expect(
       resolveCompatibleAcceptanceRoot({
-        roots: ["/old"],
-        releaseId: "v3",
         describe: async () => "v1",
         recover: async () => {
           throw new Error("repository access expired");
         },
+        releaseId: "v3",
+        roots: ["/old"],
       }),
     ).rejects.toThrow("repository access expired");
   });
   it("does not restore credentials into a recovered checkout that cannot describe the installed release", async () => {
     await expect(
       resolveCompatibleAcceptanceRoot({
-        roots: [],
-        releaseId: "v3",
         describe: async () => "v2",
         recover: async () => "/recovered",
+        releaseId: "v3",
+        roots: [],
       }),
     ).rejects.toThrow("installed release");
   });
   it("reports an actual dependency failure from the recovered command instead of a release mismatch", async () => {
     await expect(
       resolveCompatibleAcceptanceRoot({
-        roots: ["/expired"],
-        releaseId: "v3",
         describe: async (root) => {
           throw new Error(
             root === "/expired"
@@ -80,6 +78,8 @@ describe("acceptance workspace recovery", () => {
           );
         },
         recover: async () => "/recovered",
+        releaseId: "v3",
+        roots: ["/expired"],
       }),
     ).rejects.toThrow("app:describe: Cannot find package @platform/schema");
   });
@@ -88,14 +88,14 @@ describe("acceptance workspace recovery", () => {
     const recover = vi.fn();
     await expect(
       resolveCompatibleAcceptanceRoot({
-        roots: ["/retained"],
-        releaseId: "v3",
-        signal: controller.signal,
         describe: async () => {
           controller.abort(new Error("cancelled"));
           throw new Error("aborted command");
         },
         recover,
+        releaseId: "v3",
+        roots: ["/retained"],
+        signal: controller.signal,
       }),
     ).rejects.toThrow("cancelled");
     expect(recover).not.toHaveBeenCalled();
@@ -104,7 +104,7 @@ describe("acceptance workspace recovery", () => {
     const roots: string[] = [];
     const commands: string[] = [];
     const acquireCredential = vi.fn(async () => ({ token: "private-installation-token" }));
-    const setNetworkPolicy = vi.fn(async () => {});
+    const setNetworkPolicy = vi.fn<() => Promise<void>>().mockResolvedValue();
     const result = await prepareWithVerifiedGitHubFetchRecovery({
       acquireCredential,
       sandbox: { setNetworkPolicy },
@@ -118,10 +118,10 @@ describe("acceptance workspace recovery", () => {
               return roots.length === 1 && command.includes(" fetch ")
                 ? {
                     exitCode: 128,
-                    stdout: "",
                     stderr: "remote: Repository not found.\nprivate provider detail",
+                    stdout: "",
                   }
-                : { exitCode: 0, stdout: "", stderr: "" };
+                : { exitCode: 0, stderr: "", stdout: "" };
             },
           },
           repositoryUrl: "https://github.com/owner/existing.git",
@@ -150,8 +150,8 @@ describe("acceptance workspace recovery", () => {
             sandbox: {
               run: async () => ({
                 exitCode: 128,
-                stdout: "",
                 stderr: "fatal: unknown revision; private transport detail",
+                stdout: "",
               }),
             },
             repositoryUrl: "https://github.com/owner/existing.git",
@@ -191,21 +191,21 @@ describe("acceptance workspace recovery", () => {
             exitCode: 0,
           };
         } catch {
-          return { stdout: "", stderr: "command failed", exitCode: 1 };
+          return { exitCode: 1, stderr: "command failed", stdout: "" };
         }
       },
     };
-    const signal = new AbortController().signal;
+    const { signal } = new AbortController();
     try {
       await mkdir(recoveredRoot);
       await writeFile(path.join(recoveredRoot, "release"), "v3");
       await expect(
         attachAvailableAcceptanceDependencies({
-          sandbox,
-          roots: [missingRoot],
           recoveredRoot,
-          workspaceRoot: workspace,
+          roots: [missingRoot],
+          sandbox,
           signal,
+          workspaceRoot: workspace,
         }),
       ).resolves.toBeUndefined();
       expect(await readFile(path.join(recoveredRoot, "release"), "utf-8")).toBe("v3");
@@ -215,11 +215,11 @@ describe("acceptance workspace recovery", () => {
       await mkdir(packageRoot, { recursive: true });
       await writeFile(path.join(packageRoot, "index.js"), "export const retained = true;");
       await attachAvailableAcceptanceDependencies({
-        sandbox,
-        roots: [missingRoot, retainedRoot],
         recoveredRoot,
-        workspaceRoot: workspace,
+        roots: [missingRoot, retainedRoot],
+        sandbox,
         signal,
+        workspaceRoot: workspace,
       });
       expect(
         await readFile(path.join(recoveredRoot, "node_modules/fixture-package/index.js"), "utf-8"),
@@ -267,7 +267,7 @@ describe("acceptance workspace recovery", () => {
                   const result = await run("/bin/sh", ["-c", command], { cwd: workingDirectory });
                   return { ...result, exitCode: 0 };
                 } catch {
-                  return { stdout: "", stderr: "Git command failed", exitCode: 1 };
+                  return { exitCode: 1, stderr: "Git command failed", stdout: "" };
                 }
               },
             },

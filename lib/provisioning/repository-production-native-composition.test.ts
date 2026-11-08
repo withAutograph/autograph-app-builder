@@ -91,10 +91,6 @@ const fixture = () => {
   const ports: Omit<RepositoryProductionSetupPorts, "withLease"> = {
     assertAuthorized,
     store: {
-      read: async () => structuredClone(row),
-      reserve: async () => {
-        throw new Error("must reuse original app");
-      },
       compareAndSet: async (previous, record) => {
         if (previous.revision !== row.revision) {
           throw new Error("conflicting setup");
@@ -102,11 +98,15 @@ const fixture = () => {
         row = { ...row, revision: row.revision + 1, record: structuredClone(record) };
         return structuredClone(row);
       },
+      read: async () => structuredClone(row),
+      reserve: async () => {
+        throw new Error("must reuse original app");
+      },
     },
     reservePrivateState: async () => {
       throw new Error("must reuse original credentials");
     },
-    readCreatorIdentity: async () => ({ state: "verified", actorId: "creator" }),
+    readCreatorIdentity: async () => ({ actorId: "creator", state: "verified" }),
     reconcileCreatorRoles: async () => {
       applied.push("roles");
       return "applied";
@@ -117,7 +117,7 @@ const fixture = () => {
         creatorActive = true;
       }
     },
-    reconcile: async (context) => ({ state: "applied", receipt: { effect: context.effect } }),
+    reconcile: async (context) => ({ receipt: { effect: context.effect }, state: "applied" }),
   };
   const setup = createRepositoryProductionIntentBoundSetup(
     ports,
@@ -198,8 +198,8 @@ describe("Production setup approval and lease composition", () => {
     f.markPending("creator-access");
     const command = {
       action: "remove" as const,
-      memberId: "creator",
       clientRequestId: randomUUID(),
+      memberId: "creator",
     };
     expect(() => {
       assertNoConflictingProductionSetup({ row: f.row(), command, pendingCommandIds: [] });
@@ -232,8 +232,8 @@ describe("Production setup approval and lease composition", () => {
       }
       const command = {
         action: "remove" as const,
-        memberId: "guest",
         clientRequestId: randomUUID(),
+        memberId: "guest",
       };
       expect(() => {
         assertNoConflictingProductionSetup({

@@ -10,6 +10,10 @@ import {
 import type { HostedOperationRecord, HostedSessionRecord } from "./hosted-store";
 import type { NativeRecoveryBinding, NativeRecoveryDescriptor } from "./native-recovery-contract";
 
+interface OperationErrorFields {
+  safeErrorCode?: "unknown";
+}
+
 const principal = {
   audience: "https://builder.example/mcp",
   issuer: "https://builder.example/api/auth",
@@ -30,24 +34,24 @@ const auth = {
   subject: principal.ownerUserId,
 };
 const holderDescriptor: NativeRecoveryDescriptor = {
-  version: 1,
-  operationId: "op_older_recovery",
-  sourcePublicSessionId: "ses_origin",
-  sourceOwnerRunId: "run_logical",
-  sourceAdapterGeneration: 1,
   logicalSessionId: "run_logical",
+  operationId: "op_older_recovery",
   originalAuthoritySessionId: "ses_origin",
   parentCancellationRevision: 0,
+  sourceAdapterGeneration: 1,
+  sourceOwnerRunId: "run_logical",
+  sourcePublicSessionId: "ses_origin",
+  version: 1,
 };
 const winnerReceipt: NativeRecoveryBinding = {
   ...holderDescriptor,
   ownerRunId: "run_accepted_winner",
   provenance: {
+    checkpointVersion: 1,
     kind: "failed-turn-input",
-    sourceStepId: "retained-step",
     sourceEventId: "retained-event",
     sourceSlot: 0,
-    checkpointVersion: 1,
+    sourceStepId: "retained-step",
   },
 };
 const origin = durableHostedSessionRecordSchema.parse({
@@ -78,8 +82,8 @@ const winner = durableHostedSessionRecordSchema.parse({
 const descriptor: NativeRecoveryDescriptor = {
   ...holderDescriptor,
   operationId: "op_current_recovery",
-  sourcePublicSessionId: winner.sessionId,
   sourceOwnerRunId: winner.adapterSessionId,
+  sourcePublicSessionId: winner.sessionId,
 };
 const operation = (recovery: NativeRecoveryDescriptor): HostedOperationRecord =>
   hostedOperationRecordSchema.parse({
@@ -98,7 +102,7 @@ const operation = (recovery: NativeRecoveryDescriptor): HostedOperationRecord =>
 const holderOperation = hostedOperationRecordSchema.parse({
   ...operation(holderDescriptor),
   nativeRecoveryReceipt: winnerReceipt,
-  result: { sessionId: winner.sessionId, cursor: 0, events: [], status: "failed" },
+  result: { cursor: 0, events: [], sessionId: winner.sessionId, status: "failed" },
   sessionId: winner.sessionId,
   sessionRecordDigest: hostedSessionCreationDigest(winner),
   state: "succeeded",
@@ -139,14 +143,14 @@ const fixture = () => {
   });
   return {
     binding,
-    operations,
-    sessions,
-    revoke: () => {
-      allowed = false;
-    },
     onRead: (effect: (operationId: string) => void) => {
       onRead = effect;
     },
+    operations,
+    revoke: () => {
+      allowed = false;
+    },
+    sessions,
   };
 };
 
@@ -177,13 +181,14 @@ describe("fresh authorization to close an immutable recovery loser", () => {
     "does not infer nonexecution from a %s holder without a committed winner",
     async (state) => {
       const f = fixture();
+      const record = { ...operation(holderDescriptor) };
+      const errorFields: OperationErrorFields = {};
+      if (state !== "reserved") {
+        errorFields.safeErrorCode = "unknown";
+      }
       f.operations.set(
         holderDescriptor.operationId,
-        hostedOperationRecordSchema.parse({
-          ...operation(holderDescriptor),
-          ...(state === "reserved" ? {} : { safeErrorCode: "unknown" }),
-          state,
-        }),
+        hostedOperationRecordSchema.parse({ ...record, ...errorFields, state }),
       );
       await expect(f.binding.authorizeRecoveryHolderClosure(call)).rejects.toThrow();
     },

@@ -1,4 +1,5 @@
 /* oxlint-disable eslint/require-await -- In-memory async service ports preserve the real handler contract without provider operations. */
+import type { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
 import { createProtectedHostedOperatorHandler } from "./hosted-operator-service";
 import type { ProtectedHostedOperatorDependencies } from "./hosted-operator-service";
@@ -142,19 +143,19 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
     resourcesInstaller: plan.installer,
     effects: [
       {
+        description: "Observe owned Auth",
         id: "auth-resources",
         kind: "resources",
         resourceId: plan.authDatabase.resourceId,
-        description: "Observe owned Auth",
       },
       {
+        description: "Observe owned app",
         id: "app-resources",
         kind: "resources",
         resourceId: plan.appDatabase.resourceId,
-        description: "Observe owned app",
       },
       ...plan.effects.filter((effect) => effect.kind !== "resources"),
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind shared Gateway" },
+      { description: "Bind shared Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
     ],
   });
   const operationRef = "00000000-0000-4000-8000-000000000001";
@@ -174,70 +175,75 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
     proofRef: "original-approved-owner-proof",
     proofSha256: "e".repeat(64),
   };
-  let row: HostedRuntimeJournalRow = {
-    revision: 1,
-    record: hostedRuntimeJournalRecordSchema.parse({
-      version: 1,
-      kind: "app-runtime",
-      approvedByCallId: "original-approved-call",
-      request: target,
-      status: "prepared",
-      step: "bound",
-      environmentBound: true,
-      privateState: {
-        encryptedToken: "ciphertext",
-        keyVersion: "key-v1",
-        tokenIv: "iv",
-        tokenTag: "tag",
-      },
-      proof: {
-        actors: 0,
-        tenants: 1,
-        authenticatedBehavior: "unassessed",
-        artifactHash: "c".repeat(64),
-        manifestSha256: originalPlan.release.sha256,
-        releaseId: originalPlan.release.id,
-      },
-      operator: {
-        mode: "protected-operator-v1",
-        approvalId: "original-approval",
+  const recordPrefix = {
+    version: 1,
+    kind: "app-runtime",
+    approvedByCallId: "original-approved-call",
+    request: target,
+    status: "prepared",
+    step: "bound",
+    environmentBound: true,
+    privateState: {
+      encryptedToken: "ciphertext",
+      keyVersion: "key-v1",
+      tokenIv: "iv",
+      tokenTag: "tag",
+    },
+    proof: {
+      actors: 0,
+      artifactHash: "c".repeat(64),
+      authenticatedBehavior: "unassessed",
+      manifestSha256: originalPlan.release.sha256,
+      releaseId: originalPlan.release.id,
+      tenants: 1,
+    },
+  };
+  type OperatorFixture = Omit<z.input<typeof hostedOperatorRecordSchema>, "authPreparation"> & {
+    authPreparation: Omit<
+      NonNullable<z.input<typeof hostedOperatorRecordSchema>["authPreparation"]>,
+      "targetDigest"
+    > & { targetDigest: string | undefined };
+  };
+  const operator: OperatorFixture = {
+    mode: "protected-operator-v1",
+    approvalId: "original-approval",
+    operationRef,
+    plan: originalPlan,
+    planDigest,
+    fenceGeneration: 1,
+    identityLink,
+    authPreparation: {
+      assetSha256: "1".repeat(64),
+      catalogFingerprint: "2".repeat(64),
+      database: originalPlan.authDatabase.database,
+      observedAt: "2026-10-19T12:00:00Z",
+      runtimeRole: originalPlan.authDatabase.runtimeRole,
+      targetDigest: originalPlan.authSchema?.targetDigest,
+    },
+    receipts: originalPlan.effects.map((effect) => ({
+      effectId: effect.id,
+      fenceGeneration: 1,
+      observedAt: "2026-10-19T12:00:00Z",
+      resourceVersion: "observed",
+    })),
+  };
+  if (observedEndpoint) {
+    operator.deliveredGatewayDeploymentId = "ready-owner-gateway";
+    operator.gatewayDeliveryCandidates = [
+      {
+        deploymentId: "ready-owner-gateway",
+        readyState: "READY",
+        origin: identityLink.endpointOrigin,
+        branch: "preview",
+        projectId: "prj_gateway",
+        repoId: "gateway-repo",
         operationRef,
-        plan: originalPlan,
-        planDigest,
-        fenceGeneration: 1,
-        identityLink,
-        authPreparation: {
-          assetSha256: "1".repeat(64),
-          catalogFingerprint: "2".repeat(64),
-          database: originalPlan.authDatabase.database,
-          runtimeRole: originalPlan.authDatabase.runtimeRole,
-          targetDigest: originalPlan.authSchema?.targetDigest,
-          observedAt: "2026-10-19T12:00:00Z",
-        },
-        receipts: originalPlan.effects.map((effect) => ({
-          effectId: effect.id,
-          observedAt: "2026-10-19T12:00:00Z",
-          resourceVersion: "observed",
-          fenceGeneration: 1,
-        })),
-        ...(observedEndpoint
-          ? {
-              deliveredGatewayDeploymentId: "ready-owner-gateway",
-              gatewayDeliveryCandidates: [
-                {
-                  deploymentId: "ready-owner-gateway",
-                  readyState: "READY",
-                  origin: identityLink.endpointOrigin,
-                  branch: "preview",
-                  projectId: "prj_gateway",
-                  repoId: "gateway-repo",
-                  operationRef,
-                },
-              ],
-            }
-          : {}),
       },
-    }),
+    ];
+  }
+  let row: HostedRuntimeJournalRow = {
+    record: hostedRuntimeJournalRecordSchema.parse({ ...recordPrefix, operator }),
+    revision: 1,
   };
   const original = structuredClone(row.record);
   const deps: ProtectedHostedOperatorDependencies = {
@@ -256,8 +262,6 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
         : null,
     ),
     store: {
-      read: async () => structuredClone(row),
-      reserve: async () => structuredClone(row),
       compareAndSet: async (input) => {
         if (input.expectedRevision !== row.revision) {
           // oxlint-disable-next-line unicorn/no-useless-undefined -- A lost journal CAS returns no row.
@@ -269,6 +273,8 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
         };
         return structuredClone(row);
       },
+      read: async () => structuredClone(row),
+      reserve: async () => structuredClone(row),
       reserveFenceGeneration: vi.fn(async () => {
         throw new Error("Planning cannot claim an effect fence");
       }),
@@ -300,7 +306,7 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
       return operatorPublicResultSchema.parse(await response.json());
     },
   };
-  return { deps, client, originalPlan, original, identityLink, row: () => row };
+  return { client, deps, identityLink, original, originalPlan, row: () => row };
 };
 
 describe("participant proposal identity continuity", () => {
@@ -313,7 +319,7 @@ describe("participant proposal identity continuity", () => {
       });
     f.deps.readApproval = async () => null;
     const result = await f.client.request({ action: "plan", operation: "prepare", selection });
-    expect(result).toMatchObject({ status: "blocked", code: "authorization_required" });
+    expect(result).toMatchObject({ code: "authorization_required", status: "blocked" });
     expect(f.row().record).toEqual(f.original);
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
   });
@@ -343,7 +349,7 @@ describe("participant proposal identity continuity", () => {
 
   it("preserves a pending link when re-exposing its unchanged original plan", async () => {
     const f = preparedOwnerFixture(false);
-    const record = f.row().record;
+    const { record } = f.row();
     const link = record.operator?.identityLink;
     if (link === undefined) {
       throw new Error("Missing fixture link");
@@ -397,20 +403,20 @@ describe("participant proposal identity continuity", () => {
             scope === "browser" ? "https://next-auth.example.test" : identityLink.browserOrigin,
         },
         normalActorProgram: {
-          version: 1,
-          appId: selection.appId,
-          origin: publicOrigin,
           actors: [
             {
-              actorKey: "reviewer",
-              name: "Reviewer",
-              email: "reviewer@example.test",
               account: "create-email-password",
+              actorKey: "reviewer",
+              email: "reviewer@example.test",
+              name: "Reviewer",
             },
           ],
-          organizations: [],
-          memberships: [],
           appAccess: [],
+          appId: selection.appId,
+          memberships: [],
+          organizations: [],
+          origin: publicOrigin,
+          version: 1,
         },
       });
       f.deps.plan = async () => proposal;
@@ -421,7 +427,7 @@ describe("participant proposal identity continuity", () => {
         normalActorProgram: proposal.normalActorProgram,
       });
       expect(result.status).toBe("planned");
-      const record = f.row().record;
+      const { record } = f.row();
       expect(record.operator?.identityLink).toEqual(
         ["unchanged", "observed-endpoint"].includes(scope) ? identityLink : undefined,
       );
@@ -453,16 +459,16 @@ describe("consumed proof after Gateway selection advances", () => {
       effects: [
         ...original.plan.effects,
         {
+          description: "Deliver the approved Gateway",
           id: "gateway-delivery",
           kind: "gateway-delivery",
-          description: "Deliver the approved Gateway",
         },
       ],
       gatewayDelivery: {
-        projectId: "prj_gateway",
         branch: "preview",
-        repoId: "gateway-repo",
         gitSha: "c".repeat(40),
+        projectId: "prj_gateway",
+        repoId: "gateway-repo",
       },
       deploymentBoundary: {
         ...original.plan.deploymentBoundary,
@@ -489,13 +495,13 @@ describe("consumed proof after Gateway selection advances", () => {
       operationRef: "00000000-0000-4000-8000-000000000002",
     };
     return {
-      before,
       after: {
         ...before,
         operationRef: next.operationRef,
         gatewayDeliveryCandidates: [previous, next],
         deliveredGatewayDeploymentId: next.deploymentId,
       },
+      before,
     };
   };
 

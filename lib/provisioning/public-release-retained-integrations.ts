@@ -123,7 +123,7 @@ export const createOptionalIntegrationRetentionReader =
       // oxlint-disable-next-line unicorn/no-useless-undefined -- No existing optional binding needs retention authority.
       return undefined;
     }
-    const readSourceOwner = input.readSourceOwner;
+    const { readSourceOwner } = input;
     if (readSourceOwner === undefined) {
       throw fail();
     }

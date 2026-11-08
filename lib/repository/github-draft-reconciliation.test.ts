@@ -143,10 +143,10 @@ describe("existing draft reconciliation", () => {
       digest: digest(new TextEncoder().encode("catalog metadata")),
     };
     const change = {
-      path: file.path,
-      kind: "modified" as const,
-      before: { digest: digest(bytes), mode: "644" },
       after: { digest: file.digest, mode: "644" },
+      before: { digest: digest(bytes), mode: "644" },
+      kind: "modified" as const,
+      path: file.path,
     };
     const dependencyCatalog = { files: [file], nonAppIndexDigest: "a".repeat(64) };
     const accepted = createReconciliationReviewReceipt({
@@ -285,9 +285,9 @@ describe("existing draft reconciliation", () => {
     await expect(
       inspectAppliedExistingDraftReconciliation({
         adapter: {
+          inspectAppliedDraftReconciliation: mock.adapter.inspectAppliedDraftReconciliation,
           inspectExistingDraft: mock.adapter.inspectExistingDraft,
           inspectInstallation: mock.adapter.inspectInstallation,
-          inspectAppliedDraftReconciliation: mock.adapter.inspectAppliedDraftReconciliation,
         },
         proposal,
         review,

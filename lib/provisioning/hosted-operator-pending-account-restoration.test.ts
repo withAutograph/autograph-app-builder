@@ -119,56 +119,56 @@ const operationRef = "00000000-0000-4000-8000-000000000001";
 const observedAt = "2026-10-14T12:00:00Z";
 const sourceWorkload = {
   audience: "https://vercel.com/team",
+  environment: "preview" as const,
   issuer: "https://oidc.vercel.com/team",
   ownerId: "team",
   projectId: "builder",
-  environment: "preview" as const,
   subject: "builder-workload",
 };
 const desiredPlan = () =>
   hostedOperatorPlanSchema.parse({
     ...bootstrapPlan(),
     normalActorProgram: normalActorProgramSchema.parse({
-      version: 1,
-      appId: context.target.appId,
-      origin: "https://apps.example",
       actors: [
         {
+          account: "capture-existing",
           actorKey: "owner",
           email: "owner@example.test",
           name: "Owner",
-          account: "capture-existing",
         },
       ],
-      organizations: [],
-      memberships: [],
       appAccess: [],
+      appId: context.target.appId,
+      memberships: [],
+      organizations: [],
+      origin: "https://apps.example",
+      version: 1,
     }),
     publicGateway: {
-      projectId: "gateway",
       branch: context.target.branch,
       origin: "https://apps.example",
+      projectId: "gateway",
     },
     deploymentBoundary: {
-      authority,
-      teamId: "team",
       app: {
         projectId: context.target.projectId,
         deploymentId: "app-deployment",
         branch: context.target.branch,
         environment: "preview",
       },
+      authority,
       gateway: {
-        projectId: "gateway",
-        deploymentId: "gateway-deployment",
         branch: context.target.branch,
+        deploymentId: "gateway-deployment",
         environment: "preview",
+        projectId: "gateway",
       },
       operator: {
-        projectId: "operator",
         deploymentId: "operator-deployment",
         environment: "preview",
+        projectId: "operator",
       },
+      teamId: "team",
       verification: {
         gatewayOrigin: "https://gateway.example",
         jwksUrl: "https://gateway.example/_platform/jwks.json",
@@ -178,20 +178,20 @@ const desiredPlan = () =>
     gatewayBindings: {
       authBrowserOrigin: "https://apps.example",
       builderCallbackOrigin: "https://builder.example",
-      operatorOrigin: "https://operator.example",
       catalogAppIds: [context.target.appId],
+      operatorOrigin: "https://operator.example",
       sourceWorkload,
     },
     gatewayDelivery: {
-      projectId: "gateway",
       branch: context.target.branch,
-      repoId: "gateway-repo",
       gitSha: "c".repeat(40),
+      projectId: "gateway",
+      repoId: "gateway-repo",
     },
     effects: [
       ...bootstrapPlan().effects,
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway configuration" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
+      { description: "Gateway configuration", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
     ],
   });
 const completedRecord = (plan: HostedOperatorPlan = desiredPlan()) =>
@@ -271,9 +271,9 @@ const setup = () => {
     gatewayDelivery: { ...live.plan.gatewayDelivery, gitSha: "a".repeat(40) },
     effects: [
       {
+        description: "Capture the approved existing account",
         id: "normal-accounts",
         kind: "normal-accounts",
-        description: "Capture the approved existing account",
       },
     ],
   });
@@ -340,9 +340,9 @@ const setup = () => {
   const ports = { store: { read, compareAndSet }, assertAuthorized, readApproval };
   const input = { action: "plan", operation: "prepare", selection: accountPlan.selection } as const;
   return {
-    ports,
-    input,
     accountPlan,
+    input,
+    ports,
     get row() {
       return row;
     },
@@ -358,8 +358,8 @@ describe("pending account restoration after completed infrastructure", () => {
     const current = required(before.operator);
     await expect(f.run()).resolves.toMatchObject({
       operationRef: accountOperationRef,
-      planDigest: original.accountPlanDigest,
       plan: original.accountPlan,
+      planDigest: original.accountPlanDigest,
     });
     const after = f.row.record;
     expect(
@@ -376,15 +376,15 @@ describe("pending account restoration after completed infrastructure", () => {
     expect(after.privateState).toEqual(before.privateState);
     expect(after.approvedByCallId).toBe(original.accountApprovedByCallId);
     expect(after.operator).toMatchObject({
-      operationRef: accountOperationRef,
       approvalId: original.accountApprovalId,
-      planDigest: original.accountPlanDigest,
-      plan: original.accountPlan,
-      receipts: [],
       authPreparation: current.authPreparation,
-      gatewayEnvironment: current.gatewayEnvironment,
-      gatewayDeliveryCandidates: current.gatewayDeliveryCandidates,
       deliveredGatewayDeploymentId: current.deliveredGatewayDeploymentId,
+      gatewayDeliveryCandidates: current.gatewayDeliveryCandidates,
+      gatewayEnvironment: current.gatewayEnvironment,
+      operationRef: accountOperationRef,
+      plan: original.accountPlan,
+      planDigest: original.accountPlanDigest,
+      receipts: [],
     });
     expect(after.pendingAccountRestorations).toEqual([
       {
@@ -407,7 +407,7 @@ describe("pending account restoration after completed infrastructure", () => {
     "preserves unknown work and refuses %s",
     async (kind) => {
       const f = setup();
-      const record = f.row.record;
+      const { record } = f.row;
       const operator = required(record.operator);
       if (kind === "lease" || kind === "expired-lease") {
         record.leaseId = "00000000-0000-4000-8000-000000000004";
@@ -516,18 +516,18 @@ it("restores through ordinary planner then satisfies idle account/capture author
     }),
   );
   expect(await response.json()).toMatchObject({
-    status: "planned",
     operationRef: accountOperationRef,
     plan: f.accountPlan,
+    status: "planned",
   });
   const owner = vi.fn(async () => {});
   const captureAuthority = createNormalActorJournalAuthority({
-    store: f.ports.store,
+    assertApprovedOwner: f.ports.assertAuthorized,
+    assertCanonicalOwner: owner,
     keyring,
     now: () => now,
-    assertCanonicalOwner: owner,
-    assertApprovedOwner: f.ports.assertAuthorized,
     readApproval: f.ports.readApproval,
+    store: f.ports.store,
   });
   await captureAuthority.assertMutationAuthority(context, f.row);
   await captureAuthority.assertAccountApproval(context, required(f.row.record.accountPreparation));
@@ -588,7 +588,7 @@ it.each(["auth-resource", "app-resource", "browser", "issuer", "program", "gatew
 
 it("archives old success/failure histories and settled execution observation without reusing its active authority", async () => {
   const f = setup();
-  const record = f.row.record;
+  const { record } = f.row;
   const current = required(record.operator);
   record.pendingAccountRestorations = [
     {
@@ -636,7 +636,7 @@ it.each(["claimed", "unknown", "accepted"] as const)(
   "refuses a current-adapter %s continuation without replay or loss",
   async (status) => {
     const f = setup();
-    f.row.record.realmContinuation = {
+    const continuation: NonNullable<typeof f.row.record.realmContinuation> = {
       dispatchId: "d".repeat(64),
       operationRef,
       approvedPlanDigest: required(f.row.record.operator).planDigest,
@@ -644,8 +644,12 @@ it.each(["claimed", "unknown", "accepted"] as const)(
       status,
       claimedAt: observedAt,
       adapterSessionId: required(context.ownerContext).adapterSessionId,
-      ...(status === "accepted" ? { acceptedAt: observedAt, receiverClaimedAt: observedAt } : {}),
     };
+    if (status === "accepted") {
+      continuation.acceptedAt = observedAt;
+      continuation.receiverClaimedAt = observedAt;
+    }
+    f.row.record.realmContinuation = continuation;
     const before = structuredClone(f.row.record);
     await expect(f.run()).rejects.toMatchObject({ code: "operation_in_progress" });
     expect(f.row.record).toEqual(before);
@@ -700,8 +704,8 @@ it("archives only accepted old-adapter continuation and stale hook while preserv
   expect(f.row.record.realmIdentityWait).toBeUndefined();
   expect(f.row.record.realmContinuation).toBeUndefined();
   expect(f.row.record.pendingAccountRestorations?.[0]).toMatchObject({
-    realmIdentityWait: before.realmIdentityWait,
     realmContinuation: before.realmContinuation,
+    realmIdentityWait: before.realmIdentityWait,
   });
 });
 
@@ -759,22 +763,22 @@ it("reports a closed authorized candidate before a nonparticipant proposal silen
       ),
     ).resolves.toBeNull();
     expect(logs).toHaveBeenCalledWith("[builder:pending-account-restoration]", {
-      proposalIsOriginalAccountPlan: false,
-      proposalStage: "auth-bootstrap",
-      lease: "absent",
-      hasLeaseExpiry: false,
-      hasPendingEffect: false,
-      hasPendingAttempt: false,
       allPlanEffectsReceipted: true,
-      missingEffectKinds: [],
-      executionState: "absent",
-      linkScope: "absent",
-      wait: "absent",
       continuation: "absent",
+      continuationAcceptanceReceiptPresent: false,
       continuationArchiveable: false,
       currentExecutionAcknowledged: false,
-      continuationAcceptanceReceiptPresent: false,
+      executionState: "absent",
+      hasLeaseExpiry: false,
+      hasPendingAttempt: false,
+      hasPendingEffect: false,
+      lease: "absent",
+      linkScope: "absent",
+      missingEffectKinds: [],
       ownerRestrictedCapabilityPresent: false,
+      proposalIsOriginalAccountPlan: false,
+      proposalStage: "auth-bootstrap",
+      wait: "absent",
     });
     expect(f.row.record).toEqual(original);
     expect(f.ports.readApproval).not.toHaveBeenCalled();
@@ -889,7 +893,7 @@ it.each(["current-account", "old-adapter", "observed", "unrelated"] as const)(
         ownerSessionId: context.target.sessionId,
       };
     }
-    f.row.record.realmIdentityWait = {
+    const identityWait: NonNullable<typeof f.row.record.realmIdentityWait> = {
       adapterSessionId:
         classification === "old-adapter"
           ? "private-old-adapter"
@@ -900,8 +904,12 @@ it.each(["current-account", "old-adapter", "observed", "unrelated"] as const)(
       nonceSha256: "c".repeat(64),
       operationRef: accountOperationRef,
       registeredAt: observedAt,
-      ...(classification === "observed" ? { observedAt, eventId: "f".repeat(64) } : {}),
     };
+    if (classification === "observed") {
+      identityWait.observedAt = observedAt;
+      identityWait.eventId = "f".repeat(64);
+    }
+    f.row.record.realmIdentityWait = identityWait;
     const logs = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       await restorePendingAccountPreparation(f.ports, context, f.input, operator.plan, () => now);
@@ -921,7 +929,7 @@ it.each(["old-accepted", "current-accepted", "current-pending", "old-unknown"] a
   async (classification) => {
     const f = setup();
     const accepted = classification.endsWith("accepted");
-    f.row.record.realmContinuation = {
+    const continuation: NonNullable<typeof f.row.record.realmContinuation> = {
       dispatchId: "d".repeat(64),
       operationRef,
       approvedPlanDigest: required(f.row.record.operator).planDigest,
@@ -931,8 +939,12 @@ it.each(["old-accepted", "current-accepted", "current-pending", "old-unknown"] a
       adapterSessionId: classification.startsWith("old")
         ? "private-displaced-adapter"
         : required(context.ownerContext).adapterSessionId,
-      ...(accepted ? { acceptedAt: observedAt, receiverClaimedAt: observedAt } : {}),
     };
+    if (accepted) {
+      continuation.acceptedAt = observedAt;
+      continuation.receiverClaimedAt = observedAt;
+    }
+    f.row.record.realmContinuation = continuation;
     const logs = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       await restorePendingAccountPreparation(
@@ -991,13 +1003,13 @@ it("projects pending record facts and only the presence of restricted owner capa
     expect(logs).toHaveBeenCalledWith(
       "[builder:pending-account-restoration]",
       expect.objectContaining({
-        lease: "active",
-        hasLeaseExpiry: true,
-        hasPendingEffect: true,
-        hasPendingAttempt: true,
         allPlanEffectsReceipted: false,
-        missingEffectKinds: ["gateway-delivery"],
         executionState: "running",
+        hasLeaseExpiry: true,
+        hasPendingAttempt: true,
+        hasPendingEffect: true,
+        lease: "active",
+        missingEffectKinds: ["gateway-delivery"],
         ownerRestrictedCapabilityPresent: true,
       }),
     );
@@ -1017,8 +1029,8 @@ it("does not change an authorized restoration when its advisory logger throws", 
   });
   try {
     await expect(f.run()).resolves.toMatchObject({
-      status: "planned",
       operationRef: accountOperationRef,
+      status: "planned",
     });
     expect(f.ports.store.compareAndSet).toHaveBeenCalledOnce();
   } finally {
@@ -1081,8 +1093,8 @@ it.each(["past", "absent", "account"] as const)(
     const logs = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       await expect(f.run()).resolves.toMatchObject({
-        status: "planned",
         operationRef: accountOperationRef,
+        status: "planned",
       });
       expect(f.row.record.realmContinuation).toBeUndefined();
       expect(f.row.record.realmIdentityWait).toBeUndefined();
@@ -1090,8 +1102,8 @@ it.each(["past", "absent", "account"] as const)(
       expect(f.row.record.accountPreparation).toEqual(before.accountPreparation);
       expect(f.row.record.privateState).toEqual(before.privateState);
       expect(f.row.record.pendingAccountRestorations?.[0]).toMatchObject({
-        realmContinuation: before.realmContinuation,
         executionObservation: before.executionObservation,
+        realmContinuation: before.realmContinuation,
       });
       expect(f.row.record.pendingAccountRestorations?.[0].realmIdentityWait).toEqual(
         before.realmIdentityWait,
@@ -1100,9 +1112,9 @@ it.each(["past", "absent", "account"] as const)(
         "[builder:pending-account-restoration]",
         expect.objectContaining({
           continuation: "current-accepted",
+          continuationAcceptanceReceiptPresent: true,
           continuationArchiveable: true,
           currentExecutionAcknowledged: true,
-          continuationAcceptanceReceiptPresent: true,
         }),
       );
     } finally {

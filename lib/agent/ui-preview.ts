@@ -4,6 +4,9 @@ import nodePath from "node:path";
 import { z } from "zod";
 import { EVE_MAX_PAYLOAD_BYTES, serializedPayloadBytes } from "@/lib/eve/payload-envelope";
 
+const autographComponentsPackage = "@autograph/components";
+const autographIconsPackage = "@autograph/icons";
+
 const previewPath = z.string().regex(/^src\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.(?:tsx?|css)$/u);
 const route = z.string().regex(/^\/[a-z0-9-]*(?:\/[a-z0-9-]+)*$/u);
 
@@ -15,7 +18,7 @@ export const uiPreviewGapSchema = z.strictObject({
   composes: z.array(
     z.strictObject({
       name: z.string().min(1),
-      source: z.enum(["@autograph/components", "@autograph/icons"]),
+      source: z.enum([autographComponentsPackage, autographIconsPackage]),
     }),
   ),
   path: previewPath,
@@ -46,9 +49,9 @@ export const uiPreviewManifestSchema = z.strictObject({
     }),
   ),
   openQuestions: z.array(manifestItem),
-  productionComponents: z.array(catalogElement(z.literal("@autograph/components"))),
+  productionComponents: z.array(catalogElement(z.literal(autographComponentsPackage))),
   productionCompositions: z.array(catalogElement(z.literal("@autograph/compositions"))),
-  productionIcons: z.array(catalogElement(z.literal("@autograph/icons"))),
+  productionIcons: z.array(catalogElement(z.literal(autographIconsPackage))),
   screens: z
     .array(
       z.strictObject({
@@ -148,9 +151,9 @@ export interface UiPreviewTransfer {
 }
 
 const publicImports = new Set([
-  "@autograph/components",
+  autographComponentsPackage,
   "@autograph/compositions",
-  "@autograph/icons",
+  autographIconsPackage,
   "react",
   "react/jsx-runtime",
 ]);

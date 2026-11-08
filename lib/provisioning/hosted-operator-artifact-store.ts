@@ -1,9 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Drizzle requires the owned complete schema namespace.
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { prototypeArtifactChunks } from "../db/schema";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import type { HostedOperatorContext } from "./hosted-operator-service";
@@ -85,7 +83,7 @@ const predicate = (value: ReturnType<typeof key>) =>
 
 /** Private namespace in the existing immutable owner/session chunk storage. Public prototype readers reject this namespace before querying. */
 interface ArtifactDatabaseInput {
-  database: PostgresJsDatabase<typeof databaseSchema>;
+  database: HostedDatabase;
   assertCurrentOwner: (context: OperatorArtifactContext) => Promise<void>;
 }
 

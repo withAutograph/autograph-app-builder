@@ -16,27 +16,27 @@ import { expect, it } from "vitest";
 import { workspaceBinInstallCommand } from "./workspace-bin-install";
 
 it.each([
-  { change: "chmod 777 packages/owned/cli.js", exit: 0, mode: 0o755, bytes: "original" },
-  { change: "chmod 777 packages/owned/cli.js; exit 12", exit: 12, mode: 0o755, bytes: "original" },
+  { bytes: "original", change: "chmod 777 packages/owned/cli.js", exit: 0, mode: 0o755 },
+  { bytes: "original", change: "chmod 777 packages/owned/cli.js; exit 12", exit: 12, mode: 0o755 },
   {
+    bytes: "changed",
     change: "chmod 777 packages/owned/cli.js; printf changed > packages/owned/cli.js",
     exit: 1,
     mode: 0o777,
-    bytes: "changed",
   },
   {
+    bytes: "original",
     change:
       "mv packages/owned/cli.js packages/owned/old.js; cp -p packages/owned/old.js packages/owned/cli.js; chmod 777 packages/owned/cli.js",
     exit: 1,
     mode: 0o777,
-    bytes: "original",
   },
-  { change: "chmod 775 packages/owned/cli.js", exit: 0, mode: 0o775, bytes: "original" },
+  { bytes: "original", change: "chmod 775 packages/owned/cli.js", exit: 0, mode: 0o775 },
   {
+    bytes: "original",
     change: "chmod 777 packages/owned/cli.js",
     exit: 0,
     mode: 0o644,
-    bytes: "original",
     originalMode: 0o644,
   },
 ])(

@@ -61,13 +61,23 @@ export default defineTool({
       sessionId: ctx.session.id,
     });
     const ownedDraftRecovery = ownedPublishedDraftRecovery(workflow);
-    const result = {
-      ...(applicationSourceImport === undefined ? {} : { applicationSourceImport }),
+    type SourceStatus = Pick<typeof state, "phase" | "receipt" | "version"> & {
+      applicationSourceImport?: NonNullable<typeof applicationSourceImport>;
+      ownedDraftRecovery?: NonNullable<typeof ownedDraftRecovery>;
+    };
+    const imported: Pick<SourceStatus, "applicationSourceImport"> = {};
+    if (applicationSourceImport !== undefined) {
+      imported.applicationSourceImport = applicationSourceImport;
+    }
+    const result: SourceStatus = {
+      ...imported,
       phase: state.phase,
       receipt: state.receipt,
       version: state.version,
-      ...(ownedDraftRecovery === null ? {} : { ownedDraftRecovery }),
     };
+    if (ownedDraftRecovery !== null) {
+      result.ownedDraftRecovery = ownedDraftRecovery;
+    }
     if (githubSource === undefined) {
       return result;
     }

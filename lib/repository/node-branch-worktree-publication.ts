@@ -59,6 +59,13 @@ import { compareOverlayPaths } from "./target-apply";
 import { resolveAllowedRepository } from "./supported-template";
 import { runSequentially } from "../async-sequential";
 
+const unavailableDiagnosticLog = "an unavailable private diagnostic log";
+const absentOrDirectory = "absent-or-directory";
+const absentOrRegular = "absent-or-regular";
+const gitAbsolutePathFormat = "--path-format=absolute";
+const gitAbsoluteGitDir = "--absolute-git-dir";
+const gitSymbolicFullName = "--symbolic-full-name";
+
 const { dirname, isAbsolute, relative, resolve: pathResolve, sep } = nodePath;
 
 export interface BranchWorktreePublicationFaultHooks {
@@ -275,11 +282,14 @@ const gitOutput = async (
     });
   }
   child.stderr.pipe(diagnosticCapture.writer);
+  // SAFETY: ChildProcess close emits an exit code and termination signal, each nullable.
   const [status, signal] = (await once(child, "close")) as [number | null, NodeJS.Signals | null];
   if (status !== 0) {
     const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
+    const errorPrefix = `Git ${options.operation ?? args[0] ?? "command"} failed for ${root} (`;
+    const exitDescription = signal ?? `exit ${status}`;
     throw new Error(
-      `Git ${options.operation ?? args[0] ?? "command"} failed for ${root} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? "an unavailable private diagnostic log"}.`,
+      `${errorPrefix}${exitDescription}); sanitized stderr is available at ${logPath ?? unavailableDiagnosticLog}.`,
     );
   }
   await finishGitDiagnosticCapture(diagnosticCapture, false);
@@ -304,12 +314,14 @@ const gitNullRecords = async function* gitNullRecords(
     env: gitEnvironment(),
     stdio: ["ignore", "pipe", "pipe"],
   });
+  // SAFETY: ChildProcess close emits an exit code and termination signal, each nullable.
   const closed = once(child, "close") as Promise<[number | null, NodeJS.Signals | null]>;
   child.stderr.pipe(diagnosticCapture.writer);
   let remainder = Buffer.alloc(0);
   let completed = false;
   let diagnosticsFinished = false;
   try {
+    // SAFETY: Spawned stdout is a byte stream and no text encoding is set.
     for await (const chunk of child.stdout as AsyncIterable<Buffer>) {
       let offset = 0;
       while (offset < chunk.length) {
@@ -337,8 +349,10 @@ const gitNullRecords = async function* gitNullRecords(
     if (status !== 0) {
       const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
       diagnosticsFinished = true;
+      const errorPrefix = `Git ${operation} failed for ${root} (`;
+      const exitDescription = signal ?? `exit ${status}`;
       throw new Error(
-        `Git ${operation} failed for ${root} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? "an unavailable private diagnostic log"}.`,
+        `${errorPrefix}${exitDescription}); sanitized stderr is available at ${logPath ?? unavailableDiagnosticLog}.`,
       );
     }
     await finishGitDiagnosticCapture(diagnosticCapture, false);
@@ -378,8 +392,10 @@ export const hashBranchPublicationSourceBlob = async (
   });
   const hash = createHash("sha256");
   const chunks: Buffer[] = [];
+  // SAFETY: ChildProcess close emits an exit code and termination signal, each nullable.
   const closed = once(child, "close") as Promise<[number | null, NodeJS.Signals | null]>;
   child.stderr.pipe(diagnosticCapture.writer);
+  // SAFETY: Spawned stdout is a byte stream and no text encoding is set.
   // oxlint-disable-next-line eslint/no-await-in-loop -- hash Git blob data incrementally
   for await (const chunk of child.stdout as AsyncIterable<Buffer>) {
     hash.update(chunk);
@@ -390,15 +406,17 @@ export const hashBranchPublicationSourceBlob = async (
   const [status, signal] = await closed;
   if (status !== 0) {
     const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
+    const errorPrefix = `Git could not read source blob ${objectId} from ${root} (`;
+    const exitDescription = signal ?? `exit ${status}`;
     throw new Error(
-      `Git could not read source blob ${objectId} from ${root} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? "an unavailable private diagnostic log"}.`,
+      `${errorPrefix}${exitDescription}); sanitized stderr is available at ${logPath ?? unavailableDiagnosticLog}.`,
     );
   }
   await finishGitDiagnosticCapture(diagnosticCapture, false);
-  return {
-    ...(collectBytes ? { bytes: Buffer.concat(chunks) } : {}),
-    digest: hash.digest("hex"),
-  };
+  if (collectBytes) {
+    return { bytes: Buffer.concat(chunks), digest: hash.digest("hex") };
+  }
+  return { digest: hash.digest("hex") };
 };
 
 const gitCanonicalPathList = async (
@@ -447,11 +465,13 @@ const publicationRoot = (): string => {
     const state = lstatSync(resolved);
     const canonical = realpathSync(resolved);
     const currentUid = process.geteuid?.();
-    if (
+    const invalidLocation =
       currentUid === undefined ||
       !state.isDirectory() ||
       state.isSymbolicLink() ||
-      canonical !== resolved ||
+      canonical !== resolved;
+    if (
+      invalidLocation ||
       state.uid !== currentUid ||
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (state.mode & 0o777) !== 0o700
@@ -507,8 +527,8 @@ const assertContainedNoLinkPath = async (
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         if (
           options.leaf === undefined ||
-          options.leaf === "absent-or-directory" ||
-          options.leaf === "absent-or-regular"
+          options.leaf === absentOrDirectory ||
+          options.leaf === absentOrRegular
         ) {
           return;
         }
@@ -527,14 +547,14 @@ const assertContainedNoLinkPath = async (
     }
     if (
       isLeaf &&
-      (options.leaf === "directory" || options.leaf === "absent-or-directory") &&
+      (options.leaf === "directory" || options.leaf === absentOrDirectory) &&
       !state.isDirectory()
     ) {
       throw new Error("The builder-owned publication directory is unsafe.");
     }
     if (
       isLeaf &&
-      (options.leaf === "regular" || options.leaf === "absent-or-regular") &&
+      (options.leaf === "regular" || options.leaf === absentOrRegular) &&
       !state.isFile()
     ) {
       throw new Error("The builder-owned publication file is unsafe.");
@@ -548,7 +568,7 @@ const assertContainedNoLinkPath = async (
     }
     if (
       isLeaf &&
-      (options.leaf === "regular" || options.leaf === "absent-or-regular") &&
+      (options.leaf === "regular" || options.leaf === absentOrRegular) &&
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       ((state.mode & 0o777) !== 0o600 || state.nlink !== 1)
     ) {
@@ -564,7 +584,7 @@ const assertContainedNoLinkPath = async (
 const assertPublicationLayoutSafe = async (): Promise<void> => {
   await runSequentially(["journals", "staging", "worktrees"] as const, async (family) => {
     await assertContainedNoLinkPath(pathResolve(publicationRoot(), family), {
-      leaf: "absent-or-directory",
+      leaf: absentOrDirectory,
     });
   });
 };
@@ -580,10 +600,10 @@ const assertOwnedPublicationFileHandle = async (
   handle: Awaited<ReturnType<typeof open>>,
 ): Promise<void> => {
   const [state, rootState] = await Promise.all([handle.stat(), lstat(publicationRoot())]);
+  const invalidFileIdentity =
+    !state.isFile() || state.uid !== rootState.uid || state.dev !== rootState.dev;
   if (
-    !state.isFile() ||
-    state.uid !== rootState.uid ||
-    state.dev !== rootState.dev ||
+    invalidFileIdentity ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (state.mode & 0o777) !== 0o600 ||
     state.nlink !== 1
@@ -640,7 +660,7 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
   const path = pathResolve(publicationRoot(), "locks", `${identity}.lock`);
   const directory = dirname(path);
   await durableDirectory(directory);
-  await assertContainedNoLinkPath(path, { leaf: "absent-or-regular" });
+  await assertContainedNoLinkPath(path, { leaf: absentOrRegular });
   try {
     const state = await lstat(path);
     if (!state.isFile() || state.isSymbolicLink()) {
@@ -750,12 +770,13 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
   void (async () => {
     const outcome = await terminalPromise;
     clearTimeout(timeout);
+    if (outcome.kind === "error") {
+      rejectReady(outcome.error);
+      return;
+    }
+    const detail = stderr.trim() === "" ? "." : `: ${stderr.trim()}`;
     rejectReady(
-      outcome.kind === "error"
-        ? outcome.error
-        : new Error(
-            `A branch-worktree publication operation is already in progress${stderr.trim() === "" ? "." : `: ${stderr.trim()}`}`,
-          ),
+      new Error(`A branch-worktree publication operation is already in progress${detail}`),
     );
   })();
   holder.stdout.setEncoding("utf-8");
@@ -766,7 +787,7 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
       rejectReady(new Error("The OS publication lock handshake failed."));
       return;
     }
-    resolveReady(undefined as undefined);
+    resolveReady(undefined);
   });
   await ready;
   const lockLostError = () => {
@@ -775,9 +796,9 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
         cause: terminal.error,
       });
     }
-    return new Error(
-      `The OS publication lock helper exited before release${terminal?.kind === "exit" && terminal.signal !== null ? ` (${terminal.signal})` : "."}`,
-    );
+    const detail =
+      terminal?.kind === "exit" && terminal.signal !== null ? ` (${terminal.signal})` : ".";
+    return new Error(`The OS publication lock helper exited before release${detail}`);
   };
   // This derived promise intentionally races the terminal lease signal.
   // oxlint-disable-next-line promise/prefer-await-to-then
@@ -811,9 +832,9 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
 
 const atomicWrite = async (path: string, value: string): Promise<void> => {
   await durableDirectory(dirname(path));
-  await assertContainedNoLinkPath(path, { leaf: "absent-or-regular" });
+  await assertContainedNoLinkPath(path, { leaf: absentOrRegular });
   const temporary = `${path}.${randomUUID()}.tmp`;
-  await assertContainedNoLinkPath(temporary, { leaf: "absent-or-regular" });
+  await assertContainedNoLinkPath(temporary, { leaf: absentOrRegular });
   const handle = await open(
     temporary,
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -827,7 +848,7 @@ const atomicWrite = async (path: string, value: string): Promise<void> => {
   } finally {
     await handle.close();
   }
-  await assertContainedNoLinkPath(path, { leaf: "absent-or-regular" });
+  await assertContainedNoLinkPath(path, { leaf: absentOrRegular });
   await rename(temporary, path);
   await syncDirectory(dirname(path), true);
 };
@@ -837,9 +858,9 @@ const createInitialJournal = async (
   journal: BranchWorktreePublicationPendingReceipt,
 ): Promise<void> => {
   await durableDirectory(dirname(path));
-  await assertContainedNoLinkPath(path, { leaf: "absent-or-regular" });
+  await assertContainedNoLinkPath(path, { leaf: absentOrRegular });
   const candidate = `${path}.${randomUUID()}.pending`;
-  await assertContainedNoLinkPath(candidate, { leaf: "absent-or-regular" });
+  await assertContainedNoLinkPath(candidate, { leaf: absentOrRegular });
   const handle = await open(
     candidate,
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -854,7 +875,7 @@ const createInitialJournal = async (
     await handle.close();
   }
   try {
-    await assertContainedNoLinkPath(path, { leaf: "absent-or-regular" });
+    await assertContainedNoLinkPath(path, { leaf: absentOrRegular });
     await link(candidate, path);
     await syncDirectory(dirname(path), true);
   } finally {
@@ -879,7 +900,7 @@ export const readBranchWorktreePublicationJournal = async (
       : proposalOrIdentity.publicationIdentityDigest;
   try {
     const path = journalPath(identity);
-    await assertContainedNoLinkPath(path, { leaf: "absent-or-regular" });
+    await assertContainedNoLinkPath(path, { leaf: absentOrRegular });
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     const handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
     let contents: string;
@@ -979,6 +1000,7 @@ const exactStateMatches = (state: FileState, expected: FileState): boolean =>
 
 const fileDigest = async (path: string): Promise<string> => {
   const hash = createHash("sha256");
+  // SAFETY: createReadStream has no encoding option, so it yields Buffer chunks.
   // oxlint-disable-next-line eslint/no-await-in-loop -- hash file data incrementally
   for await (const chunk of createReadStream(path) as AsyncIterable<Buffer>) {
     hash.update(chunk);
@@ -1080,11 +1102,12 @@ const assertOwnedPartialWorktree = async (
   if (!rootState.isDirectory() || rootState.isSymbolicLink()) {
     throw new Error("The partial approved worktree path is unsafe.");
   }
-  const approvedPaths = async function* approvedPaths(): AsyncGenerator<{
+  interface ApprovedPath {
     path: string;
     baseState?: FileState;
     afterState?: FileState;
-  }> {
+  }
+  const approvedPaths = async function* approvedPaths(): AsyncGenerator<ApprovedPath> {
     const changes = [...proposal.changes].toSorted((left, right) =>
       compareOverlayPaths(left.path, right.path),
     );
@@ -1095,40 +1118,35 @@ const assertOwnedPartialWorktree = async (
         compareOverlayPaths(changes[changeIndex].path, entry.path) < 0
       ) {
         const change = changes[changeIndex];
-        yield {
-          path: change.path,
-          ...(change.after === undefined
-            ? {}
-            : { afterState: { kind: "regular" as const, ...change.after } }),
-        };
+        const approved: ApprovedPath = { path: change.path };
+        if (change.after !== undefined) approved.afterState = { kind: "regular", ...change.after };
+        yield approved;
         changeIndex += 1;
       }
       const change = changes[changeIndex];
-      yield {
+      const approved: ApprovedPath = {
         baseState: entry.state,
         path: entry.path,
-        ...(change?.path === entry.path && change.after !== undefined
-          ? { afterState: { kind: "regular" as const, ...change.after } }
-          : {}),
       };
+      if (change?.path === entry.path && change.after !== undefined) {
+        approved.afterState = { kind: "regular", ...change.after };
+      }
+      yield approved;
       if (change?.path === entry.path) {
         changeIndex += 1;
       }
     }
     while (changeIndex < changes.length) {
       const change = changes[changeIndex];
-      yield {
-        path: change.path,
-        ...(change.after === undefined
-          ? {}
-          : { afterState: { kind: "regular" as const, ...change.after } }),
-      };
+      const approved: ApprovedPath = { path: change.path };
+      if (change.after !== undefined) approved.afterState = { kind: "regular", ...change.after };
+      yield approved;
       changeIndex += 1;
     }
   };
   const commonGitDirectoryValue = await git(proposal.sourcePath, [
     "rev-parse",
-    "--path-format=absolute",
+    gitAbsolutePathFormat,
     "--git-common-dir",
   ]);
   const commonGitDirectory = await realpath(commonGitDirectoryValue.trim());
@@ -1252,11 +1270,11 @@ const createOrRepairExactWorktree = async (
   }
   if (await pathExists(proposal.worktreePath)) {
     try {
-      await git(proposal.worktreePath, ["rev-parse", "--absolute-git-dir"]);
+      await git(proposal.worktreePath, ["rev-parse", gitAbsoluteGitDir]);
       const worktreeBranch =
         registration === undefined
           ? undefined
-          : await git(proposal.worktreePath, ["rev-parse", "--symbolic-full-name", "HEAD"]);
+          : await git(proposal.worktreePath, ["rev-parse", gitSymbolicFullName, "HEAD"]);
       if (registration === undefined || worktreeBranch?.trim() !== expectedBranch) {
         throw new Error("The existing worktree does not match durable publication intent.");
       }
@@ -1349,8 +1367,10 @@ const materializeAtomically = async (
             { env: gitEnvironment(), stdio: ["ignore", "pipe", "pipe"] },
           );
           const hash = createHash("sha256");
+          // SAFETY: ChildProcess close emits an exit code and termination signal, each nullable.
           const closed = once(child, "close") as Promise<[number | null, NodeJS.Signals | null]>;
           child.stderr.pipe(diagnosticCapture.writer);
+          // SAFETY: Spawned stdout is a byte stream and no text encoding is set.
           // oxlint-disable-next-line eslint/no-await-in-loop -- stream Git blob bytes into the staged file
           for await (const chunk of child.stdout as AsyncIterable<Buffer>) {
             hash.update(chunk);
@@ -1360,8 +1380,10 @@ const materializeAtomically = async (
           const [status, signal] = await closed;
           if (status !== 0) {
             const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
+            const errorPrefix = `Git could not materialize ${entry.path} from ${proposal.sourcePath} (`;
+            const exitDescription = signal ?? `exit ${status}`;
             throw new Error(
-              `Git could not materialize ${entry.path} from ${proposal.sourcePath} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? "an unavailable private diagnostic log"}.`,
+              `${errorPrefix}${exitDescription}); sanitized stderr is available at ${logPath ?? unavailableDiagnosticLog}.`,
             );
           }
           await finishGitDiagnosticCapture(diagnosticCapture, false);
@@ -1480,8 +1502,8 @@ const inspectBranchPublicationSource = async (input: {
   const [headShaValue, headTreeValue, headReferenceValue, gitDirectoryValue] = await Promise.all([
     git(canonicalPath, ["rev-parse", "HEAD"]),
     git(canonicalPath, ["rev-parse", "HEAD^{tree}"]),
-    git(canonicalPath, ["rev-parse", "--symbolic-full-name", "HEAD"]),
-    git(canonicalPath, ["rev-parse", "--absolute-git-dir"]),
+    git(canonicalPath, ["rev-parse", gitSymbolicFullName, "HEAD"]),
+    git(canonicalPath, ["rev-parse", gitAbsoluteGitDir]),
   ]);
   const [headSha, headTree, headReference, gitDirectoryPath] = await Promise.all([
     Promise.resolve(headShaValue.trim()),
@@ -1495,7 +1517,7 @@ const inspectBranchPublicationSource = async (input: {
   ]);
   const indexPathValue = await git(canonicalPath, [
     "rev-parse",
-    "--path-format=absolute",
+    gitAbsolutePathFormat,
     "--git-path",
     "index",
   ]);
@@ -1557,18 +1579,16 @@ export const deriveBranchWorktreePublicationProposal = async (input: {
   const rootState = await lstat(root);
   const commonGitDirectoryValue = await git(source.canonicalPath, [
     "rev-parse",
-    "--path-format=absolute",
+    gitAbsolutePathFormat,
     "--git-common-dir",
   ]);
   const commonGitDirectory = await realpath(commonGitDirectoryValue.trim());
-  if (
+  const overlapsSource =
     within(root, source.canonicalPath) ||
     within(source.canonicalPath, root) ||
     within(root, source.gitDirectoryPath) ||
-    within(source.gitDirectoryPath, root) ||
-    within(root, commonGitDirectory) ||
-    within(commonGitDirectory, root)
-  ) {
+    within(source.gitDirectoryPath, root);
+  if (overlapsSource || within(root, commonGitDirectory) || within(commonGitDirectory, root)) {
     throw new Error(
       "The builder-owned publication root overlaps the source checkout or Git directories.",
     );
@@ -1823,13 +1843,13 @@ const worktreeSnapshot = async (proposal: BranchWorktreePublicationProposal) => 
   }
   const [rootStat, gitDirectoryValue] = await Promise.all([
     stat(root),
-    git(root, ["rev-parse", "--absolute-git-dir"]),
+    git(root, ["rev-parse", gitAbsoluteGitDir]),
   ]);
   const gitDirectoryPath = await realpath(gitDirectoryValue.trim());
   const gitDirectoryStat = await stat(gitDirectoryPath);
   const indexPathValue = await git(root, [
     "rev-parse",
-    "--path-format=absolute",
+    gitAbsolutePathFormat,
     "--git-path",
     "index",
   ]);
@@ -1838,7 +1858,7 @@ const worktreeSnapshot = async (proposal: BranchWorktreePublicationProposal) => 
   const [headShaValue, headTreeValue, headReferenceValue, remoteValue] = await Promise.all([
     git(root, ["rev-parse", "HEAD"]),
     git(root, ["rev-parse", "HEAD^{tree}"]),
-    git(root, ["rev-parse", "--symbolic-full-name", "HEAD"]),
+    git(root, ["rev-parse", gitSymbolicFullName, "HEAD"]),
     git(root, ["remote", "-v"]),
   ]);
   return {
@@ -1868,10 +1888,12 @@ const verifyWorktreeIdentity = async (proposal: BranchWorktreePublicationProposa
     "rev-parse",
     `refs/heads/${proposal.branchName}`,
   ]);
-  if (
+  const changedHead =
     snapshot.headSha !== proposal.baseSha ||
     snapshot.headTree !== proposal.sourceTree ||
-    snapshot.headReference !== `refs/heads/${proposal.branchName}` ||
+    snapshot.headReference !== `refs/heads/${proposal.branchName}`;
+  if (
+    changedHead ||
     snapshot.remoteDigest !== proposal.sourceRemoteDigest ||
     snapshot.contractDigest !== proposal.contractDigest ||
     sourceBranchSha.trim() !== proposal.baseSha
@@ -2025,13 +2047,13 @@ const pendingReceipt = (input: {
   recoveryOfDigest?: string;
 }): BranchWorktreePublicationPendingReceipt => {
   const { digest: proposalDigest, ...proposal } = input.proposal;
-  const unsigned = {
+  const unsigned: Omit<BranchWorktreePublicationPendingReceipt, "digest"> = {
     ...proposal,
     proposalDigest,
     publishedByCallId: input.callId,
     status: "pending" as const,
-    ...(input.recoveryOfDigest === undefined ? {} : { recoveryOfDigest: input.recoveryOfDigest }),
   };
+  if (input.recoveryOfDigest !== undefined) unsigned.recoveryOfDigest = input.recoveryOfDigest;
   return { digest: branchJournalDigest(unsigned), ...unsigned };
 };
 
@@ -2046,7 +2068,17 @@ const failureReceipt = (input: {
   failureMessage: string;
 }): BranchWorktreePublicationFailureReceipt => {
   const { digest: proposalDigest, ...proposal } = input.proposal;
-  const unsigned = {
+  const initial: Pick<
+    BranchWorktreePublicationFailureReceipt,
+    | keyof typeof proposal
+    | "appliedPaths"
+    | "branchCreated"
+    | "failureMessage"
+    | "proposalDigest"
+    | "publishedByCallId"
+    | "reason"
+    | "recoveryOfDigest"
+  > = {
     ...proposal,
     appliedPaths: input.appliedPaths,
     branchCreated: input.branchCreated,
@@ -2054,7 +2086,12 @@ const failureReceipt = (input: {
     proposalDigest,
     publishedByCallId: input.callId,
     reason: input.reason,
-    ...(input.recoveryOfDigest === undefined ? {} : { recoveryOfDigest: input.recoveryOfDigest }),
+  };
+  if (input.recoveryOfDigest !== undefined) {
+    initial.recoveryOfDigest = input.recoveryOfDigest;
+  }
+  const unsigned = {
+    ...initial,
     recoveryRequired: true as const,
     status: "failed" as const,
     worktreeCreated: input.worktreeCreated,
@@ -2070,7 +2107,16 @@ const successReceipt = async (input: {
   await assertPostimages(input.proposal);
   const snapshot = await verifyWorktreeIdentity(input.proposal);
   const { digest: proposalDigest, ...proposal } = input.proposal;
-  const unsigned = {
+  const initial: Pick<
+    BranchWorktreePublicationSuccessReceipt,
+    | keyof typeof proposal
+    | "appliedPaths"
+    | "branchCreated"
+    | "postconditionDigest"
+    | "proposalDigest"
+    | "publishedByCallId"
+    | "recoveryOfDigest"
+  > = {
     ...proposal,
     appliedPaths: input.proposal.approvedPaths,
     branchCreated: true,
@@ -2079,7 +2125,12 @@ const successReceipt = async (input: {
     ),
     proposalDigest,
     publishedByCallId: input.callId,
-    ...(input.recoveryOfDigest === undefined ? {} : { recoveryOfDigest: input.recoveryOfDigest }),
+  };
+  if (input.recoveryOfDigest !== undefined) {
+    initial.recoveryOfDigest = input.recoveryOfDigest;
+  }
+  const unsigned = {
+    ...initial,
     recoveryRequired: false as const,
     status: "succeeded" as const,
     worktreeCreated: true,
@@ -2108,11 +2159,13 @@ export const verifyBranchWorktreePublication = async (input: {
   });
   await assertPostimages(proposal);
   const snapshot = await verifyWorktreeIdentity(proposal);
-  if (
+  const changedRootOrGitDirectory =
     snapshot.rootIdentity.device !== input.receipt.worktreeRootIdentity.device ||
     snapshot.rootIdentity.inode !== input.receipt.worktreeRootIdentity.inode ||
     snapshot.gitDirectoryPath !== input.receipt.worktreeGitDirectoryPath ||
-    snapshot.gitDirectoryIdentity.device !== input.receipt.worktreeGitDirectoryIdentity.device ||
+    snapshot.gitDirectoryIdentity.device !== input.receipt.worktreeGitDirectoryIdentity.device;
+  if (
+    changedRootOrGitDirectory ||
     snapshot.gitDirectoryIdentity.inode !== input.receipt.worktreeGitDirectoryIdentity.inode ||
     snapshot.indexFileDigest !== input.receipt.worktreeIndexFileDigest ||
     snapshot.statusDigest !== input.receipt.worktreeStatusDigest

@@ -92,6 +92,12 @@ describe("verified GitHub fetch recovery", () => {
   });
 });
 
+const appendedAdvisory = (error: Error, original: string) => {
+  expect(error.message.startsWith(original)).toBe(true);
+  const suffix = error.message.slice(original.length);
+  return z.json().parse(JSON.parse(suffix.slice(suffix.indexOf("{"))));
+};
+
 describe("preparation failure cleanup advisory", () => {
   const advisory: DraftWorktreeRetirementAdvisory = {
     status: "complete",
@@ -100,17 +106,12 @@ describe("preparation failure cleanup advisory", () => {
     reasons: { referenced: 1, private_state: 1 },
     capacity: { after: { bytes: { total: "4096", available: "0" } } },
   };
-  const appendedAdvisory = (error: Error, original: string) => {
-    expect(error.message.startsWith(original)).toBe(true);
-    const suffix = error.message.slice(original.length);
-    return z.json().parse(JSON.parse(suffix.slice(suffix.indexOf("{"))));
-  };
 
   it("preserves the actual command error identity and cause while adding sanitized maintenance evidence", async () => {
     const f = fixture();
     const cause = new Error("controlled command cause");
     const original = new TypeError("Builder could not create its checkout (exit 128)", { cause });
-    const message = original.message;
+    const { message } = original;
     const prepare = vi.fn().mockRejectedValue(original);
     const run = async () => {
       try {
@@ -155,7 +156,7 @@ describe("preparation failure cleanup advisory", () => {
 
   it("reports unavailable maintenance without replacing an ordinary preparation failure", () => {
     const error = new Error("Original command failed");
-    const message = error.message;
+    const { message } = error;
     const unavailable: DraftWorktreeRetirementAdvisory = {
       status: "unavailable",
       retired: 0,

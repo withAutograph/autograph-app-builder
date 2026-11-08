@@ -134,20 +134,27 @@ const memoryStore = () => {
     // oxlint-disable-next-line eslint/require-await -- Promise-returning journal fixture.
     async reserve(input) {
       const key = hostedRuntimeIdentity(input.authority, input.target).digest;
-      const row = rows.get(key) ?? {
-        record: {
-          approvedByCallId: input.approvedByCallId,
-          ...(input.environmentGitBranch === undefined
-            ? {}
-            : { environmentGitBranch: input.environmentGitBranch }),
-          kind: "app-runtime",
-          request: input.target,
-          status: "pending",
-          step: "reserved",
-          version: 1,
-        } satisfies HostedRuntimeJournalRecord,
-        revision: 1,
-      };
+      let row = rows.get(key);
+      if (row === undefined || row === null) {
+        const initial: Pick<
+          HostedRuntimeJournalRecord,
+          "approvedByCallId" | "environmentGitBranch"
+        > = { approvedByCallId: input.approvedByCallId };
+        if (input.environmentGitBranch !== undefined) {
+          initial.environmentGitBranch = input.environmentGitBranch;
+        }
+        row = {
+          record: {
+            ...initial,
+            kind: "app-runtime",
+            request: input.target,
+            status: "pending",
+            step: "reserved",
+            version: 1,
+          },
+          revision: 1,
+        };
+      }
       rows.set(key, row);
       return structuredClone(row);
     },
@@ -235,8 +242,8 @@ const providerFixture = (productionBranch?: string) => {
   });
   return {
     environments,
-    request,
     project,
+    request,
     setLosePostResponse: (value: boolean) => {
       losePostResponse = value;
     },
@@ -695,8 +702,8 @@ it("persists generic managed scope before an unknown POST and recovers it after 
   };
   f.setLosePostResponse(true);
   expect(await prepareHostedRuntime(input)).toMatchObject({
-    status: "blocked",
     code: "provider_unavailable",
+    status: "blocked",
   });
   expect(posts.length).toBeGreaterThan(0);
   const pending = await store.read({ authority, target });
@@ -704,8 +711,8 @@ it("persists generic managed scope before an unknown POST and recovers it after 
   f.project.productionBranch = "another-production-branch";
   f.setLosePostResponse(false);
   expect(await prepareHostedRuntime(input)).toMatchObject({
-    status: "prepared",
     branch: target.branch,
+    status: "prepared",
   });
   const saved = await store.read({ authority, target });
   expect(saved?.record.environmentGitBranch).toBeNull();
@@ -745,7 +752,7 @@ it("rejects a foreign generic managed row in preflight before reservation or dat
       store,
       target,
     }),
-  ).toMatchObject({ status: "blocked", code: "resource_mismatch" });
+  ).toMatchObject({ code: "resource_mismatch", status: "blocked" });
   expect(executor.run).not.toHaveBeenCalled();
   expect(await store.read({ authority, target })).toBeUndefined();
   expect(f.request.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);

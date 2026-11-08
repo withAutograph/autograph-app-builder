@@ -58,20 +58,20 @@ const fixture = () => {
   const compilation = {
     context: {
       authority: {
-        issuer: "https://builder.example/api/auth",
         audience: "https://builder.example/mcp",
-        workspaceId: "workspace",
+        issuer: "https://builder.example/api/auth",
         ownerUserId: "owner",
+        workspaceId: "workspace",
       },
       target: { appId: "fixture-app", sessionId: "original-public-session" },
     },
     release: { status: "not-required" as const },
   };
   const validation = {
-    resolvedTree: "3".repeat(40),
     commands: [{ command: "mise app:check", exitCode: 0 }],
-    validatedByCallId: "validate",
     compilation,
+    resolvedTree: "3".repeat(40),
+    validatedByCallId: "validate",
   };
   const review = createReconciliationReviewReceipt({
     version: 1,
@@ -169,30 +169,30 @@ const fixture = () => {
   };
   // SAFETY: This controlled native fixture exposes the two actual outcomes for denial variants below.
   const settlement = {
-    requestId: request.requestId,
     outcome: "approved" as "approved" | "cancelled",
+    requestId: request.requestId,
     responderPrincipalId: "owner",
   };
   const nativeEvents = [
-    { type: "input.requested", data: { requests: [request] } },
+    { data: { requests: [request] }, type: "input.requested" },
     {
-      type: "approval.settled",
       data: settlement,
+      type: "approval.settled",
     },
   ];
   const history = [
     {
-      role: "assistant",
       content: [
         call,
-        { type: "tool-approval-request", toolCallId: call.toolCallId, approvalId: "approval" },
+        { approvalId: "approval", toolCallId: call.toolCallId, type: "tool-approval-request" },
       ],
+      role: "assistant",
     },
     {
+      content: [{ approvalId: "approval", approved: true, type: "tool-approval-response" }],
       role: "tool",
-      content: [{ type: "tool-approval-response", approvalId: "approval", approved: true }],
     },
-    { role: "assistant", content: "An intervening ordinary question" },
+    { content: "An intervening ordinary question", role: "assistant" },
   ];
   const context = {
     "eve.sessionId": "logical",
@@ -202,44 +202,44 @@ const fixture = () => {
       sourceReceipt: { digest: sourceDigest, sourceKind: "fresh-template" },
       githubSource: source,
       reviewReceipt: {
-        digest: originReviewDigest,
         appSpecDigest: digest,
         changeSetDigest: sourceDigest,
+        digest: originReviewDigest,
       },
     },
     "autograph-app-builder.draft-reconciliation.v1": candidate,
     "autograph-app-builder.draft-reconciliation-completions.v1": [completion],
   };
   return {
+    call,
+    candidate,
+    completion,
+    context,
+    history,
     input: {
       descriptor: {
         logicalSessionId: "logical",
         originalAuthoritySessionId: "original-public-session",
       },
-      binding: { ownerRunId: "physical", logicalSessionId: "logical" },
+      binding: { logicalSessionId: "logical", ownerRunId: "physical" },
       expectedPrincipalId: "owner",
       payload: {
-        binding: { ownerRunId: "physical", logicalSessionId: "logical" },
+        binding: { logicalSessionId: "logical", ownerRunId: "physical" },
         candidates: [
           {
             origin: { slot: 24 },
             serializedContext: context,
-            sessionState: { snapshot: { session: { sessionId: "logical", history } } },
+            sessionState: { snapshot: { session: { history, sessionId: "logical" } } },
           },
         ],
         nativeEvents,
       },
     },
-    context,
-    candidate,
-    completion,
-    call,
-    request,
     nativeEvents,
-    history,
+    publicationInstallation,
+    request,
     settlement,
     sourceInstallation,
-    publicationInstallation,
   };
 };
 
@@ -287,8 +287,8 @@ it("requires exact native call arguments and one ordered approved decision by th
   expect(authorizeRepeatableDraftReconciliationCalls(reversed.input)).toEqual([]);
   const conflicted = fixture();
   conflicted.nativeEvents.push({
-    type: "approval.settled",
     data: { ...conflicted.settlement, outcome: "cancelled" },
+    type: "approval.settled",
   });
   expect(authorizeRepeatableDraftReconciliationCalls(conflicted.input)).toEqual([]);
 });
@@ -306,14 +306,14 @@ it("does not cover draft updates, other publication tools or provider-executed c
 it("rejects malformed or ambiguous native approvals rather than ignoring conflicting frames", () => {
   const f = fixture();
   for (const extra of [
-    { type: "approval.settled", data: { ...f.settlement, outcome: "unexpected" } },
+    { data: { ...f.settlement, outcome: "unexpected" }, type: "approval.settled" },
     {
-      type: "input.requested",
       data: { requests: [{ ...f.request, kind: "question", requestId: "other-request" }] },
+      type: "input.requested",
     },
     {
-      type: "input.requested",
       data: { requests: [{ ...f.request, action: { ...f.request.action, callId: "other-call" } }] },
+      type: "input.requested",
     },
   ]) {
     expect(
@@ -333,12 +333,12 @@ it("leaves native result and incoming runtime outcome reconciliation to their or
         ...f.input.payload,
         nativeEvents: [
           ...f.nativeEvents,
-          { type: "action.result", data: { result: { callId: f.call.toolCallId } } },
+          { data: { result: { callId: f.call.toolCallId } }, type: "action.result" },
         ],
       },
     }),
   ).toEqual([]);
-  const candidate = f.input.payload.candidates[0];
+  const [candidate] = f.input.payload.candidates;
   expect(
     authorizeRepeatableDraftReconciliationCalls({
       ...f.input,
@@ -367,14 +367,14 @@ it("rejects a completed or duplicate call without rewriting history", () => {
             sessionState: {
               snapshot: {
                 session: {
-                  sessionId: "logical",
                   history: [
                     ...completed.history,
                     {
+                      content: [{ toolCallId: "reconcile-call", type: "tool-result" }],
                       role: "tool",
-                      content: [{ type: "tool-result", toolCallId: "reconcile-call" }],
                     },
                   ],
+                  sessionId: "logical",
                 },
               },
             },
@@ -384,7 +384,7 @@ it("rejects a completed or duplicate call without rewriting history", () => {
     }),
   ).toEqual([]);
   const duplicate = fixture();
-  duplicate.history.push({ role: "assistant", content: [{ ...duplicate.call }] });
+  duplicate.history.push({ content: [{ ...duplicate.call }], role: "assistant" });
   expect(authorizeRepeatableDraftReconciliationCalls(duplicate.input)).toEqual([]);
 });
 it("rejects ambiguous retained completions and a later changed current candidate", () => {
@@ -430,10 +430,10 @@ it("requires the retained sealed preparation and preserves literal read-only mod
           ...f.input.payload,
           nativeEvents: [
             {
-              type: "input.requested",
               data: { requests: [{ ...f.request, action: { ...f.request.action, input } }] },
+              type: "input.requested",
             },
-            { type: "approval.settled", data: f.settlement },
+            { data: f.settlement, type: "approval.settled" },
           ],
           candidates: [
             {
@@ -441,21 +441,21 @@ it("requires the retained sealed preparation and preserves literal read-only mod
               sessionState: {
                 snapshot: {
                   session: {
-                    sessionId: "logical",
                     history: [
                       {
-                        role: "assistant",
                         content: [
                           { ...f.call, input },
                           {
-                            type: "tool-approval-request",
-                            toolCallId: f.call.toolCallId,
                             approvalId: "approval",
+                            toolCallId: f.call.toolCallId,
+                            type: "tool-approval-request",
                           },
                         ],
+                        role: "assistant",
                       },
                       f.history[1],
                     ],
+                    sessionId: "logical",
                   },
                 },
               },
@@ -493,7 +493,8 @@ it("rejects ambiguous latest checkpoints, unknown arguments and native mode chan
 });
 it("rejects changed sealed merge bytes, review scope and current source", () => {
   const merge = fixture();
-  const after = merge.completion.review.baseChanges[0].after;
+  const [change] = merge.completion.review.baseChanges;
+  const { after } = change;
   if (after === undefined) {
     throw new Error("The added-file fixture requires after bytes.");
   }
@@ -525,7 +526,7 @@ it("retains the approved publication installation digest binding", () => {
 
 it("validates old histories and preserves latest selection across unordered candidates", () => {
   const f = fixture();
-  const latest = f.input.payload.candidates[0];
+  const [latest] = f.input.payload.candidates;
   const older = structuredClone(latest);
   older.origin.slot = 1;
   older.sessionState.snapshot.session.history = [];
@@ -537,7 +538,7 @@ it("validates old histories and preserves latest selection across unordered cand
     ...older,
     sessionState: {
       snapshot: {
-        session: { sessionId: "logical", history: [{ role: "assistant", content: [{ type: 7 }] }] },
+        session: { history: [{ content: [{ type: 7 }], role: "assistant" }], sessionId: "logical" },
       },
     },
   };
@@ -550,11 +551,11 @@ it("validates old histories and preserves latest selection across unordered cand
 });
 it("retains historical runtime-result vetoes outside the latest candidate", () => {
   const f = fixture();
-  const latest = f.input.payload.candidates[0];
+  const [latest] = f.input.payload.candidates;
   const older = {
     ...latest,
-    origin: { slot: 1 },
     incoming: { runtimeResults: { results: [{ callId: f.call.toolCallId }] } },
+    origin: { slot: 1 },
   };
   expect(
     authorizeRepeatableDraftReconciliationCalls({
@@ -565,7 +566,7 @@ it("retains historical runtime-result vetoes outside the latest candidate", () =
 });
 it("validates unrelated native events and preserves approval ordering across them", () => {
   const f = fixture();
-  const unrelated = { type: "assistant.output", data: { retained: "unrelated native evidence" } };
+  const unrelated = { data: { retained: "unrelated native evidence" }, type: "assistant.output" };
   const events = [unrelated, f.nativeEvents[0], unrelated, f.nativeEvents[1], unrelated];
   expect(
     authorizeRepeatableDraftReconciliationCalls({
@@ -576,7 +577,7 @@ it("validates unrelated native events and preserves approval ordering across the
   expect(
     authorizeRepeatableDraftReconciliationCalls({
       ...f.input,
-      payload: { ...f.input.payload, nativeEvents: [{ type: "unrelated", data: null }, ...events] },
+      payload: { ...f.input.payload, nativeEvents: [{ data: null, type: "unrelated" }, ...events] },
     }),
   ).toEqual([]);
   expect(

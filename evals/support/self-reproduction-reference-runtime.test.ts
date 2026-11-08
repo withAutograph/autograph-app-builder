@@ -9,8 +9,12 @@ import {
 } from "./self-reproduction-reference-runtime";
 
 it("rejects an in-source runtime", () => {
-  expect(() => assertExternalReferenceRoot("/tmp/source", "/tmp/source/runtime")).toThrow();
-  expect(() => assertExternalReferenceRoot("/tmp/source", "/tmp/external")).not.toThrow();
+  expect(() => {
+    assertExternalReferenceRoot("/tmp/source", "/tmp/source/runtime");
+  }).toThrow();
+  expect(() => {
+    assertExternalReferenceRoot("/tmp/source", "/tmp/external");
+  }).not.toThrow();
 });
 
 it("copies live tracked changes without credentials or ignored runtime files", async () => {

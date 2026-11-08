@@ -19,6 +19,8 @@ import {
   serializedPayloadBytes,
 } from "@/lib/eve/payload-envelope";
 
+const CURRENT_PROPOSAL_SOURCE = "current-proposal";
+
 // The source checkout is writable. An initial clone manifest cannot describe
 // files added or removed during an existing-app session.
 type AppSourceFileRunner = Pick<SandboxSession, "run">;
@@ -33,6 +35,11 @@ interface SourceInspectionContinuation {
   digest: string;
   offsetBytes: number;
   path: string;
+}
+
+interface SourceFilePage {
+  continuation?: SourceInspectionContinuation;
+  file?: SourceInspectionFile;
 }
 
 interface SourceInspectionListing {
@@ -120,7 +127,7 @@ const readSourceFilePage = async function readSourceFilePage(
     offsetBytes: number;
     path: string;
   },
-): Promise<{ continuation?: SourceInspectionContinuation; file?: SourceInspectionFile } | null> {
+): Promise<SourceFilePage | null> {
   const { appId, expectedDigest, files, listing, missingPaths, offsetBytes, path } = input;
   const content = await sandbox.readTextFile({ path: `repository/${path}` });
   if (content === null) {
@@ -144,14 +151,16 @@ const readSourceFilePage = async function readSourceFilePage(
   try {
     chunk = largestUtf8PayloadChunk({
       content,
-      makePayload: (chunkContent, nextOffsetBytes) =>
-        sourceInspectionEvent({
+      makePayload: (chunkContent, nextOffsetBytes) => {
+        const output: SourceInspectionOutput = {
           ...payloadBase,
           files: [...files, { content: chunkContent, digest, offsetBytes, path }],
-          ...(nextOffsetBytes < Buffer.byteLength(content, "utf-8")
-            ? { continuation: { digest, offsetBytes: nextOffsetBytes, path } }
-            : {}),
-        }),
+        };
+        if (nextOffsetBytes < Buffer.byteLength(content, "utf-8")) {
+          output.continuation = { digest, offsetBytes: nextOffsetBytes, path };
+        }
+        return sourceInspectionEvent(output);
+      },
       offsetBytes,
     });
   } catch (error) {
@@ -164,12 +173,13 @@ const readSourceFilePage = async function readSourceFilePage(
     }
     throw error;
   }
-  return {
+  const result: SourceFilePage = {
     file: { content: chunk.content, digest, offsetBytes, path },
-    ...(chunk.nextOffsetBytes < Buffer.byteLength(content, "utf-8")
-      ? { continuation: { digest, offsetBytes: chunk.nextOffsetBytes, path } }
-      : {}),
   };
+  if (chunk.nextOffsetBytes < Buffer.byteLength(content, "utf-8")) {
+    result.continuation = { digest, offsetBytes: chunk.nextOffsetBytes, path };
+  }
+  return result;
 };
 
 type AppBuilderState = ReturnType<typeof appBuilderWorkflowState.get>;
@@ -314,14 +324,17 @@ export const buildSourceInspectionOutput = async function buildSourceInspectionO
       break;
     }
   }
-  const response: SourceInspectionOutput = {
-    appId,
-    ...listing,
-    ...(nextPathIndex < availablePaths.length ? { nextPathIndex } : {}),
-    files,
-    ...(missingPaths.length === 0 ? {} : { missingPaths }),
-    ...(continuation === undefined ? {} : { continuation }),
-  };
+  const header: Omit<SourceInspectionOutput, "files"> = { appId, ...listing };
+  if (nextPathIndex < availablePaths.length) {
+    header.nextPathIndex = nextPathIndex;
+  }
+  const response: SourceInspectionOutput = { ...header, files };
+  if (missingPaths.length !== 0) {
+    response.missingPaths = missingPaths;
+  }
+  if (continuation !== undefined) {
+    response.continuation = continuation;
+  }
   if (serializedPayloadBytes(sourceInspectionEvent(response)) > EVE_MAX_PAYLOAD_BYTES) {
     throw new Error(
       "The requested source inspection metadata exceeds Eve's provider transport envelope. Request fewer paths in one call, then continue with the returned file digest and byte offset.",
@@ -349,7 +362,7 @@ export default defineDynamic({
           },
           ctx,
         ) {
-          if (source === "current-proposal") {
+          if (source === CURRENT_PROPOSAL_SOURCE) {
             return inspectCurrentProposalSource(
               {
                 appId,
@@ -422,7 +435,7 @@ export default defineDynamic({
         inputSchema: z
           .strictObject({
             appId: z.string().min(1),
-            source: z.enum(["applied", "current-proposal"]).optional(),
+            source: z.enum(["applied", CURRENT_PROPOSAL_SOURCE]).optional(),
             expectedProposalDigest: z
               .string()
               .regex(/^[0-9a-f]{64}$/u)
@@ -437,7 +450,10 @@ export default defineDynamic({
             paths: z.array(z.string().min(1)).default([]),
           })
           .superRefine((input, context) => {
-            if (input.source !== "current-proposal" && input.expectedProposalDigest !== undefined) {
+            if (
+              input.source !== CURRENT_PROPOSAL_SOURCE &&
+              input.expectedProposalDigest !== undefined
+            ) {
               context.addIssue({
                 code: "custom",
                 message: "Only a current-proposal read accepts expectedProposalDigest.",

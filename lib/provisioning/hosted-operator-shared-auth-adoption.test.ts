@@ -230,7 +230,7 @@ const fixture = () => {
     planDigest: requireOperator(input.target.appId === "first" ? source.record : destination.record)
       .planDigest,
   }));
-  const assertCurrent = vi.fn(async () => {});
+  const assertCurrent = vi.fn<() => Promise<void>>().mockResolvedValue();
   const readCurrentTarget = vi.fn(async (input: HostedOperatorEffectContext) => {
     await input.assertCurrent();
     await assertAuthorized(input);
@@ -267,7 +267,7 @@ const fixture = () => {
   const effect: HostedOperatorEffectContext = {
     ...targetContext,
     assertCurrent,
-    checkpoint: vi.fn(async () => {}),
+    checkpoint: vi.fn<() => Promise<void>>().mockResolvedValue(),
     effect: plan.effects[0],
     fenceGeneration: 1,
     operationRef: requireOperator(destination.record).operationRef,
@@ -1047,7 +1047,7 @@ describe("native composition adoption boundary", () => {
             return unavailable();
           },
         },
-        store: { read: unavailable, compareAndSet: unavailable },
+        store: { compareAndSet: unavailable, read: unavailable },
       },
       readNormalActorRuntimeBindings: unavailable,
       readNormalActorPreparation: unavailable,
@@ -1104,9 +1104,9 @@ describe("native composition adoption boundary", () => {
     };
     const schemaRead = vi.fn(async () => structuredClone(requirePreparation(f.source.record)));
     vi.spyOn(authReadinessModule, "createHostedOperatorAuthReadiness").mockImplementation(() => ({
+      reconcileMigration: unavailable,
       verify: schemaRead,
       verifyPublication: unavailable,
-      reconcileMigration: unavailable,
     }));
     const native = composeHostedOperatorDependencies(configuration, controlPlane);
     checkpointSharedAuthAdoption.mockImplementationOnce(async (input) => {

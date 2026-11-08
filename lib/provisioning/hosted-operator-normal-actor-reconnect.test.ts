@@ -88,7 +88,6 @@ describe("expired pre-delivery captured account", () => {
     record.approvedByCallId = "new-call";
     let row = { record: hostedRuntimeJournalRecordSchema.parse(record), revision: 1 };
     const store: NormalActorJournalPorts["store"] = {
-      read: async () => structuredClone(row),
       compareAndSet: async (input) => {
         if (input.expectedRevision !== row.revision) {
           // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS explicitly returns no row.
@@ -100,14 +99,15 @@ describe("expired pre-delivery captured account", () => {
         };
         return structuredClone(row);
       },
+      read: async () => structuredClone(row),
     };
     const journalPorts: NormalActorJournalPorts = {
-      store,
+      assertAccountApproval: async () => {},
+      assertAuthorized: async () => {},
+      assertMutationAuthority: async () => {},
       keyring,
       now: () => Date.parse(observedAt),
-      assertAuthorized: async () => {},
-      assertAccountApproval: async () => {},
-      assertMutationAuthority: async () => {},
+      store,
     };
     const network = vi.fn<typeof fetch>(async () => {
       throw new Error("expired cookie used");
@@ -116,14 +116,14 @@ describe("expired pre-delivery captured account", () => {
       throw new Error("ordinary invitation");
     });
     const deps: NormalActorOperationsDependencies = {
-      journalPorts,
-      assertPlanningAuthorized: async () => {},
       assertCurrentPlan: async () => {},
-      normalRealmFetch: async () => network,
-      prepareActorCapture: invitation,
+      assertPlanningAuthorized: async () => {},
       collectOrganizationOwnerProof: vi.fn(),
       executeOrganization: vi.fn(),
       inspectOrganization: vi.fn(),
+      journalPorts,
+      normalRealmFetch: async () => network,
+      prepareActorCapture: invitation,
     };
     const operations = createHostedOperatorNormalActorOperations(deps);
     const input = {

@@ -19,6 +19,9 @@ import {
 import { privateApplyDenialEvents } from "../eve/private-apply-denial.test-fixture";
 import { observePrivateApplyDenials } from "../eve/private-apply-denial-evidence";
 
+const observe = (values: ReturnType<typeof privateApplyDenialEvents>) =>
+  observePrivateApplyDenials({ calls: ["denied-call"], events: values, sessionId: "owned" });
+
 const scope = {
   appId: "app",
   appSpecDigest: "spec",
@@ -54,9 +57,9 @@ describe("genuine private Build denial lifecycle", () => {
       expect(readPrivateApplyAuthority().terminalDecisions).toMatchObject([
         {
           callId: "denied-call",
-          scope,
-          outcome: "denied-not-run",
           eventIds: ["request-event", "resolution-event", "result-event"],
+          outcome: "denied-not-run",
+          scope,
         },
       ]);
     });
@@ -106,8 +109,6 @@ describe("genuine private Build denial lifecycle", () => {
   });
   it("history catch-up rejects incomplete, contradictory and reordered outcomes", () => {
     const events = privateApplyDenialEvents();
-    const observe = (values: typeof events) =>
-      observePrivateApplyDenials({ sessionId: "owned", calls: ["denied-call"], events: values });
     expect(observe(events)).toHaveLength(1);
     expect(observe(events.filter((e) => e.type !== "input.resolved"))).toEqual([]);
     expect(observe(events.toReversed())).toEqual([]);
@@ -139,15 +140,15 @@ it.each(["ignored", "invalid"] as const)(
     const actual = resolveApprovalOutcome(
       status === "ignored"
         ? undefined
-        : { requestId: "denied-request", optionId: "not-a-valid-approval" },
+        : { optionId: "not-a-valid-approval", requestId: "denied-request" },
     );
     expect(actual.approved).toBe(false);
     expect(actual.status).toBe(status);
     expect(
       observePrivateApplyDenials({
-        sessionId: "owned",
         calls: ["denied-call"],
         events: privateApplyDenialEvents("denied-call", "denied-request", status),
+        sessionId: "owned",
       }),
     ).toMatchObject([{ outcome: `${status}-not-run` }]);
     await contextStorage.run(new ContextContainer(), async () => {

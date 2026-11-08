@@ -122,7 +122,7 @@ const createRecoveredBuild = async (store: InMemoryHostedEveStore, appId: string
     session: child,
     result: { cursor: 0, events: [], sessionId: child.sessionId, status: "waiting" },
   });
-  return { original, child };
+  return { child, original };
 };
 
 const fixture = async () => {
@@ -179,21 +179,21 @@ const fixture = async () => {
   const execute = vi.fn(
     async (owner: AppAccessOwner, _command: AppAccessCommand) => await read(owner),
   );
-  const route = createAppAccessRouteHandler({ origin, resolveOwner, read, execute });
+  const route = createAppAccessRouteHandler({ execute, origin, read, resolveOwner });
   return {
-    selected,
-    unrelated,
-    sessions,
-    resolveOwner,
-    route,
-    reads,
     execute,
-    setSignedIn: (value: HostedSessionTenantAuthority | null) => {
-      signedIn = value;
-    },
+    reads,
+    resolveOwner,
     revoke: () => {
       activeMember = false;
     },
+    route,
+    selected,
+    sessions,
+    setSignedIn: (value: HostedSessionTenantAuthority | null) => {
+      signedIn = value;
+    },
+    unrelated,
   };
 };
 const request = (sessionId: string) =>
@@ -208,15 +208,15 @@ describe("recovered web app access owner", () => {
       const originalBefore = await f.sessions.getSession(principal, f.selected.original.sessionId);
       const response = await f.route(request(requested), requested);
       expect(response.status).toBe(200);
-      expect(await response.json()).toMatchObject({ sessionId: requested, appId: "requests" });
+      expect(await response.json()).toMatchObject({ appId: "requests", sessionId: requested });
       expect(f.reads[0]).toMatchObject({
         appId: "requests",
-        sessionId: f.selected.original.sessionId,
         ownerContext: {
-          sessionId: f.selected.original.sessionId,
           adapterSessionId: f.selected.child.adapterSessionId,
           principal,
+          sessionId: f.selected.original.sessionId,
         },
+        sessionId: f.selected.original.sessionId,
       });
       expect(f.reads[0]?.sessionId).not.toBe(f.unrelated.original.sessionId);
       expect(await f.sessions.getSession(principal, f.selected.original.sessionId)).toEqual(
@@ -228,7 +228,7 @@ describe("recovered web app access owner", () => {
 
   it("keeps a recovered command's request identity and original operator scope", async () => {
     const f = await fixture();
-    const sessionId = f.selected.child.sessionId;
+    const { sessionId } = f.selected.child;
     const command = {
       action: "retry-setup",
       clientRequestId: "123e4567-e89b-42d3-a456-426614174000",
@@ -243,10 +243,10 @@ describe("recovered web app access owner", () => {
     );
     expect(response.status).toBe(200);
     expect(f.execute).toHaveBeenCalledTimes(1);
-    const call = f.execute.mock.calls[0];
+    const [call] = f.execute.mock.calls;
     expect(call?.[0]).toMatchObject({
-      sessionId: f.selected.original.sessionId,
       ownerContext: { adapterSessionId: f.selected.child.adapterSessionId },
+      sessionId: f.selected.original.sessionId,
     });
     expect(call?.[1]).toEqual(command);
     expect(await response.json()).toMatchObject({ sessionId });
@@ -259,7 +259,7 @@ describe("recovered web app access owner", () => {
   ])("denies another authenticated owner or tenant", async (signedIn) => {
     const f = await fixture();
     f.setSignedIn(signedIn);
-    const sessionId = f.selected.child.sessionId;
+    const { sessionId } = f.selected.child;
     const response = await f.route(request(sessionId), sessionId);
     expect(response.status).toBe(403);
     expect(f.reads).toEqual([]);
@@ -269,7 +269,7 @@ describe("recovered web app access owner", () => {
   it("requires an authenticated Builder account", async () => {
     const f = await fixture();
     f.setSignedIn(null);
-    const sessionId = f.selected.child.sessionId;
+    const { sessionId } = f.selected.child;
     const response = await f.route(request(sessionId), sessionId);
     expect(response.status).toBe(401);
     expect(f.reads).toEqual([]);
@@ -292,12 +292,12 @@ describe("recovered web app access owner", () => {
       };
     });
     const route = createAppAccessRouteHandler({
-      origin,
-      resolveOwner: f.resolveOwner,
-      read,
       execute: f.execute,
+      origin,
+      read,
+      resolveOwner: f.resolveOwner,
     });
-    const sessionId = f.selected.child.sessionId;
+    const { sessionId } = f.selected.child;
     const response = await route(request(sessionId), sessionId);
     expect(response.status).toBe(403);
     expect(await response.text()).not.toContain("organizationName");
@@ -306,11 +306,11 @@ describe("recovered web app access owner", () => {
   it("refuses a cancelled current worker without falling back to the old original", async () => {
     const f = await fixture();
     await f.sessions.recordCancellationIntent({
+      nowEpochMs: 200,
       principal,
       sessionId: f.selected.child.sessionId,
-      nowEpochMs: 200,
     });
-    const sessionId = f.selected.original.sessionId;
+    const { sessionId } = f.selected.original;
     const response = await f.route(request(sessionId), sessionId);
     expect(response.status).not.toBe(200);
     expect(f.reads).toEqual([]);

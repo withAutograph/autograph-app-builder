@@ -187,10 +187,10 @@ it("reports a closed runtime failure before preserving the sanitized readiness r
       "[builder:hosted-neon-consent]",
       expect.objectContaining({
         executionFailure: {
-          stage: "final_runtime_readiness",
           errorClass: "unexpected",
-          sqlState: "42501",
           runtimeReadinessStage: "runtime_connection",
+          sqlState: "42501",
+          stage: "final_runtime_readiness",
         },
       }),
     ]);
@@ -231,9 +231,9 @@ it.each([
       "[builder:hosted-neon-consent]",
       expect.objectContaining({
         executionFailure: {
-          stage: "final_runtime_readiness",
-          runtimeReadinessStage: stage,
           errorClass: "type_error",
+          runtimeReadinessStage: stage,
+          stage: "final_runtime_readiness",
         },
       }),
     ]);
@@ -406,7 +406,7 @@ it("retains an active actor-bound organization on a previous release without req
 
 it("excludes only observed inactive or missing actor-bound organizations", async () => {
   const f = activeInstallationFixture();
-  f.reader.readActiveOrganization = vi.fn(async () => null);
+  f.reader.readActiveOrganization = vi.fn<() => Promise<null>>().mockResolvedValue(null);
   await expect(readActiveAppInstallationCustomerIds(f.input)).resolves.toEqual([]);
 });
 
@@ -499,7 +499,7 @@ it("verifies an installation-only release through its retained active actor scop
   const f = installationOnlyFixture();
   const before = structuredClone(f.input.plan);
   const result = await f.verify(f.input);
-  expect(result).toMatchObject({ tenants: 1, releaseId: plan.release.id, actors: 0 });
+  expect(result).toMatchObject({ actors: 0, releaseId: plan.release.id, tenants: 1 });
   expect(f.readActiveOrganization).toHaveBeenCalledWith(f.retained[0]);
   expect(f.readInstallationScopes).toHaveBeenCalledTimes(2);
   expect(f.scopes).toEqual([]);
@@ -604,29 +604,29 @@ it.each([
 
 it("classifies actor and principal observations without conflating denied scope and missing membership", () => {
   const scope = {
-    appId: "spend-review",
     actorId: "actor",
+    appId: "spend-review",
     organizationId: "org",
     role: "reviewer",
   };
   const row = { ...scope, active: true, fenceGeneration: 3 };
   expect(
     classifyActorBinding(
-      { ok: false, error: { code: "authorization_denied", details: [{ code: "scope_mismatch" }] } },
+      { error: { code: "authorization_denied", details: [{ code: "scope_mismatch" }] }, ok: false },
       scope,
     ),
   ).toBe("principal_scope_denied");
-  expect(classifyActorBinding({ ok: true, data: null }, scope)).toBe("actor_absent");
-  expect(classifyActorBinding({ ok: true, data: { ...row, active: false } }, scope)).toBe(
+  expect(classifyActorBinding({ data: null, ok: true }, scope)).toBe("actor_absent");
+  expect(classifyActorBinding({ data: { ...row, active: false }, ok: true }, scope)).toBe(
     "actor_inactive",
   );
-  expect(classifyActorBinding({ ok: true, data: row }, scope)).toBe("actor_active");
+  expect(classifyActorBinding({ data: row, ok: true }, scope)).toBe("actor_active");
   expect(() =>
-    classifyActorBinding({ ok: true, data: { ...row, actorId: "foreign" } }, scope),
+    classifyActorBinding({ data: { ...row, actorId: "foreign" }, ok: true }, scope),
   ).toThrow();
   expect(() =>
     classifyActorBinding(
-      { ok: false, error: { code: "authorization_denied", details: [{ code: "unknown" }] } },
+      { error: { code: "authorization_denied", details: [{ code: "unknown" }] }, ok: false },
       scope,
     ),
   ).toThrow();
@@ -652,8 +652,8 @@ it("reads only the original plan's approved scopes after owner and runtime ident
   const result = await createHostedOperatorTenantBindingReadback(f.deps)(input);
   expect(result.bindings).toEqual(
     ["reviewer", "requester"].map((role) => ({
-      appId: "spend-review",
       actorId: "synthetic-reviewer",
+      appId: "spend-review",
       organizationId: "synthetic-org",
       role,
       status: "principal_scope_denied",
@@ -688,8 +688,8 @@ it("withholds partial bindings when owner authorization changes during a snapsho
   const f = fixture();
   f.reader.readActorBinding = vi.fn(async () => "actor_active" as const);
   f.deps.assertAuthorized
-    .mockImplementationOnce(() => Promise.resolve())
-    .mockImplementationOnce(() => Promise.resolve())
+    .mockResolvedValueOnce()
+    .mockResolvedValueOnce()
     .mockRejectedValueOnce(new Error("owner revoked"));
   await expect(createHostedOperatorTenantBindingReadback(f.deps)(f.input)).rejects.toThrow(
     "owner revoked",

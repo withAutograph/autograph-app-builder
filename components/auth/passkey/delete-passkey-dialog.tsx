@@ -75,7 +75,9 @@ export function DeletePasskeyDialog({ open, onOpenChange, passkey }: DeletePassk
             type="button"
             variant="destructive"
             disabled={isDeleting}
-            onClick={() => deletePasskey({ id: passkey.id })}
+            onClick={() => {
+              deletePasskey({ id: passkey.id });
+            }}
           >
             {isDeleting && <Spinner />}
 

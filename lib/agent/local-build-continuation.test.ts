@@ -141,7 +141,7 @@ describe("actual private local approved build continuation", () => {
           failureClass,
         },
       });
-      const dispatch = vi.fn(() => Promise.resolve());
+      const dispatch = vi.fn<() => Promise<void>>().mockResolvedValue();
       expect(
         await continueApprovedLocalBuild({
           active: false,

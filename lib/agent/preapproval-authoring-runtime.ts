@@ -50,8 +50,8 @@ export const internalCorrectionRequiresSuccessor = (ctx: Pick<HookContext, "sess
     return false;
   }
   const current = currentAuthoringDecision(ctx, {
-    completed: false,
     blocked: false,
+    completed: false,
     pendingInput: false,
   });
   return current.scope?.correction !== undefined && current.scopeDigest === delivered.scopeDigest;
@@ -93,9 +93,10 @@ export const authenticatedInternalAuthoringMessage = async (
       return false;
     }
     if (localAuthoringConfigured()) {
+      const { operationId, nonce } = marker;
       const scopeDigest = await readLocalAuthoringMarkerScope(ctx, {
-        operationId: marker.operationId,
-        nonce: marker.nonce,
+        nonce,
+        operationId,
       });
       if (scopeDigest === undefined) {
         return false;
@@ -125,7 +126,7 @@ export const authenticatedInternalAuthoringMessage = async (
     ) {
       return false;
     }
-    const scopeDigest = reserved.decision.scopeDigest;
+    const { scopeDigest } = reserved.decision;
     const claimed =
       (await store.claimInternalAuthoringMessage?.({
         principal,

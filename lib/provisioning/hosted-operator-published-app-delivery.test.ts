@@ -34,8 +34,8 @@ it("uses the selected release's actual published repository, ref and commit", ()
   expect(resolvePublishedAppDelivery(application, { ...release, publishedSource })).toEqual({
     branch: publishedSource.branch,
     gitSha: publishedSource.gitSha,
-    repoId: publishedSource.repositoryId,
     projectId: application.projectId,
+    repoId: publishedSource.repositoryId,
   });
   expect(application.branch).toBe("main");
 });
@@ -88,15 +88,15 @@ it("freezes configured project settings alongside the selected release source", 
   ).toEqual({
     branch: publishedSource.branch,
     gitSha: publishedSource.gitSha,
-    repoId: publishedSource.repositoryId,
     projectId: application.projectId,
     projectSettings,
+    repoId: publishedSource.repositoryId,
   });
 });
 it.each(["apps/spend-review", "apps/revised-product"])(
   "retains the standard Services destination when %s describes its app build",
   (workspacePath) => {
-    const projectSettings = { framework: "services", rootDirectory: ".", buildCommand: null };
+    const projectSettings = { buildCommand: null, framework: "services", rootDirectory: "." };
     const publishedSource = {
       branch: "codex/generated-app",
       changeSetDigest: "d".repeat(64),
@@ -109,8 +109,8 @@ it.each(["apps/spend-review", "apps/revised-product"])(
       app: { id: "spend-review", routes: ["/"], workspacePath },
       backend: { kind: "static" },
       deployment: {
-        framework: "nextjs",
         buildCommand: "bun run build:app",
+        framework: "nextjs",
         sourceFilesOutsideRootDirectory: true,
       },
       validation: { browser: null, check: { task: "check" }, test: { shards: 1, task: "test" } },
@@ -132,7 +132,7 @@ it.each(["apps/spend-review", "apps/revised-product"])(
 it.each(["apps/spend-review", "apps/revised-product"])(
   "retains the standard Services destination when %s describes its app build",
   (workspacePath) => {
-    const projectSettings = { framework: "services", rootDirectory: ".", buildCommand: null };
+    const projectSettings = { buildCommand: null, framework: "services", rootDirectory: "." };
     const publishedSource = {
       branch: "codex/generated-app",
       changeSetDigest: "d".repeat(64),
@@ -145,8 +145,8 @@ it.each(["apps/spend-review", "apps/revised-product"])(
       app: { id: "spend-review", routes: ["/"], workspacePath },
       backend: { kind: "static" },
       deployment: {
-        framework: "nextjs",
         buildCommand: "bun run build:app",
+        framework: "nextjs",
         sourceFilesOutsideRootDirectory: true,
       },
       validation: { browser: null, check: { task: "check" }, test: { shards: 1, task: "test" } },
@@ -255,10 +255,10 @@ it("preserves the publication prerequisite through the operator result contract"
 });
 
 it.each([
-  { status: "pending", code: "app_source_publication_required" },
-  { status: "blocked", code: "operator_unavailable" },
-  { status: "blocked", code: "reconciliation_required" },
-  { status: "blocked", code: "operation_in_progress" },
+  { code: "app_source_publication_required", status: "pending" },
+  { code: "operator_unavailable", status: "blocked" },
+  { code: "reconciliation_required", status: "blocked" },
+  { code: "operation_in_progress", status: "blocked" },
   { status: "planned" },
 ] as const)("preserves other operator outcomes (%j)", (result) => {
   expect(withAppPublicationGuidance(result)).toBe(result);

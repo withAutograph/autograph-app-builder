@@ -46,16 +46,16 @@ const program = normalActorProgramSchema.parse({
   origin: "https://apps.example.com",
   actors: [
     {
+      account: "create-email-password",
       actorKey: "owner",
       email: "owner@example.com",
       name: "Owner",
-      account: "create-email-password",
     },
-    { actorKey: "peer", email: "peer@example.com", name: "Peer", account: "create-email-password" },
+    { account: "create-email-password", actorKey: "peer", email: "peer@example.com", name: "Peer" },
   ],
   organizations: [
-    { organizationId: "org-one", ownerActorKey: "owner", name: "One", slug: "one" },
-    { organizationId: "org-two", ownerActorKey: "owner", name: "Two", slug: "two" },
+    { name: "One", organizationId: "org-one", ownerActorKey: "owner", slug: "one" },
+    { name: "Two", organizationId: "org-two", ownerActorKey: "owner", slug: "two" },
   ],
   memberships: [
     { actorKey: "owner", organizationId: "org-one", role: "owner" },
@@ -82,24 +82,24 @@ const plan = hostedOperatorPlanSchema.parse({
     sessionId: target.sessionId,
   },
   appDatabase: {
-    resourceId: "app-resource",
     database: "normal",
     migratorRole: "normal_owner",
+    resourceId: "app-resource",
     runtimeRole: "normal_runtime",
   },
   authDatabase: {
-    resourceId: "auth-resource",
     database: "auth",
     migratorRole: "auth_owner",
+    resourceId: "auth-resource",
     runtimeRole: "auth_runtime",
   },
   contextId: "accepted-spec",
   cost: { class: "shared-recovery-group", description: "Approved normal accounts", owner: "owner" },
   effects: [
     {
+      description: "Capture approved actual accounts",
       id: "normal-accounts",
       kind: "normal-accounts",
-      description: "Capture approved actual accounts",
     },
   ],
   installer: { reference: "owned-worker", sha256: "a".repeat(64) },
@@ -185,9 +185,9 @@ const fixture = () => {
     accountApprovedByCallId: "first-account-call",
     sealedState: {
       encryptedToken: "fixture-sealed-state",
+      keyVersion: "v1",
       tokenIv: "fixture-iv",
       tokenTag: "fixture-tag",
-      keyVersion: "v1",
     },
     captures: [],
     organizationProofs: [
@@ -242,12 +242,12 @@ const fixture = () => {
       ],
     },
     effects: [
-      { kind: "resources", id: "resources", description: "Fixture resource scope" },
-      { kind: "install", id: "install", description: "Fixture release" },
-      { kind: "auth-membership", id: "auth-membership:org-one", description: "One" },
-      { kind: "auth-membership", id: "auth-membership:org-two", description: "Two" },
-      { kind: "access", id: "access", description: "Fixture access" },
-      { kind: "bindings", id: "bindings", description: "Fixture binding" },
+      { description: "Fixture resource scope", id: "resources", kind: "resources" },
+      { description: "Fixture release", id: "install", kind: "install" },
+      { description: "One", id: "auth-membership:org-one", kind: "auth-membership" },
+      { description: "Two", id: "auth-membership:org-two", kind: "auth-membership" },
+      { description: "Fixture access", id: "access", kind: "access" },
+      { description: "Fixture binding", id: "bindings", kind: "bindings" },
     ],
   });
   const effect = fullPlan.effects.find((entry) => entry.id === "auth-membership:org-one");
@@ -283,14 +283,16 @@ const fixture = () => {
     execute,
     inspect,
   }));
-  const getOidcToken = vi.fn(async () => "private-fixture-project-oidc");
+  const getOidcToken = vi
+    .fn<() => Promise<string>>()
+    .mockResolvedValue("private-fixture-project-oidc");
   // Dispatch unit fixtures exercise this adapter; the real launcher's protocol tests cover Sandbox frames separately.
   const configuration: NormalActorOrganizationWorkerDependencies["configuration"] = {
     operator: {
-      origin: "https://operator.example.test",
-      projectId: "prj_operator",
       deploymentId: "dpl_operator",
       environment: "preview",
+      origin: "https://operator.example.test",
+      projectId: "prj_operator",
     },
     teamId: "team",
     sandbox: {
@@ -347,7 +349,7 @@ const fixture = () => {
     "transition-contract.json": Buffer.from("fixture-contract"),
     "transition-plan.json": Buffer.from("fixture-transitions"),
   };
-  const retained = { preparation, spec, proof };
+  const retained = { preparation, proof, spec };
   const deps: NormalActorOrganizationWorkerDependencies = {
     configuration,
     assertAuthorized: assertCurrent,
@@ -399,25 +401,25 @@ const fixture = () => {
     },
   };
   return {
-    worker,
-    input,
-    execute,
-    inspect,
-    createLauncher,
-    getOidcToken,
     configuration,
-    retained,
+    createLauncher,
     deps,
+    execute,
     files,
+    getOidcToken,
+    input,
+    inspect,
+    retained,
+    revoke() {
+      authorized = false;
+    },
     selectStatus(value: typeof status) {
       status = value;
     },
     unknown() {
       unknown = true;
     },
-    revoke() {
-      authorized = false;
-    },
+    worker,
   };
 };
 describe("actual selected organization worker adapter", () => {
@@ -440,9 +442,9 @@ describe("actual selected organization worker adapter", () => {
       authRuntime: "private-auth-runtime",
     });
     expect(launched?.membershipProof).toEqual({
-      proof: f.retained.proof,
       oidcToken: "private-fixture-project-oidc",
       organizationId: "org-one",
+      proof: f.retained.proof,
     });
     expect(launched?.generatedRelease?.files).toBe(f.files);
     expect(
@@ -517,9 +519,9 @@ describe("actual selected organization worker adapter", () => {
     const launched = f.inspect.mock.calls[0]?.[0];
     expect(launched?.plan).toEqual(frozenHistorical.plan);
     expect(launched?.membershipProof).toEqual({
-      proof,
       oidcToken: "private-fixture-project-oidc",
       organizationId: "org-one",
+      proof,
     });
     expect(launched?.generatedRelease?.artifactRef).toBe(currentPlan.release.artifactRef);
     expect(launched?.directDatabaseUrl).toBe("private-auth-migration");
@@ -621,7 +623,7 @@ describe("actual selected organization worker adapter", () => {
         change === "actor" &&
         historical.plan.authMembership?.kind === "create-owned-organizations"
       ) {
-        const organization = historical.plan.authMembership.organizations[0];
+        const [organization] = historical.plan.authMembership.organizations;
         if (organization === undefined) {
           throw new Error("fixture_missing_organization");
         }

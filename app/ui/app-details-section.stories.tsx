@@ -11,9 +11,9 @@ const meta = {
   args: {
     appName: "Vendor Portal",
     brief: "Build a vendor onboarding portal.",
-    onAppNameChange: fn(),
-    onBriefChange: fn(),
-    onCycleBrief: fn(),
+    onAppNameChange: fn<NonNullable<Parameters<typeof AppDetailsSection>[0]["onAppNameChange"]>>(),
+    onBriefChange: fn<NonNullable<Parameters<typeof AppDetailsSection>[0]["onBriefChange"]>>(),
+    onCycleBrief: fn<NonNullable<Parameters<typeof AppDetailsSection>[0]["onCycleBrief"]>>(),
   },
   component: AppDetailsSection,
   decorators: [

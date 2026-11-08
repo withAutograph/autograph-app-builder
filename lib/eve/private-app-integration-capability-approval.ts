@@ -27,7 +27,7 @@ export const createPrivateAppIntegrationCapabilityApprovalCapture = (input: {
     planDigest: appIntegrationCapabilityPlanDigest(input.plan),
     operationRef: appIntegrationCapabilityOperationRef(input.plan),
   });
-  const capture = createPrivateOperatorApprovalCapture({
+  const captureInput: Parameters<typeof createPrivateOperatorApprovalCapture>[0] = {
     request: {
       action: "app-integration-capability",
       planRef: expected.operationRef,
@@ -36,8 +36,11 @@ export const createPrivateAppIntegrationCapabilityApprovalCapture = (input: {
     },
     ownerUserId: input.plan.authority.ownerUserId,
     callId: input.callId,
-    ...(input.state === undefined ? {} : { state: input.state }),
-  });
+  };
+  if (input.state !== undefined) {
+    captureInput.state = input.state;
+  }
+  const capture = createPrivateOperatorApprovalCapture(captureInput);
   return {
     observe(event: MessageStreamEvent) {
       if (event.type === "input.requested") {
@@ -87,15 +90,27 @@ export const readPrivateAppIntegrationCapabilityApproval = async (input: {
   ) {
     throw new Error("Integration capability approval owner changed");
   }
+  const approvalContext: Pick<
+    Parameters<typeof readPrivateOperatorApproval>[0],
+    "owner" | "observation"
+  > = { owner: input.owner };
+  if (input.observation !== undefined) {
+    approvalContext.observation = input.observation;
+  }
   return await readPrivateOperatorApproval({
-    owner: input.owner,
-    ...(input.observation === undefined ? {} : { observation: input.observation }),
-    capture: (state) =>
-      createPrivateAppIntegrationCapabilityApprovalCapture({
+    ...approvalContext,
+    capture: (state) => {
+      const captureInput: Parameters<
+        typeof createPrivateAppIntegrationCapabilityApprovalCapture
+      >[0] = {
         plan: input.plan,
         callId: input.callId,
-        ...(state === undefined ? {} : { state }),
-      }),
+      };
+      if (state !== undefined) {
+        captureInput.state = state;
+      }
+      return createPrivateAppIntegrationCapabilityApprovalCapture(captureInput);
+    },
     readHistory: input.readHistory,
     assertOwner: input.assertOwner,
   });

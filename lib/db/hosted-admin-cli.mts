@@ -32,14 +32,12 @@ async function readPrivateRequest(requestPath: string): Promise<unknown> {
     throw new Error("Hosted admin request path must be canonical and unsymlinked.");
   }
   const metadata = await stat(requestPath);
-  if (
+  const invalidOwnershipOrMode =
     !metadata.isFile() ||
     metadata.uid !== process.getuid?.() ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (metadata.mode & 0o077) !== 0 ||
-    metadata.size === 0 ||
-    metadata.size > MAX_REQUEST_BYTES
-  ) {
+    (metadata.mode & 0o077) !== 0;
+  if (invalidOwnershipOrMode || metadata.size === 0 || metadata.size > MAX_REQUEST_BYTES) {
     throw new Error("Hosted admin request must be an owner-only nonempty regular file.");
   }
   return JSON.parse(await readFile(requestPath, "utf-8"));
@@ -53,10 +51,12 @@ if (argv[0] === "plan") {
   const request = hostedAdminPlanRequestSchema.parse(await readPrivateRequest(argv[2]));
   process.stdout.write(`${JSON.stringify(planHostedAdminRequest(request))}\n`);
 } else if (argv[0] === "apply") {
-  if (
+  const invalidActionArguments =
     argv.length !== 7 ||
     argv[1] !== "--expected-action" ||
-    !actions.includes(argv[2] as (typeof actions)[number]) ||
+    !actions.includes(argv[2] as (typeof actions)[number]);
+  if (
+    invalidActionArguments ||
     argv[3] !== "--database-url-fd" ||
     argv[4] !== "0" ||
     argv[5] !== "--request-file"

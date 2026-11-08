@@ -10,42 +10,50 @@ import { approvalReceiptSchema } from "../lib/agent/approval-receipt";
 
 export { approvalReceiptSchema } from "../lib/agent/approval-receipt";
 
+interface ProofRpcPrefix {
+  id?: number;
+  jsonrpc: string;
+}
+
+interface ProofQuestionAnswer {
+  kind: "answer";
+  optionId?: HostedProofScenario["questionResponses"][number]["optionId"];
+  value: HostedProofScenario["questionResponses"][number]["value"];
+}
+
+const MCP_PROTOCOL_VERSION = "2025-03-26";
+const WWW_AUTHENTICATE_HEADER = "www-authenticate";
+
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const hex64 = z.string().regex(/^[0-9a-f]{64}$/u);
 const repositoryName = z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u);
 const gitRef = z.string().regex(/^refs\/(?:heads|tags)\/[A-Za-z0-9._/-]+$/u);
 
-const expectedApprovalSchema = z
-  .object({
-    receipt: approvalReceiptSchema,
-    requestTitle: z.string().min(1),
-    response: z.literal("approve"),
-  })
-  .strict();
+const expectedApprovalSchema = z.strictObject({
+  receipt: approvalReceiptSchema,
+  requestTitle: z.string().min(1),
+  response: z.literal("approve"),
+});
 
-const targetProofSchema = z
-  .object({
-    appSpecDigest: hex64,
-    baseRef: gitRef,
-    baseSha: objectId,
-    changeSetDigest: hex64,
-    headRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]+$/u),
-    proposalDigest: hex64,
-    repository: repositoryName,
-    repositoryId: z.string().regex(/^\d+$/u),
-  })
-  .strict();
+const targetProofSchema = z.strictObject({
+  appSpecDigest: hex64,
+  baseRef: gitRef,
+  baseSha: objectId,
+  changeSetDigest: hex64,
+  headRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]+$/u),
+  proposalDigest: hex64,
+  repository: repositoryName,
+  repositoryId: z.string().regex(/^\d+$/u),
+});
 
-const oauthProofSchema = z
-  .object({
-    audience: z.string().min(1),
-    issuer: z.string().url().startsWith("https://"),
-    resource: z.string().url().startsWith("https://"),
-  })
-  .strict();
+const oauthProofSchema = z.strictObject({
+  audience: z.string().min(1),
+  issuer: z.url().startsWith("https://"),
+  resource: z.url().startsWith("https://"),
+});
 
 export const hostedProofScenarioSchema = z
-  .object({
+  .strictObject({
     approvalReceipts: z.array(expectedApprovalSchema).length(3),
     cancelPrompt: z.string().trim().min(1).max(32_000),
     createPrompt: z.string().trim().min(1).max(32_000),
@@ -55,17 +63,14 @@ export const hostedProofScenarioSchema = z
     oauth: oauthProofSchema,
     pollIntervalMs: z.number().int().min(100).max(10_000).default(1000),
     questionResponses: z.array(
-      z
-        .object({
-          optionId: z.string().min(1).optional(),
-          requestTitle: z.string().min(1),
-          value: z.string().max(16_000),
-        })
-        .strict(),
+      z.strictObject({
+        optionId: z.string().min(1).optional(),
+        requestTitle: z.string().min(1),
+        value: z.string().max(16_000),
+      }),
     ),
     target: targetProofSchema,
   })
-  .strict()
   .superRefine((scenario, context) => {
     if (scenario.oauth.audience !== scenario.oauth.resource) {
       context.addIssue({
@@ -158,13 +163,13 @@ const tokenClaimsSchema = z
   .object({
     aud: z.string(),
     exp: z.number().int(),
-    iss: z.string().url().startsWith("https://"),
+    iss: z.url().startsWith("https://"),
     nbf: z.number().int(),
     scope: z.string().min(1),
     sub: z.string().min(1),
     workspace_id: z.string().min(1),
   })
-  .passthrough();
+  .loose();
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function tokenClaims(token: string) {
@@ -194,10 +199,12 @@ export function verifyWorkspaceTokenPair(input: {
   ];
   for (const claims of [primary, secondary]) {
     const scopes = new Set(claims.scope.split(" "));
-    if (
+    const invalidIssuerOrStart =
       claims.iss !== input.scenario.oauth.issuer ||
       claims.aud !== input.scenario.oauth.audience ||
-      claims.nbf > input.nowEpochSeconds ||
+      claims.nbf > input.nowEpochSeconds;
+    if (
+      invalidIssuerOrStart ||
       claims.exp <= input.nowEpochSeconds ||
       claims.exp - claims.nbf > 300 ||
       requiredScopes.some((scope) => !scopes.has(scope))
@@ -216,36 +223,32 @@ export function verifyWorkspaceTokenPair(input: {
   };
 }
 
-const protectedResourceMetadataSchema = z
-  .object({
-    authorization_servers: z.array(z.string().url().startsWith("https://")).length(1),
-    bearer_methods_supported: z.tuple([z.literal("header")]),
-    resource: z.string().url().startsWith("https://"),
-    scopes_supported: z.tuple([
-      z.literal("autograph:session"),
-      z.literal("autograph:start"),
-      z.literal("autograph:get"),
-      z.literal("autograph:send"),
-      z.literal("autograph:respond"),
-      z.literal("autograph:cancel"),
-    ]),
-  })
-  .strict();
+const protectedResourceMetadataSchema = z.strictObject({
+  authorization_servers: z.array(z.url().startsWith("https://")).length(1),
+  bearer_methods_supported: z.tuple([z.literal("header")]),
+  resource: z.url().startsWith("https://"),
+  scopes_supported: z.tuple([
+    z.literal("autograph:session"),
+    z.literal("autograph:start"),
+    z.literal("autograph:get"),
+    z.literal("autograph:send"),
+    z.literal("autograph:respond"),
+    z.literal("autograph:cancel"),
+  ]),
+});
 
-const draftPrReceiptSchema = z
-  .object({
-    baseRef: gitRef,
-    baseSha: objectId,
-    changeSetDigest: hex64,
-    draft: z.literal(true),
-    format: z.literal("autograph-draft-pr-publication-receipt-v1"),
-    headRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]+$/u),
-    headSha: objectId,
-    outcome: z.literal("draft-pr-created"),
-    repository: repositoryName,
-    url: z.string().url().startsWith("https://github.com/"),
-  })
-  .strict();
+const draftPrReceiptSchema = z.strictObject({
+  baseRef: gitRef,
+  baseSha: objectId,
+  changeSetDigest: hex64,
+  draft: z.literal(true),
+  format: z.literal("autograph-draft-pr-publication-receipt-v1"),
+  headRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]+$/u),
+  headSha: objectId,
+  outcome: z.literal("draft-pr-created"),
+  repository: repositoryName,
+  url: z.url().startsWith("https://github.com/"),
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function verifiedDraftPrEvidence(text: string, scenario: HostedProofScenario) {
@@ -257,17 +260,23 @@ export function verifiedDraftPrEvidence(text: string, scenario: HostedProofScena
   const receipt = draftPrReceiptSchema.parse(JSON.parse(candidates[0].slice(marker.length)));
   const url = new URL(receipt.url);
   const expectedPath = `/${receipt.repository}/pull/`;
-  if (
+  const invalidUrl =
     url.origin !== "https://github.com" ||
     !url.pathname.startsWith(expectedPath) ||
     !/^[1-9][0-9]*$/u.test(url.pathname.slice(expectedPath.length)) ||
-    url.search !== "" ||
+    url.search !== "";
+  const invalidTarget =
+    invalidUrl ||
     url.hash !== "" ||
     receipt.repository !== scenario.target.repository ||
-    receipt.baseRef !== scenario.target.baseRef ||
+    receipt.baseRef !== scenario.target.baseRef;
+  const invalidRevision =
+    invalidTarget ||
     receipt.baseSha !== scenario.target.baseSha ||
     receipt.headRef !== scenario.target.headRef ||
-    receipt.headRef === receipt.baseRef ||
+    receipt.headRef === receipt.baseRef;
+  if (
+    invalidRevision ||
     receipt.headSha === receipt.baseSha ||
     receipt.changeSetDigest !== scenario.target.changeSetDigest
   ) {
@@ -286,12 +295,12 @@ function jsonRpcPayload(text: string) {
   const payload = JSON.parse(contentTypePayload ?? text) as unknown;
   return z
     .object({
-      error: z.object({ code: z.number(), message: z.string() }).passthrough().optional(),
+      error: z.object({ code: z.number(), message: z.string() }).loose().optional(),
       id: z.union([z.string(), z.number()]).optional(),
       jsonrpc: z.literal("2.0"),
       result: z.unknown().optional(),
     })
-    .passthrough()
+    .loose()
     .parse(payload);
 }
 
@@ -327,7 +336,7 @@ export class HostedMcpProofClient {
     const headers = new Headers({
       accept: "application/json, text/event-stream",
       "content-type": "application/json",
-      "mcp-protocol-version": "2025-03-26",
+      "mcp-protocol-version": MCP_PROTOCOL_VERSION,
     });
     if (options.authenticate !== false && this.token !== undefined) {
       headers.set("authorization", `Bearer ${this.token}`);
@@ -335,15 +344,14 @@ export class HostedMcpProofClient {
     if (this.sessionId !== undefined) {
       headers.set("mcp-session-id", this.sessionId);
     }
-    if (!options.notification) {
+    if (options.notification !== true) {
       this.requestId += 1;
     }
-    const body = {
-      jsonrpc: "2.0",
-      ...(options.notification ? {} : { id: this.requestId }),
-      method,
-      params,
-    };
+    const prefix: ProofRpcPrefix = { jsonrpc: "2.0" };
+    if (options.notification !== true) {
+      prefix.id = this.requestId;
+    }
+    const body = { ...prefix, method, params };
     const response = await this.fetcher(this.endpoint, {
       body: JSON.stringify(body),
       headers,
@@ -356,18 +364,18 @@ export class HostedMcpProofClient {
     }
     const text = await response.text();
     this.responseBodies.push(text);
-    return {
-      headers: response.headers,
-      status: response.status,
-      ...(text === "" ? {} : { payload: jsonRpcPayload(text) }),
-    };
+    const result: ProofHttpResult = { headers: response.headers, status: response.status };
+    if (text !== "") {
+      result.payload = jsonRpcPayload(text);
+    }
+    return result;
   }
 
   async initialize() {
     const response = await this.post("initialize", {
       capabilities: {},
       clientInfo: { name: "autograph-hosted-proof", version: "1" },
-      protocolVersion: "2025-03-26",
+      protocolVersion: MCP_PROTOCOL_VERSION,
     });
     if (response.status !== 200 || response.payload?.error !== undefined) {
       throw new Error(`MCP initialize failed with HTTP ${response.status}.`);
@@ -384,8 +392,8 @@ export class HostedMcpProofClient {
       throw new Error(`MCP tools/list failed with HTTP ${response.status}.`);
     }
     const listed = z
-      .object({ tools: z.array(z.object({ name: z.string() }).passthrough()) })
-      .passthrough()
+      .object({ tools: z.array(z.object({ name: z.string() }).loose()) })
+      .loose()
       .parse(response.payload?.result);
     if ("nextCursor" in listed) {
       throw new Error("Hosted tools/list unexpectedly required pagination.");
@@ -403,7 +411,7 @@ export class HostedMcpProofClient {
         isError: z.boolean().optional(),
         structuredContent: z.unknown().optional(),
       })
-      .passthrough()
+      .loose()
       .parse(response.payload?.result);
     return {
       isError: result.isError === true,
@@ -424,7 +432,7 @@ export class HostedMcpProofClient {
         isError: z.boolean().optional(),
         structuredContent: z.unknown(),
       })
-      .passthrough()
+      .loose()
       .parse(response.payload?.result);
     const resultRejected = result.isError === true;
     if (resultRejected) {
@@ -462,7 +470,7 @@ export class HostedMcpProofClient {
       {
         capabilities: {},
         clientInfo: { name: "autograph-hosted-proof-negative", version: "1" },
-        protocolVersion: "2025-03-26",
+        protocolVersion: MCP_PROTOCOL_VERSION,
       },
       { authenticate },
     );
@@ -546,13 +554,11 @@ function responseFor(
       throw new Error("Question did not match exactly one title-bound response.");
     }
     const [match] = matches;
-    return {
-      response: {
-        kind: "answer" as const,
-        value: match.value,
-        ...(match.optionId === undefined ? {} : { optionId: match.optionId }),
-      },
-    };
+    const response: ProofQuestionAnswer = { kind: "answer", value: match.value };
+    if (match.optionId !== undefined) {
+      response.optionId = match.optionId;
+    }
+    return { response };
   }
   if (request.kind !== "approval" || request.description === undefined) {
     throw new Error("Only closed question or approval requests can be automated.");
@@ -699,10 +705,10 @@ export async function runHostedProof(input: {
   const missing = await noAuth.rawInitialize(false);
   if (
     missing.status !== 401 ||
-    !/^Bearer(?:\s|$)/iu.test(missing.headers.get("www-authenticate") ?? "") ||
-    !missing.headers
-      .get("www-authenticate")
-      ?.includes(`resource_metadata="${metadata.metadataUrl}"`)
+    !/^Bearer(?:\s|$)/iu.test(missing.headers.get(WWW_AUTHENTICATE_HEADER) ?? "") ||
+    missing.headers
+      .get(WWW_AUTHENTICATE_HEADER)
+      ?.includes(`resource_metadata="${metadata.metadataUrl}"`) !== true
   ) {
     throw new Error("Hosted endpoint did not fail closed without OAuth.");
   }
@@ -710,10 +716,10 @@ export async function runHostedProof(input: {
   const invalidResult = await invalid.rawInitialize(true);
   if (
     invalidResult.status !== 401 ||
-    !/^Bearer(?:\s|$)/iu.test(invalidResult.headers.get("www-authenticate") ?? "") ||
-    !invalidResult.headers
-      .get("www-authenticate")
-      ?.includes(`resource_metadata="${metadata.metadataUrl}"`)
+    !/^Bearer(?:\s|$)/iu.test(invalidResult.headers.get(WWW_AUTHENTICATE_HEADER) ?? "") ||
+    invalidResult.headers
+      .get(WWW_AUTHENTICATE_HEADER)
+      ?.includes(`resource_metadata="${metadata.metadataUrl}"`) !== true
   ) {
     throw new Error("Hosted endpoint did not reject an invalid bearer token.");
   }

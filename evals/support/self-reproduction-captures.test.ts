@@ -3,19 +3,20 @@ import { tmpdir } from "node:os";
 import nodePath from "node:path";
 import type { Browser } from "playwright";
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import {
   captureParity,
   runPairedCaptureEvidence,
   unavailableCaptureObservations,
   writePairedCaptureManifest,
 } from "./self-reproduction-captures";
-import type { CaptureAdapter } from "./self-reproduction-captures";
+import type { CaptureAdapter, CapturePage } from "./self-reproduction-captures";
 import { requirements } from "./self-reproduction-parity";
 
 describe("paired capture orchestration", () => {
   it("captures all desktop states separately, records inert controls, and closes contexts", async () => {
     const root = await mkdtemp(nodePath.join(tmpdir(), "parity-capture-test-"));
-    const close = vi.fn(() => Promise.resolve());
+    const close = vi.fn(async () => {});
     const newContext = vi.fn(() =>
       Promise.resolve({
         close,
@@ -25,7 +26,7 @@ describe("paired capture orchestration", () => {
           }),
       }),
     );
-    const adapter: CaptureAdapter = {
+    const adapter: CaptureAdapter<CapturePage> = {
       exercise: async (_page, state, capture) => {
         await capture();
         const requirement = requirements.find((row) => row.id === `capture/desktop/${state}`);
@@ -44,20 +45,24 @@ describe("paired capture orchestration", () => {
     try {
       const result = await captureParity({
         adapters: { candidate: adapter, reference: adapter },
-        browser: { newContext } as unknown as Browser,
+        browser: { newContext },
         outputRoot: root,
       });
       expect(result.reference).toHaveLength(15);
       expect(result.candidate).toHaveLength(15);
       expect(close).toHaveBeenCalledTimes(30);
       expect(newContext.mock.calls).toHaveLength(30);
-      const receipt = JSON.parse(
-        await readFile(
-          nodePath.join(root, "parity/captures/desktop/keyboard/candidate.json"),
-          "utf-8",
-        ),
-      );
-      expect(receipt.assertions.every((item: { passed: boolean }) => !item.passed)).toBe(true);
+      const receipt = z
+        .object({ assertions: z.array(z.object({ passed: z.boolean() })) })
+        .parse(
+          JSON.parse(
+            await readFile(
+              nodePath.join(root, "parity/captures/desktop/keyboard/candidate.json"),
+              "utf-8",
+            ),
+          ),
+        );
+      expect(receipt.assertions.every((item) => !item.passed)).toBe(true);
       const [referenceCapture] = result.reference;
       const [candidateCapture] = result.candidate;
       if (!referenceCapture || !candidateCapture) {
@@ -72,7 +77,7 @@ describe("paired capture orchestration", () => {
     const newContext = vi.fn();
     const result = await captureParity({
       adapters: {},
-      browser: { newContext } as unknown as Browser,
+      browser: { newContext },
       outputRoot: "/unused",
     });
     expect(
@@ -89,7 +94,7 @@ describe("paired capture orchestration", () => {
     try {
       const browser = {
         newContext: () => Promise.reject(new Error("Browser disconnected")),
-      } as unknown as Browser;
+      };
       const result = await captureParity({
         adapters: { candidate: adapter },
         browser,
@@ -106,8 +111,8 @@ describe("paired capture orchestration", () => {
   });
   it("owns one browser and writes a side-by-side advisory manifest", async () => {
     const root = await mkdtemp(nodePath.join(tmpdir(), "parity-capture-manifest-"));
-    const closeBrowser = vi.fn(() => Promise.resolve());
-    const closeContext = vi.fn(() => Promise.resolve());
+    const closeBrowser = vi.fn(async () => {});
+    const closeContext = vi.fn(async () => {});
     const newContext = vi.fn(() =>
       Promise.resolve({
         close: closeContext,
@@ -142,9 +147,18 @@ describe("paired capture orchestration", () => {
         candidate: { disposition: "observed" },
         reference: { disposition: "observed" },
       });
-      const manifest = JSON.parse(
-        await readFile(nodePath.join(root, "parity/captures/manifest.json"), "utf-8"),
-      );
+      const manifest = z
+        .object({
+          rows: z.array(
+            z.object({
+              candidate: z.object({ png: z.string().optional() }),
+              reference: z.object({ png: z.string().optional() }),
+            }),
+          ),
+        })
+        .parse(
+          JSON.parse(await readFile(nodePath.join(root, "parity/captures/manifest.json"), "utf-8")),
+        );
       expect(manifest.rows).toHaveLength(15);
       expect(manifest.rows[0].reference.png).toContain("/reference.png");
       expect(manifest.rows[0].candidate.png).toContain("/candidate.png");

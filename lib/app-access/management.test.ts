@@ -8,58 +8,49 @@ import type { AppAccessManagementDependencies, AppAccessOperationRow } from "./m
 import type { AppAccessOwner } from "./operator-client";
 
 const scope: RepositoryProductionScope = {
+  appId: "expenses",
   authority: {
-    issuer: "https://builder.test/api/auth",
     audience: "https://builder.test/mcp",
+    issuer: "https://builder.test/api/auth",
     ownerUserId: "owner",
     workspaceId: "workspace",
   },
-  appId: "expenses",
-  repositoryId: "123",
-  repositoryFullName: "org/apps",
-  projectId: "project",
-  organizationId: "dev",
-  publicOrigin: "https://apps.test",
   environment: "production",
+  organizationId: "dev",
+  projectId: "project",
+  publicOrigin: "https://apps.test",
+  repositoryFullName: "org/apps",
+  repositoryId: "123",
 };
 const owner: AppAccessOwner = {
   appId: scope.appId,
-  sessionId: "session",
   ownerContext: {
-    kind: "direct",
+    adapterGeneration: 1,
+    adapterSessionId: "adapter",
     authority: scope.authority,
+    kind: "direct",
     principal: { ...scope.authority, scopes: ["autograph:session"] },
     sessionId: "session",
-    adapterSessionId: "adapter",
-    adapterGeneration: 1,
   },
+  sessionId: "session",
 };
 const invite = () => ({
-  clientRequestId: randomUUID(),
   action: "invite" as const,
+  clientRequestId: randomUUID(),
   email: "guest@example.test",
   roles: ["reader"],
 });
 const setup = () => {
   const rows = new Map<string, AppAccessOperationRow>();
   const deps: AppAccessManagementDependencies = {
-    resolve: async () => ({
-      scope,
-      appName: "Expenses",
-      organizationName: "Dev",
-      roles: [{ id: "reader", label: "Reader" }],
-      creator: { status: "ready" },
-      canManage: true,
-    }),
+    acceptInvitation: vi.fn(async () => {}),
     assertAuthorized: vi.fn(async () => {}),
-    readPeople: async () => ({ members: [], invitations: [] }),
-    withLease: async (_scope, run) => await run(async () => {}),
+    enrollInvitee: vi.fn(async () => {}),
+    execute: vi.fn(async () => "applied" as const),
     journal: {
-      reserve: async (record) => {
-        const id = record.command.clientRequestId;
-        const current = rows.get(id) ?? structuredClone({ record, revision: 1 });
-        rows.set(id, current);
-        return structuredClone(current);
+      findInvitation: async (id) => {
+        const current = rows.get(id);
+        return current === undefined ? undefined : structuredClone(current);
       },
       pending: async () =>
         [...rows.values()]
@@ -67,6 +58,12 @@ const setup = () => {
             (row) => row.record.state === "pending" || row.record.enrollment?.state === "pending",
           )
           .map((row) => structuredClone(row)),
+      reserve: async (record) => {
+        const id = record.command.clientRequestId;
+        const current = rows.get(id) ?? structuredClone({ record, revision: 1 });
+        rows.set(id, current);
+        return structuredClone(current);
+      },
       update: async (row, record) => {
         const id = record.command.clientRequestId;
         if (rows.get(id)?.revision !== row.revision) {
@@ -77,22 +74,25 @@ const setup = () => {
         rows.set(id, next);
         return structuredClone(next);
       },
-      findInvitation: async (id) => {
-        const current = rows.get(id);
-        return current === undefined ? undefined : structuredClone(current);
-      },
     },
-    execute: vi.fn(async () => "applied" as const),
-    reconcile: vi.fn(async () => "unknown" as const),
+    readPeople: async () => ({ invitations: [], members: [] }),
     readVerifiedInvitation: async () => ({
+      accepted: false,
       actorId: "verified-guest",
       email: "guest@example.test",
       roles: ["reader"],
-      accepted: false,
     }),
-    enrollInvitee: vi.fn(async () => {}),
+    reconcile: vi.fn(async () => "unknown" as const),
     reconcileInvitee: vi.fn(async () => "applied" as const),
-    acceptInvitation: vi.fn(async () => {}),
+    resolve: async () => ({
+      appName: "Expenses",
+      canManage: true,
+      creator: { status: "ready" },
+      organizationName: "Dev",
+      roles: [{ id: "reader", label: "Reader" }],
+      scope,
+    }),
+    withLease: async (_scope, run) => await run(async () => {}),
   };
   return { deps, rows, service: createAppAccessManagementService(deps) };
 };
@@ -153,12 +153,12 @@ describe("managed app access", () => {
       service.execute(owner, { ...invite(), roles: ["organization-admin"] }),
     ).rejects.toMatchObject({ code: "app_access_denied" });
     deps.resolve = async () => ({
-      scope,
       appName: "Expenses",
+      canManage: true,
+      creator: { status: "ready" },
       organizationName: "Dev",
       roles: [],
-      creator: { status: "ready" },
-      canManage: true,
+      scope,
     });
     service = createAppAccessManagementService(deps);
     await service.execute(owner, { ...invite(), roles: [] });

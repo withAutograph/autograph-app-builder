@@ -87,7 +87,7 @@ export function appNameFromBrief(brief: string) {
     .split("\n")
     .map((line) => line.replace(/^\s*#+\s*/u, "").trim())
     .find(Boolean);
-  if (!firstContentLine) {
+  if (firstContentLine === undefined || firstContentLine === "") {
     return "";
   }
 
@@ -112,16 +112,17 @@ export function appNameFromBrief(brief: string) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function randomAppName(seed?: string) {
-  if (!seed) {
-    const adjective = randomNameAdjectives[Math.floor(Math.random() * randomNameAdjectives.length)];
-    const noun = randomNameNouns[Math.floor(Math.random() * randomNameNouns.length)];
+  if (seed === undefined || seed === "") {
+    const randomValues = crypto.getRandomValues(new Uint32Array(2));
+    const adjective = randomNameAdjectives[(randomValues[0] ?? 0) % randomNameAdjectives.length];
+    const noun = randomNameNouns[(randomValues[1] ?? 0) % randomNameNouns.length];
     return `${adjective} ${noun}`;
   }
-  const hash = [...seed].reduce(
+  let hash = 0;
+  for (const character of seed) {
     // oxlint-disable-next-line eslint/no-bitwise -- Keep the hash within uint32 bounds.
-    (value, character) => (value * 31 + (character.codePointAt(0) ?? 0)) >>> 0,
-    0,
-  );
+    hash = (hash * 31 + (character.codePointAt(0) ?? 0)) >>> 0;
+  }
   const adjective = randomNameAdjectives[hash % randomNameAdjectives.length];
   const noun =
     randomNameNouns[Math.floor(hash / randomNameAdjectives.length) % randomNameNouns.length];

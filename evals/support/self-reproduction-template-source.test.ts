@@ -4,11 +4,13 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { prepareSelfReproductionTemplateSource } from "./self-reproduction-template-source";
 
+type GitRunner = NonNullable<Parameters<typeof prepareSelfReproductionTemplateSource>[0]["runGit"]>;
+
 describe("self-contained template source", () => {
   it("clones the canonical template using structured arguments then records its revision", async () => {
     const outputDirectory = await mkdtemp(path.join(tmpdir(), "template-source-"));
     const runGit = vi
-      .fn()
+      .fn<GitRunner>()
       .mockResolvedValueOnce("")
       .mockResolvedValueOnce("actual-head")
       .mockResolvedValueOnce("https://github.com/withAutograph/arrusted-development.git");
@@ -30,7 +32,7 @@ describe("self-contained template source", () => {
   });
   it("preserves an explicitly supplied checkout and strips HTTP remote credentials", async () => {
     const runGit = vi
-      .fn()
+      .fn<GitRunner>()
       .mockResolvedValueOnce("local-head")
       .mockResolvedValueOnce("https://user:secret@github.com/example/template.git");
     const result = await prepareSelfReproductionTemplateSource({
@@ -44,7 +46,7 @@ describe("self-contained template source", () => {
   });
   it("surfaces actual clone failure without continuing to revision inspection", async () => {
     const outputDirectory = await mkdtemp(path.join(tmpdir(), "template-source-"));
-    const runGit = vi.fn().mockRejectedValue(new Error("GitHub access denied"));
+    const runGit = vi.fn<GitRunner>().mockRejectedValue(new Error("GitHub access denied"));
     try {
       await expect(
         prepareSelfReproductionTemplateSource({ outputDirectory, runGit }),

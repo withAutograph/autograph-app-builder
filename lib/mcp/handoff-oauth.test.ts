@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { activeBuilderModelId } from "../integrations/active-model";
 import {
   createRealOAuthHarness,
@@ -52,7 +53,7 @@ function handoffStore(): BuilderHandoffStore {
       ) {
         return;
       }
-      if (record.sessionId) {
+      if (record.sessionId !== undefined && record.sessionId !== "") {
         return record;
       }
       const bound = {
@@ -107,16 +108,24 @@ async function callStart(
   );
   expect(response.status).toBe(200);
   const text = await response.text();
-  const result = JSON.parse(
-    text
-      .split("\n")
-      .find((line) => line.startsWith("data: "))
-      ?.slice(6) ?? text,
+  const responseSchema = z.looseObject({
+    result: z.looseObject({
+      isError: z.boolean().optional(),
+      structuredContent: z.looseObject({ sessionId: z.string() }),
+    }),
+  });
+  const responseValue = z.custom<z.infer<typeof responseSchema>>(
+    (value) => responseSchema.safeParse(value).success,
   );
-  return result.result as {
-    isError?: boolean;
-    structuredContent: { sessionId: string };
-  };
+  const result = responseValue.parse(
+    JSON.parse(
+      text
+        .split("\n")
+        .find((line) => line.startsWith("data: "))
+        ?.slice(6) ?? text,
+    ),
+  );
+  return result.result;
 }
 
 describe("web session to real OAuth to hosted MCP handoff", () => {
@@ -213,7 +222,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
         }),
       );
       expect(create.status).toBe(200);
-      const { handoffId } = (await create.json()) as { handoffId: string };
+      const { handoffId } = z.object({ handoffId: z.string() }).parse(await create.json());
       expect(journalRead).toHaveBeenCalledWith({
         authority,
         requestId: provisioningRequestId,
@@ -400,7 +409,12 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
         sourceHandoffId: handoffId,
       });
       const persisted = await store.getSession(principal, result.structuredContent.sessionId);
-      if (!persisted || persisted.version !== 2 || !persisted.sourceHandoffId) {
+      if (
+        !persisted ||
+        persisted.version !== 2 ||
+        persisted.sourceHandoffId === undefined ||
+        persisted.sourceHandoffId === ""
+      ) {
         throw new Error("Durable prepared session missing.");
       }
       const restartedAuth = sessionEnvelope(persisted.principal, persisted.sourceHandoffId);

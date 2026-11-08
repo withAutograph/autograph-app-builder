@@ -112,7 +112,7 @@ export const createLocalNativeRecovery = (environment: Record<string, string | u
       | z.infer<typeof cancellationSchema>,
   ) => {
     assertLocal();
-    await mkdir(directory, { recursive: true, mode: 0o700 });
+    await mkdir(directory, { mode: 0o700, recursive: true });
     owned(directory, true);
     const temporary = `${file}.${process.pid}.${randomUUID()}`;
     try {
@@ -331,7 +331,7 @@ export const createLocalNativeRecovery = (environment: Record<string, string | u
           : reservationSchema.parse(previous).descriptor;
       await writeOnce(
         filename(source, "reservation"),
-        reservationSchema.parse({ kind: "local-native-recovery-v1", descriptor }),
+        reservationSchema.parse({ descriptor, kind: "local-native-recovery-v1" }),
       );
       const body = {
         operationId: descriptor.operationId,
@@ -397,10 +397,10 @@ export const withLocalRecoveredSessions = (
           throw unavailable();
         }
         return {
-          prefix,
           actual: client.sessions.attach(owner, {
             streamIndex: Math.max(0, (options?.streamIndex ?? 0) - prefix.length),
           }),
+          prefix,
         };
       };
       const control = async (actual: ClientSession, body: LocalRecoveredControlBody) => {

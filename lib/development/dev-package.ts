@@ -7,6 +7,9 @@ import { promisify } from "node:util";
 
 import { registeredAutographToolNames, sha256 } from "../../scripts/portable-release";
 
+const PLUGIN_ICON_PATH = "assets/autograph-icon.png";
+const PLUGIN_MANIFEST_PATH = ".codex-plugin/plugin.json";
+
 const execFileAsync = promisify(execFile);
 
 export const DEVELOPMENT_MARKETPLACE_NAME = "autograph-dev";
@@ -63,11 +66,11 @@ export const developmentPackageFingerprint = async (input: {
   const repositoryRoot = path.resolve(input.repositoryRoot);
   return sha256(
     JSON.stringify({
-      icon: sha256(await readFile(path.join(repositoryRoot, "assets/autograph-icon.png"))),
+      icon: sha256(await readFile(path.join(repositoryRoot, PLUGIN_ICON_PATH))),
       mcpHandler: sha256(await readFile(path.join(repositoryRoot, "lib/mcp/request-handler.ts"))),
       origin: input.origin,
       hostedSession: input.hostedSession,
-      plugin: sha256(await readFile(path.join(repositoryRoot, ".codex-plugin/plugin.json"))),
+      plugin: sha256(await readFile(path.join(repositoryRoot, PLUGIN_MANIFEST_PATH))),
       port: input.port,
       skills: await packageInputDigest(path.join(repositoryRoot, "skills")),
     }),
@@ -103,12 +106,9 @@ export const createDevelopmentPackage = async (input: {
       recursive: true,
     });
     await mkdir(path.join(pluginRoot, "assets"), { mode: 0o700 });
-    await cp(
-      path.join(repositoryRoot, "assets/autograph-icon.png"),
-      path.join(pluginRoot, "assets/autograph-icon.png"),
-    );
+    await cp(path.join(repositoryRoot, PLUGIN_ICON_PATH), path.join(pluginRoot, PLUGIN_ICON_PATH));
     const sourceManifest = JSON.parse(
-      await readFile(path.join(repositoryRoot, ".codex-plugin/plugin.json"), "utf-8"),
+      await readFile(path.join(repositoryRoot, PLUGIN_MANIFEST_PATH), "utf-8"),
     ) as Record<string, unknown>;
     const sourceInterface =
       typeof sourceManifest.interface === "object" && sourceManifest.interface !== null
@@ -195,7 +195,7 @@ export const createDevelopmentPackage = async (input: {
         mode: 0o600,
       }),
       writeFile(
-        path.join(pluginRoot, ".codex-plugin/plugin.json"),
+        path.join(pluginRoot, PLUGIN_MANIFEST_PATH),
         `${JSON.stringify(manifest, null, 2)}\n`,
         { mode: 0o600 },
       ),
@@ -206,7 +206,7 @@ export const createDevelopmentPackage = async (input: {
         mode: 0o600,
       }),
     ]);
-    const receipt = {
+    const receiptBase = {
       digest: sha256(
         JSON.stringify({
           endpoint,
@@ -222,9 +222,17 @@ export const createDevelopmentPackage = async (input: {
       format: "autograph-development-package-v2",
       marketplace: DEVELOPMENT_MARKETPLACE_NAME,
       mcpAppPreview: false,
-      ...(input.hostedSession === undefined
-        ? {}
-        : { hostedSessionResource: input.hostedSession.resourceUrl, execution: "hosted" }),
+    } as const;
+    const withHosted: typeof receiptBase & {
+      hostedSessionResource?: string;
+      execution?: "hosted";
+    } = receiptBase;
+    if (input.hostedSession !== undefined) {
+      withHosted.hostedSessionResource = input.hostedSession.resourceUrl;
+      withHosted.execution = "hosted";
+    }
+    const receipt = {
+      ...withHosted,
       mcpServer,
       plugin: DEVELOPMENT_PLUGIN_NAME,
       publication: false,
@@ -339,13 +347,31 @@ export const registerDevelopmentPackage = async (input: {
   if (
     !Array.isArray(parsed.installed) ||
     parsed.installed.length !== 1 ||
-    installed?.pluginId !== DEVELOPMENT_PLUGIN_SELECTOR ||
+    installed?.pluginId !== DEVELOPMENT_PLUGIN_SELECTOR
+  ) {
+    throw new Error(
+      `Codex did not report the exact project-scoped ${DEVELOPMENT_PLUGIN_SELECTOR} installation.`,
+    );
+  }
+  if (
     installed.name !== DEVELOPMENT_PLUGIN_NAME ||
     installed.marketplaceName !== DEVELOPMENT_MARKETPLACE_NAME ||
-    installed.version !== input.version ||
+    installed.version !== input.version
+  ) {
+    throw new Error(
+      `Codex did not report the exact project-scoped ${DEVELOPMENT_PLUGIN_SELECTOR} installation.`,
+    );
+  }
+  if (
     installed.installed !== true ||
     installed.source?.source !== "local" ||
-    installed.source.path !== path.join(marketplaceRoot, "plugins", DEVELOPMENT_PLUGIN_NAME) ||
+    installed.source.path !== path.join(marketplaceRoot, "plugins", DEVELOPMENT_PLUGIN_NAME)
+  ) {
+    throw new Error(
+      `Codex did not report the exact project-scoped ${DEVELOPMENT_PLUGIN_SELECTOR} installation.`,
+    );
+  }
+  if (
     installed.marketplaceSource?.sourceType !== "local" ||
     installed.marketplaceSource.source !== marketplaceRoot
   ) {

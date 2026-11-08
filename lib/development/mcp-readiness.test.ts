@@ -1,9 +1,12 @@
 import { setTimeout as delay } from "node:timers/promises";
 import type { setTimeout as timerPromiseSetTimeout } from "node:timers/promises";
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import { TOOL_NAMES } from "../../scripts/portable-release";
 import { developmentMcpToolNames, waitForDevelopmentMcp } from "./mcp-readiness";
+
+const requestSchema = z.looseObject({ id: z.number().optional(), method: z.string() });
 
 // oxlint-disable-next-line anti-slop/no-module-mocking -- deterministic coverage of the retry delay without wall-clock waits
 vi.mock("node:timers/promises", async (importOriginal) => {
@@ -23,11 +26,8 @@ describe("development MCP readiness", () => {
   it("initializes one session and returns the advertised tool names", async () => {
     const methods: string[] = [];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const fetcher = vi.fn(async (_input, init) => {
-      const request = JSON.parse(String(init?.body)) as {
-        id?: number;
-        method: string;
-      };
+    const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
+      const request = requestSchema.parse(JSON.parse(String(init?.body)));
       methods.push(request.method);
       if (request.method === "initialize") {
         return response({ id: request.id, jsonrpc: "2.0", result: {} }, 200, "dev-1");
@@ -40,7 +40,7 @@ describe("development MCP readiness", () => {
         jsonrpc: "2.0",
         result: { tools: TOOL_NAMES.map((name) => ({ name })) },
       });
-    }) as typeof fetch;
+    });
     await expect(
       developmentMcpToolNames({
         endpoint: "http://127.0.0.1:3210/mcp",
@@ -53,11 +53,8 @@ describe("development MCP readiness", () => {
   it("retries an endpoint that is still starting, then returns discovery", async () => {
     let attempt = 0;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const fetcher = vi.fn(async (_input, init) => {
-      const request = JSON.parse(String(init?.body)) as {
-        id?: number;
-        method: string;
-      };
+    const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
+      const request = requestSchema.parse(JSON.parse(String(init?.body)));
       const firstAttempt = attempt === 0;
       attempt += 1;
       if (request.method === "initialize" && firstAttempt) {
@@ -74,7 +71,7 @@ describe("development MCP readiness", () => {
         jsonrpc: "2.0",
         result: { tools: TOOL_NAMES.map((name) => ({ name })) },
       });
-    }) as typeof fetch;
+    });
     await expect(
       waitForDevelopmentMcp({
         endpoint: "http://127.0.0.1:3210/mcp",
@@ -105,13 +102,13 @@ describe("development MCP readiness", () => {
       vi.mocked(delay).mockImplementationOnce(deterministicDelay as typeof delay);
     }
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const fetcher = vi.fn(async (_input, init) => {
-      const request = JSON.parse(String(init?.body)) as { method: string };
+    const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
+      const request = requestSchema.parse(JSON.parse(String(init?.body)));
       if (request.method === "initialize") {
         initializeTimes.push(Date.now());
       }
       return response({ error: "starting" }, 503);
-    }) as typeof fetch;
+    });
     const waiting = waitForDevelopmentMcp({
       endpoint: "http://127.0.0.1:3210/mcp",
       fetcher,
@@ -143,7 +140,7 @@ describe("development MCP readiness", () => {
       vi.mocked(delay).mockImplementationOnce(deterministicDelay as typeof delay);
     }
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const fetcher = vi.fn(async () => response({ error: "starting" }, 503)) as typeof fetch;
+    const fetcher = vi.fn<typeof fetch>(async () => response({ error: "starting" }, 503));
     try {
       await expect(
         waitForDevelopmentMcp({
@@ -161,11 +158,8 @@ describe("development MCP readiness", () => {
   it("accepts reordered discovery with additional tools", async () => {
     const names = [...TOOL_NAMES.toReversed(), "development_inspect"];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const fetcher = vi.fn(async (_input, init) => {
-      const request = JSON.parse(String(init?.body)) as {
-        id?: number;
-        method: string;
-      };
+    const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
+      const request = requestSchema.parse(JSON.parse(String(init?.body)));
       if (request.method === "initialize") {
         return response({ id: request.id, jsonrpc: "2.0", result: {} }, 200, "dev-3");
       }
@@ -177,7 +171,7 @@ describe("development MCP readiness", () => {
         jsonrpc: "2.0",
         result: { tools: names.map((name) => ({ name })) },
       });
-    }) as typeof fetch;
+    });
     await expect(
       waitForDevelopmentMcp({
         endpoint: "http://127.0.0.1:3210/mcp",

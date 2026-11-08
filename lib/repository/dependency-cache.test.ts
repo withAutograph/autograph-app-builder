@@ -18,6 +18,7 @@ import nodePath from "node:path";
 import { promisify } from "node:util";
 
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import type { SandboxSession } from "eve/sandbox";
 
@@ -50,8 +51,40 @@ import {
   shouldPreferLiveTemplateDependencies,
 } from "./dependency-cache";
 
+const unexpectedSandboxOperation = (): never => {
+  throw new Error("Unexpected sandbox operation in test fixture");
+};
+const sandboxDefaults = {
+  readBinaryFile: unexpectedSandboxOperation,
+  readFile: unexpectedSandboxOperation,
+  readTextFile: unexpectedSandboxOperation,
+  removePath: unexpectedSandboxOperation,
+  resolvePath: unexpectedSandboxOperation,
+  run: unexpectedSandboxOperation,
+  spawn: unexpectedSandboxOperation,
+  writeBinaryFile: unexpectedSandboxOperation,
+  writeFile: unexpectedSandboxOperation,
+  writeTextFile: unexpectedSandboxOperation,
+} satisfies SandboxSession;
+const createSandbox = <T extends Partial<SandboxSession>>(overrides: T): SandboxSession & T => ({
+  ...sandboxDefaults,
+  ...overrides,
+});
+
 const { join } = nodePath;
 const executeFile = promisify(execFile);
+
+const closureObservationSchema = z.looseObject({
+  nodeModulesDigest: z.string(),
+  workspaceLinks: z.array(
+    z.looseObject({ path: z.string(), sourcePath: z.string(), target: z.string() }),
+  ),
+  workspaceNodeModules: z.array(
+    z.looseObject({ digest: z.string(), nodeModulesPath: z.string(), path: z.string() }),
+  ),
+});
+const isClosureObservation = (value: unknown): value is z.infer<typeof closureObservationSchema> =>
+  closureObservationSchema.safeParse(value).success;
 
 const archiveDigest = "a".repeat(64);
 const hostedArchiveDigest = "d1febde038cc4f84394293e80bf076c944809a3e6cb6485accf67f4af2c4b1ce";
@@ -157,17 +190,20 @@ function liveDependencySourceFixture(input?: { packageJson?: string; ordinarySou
   }));
   const dependencyInputs = Object.fromEntries(
     sourceFiles
-      .filter(
-        ({ path }) =>
-          path === ".config/mise/config.toml" ||
-          path === ".config/mise/mise.lock" ||
+      .filter(({ path }) => {
+        if (path === ".config/mise/config.toml" || path === ".config/mise/mise.lock") {
+          return true;
+        }
+        if (
           path === "package.json" ||
           path === "bun.lock" ||
           path === "Cargo.toml" ||
-          path === "Cargo.lock" ||
-          path.endsWith("/package.json") ||
-          path.endsWith("/Cargo.toml"),
-      )
+          path === "Cargo.lock"
+        ) {
+          return true;
+        }
+        return path.endsWith("/package.json") || path.endsWith("/Cargo.toml");
+      })
       .map(({ path, sha256 }) => [path, sha256]),
   );
   return { contents, dependencyInputs, sourceFiles };
@@ -223,7 +259,7 @@ function liveTemplateCacheFixture() {
   const writeTextFile = vi.fn(async ({ path, content }: { path: string; content: string }) => {
     stored.set(path, content);
   });
-  const sandbox = {
+  const sandbox = createSandbox({
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     readBinaryFile: vi.fn(async ({ path }: { path: string }) => {
       const content = source.contents.get(path.replace(/^repository\//u, ""));
@@ -238,7 +274,7 @@ function liveTemplateCacheFixture() {
     run,
     setNetworkPolicy,
     writeTextFile,
-  } as unknown as SandboxSession;
+  });
   return {
     run,
     sandbox,
@@ -261,7 +297,7 @@ function liveTemplateCacheFixture() {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sandboxFixture(inputManifest: unknown = manifest) {
   const run = vi
-    .fn()
+    .fn<SandboxSession["run"]>()
     .mockResolvedValueOnce({
       exitCode: 0,
       stderr: "",
@@ -279,12 +315,12 @@ function sandboxFixture(inputManifest: unknown = manifest) {
   run.mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const writeTextFile = vi.fn(async () => {});
-  const sandbox = {
+  const sandbox = createSandbox({
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     readTextFile: vi.fn(async () => JSON.stringify({ version: "2.4.0" })),
     run,
     writeTextFile,
-  } as unknown as SandboxSession;
+  });
   return { run, sandbox, writeTextFile };
 }
 
@@ -302,7 +338,7 @@ function hostedExecutionSandbox(inputManifest: unknown = hostedExecutionManifest
       stderr: "",
       stdout: `${hostedArchiveDigest}  ${DEPENDENCY_CACHE_ARCHIVE_PATH}\n1356765\n`,
     });
-  return { run, sandbox: { run } as unknown as SandboxSession };
+  return { run, sandbox: createSandbox({ run }) };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -359,9 +395,8 @@ describe("offline dependency cache", () => {
     const fixture = liveTemplateCacheFixture();
     fixture.setBootstrapStderr("installer progress\n".repeat(20_000));
 
-    await expect(
-      bootstrapLiveTemplateDependencies({ sandbox: fixture.sandbox }),
-    ).resolves.toMatchObject({ contentDigest: expect.any(String) });
+    const result = await bootstrapLiveTemplateDependencies({ sandbox: fixture.sandbox });
+    expect(result.contentDigest).toEqual(expect.any(String));
   });
 
   it("invalidates the live cache key only for declared dependency and runtime inputs", () => {
@@ -423,19 +458,10 @@ describe("offline dependency cache", () => {
         "linux/x86_64",
         fixture.manifestPath,
       ]);
-      const observation = JSON.parse(inspected.stdout) as {
-        nodeModulesDigest: string;
-        workspaceNodeModules: {
-          path: string;
-          nodeModulesPath: string;
-          digest: string;
-        }[];
-        workspaceLinks: {
-          path: string;
-          target: string;
-          sourcePath: string;
-        }[];
-      };
+      const observation: unknown = JSON.parse(inspected.stdout);
+      if (!isClosureObservation(observation)) {
+        throw new Error("Dependency closure inspection returned malformed output.");
+      }
       expect(observation.workspaceNodeModules).toEqual([
         expect.objectContaining({
           nodeModulesPath: fixture.appModules,
@@ -652,7 +678,7 @@ describe("offline dependency cache", () => {
       sourceSha: "3".repeat(40),
       sourceTree: "4".repeat(40),
     };
-    const cache = await inspectDependencyCache({} as SandboxSession, process.env, target);
+    const cache = await inspectDependencyCache(createSandbox({}), process.env, target);
 
     expect(dependencyTargetForWorkspace(cache, target)).toEqual(
       expect.objectContaining({
@@ -660,13 +686,13 @@ describe("offline dependency cache", () => {
         tree: target.sourceTree,
       }),
     );
-    expect(() =>
+    expect(() => {
       assertExactDependencyTargetBinding({
         cache,
         sourceReceipt: target,
         workspace: target,
-      }),
-    ).not.toThrow();
+      });
+    }).not.toThrow();
   });
 
   it("rejects source-tree and durable dependency-receipt drift", async () => {
@@ -675,16 +701,16 @@ describe("offline dependency cache", () => {
       sourceSha: "3".repeat(40),
       sourceTree: "4".repeat(40),
     };
-    const cache = await inspectDependencyCache({} as SandboxSession, process.env, target);
+    const cache = await inspectDependencyCache(createSandbox({}), process.env, target);
 
-    expect(() =>
+    expect(() => {
       assertExactDependencyTargetBinding({
         cache,
         sourceReceipt: { ...target, sourceTree: "5".repeat(40) },
         workspace: target,
-      }),
-    ).toThrow("prepared source does not match");
-    expect(() =>
+      });
+    }).toThrow("prepared source does not match");
+    expect(() => {
       assertExactDependencyTargetBinding({
         cache,
         dependencyReceipt: {
@@ -695,9 +721,9 @@ describe("offline dependency cache", () => {
         },
         sourceReceipt: target,
         workspace: target,
-      }),
-    ).toThrow("prepared source does not match");
-    expect(() =>
+      });
+    }).toThrow("prepared source does not match");
+    expect(() => {
       assertExactDependencyTargetBinding({
         cache,
         dependencyReceipt: {
@@ -708,8 +734,8 @@ describe("offline dependency cache", () => {
         },
         sourceReceipt: target,
         workspace: target,
-      }),
-    ).toThrow("prepared source does not match");
+      });
+    }).toThrow("prepared source does not match");
   });
 
   it("binds reusable development dependencies to the per-run source without making source bytes part of the cache key", () => {
@@ -751,13 +777,13 @@ describe("offline dependency cache", () => {
       sha: workspace.sourceSha,
       tree: workspace.sourceTree,
     });
-    expect(() =>
+    expect(() => {
       assertExactDependencyTargetBinding({
         cache,
         sourceReceipt: workspace,
         workspace,
-      }),
-    ).not.toThrow();
+      });
+    }).not.toThrow();
   });
 
   it("reports a typed live-template miss without falling through to another cache", async () => {
@@ -769,7 +795,7 @@ describe("offline dependency cache", () => {
       stderr: "",
       stdout: "linux/x86_64\n",
     }));
-    const sandbox = {
+    const sandbox = createSandbox({
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       readBinaryFile: vi.fn(async ({ path }: { path: string }) => {
         const content = source.contents.get(path.replace(/^repository\//u, ""));
@@ -780,7 +806,7 @@ describe("offline dependency cache", () => {
         path === ".app-builder/source-files.json" ? JSON.stringify(source.sourceFiles) : null,
       ),
       run,
-    } as unknown as SandboxSession;
+    });
 
     await expect(inspectDependencyCache(sandbox, {}, target, true)).rejects.toBeInstanceOf(
       DependencyCacheMissingError,
@@ -974,7 +1000,7 @@ describe("offline dependency cache", () => {
       workingDirectory: "/workspace",
     });
     const linkCommand = run.mock.calls
-      .map(([request]) => request.command as string)
+      .map(([request]) => request.command)
       .find((command) => command.includes("test -x") && command.includes(".bin/vp"));
     expect(linkCommand).toBeDefined();
     if (linkCommand === undefined) {
@@ -1024,12 +1050,12 @@ describe("offline dependency cache", () => {
     expect(
       run.mock.calls.some(
         ([request]) =>
-          (request.command as string).includes("@autograph/vite-config") &&
-          (request.command as string).includes("await import"),
+          request.command.includes("@autograph/vite-config") &&
+          request.command.includes("await import"),
       ),
     ).toBe(false);
     const resolutionCommand = run.mock.calls
-      .map(([request]) => request.command as string)
+      .map(([request]) => request.command)
       .find((command) => command.includes('const {match}=require("path-to-regexp")'));
     expect(resolutionCommand).toBeDefined();
     if (resolutionCommand === undefined) {
@@ -1039,9 +1065,9 @@ describe("offline dependency cache", () => {
     expect(resolutionCommand).toContain(ARRUSTED_MICROFRONTENDS_VERSION);
     expect(resolutionCommand).toContain(ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION);
     expect(resolutionCommand).toContain('result?.path!=="/vendor"');
-    expect(
-      run.mock.calls.some(([request]) => (request.command as string).includes("cargo metadata")),
-    ).toBe(false);
+    expect(run.mock.calls.some(([request]) => request.command.includes("cargo metadata"))).toBe(
+      false,
+    );
   });
 
   it("does not require Rust for the pinned Vercel Development planning closure", async () => {
@@ -1059,11 +1085,11 @@ describe("offline dependency cache", () => {
       },
     });
 
-    expect(
-      run.mock.calls.some(([request]) => (request.command as string).includes("cargo metadata")),
-    ).toBe(false);
+    expect(run.mock.calls.some(([request]) => request.command.includes("cargo metadata"))).toBe(
+      false,
+    );
     const developmentLinkCommand = run.mock.calls
-      .map(([request]) => request.command as string)
+      .map(([request]) => request.command)
       .find((command) => command.includes("test -x") && command.includes(".bin/vp"));
     expect(developmentLinkCommand).toBeDefined();
     if (developmentLinkCommand === undefined) {
@@ -1260,21 +1286,21 @@ describe("linked package dependency views", () => {
       }
       const layout = {
         kind: "cache",
-        version: 1,
         roots: [
-          { path: "node_modules", cachePath: rootModules },
-          { path: "apps/example/node_modules", cachePath: appModules },
+          { cachePath: rootModules, path: "node_modules" },
+          { cachePath: appModules, path: "apps/example/node_modules" },
         ],
+        version: 1,
         workspaceLinks: [
           {
             path: "node_modules/@fixture/local",
-            target: "../../packages/local",
             sourcePath: "packages/local",
+            target: "../../packages/local",
           },
           {
             path: "apps/example/node_modules/@fixture/local",
-            target: "../../../../packages/local",
             sourcePath: "packages/local",
+            target: "../../../../packages/local",
           },
         ],
       };
@@ -1294,18 +1320,18 @@ describe("linked package dependency views", () => {
       ]);
     };
     return {
-      root,
-      workspace,
-      source,
-      candidate,
-      view,
-      rootModules,
       appModules,
-      physicalPackage,
+      candidate,
       packageBytes,
-      sourceBytes,
       packageMode,
+      physicalPackage,
+      root,
+      rootModules,
       run,
+      source,
+      sourceBytes,
+      view,
+      workspace,
     };
   };
 
@@ -1366,7 +1392,7 @@ describe("linked package dependency views", () => {
           fixture.sourceBytes,
         );
       } finally {
-        await rm(fixture.root, { recursive: true, force: true });
+        await rm(fixture.root, { force: true, recursive: true });
       }
     },
   );
@@ -1445,7 +1471,7 @@ describe("linked package dependency views", () => {
         code: "ENOENT",
       });
     } finally {
-      await rm(fixture.root, { recursive: true, force: true });
+      await rm(fixture.root, { force: true, recursive: true });
     }
   });
 
@@ -1480,7 +1506,7 @@ describe("linked package dependency views", () => {
           fixture.packageBytes,
         );
       } finally {
-        await rm(fixture.root, { recursive: true, force: true });
+        await rm(fixture.root, { force: true, recursive: true });
       }
     },
   );
@@ -1514,7 +1540,7 @@ describe("linked package dependency views", () => {
           'module.exports="candidate-install";',
         );
       } finally {
-        await rm(fixture.root, { recursive: true, force: true });
+        await rm(fixture.root, { force: true, recursive: true });
       }
     },
   );

@@ -93,12 +93,17 @@ export const readSelectedDevelopmentDependencies = async (
       "The selected Builder resolves Eve outside its selected dependency tree. Run pnpm install --frozen-lockfile in that checkout to remove stale per-package or ancestor resolution before resuming.",
     );
   }
-  return {
-    modulesRoot,
-    ...(sourceLock === undefined ? {} : { sourceLockSha256: digest(sourceLock) }),
-    ...(installedLock === undefined ? {} : { installedLockSha256: digest(installedLock) }),
-    evePackagePath,
-  };
+  const binding: Pick<
+    DevelopmentDependencyBinding,
+    "modulesRoot" | "sourceLockSha256" | "installedLockSha256"
+  > = { modulesRoot };
+  if (sourceLock !== undefined) {
+    binding.sourceLockSha256 = digest(sourceLock);
+  }
+  if (installedLock !== undefined) {
+    binding.installedLockSha256 = digest(installedLock);
+  }
+  return { ...binding, evePackagePath };
 };
 /** Actual resolution readback, not an authored-source or READY claim. */
 export const assertDevelopmentApplicationDependencies = async (input: {

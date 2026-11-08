@@ -1,5 +1,4 @@
 import { and, eq, lt, lte, ne, notExists, or, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import {
   agentOperations,
@@ -15,10 +14,10 @@ import {
   validationLogChunks,
   validationLogManifests,
 } from "./schema";
-import type * as databaseSchema from "./schema";
+import type { HostedDatabase } from "./hosted-postgres";
 import type { HostedAdminStore } from "./hosted-admin";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

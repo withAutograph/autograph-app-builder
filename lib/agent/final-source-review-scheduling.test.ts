@@ -341,8 +341,8 @@ it("final acceptance permits absent or incomplete destination inspection coverag
     ]);
     expect(model.doGenerateCalls).toHaveLength(0);
     expect(appBuilderWorkflowState.get()).toMatchObject({
-      phase: "validated",
       appBackendKind: "static",
+      phase: "validated",
     });
     const installation = createGitHubInstallationIdentity({
       accountId: "20",
@@ -384,8 +384,8 @@ it("final acceptance permits absent or incomplete destination inspection coverag
     }).toThrow("changed concurrently");
     const first = await tool.execute({ runSourceReview: true }, context("final-first"));
     expect(appBuilderWorkflowState.get()).toMatchObject({
-      phase: "reviewed",
       appBackendKind: "static",
+      phase: "reviewed",
     });
     expect(first).toMatchObject({
       sourceAssessment: { reviewCompleted: true, status: "unassessed" },
@@ -505,22 +505,6 @@ it("prepared review resumes in the original acceptance context without a second 
     let preparedCalls = 0;
     let finalizedCalls = 0;
     const tool = createChangeSetAcceptanceTool({
-      async observeChangeSet() {
-        return await Promise.resolve({
-          changeSet: deriveNormalizedChangeSet(apply, validation, "contract"),
-          observed: { files: apply.postTree, treeDigest: apply.postTreeDigest },
-        });
-      },
-      async reviewSource() {
-        directCalls += 1;
-        await Promise.resolve();
-        throw new Error("Direct paid loop must not run");
-      },
-      async prepareSourceReview(input) {
-        preparedCalls += 1;
-        expect(input.sessionId).toBe("local-session");
-        return await Promise.resolve({ reference });
-      },
       async finalizeSourceReview(input) {
         finalizedCalls += 1;
         expect(input.reference).toEqual(reference);
@@ -541,28 +525,44 @@ it("prepared review resumes in the original acceptance context without a second 
           ),
         );
       },
+      async observeChangeSet() {
+        return await Promise.resolve({
+          changeSet: deriveNormalizedChangeSet(apply, validation, "contract"),
+          observed: { files: apply.postTree, treeDigest: apply.postTreeDigest },
+        });
+      },
+      async prepareSourceReview(input) {
+        preparedCalls += 1;
+        expect(input.sessionId).toBe("local-session");
+        return await Promise.resolve({ reference });
+      },
+      async reviewSource() {
+        directCalls += 1;
+        await Promise.resolve();
+        throw new Error("Direct paid loop must not run");
+      },
     });
     const ordinary = await tool.execute({}, context("ordinary-acceptance"));
     expect(ordinary).toMatchObject({
       sourceAssessment: { reviewCompleted: false, status: "unassessed" },
     });
-    expect({ directCalls, preparedCalls, finalizedCalls }).toEqual({
+    expect({ directCalls, finalizedCalls, preparedCalls }).toEqual({
       directCalls: 0,
-      preparedCalls: 0,
       finalizedCalls: 0,
+      preparedCalls: 0,
     });
     const pending = await tool.execute({ runSourceReview: true }, context("prepare-review"));
-    expect(pending).toMatchObject({ status: "source_review_pending", sourceReview: reference });
+    expect(pending).toMatchObject({ sourceReview: reference, status: "source_review_pending" });
     expect(appBuilderWorkflowState.get().phase).toBe("reviewed");
     const accepted = await tool.execute({ sourceReview: reference }, context("finish-review"));
     expect(accepted).toMatchObject({
       sourceAssessment: { reviewCompleted: false, status: "blocked" },
     });
     expect(appBuilderWorkflowState.get().phase).toBe("reviewed");
-    expect({ directCalls, preparedCalls, finalizedCalls }).toEqual({
+    expect({ directCalls, finalizedCalls, preparedCalls }).toEqual({
       directCalls: 0,
-      preparedCalls: 1,
       finalizedCalls: 1,
+      preparedCalls: 1,
     });
   });
 });
@@ -644,7 +644,7 @@ it("captures parent evidence and finalizes a private durable outcome without rer
         }),
       ).toMatchObject({ reviewCompleted: true });
       expect(await prepareAppliedProductSourceReview(input)).toMatchObject({
-        assessment: { reviewCompleted: true, invocation: { journalReuses: 1 } },
+        assessment: { invocation: { journalReuses: 1 }, reviewCompleted: true },
       });
       expect(
         await finalizeAppliedProductSourceReview({
@@ -655,6 +655,6 @@ it("captures parent evidence and finalizes a private durable outcome without rer
     });
   } finally {
     vi.unstubAllEnvs();
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { force: true, recursive: true });
   }
 });

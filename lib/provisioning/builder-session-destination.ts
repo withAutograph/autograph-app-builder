@@ -45,7 +45,7 @@ export const createBuilderSessionDestinationService = <
     if (session.builderDestination === undefined && request.deploymentAccess !== "public-app") {
       throw new Error("Review public app delivery before creating its destination.");
     }
-    const appId = session.appId;
+    const { appId } = session;
     const authority = {
       issuer: input.principal.issuer,
       audience: input.principal.audience,

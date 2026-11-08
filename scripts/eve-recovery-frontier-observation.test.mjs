@@ -42,10 +42,12 @@ const request = {
 };
 const response = { requestId: request.requestId, optionId: "approve" };
 const coordinates = { sequence: 7, stepIndex: 2, turnId: "private-turn" };
+const state = (session) => ({ snapshot: { session } });
 const setup = () => {
   let before = appendPendingInputBatch({
-    session: { sessionId: "logical", history: [], state: {} },
+    event: coordinates,
     requests: [request],
+    responseAuthRequiredRequestIds: [request.requestId],
     responseMessages: [
       {
         role: "assistant",
@@ -59,16 +61,15 @@ const setup = () => {
         ],
       },
     ],
-    event: coordinates,
-    responseAuthRequiredRequestIds: [request.requestId],
+    session: { sessionId: "logical", history: [], state: {} },
     toolReplayIdentities: { [request.requestId]: secret },
   });
   before = setPendingCoordinationBatch({
-    session: before,
-    responseMessages: [],
-    tasks: [{ callId: call.toolCallId, toolName: call.toolName }],
-    runtimeActions: [],
     event: coordinates,
+    responseMessages: [],
+    runtimeActions: [],
+    session: before,
+    tasks: [{ callId: call.toolCallId, toolName: call.toolName }],
   });
   const after = {
     ...before,
@@ -94,7 +95,6 @@ const setup = () => {
       { role: "user", kind: "context.instruction", content: secret },
     ],
   };
-  const state = (session) => ({ snapshot: { session } });
   const candidates = [
     {
       kind: "terminal-finalizer-input",
@@ -183,7 +183,7 @@ test("reports exact retained approval lineage, outcome frontier and durable disp
   const unchanged = JSON.stringify(input);
   assert.equal(recordTerminalRecoveryObservation(input), true);
   const summary = logs.at(-1);
-  const fact = summary.missingCallFrontier.sample[0];
+  const [fact] = summary.missingCallFrontier.sample;
   assert.equal(fact.callHash, protocolIdentityHash(call.toolCallId));
   assert.equal(fact.toolNameHash, protocolIdentityHash(call.toolName));
   assert.equal(fact.bindingSample[0].sameCallBytes, true);
@@ -210,7 +210,7 @@ test("does not call missing outcome an execution proof and counts mismatching ac
     optionId: "deny",
   };
   assert.equal(recordTerminalRecoveryObservation(input), true);
-  const fact = logs.at(-1).missingCallFrontier.sample[0];
+  const [fact] = logs.at(-1).missingCallFrontier.sample;
   assert.equal(fact.bindingSample[0].acceptedIncomingResponseMatchCount, 0);
   assert.equal(fact.actionResultCount, 0);
   assert.equal(fact.durableResultStepCount, 0);
@@ -223,7 +223,7 @@ test("reports child without ancestor evidence honestly", () => {
   input.payload.nativeEvents = [];
   input.payload.steps = [];
   assert.equal(recordTerminalRecoveryObservation(input), true);
-  const fact = logs.at(-1).missingCallFrontier.sample[0];
+  const [fact] = logs.at(-1).missingCallFrontier.sample;
   assert.equal(fact.bindingCount, 0);
   assert.equal(fact.frontierUsesWholeStream, true);
   assert.equal(fact.retainedTurnInputCount, 0);
@@ -233,7 +233,7 @@ test("bounded failure samples retain full counts and reject malformed payload on
   const failure = input.payload.nativeEvents.at(-1);
   input.payload.nativeEvents.push(...Array.from({ length: 30 }, () => failure));
   assert.equal(recordTerminalRecoveryObservation(input), true);
-  const fact = logs.at(-1).missingCallFrontier.sample[0];
+  const [fact] = logs.at(-1).missingCallFrontier.sample;
   assert.equal(fact.failedStepOrTurnCount, 31);
   assert.equal(fact.failureSample.length, 12);
   assert.equal(fact.exactMissingCallFailureCount, 31);
@@ -252,9 +252,9 @@ test("logs only typed safe app facts and retained native retry counters", () => 
   assert.equal(recordTerminalRecoveryObservation(input), true);
   const report = logs.at(-1);
   assert.deepEqual(report.candidateFacts, {
-    flags: { explicitNull: true, absent: null },
     counts: { matched: 2 },
-    hashes: { callId: protocolIdentityHash(call.toolCallId), absent: null },
+    flags: { absent: null, explicitNull: true },
+    hashes: { absent: null, callId: protocolIdentityHash(call.toolCallId) },
   });
   assert.equal(report.nativeStepFrontier.retainedStepSample[0].attempt, 2);
   assert.equal(JSON.stringify(report).includes(secret), false);

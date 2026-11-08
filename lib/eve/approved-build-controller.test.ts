@@ -102,8 +102,8 @@ describe("canonical approved private build continuation", () => {
       sessionId: result.sessionId,
     });
     expect(await continueApprovedHostedBuild(f)).toMatchObject({
-      status: "waiting",
       error: { code: "approved_build_no_progress" },
+      status: "waiting",
     });
     expect(f.sendAccepted).not.toHaveBeenCalled();
   });

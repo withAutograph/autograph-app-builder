@@ -9,6 +9,10 @@ import { MockLanguageModelV4 } from "ai/test";
 import { z } from "zod";
 import { authorizeRepeatablePrivateApplyCalls } from "../lib/eve/native-recovery-repeatable-apply.ts";
 
+const TOOL_RESULT_TYPE = "tool-result";
+const ORIGINAL_INPUT_VALUE = "original-input";
+const ORIGINAL_TURN_ID = "original-turn";
+
 const require = createRequire(import.meta.url);
 const eve = path.dirname(require.resolve("eve/package.json"));
 const load = (name) => import(pathToFileURL(path.join(eve, "dist/src", name)).href);
@@ -29,7 +33,7 @@ const logical = "logical-session";
 const owner = "physical-owner";
 const callId = "native-call";
 const result = {
-  type: "tool-result",
+  type: TOOL_RESULT_TYPE,
   toolCallId: "deferred-call",
   toolName: "deferred",
   output: { type: "text", value: "actual-deferred-result" },
@@ -47,7 +51,7 @@ const history = (tail = "mixed", approved = true) => [
         type: "tool-call",
         toolCallId: callId,
         toolName: "native",
-        input: { value: "original-input" },
+        input: { value: ORIGINAL_INPUT_VALUE },
       },
       { type: "tool-approval-request", approvalId: "native-approval", toolCallId: callId },
       { type: "tool-call", toolCallId: "deferred-call", toolName: "deferred", input: {} },
@@ -78,7 +82,7 @@ const fixture = async (options = {}) => {
         sessionStarted: true,
         sequence: 5,
         stepIndex: 4,
-        turnId: "original-turn",
+        turnId: ORIGINAL_TURN_ID,
       },
     },
     history: options.history ?? history(),
@@ -92,12 +96,12 @@ const fixture = async (options = {}) => {
           kind: "workflow-task",
           callId,
           toolName: "native",
-          input: { value: "original-input" },
+          input: { value: ORIGINAL_INPUT_VALUE },
           workflowId: "workflow:native",
         },
       ],
       responseMessages: [],
-      event: { sequence: 5, stepIndex: 4, turnId: "original-turn" },
+      event: { sequence: 5, stepIndex: 4, turnId: ORIGINAL_TURN_ID },
     });
   }
   if (options.pending === "human") {
@@ -111,11 +115,11 @@ const fixture = async (options = {}) => {
             kind: "tool-call",
             callId,
             toolName: "native",
-            input: { value: "original-input" },
+            input: { value: ORIGINAL_INPUT_VALUE },
           },
         },
       ],
-      event: { sequence: 5, stepIndex: 4, turnId: "original-turn" },
+      event: { sequence: 5, stepIndex: 4, turnId: ORIGINAL_TURN_ID },
     });
   }
   const pair = {
@@ -134,7 +138,6 @@ const fixture = async (options = {}) => {
     input: await serialization.dehydrateStepArguments({ args: [pair], closureVars: [] }, owner),
   };
   const world = {
-    runs: { get: () => Promise.resolve({ runId: owner, status: "completed" }) },
     events: {
       list: () =>
         Promise.resolve({
@@ -150,21 +153,22 @@ const fixture = async (options = {}) => {
           hasMore: false,
         }),
     },
+    runs: { get: () => Promise.resolve({ runId: owner, status: "completed" }) },
     steps: { get: () => Promise.resolve(step) },
   };
   const collect = createTerminalRecoveryCandidateCollector({
     getWorld: () => Promise.resolve(world),
-    resolveRunEncryptionKey: () => Promise.resolve(),
     hydrateStepArguments: (value, runId, key) =>
       serialization.hydrateStepArguments(value, runId, key, []),
     hydrateStepReturnValue: (value, runId, key) =>
       serialization.hydrateStepReturnValue(value, runId, key),
+    now: () => 0,
     readDurableSession,
-    requireEventSlot: (id) => Number(id.slice(5)),
     async *readNativeEvents() {
       yield* options.nativeEvents ?? [];
     },
-    now: () => 0,
+    requireEventSlot: (id) => Number(id.slice(5)),
+    resolveRunEncryptionKey: () => Promise.resolve(),
   });
   const collected = await collect({
     binding: { ownerRunId: owner, logicalSessionId: logical },
@@ -172,7 +176,7 @@ const fixture = async (options = {}) => {
   });
   assert.equal(collected.kind, "candidate");
   const payload = readTerminalRecoveryCandidate(collected.candidate);
-  return { handle: collected.candidate, payload, pair };
+  return { handle: collected.candidate, pair, payload };
 };
 const runNextModel = async (ready) => {
   const session = readDurableSession(ready.checkpointCore.sessionState);
@@ -195,7 +199,7 @@ const runNextModel = async (ready) => {
     inputSchema: z.object({ value: z.string() }),
     execute: (value) => {
       executions += 1;
-      assert.equal(value.value, "original-input");
+      assert.equal(value.value, ORIGINAL_INPUT_VALUE);
       return "actual-native-output";
     },
   });
@@ -207,7 +211,7 @@ const runNextModel = async (ready) => {
         inputSchema: z.object({ value: z.string() }),
         execute: (value) => {
           executions += 1;
-          assert.equal(value.value, "original-input");
+          assert.equal(value.value, ORIGINAL_INPUT_VALUE);
           return "actual-native-output";
         },
       }),
@@ -223,9 +227,9 @@ test("mixed retained call/approval/deferred result is uncertain before any inval
   const before = JSON.stringify(f.payload);
   const reconciled = await reconcileTerminalRecoveryCandidate(f.handle);
   assert.deepEqual(reconciled, {
+    callId,
     kind: "uncertain",
     reason: "uncommitted-action-dispatch",
-    callId,
   });
   assert.equal(JSON.stringify(f.payload), before);
 });
@@ -233,7 +237,7 @@ test("mixed retained call/approval/deferred result is uncertain before any inval
 test("a genuine result already retained pairs the call and is not executed again", async () => {
   const messages = history();
   messages.at(-1).content.push({
-    type: "tool-result",
+    type: TOOL_RESULT_TYPE,
     toolCallId: callId,
     toolName: "native",
     output: { type: "text", value: "real-retained-native-output" },
@@ -289,7 +293,7 @@ test("emitted native result alone never becomes a committed result or permission
           sequence: 1,
           stepIndex: 1,
           result: {
-            kind: "tool-result",
+            kind: TOOL_RESULT_TYPE,
             callId,
             toolName: "native",
             output: "actual-but-uncommitted-output",
@@ -300,9 +304,9 @@ test("emitted native result alone never becomes a committed result or permission
   });
   const before = JSON.stringify(f.payload);
   assert.deepEqual(await reconcileTerminalRecoveryCandidate(f.handle), {
+    callId,
     kind: "uncertain",
     reason: "uncommitted-action-result",
-    callId,
   });
   assert.equal(JSON.stringify(f.payload), before);
 });
@@ -435,15 +439,15 @@ test("trusted Builder call contract flows through actual native prepare and reco
     {
       collect: async ({ binding: source, authorizeOwner }) => {
         await authorizeOwner(source);
-        return { kind: "candidate", candidate: f.handle };
+        return { candidate: f.handle, kind: "candidate" };
       },
       readCandidate: readTerminalRecoveryCandidate,
       reconcile: reconcileTerminalRecoveryCandidate,
       readEntry: () =>
-        Promise.resolve({ kind: "handoff", checkpoint: { sessionTimeoutMs: false } }),
+        Promise.resolve({ checkpoint: { sessionTimeoutMs: false }, kind: "handoff" }),
       start: (input) => {
         starts += 1;
-        checkpoint = input.checkpoint;
+        ({ checkpoint } = input);
         hook = {
           runId: binding.ownerRunId,
           metadata: Promise.resolve({ recoveryBinding: binding }),

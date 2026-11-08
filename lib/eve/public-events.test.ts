@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
+import assert from "node:assert/strict";
 
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import type { MessageStreamEvent } from "eve/client";
 import {
   createInstalledPrototypeProjector,
@@ -24,6 +26,29 @@ import {
 
 import { reduceIdentityInvitations } from "../mcp/session-app/identity-invitation";
 import { sessionAuthorizationRefreshKey } from "../mcp/session-app/automatic-refresh";
+
+const recordedRequestSchema = z.object({
+  data: z.object({
+    actions: z.tuple([
+      z.object({ input: z.object({ mediaType: z.string().optional(), path: z.string() }) }),
+    ]),
+  }),
+});
+const recordedResultSchema = z.object({
+  data: z.object({
+    result: z.object({
+      output: z.object({ digest: z.string(), mediaType: z.string().optional(), path: z.string() }),
+    }),
+  }),
+});
+const isRecordedRequest = (
+  event: MessageStreamEvent | undefined,
+): event is MessageStreamEvent & z.infer<typeof recordedRequestSchema> =>
+  recordedRequestSchema.safeParse(event).success;
+const isRecordedResult = (
+  event: MessageStreamEvent | undefined,
+): event is MessageStreamEvent & z.infer<typeof recordedResultSchema> =>
+  recordedResultSchema.safeParse(event).success;
 
 const installedEvent = (event: unknown) => event as MessageStreamEvent;
 
@@ -420,9 +445,9 @@ describe("installed Eve 0.68 projection", () => {
     ]);
     expect(events).toContainEqual(
       expect.objectContaining({
-        type: "progress",
         label: "Installing the app's requested integrations",
         state,
+        type: "progress",
       }),
     );
     expect(JSON.stringify(events)).not.toContain("private installer diagnosis");
@@ -518,16 +543,14 @@ describe("installed Eve 0.68 projection", () => {
   });
   it("recovers only the latest receipt-bound HTML prototype", () => {
     const first = recordedPrototypeEvents();
+    const updatedContent = "<!doctype html><html><body>Updated review queue</body></html>";
     const second = recordedPrototypeEvents({
       callId: "call_prototype_2",
-      content: "<!doctype html><html><body>Updated review queue</body></html>",
+      content: updatedContent,
     });
-    const expected = second[0] as MessageStreamEvent & {
-      data: { actions: [{ input: { content: string } }] };
-    };
 
     expect(latestInstalledPrototype([...first, ...second])).toMatchObject({
-      content: expected.data.actions[0].input.content,
+      content: updatedContent,
       mediaType: "text/html",
       path: "prototype/vendor-onboarding/index.html",
     });
@@ -621,9 +644,8 @@ describe("installed Eve 0.68 projection", () => {
     });
 
     const tampered = structuredClone(events);
-    const last = tampered.at(-1) as MessageStreamEvent & {
-      data: { result: { output: { digest: string } } };
-    };
+    const last = tampered.at(-1);
+    assert.ok(isRecordedResult(last));
     last.data.result.output.digest = "0".repeat(64);
     expect(latestInstalledPrototype(tampered)).toBeUndefined();
   });
@@ -726,7 +748,7 @@ describe("installed Eve 0.68 projection", () => {
   it("rejects unmatched, failed, wrong-tool, and digest-mismatched prototypes", () => {
     const valid = recordedPrototypeEvents();
     const [, result] = valid;
-    if (!result) {
+    if (result === undefined) {
       throw new Error("expected a prototype result fixture");
     }
     expect(latestInstalledPrototype([result])).toBeUndefined();
@@ -741,9 +763,8 @@ describe("installed Eve 0.68 projection", () => {
     ).toBeUndefined();
 
     const malformedRequest = structuredClone(valid);
-    const requested = malformedRequest[0] as MessageStreamEvent & {
-      data: { actions: [{ input: { path: string } }] };
-    };
+    const [requested] = malformedRequest;
+    assert.ok(isRecordedRequest(requested));
     requested.data.actions[0].input.path = "prototype/vendor-onboarding/app-spec.md";
     expect(latestInstalledPrototype(malformedRequest)).toBeUndefined();
   });
@@ -785,12 +806,9 @@ describe("installed Eve 0.68 projection", () => {
 
   it("never treats a recorded Markdown AppSpec as Browser HTML", () => {
     const events = structuredClone(recordedPrototypeEvents());
-    const request = events[0] as MessageStreamEvent & {
-      data: { actions: [{ input: { path: string; mediaType: string } }] };
-    };
-    const receipt = events[1] as MessageStreamEvent & {
-      data: { result: { output: { path: string; mediaType: string } } };
-    };
+    const [request, receipt] = events;
+    assert.ok(isRecordedRequest(request));
+    assert.ok(isRecordedResult(receipt));
     request.data.actions[0].input.path = "prototype/vendor-onboarding/app-spec.md";
     request.data.actions[0].input.mediaType = "text/markdown";
     receipt.data.result.output.path = "prototype/vendor-onboarding/app-spec.md";
@@ -1563,17 +1581,25 @@ it("keeps a typed framework session limit out of public confirmations", () => {
   );
 });
 
+const receipt = (phase = "draft_update") => ({
+  baseRef: "refs/heads/reviewed-change",
+  baseSha: "a".repeat(40),
+  format: "autograph-eve-approval-receipt-v2",
+  outcome: phase === "publication" ? "create-draft-pr" : "update-draft-pr",
+  phase,
+  repository: "example/reviewed-repository",
+  repositoryId: "1234",
+  subjectDigest: "b".repeat(64),
+});
+
+const result = (events: ReturnType<typeof projectInstalledEveEvents>) => ({
+  cursor: events.at(-1)?.index ?? 0,
+  events,
+  sessionId: "original-session",
+  status: "waiting" as const,
+});
+
 describe("public draft pull request approval scope", () => {
-  const receipt = (phase = "draft_update") => ({
-    baseRef: "refs/heads/reviewed-change",
-    baseSha: "a".repeat(40),
-    format: "autograph-eve-approval-receipt-v2",
-    outcome: phase === "publication" ? "create-draft-pr" : "update-draft-pr",
-    phase,
-    repository: "example/reviewed-repository",
-    repositoryId: "1234",
-    subjectDigest: "b".repeat(64),
-  });
   const requested = (toolName: string, approvalReceipt: unknown) =>
     installedEvent({
       data: {
@@ -1685,8 +1711,8 @@ describe("suspended hosted identity invitation", () => {
     expect(projected).toHaveLength(2);
     expect(projected[0]).toMatchObject({ type: "assistant_message" });
     expect(projected[1]).toMatchObject({
-      type: "auth_identity_invitation",
       callId: "prepare-call",
+      type: "auth_identity_invitation",
       url: link,
     });
     expect(JSON.stringify(projected)).toContain(link);
@@ -1747,9 +1773,9 @@ it("closes only the finished hosted identity tool invitation", () => {
     }),
   ]);
   expect(events).toContainEqual({
-    type: "auth_identity_invitation_resolved",
     callId: "prepare-call",
     index: 1,
+    type: "auth_identity_invitation_resolved",
   });
 });
 
@@ -1774,12 +1800,6 @@ describe("Production app identity invitation", () => {
         result: { kind: "tool-result", toolName, callId, output: value, isError },
       },
     });
-  const result = (events: ReturnType<typeof projectInstalledEveEvents>) => ({
-    sessionId: "original-session",
-    status: "waiting" as const,
-    cursor: events.at(-1)?.index ?? 0,
-    events,
-  });
   const prepare = (value = output(), callId = "prepare-call") =>
     completed("prepare-app-production", callId, value);
 
@@ -1788,11 +1808,11 @@ describe("Production app identity invitation", () => {
     const events = projectInstalledEveEvents([event]);
     expect(events).toContainEqual(
       expect.objectContaining({
-        type: "auth_identity_invitation",
         callId: "prepare-call",
-        operationRef,
-        url,
         expiresAt,
+        operationRef,
+        type: "auth_identity_invitation",
+        url,
       }),
     );
     const message = events.find((projected) => projected.type === "assistant_message");
@@ -1857,7 +1877,7 @@ describe("Production app identity invitation", () => {
     const delta = projectInstalledEveEvents([...savedHistory, status]).slice(nextCursor);
     state = reduceIdentityInvitations(state, result(delta));
     expect(state.invitations).toEqual([
-      { callId: "status-after-upgrade", operationRef, url, expiresAt },
+      { callId: "status-after-upgrade", expiresAt, operationRef, url },
     ]);
     expect(outstandingInstalledEveRequests([...savedHistory, status])).toEqual([]);
     expect(JSON.stringify(delta)).not.toContain("private-proof");
@@ -1886,7 +1906,7 @@ describe("Production app identity invitation", () => {
       result(projectInstalledEveEvents([prepare(), prepare(renewed, "renewed-prepare-call")])),
     );
     expect(state.invitations).toEqual([
-      { callId: "renewed-prepare-call", operationRef, url, expiresAt: renewed.creator.expiresAt },
+      { callId: "renewed-prepare-call", expiresAt: renewed.creator.expiresAt, operationRef, url },
     ]);
   });
 

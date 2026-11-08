@@ -26,9 +26,13 @@ export function logProviderConnectionFailure(input: {
     installationValidation?: string;
   };
 }) {
-  console.error(
-    JSON.stringify({
-      ...(input.diagnostic === undefined ? {} : { diagnostic: input.diagnostic }),
+  const logEntry = () => {
+    const details: Pick<Parameters<typeof logProviderConnectionFailure>[0], "diagnostic"> = {};
+    if (input.diagnostic !== undefined) {
+      details.diagnostic = input.diagnostic;
+    }
+    return {
+      ...details,
       durationMs: Math.max(0, Date.now() - input.startedAt),
       level: "error",
       message: "provider_connection_failed",
@@ -36,6 +40,7 @@ export function logProviderConnectionFailure(input: {
       provider: input.provider,
       reason: input.reason,
       requestId: input.request.headers.get("x-vercel-id") ?? "unavailable",
-    }),
-  );
+    };
+  };
+  console.error(JSON.stringify(logEntry()));
 }

@@ -175,7 +175,7 @@ describe("request-owned Sandbox management fetch", () => {
       status: 302,
       headers: { location: "https://foreign.test/target" },
     });
-    const raw = vi.fn<typeof fetch>(() => Promise.resolve(redirect));
+    const raw = vi.fn<typeof fetch>().mockResolvedValue(redirect);
     const adapted = createHostedOperatorSandboxFetch(() => "verified-builder", raw);
     expect(await adapted(management)).toBe(redirect);
     expect(raw.mock.calls[0]?.[1]?.redirect).toBe("manual");

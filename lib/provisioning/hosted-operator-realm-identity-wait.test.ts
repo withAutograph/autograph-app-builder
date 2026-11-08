@@ -39,46 +39,46 @@ const authority = {
 const principal = { ...authority, scopes: ["autograph:start", "autograph:get"] };
 const context: HostedOperatorContext = {
   authority,
+  ownerContext: {
+    adapterGeneration: 1,
+    adapterSessionId: "native-session",
+    authority,
+    kind: "direct",
+    principal,
+    sessionId: "public-session",
+  },
   target: {
     appId: "app",
-    sessionId: "public-session",
     branch: "preview",
     environment: "preview",
     installationId: "installation",
     projectId: "project",
     scopeId: "team",
     scopeType: "team",
-  },
-  ownerContext: {
-    kind: "direct",
-    authority,
-    principal,
-    adapterGeneration: 1,
-    adapterSessionId: "native-session",
     sessionId: "public-session",
   },
 };
 const initialObservation: RealmContinuationObservation = {
-  authority,
-  appId: "app",
-  ownerSessionId: "public-session",
   adapterSessionId: "native-session",
-  operationRef: "11111111-1111-4111-8111-111111111111",
+  appId: "app",
   approvedPlanDigest: "a".repeat(64),
-  nonceSha256: "b".repeat(64),
-  reason: { kind: "consumed-proof", proofRef: "private-proof", proofSha256: "c".repeat(64) },
+  authority,
   initiator: {
+    attributes: {
+      "mcp:audience": authority.audience,
+      "mcp:scopes": principal.scopes,
+      "mcp:workspace-id": "workspace",
+    },
     authenticator: "mcp-oauth-jwks",
     issuer: authority.issuer,
     principalId: "owner",
     principalType: "user",
     subject: "owner",
-    attributes: {
-      "mcp:audience": authority.audience,
-      "mcp:workspace-id": "workspace",
-      "mcp:scopes": principal.scopes,
-    },
   },
+  nonceSha256: "b".repeat(64),
+  operationRef: "11111111-1111-4111-8111-111111111111",
+  ownerSessionId: "public-session",
+  reason: { kind: "consumed-proof", proofRef: "private-proof", proofSha256: "c".repeat(64) },
 };
 const plan = hostedOperatorPlanSchema.parse({
   access: [],
@@ -102,7 +102,30 @@ const plan = hostedOperatorPlanSchema.parse({
     targetDigest: "b".repeat(64),
   },
   contextId: "fixture-context",
-  publicGateway: { branch: "preview", origin: "https://auth.test", projectId: "gateway-project" },
+  cost: { class: "independent-service", description: "fixture", owner: "fixture" },
+  deploymentBoundary: {
+    app: { branch: "preview", environment: "preview", projectId: "project" },
+    authority,
+    gateway: { branch: "preview", environment: "preview", projectId: "gateway-project" },
+    operator: {
+      deploymentId: "operator-deployment",
+      environment: "preview",
+      projectId: "operator-project",
+    },
+    teamId: "team",
+    verification: {
+      gatewayOrigin: "https://gateway.test",
+      jwksUrl: "https://gateway.test/_platform/jwks.json",
+      publicOrigin: "https://auth.test",
+    },
+  },
+  effects: [
+    { description: "resource", id: "resource", kind: "resources" },
+    { description: "install", id: "install", kind: "install" },
+    { description: "access", id: "access", kind: "access" },
+    { description: "bindings", id: "bindings", kind: "bindings" },
+    { description: "gateway bindings", id: "gateway-bindings", kind: "gateway-bindings" },
+  ],
   gatewayBindings: {
     authBrowserOrigin: "https://auth.test",
     builderCallbackOrigin: "https://builder.test",
@@ -117,30 +140,6 @@ const plan = hostedOperatorPlanSchema.parse({
       subject: "operator-workload",
     },
   },
-  deploymentBoundary: {
-    authority,
-    teamId: "team",
-    app: { branch: "preview", environment: "preview", projectId: "project" },
-    gateway: { branch: "preview", environment: "preview", projectId: "gateway-project" },
-    operator: {
-      deploymentId: "operator-deployment",
-      environment: "preview",
-      projectId: "operator-project",
-    },
-    verification: {
-      gatewayOrigin: "https://gateway.test",
-      jwksUrl: "https://gateway.test/_platform/jwks.json",
-      publicOrigin: "https://auth.test",
-    },
-  },
-  cost: { class: "independent-service", description: "fixture", owner: "fixture" },
-  effects: [
-    { description: "resource", id: "resource", kind: "resources" },
-    { description: "install", id: "install", kind: "install" },
-    { description: "access", id: "access", kind: "access" },
-    { description: "bindings", id: "bindings", kind: "bindings" },
-    { description: "gateway bindings", id: "gateway-bindings", kind: "gateway-bindings" },
-  ],
   installer: { reference: "app-installer", sha256: "e".repeat(64) },
   neon: {
     branchId: "branch",
@@ -149,6 +148,7 @@ const plan = hostedOperatorPlanSchema.parse({
     projectId: "project",
     source: "synthetic-only",
   },
+  publicGateway: { branch: "preview", origin: "https://auth.test", projectId: "gateway-project" },
   release: { artifactRef: "release", id: "v19", sha256: "d".repeat(64) },
   retention: { expiresAt: "2027-01-01T00:00:00Z", policy: "fixture" },
   selection: {
@@ -162,12 +162,8 @@ const plan = hostedOperatorPlanSchema.parse({
 });
 
 const initialRecord = (): HostedRuntimeJournalRecord => ({
-  kind: "app-runtime",
-  version: 1,
   approvedByCallId: "approval-call",
-  status: "pending",
-  step: "reserved",
-  request: context.target,
+  kind: "app-runtime",
   operator: {
     mode: "protected-operator-v1",
     plan,
@@ -187,10 +183,14 @@ const initialRecord = (): HostedRuntimeJournalRecord => ({
       expiresAt: "2026-10-16T00:00:00.000Z",
     },
   },
+  request: context.target,
+  status: "pending",
+  step: "reserved",
+  version: 1,
 });
 
 const fixture = () => {
-  let row: HostedRuntimeJournalRow = { revision: 1, record: initialRecord() };
+  let row: HostedRuntimeJournalRow = { record: initialRecord(), revision: 1 };
   let clock = Date.parse("2026-10-15T00:00:00.000Z");
   const read = vi.fn<HostedRuntimeJournalStore["read"]>(async () => structuredClone(row));
   const compareAndSet = vi.fn<HostedRuntimeJournalStore["compareAndSet"]>(async (input) => {
@@ -227,17 +227,17 @@ const fixture = () => {
   const observe = vi.fn(async (candidate: HostedOperatorContext) =>
     observeRealmContinuationRecord({
       context: candidate,
-      record: structuredClone(row.record),
       initiator: initialObservation.initiator,
       now: clock,
+      record: structuredClone(row.record),
     }),
   );
   const run = createHostedOperatorRealmIdentityWait({
-    store,
-    config: { tokenKey: key, tokenKeyVersion: "wait-v1" },
     assertAuthorized,
-    observe,
+    config: { tokenKey: key, tokenKeyVersion: "wait-v1" },
     now: () => clock,
+    observe,
+    store,
   });
   const link = requireFixture(row.record.operator?.identityLink);
   const url = new URL("/api/auth/platform/operator-link", link.browserOrigin);
@@ -252,14 +252,14 @@ const fixture = () => {
   const registration: HostedRuntimeIdentityWaitRegistration = {
     adapterSessionId: "native-session",
     callId: "approved-workflow-call",
-    token,
     identityInput: { browserUrl: url.href, expiresAt: link.expiresAt },
     input: {
       ...plan.selection,
       operationRef: initialObservation.operationRef,
-      planDigest: operatorPlanDigest(plan),
       plan,
+      planDigest: operatorPlanDigest(plan),
     },
+    token,
   };
   const mutate = (change: (record: HostedRuntimeJournalRecord) => void) => {
     change(row.record);
@@ -275,19 +275,19 @@ const fixture = () => {
     });
   };
   return {
-    run,
-    registration,
-    read,
-    compareAndSet,
     assertAuthorized,
-    observe,
-    store,
-    mutate,
+    compareAndSet,
     consume,
+    mutate,
+    observe,
+    read,
+    registration,
     row: () => structuredClone(row),
+    run,
     setTime: (time: string) => {
       clock = Date.parse(time);
     },
+    store,
   };
 };
 
@@ -304,9 +304,9 @@ describe("approved Realm identity wait registration", () => {
       adapterSessionId: f.registration.adapterSessionId,
       approvedPlanDigest: f.registration.input.planDigest,
       callId: f.registration.callId,
+      hook: { keyVersion: "wait-v1" },
       nonceSha256: realmIdentityNonceSha256(nonce),
       operationRef: f.registration.input.operationRef,
-      hook: { keyVersion: "wait-v1" },
     });
     expect(wait?.hook.encryptedToken).not.toBe(token);
     expect(JSON.stringify(after)).not.toContain(token);
@@ -321,10 +321,10 @@ describe("approved Realm identity wait registration", () => {
   it("uses the protected server clock for the next check instead of the browser link expiry", async () => {
     const f = fixture();
     const state = await f.run.register(context, f.registration);
-    expect(state).toEqual({ status: "waiting", checkAfter: "2026-10-15T00:00:05.000Z" });
+    expect(state).toEqual({ checkAfter: "2026-10-15T00:00:05.000Z", status: "waiting" });
     f.setTime("2026-10-15T00:02:00.000Z");
     const replayed = await f.run.register(context, f.registration);
-    expect(replayed).toEqual({ status: "waiting", checkAfter: "2026-10-15T00:02:05.000Z" });
+    expect(replayed).toEqual({ checkAfter: "2026-10-15T00:02:05.000Z", status: "waiting" });
     expect(f.row().record.operator?.identityLink?.expiresAt).toBe(
       f.registration.identityInput.expiresAt,
     );
@@ -442,14 +442,14 @@ describe("canonical identity event delivery and acknowledgment", () => {
     f.consume();
     const observation = await f.observe(context);
     const eventId = realmContinuationDispatchId(requireFixture(observation));
-    expect(await f.run.delivery(context)).toEqual({ token, eventId, observed: false });
+    expect(await f.run.delivery(context)).toEqual({ eventId, observed: false, token });
     const result = await f.run.acknowledge(context, { ...f.registration, eventId });
-    expect(result).toEqual({ status: "consumed", eventId });
+    expect(result).toEqual({ eventId, status: "consumed" });
     expect(JSON.stringify(result)).not.toContain(token);
     expect(JSON.stringify(result)).not.toContain("private-canonical-proof");
     expect(f.row().record.realmIdentityWait?.eventId).toBe(eventId);
     expect(f.row().record.realmIdentityWait?.observedAt).toBeDefined();
-    expect(await f.run.delivery(context)).toEqual({ token, eventId, observed: true });
+    expect(await f.run.delivery(context)).toEqual({ eventId, observed: true, token });
     const acknowledged = f.row().record.realmIdentityWait?.observedAt;
     f.setTime("2026-10-15T01:00:00.000Z");
     await f.run.acknowledge(context, { ...f.registration, eventId });
@@ -461,12 +461,12 @@ describe("canonical identity event delivery and acknowledgment", () => {
     await f.run.register(context, f.registration);
     f.setTime("2026-10-17T00:00:00.000Z");
     const delivery = await f.run.delivery(context);
-    expect(delivery).toMatchObject({ token, observed: false });
+    expect(delivery).toMatchObject({ observed: false, token });
     const result = await f.run.acknowledge(context, {
       ...f.registration,
       eventId: requireFixture(delivery).eventId,
     });
-    expect(result).toEqual({ status: "expired", eventId: delivery?.eventId });
+    expect(result).toEqual({ eventId: delivery?.eventId, status: "expired" });
     expect(f.row().record.operator?.identityLink?.proofRef).toBeUndefined();
     expect(f.row().record.operator?.identityLink?.consumedAt).toBeUndefined();
   });

@@ -403,10 +403,11 @@ export const projectAuthStartupDiagnostic = (value: unknown): AuthStartupDiagnos
     }
     const code: unknown = Object.getOwnPropertyDescriptor(value, "domain_code")?.value;
     const parsedCode = authStartupDomainCode.safeParse(code);
-    return {
-      stage: parsedStage.data,
-      ...(parsedCode.success ? { domain_code: parsedCode.data } : {}),
-    };
+    const diagnostic: AuthStartupDiagnostic = { stage: parsedStage.data };
+    if (parsedCode.success) {
+      diagnostic.domain_code = parsedCode.data;
+    }
+    return diagnostic;
   } catch {
     return undefined;
   }
@@ -474,18 +475,21 @@ export const projectResourceReadbackDiagnostic = (
     const parsedReason = resourceReadbackReason.safeParse(reason);
     const sqlStateClass: unknown = Object.getOwnPropertyDescriptor(value, "sqlStateClass")?.value;
     const parsedClass = resourceReadbackSqlStateClass.safeParse(sqlStateClass);
-    return {
-      stage: parsedStage.data,
-      ...(parsedReason.success ? { reason: parsedReason.data } : {}),
-      ...(parsedClass.success ? { sqlStateClass: parsedClass.data } : {}),
-    };
+    const diagnostic: ResourceReadbackDiagnostic = { stage: parsedStage.data };
+    if (parsedReason.success) {
+      diagnostic.reason = parsedReason.data;
+    }
+    if (parsedClass.success) {
+      diagnostic.sqlStateClass = parsedClass.data;
+    }
+    return diagnostic;
   } catch {
     return undefined;
   }
 };
 
 const operatorExecutionFailure = operatorPlanningFailure
-  .omit({ stage: true, nativeStoreFailure: true })
+  .omit({ nativeStoreFailure: true, stage: true })
   .extend({
     stage: operatorExecutionStage,
     runtimeReadinessStage: operatorRuntimeReadinessStage.optional(),
@@ -518,11 +522,17 @@ const operatorExecutionFailure = operatorPlanningFailure
       failure.workerFailure === "readback_unknown" && failure.mode === "inspect"
         ? projectResourceReadbackDiagnostic(resourceReadback)
         : undefined;
-    return {
-      ...failure,
-      ...(projected === undefined ? {} : { authStartup: projected }),
-      ...(readback === undefined ? {} : { resourceReadback: readback }),
-    };
+    const result: typeof failure & {
+      authStartup?: AuthStartupDiagnostic;
+      resourceReadback?: ResourceReadbackDiagnostic;
+    } = { ...failure };
+    if (projected !== undefined) {
+      result.authStartup = projected;
+    }
+    if (readback !== undefined) {
+      result.resourceReadback = readback;
+    }
+    return result;
   });
 export type OperatorExecutionFailure = z.infer<typeof operatorExecutionFailure>;
 
@@ -1275,10 +1285,10 @@ export const reportOperatorRuntimeIdentityFailure = (
       sink,
     )({
       boundary: "operator",
-      phase: "inline",
-      stage: "operator_request",
       outcome: "setup_unavailable",
+      phase: "inline",
       runtimeIdentityFailure: projected.data,
+      stage: "operator_request",
     });
   } catch {
     /* Reporting cannot change the original runtime handoff rejection. */
@@ -1402,7 +1412,7 @@ export const reportExportPlanningFailure = (
       phase: "inline",
       stage: "operator_request",
       outcome: "setup_unavailable",
-      exportPlanningFailure: { stage: planStage, errorClass },
+      exportPlanningFailure: { errorClass, stage: planStage },
     });
   } catch {
     /* Diagnostics cannot replace the original rejection. */
@@ -1419,8 +1429,8 @@ export const reportContinuityPlanningFailure = (
   requestSignal?: AbortSignal,
 ): void => {
   const failure: z.infer<typeof continuityPlanningFailure> = {
-    stage: planStage,
     errorClass: "unexpected",
+    stage: planStage,
   };
   try {
     if (error instanceof HostedOperatorError) {
@@ -1480,8 +1490,8 @@ export const observeOperatorPlanStage = async <T>(
     return await run();
   } catch (error) {
     const planningFailure: OperatorPlanningFailure = {
-      stage: planStage,
       errorClass: "unexpected",
+      stage: planStage,
     };
     try {
       if (error instanceof HostedOperatorError) {
@@ -1591,10 +1601,10 @@ export const reportOperatorExecutionFailure = (
       sink,
     )({
       boundary: "operator",
+      executionFailure,
+      outcome: "setup_unavailable",
       phase: "inline",
       stage: "operator_request",
-      outcome: "setup_unavailable",
-      executionFailure,
     });
   } catch {
     /* Reporting cannot change the original rejection. */
@@ -1663,10 +1673,10 @@ export const reportOperatorInventoryReadFailure = (
       sink,
     )({
       boundary: "operator",
+      inventoryReadFailure: failure,
+      outcome: "setup_unavailable",
       phase: "inline",
       stage: "operator_request",
-      outcome: "setup_unavailable",
-      inventoryReadFailure: failure,
     });
   } catch {
     /* Hostile descriptors and diagnostics never change provider read behavior. */
@@ -1736,10 +1746,10 @@ export const reportOperatorNeonMcpFailure = (
       sink,
     )({
       boundary: "operator",
+      neonMcpFailure: failure,
+      outcome: "setup_unavailable",
       phase: "inline",
       stage: "operator_request",
-      outcome: "setup_unavailable",
-      neonMcpFailure: failure,
     });
   } catch {
     /* Diagnostics cannot change credential authorization or expose hostile exception properties. */
@@ -1755,8 +1765,8 @@ export const reportRuntimePreparationFailure = (
   sink?: HostedOperatorConsentDiagnosticSink,
 ): void => {
   const failure: z.infer<typeof runtimePreparationFailure> = {
-    stage: preparationStage,
     errorClass: "unexpected",
+    stage: preparationStage,
   };
   try {
     if (error instanceof HostedOperatorError) {
@@ -1795,8 +1805,8 @@ export const reportRuntimePreparationFailure = (
       boundary: "builder",
       outcome: "setup_unavailable",
       phase: "inline",
-      stage: "operator_request",
       preparationFailure: failure,
+      stage: "operator_request",
     });
   } catch {
     /* Failure reporting is advisory. */
@@ -1813,8 +1823,8 @@ export const reportRuntimePreparationStarted = (
       boundary: "builder",
       outcome: "started",
       phase: "inline",
-      stage: "operator_request",
       preparationStage,
+      stage: "operator_request",
     });
   } catch {
     /* Diagnostics never prevent entry into the original step. */

@@ -3,7 +3,9 @@ import { expect, test } from "playwright/test";
 import { finishOAuth, resetApplicationState, waitForBuilderReady } from "../support/harness";
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-test.beforeEach(async () => resetApplicationState());
+test.beforeEach(async () => {
+  await resetApplicationState();
+});
 
 test("editing and autosave never start a view transition around the live form", async ({
   page,
@@ -35,7 +37,8 @@ test("editing and autosave never start a view transition around the live form", 
       return (
         request.method() === "POST" &&
         Boolean(request.headers()["next-action"]) &&
-        Boolean(body?.includes("clientMutationId") && body.includes(JSON.stringify(value)))
+        body?.includes("clientMutationId") === true &&
+        body.includes(JSON.stringify(value))
       );
     });
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow

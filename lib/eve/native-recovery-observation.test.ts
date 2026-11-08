@@ -22,9 +22,9 @@ const principal: HostedPrincipal = {
 
 const fixture = async (id: string) => {
   const store = new InMemoryHostedEveStore();
-  const observeRecovery = vi.fn<NonNullable<HostedEveTransport["observeRecovery"]>>(() =>
-    Promise.resolve(),
-  );
+  const observeRecovery = vi
+    .fn<NonNullable<HostedEveTransport["observeRecovery"]>>()
+    .mockResolvedValue();
   const activateRecovery = vi.fn<NonNullable<HostedEveTransport["activateRecovery"]>>();
   const start = vi
     .fn<HostedEveTransport["start"]>()
@@ -42,12 +42,12 @@ const fixture = async (id: string) => {
     respond: vi.fn(),
     cancel: vi.fn(),
   };
-  const assertOwner = vi.fn(() => Promise.resolve());
+  const assertOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
   const service = createHostedEveSessionService({
+    assertNativeRecoveryOwner: assertOwner,
     principal,
     store,
     transport: adapter,
-    assertNativeRecoveryOwner: assertOwner,
   });
   const first = await service.start({ clientRequestId: `${id}-initial`, prompt: "Build" });
   const readSession = store.getSession.bind(store);
@@ -66,12 +66,12 @@ const fixture = async (id: string) => {
   await expect(
     service.start({ clientRequestId, resumeSessionId: first.sessionId }),
   ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
-  const getStart = service.getStart;
+  const { getStart } = service;
   if (getStart === undefined) {
     throw new Error("Expected public start lookup.");
   }
   const lookup = () => getStart({ clientRequestId, cursor: 0, limit: 20 });
-  return { store, service, adapter, assertOwner, lookup, clientRequestId, observeRecovery };
+  return { adapter, assertOwner, clientRequestId, lookup, observeRecovery, service, store };
 };
 
 describe("normal public recovery observation", () => {
@@ -176,12 +176,12 @@ it("uses the authenticated existing observation route once without session start
     expectedOwnerRunId: "failed-receipt-owner",
   });
   expect(request).toHaveBeenCalledOnce();
-  const [url, init] = request.mock.calls[0];
+  const [[url, init]] = request.mock.calls;
   expect(url).toBe("https://builder.example.test/eve/v1/session");
   expect(JSON.parse(z.string().parse(init?.body))).toMatchObject({
-    recoveryPhase: "observe",
-    recovery,
     forwardedPrincipal: { current: { principalId: principal.ownerUserId } },
+    recovery,
+    recoveryPhase: "observe",
   });
   expect(init?.redirect).toBe("manual");
 });
@@ -205,16 +205,16 @@ it("observes exact source coordinates through the protected route without recove
   });
   await adapter.observeSource?.({ principal, source });
   expect(request).toHaveBeenCalledOnce();
-  const call = request.mock.calls[0];
+  const [call] = request.mock.calls;
   const body: unknown = JSON.parse(z.string().parse(call?.[1]?.body));
   expect(body).toMatchObject({ recoveryPhase: "inspect-source", sourceObservation: source });
   expect(body).not.toHaveProperty("operationId");
   expect(body).not.toHaveProperty("recovery");
 });
 it("coalesces identical source observations and re-inspects changed cancellation", async () => {
-  const observeSource = vi.fn<NonNullable<HostedEveTransport["observeSource"]>>(() =>
-    Promise.resolve(),
-  );
+  const observeSource = vi
+    .fn<NonNullable<HostedEveTransport["observeSource"]>>()
+    .mockResolvedValue();
   const source = {
     sourcePublicSessionId: "coalesced-source",
     sourceAdapterSessionId: "anchor",

@@ -1,11 +1,14 @@
 /* oxlint-disable eslint/no-await-in-loop -- lock ownership checks and quarantine mutations must remain sequential. */
 import { randomUUID } from "node:crypto";
 import type { ChildProcess } from "node:child_process";
+import type { EventEmitter } from "node:events";
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, realpathSync } from "node:fs";
 import { lstat, readFile, readdir, realpath, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
 import type { Duplex } from "node:stream";
+
+type EvalChild = Pick<ChildProcess, "pid" | "kill"> & Pick<EventEmitter, "once" | "off">;
 
 type EvalSignal = "SIGINT" | "SIGTERM";
 
@@ -28,9 +31,10 @@ function isErrno(error: unknown, code: string) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ownerBound(info: Awaited<ReturnType<typeof lstat>>) {
+  if (typeof info.uid !== "number" || typeof info.mode !== "number") {
+    return false;
+  }
   return (
-    typeof info.uid === "number" &&
-    typeof info.mode === "number" &&
     info.uid === process.getuid?.() &&
     !info.isSymbolicLink() &&
     // oxlint-disable-next-line eslint/no-bitwise -- File permission mask check.
@@ -237,9 +241,14 @@ export function createEveEvalRuntimeDirectories(
       realpathSync(path) !== path ||
       !info.isDirectory() ||
       info.isSymbolicLink() ||
-      info.uid !== process.getuid?.() ||
+      info.uid !== process.getuid?.()
+    ) {
+      throw new Error("The Eve eval runtime directory was not owner-only.");
+    }
+    if (
       // oxlint-disable-next-line eslint/no-bitwise -- File permission mask check.
-      (info.mode & 0o077) !== 0
+      (info.mode & 0o077) !==
+      0
     ) {
       throw new Error("The Eve eval runtime directory was not owner-only.");
     }
@@ -267,7 +276,7 @@ function signalExitCode(signal: NodeJS.Signals | null) {
 export function waitForEveEvalChild(
   input: Readonly<{
     authorization: Duplex;
-    child: ChildProcess;
+    child: EvalChild;
     gracefulTimeoutMs?: number;
     signalTarget?: SignalTarget;
   }>,
@@ -318,8 +327,12 @@ export function waitForEveEvalChild(
       forceTimer = setTimeout(forceGroup, gracefulTimeoutMs);
       forceTimer.unref?.();
     };
-    const interrupt = () => requestStop("SIGINT");
-    const terminate = () => requestStop("SIGTERM");
+    const interrupt = () => {
+      requestStop("SIGINT");
+    };
+    const terminate = () => {
+      requestStop("SIGTERM");
+    };
     const failed = (error: Error) => {
       if (settled) {
         return;

@@ -8,6 +8,7 @@ const eagerAssets = `var FONTS = {
 };
 var FAVICON = readFileSync(path.join(__dirname, "fonts", "favicon.ico"));`;
 
+/** @type {Set<string>} */
 const entrypoints = new Set();
 const packages = ["github", "vercel"];
 

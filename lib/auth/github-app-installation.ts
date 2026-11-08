@@ -41,6 +41,9 @@ export type GitHubOAuthErrorCategory =
 
 export type GitHubOAuthCallbackError = "access_denied" | "temporarily_unavailable" | "server_error";
 
+const isGitHubOAuthCallbackError = (value: string | null): value is GitHubOAuthCallbackError =>
+  ["access_denied", "temporarily_unavailable", "server_error"].includes(value ?? "");
+
 export interface GitHubCallbackDiagnostic {
   queryKeys: string[];
   keyCounts: Record<string, number>;
@@ -77,19 +80,32 @@ export type GitHubInstallationValidationSubstage =
   | "personal-installation-mismatch"
   | "installation-handoff";
 
+interface GitHubInstallationAuthorizationDiagnostic {
+  stage: GitHubInstallationAuthorizationFailureStage;
+  category?: GitHubOAuthErrorCategory | GitHubOAuthCallbackError;
+  callback?: GitHubCallbackDiagnostic;
+  stateValidation?: GitHubStateValidationDiagnostic;
+  installationValidation?: GitHubInstallationValidationSubstage;
+}
+
 export const githubInstallationAuthorizationDiagnostic = (error: unknown) => {
   if (!(error instanceof GitHubInstallationAuthorizationError)) {
     return;
   }
-  return {
-    stage: error.stage,
-    ...(error.category === undefined ? {} : { category: error.category }),
-    ...(error.callback === undefined ? {} : { callback: error.callback }),
-    ...(error.stateValidation === undefined ? {} : { stateValidation: error.stateValidation }),
-    ...(error.installationValidation === undefined
-      ? {}
-      : { installationValidation: error.installationValidation }),
-  };
+  const diagnostic: GitHubInstallationAuthorizationDiagnostic = { stage: error.stage };
+  if (error.category !== undefined) {
+    diagnostic.category = error.category;
+  }
+  if (error.callback !== undefined) {
+    diagnostic.callback = error.callback;
+  }
+  if (error.stateValidation !== undefined) {
+    diagnostic.stateValidation = error.stateValidation;
+  }
+  if (error.installationValidation !== undefined) {
+    diagnostic.installationValidation = error.installationValidation;
+  }
+  return diagnostic;
 };
 
 type HostedTenantAuthority = z.infer<typeof hostedTenantAuthoritySchema>;
@@ -99,7 +115,7 @@ const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
 const githubLoginSchema = z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/u);
 
 const configSchema = z
-  .object({
+  .strictObject({
     appId: decimalSchema,
     appSlug: z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/u),
     clientId: z
@@ -112,35 +128,30 @@ const configSchema = z
       .min(20)
       .max(512)
       .refine((value) => !/[\0\r\n]/u.test(value)),
-    issuer: z.string().url().startsWith("https://"),
-    resource: z.string().url().startsWith("https://"),
+    issuer: z.url().startsWith("https://"),
+    resource: z.url().startsWith("https://"),
     stateSecret: z
       .string()
       .min(32)
       .max(512)
       .refine((value) => !/[\0\r\n]/u.test(value)),
   })
-  .strict()
   .superRefine((value, context) => {
     const issuer = new URL(value.issuer);
     const resource = new URL(value.resource);
-    if (
-      issuer.pathname !== "/api/auth" ||
-      issuer.search ||
-      issuer.hash ||
-      issuer.username ||
-      issuer.password
-    ) {
+    const invalidIssuerLocation =
+      issuer.pathname !== "/api/auth" || issuer.search !== "" || issuer.hash !== "";
+    if (invalidIssuerLocation || issuer.username || issuer.password) {
       context.addIssue({
         code: "custom",
         message: "GitHub installation issuer must be exact /api/auth.",
         path: ["issuer"],
       });
     }
+    const invalidResourceLocation =
+      resource.pathname !== "/mcp" || resource.search !== "" || resource.hash !== "";
     if (
-      resource.pathname !== "/mcp" ||
-      resource.search ||
-      resource.hash ||
+      invalidResourceLocation ||
       resource.username ||
       resource.password ||
       resource.origin !== issuer.origin
@@ -199,13 +210,16 @@ export interface GitHubInstallationMembershipAuthority {
 
 type Fetch = typeof fetch;
 
-const githubOAuthErrorCategory = (value: unknown) =>
-  value === "incorrect_client_credentials" ||
-  value === "redirect_uri_mismatch" ||
-  value === "bad_verification_code" ||
-  value === "unverified_user_email"
-    ? value
-    : undefined;
+const githubOAuthErrorCategory = (value: unknown) => {
+  if (
+    value === "incorrect_client_credentials" ||
+    value === "redirect_uri_mismatch" ||
+    value === "bad_verification_code"
+  ) {
+    return value;
+  }
+  return value === "unverified_user_email" ? value : undefined;
+};
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
@@ -221,11 +235,23 @@ const canonicalAuthority = (authority: HostedTenantAuthority) =>
 
 const authorityDigest = (authority: HostedTenantAuthority) => sha256(canonicalAuthority(authority));
 
+const membershipInactive = "membership-inactive";
+const stateFormat = "state-format";
+const stateSchema = "state-schema";
+const invalidCallbackReason = "callback-shape";
+const callbackStateValidation = "callback-state-validation";
+const membershipStateConsumption = "membership-state-consumption";
+const invalidResponse = "invalid-response";
+const invalidToken = "invalid-token";
+
+const isNonArrayObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 const property = (value: unknown, key: string): unknown => {
-  if (typeof value !== "object" || value === null || Array.isArray(value) || !(key in value)) {
-    throw new Error("invalid-response");
+  if (!isNonArrayObject(value) || !(key in value)) {
+    throw new Error(invalidResponse);
   }
-  return (value as Record<string, unknown>)[key];
+  return value[key];
 };
 
 const decimalProperty = (value: unknown, key: string): string => {
@@ -236,13 +262,13 @@ const decimalProperty = (value: unknown, key: string): string => {
   if (typeof candidate === "string" && decimalSchema.safeParse(candidate).success) {
     return candidate;
   }
-  throw new Error("invalid-response");
+  throw new Error(invalidResponse);
 };
 
 const stringProperty = (value: unknown, key: string): string => {
   const candidate = property(value, key);
   if (typeof candidate !== "string") {
-    throw new TypeError("invalid-response");
+    throw new TypeError(invalidResponse);
   }
   return candidate;
 };
@@ -250,7 +276,7 @@ const stringProperty = (value: unknown, key: string): string => {
 const nullableStringProperty = (value: unknown, key: string): string | null => {
   const candidate = property(value, key);
   if (candidate !== null && typeof candidate !== "string") {
-    throw new Error("invalid-response");
+    throw new Error(invalidResponse);
   }
   return candidate;
 };
@@ -302,22 +328,20 @@ const signedState = (input: {
   };
 };
 
-const statePayloadSchema = z
-  .object({
-    authorityDigest: digestSchema,
-    expiresAt: z.number().int().positive(),
-    installationId: decimalSchema.optional(),
-    issuedAt: z.number().int().nonnegative(),
-    nonce: z.string().regex(/^[A-Za-z0-9_-]{32,128}$/u),
-    phase: z.enum(["install", "authorize"]),
-    resumeKey: z.string().uuid().optional(),
-    returnTo: providerConnectionReturnToSchema,
-    setupAction: z.enum(["install", "update"]).optional(),
-    targetAccountLogin: githubLoginSchema.optional(),
-    version: z.literal(1),
-    via: z.enum(["existing", "installation"]).optional(),
-  })
-  .strict();
+const statePayloadSchema = z.strictObject({
+  authorityDigest: digestSchema,
+  expiresAt: z.number().int().positive(),
+  installationId: decimalSchema.optional(),
+  issuedAt: z.number().int().nonnegative(),
+  nonce: z.string().regex(/^[A-Za-z0-9_-]{32,128}$/u),
+  phase: z.enum(["install", "authorize"]),
+  resumeKey: z.uuid().optional(),
+  returnTo: providerConnectionReturnToSchema,
+  setupAction: z.enum(["install", "update"]).optional(),
+  targetAccountLogin: githubLoginSchema.optional(),
+  version: z.literal(1),
+  via: z.enum(["existing", "installation"]).optional(),
+});
 
 const verifyState = (input: {
   state: string;
@@ -328,18 +352,18 @@ const verifyState = (input: {
   const diagnostic = { stateDigest: sha256(input.state) };
   if (input.state.length > 2048) {
     throw new GitHubStateValidationError({
-      substage: "state-format",
+      substage: stateFormat,
       ...diagnostic,
     });
   }
   const segments = input.state.split(".");
   if (segments.length !== 2) {
     throw new GitHubStateValidationError({
-      substage: "state-format",
+      substage: stateFormat,
       ...diagnostic,
     });
   }
-  const [payload, providedSignature] = segments as [string, string];
+  const [payload, providedSignature] = segments;
   const expectedSignature = createHmac("sha256", input.stateSecret)
     .update("github-installation-state\n")
     .update(payload)
@@ -349,7 +373,7 @@ const verifyState = (input: {
     provided = Buffer.from(providedSignature, "base64url");
   } catch {
     throw new GitHubStateValidationError({
-      substage: "state-format",
+      substage: stateFormat,
       ...diagnostic,
     });
   }
@@ -367,7 +391,7 @@ const verifyState = (input: {
     decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
   } catch {
     throw new GitHubStateValidationError({
-      substage: "state-schema",
+      substage: stateSchema,
       ...diagnostic,
     });
   }
@@ -376,7 +400,7 @@ const verifyState = (input: {
     parsed = statePayloadSchema.parse(decoded);
   } catch {
     throw new GitHubStateValidationError({
-      substage: "state-schema",
+      substage: stateSchema,
       ...diagnostic,
     });
   }
@@ -397,21 +421,31 @@ const verifyState = (input: {
       ...diagnostic,
     });
   }
+  const connectionReturn = (): ProviderConnectionReturn => {
+    const result: ProviderConnectionReturn = { returnTo: parsed.returnTo };
+    if (parsed.resumeKey !== undefined) {
+      result.resumeKey = parsed.resumeKey;
+    }
+    return result;
+  };
   return {
     authorityDigest: parsed.authorityDigest,
     installationId: parsed.installationId,
     nonce: parsed.nonce,
     phase: parsed.phase,
-    returnState: {
-      returnTo: parsed.returnTo,
-      ...(parsed.resumeKey === undefined ? {} : { resumeKey: parsed.resumeKey }),
-    },
+    returnState: connectionReturn(),
     setupAction: parsed.setupAction,
     stateDigest: sha256(input.state),
     targetAccountLogin: parsed.targetAccountLogin,
     via: parsed.via,
   };
 };
+
+interface GitHubAuthorizationCallbackFields {
+  code: string;
+  installationId?: string;
+  setupAction?: "install" | "update";
+}
 
 const callbackInput = (url: string) => {
   const query = new URL(url).searchParams;
@@ -421,7 +455,7 @@ const callbackInput = (url: string) => {
   }
   const stateResult = z.string().min(1).max(2048).safeParse(query.get("state"));
   if (!stateResult.success) {
-    throw new GitHubCallbackParseError("state-format");
+    throw new GitHubCallbackParseError(stateFormat);
   }
   const state = stateResult.data;
   const code = query.get("code");
@@ -433,47 +467,41 @@ const callbackInput = (url: string) => {
       query.has("installation_id") ||
       query.has("setup_action")
     ) {
-      throw new GitHubCallbackParseError("callback-shape");
+      throw new GitHubCallbackParseError(invalidCallbackReason);
     }
     return {
-      error: ["access_denied", "temporarily_unavailable", "server_error"].includes(oauthError)
-        ? (oauthError as GitHubOAuthCallbackError)
-        : undefined,
+      error: isGitHubOAuthCallbackError(oauthError) ? oauthError : undefined,
       kind: "oauth-error" as const,
       state,
     };
   }
   if (code !== null) {
+    if (query.getAll("code").length !== 1 || query.getAll("state").length !== 1) {
+      throw new GitHubCallbackParseError(invalidCallbackReason);
+    }
     if (
-      query.getAll("code").length !== 1 ||
-      query.getAll("state").length !== 1 ||
       query.has("installation_id") !== query.has("setup_action") ||
       (query.has("installation_id") &&
         (query.getAll("installation_id").length !== 1 || query.getAll("setup_action").length !== 1))
     ) {
-      throw new GitHubCallbackParseError("callback-shape");
+      throw new GitHubCallbackParseError(invalidCallbackReason);
     }
     if (code.length === 0) {
       throw new GitHubCallbackParseError("code-format");
     }
-    return {
-      code,
-      ...(query.has("installation_id")
-        ? {
-            installationId: decimalSchema.parse(query.get("installation_id")),
-            setupAction: z.enum(["install", "update"]).parse(query.get("setup_action")),
-          }
-        : {}),
-      kind: "authorize" as const,
-      state,
-    };
+    const fields: GitHubAuthorizationCallbackFields = { code };
+    if (query.has("installation_id")) {
+      fields.installationId = decimalSchema.parse(query.get("installation_id"));
+      fields.setupAction = z.enum(["install", "update"]).parse(query.get("setup_action"));
+    }
+    return { ...fields, kind: "authorize" as const, state };
   }
   if (
     query.getAll("state").length !== 1 ||
     query.getAll("installation_id").length !== 1 ||
     query.getAll("setup_action").length !== 1
   ) {
-    throw new GitHubCallbackParseError("callback-shape");
+    throw new GitHubCallbackParseError(invalidCallbackReason);
   }
   return {
     installationId: decimalSchema.parse(query.get("installation_id")),
@@ -498,23 +526,36 @@ const githubCallbackDiagnostic = (url: string): GitHubCallbackDiagnostic => {
   const code = query.get("code");
   const error = query.get("error");
   const unknownKeys = [...new Set([...query.keys()].filter((key) => !known.has(key)))];
-  return {
-    ...(code === null ? {} : { codeLength: code.length }),
+  const codeLength: Pick<GitHubCallbackDiagnostic, "codeLength"> = {};
+  if (code !== null) {
+    codeLength.codeLength = code.length;
+  }
+  const codeDetails: Pick<GitHubCallbackDiagnostic, "codeLength" | "codePresent" | "error"> = {
+    ...codeLength,
     codePresent: code !== null,
-    ...(["access_denied", "temporarily_unavailable", "server_error"].includes(error ?? "")
-      ? { error: error as GitHubOAuthCallbackError }
-      : {}),
+  };
+  if (isGitHubOAuthCallbackError(error)) {
+    codeDetails.error = error;
+  }
+  const queryDetails: Pick<
+    GitHubCallbackDiagnostic,
+    "codeLength" | "codePresent" | "error" | "keyCounts" | "queryKeys" | "stateLength"
+  > = {
+    ...codeDetails,
     keyCounts: Object.fromEntries([...known].map((key) => [key, query.getAll(key).length])),
     queryKeys: [...new Set([...query.keys()].filter((key) => known.has(key)))].toSorted(),
-    ...(state === null ? {} : { stateLength: state.length }),
-    statePresent: state !== null,
-    ...(unknownKeys.length === 0
-      ? {}
-      : {
-          unknownKeyDigests: unknownKeys.slice(0, 3).map(sha256),
-        }),
-    unknownKeyCount: unknownKeys.length,
   };
+  if (state !== null) {
+    queryDetails.stateLength = state.length;
+  }
+  const details: Omit<GitHubCallbackDiagnostic, "unknownKeyCount"> = {
+    ...queryDetails,
+    statePresent: state !== null,
+  };
+  if (unknownKeys.length !== 0) {
+    details.unknownKeyDigests = unknownKeys.slice(0, 3).map(sha256);
+  }
+  return { ...details, unknownKeyCount: unknownKeys.length };
 };
 
 const oauthErrorCategoryFromException = (error: unknown) => {
@@ -528,17 +569,17 @@ const oauthErrorCategoryFromException = (error: unknown) => {
 };
 
 const propertyOrUndefined = (value: unknown, key: string): unknown => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isNonArrayObject(value)) {
     return undefined;
   }
-  return key in value ? (value as Record<string, unknown>)[key] : undefined;
+  return key in value ? value[key] : undefined;
 };
 
 const normalizedUserTokens = (authentication: unknown, now: number) => {
   try {
     const accessToken = stringProperty(authentication, "token");
     if (accessToken.length < 20 || accessToken.length > 512 || /[\0\r\n]/u.test(accessToken)) {
-      throw new Error("invalid-token");
+      throw new Error(invalidToken);
     }
     const expiresAt =
       typeof propertyOrUndefined(authentication, "expiresAt") === "string"
@@ -554,28 +595,24 @@ const normalizedUserTokens = (authentication: unknown, now: number) => {
         : undefined;
     const expiring =
       expiresAt !== undefined || refreshToken !== undefined || refreshTokenExpiresAt !== undefined;
-    if (
-      expiring &&
-      (expiresAt === undefined ||
-        refreshToken === undefined ||
-        refreshTokenExpiresAt === undefined ||
-        refreshToken.length < 20 ||
-        refreshToken.length > 512 ||
-        /[\0\r\n]/u.test(refreshToken) ||
-        !Number.isFinite(Date.parse(expiresAt)) ||
-        !Number.isFinite(Date.parse(refreshTokenExpiresAt)) ||
-        Date.parse(expiresAt) <= now ||
-        Date.parse(refreshTokenExpiresAt) <= now)
-    ) {
-      throw new Error("invalid-token");
-    }
     if (expiring) {
       if (
         expiresAt === undefined ||
         refreshToken === undefined ||
         refreshTokenExpiresAt === undefined
       ) {
-        throw new Error("invalid-token");
+        throw new Error(invalidToken);
+      }
+      if (refreshToken.length < 20 || refreshToken.length > 512 || /[\0\r\n]/u.test(refreshToken)) {
+        throw new Error(invalidToken);
+      }
+      if (
+        !Number.isFinite(Date.parse(expiresAt)) ||
+        !Number.isFinite(Date.parse(refreshTokenExpiresAt)) ||
+        Date.parse(expiresAt) <= now ||
+        Date.parse(refreshTokenExpiresAt) <= now
+      ) {
+        throw new Error(invalidToken);
       }
       return { accessToken, accessTokenExpiresAt: expiresAt, refreshToken, refreshTokenExpiresAt };
     }
@@ -648,10 +685,11 @@ const accessibleInstallation = async (input: {
       typeof totalCount !== "number" ||
       !Number.isSafeInteger(totalCount) ||
       totalCount < 0 ||
-      totalCount > 1000 ||
-      !Array.isArray(installations) ||
-      installations.length > 100
+      totalCount > 1000
     ) {
+      throw new GitHubInstallationValidationError("response-shape");
+    }
+    if (!Array.isArray(installations) || installations.length > 100) {
       throw new GitHubInstallationValidationError("response-shape");
     }
     for (const value of installations) {
@@ -846,7 +884,7 @@ export const createGitHubAppInstallationAuthorization = (input: {
     try {
       const authority = hostedTenantAuthoritySchema.parse(authorityInput);
       if (!(await input.membership.isActiveMember(authority))) {
-        throw new Error("membership-inactive");
+        throw new Error(membershipInactive);
       }
       const issuedAt = now();
       const state = signedState({
@@ -896,20 +934,21 @@ export const createGitHubAppInstallationAuthorization = (input: {
       try {
         const authority = hostedTenantAuthoritySchema.parse(authorityInput);
         if (!(await input.membership.isActiveMember(authority))) {
-          throw new Error("membership-inactive");
+          throw new Error(membershipInactive);
         }
-        return await beginUserAuthorization({
+        const authorization: Parameters<typeof beginUserAuthorization>[0] = {
           authority,
           returnState,
           setupAction: "update",
           via: "existing",
-          ...(target?.accountLogin
-            ? { targetAccountLogin: githubLoginSchema.parse(target.accountLogin) }
-            : {}),
-          ...(target?.installationId
-            ? { installationId: decimalSchema.parse(target.installationId) }
-            : {}),
-        });
+        };
+        if (target?.accountLogin) {
+          authorization.targetAccountLogin = githubLoginSchema.parse(target.accountLogin);
+        }
+        if (target?.installationId) {
+          authorization.installationId = decimalSchema.parse(target.installationId);
+        }
+        return await beginUserAuthorization(authorization);
       } catch {
         throw new Error(FAILURE_MESSAGE);
       }
@@ -925,7 +964,7 @@ export const createGitHubAppInstallationAuthorization = (input: {
           authority = hostedTenantAuthoritySchema.parse(authorityInput);
         } catch {
           throw new GitHubInstallationAuthorizationError(
-            "callback-state-validation",
+            callbackStateValidation,
             undefined,
             undefined,
             callbackDiagnostic,
@@ -935,17 +974,16 @@ export const createGitHubAppInstallationAuthorization = (input: {
         try {
           callback = callbackInput(inputUrl);
         } catch (error) {
+          const stateValidation: GitHubStateValidationDiagnostic = { substage: "callback-parse" };
+          if (error instanceof GitHubCallbackParseError) {
+            stateValidation.callbackParseReason = error.reason;
+          }
           throw new GitHubInstallationAuthorizationError(
-            "callback-state-validation",
+            callbackStateValidation,
             undefined,
             undefined,
             callbackDiagnostic,
-            {
-              substage: "callback-parse",
-              ...(error instanceof GitHubCallbackParseError
-                ? { callbackParseReason: error.reason }
-                : {}),
-            },
+            stateValidation,
           );
         }
         try {
@@ -957,13 +995,13 @@ export const createGitHubAppInstallationAuthorization = (input: {
           });
         } catch (error) {
           throw new GitHubInstallationAuthorizationError(
-            "callback-state-validation",
+            callbackStateValidation,
             undefined,
             undefined,
             callbackDiagnostic,
             error instanceof GitHubStateValidationError
               ? error.diagnostic
-              : { substage: "state-schema" },
+              : { substage: stateSchema },
           );
         }
         const current = now();
@@ -971,10 +1009,10 @@ export const createGitHubAppInstallationAuthorization = (input: {
         try {
           activeMember = await input.membership.isActiveMember(authority);
         } catch {
-          throw new GitHubInstallationAuthorizationError("membership-state-consumption");
+          throw new GitHubInstallationAuthorizationError(membershipStateConsumption);
         }
         if (!activeMember) {
-          throw new GitHubInstallationAuthorizationError("membership-state-consumption");
+          throw new GitHubInstallationAuthorizationError(membershipStateConsumption);
         }
         let consumed: boolean;
         try {
@@ -985,11 +1023,11 @@ export const createGitHubAppInstallationAuthorization = (input: {
             stateDigest: state.stateDigest,
           });
         } catch {
-          throw new GitHubInstallationAuthorizationError("membership-state-consumption");
+          throw new GitHubInstallationAuthorizationError(membershipStateConsumption);
         }
         if (!consumed) {
           throw new GitHubInstallationAuthorizationError(
-            "membership-state-consumption",
+            membershipStateConsumption,
             undefined,
             state.returnState,
           );
@@ -1139,10 +1177,10 @@ export const createGitHubAppInstallationAuthorization = (input: {
         }
         try {
           if (!(await input.membership.isActiveMember(authority))) {
-            throw new Error("membership-inactive");
+            throw new Error(membershipInactive);
           }
         } catch {
-          throw new GitHubInstallationAuthorizationError("membership-state-consumption");
+          throw new GitHubInstallationAuthorizationError(membershipStateConsumption);
         }
 
         const appliedAt = new Date(now());

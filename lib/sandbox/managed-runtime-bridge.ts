@@ -113,6 +113,10 @@ const collectBody = async (request: IncomingMessage, limit: number) => {
   return Buffer.concat(parts);
 };
 
+const denyUpgrade = (socket: Duplex) => {
+  socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+};
+
 /** A private fixed-loopback bridge. It has public verification keys and capability hashes, never signing/Auth/OIDC credentials. */
 export const createManagedRuntimeBridge = <Configuration>(input: {
   identity: ManagedRuntimeIdentity;
@@ -184,7 +188,7 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
     }
   };
   const authorize = async (request: IncomingMessage, body?: Uint8Array) => {
-    const authorization = request.headers.authorization;
+    const { authorization } = request.headers;
     const bearer =
       authorization !== undefined && authorization.startsWith("Bearer ")
         ? authorization.slice(7)
@@ -193,21 +197,28 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
       throw unavailable();
     }
     await assertCurrent();
-    await input.verification.verifyRequest({
-      verification,
-      headers: incomingHeaders(request),
-      method: request.method ?? "GET",
-      target: request.url ?? "/",
-      ...(body === undefined ? {} : { body }),
-      actors,
-    });
+    const verificationRequest = () => {
+      const requestDetails: Pick<VerifiedRequest, "headers" | "method" | "target" | "body"> & {
+        verification: Configuration;
+      } = {
+        verification,
+        headers: incomingHeaders(request),
+        method: request.method ?? "GET",
+        target: request.url ?? "/",
+      };
+      if (body !== undefined) {
+        requestDetails.body = body;
+      }
+      return { ...requestDetails, actors };
+    };
+    await input.verification.verifyRequest(verificationRequest());
     await assertCurrent();
   };
   const server = createServer((request, response) => {
     void (async () => {
       try {
         // Reject unauthenticated ingress before buffering any entity bytes.
-        const authorization = request.headers.authorization;
+        const { authorization } = request.headers;
         if (
           !verifyManagedCapability(
             authorization !== undefined && authorization.startsWith("Bearer ")
@@ -260,9 +271,6 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
       }
     })();
   });
-  const denyUpgrade = (socket: Duplex) => {
-    socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
-  };
   server.on("upgrade", (request, socket, head) => {
     connections.add(socket);
     socket.once("close", () => {

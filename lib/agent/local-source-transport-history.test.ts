@@ -52,10 +52,10 @@ test("actual source-preparation service retains old validation workflow while Na
     const stateRoot = path.dirname(f.source);
     writeFileSync(path.join(stateRoot, "eve-cycle"), "a".repeat(64), { mode: 0o600 });
     const environment = {
-      EVE_AGENT_HOST: "http://127.0.0.1:2100",
-      APP_BUILDER_EXECUTION_MODE: "development",
       APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+      APP_BUILDER_EXECUTION_MODE: "development",
       APP_BUILDER_LOCAL_ADAPTER: "1",
+      EVE_AGENT_HOST: "http://127.0.0.1:2100",
       EVE_HOSTED_ADAPTER: "0",
     };
     const appSpec = { appId: "example", digest: "a".repeat(64), artifactRevision: "b".repeat(64) };
@@ -91,9 +91,9 @@ test("actual source-preparation service retains old validation workflow while Na
       {
         sessionId: "saved-session",
         expected: {
+          sourcePath: f.source,
           workspaceId: f.original.workspaceId,
           workspacePath: f.original.workspacePath,
-          sourcePath: f.source,
         },
       },
       {
@@ -134,9 +134,9 @@ test("actual source-preparation service retains old validation workflow while Na
       const normalized = completedLocalSourceTransport(
         [result(reconciled.workspace, "completed", "new-plan")],
         {
+          sourcePath: f.source,
           workspaceId: f.original.workspaceId,
           workspacePath: f.original.workspacePath,
-          sourcePath: f.source,
         },
       );
       expect(
@@ -172,9 +172,9 @@ test("actual source-preparation service retains old validation workflow while Na
         reconciledByCallId: "new-plan",
       };
       const compatibility = {
+        sourcePath: f.source,
         workspaceId: frozen.workspaceId,
         workspacePath: frozen.workspacePath,
-        sourcePath: f.source,
         reconciliation: {
           appId: appSpec.appId,
           currentWorkspace: frozen,
@@ -261,7 +261,7 @@ test("actual source-preparation service retains old validation workflow while Na
       };
       const noOpHistory = [legacyEvent, failedPlanning, noOpEvent];
       const afterNoOp = await readCompletedLocalSourceTransport(
-        { sessionId: "saved-session", expected: compatibility },
+        { expected: compatibility, sessionId: "saved-session" },
         {
           environment,
           readAuthority: () => Promise.resolve({ kind: "local", ownerUid: 1, stateRoot }),
@@ -348,9 +348,9 @@ test("actual source-preparation service retains old validation workflow while Na
       }
       expect(() =>
         completedLocalSourceTransport([legacyEvent], {
+          sourcePath: f.source,
           workspaceId: frozen.workspaceId,
           workspacePath: frozen.workspacePath,
-          sourcePath: f.source,
         }),
       ).toThrow("another workspace or source");
       expect(() =>
@@ -405,16 +405,16 @@ test("actual source-preparation service retains old validation workflow while Na
             capture: next,
           });
         await f.sandbox.writeTextFile({
-          path: ".app-builder/source-files.json",
           content: oldManifest,
+          path: ".app-builder/source-files.json",
         });
         await expect(refresh()).rejects.toThrow("manifest no longer matches its receipt");
         expect(readFileSync(path.join(f.candidate, "shared.txt"), "utf-8")).toBe(
           "current repaired shared source\n",
         );
         await f.sandbox.writeTextFile({
-          path: ".app-builder/source-files.json",
           content: currentManifest,
+          path: ".app-builder/source-files.json",
         });
         const run = f.sandbox.run.bind(f.sandbox);
         const replaceBeforeReconcile = vi
@@ -426,8 +426,8 @@ test("actual source-preparation service retains old validation workflow while Na
               )
             ) {
               await f.sandbox.writeTextFile({
-                path: ".app-builder/source-files.json",
                 content: oldManifest,
+                path: ".app-builder/source-files.json",
               });
             }
             return await run(options);
@@ -441,8 +441,8 @@ test("actual source-preparation service retains old validation workflow while Na
           replaceBeforeReconcile.mockRestore();
         }
         await f.sandbox.writeTextFile({
-          path: ".app-builder/source-files.json",
           content: currentManifest,
+          path: ".app-builder/source-files.json",
         });
         await expect(refresh()).resolves.toMatchObject({
           workspace: { workspaceDigest: next.generation.workspaceDigest },
@@ -470,16 +470,16 @@ test("failed tool results, observed metadata and foreign/incomplete history cann
     const stateRoot = path.dirname(f.source);
     writeFileSync(path.join(stateRoot, "eve-cycle"), "a".repeat(64), { mode: 0o600 });
     const environment = {
-      EVE_AGENT_HOST: "http://127.0.0.1:2100",
-      APP_BUILDER_EXECUTION_MODE: "development",
       APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+      APP_BUILDER_EXECUTION_MODE: "development",
       APP_BUILDER_LOCAL_ADAPTER: "1",
+      EVE_AGENT_HOST: "http://127.0.0.1:2100",
       EVE_HOSTED_ADAPTER: "0",
     };
     const expected = {
+      sourcePath: f.source,
       workspaceId: f.original.workspaceId,
       workspacePath: f.original.workspacePath,
-      sourcePath: f.source,
     };
     expect(completedLocalSourceTransport([result(f.original, "failed")], expected)).toBeUndefined();
     expect(() =>
@@ -487,15 +487,14 @@ test("failed tool results, observed metadata and foreign/incomplete history cann
     ).toThrow("another workspace");
     await expect(
       readCompletedLocalSourceTransport(
-        { sessionId: "saved-session", expected },
+        { expected, sessionId: "saved-session" },
         {
           environment,
           readAuthority: () => Promise.resolve({ kind: "local", ownerUid: 1, stateRoot }),
-          snapshot: () =>
-            Promise.resolve({
-              events: [],
-              session: { sessionId: "saved-session", streamIndex: 2 },
-            }),
+          snapshot: async () => ({
+            events: [],
+            session: { sessionId: "saved-session", streamIndex: 2 },
+          }),
         },
       ),
     ).rejects.toThrow("incomplete");
@@ -515,7 +514,7 @@ test("failed tool results, observed metadata and foreign/incomplete history cann
     }
     await expect(
       readCompletedLocalSourceTransport(
-        { sessionId: "saved-session", ownerRunId: "foreign-child", expected },
+        { expected, ownerRunId: "foreign-child", sessionId: "saved-session" },
         {
           environment,
           readAuthority: () => Promise.resolve({ kind: "local", ownerUid: 1, stateRoot }),
@@ -527,18 +526,17 @@ test("failed tool results, observed metadata and foreign/incomplete history cann
     let reads = 0;
     await expect(
       readCompletedLocalSourceTransport(
-        { sessionId: "saved-session", expected },
+        { expected, sessionId: "saved-session" },
         {
           environment,
           readAuthority: () => {
             reads += 1;
             return Promise.resolve({ kind: "local", ownerUid: reads, stateRoot });
           },
-          snapshot: () =>
-            Promise.resolve({
-              events: [],
-              session: { sessionId: "saved-session", streamIndex: 0 },
-            }),
+          snapshot: async () => ({
+            events: [],
+            session: { sessionId: "saved-session", streamIndex: 0 },
+          }),
         },
       ),
     ).rejects.toThrow("owner changed");
@@ -553,10 +551,10 @@ test("missing cycle variable uses the same owned cycle and stitches actual SDK h
   const cycle = path.join(stateRoot, "eve-cycle");
   writeFileSync(cycle, "a".repeat(64), { mode: 0o600 });
   const environment = {
-    EVE_AGENT_HOST: "http://127.0.0.1:2100",
-    APP_BUILDER_EXECUTION_MODE: "development",
     APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+    APP_BUILDER_EXECUTION_MODE: "development",
     APP_BUILDER_LOCAL_ADAPTER: "1",
+    EVE_AGENT_HOST: "http://127.0.0.1:2100",
     EVE_HOSTED_ADAPTER: "0",
   };
   const recovery = createLocalNativeRecovery({
@@ -567,9 +565,9 @@ test("missing cycle variable uses the same owned cycle and stitches actual SDK h
     throw new Error("Missing fixture recovery");
   }
   const expected = {
+    sourcePath: f.source,
     workspaceId: f.original.workspaceId,
     workspacePath: f.original.workspacePath,
-    sourcePath: f.source,
   };
   f.write(f.source, "shared.txt", "genuine later source overlay\n");
   const overlay = await prepareDevelopmentSandboxWorkspace(f.source, f.sandbox, "overlay");
@@ -599,11 +597,11 @@ test("missing cycle variable uses the same owned cycle and stitches actual SDK h
         ...body.recovery,
         ownerRunId: "recovered-session",
         provenance: {
+          checkpointVersion: 1,
           kind: "failed-turn-input",
-          sourceStepId: "failed-step",
           sourceEventId: "failed",
           sourceSlot: 0,
-          checkpointVersion: 1,
+          sourceStepId: "failed-step",
         },
       });
       const call = {
@@ -628,7 +626,7 @@ test("missing cycle variable uses the same owned cycle and stitches actual SDK h
         Promise.resolve({ kind: "local" as const, ownerUid: process.getuid?.() ?? 0, stateRoot }),
     };
     const stitched = await readCompletedLocalSourceTransport(
-      { sessionId: "saved-session", expected },
+      { expected, sessionId: "saved-session" },
       dependencies,
     );
     expect(stitched?.workspaceDigest).toBe(overlay.workspaceDigest);
@@ -636,10 +634,10 @@ test("missing cycle variable uses the same owned cycle and stitches actual SDK h
     // prepared-session stream anchor after supported native recovery.
     const callback = await readCompletedLocalSourceTransport(
       {
-        sessionId: "saved-session",
-        ownerRunId: "callback-step-owner",
-        ownerAnchorRunId: "recovered-session",
         expected,
+        ownerAnchorRunId: "recovered-session",
+        ownerRunId: "callback-step-owner",
+        sessionId: "saved-session",
       },
       dependencies,
     );
@@ -647,30 +645,30 @@ test("missing cycle variable uses the same owned cycle and stitches actual SDK h
     await expect(
       readCompletedLocalSourceTransport(
         {
-          sessionId: "saved-session",
-          ownerRunId: "callback-step-owner",
-          ownerAnchorRunId: "foreign-anchor",
           expected,
+          ownerAnchorRunId: "foreign-anchor",
+          ownerRunId: "callback-step-owner",
+          sessionId: "saved-session",
         },
         dependencies,
       ),
     ).rejects.toThrow("owner changed");
     await expect(
       readCompletedLocalSourceTransport(
-        { sessionId: "saved-session", ownerAnchorRunId: "recovered-session", expected },
+        { expected, ownerAnchorRunId: "recovered-session", sessionId: "saved-session" },
         dependencies,
       ),
     ).rejects.toThrow("owner changed");
     await expect(
       readCompletedLocalSourceTransport(
-        { sessionId: "saved-session", ownerRunId: "callback-step-owner", expected },
+        { expected, ownerRunId: "callback-step-owner", sessionId: "saved-session" },
         dependencies,
       ),
     ).rejects.toThrow("owner changed");
 
     await expect(
       readCompletedLocalSourceTransport(
-        { sessionId: "saved-session", expected },
+        { expected, sessionId: "saved-session" },
         {
           ...dependencies,
           environment: {
@@ -682,7 +680,7 @@ test("missing cycle variable uses the same owned cycle and stitches actual SDK h
     ).rejects.toThrow();
     await expect(
       readCompletedLocalSourceTransport(
-        { sessionId: "saved-session", expected },
+        { expected, sessionId: "saved-session" },
         {
           ...dependencies,
           environment: {

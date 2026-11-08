@@ -55,7 +55,7 @@ export const inspectPlannedAuthoringCandidate = (input: {
   ) {
     return null;
   }
-  const target = current.proposal.target;
+  const { target } = current.proposal;
   if (
     target.contract.appId !== current.appSpec.appId ||
     target.contract.appSpec.sha256 !== current.appSpec.digest ||

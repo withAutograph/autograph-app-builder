@@ -1473,7 +1473,7 @@ describe("local public session recovery", () => {
       JSON.stringify({ code: "session_not_active", error: "The session is no longer active." }),
     );
     const session = {
-      send: vi.fn(() => Promise.reject(inactive)),
+      send: vi.fn().mockRejectedValue(inactive),
       state: { sessionId },
     };
     const create = vi.fn(() =>

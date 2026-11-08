@@ -32,9 +32,9 @@ async function readPrivateRequest(path: string): Promise<unknown> {
     throw new Error("Activation request path must be canonical and unsymlinked.");
   }
   const metadata = await stat(path);
+  const invalidFileOwner = !metadata.isFile() || metadata.uid !== process.getuid?.();
   if (
-    !metadata.isFile() ||
-    metadata.uid !== process.getuid?.() ||
+    invalidFileOwner ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (metadata.mode & 0o077) !== 0 ||
     metadata.size === 0 ||
@@ -206,19 +206,20 @@ function createStore(sql: Sql): PreviewActivationStore {
         { count: number }[]
       >`select count(*)::integer as count from jwks`;
       const database = drizzle(sql, { schema: databaseSchema });
+      const taskScopedOAuthPlaceholder = "task-scoped-oauth-initialization";
       const auth = createPreviewOAuthServer({
         config: {
           databaseUrl: "postgresql://task-scoped.invalid/database",
           environment: "preview",
-          githubClientId: "task-scoped-oauth-initialization",
-          githubClientSecret: "task-scoped-oauth-initialization",
+          githubClientId: taskScopedOAuthPlaceholder,
+          githubClientSecret: taskScopedOAuthPlaceholder,
           hostedAdapter: "1",
           issuer: input.issuer,
           passkeyOnboarding: null,
           resource: input.resource,
           secret: input.authSecret,
-          vercelClientId: "task-scoped-oauth-initialization",
-          vercelClientSecret: "task-scoped-oauth-initialization",
+          vercelClientId: taskScopedOAuthPlaceholder,
+          vercelClientSecret: taskScopedOAuthPlaceholder,
         },
         database: drizzleAdapter(database, {
           provider: "pg",
@@ -292,14 +293,18 @@ function createStore(sql: Sql): PreviewActivationStore {
           const now = new Date(input.requestedAt);
           await transaction`insert into "user" (id, name, email, email_verified, created_at, updated_at) values (${input.userId}, ${input.githubLogin}, ${input.email}, true, ${now}, ${now})`;
           userRowsAffected = 1;
-        } else if (
-          users.length !== 1 ||
-          users[0]?.id !== input.userId ||
-          users[0]?.email !== input.email ||
-          users[0]?.name !== input.githubLogin ||
-          users[0]?.email_verified !== true
-        ) {
-          throw new Error("Invited user identity conflicts with an existing row.");
+        } else {
+          const identityConflict = "Invited user identity conflicts with an existing row.";
+          if (
+            users.length !== 1 ||
+            users[0]?.id !== input.userId ||
+            users[0]?.email !== input.email
+          ) {
+            throw new Error(identityConflict);
+          }
+          if (users[0]?.name !== input.githubLogin || users[0]?.email_verified !== true) {
+            throw new Error(identityConflict);
+          }
         }
         if (accounts.length === 0) {
           const now = new Date(input.requestedAt);
@@ -307,11 +312,13 @@ function createStore(sql: Sql): PreviewActivationStore {
           accountRowsAffected = 1;
         } else {
           const [account] = accounts;
-          if (
+          const invalidAccountIdentity =
             accounts.length !== 1 ||
             account?.id !== accountId ||
             account.issuer !== "local:oauth:github" ||
-            account.account_id !== input.githubAccountId ||
+            account.account_id !== input.githubAccountId;
+          if (
+            invalidAccountIdentity ||
             account.provider_id !== "github" ||
             account.user_id !== input.userId ||
             account.password !== null
@@ -344,13 +351,9 @@ if (argv[0] === "plan") {
   const request = previewActivationPlanRequestSchema.parse(await readPrivateRequest(argv[2]));
   process.stdout.write(`${JSON.stringify(planPreviewActivation(request))}\n`);
 } else if (argv[0] === "apply") {
-  if (
-    argv.length !== 7 ||
-    argv[1] !== "--expected-action" ||
-    argv[3] !== "--database-url-fd" ||
-    argv[4] !== "0" ||
-    argv[5] !== "--request-file"
-  ) {
+  const invalidApplyOptions =
+    argv.length !== 7 || argv[1] !== "--expected-action" || argv[3] !== "--database-url-fd";
+  if (invalidApplyOptions || argv[4] !== "0" || argv[5] !== "--request-file") {
     throw new Error("Preview activation apply arguments were invalid.");
   }
   const request = previewActivationApplyRequestSchema.parse(await readPrivateRequest(argv[6]));

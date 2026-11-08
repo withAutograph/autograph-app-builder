@@ -29,9 +29,10 @@ const workerPortKey = "__appBuilderStructuralTestAuthorizationV2";
 const workerProfileKey = `${workerPortKey}Profile`;
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const repositoryRootStat = statSync(repositoryRoot, { bigint: true });
+const invalidRootPath =
+  !path.isAbsolute(repositoryRoot) || realpathSync(repositoryRoot) !== repositoryRoot;
 if (
-  !path.isAbsolute(repositoryRoot) ||
-  realpathSync(repositoryRoot) !== repositoryRoot ||
+  invalidRootPath ||
   !repositoryRootStat.isDirectory() ||
   repositoryRootStat.uid !== BigInt(process.getuid?.() ?? -1) ||
   // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -64,8 +65,10 @@ const allowedWorkerEnvironment = new Set([
 ]);
 delete process.env.NODE_OPTIONS;
 
+/** @param {ReturnType<typeof captureEveWorkerEnvelope> | undefined} eveEnvelope - Authorized Eve worker environment. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function workerEnvironment(source, eveProfile, eveEnvelope) {
+  /** @type {NodeJS.ProcessEnv} */
   const environment = { PATH: "/usr/bin:/bin" };
   for (const name of allowedWorkerEnvironment) {
     if (name !== "EVE_DEV_WORKER_APP_ROOT" && source[name] !== undefined) {
@@ -87,6 +90,7 @@ function workerEnvironment(source, eveProfile, eveEnvelope) {
   return environment;
 }
 
+/** @param {{version: unknown, nonce: unknown, context: unknown, authorization: unknown, expiresAt: unknown, capabilities: unknown, publicKey: unknown, gateAEvalProfile: unknown}} proof - Worker authorization fields to sign. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonical(proof) {
   return JSON.stringify(
@@ -102,6 +106,7 @@ function canonical(proof) {
     ]),
   );
 }
+/** @param {unknown} value @param {string[]} keys */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactKeys(value, keys) {
   return (
@@ -153,14 +158,14 @@ function contextForProcess() {
 function requestAuthorization() {
   const context = contextForProcess();
   const port =
-    !isMainThread && workerData && typeof workerData === "object"
+    !isMainThread && workerData !== null && typeof workerData === "object"
       ? workerData[workerPortKey]
       : undefined;
   if (!isMainThread && port === undefined) {
     throw new Error("Structural test Worker authorization was absent.");
   }
   const delegatedPublicKey =
-    !isMainThread && workerData && typeof workerData === "object"
+    !isMainThread && workerData !== null && typeof workerData === "object"
       ? workerData[`${workerPortKey}PublicKey`]
       : undefined;
   const request = registry.begin(process, context, delegatedPublicKey);
@@ -259,6 +264,7 @@ function eveRuntimeWorkerPath() {
     ),
   );
 }
+/** @param {ReturnType<typeof createPrivateKey>} privateKey - Delegation key created by requestAuthorization. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, gateAEvalProfile) {
   const allowed = allowedWorkerPaths();
@@ -293,7 +299,7 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
           ...workerEnvironment(options.env ?? process.env, eveProfile, eveEnvelope),
           APP_BUILDER_TEST_CAPABILITY_ID: undefined,
           APP_BUILDER_TEST_MODEL: undefined,
-          NODE_OPTIONS: isTimeoutFixture ? undefined : `--import=${preloadUrl}`,
+          NODE_OPTIONS: isTimeoutFixture === true ? undefined : `--import=${preloadUrl}`,
         },
         execArgv: [],
         transferList: [...(options.transferList ?? []), channel.port2],
@@ -323,17 +329,19 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
           cleanup();
           void this.terminate();
         },
-        isTimeoutFixture ? 250 : timeoutMs,
+        isTimeoutFixture === true ? 250 : timeoutMs,
       );
       timer.timeout.unref();
       channel.port1.unref();
       this.once("error", cleanup);
       this.once("exit", cleanup);
       channel.port1.once("message", (request) => {
-        if (
+        const invalidRequestEnvelope =
           settled ||
           Buffer.byteLength(JSON.stringify(request)) > maxBytes ||
-          !exactKeys(request, ["version", "nonce", "context"]) ||
+          !exactKeys(request, ["version", "nonce", "context"]);
+        if (
+          invalidRequestEnvelope ||
           request.version !== 2 ||
           typeof request.nonce !== "string" ||
           typeof request.context !== "string"

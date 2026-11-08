@@ -32,8 +32,8 @@ const signed = (event = envelope) => {
 it("admits only actual signed exact-operation native identity and retains bounded provider facts", () => {
   const receipt = verifyCentralNativeDeploymentReceipt(signed());
   expect(receipt).toMatchObject({
-    providerDeploymentId: "dpl_native_one",
     immutableOrigin: "https://native-immutable.vercel.app",
+    providerDeploymentId: "dpl_native_one",
   });
   expect(JSON.stringify(receipt)).not.toContain("raw provider");
   expect(JSON.stringify(receipt)).not.toContain(secret);
@@ -88,8 +88,8 @@ it("retains conflicting native IDs or changed delivery bytes as a conflict rathe
     providerDeploymentId: "dpl_second",
   });
   expect(conflict).toEqual({
-    status: "conflict",
     providerDeploymentIds: ["dpl_native_one", "dpl_second"],
+    status: "conflict",
   });
   expect(retainCentralNativeDeploymentReceipt(conflict, receipt)).toEqual(conflict);
   expect(

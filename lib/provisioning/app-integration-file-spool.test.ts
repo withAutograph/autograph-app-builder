@@ -8,10 +8,10 @@ import type { ProtectedInstallContextWire } from "./hosted-operator-sandbox-laun
 const runId = "11111111-1111-4111-a111-111111111111";
 const sha = "a".repeat(64);
 const worker = {
-  id: "app-integration-bootstrap-v1",
-  sha256: sha,
-  operationScope: "app-integration-bootstrap-v1",
   executablePath: "/worker/integration",
+  id: "app-integration-bootstrap-v1",
+  operationScope: "app-integration-bootstrap-v1",
+  sha256: sha,
   subcommand: "integration-control-schema-readback",
 } as const;
 const context: ProtectedInstallContextWire = {
@@ -172,7 +172,6 @@ const fixture = (
       }
       return {
         kill: vi.fn(async () => {}),
-        wait: async () => ({ exitCode: 0 }),
         logs: async function* logs() {
           for (const [kind, frameId] of [
             ["protected_installer_lifecycle_ready", 1],
@@ -192,6 +191,7 @@ const fixture = (
             };
           }
         },
+        wait: async () => ({ exitCode: 0 }),
       };
     }),
   };
@@ -207,7 +207,7 @@ const fixture = (
     signal: new AbortController().signal,
     assertCurrent: vi.fn(async () => {}),
   };
-  return { input, createSandbox, stop, files };
+  return { createSandbox, files, input, stop };
 };
 const config = {
   image: "pinned-control",
@@ -224,8 +224,8 @@ it("reuses the fenced framed transport for fixed integration readback and privat
     >["createSandbox"],
   });
   expect(result).toMatchObject({
-    status: "applied",
     receipt: { resourceId: context.resource.resource_id },
+    status: "applied",
   });
   expect(f.input.assertCurrent).toHaveBeenCalled();
   expect(f.stop).toHaveBeenCalledOnce();
@@ -281,7 +281,7 @@ it("authorizes the stopped snapshot only at the app fence frame, not narrow owne
   expect(checkpoint).toHaveBeenCalledWith(
     expect.objectContaining({
       effectId: "fence-app-integration-authority",
-      receipt: { state: "applied", readbackSha256: "d".repeat(64) },
+      receipt: { readbackSha256: "d".repeat(64), state: "applied" },
     }),
   );
 });

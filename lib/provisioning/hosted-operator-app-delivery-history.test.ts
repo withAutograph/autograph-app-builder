@@ -91,24 +91,24 @@ const sourcePlan = (branch: string) =>
     bootstrap: { endpointId: "ep-fixture", maintenanceDatabase: "neondb", role: "neondb_owner" },
     resourcesInstaller: { reference: "resource-worker", sha256: "d".repeat(64) },
     publicGateway: {
-      projectId: "prj_gateway",
       branch: selection.branch,
       origin: "https://apps-preview.example.test",
+      projectId: "prj_gateway",
     },
     deploymentBoundary: {
+      app: { branch, environment: "preview", projectId: selection.projectId },
       authority,
-      teamId: "team_fixture",
-      app: { projectId: selection.projectId, branch, environment: "preview" },
-      gateway: { projectId: "prj_gateway", branch: selection.branch, environment: "preview" },
+      gateway: { branch: selection.branch, environment: "preview", projectId: "prj_gateway" },
       operator: {
-        projectId: "prj_operator",
-        environment: "preview",
         deploymentId: "operator-deployment",
+        environment: "preview",
+        projectId: "prj_operator",
       },
+      teamId: "team_fixture",
       verification: {
         gatewayOrigin: "https://gateway.example.test",
-        publicOrigin: "https://apps-preview.example.test",
         jwksUrl: "https://gateway.example.test/_platform/jwks.json",
+        publicOrigin: "https://apps-preview.example.test",
       },
     },
     delivery: {
@@ -119,19 +119,19 @@ const sourcePlan = (branch: string) =>
     },
     effects: [
       {
+        description: "Auth resources",
         id: "auth-resources",
         kind: "resources",
-        description: "Auth resources",
         resourceId: basePlan.authDatabase.resourceId,
       },
       {
+        description: "App resources",
         id: "app-resources",
         kind: "resources",
-        description: "App resources",
         resourceId: basePlan.appDatabase.resourceId,
       },
       ...basePlan.effects.filter((effect) => effect.kind !== "resources"),
-      { id: "delivery", kind: "delivery", description: "Actual delivery" },
+      { description: "Actual delivery", id: "delivery", kind: "delivery" },
     ],
   });
 const oldPlan = sourcePlan("codex/generated-old");
@@ -145,23 +145,23 @@ const old = hostedOperatorRecordSchema.parse({
   receipts: [],
   managedEnvironment: [
     {
+      branch: oldPlan.delivery?.branch,
+      comment: `App Builder protected operator ${operationRef}`,
       id: "old-owned-row",
       key: "SPEND_REVIEW_DATABASE_URL",
-      branch: oldPlan.delivery?.branch,
-      projectId: selection.projectId,
       operationRef,
-      comment: `App Builder protected operator ${operationRef}`,
+      projectId: selection.projectId,
     },
   ],
   deliveryCandidates: [
     {
       branch: oldPlan.delivery?.branch,
-      projectId: selection.projectId,
-      operationRef,
-      readyState: "READY",
-      origin: "https://old-app.example.test",
-      repoId: "actual-app-repository",
       deploymentId: "old-app-deployment",
+      operationRef,
+      origin: "https://old-app.example.test",
+      projectId: selection.projectId,
+      readyState: "READY",
+      repoId: "actual-app-repository",
     },
   ],
 });
@@ -204,13 +204,13 @@ it("freezes exact saved cleanup scopes and preserves provenance after confirmed 
       ...newPlan,
       action: "cleanup",
       effects: [
-        { id: "revoke", kind: "revoke", description: "Revoke access" },
-        { id: "remove", kind: "remove-bindings", description: "Remove owned rows" },
+        { description: "Revoke access", id: "revoke", kind: "revoke" },
+        { description: "Remove owned rows", id: "remove", kind: "remove-bindings" },
         {
+          description: "Retire owned resources",
           id: "retire",
           kind: "retire",
           resourceId: newPlan.appDatabase.resourceId,
-          description: "Retire owned resources",
         },
       ],
     },
@@ -303,10 +303,10 @@ it("accepts additive historical metadata while retaining owned delivery scope", 
     })),
   });
   expect(parsed.retainedAppDeliveries?.[0]).toMatchObject({
-    projectId: selection.projectId,
-    operationRef,
     delivery: oldPlan.delivery,
     managedEnvironment: old.managedEnvironment,
+    operationRef,
+    projectId: selection.projectId,
   });
   expect(parsed.retainedAppDeliveries?.[0]).not.toHaveProperty("advisory");
   expect(() =>

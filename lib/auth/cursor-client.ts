@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { openHostedPostgresDatabase } from "../db/hosted-postgres";
 
-import * as schema from "../db/schema";
+import { oauthClient, oauthClientResource, oauthResource } from "../db/schema";
 import { previewOAuthScopes, readPreviewOAuthContractConfig } from "./preview-oauth-contract";
 
 export const cursorClientId = "autograph-cursor-desktop";
@@ -29,10 +29,10 @@ export function cursorClientRegistration() {
     skipConsent: false,
     tokenEndpointAuthMethod: "none",
     userId: null,
-  } satisfies Partial<typeof schema.oauthClient.$inferInsert>;
+  } satisfies Partial<typeof oauthClient.$inferInsert>;
 }
 
-type Database = PostgresJsDatabase<typeof schema>;
+type Database = ReturnType<typeof openHostedPostgresDatabase>;
 type Reader = Pick<Database, "select">;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -49,8 +49,8 @@ export async function isCursorClientReady(database: Reader, resource: string): P
   validateResource(resource);
   const [client] = await database
     .select()
-    .from(schema.oauthClient)
-    .where(eq(schema.oauthClient.clientId, cursorClientId))
+    .from(oauthClient)
+    .where(eq(oauthClient.clientId, cursorClientId))
     .limit(1);
   if (!client) {
     return false;
@@ -73,20 +73,18 @@ export async function isCursorClientReady(database: Reader, resource: string): P
   }
   const bindings = await database
     .select()
-    .from(schema.oauthClientResource)
-    .where(eq(schema.oauthClientResource.clientId, cursorClientId));
+    .from(oauthClientResource)
+    .where(eq(oauthClientResource.clientId, cursorClientId));
   if (bindings.length !== 1 || bindings[0].resourceId !== resource) {
     return false;
   }
   const [target] = await database
     .select()
-    .from(schema.oauthResource)
-    .where(
-      and(eq(schema.oauthResource.identifier, resource), eq(schema.oauthResource.disabled, false)),
-    )
+    .from(oauthResource)
+    .where(and(eq(oauthResource.identifier, resource), eq(oauthResource.disabled, false)))
     .limit(1);
   return Boolean(
-    target && previewOAuthScopes.every((scope) => target.allowedScopes?.includes(scope)),
+    target && previewOAuthScopes.every((scope) => target.allowedScopes?.includes(scope) ?? false),
   );
 }
 
@@ -97,27 +95,27 @@ export async function setupCursorClient(database: Database, resource: string) {
   await database.transaction(async (tx) => {
     const [target] = await tx
       .select()
-      .from(schema.oauthResource)
-      .where(eq(schema.oauthResource.identifier, resource))
+      .from(oauthResource)
+      .where(eq(oauthResource.identifier, resource))
       .limit(1);
     if (
       !target ||
       target.disabled ||
-      !previewOAuthScopes.every((scope) => target.allowedScopes?.includes(scope))
+      !previewOAuthScopes.every((scope) => target.allowedScopes?.includes(scope) ?? false)
     ) {
       throw new Error("Initialize the OAuth resource before registering Cursor.");
     }
     await tx
-      .insert(schema.oauthClient)
+      .insert(oauthClient)
       .values({
         id: randomUUID(),
         ...cursorClientRegistration(),
         createdAt: new Date(),
         updatedAt: new Date(),
       })
-      .onConflictDoNothing({ target: schema.oauthClient.clientId });
+      .onConflictDoNothing({ target: oauthClient.clientId });
     await tx
-      .insert(schema.oauthClientResource)
+      .insert(oauthClientResource)
       .values({
         clientId: cursorClientId,
         createdAt: new Date(),
@@ -125,7 +123,7 @@ export async function setupCursorClient(database: Database, resource: string) {
         resourceId: resource,
       })
       .onConflictDoNothing({
-        target: [schema.oauthClientResource.clientId, schema.oauthClientResource.resourceId],
+        target: [oauthClientResource.clientId, oauthClientResource.resourceId],
       });
     if (!(await isCursorClientReady(tx, resource))) {
       throw new Error(

@@ -109,7 +109,7 @@ describe("owned private browser authority", () => {
       expect(commands.join("\n")).not.toContain("fixture-owner-capability");
       await expect(stat(actualFile)).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { force: true, recursive: true });
     }
   });
   it.each(["source-changed", "cancelled"])(
@@ -119,7 +119,7 @@ describe("owned private browser authority", () => {
       let current = true;
       const run = vi
         .fn<Parameters<typeof withPrivatePreviewBrowserAccess>[0]["sandbox"]["run"]>()
-        .mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+        .mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
       const writeTextFile = vi.fn(() => {
         if (kind === "cancelled") {
           controller.abort();

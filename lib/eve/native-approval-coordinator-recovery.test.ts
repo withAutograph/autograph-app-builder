@@ -71,7 +71,7 @@ beforeAll(async () => {
 });
 afterAll(() => {
   if (fixtureDirectory) {
-    rmSync(fixtureDirectory, { recursive: true, force: true });
+    rmSync(fixtureDirectory, { force: true, recursive: true });
   }
 });
 
@@ -80,21 +80,21 @@ const setup = async (
   abortSignal?: AbortSignal,
 ) => {
   const actor = {
+    attributes: {},
     authenticator: "fixture",
     principalId: "owner",
     principalType: "user",
-    attributes: {},
   };
   const request = {
-    kind: "tool-approval",
-    requestId: "pending-request",
-    prompt: "Approve target",
     action: {
-      kind: "tool-call",
-      toolName: "prepare-app-native-target",
       callId: "pending-call",
       input: { plan: "same-plan" },
+      kind: "tool-call",
+      toolName: "prepare-app-native-target",
     },
+    kind: "tool-approval",
+    prompt: "Approve target",
+    requestId: "pending-request",
   } satisfies Parameters<typeof batches.appendPendingInputBatch>[0]["requests"][number];
   const initial = batches.appendPendingInputBatch({
     session: {
@@ -111,8 +111,8 @@ const setup = async (
   });
   const context = new contexts.ContextContainer();
   context.set(keys.SessionKey, {
-    sessionId: "session",
     auth: { current: actor, initiator: actor },
+    sessionId: "session",
     turn: { id: "turn", sequence: 1 },
   });
   const authorizer = vi.fn(async (input: ApprovalResponseContext) => {
@@ -124,10 +124,10 @@ const setup = async (
     [
       "prepare-app-native-target",
       {
-        name: "prepare-app-native-target",
+        approval: { request: () => "user-approval", response: authorizer },
         description: "fixture",
         inputSchema: z.object({}),
-        approval: { request: () => "user-approval", response: authorizer },
+        name: "prepare-app-native-target",
       },
     ],
   ]);
@@ -140,17 +140,17 @@ const setup = async (
     abortSignal,
     stepInput: {
       attributedInputResponses: [
-        { auth: actor, response: { requestId: request.requestId, optionId: "approve" } },
+        { auth: actor, response: { optionId: "approve", requestId: request.requestId } },
       ],
     },
   });
   expect(ingested.kind).toBe("continue-coordination");
   return {
     authorizer,
-    tools,
-    session: ingested.session,
     run: (prepareTools?: CoordinatorInput["prepareTools"]) =>
-      run({ now: 2, session: ingested.session, tools, abortSignal, prepareTools }),
+      run({ abortSignal, now: 2, prepareTools, session: ingested.session, tools }),
+    session: ingested.session,
+    tools,
   };
 };
 
@@ -166,7 +166,7 @@ describe("native approval coordinator recovery", () => {
       authorization.resolve({ status: "allowed" });
       const result = await pending;
       expect(approvals.getApprovalAuditState(result.session.state).settlements).toEqual([
-        expect.objectContaining({ requestId: "pending-request", outcome: "allowed" }),
+        expect.objectContaining({ outcome: "allowed", requestId: "pending-request" }),
       ]);
     } finally {
       vi.useRealTimers();
@@ -177,7 +177,7 @@ describe("native approval coordinator recovery", () => {
       if (mode === "failure") {
         return Promise.reject(new Error("owner verification unavailable"));
       }
-      return Promise.resolve({ status: "rejected", reason: "owner denied" });
+      return Promise.resolve({ reason: "owner denied", status: "rejected" });
     });
     const result = await f.run();
     expect(approvals.getApprovalAuditState(result.session.state).settlements).toHaveLength(0);

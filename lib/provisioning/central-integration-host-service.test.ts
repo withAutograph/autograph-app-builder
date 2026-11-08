@@ -31,7 +31,7 @@ import { retainCentralNativeDeploymentReceipt } from "./central-integration-depl
 
 const id = "11111111-1111-4111-a111-111111111111";
 const receiptFor = (context: CentralHostEffectContext): CentralEffectReceipt => {
-  const plan = context.plan;
+  const { plan } = context;
   if (plan.kind === "central-integration-host-caller-v1") {
     return {
       effect: "authorize-app-central-caller",
@@ -98,6 +98,11 @@ const receiptFor = (context: CentralHostEffectContext): CentralEffectReceipt => 
     }
   }
 };
+const approval = (callId: string) => ({
+  approvedByCallId: callId,
+  approvedAt: "2026-11-03T00:00:00Z",
+});
+
 const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) => {
   let row: CentralHostRow | undefined;
   let authorized = true;
@@ -115,34 +120,7 @@ const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) 
     callId: "current-call",
     signal: new AbortController().signal,
   };
-  const approval = (callId: string) => ({
-    approvedByCallId: callId,
-    approvedAt: "2026-11-03T00:00:00Z",
-  });
   const store: CentralHostServicePorts["store"] = {
-    read: async (authority, operationRef) =>
-      row !== undefined &&
-      isDeepStrictEqual(authority, row.record.plan.authority) &&
-      operationRef === row.operationRef
-        ? structuredClone(row)
-        : undefined,
-    reserve: async (selected) => {
-      row ??= {
-        operationRef: centralHostOperationRef(selected),
-        revision: 1,
-        record: centralHostRecordSchema.parse({
-          kind: "central-integration-host-journal-v1",
-          plan: selected,
-          planDigest: centralHostPlanDigest(selected),
-          effects: Object.fromEntries(selected.effects.map((effect) => [effect, "idle"])),
-          attempts: {},
-          ...(selected.kind === "central-integration-host-setup-v1"
-            ? { nativeDeployment: { status: "empty" } }
-            : {}),
-        }),
-      };
-      return structuredClone(row);
-    },
     compareAndSet: async (before, raw): Promise<CentralHostRow | undefined> => {
       if (conflict) {
         conflict = false;
@@ -156,33 +134,31 @@ const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) 
       row = { operationRef: before.operationRef, revision: before.revision + 1, record };
       return structuredClone(row);
     },
+    read: async (authority, operationRef) =>
+      row !== undefined &&
+      isDeepStrictEqual(authority, row.record.plan.authority) &&
+      operationRef === row.operationRef
+        ? structuredClone(row)
+        : undefined,
+    reserve: async (selected) => {
+      if (row === undefined) {
+        const operationRef = centralHostOperationRef(selected);
+        const record: CentralHostRecord = {
+          kind: "central-integration-host-journal-v1",
+          plan: selected,
+          planDigest: centralHostPlanDigest(selected),
+          effects: Object.fromEntries(selected.effects.map((effect) => [effect, "idle"])),
+          attempts: {},
+        };
+        if (selected.kind === "central-integration-host-setup-v1") {
+          record.nativeDeployment = { status: "empty" };
+        }
+        row = { operationRef, revision: 1, record: centralHostRecordSchema.parse(record) };
+      }
+      return structuredClone(row);
+    },
   };
   const ports: CentralHostServicePorts = {
-    store,
-    resolvePlan: async () => plan,
-    assertAuthorized: async () => {
-      if (!authorized) {
-        throw new Error("owner revoked");
-      }
-    },
-    readApproval: async (_inv, _plan, callId) => {
-      if (revoked.has(callId)) {
-        throw new Error("consent revoked");
-      }
-      return approval(callId);
-    },
-    withTargetLease: async (_inv, _plan, run) => {
-      generation += 1;
-      return await run({
-        leaseId: id,
-        fenceGeneration: generation,
-        assertCurrent: async () => {
-          if (!authorized) {
-            throw new Error("lease revoked");
-          }
-        },
-      });
-    },
     applyEffect: async (context) => {
       expect(row?.record.effects[context.effect]).toBe("pending");
       expect(row?.record.attempts?.[context.effect]?.attemptGeneration).toBe(
@@ -195,11 +171,11 @@ const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) 
         throw new Error("lost acknowledgement");
       }
     },
-    reconcileEffect: async (context) => {
-      reconciled.push({ effect: context.effect, generation: context.attemptGeneration });
-      return unknown ? { status: "unknown" } : { status: "applied", receipt: receiptFor(context) };
+    assertAuthorized: async () => {
+      if (!authorized) {
+        throw new Error("owner revoked");
+      }
     },
-    observeSetup: async () => providerReady,
     observeCaller: async () =>
       plan.kind === "central-integration-host-caller-v1"
         ? centralHostReadyReceiptSchema.parse({
@@ -217,6 +193,31 @@ const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) 
             },
           })
         : undefined,
+    observeSetup: async () => providerReady,
+    readApproval: async (_inv, _plan, callId) => {
+      if (revoked.has(callId)) {
+        throw new Error("consent revoked");
+      }
+      return approval(callId);
+    },
+    reconcileEffect: async (context) => {
+      reconciled.push({ effect: context.effect, generation: context.attemptGeneration });
+      return unknown ? { status: "unknown" } : { status: "applied", receipt: receiptFor(context) };
+    },
+    resolvePlan: async () => plan,
+    store,
+    withTargetLease: async (_inv, _plan, run) => {
+      generation += 1;
+      return await run({
+        leaseId: id,
+        fenceGeneration: generation,
+        assertCurrent: async () => {
+          if (!authorized) {
+            throw new Error("lease revoked");
+          }
+        },
+      });
+    },
   };
   const service = createCentralHostService(ports);
   const select = {
@@ -246,16 +247,23 @@ const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) 
     row = await store.compareAndSet(row, next);
   };
   return {
-    service,
-    store,
-    ports,
-    invocation,
-    select,
     applied,
-    reconciled,
-    native,
+    conflict: () => {
+      conflict = true;
+    },
+    invocation,
+    lose: () => {
+      lost = true;
+    },
     markProviderReady: () => {
       providerReady = true;
+    },
+    native,
+    ports,
+    reconciled,
+    revokeCall: (callId: string) => revoked.add(callId),
+    revokeOwner: () => {
+      authorized = false;
     },
     row: () => {
       if (row === undefined) {
@@ -263,24 +271,17 @@ const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) 
       }
       return structuredClone(row);
     },
-    lose: () => {
-      lost = true;
-    },
+    select,
+    service,
     setUnknown: () => {
       unknown = true;
     },
-    revokeOwner: () => {
-      authorized = false;
-    },
-    revokeCall: (callId: string) => revoked.add(callId),
-    conflict: () => {
-      conflict = true;
-    },
+    store,
   };
 };
 test("normal planning reserves no effects; global prepare performs exactly six ordered effects and waits for signed ready identity", async () => {
   const f = fixture();
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   expect(f.applied).toEqual([]);
   expect(await f.service.prepare(f.invocation, f.select)).toMatchObject({
     status: "waiting-native-deployment",
@@ -296,7 +297,7 @@ test("normal planning reserves no effects; global prepare performs exactly six o
 });
 test("pending recovery inspects the original attempt generation under a fresh lease without replay", async () => {
   const f = fixture();
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   f.lose();
   await expect(f.service.prepare(f.invocation, f.select)).rejects.toThrow("lost acknowledgement");
   expect(f.row().record.effects[original.effects[0]]).toBe("pending");
@@ -307,7 +308,7 @@ test("pending recovery inspects the original attempt generation under a fresh le
 });
 test("uncertain readback never dispatches the pending effect or advances dependencies", async () => {
   const f = fixture();
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   f.lose();
   await expect(f.service.prepare(f.invocation, f.select)).rejects.toThrow();
   f.setUnknown();
@@ -317,7 +318,7 @@ test("uncertain readback never dispatches the pending effect or advances depende
 });
 test("revoked original consent blocks recovery even when a new call consents", async () => {
   const f = fixture();
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   f.lose();
   await expect(f.service.prepare(f.invocation, f.select)).rejects.toThrow();
   f.revokeCall(f.invocation.callId);
@@ -328,7 +329,7 @@ test("revoked original consent blocks recovery even when a new call consents", a
 });
 test("owner revocation, foreign session and stale plan cannot authorize effects", async () => {
   const f = fixture();
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   await expect(
     f.service.prepare({ ...f.invocation, sessionId: "foreign-session" }, f.select),
   ).rejects.toThrow();
@@ -341,14 +342,14 @@ test("owner revocation, foreign session and stale plan cannot authorize effects"
 });
 test("CAS conflict before dispatch stops rather than retrying any effect", async () => {
   const f = fixture();
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   f.conflict();
   await expect(f.service.prepare(f.invocation, f.select)).rejects.toThrow("state_changed");
   expect(f.applied).toEqual([]);
 });
 test("real store transition rejects phase regression, replaced receipts, removed approval and stale fence", async () => {
   const f = fixture();
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   f.lose();
   await expect(f.service.prepare(f.invocation, f.select)).rejects.toThrow();
   const before = f.row().record;
@@ -424,7 +425,7 @@ test("caller enrollment performs only its one approved effect and persists the i
     effects: ["authorize-app-central-caller"],
   });
   const f = fixture(plan);
-  await f.service.plan(f.invocation, { kind: "caller", appId: plan.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: plan.selection.initiatingAppId, kind: "caller" });
   expect(await f.service.prepare(f.invocation, f.select)).toMatchObject({ status: "ready" });
   expect(f.applied).toEqual(["authorize-app-central-caller"]);
   expect(f.row().record.nativeDeployment).toBeUndefined();
@@ -453,16 +454,16 @@ test("provider grant and per-key accepted IDs stay in the same row and cannot be
     }
     await apply(context);
   };
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   await f.service.prepare(f.invocation, f.select);
   const before = f.row().record;
   expect(before.attempts?.["authorize-central-inspector"]?.grantAttempt).toEqual({
-    beforeSha256: "a".repeat(64),
     afterSha256: "b".repeat(64),
+    beforeSha256: "a".repeat(64),
   });
   expect(before.runtimeBindings?.[original.environment[0].key]).toMatchObject({
-    state: "applied",
     acceptedEnvId: "accepted-env-id",
+    state: "applied",
   });
   const binding = before.runtimeBindings?.[original.environment[0].key];
   if (binding?.state !== "applied") {
@@ -495,14 +496,14 @@ test("wrong worker generation cannot settle pending schema or advance to receive
           },
         }
       : await reconcile(context);
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   await expect(f.service.prepare(f.invocation, f.select)).rejects.toThrow();
   expect(f.row().record.effects["install-central-schema"]).toBe("pending");
   expect(f.applied).toEqual(["prepare-central-resources", "install-central-schema"]);
 });
 test("conflicting native identity and late consent revocation remain visible on read", async () => {
   const f = fixture();
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   await f.service.prepare(f.invocation, f.select);
   await f.native("deployment.ready");
   const current = f.row();
@@ -520,7 +521,7 @@ test("conflicting native identity and late consent revocation remain visible on 
     "native_deployment_conflict",
   );
   const g = fixture();
-  await g.service.plan(g.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await g.service.plan(g.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   await g.service.prepare(g.invocation, g.select);
   await g.native("deployment.ready");
   g.revokeCall(g.invocation.callId);
@@ -537,7 +538,7 @@ test("separate revision session receives read-only canonical caller READY pointe
   let originalAuthorityReads = 0;
   f.ports.resolveReady = async (invocation, request) => {
     expect(invocation.sessionId).toBe(revision.sessionId);
-    expect(request).toEqual({ kind: "caller", appId: original.selection.initiatingAppId });
+    expect(request).toEqual({ appId: original.selection.initiatingAppId, kind: "caller" });
     originalAuthorityReads += 1;
     return receipt;
   };
@@ -551,10 +552,10 @@ test("separate revision session receives read-only canonical caller READY pointe
     throw new Error("must not create revision consent");
   };
   const result = await f.service.plan(revision, {
-    kind: "caller",
     appId: original.selection.initiatingAppId,
+    kind: "caller",
   });
-  expect(result).toEqual({ status: "ready", receipt, ...receipt.callerSetup });
+  expect(result).toEqual({ receipt, status: "ready", ...receipt.callerSetup });
   expect(originalAuthorityReads).toBe(1);
   expect("plan" in result).toBe(false);
   expect(centralHostPlanResultSchema.parse(result)).toEqual(result);
@@ -571,7 +572,7 @@ test("read-only caller reuse rejects foreign receipt authority without reserving
   await expect(
     f.service.plan(
       { ...f.invocation, sessionId: "revision-session" },
-      { kind: "caller", appId: original.selection.initiatingAppId },
+      { appId: original.selection.initiatingAppId, kind: "caller" },
     ),
   ).rejects.toThrow("central_host_service_unavailable");
   expect(f.applied).toEqual([]);

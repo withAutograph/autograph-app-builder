@@ -12,6 +12,8 @@ import {
 } from "./working-preview-diagnostics";
 import { createWorkingPreviewAccess } from "./working-preview-access";
 
+const CLEANUP_REQUIRED = "cleanup-required";
+
 export interface WorkingPreviewCommand {
   executable: string;
   args: string[];
@@ -183,7 +185,7 @@ const openApp = async (input: {
   absorbCookies(cookies, launch);
   const location = launch.headers.get("location");
   await launch.body?.cancel();
-  if (launch.status !== 303 || cookies.size === 0 || !location) {
+  if (launch.status !== 303 || cookies.size === 0 || location === null || location === "") {
     input.observe(`Launch HTTP ${launch.status}; expected redirect with access cookie`);
     return false;
   }
@@ -210,10 +212,10 @@ const openApp = async (input: {
     const ready = response.ok && response.headers.get("content-type")?.includes("text/html");
     // oxlint-disable-next-line eslint/no-await-in-loop -- Release the current response before following its redirect.
     await response.body?.cancel();
-    if (ready) {
+    if (ready ?? false) {
       return true;
     }
-    if (response.status < 300 || response.status >= 400 || !next) {
+    if (response.status < 300 || response.status >= 400 || next === null || next === "") {
       return false;
     }
     url = new URL(next, url);
@@ -392,7 +394,7 @@ const reconcilePreviewAttempt = async (
   } catch (error) {
     await previewOwnershipOperation(
       provider,
-      { kind: "update", ...attemptIdentity(attempt), patch: { status: "cleanup-required" } },
+      { kind: "update", ...attemptIdentity(attempt), patch: { status: CLEANUP_REQUIRED } },
       AbortSignal.timeout(5000),
     );
     throw error;
@@ -483,7 +485,9 @@ const cleanupPreviewAttempt = async (input: {
       ? provider.update({ ports: [] }, { signal: AbortSignal.timeout(10_000) })
       : undefined,
   ]);
-  const failed = cleanup.filter((result) => result.status === "rejected");
+  const failed: { status: "rejected"; reason: unknown }[] = cleanup.filter(
+    (result) => result.status === "rejected",
+  );
   if (launchDispatched && command === undefined) {
     failed.push({
       reason: new Error(
@@ -505,7 +509,7 @@ const cleanupPreviewAttempt = async (input: {
         const pending = { ...attempt, status: "cleanup-required" as const };
         await previewOwnershipOperation(
           provider,
-          { kind: "update", ...attemptIdentity(attempt), patch: { status: "cleanup-required" } },
+          { kind: "update", ...attemptIdentity(attempt), patch: { status: CLEANUP_REQUIRED } },
           AbortSignal.timeout(5000),
         );
         onAttempt?.(pending);
@@ -699,7 +703,7 @@ export const startWorkingPreview = async (input: {
     return cleanupPreviewAttempt({
       attempt,
       command,
-      diagnosticsPath: input.signal?.aborted ? undefined : diagnosticsPath,
+      diagnosticsPath: (input.signal?.aborted ?? false) ? undefined : diagnosticsPath,
       error,
       expiresAt,
       launchDispatched,

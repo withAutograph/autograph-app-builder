@@ -1,11 +1,9 @@
 /* oxlint-disable eslint/complexity, sonarjs/expression-complexity -- Stored intent, immutable authority and completed effect scopes are checked together before readiness may be returned. */
 import { isDeepStrictEqual } from "node:util";
 import { and, eq, or, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 import { builderProvisioningJournals } from "../db/schema";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Drizzle database type requires the repository schema namespace.
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import type { ReadCentralIntegrationHostReady } from "./app-integration-central-authority";
 import {
   centralHostSetupPlanSchema,
@@ -22,6 +20,8 @@ import {
   centralRuntimeBindingSchema,
   centralEffectReceiptMatches,
 } from "./central-integration-host-checkpoint";
+
+const CENTRAL_HOST_SETUP_KIND = "central-integration-host-setup-v1";
 
 const phase = z.enum(["idle", "pending", "applied"]);
 const receipt = z.strictObject({
@@ -43,7 +43,7 @@ export const centralHostRecordSchema = z
     observation: centralHostReadyReceiptSchema.optional(),
   })
   .superRefine((record, ctx) => {
-    const plan = record.plan;
+    const { plan } = record;
     const attempts = record.attempts ?? {};
     if (record.attempts !== undefined) {
       const firstUnfinished = plan.effects.findIndex(
@@ -83,7 +83,7 @@ export const centralHostRecordSchema = z
     if (
       record.runtimeBindings !== undefined &&
       (record.effects["bind-central-preview-runtime"] === "idle" ||
-        plan.kind !== "central-integration-host-setup-v1" ||
+        plan.kind !== CENTRAL_HOST_SETUP_KIND ||
         Object.keys(record.runtimeBindings).some(
           (key) => !plan.environment.some((entry) => entry.key === key),
         ))
@@ -94,7 +94,7 @@ export const centralHostRecordSchema = z
       });
     }
 
-    if (plan.kind === "central-integration-host-setup-v1") {
+    if (plan.kind === CENTRAL_HOST_SETUP_KIND) {
       const native = record.nativeDeployment;
       if (
         native === undefined ||
@@ -148,7 +148,6 @@ export interface CentralHostRow {
   record: CentralHostRecord;
 }
 type Authority = CentralHostRecord["plan"]["authority"];
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 const nativeTransitionAllowed = (
   before: CentralHostRecord["nativeDeployment"],
   after: CentralHostRecord["nativeDeployment"],
@@ -278,9 +277,7 @@ export const createPostgresCentralHostStore = (database: Database) => {
         planDigest: centralHostPlanDigest(plan),
         effects: Object.fromEntries(plan.effects.map((effect) => [effect, "idle"])),
         attempts: {},
-        ...(plan.kind === "central-integration-host-setup-v1"
-          ? { nativeDeployment: { status: "empty" } }
-          : {}),
+        ...(plan.kind === CENTRAL_HOST_SETUP_KIND ? { nativeDeployment: { status: "empty" } } : {}),
       });
       const operationRef = centralHostOperationRef(plan);
       const now = new Date();
@@ -433,7 +430,7 @@ export const createReadCentralIntegrationHostReady =
     );
     if (
       setup === undefined ||
-      setup.record.plan.kind !== "central-integration-host-setup-v1" ||
+      setup.record.plan.kind !== CENTRAL_HOST_SETUP_KIND ||
       setup.record.planDigest !== caller.record.plan.setup.planDigest ||
       setup.record.nativeDeployment?.status !== "accepted" ||
       setup.record.nativeDeployment.providerDeploymentId !==

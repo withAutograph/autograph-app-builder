@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import { test, vi } from "vitest";
 import { z } from "zod";
 
+const terminalRecoveryActivationFailed = "eve.terminal_recovery_activation_failed";
 const require = createRequire(import.meta.url);
 const sdk = pathToFileURL(`${path.dirname(require.resolve("eve/package.json"))}/dist/src/`).href;
 const { activateTerminalSession } = await import(`${sdk}execution/session/terminal-recovery.js`);
@@ -48,19 +49,21 @@ const fixture = () => {
   };
   const deps = {
     async getHook() {
-      return { runId: receipt.ownerRunId, metadata: Promise.resolve({ recoveryBinding: receipt }) };
+      const runId = receipt.ownerRunId;
+      const metadata = Promise.resolve({ recoveryBinding: receipt });
+      return { metadata, runId };
     },
+    isHookNotFound: HookNotFoundError.is,
     async resumeHook() {
       state.resumes += 1;
     },
-    isHookNotFound: HookNotFoundError.is,
   };
   const input = {
     auth: { authenticator: canary, principalType: "user", principalId: canary },
     descriptor,
     ports,
   };
-  return { input, deps, receipt, state };
+  return { deps, input, receipt, state };
 };
 const captureFailure = async (f, original, expectedStage) => {
   const logged = [];
@@ -81,7 +84,7 @@ const captureFailure = async (f, original, expectedStage) => {
   assert.equal(line.startsWith(prefix), true);
   assert.equal(line.includes(canary), false);
   const summary = JSON.parse(line.slice(prefix.length));
-  assert.equal(summary.event, "eve.terminal_recovery_activation_failed");
+  assert.equal(summary.event, terminalRecoveryActivationFailed);
   assert.equal(summary.stage, expectedStage);
   assert.equal(
     Object.keys(summary).every((key) =>
@@ -104,10 +107,10 @@ test("receipt read errors retain identity and log only closed compiled error fac
     throw failure;
   };
   assert.deepEqual(await captureFailure(f, failure, "receipt_read"), {
-    event: "eve.terminal_recovery_activation_failed",
-    stage: "receipt_read",
-    errorClass: "WorkflowWorldError",
     code: "TRANSPORT",
+    errorClass: "WorkflowWorldError",
+    event: terminalRecoveryActivationFailed,
+    stage: "receipt_read",
     status: 503,
   });
   assert.equal(f.state.resumes, 0);
@@ -126,10 +129,10 @@ test("an actual expired hook lookup remains a failure and is never treated as a 
     throw failure;
   };
   assert.deepEqual(await captureFailure(f, failure, "hook_lookup"), {
-    event: "eve.terminal_recovery_activation_failed",
-    stage: "hook_lookup",
-    errorClass: "RunExpiredError",
     code: "run-expired",
+    errorClass: "RunExpiredError",
+    event: terminalRecoveryActivationFailed,
+    stage: "hook_lookup",
     status: 410,
   });
   assert.equal(f.state.resumes, 0);
@@ -138,24 +141,25 @@ test("metadata decryption errors never expose their message or private context",
   const f = fixture();
   const failure = new RuntimeDecryptionError(canary, { context: { private: canary } });
   f.deps.getHook = async () => ({
-    runId: f.receipt.ownerRunId,
     get metadata() {
       return Promise.reject(failure);
     },
+    runId: f.receipt.ownerRunId,
   });
   assert.deepEqual(await captureFailure(f, failure, "hook_metadata"), {
-    event: "eve.terminal_recovery_activation_failed",
-    stage: "hook_metadata",
     errorClass: "RuntimeDecryptionError",
+    event: terminalRecoveryActivationFailed,
+    stage: "hook_metadata",
   });
   assert.equal(f.state.resumes, 0);
 });
 test("a changed hook binding retains the existing receipt comparison rejection", async () => {
   const f = fixture();
-  f.deps.getHook = async () => ({
-    runId: `${canary}-other`,
-    metadata: Promise.resolve({ recoveryBinding: f.receipt }),
-  });
+  f.deps.getHook = async () => {
+    const runId = `${canary}-other`;
+    const metadata = Promise.resolve({ recoveryBinding: f.receipt });
+    return { metadata, runId };
+  };
   await captureFailure(f, undefined, "hook_validate");
   assert.equal(f.state.resumes, 0);
 });
@@ -197,9 +201,9 @@ test("unknown names, arbitrary codes, invalid status and deep causes cannot leak
     throw failure;
   };
   assert.deepEqual(await captureFailure(f, failure, "receipt_read"), {
-    event: "eve.terminal_recovery_activation_failed",
-    stage: "receipt_read",
     errorClass: "other",
+    event: terminalRecoveryActivationFailed,
+    stage: "receipt_read",
   });
 });
 test("hostile error getters are not called and cause cycles terminate", async () => {
@@ -267,10 +271,11 @@ test("actual missing hooks and already-consumed resume hooks retain successful n
       recoveryBinding: f.receipt,
     });
     assert.equal(f.state.resumes, 0);
-    f.deps.getHook = async () => ({
-      runId: f.receipt.ownerRunId,
-      metadata: Promise.resolve({ recoveryBinding: f.receipt }),
-    });
+    f.deps.getHook = async () => {
+      const runId = f.receipt.ownerRunId;
+      const metadata = Promise.resolve({ recoveryBinding: f.receipt });
+      return { metadata, runId };
+    };
     f.deps.resumeHook = async () => {
       f.state.resumes += 1;
       throw new HookNotFoundError(canary);

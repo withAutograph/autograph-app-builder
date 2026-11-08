@@ -37,7 +37,11 @@ export const createReadyReplacementNativeReader = (ports: {
     if (
       !credential ||
       !credential.binding.active ||
-      credential.binding.installationId !== target.installationId ||
+      credential.binding.installationId !== target.installationId
+    ) {
+      throw new HostedOperatorError("authorization_required");
+    }
+    if (
       credential.binding.scopeId !== target.scopeId ||
       credential.binding.scopeType !== "team" ||
       target.scopeType !== "team"
@@ -74,11 +78,10 @@ export const createReadyReplacementNativeReader = (ports: {
         redirect: z.string().nullable().optional(),
       })
       .parse(await request(`/v4/aliases/${encodeURIComponent(alias)}`));
-    if (
-      observed.alias.toLowerCase() !== alias ||
-      observed.projectId !== gateway.projectId ||
-      (observed.redirect !== undefined && observed.redirect !== null && observed.redirect !== "")
-    ) {
+    if (observed.alias.toLowerCase() !== alias || observed.projectId !== gateway.projectId) {
+      throw new HostedOperatorError("resource_mismatch");
+    }
+    if (observed.redirect !== undefined && observed.redirect !== null && observed.redirect !== "") {
       throw new HostedOperatorError("resource_mismatch");
     }
     return observed.deploymentId;
@@ -126,17 +129,30 @@ export const createReadyReplacementNativeReader = (ports: {
         const origin = new URL(`https://${native.url}`);
         if (
           project.id !== candidate.projectId ||
-          project.accountId !== ports.context.target.scopeId ||
+          project.accountId !== ports.context.target.scopeId
+        ) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        if (
           native.id !== candidate.deploymentId ||
           native.projectId !== candidate.projectId ||
           native.ownerId !== project.accountId ||
-          !isNativePreviewDeployment(native) ||
+          !isNativePreviewDeployment(native)
+        ) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        if (
           origin.origin !== candidate.origin ||
           origin.pathname !== "/" ||
           origin.search !== "" ||
-          origin.hash !== "" ||
-          origin.username !== "" ||
-          origin.password !== "" ||
+          origin.hash !== ""
+        ) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        if (origin.username !== "" || origin.password !== "") {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        if (
           native.gitSource.ref !== nativeDeliveryGitRef(previous.plan, source, target) ||
           String(native.gitSource.repoId) !== source.repoId ||
           (source.gitSha !== undefined && native.gitSource.sha !== source.gitSha)

@@ -1,6 +1,11 @@
 /* oxlint-disable eslint/no-await-in-loop -- assessment rows retain deterministic requirement order while checking artifacts. */
 import { z } from "zod";
 
+const instantNavigation = "instant-navigation";
+const missingFunctionality = "missing-functionality";
+const infrastructureUnavailable = "infrastructure-unavailable";
+const instantPlaywrightMethod = "@next/playwright/instant";
+
 export const parityVersion = "self-reproduction-parity/v1" as const;
 export const sides = ["reference", "candidate"] as const;
 export const desktopViewports = [
@@ -124,7 +129,7 @@ export const frameworkMatrix = [
   },
   {
     assertions: ["instant-direct-load", "instant-client-navigation", "resolved-content-visible"],
-    id: "instant-navigation",
+    id: instantNavigation,
   },
   {
     assertions: ["back-forward-preserves-draft", "shared-layout-state-preserved", "focus-restored"],
@@ -168,48 +173,39 @@ const artifactPath = z
     /^(?!\/)(?!.*\\)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*\/\/)[^\s]+(?<!\/)$/u,
     "Use a relative evidence artifact path without traversal",
   );
-const assertionSchema = z
-  .object({
-    artifacts: z.array(artifactPath).min(1),
-    detail: z.string().min(1),
-    id: z.string().min(1),
-    passed: z.boolean(),
-  })
-  .strict();
+const assertionSchema = z.strictObject({
+  artifacts: z.array(artifactPath).min(1),
+  detail: z.string().min(1),
+  id: z.string().min(1),
+  passed: z.boolean(),
+});
 export const observationSchema = z
-  .object({
+  .strictObject({
     artifacts: z.array(artifactPath),
     assertions: z.array(assertionSchema),
-    disposition: z.enum([
-      "observed",
-      "missing-functionality",
-      "infrastructure-unavailable",
-      "not-run",
-    ]),
+    disposition: z.enum(["observed", missingFunctionality, infrastructureUnavailable, "not-run"]),
     method: z.enum([
       "browser",
       "source-review",
       "source-and-browser",
-      "@next/playwright/instant",
+      instantPlaywrightMethod,
       "none",
     ]),
     reason: z.string().min(1),
     requirementId: z.enum(requirements.map((row) => row.id)),
   })
-  .strict()
   .superRefine((value, ctx) => {
     if (new Set(value.assertions.map((item) => item.id)).size !== value.assertions.length) {
       ctx.addIssue({ code: "custom", message: "Duplicate assertions" });
     }
   });
 export const sideEvidenceSchema = z
-  .object({
+  .strictObject({
     observations: z.array(observationSchema),
-    output: z.enum(["available", "missing", "infrastructure-unavailable"]),
+    output: z.enum(["available", "missing", infrastructureUnavailable]),
     reason: z.string().min(1),
     sourceRevision: z.string().min(1),
   })
-  .strict()
   .superRefine((value, ctx) => {
     if (
       new Set(value.observations.map((item) => item.requirementId)).size !==
@@ -218,16 +214,14 @@ export const sideEvidenceSchema = z
       ctx.addIssue({ code: "custom", message: "Duplicate requirement observations" });
     }
   });
-export const parityEvidenceSchema = z
-  .object({
-    candidate: sideEvidenceSchema,
-    fixtureVersion: z.literal(1),
-    producer: z.literal("evaluator"),
-    reference: sideEvidenceSchema,
-    runId: z.string().min(1),
-    schemaVersion: z.literal(parityVersion),
-  })
-  .strict();
+export const parityEvidenceSchema = z.strictObject({
+  candidate: sideEvidenceSchema,
+  fixtureVersion: z.literal(1),
+  producer: z.literal("evaluator"),
+  reference: sideEvidenceSchema,
+  runId: z.string().min(1),
+  schemaVersion: z.literal(parityVersion),
+});
 export type ParityEvidence = z.infer<typeof parityEvidenceSchema>;
 export type Observation = z.infer<typeof observationSchema>;
 export type Status = "passed" | "failed" | "blocked" | "unassessed";
@@ -236,7 +230,7 @@ export const parityReasonCodes = [
   "excluded-from-scope",
   "output-missing",
   "output-infrastructure-unavailable",
-  "missing-functionality",
+  missingFunctionality,
   "assertion-failed",
   "observation-infrastructure-unavailable",
   "observation-not-run",
@@ -245,26 +239,22 @@ export const parityReasonCodes = [
 ] as const;
 export type ParityReasonCode = (typeof parityReasonCodes)[number];
 
-export const parityAssessmentSchema = z
-  .object({
-    rows: z.array(
-      z
-        .object({
-          artifacts: z.array(artifactPath),
-          kind: z.enum(["workflow", "framework", "capture"]),
-          reason: z.string(),
-          reasonCode: z.enum(parityReasonCodes),
-          requirementId: z.enum(requirements.map((row) => row.id)),
-          side: z.enum(sides),
-          status: z.enum(["passed", "failed", "blocked", "unassessed"]),
-        })
-        .strict(),
-    ),
-    runId: z.string(),
-    schemaVersion: z.literal(parityVersion),
-    visualScoresAdvisory: z.literal(true),
-  })
-  .strict();
+export const parityAssessmentSchema = z.strictObject({
+  rows: z.array(
+    z.strictObject({
+      artifacts: z.array(artifactPath),
+      kind: z.enum(["workflow", "framework", "capture"]),
+      reason: z.string(),
+      reasonCode: z.enum(parityReasonCodes),
+      requirementId: z.enum(requirements.map((row) => row.id)),
+      side: z.enum(sides),
+      status: z.enum(["passed", "failed", "blocked", "unassessed"]),
+    }),
+  ),
+  runId: z.string(),
+  schemaVersion: z.literal(parityVersion),
+  visualScoresAdvisory: z.literal(true),
+});
 export type Assessment = z.infer<typeof parityAssessmentSchema>;
 
 /** artifactExists must verify a nonempty file within the evaluator evidence root. */
@@ -297,13 +287,13 @@ export async function assessParity(
         reasonCode =
           bundle.output === "missing" ? "output-missing" : "output-infrastructure-unavailable";
         ({ reason } = bundle);
-      } else if (observation?.disposition === "missing-functionality") {
+      } else if (observation?.disposition === missingFunctionality) {
         status = "failed";
-        reasonCode = "missing-functionality";
-      } else if (observation?.assertions.some((assertion) => !assertion.passed)) {
+        reasonCode = missingFunctionality;
+      } else if (observation?.assertions.some((assertion) => !assertion.passed) ?? false) {
         status = "failed";
         reasonCode = "assertion-failed";
-      } else if (observation?.disposition === "infrastructure-unavailable") {
+      } else if (observation?.disposition === infrastructureUnavailable) {
         status = "blocked";
         reasonCode = "observation-infrastructure-unavailable";
       } else if (observation?.disposition === "not-run") {
@@ -320,13 +310,13 @@ export async function assessParity(
         const behavioral =
           requirement.kind === "framework"
             ? observation.method === "source-and-browser" ||
-              (requirement.id === "instant-navigation" &&
-                observation.method === "@next/playwright/instant")
+              (requirement.id === instantNavigation &&
+                observation.method === instantPlaywrightMethod)
             : observation.method === "browser";
         const instant =
-          requirement.id !== "instant-navigation" ||
-          observation.method === "@next/playwright/instant";
-        if (complete && retained && screenshot && behavioral && instant) {
+          requirement.id !== instantNavigation || observation.method === instantPlaywrightMethod;
+        const hasRequiredEvidence = complete && retained && screenshot;
+        if (hasRequiredEvidence && behavioral && instant) {
           status = "passed";
           reasonCode = "observed-complete";
         } else {

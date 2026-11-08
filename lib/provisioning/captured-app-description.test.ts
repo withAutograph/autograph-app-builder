@@ -10,18 +10,18 @@ type Row = typeof prototypeArtifactChunks.$inferInsert;
 type Database = Parameters<typeof createCapturedAppDescriptionStore>[0]["database"];
 const context = {
   authority: {
-    issuer: "https://builder.example/api/auth",
     audience: "https://builder.example/mcp",
+    issuer: "https://builder.example/api/auth",
     ownerUserId: "owner",
     workspaceId: "workspace",
   },
   target: { appId: "example", sessionId: "session" },
 };
 const description: AppDescription = {
-  version: 1,
   app: { id: "example", routes: ["/example"], workspacePath: "apps/example" },
   backend: { kind: "static" },
   validation: { browser: null, check: { task: "check" }, test: null },
+  version: 1,
 };
 const columns = [
   "issuer",
@@ -69,19 +69,19 @@ const setup = () => {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- Deliberate in-memory Drizzle transport fixture.
   const db = database as unknown as Database;
   const store = createCapturedAppDescriptionStore({
-    database: db,
     assertCurrentOwner: async () => {
       if (revoked) {
         throw new Error("owner revoked");
       }
     },
+    database: db,
   });
   return {
-    store,
-    rows,
     revoke: () => {
       revoked = true;
     },
+    rows,
+    store,
   };
 };
 

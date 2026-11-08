@@ -16,6 +16,11 @@ import { planningOverlayRoot } from "./dependency-cache";
 import type { ExecutionDependencyLayout } from "./dependency-cache";
 import type { TargetProposal, TargetIterationChange } from "./target-planning";
 
+const microfrontendsConfigPath = "microfrontends.json";
+const providerProvisioningAuthority = "provider-provisioning";
+const productionReadinessAuthority = "production-readiness";
+const repositoryWorkspacePath = "/workspace/repository";
+
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
 const repositoryPath = z
   .string()
@@ -27,17 +32,17 @@ const repositoryPath = z
 
 export const targetApplyCommandReceiptSchema = z.strictObject({
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-  mutations: z.tuple([repositoryPath, z.literal("microfrontends.json")]),
+  mutations: z.tuple([repositoryPath, z.literal(microfrontendsConfigPath)]),
   omittedAuthorities: z.tuple([
-    z.literal("provider-provisioning"),
+    z.literal(providerProvisioningAuthority),
     z.literal("deployment"),
-    z.literal("production-readiness"),
+    z.literal(productionReadinessAuthority),
   ]),
   recovered: z.boolean(),
   topology: z.strictObject({
     newDigest: digestSchema,
     oldDigest: digestSchema,
-    path: z.literal("microfrontends.json"),
+    path: z.literal(microfrontendsConfigPath),
   }),
   version: z.literal(1),
   workspacePath: repositoryPath,
@@ -248,7 +253,11 @@ export function assertCurrentTargetApplyReceipt(input: {
   if (
     input.version !== 2 ||
     input.appSpecPath === undefined ||
-    !safeSourcePath(input.appSpecPath) ||
+    !safeSourcePath(input.appSpecPath)
+  ) {
+    throw new Error("A canonical V2 target apply receipt is required.");
+  }
+  if (
     !digestSchema.safeParse(input.appSpecDigest).success ||
     !digestSchema.safeParse(input.preparedTreeDigest).success
   ) {
@@ -353,7 +362,7 @@ export async function materializeFreshApplyOverlay(input: {
     return {
       acceptedAppSpec,
       appSpecPath,
-      applyRoot: "/workspace/repository",
+      applyRoot: repositoryWorkspacePath,
     };
   } catch (error) {
     await input.sandbox.removePath({
@@ -521,19 +530,18 @@ export async function inspectFixtureApplyOverlay(
   if (sourceManifest === null) {
     throw new Error("The prepared workspace manifest is missing.");
   }
+  const invalidManifest = "The prepared workspace manifest is invalid.";
   const parsed = JSON.parse(sourceManifest) as unknown;
   if (!Array.isArray(parsed)) {
-    throw new TypeError("The prepared workspace manifest is invalid.");
+    throw new TypeError(invalidManifest);
   }
-  const sourceFiles = parsed.map((candidate) => {
-    if (
-      typeof candidate !== "object" ||
-      candidate === null ||
-      !("path" in candidate) ||
-      typeof candidate.path !== "string" ||
-      !safeSourcePath(candidate.path)
-    ) {
-      throw new Error("The prepared workspace manifest is invalid.");
+  const manifestEntries: unknown[] = parsed;
+  const sourceFiles = manifestEntries.map((candidate) => {
+    if (typeof candidate !== "object" || candidate === null || !("path" in candidate)) {
+      throw new Error(invalidManifest);
+    }
+    if (typeof candidate.path !== "string" || !safeSourcePath(candidate.path)) {
+      throw new Error(invalidManifest);
     }
     return {
       mode: "mode" in candidate && candidate.mode === "100755" ? "755" : "644",
@@ -634,9 +642,17 @@ function parseTargetReceipt(
   if (
     receipt.appId !== proposal.contract.appId ||
     receipt.workspacePath !== proposal.plan.source.workspacePath ||
-    receipt.topology.path !== proposal.plan.topology.configPath ||
-    (proposal.plan.topology.currentDigest !== undefined &&
-      receipt.topology.oldDigest !== proposal.plan.topology.currentDigest) ||
+    receipt.topology.path !== proposal.plan.topology.configPath
+  ) {
+    return undefined;
+  }
+  if (
+    proposal.plan.topology.currentDigest !== undefined &&
+    receipt.topology.oldDigest !== proposal.plan.topology.currentDigest
+  ) {
+    return undefined;
+  }
+  if (
     (proposal.plan.topology.proposedDigest !== undefined &&
       receipt.topology.newDigest !== proposal.plan.topology.proposedDigest) ||
     receipt.mutations[0] !== proposal.plan.source.workspacePath
@@ -681,13 +697,17 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
         const current = await sandbox.readBinaryFile({
           path: `${relativeRoot}/${change.path}`,
         });
-        if (
-          ((change.before === undefined
+        const mismatchedBefore =
+          change.before === undefined
             ? current !== null
-            : current === null || sha256(current) !== change.before.digest) &&
-            (change.after === undefined
-              ? current !== null
-              : current === null || sha256(current) !== change.after.digest)) ||
+            : current === null || sha256(current) !== change.before.digest;
+        const mismatchedPreimage =
+          mismatchedBefore &&
+          (change.after === undefined
+            ? current !== null
+            : current === null || sha256(current) !== change.after.digest);
+        if (
+          mismatchedPreimage ||
           (change.after !== undefined && change.after.digest !== sha256(change.after.content))
         ) {
           return {
@@ -709,7 +729,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       }
     }
     if ("operation" in proposal && proposal.applicationSourceImport !== undefined) {
-      const registration = proposal.applicationSourceImport.registration;
+      const { registration } = proposal.applicationSourceImport;
       if (
         registration === undefined ||
         registration.projectName !== appId ||
@@ -794,8 +814,12 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
         "0".repeat(64);
       const receipt: TargetApplyCommandReceipt = {
         appId: proposal.contract.appId,
-        mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
-        omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
+        mutations: [proposal.plan.source.workspacePath, microfrontendsConfigPath],
+        omittedAuthorities: [
+          providerProvisioningAuthority,
+          "deployment",
+          productionReadinessAuthority,
+        ],
         recovered: false,
         topology: {
           newDigest:
@@ -803,7 +827,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
             proposal.plan.topology.proposedDigest ??
             oldDigest,
           oldDigest,
-          path: "microfrontends.json",
+          path: microfrontendsConfigPath,
         },
         version: 1,
         workspacePath: proposal.plan.source.workspacePath,
@@ -858,13 +882,17 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
       const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
       const receipt: TargetApplyCommandReceipt = {
         appId,
-        mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
-        omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
+        mutations: [proposal.plan.source.workspacePath, microfrontendsConfigPath],
+        omittedAuthorities: [
+          providerProvisioningAuthority,
+          "deployment",
+          productionReadinessAuthority,
+        ],
         recovered: false,
         topology: {
           newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
           oldDigest,
-          path: "microfrontends.json",
+          path: microfrontendsConfigPath,
         },
         version: 1,
         workspacePath: proposal.plan.source.workspacePath,
@@ -903,13 +931,17 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
     const newDigest = proposal.plan.topology.proposedDigest ?? "1".repeat(64);
     const receipt: TargetApplyCommandReceipt = {
       appId,
-      mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
-      omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
+      mutations: [proposal.plan.source.workspacePath, microfrontendsConfigPath],
+      omittedAuthorities: [
+        providerProvisioningAuthority,
+        "deployment",
+        productionReadinessAuthority,
+      ],
       recovered: false,
       topology: {
         newDigest,
         oldDigest,
-        path: "microfrontends.json",
+        path: microfrontendsConfigPath,
       },
       version: 1,
       workspacePath: proposal.plan.source.workspacePath,
@@ -959,7 +991,7 @@ export async function executeProposalBoundApply(input: {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const linked = await input.sandbox.run({
           command: `ln -s ${root.cachePath} ${root.path}`,
-          workingDirectory: "/workspace/repository",
+          workingDirectory: repositoryWorkspacePath,
         });
         if (linked.exitCode !== 0) {
           throw new Error("dependency cache miss");
@@ -975,7 +1007,7 @@ export async function executeProposalBoundApply(input: {
   let before: OverlaySnapshot;
   try {
     planning = await snapshotter(input.sandbox, overlay.applyRoot);
-    prepared = await snapshotter(input.sandbox, "/workspace/repository");
+    prepared = await snapshotter(input.sandbox, repositoryWorkspacePath);
     before = await snapshotter(input.sandbox, overlay.applyRoot);
     if ("operation" in input.proposal) {
       before = iterationBaselineSnapshot(before, input.proposal.iteration.changes);
@@ -1027,21 +1059,22 @@ export async function executeProposalBoundApply(input: {
       stdout: "",
     };
   }
-  const attemptBase = {
+  const attemptBinding: TargetApplyBinding & Pick<ApplyResultBase, "frameworkUpgrade"> = {
     ...input.binding,
-    ...(input.proposal.frameworkUpgrade === undefined
-      ? {}
-      : { frameworkUpgrade: input.proposal.frameworkUpgrade.versions }),
+  };
+  if (input.proposal.frameworkUpgrade !== undefined) {
+    attemptBinding.frameworkUpgrade = input.proposal.frameworkUpgrade.versions;
+  }
+  const attemptBase = {
+    ...attemptBinding,
     appliedByCallId: input.appliedByCallId,
     applyRoot: overlay.applyRoot,
     command: {
       exitCode: command.exitCode,
-      name: ("operation" in input.proposal ? "iterate-existing-app" : "create-app") as
-        | "create-app"
-        | "iterate-existing-app",
+      name: "operation" in input.proposal ? "iterate-existing-app" : "create-app",
       stderrDigest: sha256(command.stderr),
       stdoutDigest: sha256(command.stdout),
-    },
+    } satisfies ApplyResultBase["command"],
     planningTreeDigest: planning.treeDigest,
     preTree: before.files,
     preTreeDigest: before.treeDigest,
@@ -1079,18 +1112,31 @@ export async function executeProposalBoundApply(input: {
   if (command.exitCode !== 0 || targetReceipt === undefined) {
     const commandOutput = `${command.stderr}\n${command.stdout}`;
     const output = validationOutputExcerpt(command.stdout, command.stderr);
-    const unsigned = {
+    const failureFields: typeof base &
+      Pick<TargetApplyFailureReceipt, "commandFailureKind" | "failedCommand" | "output"> = {
       ...base,
       commandFailureKind: commandFailureKind(commandOutput),
-      ...(command.failedCommand === undefined ? {} : { failedCommand: command.failedCommand }),
-      ...(output.stderr === "" && output.stdout === "" ? {} : { output }),
+    };
+    if (command.failedCommand !== undefined) {
+      failureFields.failedCommand = command.failedCommand;
+    }
+    if (!(output.stderr === "" && output.stdout === "")) {
+      failureFields.output = output;
+    }
+    const unsigned: typeof failureFields &
+      Pick<TargetApplyFailureReceipt, "missingDependency"> & {
+        reason: "invalid-receipt" | "command-failed";
+        recoveryRequired: true;
+        status: "partial-failure";
+      } = {
+      ...failureFields,
       reason: command.exitCode === 0 ? ("invalid-receipt" as const) : ("command-failed" as const),
       recoveryRequired: true as const,
       status: "partial-failure" as const,
-      ...(missingDependency(commandOutput) === undefined
-        ? {}
-        : { missingDependency: missingDependency(commandOutput) }),
     };
+    if (missingDependency(commandOutput) !== undefined) {
+      unsigned.missingDependency = missingDependency(commandOutput);
+    }
     return {
       ok: false,
       receipt: { ...unsigned, digest: sha256(JSON.stringify(unsigned)) },

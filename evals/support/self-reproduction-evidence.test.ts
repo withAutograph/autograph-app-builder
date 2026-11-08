@@ -20,7 +20,7 @@ function capture() {
   directories.push(directory);
   const logPath = path.join(directory, "native.log");
   const transcriptPath = path.join(directory, "transcript.jsonl");
-  const records: Record<string, unknown>[] = [];
+  const records: Parameters<typeof evidenceSink>[2] = [];
   return { logPath, records, sink: evidenceSink(logPath, transcriptPath, records), transcriptPath };
 }
 

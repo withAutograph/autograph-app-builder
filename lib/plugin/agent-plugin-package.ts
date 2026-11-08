@@ -8,6 +8,9 @@ import packageManifest from "../../package.json" with { type: "json" };
 import { isReservedPublicReleaseHostname } from "./public-release-endpoint.ts";
 import { runSequentially } from "../async-sequential.ts";
 
+const PLUGIN_MANIFEST_FILENAME = "plugin.json";
+const ALLOWED_TOOLS_FRONTMATTER_FIELD = "allowed-tools";
+
 const SPEC_VERSION = "1.0.0";
 export const AUTOGRAPH_PACKAGE_VERSION = packageManifest.version;
 export const AUTOGRAPH_MCP_SERVER_NAME = "app-builder";
@@ -18,7 +21,7 @@ const SCHEMA_DIGESTS = {
   "mcp.schema.json": "d9904e6befac63b2bca19c32f3bc6a304173f5ed4f50daf8ce05fafc188c50ad",
   "plugin.schema.json": "fd74dfcbccea4a5b8768d9bc87b9da27449213ca5d464ace724ca48ec4bc074b",
 } as const;
-const PORTABLE_ENTRIES = ["plugin.json", "mcp.json", "skills", "LICENSE"];
+const PORTABLE_ENTRIES = [PLUGIN_MANIFEST_FILENAME, "mcp.json", "skills", "LICENSE"];
 const PORTABLE_ENTRY_SET = new Set(PORTABLE_ENTRIES);
 const SKILL_FRONTMATTER_FIELDS = new Set([
   "name",
@@ -26,7 +29,7 @@ const SKILL_FRONTMATTER_FIELDS = new Set([
   "license",
   "compatibility",
   "metadata",
-  "allowed-tools",
+  ALLOWED_TOOLS_FRONTMATTER_FIELD,
 ]);
 const HTTP_FIELD_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/u;
 const HTTP_FIELD_VALUE = /^[\t\u0020-\u007E\u0080-\u00FF]*$/u;
@@ -37,8 +40,27 @@ const SECRET_LIKE_HEADER_VALUE =
 
 type JsonObject = Record<string, unknown>;
 
-const readJson = async (filePath: string): Promise<JsonObject> =>
-  JSON.parse(await readFile(filePath, "utf-8")) as JsonObject;
+interface ValidatedPluginManifest {
+  $schema: string;
+  name: string;
+  version?: string;
+}
+interface ValidatedMcpManifest {
+  $schema: string;
+  mcpServers: Record<
+    string,
+    {
+      type: string;
+      url?: string;
+      headers?: Record<string, string>;
+    }
+  >;
+}
+
+const readJson = async (filePath: string): Promise<unknown> => {
+  const value: unknown = JSON.parse(await readFile(filePath, "utf-8"));
+  return value;
+};
 
 const isWithin = (root: string, candidate: string) => {
   const candidatePath = path.relative(root, candidate);
@@ -181,11 +203,10 @@ const requireString = ({
     value.length < min ||
     (max !== undefined && value.length > max)
   ) {
-    throw new Error(
-      `${path.relative(pluginRoot, skillPath)} field ${field} must be a string${
-        min > 0 ? ` with at least ${min} character${min === 1 ? "" : "s"}` : ""
-      }${max === undefined ? "" : ` and at most ${max} characters`}.`,
-    );
+    const prefix = `${path.relative(pluginRoot, skillPath)} field ${field} must be a string`;
+    const minimum = min > 0 ? ` with at least ${min} character${min === 1 ? "" : "s"}` : "";
+    const maximum = max === undefined ? "" : ` and at most ${max} characters`;
+    throw new Error(`${prefix}${minimum}${maximum}.`);
   }
   return value;
 };
@@ -259,13 +280,13 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
       value: frontmatter.compatibility,
     });
   }
-  if ("allowed-tools" in frontmatter) {
+  if (ALLOWED_TOOLS_FRONTMATTER_FIELD in frontmatter) {
     requireString({
-      field: "allowed-tools",
+      field: ALLOWED_TOOLS_FRONTMATTER_FIELD,
       min: 1,
       pluginRoot,
       skillPath,
-      value: frontmatter["allowed-tools"],
+      value: frontmatter[ALLOWED_TOOLS_FRONTMATTER_FIELD],
     });
   }
   if ("metadata" in frontmatter) {
@@ -274,7 +295,13 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
       metadata === null ||
       typeof metadata !== "object" ||
       Array.isArray(metadata) ||
-      Object.getPrototypeOf(metadata) !== Object.prototype ||
+      Object.getPrototypeOf(metadata) !== Object.prototype
+    ) {
+      throw new Error(
+        `${path.relative(pluginRoot, skillPath)} field metadata must map string keys to string values.`,
+      );
+    }
+    if (
       Object.entries(metadata).some(
         ([key, value]) => typeof key !== "string" || typeof value !== "string",
       )
@@ -344,7 +371,10 @@ export const validateAgentPluginPackage = async ({
   if (packageKind === "generated-artifact") {
     await assertCleanGeneratedArtifact(resolvedPluginRoot);
   }
-  await assertRegularFile(resolvedPluginRoot, path.resolve(resolvedPluginRoot, "plugin.json"));
+  await assertRegularFile(
+    resolvedPluginRoot,
+    path.resolve(resolvedPluginRoot, PLUGIN_MANIFEST_FILENAME),
+  );
   await assertRegularFile(resolvedPluginRoot, path.resolve(resolvedPluginRoot, "mcp.json"));
 
   const schemaRoot = path.resolve(repositoryRoot, "schemas/agent-plugins", SPEC_VERSION);
@@ -359,17 +389,18 @@ export const validateAgentPluginPackage = async ({
     schemaDocuments[name] = JSON.parse(bytes.toString("utf-8")) as JsonObject;
   }
 
-  const plugin = await readJson(path.resolve(resolvedPluginRoot, "plugin.json"));
+  const plugin = await readJson(path.resolve(resolvedPluginRoot, PLUGIN_MANIFEST_FILENAME));
   const mcp = await readJson(path.resolve(resolvedPluginRoot, "mcp.json"));
   const ajv = new Ajv2020({ allErrors: true, strict: false });
-  for (const [name, value, schema] of [
-    ["plugin.json", plugin, schemaDocuments["plugin.schema.json"]],
-    ["mcp.json", mcp, schemaDocuments["mcp.schema.json"]],
-  ] as const) {
-    const validate = ajv.compile(schema);
-    if (!validate(value)) {
-      throw new Error(`${name} is invalid: ${ajv.errorsText(validate.errors)}`);
-    }
+  const validatePlugin = ajv.compile<ValidatedPluginManifest>(
+    schemaDocuments["plugin.schema.json"],
+  );
+  if (!validatePlugin(plugin)) {
+    throw new Error(`plugin.json is invalid: ${ajv.errorsText(validatePlugin.errors)}`);
+  }
+  const validateMcp = ajv.compile<ValidatedMcpManifest>(schemaDocuments["mcp.schema.json"]);
+  if (!validateMcp(mcp)) {
+    throw new Error(`mcp.json is invalid: ${ajv.errorsText(validateMcp.errors)}`);
   }
   if (plugin.$schema !== PLUGIN_SCHEMA || mcp.$schema !== MCP_SCHEMA) {
     throw new Error(`Portable manifests must target Agent Plugins ${SPEC_VERSION}.`);
@@ -382,7 +413,7 @@ export const validateAgentPluginPackage = async ({
     throw new Error(`plugin.json version must be exactly ${AUTOGRAPH_PACKAGE_VERSION}.`);
   }
 
-  const servers = mcp.mcpServers as Record<string, JsonObject>;
+  const servers = mcp.mcpServers;
   if (Object.keys(servers).length !== 1 || !Object.hasOwn(servers, AUTOGRAPH_MCP_SERVER_NAME)) {
     throw new Error(`mcp.json must declare exactly one ${AUTOGRAPH_MCP_SERVER_NAME} MCP server.`);
   }
@@ -391,7 +422,7 @@ export const validateAgentPluginPackage = async ({
     throw new Error(`${AUTOGRAPH_MCP_SERVER_NAME} must use the streamable-http transport.`);
   }
   assertAutographMcpEndpoint(server.url, { release });
-  const headers = (server.headers ?? {}) as Record<string, string>;
+  const headers = server.headers ?? {};
   validateHeaders(AUTOGRAPH_MCP_SERVER_NAME, headers);
 
   const skillsRoot = path.resolve(resolvedPluginRoot, "skills");
@@ -405,7 +436,7 @@ export const validateAgentPluginPackage = async ({
     await assertTreeContainsNoLinks(resolvedPluginRoot, path.resolve(resolvedPluginRoot, entry));
   });
   return {
-    name: plugin.name as string,
+    name: plugin.name,
     packageKind,
     specification: SPEC_VERSION,
     version: plugin.version,

@@ -14,6 +14,8 @@ import type { PreparedSandboxWorkspace } from "./supported-template";
 import { parseCanonicalTemplateSnapshot } from "./source-receipt";
 import type { ImmutableGitHubSourceReceipt } from "./github-publication";
 
+const sandboxWorkingDirectory = "/workspace";
+
 const SHA = /^[0-9a-f]{40}$/u;
 const REPOSITORY = /^[A-Za-z0-9_.-]{1,100}$/u;
 const BRANCH =
@@ -53,7 +55,7 @@ const runSourceSandboxCommand = async (
   command: string,
 ) => {
   try {
-    return await sandbox.run({ command, workingDirectory: "/workspace" });
+    return await sandbox.run({ command, workingDirectory: sandboxWorkingDirectory });
   } catch (error) {
     const cause = sandboxFailureDetail(error instanceof Error ? error.message : String(error));
     throw new Error(
@@ -64,8 +66,11 @@ const runSourceSandboxCommand = async (
 };
 
 const shellQuote = function shellQuote(value: string) {
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
+  return `'${value.replaceAll("'", "'\"'\"'")}'`;
 };
+
+const hasValidRepositoryComponents = (match: RegExpExecArray): boolean =>
+  REPOSITORY.test(match[1] ?? "") && REPOSITORY.test(match[2] ?? "");
 
 const parseRemote = function parseRemote(input: string) {
   let remote: URL;
@@ -79,15 +84,16 @@ const parseRemote = function parseRemote(input: string) {
   const match = /^\/(?<owner>[A-Za-z0-9_.-]{1,100})\/(?<repo>[A-Za-z0-9_.-]{1,100})\.git$/u.exec(
     remote.pathname,
   );
-  if (
+  const invalidOrigin =
     remote.origin !== "https://github.com" ||
     remote.username !== "" ||
     remote.password !== "" ||
-    remote.search !== "" ||
+    remote.search !== "";
+  if (
+    invalidOrigin ||
     remote.hash !== "" ||
     match === null ||
-    !REPOSITORY.test(match[1] ?? "") ||
-    !REPOSITORY.test(match[2] ?? "")
+    !hasValidRepositoryComponents(match)
   ) {
     throw new Error(
       "The GitHub source remote is invalid. Select a GitHub repository with an HTTPS clone URL, then retry.",
@@ -418,22 +424,17 @@ const inspectSelectedCheckout = (
   expected: { repository: string; sourceSha?: string; sourceTree?: string },
 ) => {
   const [sourceSha, sourceTree, remote] = stdout.trim().split(/\s+/u);
-  if (
-    sourceSha === undefined ||
-    sourceTree === undefined ||
-    remote === undefined ||
-    !SHA.test(sourceSha) ||
-    !SHA.test(sourceTree)
-  ) {
+  const missingCheckoutIdentity =
+    sourceSha === undefined || sourceTree === undefined || remote === undefined;
+  if (missingCheckoutIdentity || !SHA.test(sourceSha) || !SHA.test(sourceTree)) {
     throw new Error(
       "The selected GitHub checkout inspection did not return a commit and tree revision. Check that the provider created a complete Git checkout, then retry this session.",
     );
   }
-  if (
-    parseRemote(remote) !== parseRemote(expected.repository) ||
+  const hasUnexpectedRevision = () =>
     (expected.sourceSha !== undefined && sourceSha !== expected.sourceSha) ||
-    (expected.sourceTree !== undefined && sourceTree !== expected.sourceTree)
-  ) {
+    (expected.sourceTree !== undefined && sourceTree !== expected.sourceTree);
+  if (parseRemote(remote) !== parseRemote(expected.repository) || hasUnexpectedRevision()) {
     throw new Error(
       `The sandbox checkout does not match the selected GitHub source. Expected ${parseRemote(expected.repository)}${expected.sourceSha === undefined ? "" : ` at ${expected.sourceSha}`}; observed ${parseRemote(remote)} at ${sourceSha}. Select the intended repository or start a new Builder session for this checkout.`,
     );
@@ -571,7 +572,7 @@ export const writeSandboxGitHubSourceManifest = async function writeSandboxGitHu
   try {
     result = await sandbox.run({
       command: `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 node -e ${shellQuote(sandboxGitHubSourceManifestProgram(SANDBOX_WORKSPACE, "/workspace/.app-builder"))}`,
-      workingDirectory: "/workspace",
+      workingDirectory: sandboxWorkingDirectory,
     });
   } catch (error) {
     const cause = sandboxFailureDetail(error instanceof Error ? error.message : String(error));
@@ -645,7 +646,7 @@ const reinspectGitHubSourceWorkspace = async function reinspectGitHubSourceWorks
   }
   const result = await input.sandbox.run({
     command: sandboxGitHubSourceReinspectionCommand(input),
-    workingDirectory: "/workspace",
+    workingDirectory: sandboxWorkingDirectory,
   });
   if (result.exitCode !== 0) {
     throw new Error("The GitHub source workspace could not be verified.");
@@ -662,20 +663,27 @@ const reinspectGitHubSourceWorkspace = async function reinspectGitHubSourceWorks
     snapshot?: unknown;
   };
   const snapshot = parseCanonicalTemplateSnapshot(inspection.snapshot);
-  if (
+  const checkoutMismatch =
     inspection.remote !== parseRemote(input.remote) ||
     inspection.resolvedRef !== input.expectedSha ||
     inspection.detached !== true ||
-    inspection.hasGitmodules !== false ||
+    inspection.hasGitmodules !== false;
+  const hasUnsafeGitState = () =>
     !Array.isArray(inspection.gitlinks) ||
     inspection.gitlinks.length !== 0 ||
     inspection.manifestMatches !== true ||
-    inspection.checksumsMatch !== true ||
+    inspection.checksumsMatch !== true;
+  const hasDifferentSourceIdentity = () =>
     inspection.workspaceDigest !== prepared.workspace.workspaceDigest ||
     snapshot.sourceSha !== input.expectedSha ||
-    snapshot.sourceTree !== input.expectedTree ||
-    snapshot.dirtyPaths.length !== 0 ||
-    JSON.stringify(snapshot) !== JSON.stringify(storedSnapshot)
+    snapshot.sourceTree !== input.expectedTree;
+  const hasSnapshotDrift = () =>
+    snapshot.dirtyPaths.length !== 0 || JSON.stringify(snapshot) !== JSON.stringify(storedSnapshot);
+  if (
+    checkoutMismatch ||
+    hasUnsafeGitState() ||
+    hasDifferentSourceIdentity() ||
+    hasSnapshotDrift()
   ) {
     throw new Error("The GitHub source workspace drifted.");
   }

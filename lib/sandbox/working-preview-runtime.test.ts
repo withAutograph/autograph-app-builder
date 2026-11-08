@@ -4,13 +4,26 @@ import type { Sandbox } from "@vercel/sandbox";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { startWorkingPreview, stopWorkingPreviewCommand } from "./working-preview-runtime";
+import type {
+  PreviewAttempt,
+  previewOwnershipOperation,
+  previewOwnershipRoot,
+  previewOwnershipSource,
+} from "./working-preview-ownership";
 
-const ownership = vi.hoisted(() => ({ current: null as Record<string, unknown> | null }));
+const ownership = vi.hoisted(() => ({ current: null as Partial<PreviewAttempt> | null }));
 vi.mock("./working-preview-ownership", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
+  const actual = await importOriginal<{
+    previewOwnershipOperation: typeof previewOwnershipOperation;
+    previewOwnershipRoot: typeof previewOwnershipRoot;
+    previewOwnershipSource: typeof previewOwnershipSource;
+  }>();
   return {
     ...actual,
-    previewOwnershipOperation: (_provider: unknown, operation: Record<string, unknown>) => {
+    previewOwnershipOperation: (
+      _provider: Parameters<typeof previewOwnershipOperation>[0],
+      operation: Parameters<typeof previewOwnershipOperation>[1],
+    ) => {
       if (operation.kind === "read") {
         return Promise.resolve(ownership.current);
       }
@@ -18,7 +31,7 @@ vi.mock("./working-preview-ownership", async (importOriginal) => {
         if (ownership.current !== null) {
           return Promise.resolve({ claimed: false });
         }
-        ownership.current = operation.attempt as Record<string, unknown>;
+        ownership.current = operation.attempt;
         return Promise.resolve({ claimed: true });
       }
       if (ownership.current?.attemptId !== operation.attemptId) {
@@ -28,7 +41,7 @@ vi.mock("./working-preview-ownership", async (importOriginal) => {
         ownership.current = null;
       }
       if (operation.kind === "update") {
-        ownership.current = { ...ownership.current, ...(operation.patch as object) };
+        ownership.current = { ...ownership.current, ...operation.patch };
       }
       return Promise.resolve(ownership.current);
     },
@@ -44,7 +57,7 @@ const setup = () => {
     cmdId: "command-1",
     exitCode: null as number | null,
     kill: vi.fn(async () => {}),
-    wait: vi.fn(() => Promise.resolve()),
+    wait: vi.fn(async () => {}),
   };
   const provider = {
     currentSession: () => ({ sessionId: "provider-1" }),
@@ -67,7 +80,7 @@ const setup = () => {
         return Promise.resolve();
       }),
     },
-    getCommand: vi.fn(() => Promise.resolve(command)),
+    getCommand: vi.fn<() => Promise<typeof command>>().mockResolvedValue(command),
     runCommand: vi.fn(() => {
       events.push("spawn");
       return Promise.resolve(command);
@@ -402,7 +415,10 @@ describe("safe interrupted startup diagnostics", () => {
       signal: AbortSignal.timeout(100),
     }).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(Error);
-    const { message } = failure as Error;
+    if (!(failure instanceof Error)) {
+      throw new Error("Expected preview startup to fail with an Error.");
+    }
+    const { message } = failure;
     expect(message).toContain("application HTTP readiness. Last observation: Application HTTP 503");
     expect(message).not.toMatch(/secret|https:|token|cookie|preview\.example/u);
   });
@@ -430,7 +446,7 @@ describe("preview command termination", () => {
     const exited = Promise.withResolvers<null>();
     const command = {
       exitCode: null,
-      kill: vi.fn(() => Promise.resolve()),
+      kill: vi.fn(async () => {}),
       wait: vi.fn(() => exited.promise),
     };
     let settled = false;
@@ -439,7 +455,9 @@ describe("preview command termination", () => {
     ).then(() => {
       settled = true;
     });
-    await vi.waitFor(() => expect(command.wait).toHaveBeenCalledOnce());
+    await vi.waitFor(() => {
+      expect(command.wait).toHaveBeenCalledOnce();
+    });
     expect(settled).toBe(false);
     exited.resolve(null);
     await cleanup;
@@ -481,7 +499,9 @@ describe("startup ownership recovery", () => {
         return error;
       }
     })();
-    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
+    await vi.waitFor(() => {
+      expect(fetcher).toHaveBeenCalledOnce();
+    });
     const mutations = provider.update.mock.calls.length;
     await expect(startWorkingPreview(options)).rejects.toThrow("still pending");
     expect(provider.update.mock.calls).toHaveLength(mutations);
@@ -565,7 +585,10 @@ it("sanitizes startup error files and keeps the safe cause visible if cleanup fa
     observed = error;
   }
   expect(observed).toBeInstanceOf(AggregateError);
-  const { message } = observed as Error;
+  if (!(observed instanceof AggregateError)) {
+    throw new Error("Expected preview startup to fail with an AggregateError.");
+  }
+  const { message } = observed;
   expect(message).toContain("The application server failed to start");
   expect(message).toContain("Error:");
   expect(message).not.toMatch(/private-value|private-token|https:/u);

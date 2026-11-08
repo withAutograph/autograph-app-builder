@@ -51,6 +51,12 @@ const auth = {
   issuer: "builder",
 };
 
+const metadata = (value) => {
+  const data = { ...value.eventData };
+  delete data.payload;
+  return { ...value, eventData: data };
+};
+
 const fixture = async function fixture(change = () => {}) {
   const originalState = {
     "builder.workflow": {
@@ -113,16 +119,18 @@ const fixture = async function fixture(change = () => {}) {
       { stepName: "step//eve@0.68.0//emitTerminalRecoveryWaitingStep", status: "failed" },
     ],
   ]);
-  const event = (slot, eventType, correlationId, eventData = {}) => ({
-    runId: ownerRunId,
-    eventId: eventId(slot),
-    eventType,
-    ...(correlationId === undefined ? {} : { correlationId }),
-    eventData: {
-      ...(steps.has(correlationId) ? { stepName: steps.get(correlationId).stepName } : {}),
-      ...eventData,
-    },
-  });
+  const event = (slot, eventType, correlationId, eventData = {}) => {
+    const value = { runId: ownerRunId, eventId: eventId(slot), eventType };
+    if (correlationId !== undefined) {
+      value.correlationId = correlationId;
+    }
+    const details = {};
+    if (steps.has(correlationId)) {
+      details.stepName = steps.get(correlationId).stepName;
+    }
+    value.eventData = { ...details, ...eventData };
+    return value;
+  };
   const events = [
     event(1, "run_created"),
     event(2, "step_created", "step-derive"),
@@ -170,45 +178,43 @@ const fixture = async function fixture(change = () => {}) {
       }
     }),
   );
-  const metadata = (value) => {
-    const data = { ...value.eventData };
-    delete data.payload;
-    return { ...value, eventData: data };
-  };
   const world = {
-    runs: { get: async () => run },
     events: {
-      list: async () => ({ data: events.map(metadata), hasMore: false }),
       get: async (_runId, id) => events.find((current) => current.eventId === id),
+      list: async () => ({ data: events.map(metadata), hasMore: false }),
     },
+    runs: { get: async () => run },
     steps: {
       get: async (_runId, id, options) =>
         options.resolveData === "none" ? { ...steps.get(id), input: undefined } : steps.get(id),
     },
   };
   let authorized = true;
+  const { hydrateWorkflowArguments, hydrateStepArguments, hydrateStepReturnValue } = serialization;
+  const { hydrateWorkflowArguments: hydrateHookPayload } = serialization;
+  const { now } = Date;
   const collect = createTerminalRecoveryCandidateCollector({
     getWorld: async () => world,
-    resolveRunEncryptionKey: async () => {},
-    hydrateWorkflowArguments: serialization.hydrateWorkflowArguments,
-    hydrateStepArguments: serialization.hydrateStepArguments,
-    hydrateStepReturnValue: serialization.hydrateStepReturnValue,
-    hydrateHookPayload: serialization.hydrateWorkflowArguments,
+    hydrateHookPayload,
+    hydrateStepArguments,
+    hydrateStepReturnValue,
+    hydrateWorkflowArguments,
+    now,
     readDurableSession,
-    requireEventSlot,
-    now: Date.now,
     async *readNativeEvents() {
       yield* nativeEvents;
     },
+    requireEventSlot,
+    resolveRunEncryptionKey: async () => {},
   });
   const input = {
-    binding,
     authorizeOwner: async (value) => {
       assert.deepEqual(value, binding);
       if (!authorized) {
         throw new Error("owner revoked");
       }
     },
+    binding,
   };
   return {
     ...f,
@@ -220,9 +226,9 @@ const fixture = async function fixture(change = () => {}) {
     },
     status: (tail = -1) =>
       readFailedRecoveryBootStatus(ownerRunId, tail, {
-        readEntry: async () => ({ run, entry }),
         collect,
         readCandidate: readTerminalRecoveryCandidate,
+        readEntry: async () => ({ entry, run }),
       }),
   };
 };
@@ -232,15 +238,6 @@ test("failed waiting boot retains the validated original app, owner, unapproved 
   // Reproduce failure after real boot validation/activation, before the first authored turn.
   await assert.rejects(
     bootTerminalRecoveryOwnerWithPorts(f.entry, {
-      validateCheckpoint: async () => {},
-      getWorkflowMetadata: () => ({ workflowRunId: ownerRunId }),
-      createSessionInbox: () => ({
-        claimSessionHooks: async () => {},
-        onInterrupt: () => () => {},
-        drain: () => [],
-        restore() {},
-        dispose: async () => {},
-      }),
       createHook: () =>
         Object.assign(
           Promise.resolve({
@@ -248,12 +245,21 @@ test("failed waiting boot retains the validated original app, owner, unapproved 
             operationId: descriptor.operationId,
             ownerRunId,
           }),
-          { getConflict: async () => null, dispose() {} },
+          { dispose() {}, getConflict: async () => null },
         ),
-      getWritable: () => "native-stream",
+      createSessionInbox: () => ({
+        claimSessionHooks: async () => {},
+        dispose: async () => {},
+        drain: () => [],
+        onInterrupt: () => () => {},
+        restore() {},
+      }),
       emitIdleWaiting: async () => {
         throw new Error("step argument serialization failed");
       },
+      getWorkflowMetadata: () => ({ workflowRunId: ownerRunId }),
+      getWritable: () => "native-stream",
+      validateCheckpoint: async () => {},
     }),
     /step argument serialization failed/u,
   );
@@ -405,14 +411,14 @@ test("the exact empty native stream exposes boot failure without adding events",
   const response = await createSessionStreamResponse(
     new Request("https://builder.test/stream?includeTailIndex=true&tail=true"),
     {
-      id: ownerRunId,
-      getStreamTailIndex: async () => -1,
       getEventStream: async () =>
         new ReadableStream({
           start(controller) {
             controller.close();
           },
         }),
+      getStreamTailIndex: async () => -1,
+      id: ownerRunId,
     },
     async (id, tail) => {
       assert.equal(id, ownerRunId);
@@ -442,20 +448,29 @@ test("same recovery request adopts once, preserves original authority, and activ
   const ports = {
     authorize: async () => {},
     authorizeActivation: async () => {},
-    readReceipt: async () => receipt,
     commitReceipt: async ({ recoveryBinding }) => {
       receipt ??= recoveryBinding;
       return receipt;
     },
+    readReceipt: async () => receipt,
   };
   const dependencies = {
     collect: f.collect,
-    reconcile: reconcileTerminalRecoveryCandidate,
+    getHook: async () => {
+      if (hook === undefined) {
+        throw new Error("missing");
+      }
+      return hook;
+    },
+    isHookNotFound: (error) => error.message === "missing",
+    now: Date.now,
     readCandidate: readTerminalRecoveryCandidate,
     readEntry: async () => f.entry,
-    now: Date.now,
-    wait: async () => {
-      throw new Error("unexpected readiness wait");
+    reconcile: reconcileTerminalRecoveryCandidate,
+    resumeHook: async (_token, input) => {
+      assert.equal(input.ownerRunId, receipt.ownerRunId);
+      activations += 1;
+      hook = undefined;
     },
     start: async (input) => {
       starts += 1;
@@ -467,20 +482,11 @@ test("same recovery request adopts once, preserves original authority, and activ
         }),
       };
     },
-    getHook: async () => {
-      if (hook === undefined) {
-        throw new Error("missing");
-      }
-      return hook;
-    },
-    isHookNotFound: (error) => error.message === "missing",
-    resumeHook: async (_token, input) => {
-      assert.equal(input.ownerRunId, receipt.ownerRunId);
-      activations += 1;
-      hook = undefined;
+    wait: async () => {
+      throw new Error("unexpected readiness wait");
     },
   };
-  const commitReceipt = ports.commitReceipt;
+  const { commitReceipt } = ports;
   let failFirstCommit = true;
   ports.commitReceipt = async (input) => {
     if (failFirstCommit) {

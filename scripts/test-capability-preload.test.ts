@@ -2,12 +2,13 @@ import { generateKeyPairSync } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import path from "node:path";
-import type { Duplex } from "node:stream";
+import { Duplex } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const preload = pathToFileURL(
@@ -36,10 +37,9 @@ function inspectAmbientPreload(environment: NodeJS.ProcessEnv) {
     env: environment,
   });
   expect(result.status, result.stderr).toBe(0);
-  return JSON.parse(result.stdout) as {
-    capability: unknown;
-    nodeOptions: string | null;
-  };
+  return z
+    .object({ capability: z.unknown(), nodeOptions: z.string().nullable() })
+    .parse(JSON.parse(result.stdout));
 }
 
 describe("test capability preload", () => {
@@ -47,9 +47,12 @@ describe("test capability preload", () => {
     const accessor = (process as unknown as Record<symbol, (() => unknown) | undefined>)[
       Symbol.for("withAutograph.autograph-app-builder.test-capability-registry.v2")
     ];
-    const capability = accessor?.() as
-      | { id: string; version: number; capabilities: string[] }
-      | undefined;
+    const capabilitySchema = z.object({
+      capabilities: z.array(z.string()),
+      id: z.string(),
+      version: z.number(),
+    });
+    const capability = capabilitySchema.optional().parse(accessor?.());
     expect(capability).toMatchObject({
       capabilities: fullCapabilities,
       version: 1,
@@ -77,27 +80,29 @@ describe("test capability preload", () => {
       },
       workerData: { spawnNested: true },
     });
-    const [result] = (await once(worker, "message")) as [
-      {
-        capability: typeof capability;
-        appRoot: string | null;
-        eveDev: string | null;
-        nestedCapability: typeof capability;
-        nestedAppRoot: string | null;
-        nestedEveDev: string | null;
-        nestedWorkflowBodyTimeout: string | null;
-        nestedWorkflowHeadersTimeout: string | null;
-        workflowBaseUrl: string | null;
-        workflowBodyTimeout: string | null;
-        workflowHeadersTimeout: string | null;
-        port: string | null;
-        hasTransportSecret: boolean;
-        sandboxRunId: string | null;
-        evaluation: string | null;
-        evaluationRunId: string | null;
-        hasGateAEnvironment: boolean;
-      },
-    ];
+    const messages: unknown[] = await once(worker, "message");
+    const [message] = messages;
+    const result = z
+      .object({
+        appRoot: z.string().nullable(),
+        capability: capabilitySchema.nullable(),
+        evaluation: z.string().nullable(),
+        evaluationRunId: z.string().nullable(),
+        eveDev: z.string().nullable(),
+        hasGateAEnvironment: z.boolean(),
+        hasTransportSecret: z.boolean(),
+        nestedAppRoot: z.string().nullable(),
+        nestedCapability: capabilitySchema.nullable(),
+        nestedEveDev: z.string().nullable(),
+        nestedWorkflowBodyTimeout: z.string().nullable(),
+        nestedWorkflowHeadersTimeout: z.string().nullable(),
+        port: z.string().nullable(),
+        sandboxRunId: z.string().nullable(),
+        workflowBaseUrl: z.string().nullable(),
+        workflowBodyTimeout: z.string().nullable(),
+        workflowHeadersTimeout: z.string().nullable(),
+      })
+      .parse(message);
     await worker.terminate();
     expect(result.capability).toMatchObject({ version: 1 });
     expect(result.capability?.id).not.toBe(capability?.id);
@@ -122,7 +127,9 @@ describe("test capability preload", () => {
       const environment = { ...process.env, EVE_DEV: hostileEveDev };
       const hostileWorker = new Worker(workerFixture, { env: environment });
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const [hostileResult] = (await once(hostileWorker, "message")) as [{ eveDev: string | null }];
+      const hostileMessages: unknown[] = await once(hostileWorker, "message");
+      const [hostileMessage] = hostileMessages;
+      const hostileResult = z.object({ eveDev: z.string().nullable() }).parse(hostileMessage);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await hostileWorker.terminate();
       expect(hostileResult.eveDev).toBeNull();
@@ -136,7 +143,8 @@ describe("test capability preload", () => {
       typeof handle === "object" && handle !== null && handle.constructor.name === "MessagePort";
     const beforePorts = activeHandles().filter(isMessagePort).length;
     const timeoutWorker = new Worker(timeoutWorkerFixture, { execArgv: [] });
-    const [timeoutExit] = (await once(timeoutWorker, "exit")) as [number];
+    const timeoutExitArguments: unknown[] = await once(timeoutWorker, "exit");
+    const [timeoutExit] = timeoutExitArguments;
     await delay(25);
     const afterPorts = activeHandles().filter(isMessagePort).length;
     expect(timeoutExit).not.toBe(0);
@@ -208,7 +216,7 @@ describe("test capability preload", () => {
         env: { NODE_ENV: "test", PATH: "/usr/bin:/bin" },
         stdio: ["ignore", "pipe", "pipe", "pipe"],
       });
-      const authorization = child.stdio[3] as Duplex;
+      const authorization = z.instanceof(Duplex).parse(child.stdio[3]);
       const authorizationErrors: string[] = [];
       authorization.on("error", (error: NodeJS.ErrnoException) => {
         authorizationErrors.push(error.code ?? error.message);
@@ -223,12 +231,17 @@ describe("test capability preload", () => {
       );
       let stdout = "";
       let stderr = "";
-      child.stdout?.setEncoding("utf-8").on("data", (chunk) => (stdout += chunk));
-      child.stderr?.setEncoding("utf-8").on("data", (chunk) => (stderr += chunk));
+      child.stdout?.setEncoding("utf-8").on("data", (chunk) => {
+        stdout += chunk;
+      });
+      child.stderr?.setEncoding("utf-8").on("data", (chunk) => {
+        stderr += chunk;
+      });
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const [status] = (await once(child, "exit")) as [number | null];
+      const exitArguments: unknown[] = await once(child, "exit");
+      const [status] = exitArguments;
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await authorizationClosed;
+      await authorizationClosed.promise;
       expect(status, stderr).toBe(0);
       expect(stdout).toBe("false");
       expect(authorizationErrors.every((code) => ["ECONNRESET", "EPIPE"].includes(code))).toBe(

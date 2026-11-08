@@ -176,7 +176,7 @@ it("keeps original requirements, chronological product changes and complete dura
     text: "Use durable drafts",
   });
   const first = await evidence.readRequirements({ id: "app-spec" });
-  const second = await evidence.readRequirements({ id: "app-spec", cursor: first.nextCursor });
+  const second = await evidence.readRequirements({ cursor: first.nextCursor, id: "app-spec" });
   expect(first.text + second.text).toBe(fullSpec);
   expect(
     await evidence.verifyRequirementQuote({ documentId: "app-spec", quote: fullSpec.slice(-100) }),
@@ -196,26 +196,26 @@ it("reads exact ranged evidence from relevant unchanged imports and rejects inve
     "secrets.json": '{"credential":"must-not-read"}',
   });
   const source = await evidence.readSource({
+    endLine: 2,
     path: "packages/shared/save.ts",
     startLine: 2,
-    endLine: 2,
   });
   expect(source.content).toBe("  return database.insert(record);");
   expect(source.startLine).toBe(2);
   expect(
     await evidence.verifySourceCitation({
-      path: source.path,
-      startLine: 2,
       endLine: 2,
       excerpt: source.content,
+      path: source.path,
+      startLine: 2,
     }),
   ).toBe(true);
   expect(
     await evidence.verifySourceCitation({
-      path: source.path,
-      startLine: 2,
       endLine: 2,
       excerpt: "invented",
+      path: source.path,
+      startLine: 2,
     }),
   ).toBe(false);
   expect(await evidence.verifyRequirementQuote({ documentId: "original", quote: "invented" })).toBe(
@@ -235,7 +235,7 @@ it("verifies complete file bytes before returning a requested range", async () =
     { digestOverride: exactDigest("observed bytes") },
   );
   await expect(
-    evidence.readSource({ path: "apps/example/page.ts", startLine: 1, endLine: 1 }),
+    evidence.readSource({ endLine: 1, path: "apps/example/page.ts", startLine: 1 }),
   ).rejects.toThrow("changed since");
 });
 const completedApplication = () => ({
@@ -256,20 +256,20 @@ it("authorizes application journal reuse before returning completed evidence wit
   const put = vi.fn(async (_key: string, record: SourceReviewJournalRecord) => record);
   const assess = vi.fn(async () => assessment);
   const input = {
-    reviewInput,
-    normalizedChanges: [],
-    evidence: sourceEvidence({}),
-    journal: { assertCurrentOwner: async () => {}, read, put },
     currentDigest: async () => reviewInput.sourceDigest,
+    evidence: sourceEvidence({}),
+    journal: { assertCurrentOwner: async () => {}, put, read },
+    normalizedChanges: [],
+    reviewInput,
   };
   const result = await reviewApplicationWithJournal(input, assess);
   expect(read).toHaveBeenCalledOnce();
   expect(assess).not.toHaveBeenCalled();
   expect(put).not.toHaveBeenCalled();
   expect(result).toMatchObject({
+    invocation: { journalReuses: 1, requestAttempts: 0 },
     reviewCompleted: true,
     status: "unassessed",
-    invocation: { requestAttempts: 0, journalReuses: 1 },
   });
   read.mockRejectedValueOnce(new Error("owner revoked"));
   await expect(reviewApplicationWithJournal(input, assess)).rejects.toThrow("owner revoked");
@@ -287,37 +287,37 @@ it("strips fresh invocation from durable completion", async () => {
       freshUsage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 },
     },
   };
-  const read = vi.fn(async (): Promise<undefined> => {});
+  const read = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
   const put = vi.fn(async (_key: string, record: SourceReviewJournalRecord) => record);
   const assess = vi.fn(async () => assessment);
   const result = await reviewApplicationWithJournal(
     {
-      reviewInput,
-      normalizedChanges: [],
-      evidence: sourceEvidence({}),
-      journal: { assertCurrentOwner: async () => {}, read, put },
       currentDigest: async () => reviewInput.sourceDigest,
+      evidence: sourceEvidence({}),
+      journal: { assertCurrentOwner: async () => {}, put, read },
+      normalizedChanges: [],
+      reviewInput,
     },
     assess,
   );
   expect(assess).toHaveBeenCalledOnce();
   expect(put).toHaveBeenCalledWith(expect.any(String), {
-    kind: "application-completed",
     assessment: completedApplication(),
+    kind: "application-completed",
   });
   expect(result.invocation?.freshUsage.totalTokens).toBe(12);
 });
 it("keeps repeated evidence authorization separate from the one completed-assessment lookup", async () => {
-  const read = vi.fn(async (): Promise<undefined> => undefined);
-  const assertCurrentOwner = vi.fn(async () => {});
+  const read = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
+  const assertCurrentOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
   const put = vi.fn(async (_key: string, record: SourceReviewJournalRecord) => record);
   const result = await reviewApplicationWithJournal(
     {
-      reviewInput,
-      normalizedChanges: [],
-      evidence: sourceEvidence({}),
-      journal: { assertCurrentOwner, read, put },
       currentDigest: async () => reviewInput.sourceDigest,
+      evidence: sourceEvidence({}),
+      journal: { assertCurrentOwner, put, read },
+      normalizedChanges: [],
+      reviewInput,
     },
     async (_input, _evidence, options) => {
       await options?.assertCurrentOwner?.();
@@ -340,10 +340,10 @@ it("does not publish completed application evidence after source changes or Stop
     evidence: sourceEvidence({}),
     journal: {
       assertCurrentOwner: async () => {},
+      put,
       read: async (): Promise<undefined> => {
         /* No completed record exists in this fixture. */
       },
-      put,
     },
   };
   const assess = vi.fn(async () => completedApplication());
@@ -404,16 +404,16 @@ it("releases a pending source byte read when Stop arrives", async () => {
 
 it("preserves validated baseline visibility and narrows missing optional metadata without a setup gate", () => {
   const input = {
-    observedPaths: ["app/page.ts", "shared/save.ts", "retained/later/manifest.json"],
     changedPaths: ["app/page.ts"],
     hasSelectedBaseline: true,
+    observedPaths: ["app/page.ts", "shared/save.ts", "retained/later/manifest.json"],
   };
   const fallback = applicationReviewVisibility(input);
   expect(fallback.paths).toEqual(["app/page.ts"]);
   expect(fallback.omissions).toHaveLength(1);
   expect(
     applicationReviewVisibility({ ...input, unexposedReleasePrefixes: ["retained/later/"] }),
-  ).toEqual({ paths: ["app/page.ts", "shared/save.ts"], omissions: [] });
+  ).toEqual({ omissions: [], paths: ["app/page.ts", "shared/save.ts"] });
   expect(applicationReviewVisibility({ ...input, hasSelectedBaseline: false }).paths).toEqual(
     input.observedPaths,
   );
@@ -430,7 +430,7 @@ it("distinguishes correctable evidence selection from actual observed source fai
   await expect(evidence.readRequirements({ id: "unknown-document" })).rejects.toBeInstanceOf(
     ApplicationReviewSelectionError,
   );
-  await expect(evidence.readRequirements({ id: "original", cursor: 1000 })).rejects.toBeInstanceOf(
+  await expect(evidence.readRequirements({ cursor: 1000, id: "original" })).rejects.toBeInstanceOf(
     ApplicationReviewSelectionError,
   );
   const observedSource = await evidence.readSource({ path: "apps/example/page.ts" });
@@ -469,7 +469,7 @@ it("rechecks fresh ownership without rereading completed evidence and blocks com
         reviewInput,
         normalizedChanges: [],
         evidence: sourceEvidence({}),
-        journal: { assertCurrentOwner, read, put },
+        journal: { assertCurrentOwner, put, read },
         currentDigest: async () => reviewInput.sourceDigest,
       },
       assess,
@@ -483,7 +483,7 @@ it("rechecks fresh ownership without rereading completed evidence and blocks com
 it("rejects completed journal assessments with wrong policy, reviewer, effort, rubric, or binding", () => {
   const valid = completedApplication();
   expect(
-    completedReviewForInput({ kind: "application-completed", assessment: valid }, reviewInput),
+    completedReviewForInput({ assessment: valid, kind: "application-completed" }, reviewInput),
   ).toBe(true);
   for (const assessment of [
     { ...valid, reviewPolicyId: "wrong-policy" },
@@ -494,7 +494,7 @@ it("rejects completed journal assessments with wrong policy, reviewer, effort, r
     { ...valid, reviewCompleted: false },
   ]) {
     expect(
-      completedReviewForInput({ kind: "application-completed", assessment }, reviewInput),
+      completedReviewForInput({ assessment, kind: "application-completed" }, reviewInput),
     ).toBe(false);
   }
 });
@@ -517,8 +517,8 @@ it("does not reuse an incompatible first-writer record or perform a fresh review
         evidence: sourceEvidence({}),
         journal: {
           assertCurrentOwner: async () => {},
-          read: async () => ({ kind: "application-completed" as const, assessment }),
           put,
+          read: async () => ({ kind: "application-completed" as const, assessment }),
         },
         currentDigest: async () => reviewInput.sourceDigest,
       },
@@ -538,7 +538,7 @@ it("rejects an incompatible canonical first writer returned by journal put", asy
     { ...valid, reasoningEffort: "medium" as const },
     { ...valid, reviewRubricDigest: "a".repeat(64) },
   ]) {
-    const read = vi.fn(async (): Promise<undefined> => {});
+    const read = vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined);
     const put = vi.fn(async () => ({ kind: "application-completed" as const, assessment }));
     // oxlint-disable-next-line eslint/no-await-in-loop -- Exercise each canonical mismatch independently.
     await expect(
@@ -547,7 +547,7 @@ it("rejects an incompatible canonical first writer returned by journal put", asy
           reviewInput,
           normalizedChanges: [],
           evidence: sourceEvidence({}),
-          journal: { assertCurrentOwner: async () => {}, read, put },
+          journal: { assertCurrentOwner: async () => {}, put, read },
           currentDigest: async () => reviewInput.sourceDigest,
         },
         async () => valid,
@@ -567,8 +567,8 @@ it("does not publish an incompatible newly completed assessment", async () => {
       evidence: sourceEvidence({}),
       journal: {
         assertCurrentOwner: async () => {},
-        read: async (): Promise<undefined> => {},
         put,
+        read: async (): Promise<undefined> => {},
       },
       currentDigest: async () => reviewInput.sourceDigest,
     },
@@ -594,7 +594,7 @@ it("fails closed on occupied non-application records without attempting a review
         reviewInput,
         normalizedChanges: [],
         evidence: sourceEvidence({}),
-        journal: { assertCurrentOwner: async () => {}, read: async () => record, put },
+        journal: { assertCurrentOwner: async () => {}, put, read: async () => record },
         currentDigest: async () => reviewInput.sourceDigest,
       },
       assess,

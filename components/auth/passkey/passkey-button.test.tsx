@@ -78,7 +78,9 @@ it("shows an inline retry after a hydrated verification transport failure", asyn
   }
   await act(
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    async () => button.click(),
+    async () => {
+      button.click();
+    },
   );
   expect(auth.signIn).toHaveBeenCalledOnce();
   expect(container.querySelector("button")?.textContent).toContain(

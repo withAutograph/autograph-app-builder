@@ -75,11 +75,19 @@ export async function prepareOrReuseDependencies(input: {
     ...unsigned,
     digest: sha256(JSON.stringify(unsigned)),
   };
-  const preparedState: DependencyReadyState = {
+  const preparedBinding: Pick<
+    Extract<DependencyReadyState, { phase: "dependencies_prepared" }>,
+    "appSpec" | "artifacts" | "dependencyReceipt" | "githubSource"
+  > = {
     appSpec: current.appSpec,
     artifacts: current.artifacts,
     dependencyReceipt,
-    ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+  };
+  if (current.githubSource !== undefined) {
+    preparedBinding.githubSource = current.githubSource;
+  }
+  const preparedState: DependencyReadyState = {
+    ...preparedBinding,
     phase: "dependencies_prepared",
     preparedByCallId: current.preparedByCallId,
     sourceReceipt: current.sourceReceipt,

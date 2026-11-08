@@ -113,7 +113,7 @@ const reply = (body: unknown, status = 200) =>
 /** Both entry points stay in the protected operator; the browser never receives provider credentials. */
 export const createRepositoryProductionHandler =
   (deps: RepositoryProductionHandlerDependencies) => async (request: Request) => {
-    const pathname = new URL(request.url).pathname;
+    const { pathname } = new URL(request.url);
     if (
       request.method !== "POST" ||
       ![repositoryProductionPath, repositoryProductionCompletionPath].includes(pathname)

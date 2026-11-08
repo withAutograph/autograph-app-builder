@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { betterAuth } from "better-auth";
 import { organization } from "better-auth/plugins";
 import { generateKeyPair, SignJWT, jwtVerify } from "jose";
+import type { JWTPayload, JWTVerifyOptions } from "jose";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
@@ -47,8 +48,8 @@ const requiredFixture = <T>(value: T | undefined): T => {
 
 const accountOperationRef = "11111111-1111-4111-8111-111111111111";
 const authority = {
-  issuer: "https://builder.example.test/api/auth",
   audience: "https://builder.example.test/mcp",
+  issuer: "https://builder.example.test/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
@@ -56,40 +57,40 @@ const target = {
   appId: "normal-app",
   branch: "preview",
   environment: "preview" as const,
-  projectId: "prj_app",
-  sessionId: "owner-session",
   installationId: "installation",
+  projectId: "prj_app",
   scopeId: "team",
   scopeType: "team" as const,
+  sessionId: "owner-session",
 };
 const context = { authority, target };
 const program = normalActorProgramSchema.parse({
-  version: 1,
-  appId: target.appId,
-  origin: "https://apps.example.com",
   actors: [
     {
+      account: "create-email-password",
       actorKey: "owner",
       email: "owner@example.com",
       name: "Owner",
-      account: "create-email-password",
     },
-    { actorKey: "peer", email: "peer@example.com", name: "Peer", account: "create-email-password" },
+    { account: "create-email-password", actorKey: "peer", email: "peer@example.com", name: "Peer" },
   ],
-  organizations: [
-    { organizationId: "org-one", ownerActorKey: "owner", name: "One", slug: "one" },
-    { organizationId: "org-two", ownerActorKey: "owner", name: "Two", slug: "two" },
+  appAccess: [
+    { actorKey: "owner", organizationId: "org-one", roles: ["owner"] },
+    { actorKey: "peer", organizationId: "org-two", roles: ["member"] },
   ],
+  appId: target.appId,
   memberships: [
     { actorKey: "owner", organizationId: "org-one", role: "owner" },
     { actorKey: "peer", organizationId: "org-one", role: "member" },
     { actorKey: "owner", organizationId: "org-two", role: "owner" },
     { actorKey: "peer", organizationId: "org-two", role: "member" },
   ],
-  appAccess: [
-    { actorKey: "owner", organizationId: "org-one", roles: ["owner"] },
-    { actorKey: "peer", organizationId: "org-two", roles: ["member"] },
+  organizations: [
+    { name: "One", organizationId: "org-one", ownerActorKey: "owner", slug: "one" },
+    { name: "Two", organizationId: "org-two", ownerActorKey: "owner", slug: "two" },
   ],
+  origin: "https://apps.example.com",
+  version: 1,
 });
 const plan = hostedOperatorPlanSchema.parse({
   version: 1,
@@ -105,24 +106,24 @@ const plan = hostedOperatorPlanSchema.parse({
     sessionId: target.sessionId,
   },
   appDatabase: {
-    resourceId: "app-resource",
     database: "normal",
     migratorRole: "normal_owner",
+    resourceId: "app-resource",
     runtimeRole: "normal_runtime",
   },
   authDatabase: {
-    resourceId: "auth-resource",
     database: "auth",
     migratorRole: "auth_owner",
+    resourceId: "auth-resource",
     runtimeRole: "auth_runtime",
   },
   contextId: "accepted-spec",
   cost: { class: "shared-recovery-group", description: "Approved normal accounts", owner: "owner" },
   effects: [
     {
+      description: "Capture approved actual accounts",
       id: "normal-accounts",
       kind: "normal-accounts",
-      description: "Capture approved actual accounts",
     },
   ],
   installer: { reference: "owned-worker", sha256: "a".repeat(64) },
@@ -150,11 +151,11 @@ const plan = hostedOperatorPlanSchema.parse({
     catalogAppIds: [target.appId],
     operatorOrigin: "https://operator.example.com",
     sourceWorkload: {
-      issuer: "https://oidc.vercel.com",
       audience: "https://operator.example.com",
+      environment: "preview",
+      issuer: "https://oidc.vercel.com",
       ownerId: "team",
       projectId: "prj_gateway",
-      environment: "preview",
       subject: "gateway",
     },
   },
@@ -165,14 +166,13 @@ const plan = hostedOperatorPlanSchema.parse({
     repoId: "gateway-repo",
   },
   deploymentBoundary: {
-    authority,
-    teamId: "team",
     app: {
       branch: target.branch,
       deploymentId: "dpl_app",
       environment: "preview",
       projectId: target.projectId,
     },
+    authority,
     gateway: {
       branch: target.branch,
       deploymentId: "dpl_gateway",
@@ -180,6 +180,7 @@ const plan = hostedOperatorPlanSchema.parse({
       projectId: "prj_gateway",
     },
     operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
+    teamId: "team",
     verification: {
       gatewayOrigin: "https://gateway.example.test",
       jwksUrl: "https://gateway.example.test/_platform/jwks.json",
@@ -241,7 +242,7 @@ const fixture = async (publicRelease?: {
     hostname: plan.neon.endpoint,
     migratorRole: plan.authDatabase.migratorRole,
     runtimeRole: plan.authDatabase.runtimeRole,
-    neon: { projectId: plan.neon.projectId, branchId: plan.neon.branchId },
+    neon: { branchId: plan.neon.branchId, projectId: plan.neon.projectId },
     port: 5432,
     schema: "public" as const,
   };
@@ -268,7 +269,6 @@ const fixture = async (publicRelease?: {
       expect(current.record.leaseId).toBeUndefined();
     },
     store: {
-      read: async () => structuredClone(row),
       compareAndSet: async (input) => {
         if (input.expectedRevision !== row.revision) {
           return undefined;
@@ -279,6 +279,7 @@ const fixture = async (publicRelease?: {
         };
         return structuredClone(row);
       },
+      read: async () => structuredClone(row),
     },
   };
   const normalFetch: typeof fetch = async (url, init) => {
@@ -304,7 +305,7 @@ const fixture = async (publicRelease?: {
       return new Response(null, { status: 401 });
     }
     cookies.set(actual.session.id, request.headers.get("cookie") ?? "");
-    const proof = await new SignJWT({
+    const proofPayload: JWTPayload = {
       purpose: "realm-operator-link-v1",
       sessionId: actual.session.id,
       organizationId: null,
@@ -315,16 +316,15 @@ const fixture = async (publicRelease?: {
         .update(values.get("nonce") ?? "")
         .digest("hex"),
       resource,
-      ...(values.has("publicEnrollmentRef")
-        ? {
-            publicRelease: {
-              enrollmentRef: values.get("publicEnrollmentRef"),
-              operationRef: values.get("publicOperationRef"),
-              planDigest: values.get("publicPlanDigest"),
-            },
-          }
-        : {}),
-    })
+    };
+    if (values.has("publicEnrollmentRef")) {
+      proofPayload.publicRelease = {
+        enrollmentRef: values.get("publicEnrollmentRef"),
+        operationRef: values.get("publicOperationRef"),
+        planDigest: values.get("publicPlanDigest"),
+      };
+    }
+    const proof = await new SignJWT(proofPayload)
       .setProtectedHeader({
         alg: "EdDSA",
         kid: "fixture-key",
@@ -359,10 +359,10 @@ const fixture = async (publicRelease?: {
       checkpoint: async (state) => {
         await journal.checkpoint(context, state);
       },
-      readCapturedActor: async () => null,
-      readOrganizationSession: async () => null,
       clientFactory: (input) =>
         createHostedOperatorNormalAuthClient({ ...input, fetch: normalFetch }),
+      readCapturedActor: async () => null,
+      readOrganizationSession: async () => null,
     },
   });
   const artifactStore: OperatorArtifactStore = {
@@ -383,8 +383,8 @@ const fixture = async (publicRelease?: {
     await assertAuthorized();
   });
   const collect = createHostedOperatorNormalActorProofCollector({
-    journalPorts,
     assertPlanningAuthorized,
+    journalPorts,
     normalRealmFetch: async (input) => {
       expect(input.origin).toBe(program.origin);
       return normalFetch;
@@ -430,11 +430,11 @@ const fixture = async (publicRelease?: {
         return publicKey;
       },
       transportSource: {
-        issuer: "https://oidc.vercel.com",
         audience: "https://operator.example.com",
+        environment: "preview",
+        issuer: "https://oidc.vercel.com",
         ownerId: "team",
         projectId: "prj_operator",
-        environment: "preview",
       },
       readback: async (request) => {
         if (proofReadbackResponse !== undefined) {
@@ -447,19 +447,18 @@ const fixture = async (publicRelease?: {
         if (proof === null) {
           return new Response(null, { status: 401 });
         }
-        const { payload } = await jwtVerify(proof, publicKey, {
-          issuer: program.origin,
+        const verifyOptions: JWTVerifyOptions = {
           audience: "https://operator.example.com",
-          ...(values.has("attestation")
-            ? {
-                currentDate: new Date(
-                  z
-                    .object({ capturedAt: z.iso.datetime() })
-                    .parse(JSON.parse(values.get("attestation") ?? "{}")).capturedAt,
-                ),
-              }
-            : {}),
-        });
+          issuer: program.origin,
+        };
+        if (values.has("attestation")) {
+          verifyOptions.currentDate = new Date(
+            z
+              .object({ capturedAt: z.iso.datetime() })
+              .parse(JSON.parse(values.get("attestation") ?? "{}")).capturedAt,
+          );
+        }
+        const { payload } = await jwtVerify(proof, publicKey, verifyOptions);
         const cookie = cookies.get(String(payload.sessionId));
         const actual = await auth.api.getSession({
           headers: new Headers({ cookie: cookie ?? "" }),
@@ -509,20 +508,20 @@ const fixture = async (publicRelease?: {
       gatewayDelivery: { ...plan.gatewayDelivery, gitSha: "b".repeat(40) },
       effects: [
         {
+          description: "Auth resource",
           id: "auth-resources",
           kind: "resources",
           resourceId: plan.authDatabase.resourceId,
-          description: "Auth resource",
         },
         {
+          description: "App resource",
           id: "app-resources",
           kind: "resources",
           resourceId: plan.appDatabase.resourceId,
-          description: "App resource",
         },
-        { id: "auth-schema", kind: "install", description: "Observe Auth schema" },
-        { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway binding" },
-        { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
+        { description: "Observe Auth schema", id: "auth-schema", kind: "install" },
+        { description: "Gateway binding", id: "gateway-bindings", kind: "gateway-bindings" },
+        { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
       ],
     });
     const deps: ProtectedHostedOperatorDependencies = {
@@ -635,8 +634,8 @@ const fixture = async (publicRelease?: {
     ).toMatchObject({ status: "participants-prepared" });
     const proposed = await request({
       action: "plan",
-      operation: "prepare",
       normalActorProgram: program,
+      operation: "prepare",
       selection: plan.selection,
     });
     expect(proposed.status).toBe("planned");
@@ -650,9 +649,9 @@ const fixture = async (publicRelease?: {
       }),
     ).toMatchObject({ status: "auth-schema-prepared" });
     endpointOrigin = "https://new-gateway.example.test";
-    const candidate = requiredFixture(
+    const [candidate] = requiredFixture(
       requiredFixture(row.record.operator).gatewayDeliveryCandidates,
-    )[0];
+    );
     bootstrapSnapshot = completedParticipantBootstrapSchema.parse({
       auth: retainedOperatorAuthFromJournal(row.record),
       candidate,
@@ -710,7 +709,7 @@ const fixture = async (publicRelease?: {
       false,
       undefined,
       undefined,
-      { bootstrap, assertCurrent },
+      { assertCurrent, bootstrap },
     );
   };
   const beginAppPlanning = async () => {
@@ -740,15 +739,15 @@ const fixture = async (publicRelease?: {
     return appPlan;
   };
   return {
-    proposeAccess,
+    artifacts,
     assertPlanningAuthorized,
-    completeBootstrapRefresh,
     beginAppPlanning,
     collect,
+    completeBootstrapRefresh,
     input,
     journal,
+    proposeAccess,
     requests,
-    artifacts,
     get row() {
       return row;
     },
@@ -825,7 +824,7 @@ describe("normal organization owner proof collector", () => {
     const f = await fixture();
     await f.beginAppPlanning();
     const before = structuredClone(f.row.record);
-    const revision = f.row.revision;
+    const { revision } = f.row;
     expect(before.accountPreparation?.organizationProofs).toBeUndefined();
     const signups = f.requests.filter(
       (request) => new URL(request.url).pathname === "/api/auth/sign-up/email",
@@ -876,8 +875,8 @@ describe("normal organization owner proof collector", () => {
   );
   afterEach(() => vi.restoreAllMocks());
   it.each([
-    { status: 401, contentType: "text/html", valid: false },
-    { status: 503, contentType: "application/vnd.realm-operator-proof+json", valid: true },
+    { contentType: "text/html", status: 401, valid: false },
+    { contentType: "application/vnd.realm-operator-proof+json", status: 503, valid: true },
   ])(
     "reports only closed proof response facts for $status",
     async ({ status, contentType, valid }) => {
@@ -885,8 +884,8 @@ describe("normal organization owner proof collector", () => {
       const f = await fixture();
       f.proofResponse(
         new Response("private cookie JWT URL actor", {
-          status,
           headers: { "content-type": contentType },
+          status,
         }),
       );
       await expect(f.collect(await f.input("org-one"))).rejects.toMatchObject({
@@ -896,13 +895,13 @@ describe("normal organization owner proof collector", () => {
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           normalActorProofFailure: {
-            stage: "proof_response",
-            cookiePresent: true,
-            httpStatus: status,
-            contentTypeValid: valid,
-            redirected: false,
-            errorClass: "operator_error",
             code: "auth_identity_required",
+            contentTypeValid: valid,
+            cookiePresent: true,
+            errorClass: "operator_error",
+            httpStatus: status,
+            redirected: false,
+            stage: "proof_response",
           },
         }),
       );
@@ -924,9 +923,9 @@ describe("normal organization owner proof collector", () => {
       "[builder:hosted-neon-consent]",
       expect.objectContaining({
         normalActorProofFailure: {
-          stage: "proof_request",
           cookiePresent: true,
           errorClass: "type_error",
+          stage: "proof_request",
         },
       }),
     );
@@ -943,11 +942,11 @@ describe("normal organization owner proof collector", () => {
       "[builder:hosted-neon-consent]",
       expect.objectContaining({
         normalActorProofFailure: {
-          stage: "proof_readback_response",
+          code: "auth_identity_required",
+          errorClass: "operator_error",
           httpStatus: 403,
           redirected: false,
-          errorClass: "operator_error",
-          code: "auth_identity_required",
+          stage: "proof_readback_response",
         },
       }),
     );

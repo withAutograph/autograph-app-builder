@@ -124,10 +124,12 @@ export function assertRepositoryAccessReceiptForSource(input: {
     throw new Error("No confirmed repository access receipt is available.");
   }
   const receipt = repositoryAccessReceiptSchema.parse(input.receipt);
-  if (
+  const receiptIdentityMismatch =
     receipt.digest !== input.expectedDigest ||
     receipt.sessionId !== input.sessionId ||
-    receipt.repository.repositoryId !== input.repositoryId ||
+    receipt.repository.repositoryId !== input.repositoryId;
+  if (
+    receiptIdentityMismatch ||
     `refs/heads/${receipt.repository.defaultBranch}` !== input.ref ||
     receipt.repository.headSha !== input.expectedSha ||
     receipt.repository.headTree !== input.expectedTree
@@ -144,14 +146,18 @@ export function assertResolvedSourceMatchesRepositoryAccess(input: {
 }): void {
   const access = repositoryAccessReceiptSchema.parse(input.access);
   const { repository } = input.source;
-  if (
+  const repositoryIdentityMismatch =
     repository.repositoryId !== access.repository.repositoryId ||
     repository.owner !== access.repository.owner ||
     repository.name !== access.repository.name ||
-    repository.defaultBranch !== access.repository.defaultBranch ||
+    repository.defaultBranch !== access.repository.defaultBranch;
+  const sourceHeadMismatch = () =>
     repository.headSha !== access.repository.headSha ||
     repository.headTree !== access.repository.headTree ||
-    input.source.resolvedRef !== `refs/heads/${access.repository.defaultBranch}` ||
+    input.source.resolvedRef !== `refs/heads/${access.repository.defaultBranch}`;
+  if (
+    repositoryIdentityMismatch ||
+    sourceHeadMismatch() ||
     input.source.resolvedSha !== access.repository.headSha ||
     input.source.resolvedTree !== access.repository.headTree
   ) {

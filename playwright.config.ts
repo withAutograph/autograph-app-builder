@@ -7,11 +7,12 @@ const mise = [
   `${process.env.HOME}/.local/share/mise/bin/mise`,
   `${process.env.HOME}/.local/bin/mise`,
 ].find(existsSync);
-if (!mise) {
+if (mise === undefined) {
   throw new Error("The mise executable is unavailable.");
 }
 const webServerPath = `${path.dirname(process.execPath)}:${path.dirname(mise)}:/usr/bin:/bin`;
-const appPort = process.env.APP_BUILDER_LOCAL_PORT || "3001";
+const configuredPort = process.env.APP_BUILDER_LOCAL_PORT;
+const appPort = configuredPort === undefined || configuredPort === "" ? "3001" : configuredPort;
 const appProtocol = "https";
 const appOrigin = `${appProtocol}://localhost:${appPort}`;
 const flagsStorageState = "test-results/passkey-flags-storage-state.json";
@@ -21,7 +22,7 @@ export default defineConfig({
   // Individual tests have a 90-second bound, but CI also needs a suite-wide
   // terminal condition if the browser runner stops making progress.
   globalSetup: "./e2e/support/global-setup.ts",
-  globalTimeout: process.env.CI ? 12 * 60_000 : undefined,
+  globalTimeout: (process.env.CI ?? "") === "" ? undefined : 12 * 60_000,
   outputDir: "test-results/web-product-e2e-emulated",
   projects: [
     {
@@ -32,7 +33,8 @@ export default defineConfig({
       },
     },
   ],
-  reporter: process.env.CI ? [["github"], ["line"], ["html", { open: "never" }]] : "list",
+  reporter:
+    (process.env.CI ?? "") === "" ? "list" : [["github"], ["line"], ["html", { open: "never" }]],
   retries: 0,
   testDir: "./e2e",
   testIgnore: "**/production-navigation/**",
@@ -46,16 +48,17 @@ export default defineConfig({
     trace: "retain-on-failure",
     video: "off",
   },
-  webServer: process.env.APP_BUILDER_EXTERNAL_WEB_SERVER
-    ? undefined
-    : {
-        command: `PATH=${JSON.stringify(webServerPath)} .config/mise/tasks/app/dev-emulated`,
-        ignoreHTTPSErrors: true,
-        reuseExistingServer: false,
-        // A cold local checkout must initialize PostgreSQL, seed both
-        // emulators, generate the certificate, and compile the first route.
-        timeout: 300_000,
-        url: `${appProtocol}://127.0.0.1:${appPort}/auth/sign-in`,
-      },
+  webServer:
+    (process.env.APP_BUILDER_EXTERNAL_WEB_SERVER ?? "") === ""
+      ? {
+          command: `PATH=${JSON.stringify(webServerPath)} .config/mise/tasks/app/dev-emulated`,
+          ignoreHTTPSErrors: true,
+          reuseExistingServer: false,
+          // A cold local checkout must initialize PostgreSQL, seed both
+          // emulators, generate the certificate, and compile the first route.
+          timeout: 300_000,
+          url: `${appProtocol}://127.0.0.1:${appPort}/auth/sign-in`,
+        }
+      : undefined,
   workers: 1,
 });

@@ -117,7 +117,7 @@ describe("protected repository Production dispatcher", () => {
     const f = fixture();
     const response = await f.send({ version: 1, ...owner, action: "plan" });
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ version: 1, plan: { scope, intent } });
+    expect(await response.json()).toMatchObject({ plan: { intent, scope }, version: 1 });
     expect(f.prepared).not.toHaveBeenCalled();
     expect(
       (await f.send({ version: 1, ...owner, action: "prepare", approvedByCallId: "invented" }))
@@ -268,8 +268,8 @@ describe("protected repository Production dispatcher", () => {
     expect((await f.send(body, "builder", repositoryProductionCompletionPath)).status).toBe(403);
     expect(f.deps.management.completeInvitation).not.toHaveBeenCalled();
     expect(await (await f.send(body, "auth", repositoryProductionCompletionPath)).json()).toEqual({
-      version: 1,
       status: "ready",
+      version: 1,
     });
     expect(f.deps.verifyBuilderWorkload).not.toHaveBeenCalled();
   });
@@ -287,7 +287,7 @@ describe("protected repository Production dispatcher", () => {
       repositoryProductionCompletionPath,
     );
     expect(response.status).toBe(202);
-    expect(await response.json()).toEqual({ version: 1, status: "pending" });
+    expect(await response.json()).toEqual({ status: "pending", version: 1 });
     expect(retain).toHaveBeenCalledOnce();
     expect(dispose).not.toHaveBeenCalled();
     work.resolve("ready");

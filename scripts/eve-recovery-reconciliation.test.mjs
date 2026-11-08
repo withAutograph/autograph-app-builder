@@ -5,6 +5,20 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { test } from "vitest";
 
+const toolResultKind = "tool-result";
+const originalDeferredCallId = "original-deferred";
+const originalRequestId = "original-request";
+const turnStepName = "step//eve//turnStep";
+const uncommittedActionResultReason = "uncommitted-action-result";
+const unconsumedNativeInboxReason = "unconsumed-native-inbox-input";
+
+const originalTurnId = "turn-original";
+const childDeploymentId = "child-deployment";
+const originalNativeCallId = "original-native";
+const originalOwnerId = "original-owner";
+const completedStatus = "completed";
+const eventsListOperation = "events.list";
+
 const require = createRequire(import.meta.url);
 const eve = path.resolve(
   process.env.EVE_RECOVERY_NATIVE_ROOT ?? path.dirname(require.resolve("eve/package.json")),
@@ -35,11 +49,11 @@ const { z } = await import("zod");
 const ownerRunId = "wrun_physical_original";
 const logicalSessionId = "wrun_logical_original";
 const eventId = (slot) => `evnt_${String(slot).padStart(26, "0")}`;
-const batchEvent = { sequence: 1, stepIndex: 1, turnId: "turn-original" };
-const emission = { sessionStarted: true, sequence: 1, stepIndex: 2, turnId: "turn-original" };
+const batchEvent = { sequence: 1, stepIndex: 1, turnId: originalTurnId };
+const emission = { sessionStarted: true, sequence: 1, stepIndex: 2, turnId: originalTurnId };
 const actualRuntimeResult = {
-  kind: "tool-result",
-  callId: "original-deferred",
+  kind: toolResultKind,
+  callId: originalDeferredCallId,
   toolName: "deferred",
   output: { value: "actual-native-outcome" },
 };
@@ -61,7 +75,7 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
     const startInput = {
       anchorRunId,
       logicalSessionId,
-      targetDeploymentId: "child-deployment",
+      targetDeploymentId: childDeploymentId,
       activationToken: token,
       checkpoint,
       delivery,
@@ -71,7 +85,7 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
       sessionId: logicalSessionId,
       streamRunId: anchorRunId,
       activationToken: token,
-      ownerDeploymentId: "child-deployment",
+      ownerDeploymentId: childDeploymentId,
       checkpoint,
       delivery,
     };
@@ -79,7 +93,7 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
       runId,
       stepId: id,
       stepName: `step//eve//${name}`,
-      status: "completed",
+      status: completedStatus,
       input: await serialization.dehydrateStepArguments({ args: [value], closureVars: [] }, runId),
     });
     const startStep = await makeStep(
@@ -153,7 +167,7 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
         anchorRunId,
         {
           runId: anchorRunId,
-          status: options.anchorStatus ?? "completed",
+          status: options.anchorStatus ?? completedStatus,
           deploymentId: "anchor-deployment",
           workflowName: "session-owner",
           input: await serialization.dehydrateWorkflowArguments([{ kind: "initial" }], anchorRunId),
@@ -164,7 +178,7 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
         {
           runId: ownerRunId,
           status: options.runStatus ?? "cancelled",
-          deploymentId: "child-deployment",
+          deploymentId: childDeploymentId,
           workflowName: "session-owner",
           input: await serialization.dehydrateWorkflowArguments([childEntry], ownerRunId),
         },
@@ -175,7 +189,7 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
       Object.defineProperty(runs.get(ownerRunId), "status", {
         get: () => {
           reads += 1;
-          return reads === 1 ? "completed" : "suspended";
+          return reads === 1 ? completedStatus : "suspended";
         },
       });
     }
@@ -200,7 +214,7 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
     }
     let parentScans = 0;
     world.events.list = ({ runId, resolveData }) => {
-      readOperations.push(["events.list", runId, resolveData]);
+      readOperations.push([eventsListOperation, runId, resolveData]);
       if (runId === anchorRunId) {
         parentScans += 1;
       }
@@ -263,10 +277,6 @@ const attachNativeSnapshot = async (world, nativeEvents, enabled) => {
     chunks.push({ index: chunks.length, data });
   }
   world.streams = {
-    getInfo: () => Promise.resolve({ tailIndex: chunks.length - 1, done: false }),
-    getChunks: () => {
-      throw new Error("Serial native snapshot pagination is forbidden.");
-    },
     get: (_id, _name, startIndex) => {
       assert.equal(startIndex, 0);
       let index = 0;
@@ -282,6 +292,10 @@ const attachNativeSnapshot = async (world, nativeEvents, enabled) => {
         }),
       );
     },
+    getChunks: () => {
+      throw new Error("Serial native snapshot pagination is forbidden.");
+    },
+    getInfo: () => Promise.resolve({ tailIndex: chunks.length - 1, done: false }),
   };
   return snapshotKey;
 };
@@ -335,7 +349,7 @@ const fixture = async (options = {}) => {
       "eve.runtime.hitl.approvedTools": options.denied === true ? [] : ["native"],
       "fixture.authority": {
         grant: options.denied === true ? null : originalGrant,
-        pending: [{ callId: "original-native", scope: originalGrant }],
+        pending: [{ callId: originalNativeCallId, scope: originalGrant }],
       },
       "fixture.program": { phase: "source-planned", arbitraryNestedState: { keep: true } },
     },
@@ -353,14 +367,14 @@ const fixture = async (options = {}) => {
         content: [
           {
             type: "tool-approval-response",
-            approvalId: "original-request",
+            approvalId: originalRequestId,
             approved: options.denied !== true,
           },
           ...(options.denied === true
             ? [
                 {
-                  type: "tool-result",
-                  toolCallId: "original-native",
+                  type: toolResultKind,
+                  toolCallId: originalNativeCallId,
                   toolName: "native",
                   output: { type: "execution-denied", reason: "original denial" },
                 },
@@ -377,7 +391,7 @@ const fixture = async (options = {}) => {
     tasks: [
       {
         kind: "workflow-task",
-        callId: "original-deferred",
+        callId: originalDeferredCallId,
         toolName: "deferred",
         input: {},
         workflowId: "workflow:deferred",
@@ -389,15 +403,20 @@ const fixture = async (options = {}) => {
         content: [
           {
             type: "tool-call",
-            toolCallId: "original-native",
+            toolCallId: originalNativeCallId,
             toolName: "native",
             input: { value: "exact-original-input" },
           },
-          { type: "tool-call", toolCallId: "original-deferred", toolName: "deferred", input: {} },
+          {
+            type: "tool-call",
+            toolCallId: originalDeferredCallId,
+            toolName: "deferred",
+            input: {},
+          },
           {
             type: "tool-approval-request",
-            approvalId: "original-request",
-            toolCallId: "original-native",
+            approvalId: originalRequestId,
+            toolCallId: originalNativeCallId,
           },
         ],
       },
@@ -419,7 +438,7 @@ const fixture = async (options = {}) => {
   const sourcePair = {
     serializedContext: {
       "eve.sessionId": logicalSessionId,
-      "eve.auth": { principalId: "original-owner" },
+      "eve.auth": { principalId: originalOwnerId },
       "fixture.privateContext": { original: true },
     },
     sessionState: createDurableSessionState({ session: source }),
@@ -433,16 +452,14 @@ const fixture = async (options = {}) => {
   };
   const incoming = {
     runtimeResults: { results: options.missingResult === true ? [] : [actualRuntimeResult] },
-    ...(options.delivery === true
-      ? {
-          delivery: {
-            kind: "deliver",
-            auth: { principalId: "original-owner" },
-            payloads: [{ message: "already admitted" }],
-          },
-        }
-      : {}),
   };
+  if (options.delivery === true) {
+    incoming.delivery = {
+      kind: "deliver",
+      auth: { principalId: originalOwnerId },
+      payloads: [{ message: "already admitted" }],
+    };
+  }
   const args = (value) =>
     serialization.dehydrateStepArguments({ args: [value], closureVars: [] }, ownerRunId, key);
   const output = (value) => serialization.dehydrateStepReturnValue(value, ownerRunId, key);
@@ -452,8 +469,8 @@ const fixture = async (options = {}) => {
       {
         runId: ownerRunId,
         stepId: "prior",
-        stepName: "step//eve//turnStep",
-        status: "completed",
+        stepName: turnStepName,
+        status: completedStatus,
         input: await args(sourcePair),
         output: await output({ action: "park", ...sourcePair }),
       },
@@ -463,8 +480,8 @@ const fixture = async (options = {}) => {
       {
         runId: ownerRunId,
         stepId: "terminal",
-        stepName: "step//eve//turnStep",
-        status: options.failedTurn === true ? "failed" : "completed",
+        stepName: turnStepName,
+        status: options.failedTurn === true ? "failed" : completedStatus,
         input: await args({ ...sourcePair, input: incoming }),
         ...(options.failedTurn === true
           ? { error: { name: "failure" } }
@@ -477,7 +494,7 @@ const fixture = async (options = {}) => {
         runId: ownerRunId,
         stepId: "finalizer",
         stepName: "step//eve//terminateChildSessionsStep",
-        status: "completed",
+        status: completedStatus,
         input: await args(latestPair),
       },
     ],
@@ -486,7 +503,7 @@ const fixture = async (options = {}) => {
     steps.set("historical", {
       runId: ownerRunId,
       stepId: "historical",
-      stepName: "step//eve//turnStep",
+      stepName: turnStepName,
       status: "failed",
       input: await args(sourcePair),
       error: { name: "older failure" },
@@ -496,21 +513,23 @@ const fixture = async (options = {}) => {
     steps.set("unreadable", {
       runId: ownerRunId,
       stepId: "unreadable",
-      stepName: "step//eve//turnStep",
-      status: "completed",
+      stepName: turnStepName,
+      status: completedStatus,
       output: new Uint8Array([99, 1, 2, 3]),
     });
   }
-  const event = (slot, eventType, stepId, eventData = {}) => ({
-    runId: ownerRunId,
-    eventId: eventId(slot),
-    eventType,
-    ...(stepId === undefined ? {} : { correlationId: stepId }),
-    eventData: {
-      ...(steps.has(stepId) ? { stepName: steps.get(stepId).stepName } : {}),
-      ...eventData,
-    },
-  });
+  const event = (slot, eventType, stepId, eventData = {}) => {
+    const value = { runId: ownerRunId, eventId: eventId(slot), eventType };
+    if (stepId !== undefined) {
+      value.correlationId = stepId;
+    }
+    const details = {};
+    if (steps.has(stepId)) {
+      details.stepName = steps.get(stepId).stepName;
+    }
+    value.eventData = { ...details, ...eventData };
+    return value;
+  };
   const events = [
     ...(options.historicalFailure === true
       ? [event(1, "step_started", "historical"), event(2, "step_failed", "historical")]
@@ -524,14 +543,16 @@ const fixture = async (options = {}) => {
     ...(options.unreadableLater === true
       ? [event(9, "step_started", "unreadable"), event(10, "step_completed", "unreadable")]
       : []),
-    event(11, "hook_received", "ordinary-hook", {
-      ...(options.inboxAfterSource === true
-        ? { token: `eve:session:${logicalSessionId}:inbox` }
-        : {}),
-      payload: { untouchedNativeFact: true },
-    }),
-    event(12, options.runStatus === "cancelled" ? "run_cancelled" : "run_completed"),
   ];
+  const inboxEventData = {};
+  if (options.inboxAfterSource === true) {
+    inboxEventData.token = `eve:session:${logicalSessionId}:inbox`;
+  }
+  inboxEventData.payload = { untouchedNativeFact: true };
+  events.push(
+    event(11, "hook_received", "ordinary-hook", inboxEventData),
+    event(12, options.runStatus === "cancelled" ? "run_cancelled" : "run_completed"),
+  );
   await appendHistoricalInbox(events, event, output, options.inboxSuffix);
   const nativeEvents = [
     { type: "action.result", data: { ...batchEvent, result: actualRuntimeResult } },
@@ -542,8 +563,8 @@ const fixture = async (options = {}) => {
             data: {
               ...emission,
               result: {
-                kind: "tool-result",
-                callId: "original-native",
+                kind: toolResultKind,
+                callId: originalNativeCallId,
                 toolName: "native",
                 output: "may-have-written",
               },
@@ -570,21 +591,21 @@ const fixture = async (options = {}) => {
         ]
       : []),
     ...(options.cancelled === true
-      ? [{ type: "turn.cancelled", data: { sequence: 1, turnId: "turn-original" } }]
+      ? [{ type: "turn.cancelled", data: { sequence: 1, turnId: originalTurnId } }]
       : []),
   ];
   const world = {
+    events: {
+      get: (_runId, id) => Promise.resolve(events.find((value) => value.eventId === id)),
+      list: async () => await Promise.resolve({ data: events, hasMore: false }),
+    },
     runs: {
       get: async () =>
         await Promise.resolve({
           runId: ownerRunId,
-          status: options.runStatus ?? (options.failedTurn === true ? "failed" : "completed"),
+          status: options.runStatus ?? (options.failedTurn === true ? "failed" : completedStatus),
           input: "original-entry-retained",
         }),
-    },
-    events: {
-      list: async () => await Promise.resolve({ data: events, hasMore: false }),
-      get: (_runId, id) => Promise.resolve(events.find((value) => value.eventId === id)),
     },
     steps: {
       get: async (runId, id) => {
@@ -594,21 +615,16 @@ const fixture = async (options = {}) => {
     },
   };
   const { boundOwnerRunId, readOperations } = await attachHandoffWorld({
+    events,
     options,
     sourcePair,
-    world,
-    events,
     steps,
+    world,
   });
   const snapshotKey = await attachNativeSnapshot(world, nativeEvents, options.snapshot);
   let authorized = false;
   const collect = collectorFor(options)({
     getWorld: async () => await Promise.resolve(world),
-    resolveRunEncryptionKey: async () => {
-      await Promise.resolve();
-      return key;
-    },
-    hydrateWorkflowArguments: (...values) => serialization.hydrateWorkflowArguments(...values),
     hydrateHookPayload: async (value, _runId, payloadKey) =>
       serialization.deserializePreparedReplayPayload(
         await serialization.prepareReplayPayload(value, payloadKey),
@@ -616,20 +632,25 @@ const fixture = async (options = {}) => {
       ),
     hydrateStepArguments: (...values) => serialization.hydrateStepArguments(...values),
     hydrateStepReturnValue: (...values) => serialization.hydrateStepReturnValue(...values),
-    readDurableSession,
-    requireEventSlot: (id) => Number(id.slice(5)),
+    hydrateWorkflowArguments: (...values) => serialization.hydrateWorkflowArguments(...values),
     now: () => 0,
+    readDurableSession,
     async *readNativeEvents(runId) {
       yield* options.snapshot === true
         ? readTerminalNativeEventsSnapshot(world, runId, snapshotKey)
         : nativeEvents;
+    },
+    requireEventSlot: (id) => Number(id.slice(5)),
+    resolveRunEncryptionKey: async () => {
+      await Promise.resolve();
+      return key;
     },
   });
   const collected = await collect({
     allowParked: options.allowParked === true,
     binding: { ownerRunId: boundOwnerRunId, logicalSessionId },
     authorizeOwner: async (currentBinding) => {
-      assert.deepEqual(currentBinding, { ownerRunId: boundOwnerRunId, logicalSessionId });
+      assert.deepEqual(currentBinding, { logicalSessionId, ownerRunId: boundOwnerRunId });
       assert.ok(Object.isFrozen(currentBinding));
       authorized = true;
       await Promise.resolve();
@@ -639,15 +660,15 @@ const fixture = async (options = {}) => {
   assert.equal(authorized, true);
   return {
     collected,
+    events,
+    incoming,
+    latest,
+    latestPair,
+    nativeEvents,
+    originalGrant,
     readOperations,
     source,
-    latest,
     sourcePair,
-    latestPair,
-    originalGrant,
-    incoming,
-    events,
-    nativeEvents,
   };
 };
 
@@ -689,7 +710,7 @@ const resumeSynthetic = async (ready, denied) => {
       for (const name of ["native", "deferred"]) {
         assert.equal(
           content.filter(
-            (part) => part.type === "tool-result" && part.toolCallId === `original-${name}`,
+            (part) => part.type === toolResultKind && part.toolCallId === `original-${name}`,
           ).length,
           1,
         );
@@ -703,15 +724,15 @@ const resumeSynthetic = async (ready, denied) => {
     },
   });
   const ctx = new ContextContainer();
-  const auth = { authenticator: "test", principalId: "original-owner", principalType: "user" };
+  const auth = { authenticator: "test", principalId: originalOwnerId, principalType: "user" };
   ctx.set(SessionKey, {
     sessionId: logicalSessionId,
     auth: { current: auth, initiator: auth },
-    turn: { id: "turn-original" },
+    turn: { id: originalTurnId },
   });
   assert.equal(executions, 0);
   const result = await contextStorage.run(ctx, () =>
-    createToolLoopHarness({ tools, resolveModel: async () => await Promise.resolve(model) })(
+    createToolLoopHarness({ resolveModel: async () => await Promise.resolve(model), tools })(
       session,
       {
         runtimeActionResults: ready.replayInput.runtimeResults.results,
@@ -760,14 +781,14 @@ test("denial is retained and never executes the denied native call", async () =>
 });
 
 for (const { options, reason } of [
-  { options: { uncommittedWrite: true }, reason: "uncommitted-action-result" },
+  { options: { uncommittedWrite: true }, reason: uncommittedActionResultReason },
   { options: { uncommittedDispatch: true }, reason: "uncommitted-action-dispatch" },
   { options: { failedTurn: true }, reason: "failed-turn-effects-unreconciled" },
   { options: { delivery: true }, reason: "delivery-consumption-unreconciled" },
   { options: { missingResult: true }, reason: "coordination-results-incomplete" },
   { options: { cancelled: true }, reason: "cancelled-turn-replay" },
   { options: { unreadableLater: true }, reason: "unreadable-native-effect-frontier" },
-  { options: { inboxAfterSource: true }, reason: "unconsumed-native-inbox-input" },
+  { options: { inboxAfterSource: true }, reason: unconsumedNativeInboxReason },
 ]) {
   test(`uncertain ${reason} never becomes replay permission`, async () => {
     const f = await fixture(options);
@@ -784,6 +805,11 @@ test("historical failed step covered by a later committed turn does not block kn
   assert.equal(result.provenance.coveredNativeEventIds.includes(eventId(2)), true);
 });
 
+const approvals = (history) =>
+  history
+    .flatMap(({ content }) => (Array.isArray(content) ? content : []))
+    .filter((part) => part.type === "tool-approval-response");
+
 test("provider-cancelled physical handoff reconciles latest native typed state without replay or effect execution", async () => {
   const f = await fixture({ handoff: true, runStatus: "cancelled", snapshot: true });
   const payload = readTerminalRecoveryCandidate(f.collected.candidate);
@@ -793,13 +819,13 @@ test("provider-cancelled physical handoff reconciles latest native typed state w
   assert.equal(payload.handoffChain.length, 1);
   assert.equal(
     f.readOperations.filter(
-      ([operation, id]) => operation === "events.list" && id === logicalSessionId,
+      ([operation, id]) => operation === eventsListOperation && id === logicalSessionId,
     ).length,
     2,
   );
   assert.equal(
     f.readOperations
-      .filter(([operation]) => operation === "events.list")
+      .filter(([operation]) => operation === eventsListOperation)
       .every((call) => call[2] === "none"),
     true,
   );
@@ -811,14 +837,10 @@ test("provider-cancelled physical handoff reconciles latest native typed state w
   for (const key of ["fixture.program", "fixture.authority", "eve.runtime.hitl.approvedTools"]) {
     assert.deepEqual(recovered.state[key], f.latest.state[key]);
   }
-  const approvals = (history) =>
-    history
-      .flatMap(({ content }) => (Array.isArray(content) ? content : []))
-      .filter((part) => part.type === "tool-approval-response");
   assert.deepEqual(approvals(recovered.history), approvals(f.source.history));
   assert.equal(
     approvals(recovered.history).some(
-      (approval) => approval.approvalId === "original-request" && approval.approved === true,
+      (approval) => approval.approvalId === originalRequestId && approval.approved === true,
     ),
     true,
   );
@@ -828,7 +850,7 @@ test("provider-cancelled physical handoff reconciles latest native typed state w
   assert.deepEqual(payload.candidates, before);
   assert.ok(
     f.readOperations.every(([operation]) =>
-      ["runs.get", "runs.list", "events.get", "events.list", "steps.get"].includes(operation),
+      ["runs.get", "runs.list", "events.get", eventsListOperation, "steps.get"].includes(operation),
     ),
   );
 });
@@ -854,7 +876,7 @@ for (const options of [
 for (const { options, reason } of [
   { options: { cancelled: true }, reason: "cancelled-turn-replay" },
   { options: { uncommittedDispatch: true }, reason: "uncommitted-action-dispatch" },
-  { options: { uncommittedWrite: true }, reason: "uncommitted-action-result" },
+  { options: { uncommittedWrite: true }, reason: uncommittedActionResultReason },
 ]) {
   test(`provider cancellation grants no replay authority for ${reason}`, async () => {
     const f = await fixture({ handoff: true, runStatus: "cancelled", ...options });
@@ -865,20 +887,20 @@ for (const { options, reason } of [
 }
 
 const acceptedSuffix = () => [
-  { kind: "cancel", turnId: "turn-original" },
+  { kind: "cancel", turnId: originalTurnId },
   {
     kind: "send",
     requestId: "original-native-request",
-    auth: { principalId: "original-owner" },
+    auth: { principalId: originalOwnerId },
     payload: { message: "original accepted intent" },
     delivery: { originalEvidence: true },
   },
-  { kind: "cancel", turnId: "turn-original" },
+  { kind: "cancel", turnId: originalTurnId },
 ];
 
 test("exact encrypted post-checkpoint cancel/send/cancel is retained for ordinary owner admission", async () => {
   const suffix = acceptedSuffix();
-  const f = await fixture({ runStatus: "cancelled", inboxSuffix: suffix, encrypted: true });
+  const f = await fixture({ encrypted: true, inboxSuffix: suffix, runStatus: "cancelled" });
   const payload = readTerminalRecoveryCandidate(f.collected.candidate);
   assert.deepEqual(
     payload.carriedInbox.map((entry) => entry.payload),
@@ -899,9 +921,9 @@ test("exact encrypted post-checkpoint cancel/send/cancel is retained for ordinar
 });
 for (const kind of ["reset", "session-timeout", "unknown"]) {
   test(`unsupported historical inbox ${kind} remains uncertain`, async () => {
-    const f = await fixture({ runStatus: "cancelled", inboxSuffix: [{ kind }] });
+    const f = await fixture({ inboxSuffix: [{ kind }], runStatus: "cancelled" });
     const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
-    assert.deepEqual(result, { kind: "uncertain", reason: "unconsumed-native-inbox-input" });
+    assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
   });
 }
 for (const mutation of [
@@ -913,7 +935,7 @@ for (const mutation of [
   "missing-envelope",
 ]) {
   test(`historical inbox cannot waive uncertainty with ${mutation}`, async () => {
-    const f = await fixture({ runStatus: "cancelled", inboxSuffix: acceptedSuffix() });
+    const f = await fixture({ inboxSuffix: acceptedSuffix(), runStatus: "cancelled" });
     const payload = readTerminalRecoveryCandidate(f.collected.candidate);
     const first = payload.carriedInbox[0];
     if (mutation === "foreign-run") {
@@ -935,25 +957,25 @@ for (const mutation of [
       payload.carriedInbox.splice(0, 1);
     }
     const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
-    assert.deepEqual(result, { kind: "uncertain", reason: "unconsumed-native-inbox-input" });
+    assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
   });
 }
 test("retained inbox commands never waive unknown native effects", async () => {
   const f = await fixture({
-    runStatus: "cancelled",
     inboxSuffix: acceptedSuffix(),
+    runStatus: "cancelled",
     uncommittedWrite: true,
   });
   const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
   assert.deepEqual(result, {
+    callId: originalNativeCallId,
     kind: "uncertain",
-    reason: "uncommitted-action-result",
-    callId: "original-native",
+    reason: uncommittedActionResultReason,
   });
 });
 
 test("a later authored step leaves historical command admission uncertain", async () => {
-  const f = await fixture({ runStatus: "cancelled", inboxSuffix: acceptedSuffix() });
+  const f = await fixture({ inboxSuffix: acceptedSuffix(), runStatus: "cancelled" });
   const payload = readTerminalRecoveryCandidate(f.collected.candidate);
   payload.events.push({
     runId: ownerRunId,
@@ -963,54 +985,57 @@ test("a later authored step leaves historical command admission uncertain", asyn
     eventData: { stepName: "turnStep" },
   });
   const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
-  assert.deepEqual(result, { kind: "uncertain", reason: "unconsumed-native-inbox-input" });
+  assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
 });
 
 for (const item of [
   {
-    options: { anchorStatus: "running", runStatus: "completed" },
+    options: { anchorStatus: "running", runStatus: completedStatus },
     stage: "handoff_parent",
     status: "running",
   },
   {
     options: { runStatus: "waiting" },
+    parentStatus: completedStatus,
     stage: "handoff_successor",
     status: "waiting",
-    parentStatus: "completed",
   },
   { options: { finalStatusTransition: true }, stage: "final_owner", status: "suspended" },
 ]) {
   test(`actual native handoff resolver identifies ${item.stage} refusal`, async () => {
     const f = await fixture({
-      handoff: true,
       allowParked: true,
       expectedUnavailable: true,
+      handoff: true,
       ...item.options,
     });
     assert.equal(f.collected.reason, "source-not-terminal");
-    assert.deepEqual(f.collected.boundary, {
+    const expectedBoundary = {
       stage: item.stage,
       status: item.status,
-      ...(item.parentStatus === undefined ? {} : { parentStatus: item.parentStatus }),
-      allowParked: true,
-    });
+    };
+    if (item.parentStatus !== undefined) {
+      expectedBoundary.parentStatus = item.parentStatus;
+    }
+    expectedBoundary.allowParked = true;
+    assert.deepEqual(f.collected.boundary, expectedBoundary);
   });
 }
 
 test("running anchored-result parent is observable only through an opaque lineage preflight", async () => {
   const options = {
-    handoff: true,
-    anchorStatus: "running",
-    runStatus: "running",
     allowParked: true,
+    anchorStatus: "running",
+    handoff: true,
+    runStatus: "running",
   };
   const terminal = await fixture({ ...options, expectedUnavailable: true });
   assert.equal(terminal.collected.boundary.stage, "handoff_parent");
   const observed = await fixture({
     ...options,
-    omitListedOwner: true,
     collectFactory: createOwnedLineagePreflightCollector,
     expectedKind: "preflight",
+    omitListedOwner: true,
   });
   const payload = readOwnedLineagePreflight(observed.collected.preflight);
   assert.equal(payload.handoffChain.length, 1);

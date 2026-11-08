@@ -207,7 +207,7 @@ describe("component-backed UI preview policy", () => {
   });
 
   it("does not count TypeScript-only imports as visual components", () => {
-    expect(() =>
+    expect(() => {
       validateUiPreview({
         ...preview,
         files: [
@@ -217,11 +217,13 @@ describe("component-backed UI preview policy", () => {
             path: "src/routes/index.tsx",
           },
         ],
-      }),
-    ).not.toThrow();
+      });
+    }).not.toThrow();
   });
   it("accepts public Arrusted imports and gives equivalent source one revision", () => {
-    expect(() => validateUiPreview(preview)).not.toThrow();
+    expect(() => {
+      validateUiPreview(preview);
+    }).not.toThrow();
     expect(uiPreviewSourceDigest(preview)).toMatch(/^[a-f0-9]{64}$/u);
   });
 
@@ -242,16 +244,16 @@ describe("component-backed UI preview policy", () => {
       /inside its source bundle/u,
     ],
   ])("rejects %s", (_name, content, message) => {
-    expect(() =>
+    expect(() => {
       validateUiPreview({
         ...preview,
         files: [{ content, path: "src/routes/index.tsx" }],
-      }),
-    ).toThrow(message);
+      });
+    }).toThrow(message);
   });
 
   it("accepts contained parent imports, frontend module paths, and CSS declarations", () => {
-    expect(() =>
+    expect(() => {
       validateUiPreview({
         ...preview,
         files: [
@@ -267,14 +269,14 @@ describe("component-backed UI preview policy", () => {
           { content: ":root { --new-token: red; }", path: "src/styles.css" },
           { content: 'export const label = "Review";', path: "src/schema/view.ts" },
         ],
-      }),
-    ).not.toThrow();
+      });
+    }).not.toThrow();
   });
 
   it.each(["button", "input", "select", "textarea", "dialog", "table"])(
     "does not use raw %s controls as an admission gate",
     (tag) => {
-      expect(() =>
+      expect(() => {
         validateUiPreview({
           ...preview,
           files: [
@@ -283,8 +285,8 @@ describe("component-backed UI preview policy", () => {
               path: "src/routes/index.tsx",
             },
           ],
-        }),
-      ).not.toThrow();
+        });
+      }).not.toThrow();
     },
   );
 
@@ -300,7 +302,9 @@ describe("component-backed UI preview policy", () => {
       ],
     };
 
-    expect(() => validateUiPreview(helperPreview)).not.toThrow();
+    expect(() => {
+      validateUiPreview(helperPreview);
+    }).not.toThrow();
 
     const result = uiPreviewInputSchema.safeParse({
       ...helperPreview,
@@ -316,7 +320,7 @@ describe("component-backed UI preview policy", () => {
   });
 
   it("accepts route composition using a public Button and local fixture state", () => {
-    expect(() =>
+    expect(() => {
       validateUiPreview({
         ...preview,
         files: [
@@ -333,12 +337,12 @@ export default function Page() {
             path: "src/routes/index.tsx",
           },
         ],
-      }),
-    ).not.toThrow();
+      });
+    }).not.toThrow();
   });
 
   it("does not require imports to match an advisory manifest inventory", () => {
-    expect(() =>
+    expect(() => {
       validateUiPreview({
         ...preview,
         files: [
@@ -348,12 +352,12 @@ export default function Page() {
             path: "src/routes/index.tsx",
           },
         ],
-      }),
-    ).not.toThrow();
+      });
+    }).not.toThrow();
   });
 
   it("leaves actual public icon export validation to the renderer compiler", () => {
-    expect(() =>
+    expect(() => {
       validateUiPreview({
         ...preview,
         files: [
@@ -368,12 +372,12 @@ export default function Page() {
           productionComponents: [],
           productionIcons: [{ name: "ArrowLeft", source: "@autograph/icons" }],
         },
-      }),
-    ).not.toThrow();
+      });
+    }).not.toThrow();
   });
 
   it("accepts valid single-line JSX regardless of formatting", () => {
-    expect(() =>
+    expect(() => {
       validateUiPreview({
         ...preview,
         files: [
@@ -383,12 +387,12 @@ export default function Page() {
           },
         ],
         manifest: { ...preview.manifest, productionComponents: [] },
-      }),
-    ).not.toThrow();
+      });
+    }).not.toThrow();
   });
 
   it("does not make controls or long-line JSX a visual admission gate", () => {
-    expect(() =>
+    expect(() => {
       validateUiPreview({
         ...preview,
         files: [
@@ -398,8 +402,8 @@ export default function Page() {
           },
         ],
         manifest: { ...preview.manifest, productionComponents: [] },
-      }),
-    ).not.toThrow();
+      });
+    }).not.toThrow();
   });
 
   it("binds manifest decisions and assumptions into the immutable revision", () => {
@@ -417,7 +421,9 @@ export default function Page() {
       },
     };
     expect(uiPreviewSourceDigest(changed)).not.toBe(uiPreviewSourceDigest(preview));
-    expect(() => validateUiPreview(changed)).not.toThrow();
+    expect(() => {
+      validateUiPreview(changed);
+    }).not.toThrow();
   });
 
   it("keeps internal context and draft behavior out of Browser transport", () => {
@@ -435,7 +441,7 @@ export default function Page() {
         'import { Button } from "@autograph/components"; export const ReviewRail = () => <Button>Review</Button>;',
       path: "src/components/ReviewRail.tsx",
     };
-    expect(() =>
+    expect(() => {
       validateUiPreview({
         ...preview,
         catalogGaps: [
@@ -447,8 +453,8 @@ export default function Page() {
           },
         ],
         files: [...preview.files, local],
-      }),
-    ).not.toThrow();
+      });
+    }).not.toThrow();
   });
 
   it.each([
@@ -458,7 +464,7 @@ export default function Page() {
     ],
     ["raw replacement control", "export const ReviewRail = () => <button>Review</button>;"],
   ])("does not gate %s in component-backed previews", (_name, content) => {
-    expect(() =>
+    expect(() => {
       validateUiPreview({
         ...preview,
         catalogGaps: [
@@ -470,7 +476,7 @@ export default function Page() {
           },
         ],
         files: [...preview.files, { content, path: "src/components/ReviewRail.tsx" }],
-      }),
-    ).not.toThrow();
+      });
+    }).not.toThrow();
   });
 });

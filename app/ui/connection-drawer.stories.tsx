@@ -5,9 +5,9 @@ import { ConnectionDrawer } from "./builder-connections";
 const meta = {
   args: {
     flow: { name: "QuickBooks", stage: "connect" },
-    onClose: fn(),
-    onConnected: fn(),
-    onStageChange: fn(),
+    onClose: fn<NonNullable<Parameters<typeof ConnectionDrawer>[0]["onClose"]>>(),
+    onConnected: fn<NonNullable<Parameters<typeof ConnectionDrawer>[0]["onConnected"]>>(),
+    onStageChange: fn<NonNullable<Parameters<typeof ConnectionDrawer>[0]["onStageChange"]>>(),
   },
   component: ConnectionDrawer,
   parameters: { layout: "fullscreen" },

@@ -130,18 +130,36 @@ export const createAppAccessManagementService = (deps: AppAccessManagementDepend
     const pending = app.canManage ? await deps.journal.pending(app.scope) : [];
     const pendingCommand = pending.find((row) => row.record.state === "pending")?.record.command;
     await deps.assertAuthorized(owner, app.scope, false);
-    return appAccessSnapshotSchema.parse({
-      sessionId: owner.sessionId,
-      appId: app.scope.appId,
-      appName: app.appName,
-      organizationName: app.organizationName,
-      roles: app.roles,
-      canManage: app.canManage,
-      creator: app.creator,
-      ...(app.appUrl === undefined ? {} : { appUrl: app.appUrl }),
-      ...people,
-      ...(pendingCommand === undefined ? {} : { pendingCommand }),
-    });
+    const snapshotInput = () => {
+      const appDetails: Pick<
+        z.input<typeof appAccessSnapshotSchema>,
+        | "sessionId"
+        | "appId"
+        | "appName"
+        | "organizationName"
+        | "roles"
+        | "canManage"
+        | "creator"
+        | "appUrl"
+      > = {
+        sessionId: owner.sessionId,
+        appId: app.scope.appId,
+        appName: app.appName,
+        organizationName: app.organizationName,
+        roles: app.roles,
+        canManage: app.canManage,
+        creator: app.creator,
+      };
+      if (app.appUrl !== undefined) {
+        appDetails.appUrl = app.appUrl;
+      }
+      const snapshot: z.input<typeof appAccessSnapshotSchema> = { ...appDetails, ...people };
+      if (pendingCommand !== undefined) {
+        snapshot.pendingCommand = pendingCommand;
+      }
+      return snapshot;
+    };
+    return appAccessSnapshotSchema.parse(snapshotInput());
   };
   const execute = async (
     owner: AppAccessOwner,
@@ -244,7 +262,7 @@ export const createAppAccessManagementService = (deps: AppAccessManagementDepend
     if (!saved || saved.record.command.action !== "invite" || saved.record.state !== "applied") {
       throw new AppAccessError("app_access_denied");
     }
-    const scope = saved.record.scope;
+    const { scope } = saved.record;
     const owner = {
       appId: scope.appId,
       sessionId: saved.record.ownerContext.sessionId,
@@ -265,7 +283,7 @@ export const createAppAccessManagementService = (deps: AppAccessManagementDepend
         await deps.assertAuthorized(owner, scope, true);
       };
       await assertCurrent();
-      const command = found.record.command;
+      const { command } = found.record;
       const invitation = await deps.readVerifiedInvitation(scope, invitationId, {
         operationRef: invitationId,
         createdAt: row.record.createdAt,

@@ -62,11 +62,11 @@ export interface NativeTargetCapturedRelease {
 /** All ports are private server capabilities; none are constructed from tool input. */
 export type NativeTargetNonCreationReason = NativeTargetNoCreationReason;
 const nonCreationReason = {
+  authorization_denied: "not_dispatched",
   collision: "name_conflict",
   permission_denied: "provider_permission_denied",
   provider_rejected: "provider_validation_failed",
   rate_limited: "provider_rate_limited",
-  authorization_denied: "not_dispatched",
 } as const;
 export interface NativeTargetOnboardingRuntimePorts {
   /** Reauthorizes current owner/app and reads captured immutable release metadata. */
@@ -184,15 +184,28 @@ const publicStatus = (stage: NativeTargetOnboardingRow["record"]["stage"]) => {
   }
   return "pending" as const;
 };
-const publicResult = (row: NativeTargetOnboardingRow) => ({
-  ...envelope(row),
-  status: publicStatus(row.record.stage),
-  ...(row.record.stage === "ready"
-    ? { projectId: row.record.registration.observed.projectId }
-    : {}),
-});
+const publicResult = (row: NativeTargetOnboardingRow) => {
+  const result: NativeTargetPreparationRequest & {
+    status: ReturnType<typeof publicStatus>;
+    projectId?: string;
+  } = {
+    ...envelope(row),
+    status: publicStatus(row.record.stage),
+  };
+  if (row.record.stage === "ready") {
+    result.projectId = row.record.registration.observed.projectId;
+  }
+  return result;
+};
 
 /** Source provenance is checked at planning; later execution resumes the frozen operation. */
+const resourceIdentity = (plan: NativeTargetOnboardingPlan) => ({
+  profile: plan.resourceProfileId,
+  authority: plan.resourceProfileAuthorityDigest,
+  nativeNeon: plan.nativeNeon,
+  resourceId: plan.appDatabase.resourceId,
+});
+
 export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardingRuntimePorts) => {
   const now = ports.now ?? (() => new Date());
   const uuid = ports.uuid ?? randomUUID;
@@ -258,7 +271,7 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
     row: NativeTargetOnboardingRow,
     observed: NativeTargetVercelProjectObservation,
   ) => {
-    const record = row.record;
+    const { record } = row;
     if (!("attempt" in record)) {
       throw invalid();
     }
@@ -390,12 +403,6 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
     if (candidate.resourceProfileId !== proposal.resourceProfileId) {
       throw invalid();
     }
-    const resourceIdentity = (plan: NativeTargetOnboardingPlan) => ({
-      profile: plan.resourceProfileId,
-      authority: plan.resourceProfileAuthorityDigest,
-      nativeNeon: plan.nativeNeon,
-      resourceId: plan.appDatabase.resourceId,
-    });
     if (isDeepStrictEqual(resourceIdentity(candidate), resourceIdentity(prior.plan))) {
       return publicResult(retained);
     }

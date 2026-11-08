@@ -13,24 +13,24 @@ import type { AppAccessCommand } from "../app-access/contracts";
 
 const fixture = () => {
   const scope = {
+    appId: "requests",
     authority: {
-      issuer: "https://builder.test/api/auth",
       audience: "https://builder.test/mcp",
+      issuer: "https://builder.test/api/auth",
       ownerUserId: "owner",
       workspaceId: "workspace",
     },
-    appId: "requests",
-    repositoryId: "repo",
-    repositoryFullName: "example/repo",
-    projectId: "project",
-    organizationId: "org",
-    publicOrigin: "https://apps.test",
     environment: "production" as const,
+    organizationId: "org",
+    projectId: "project",
+    publicOrigin: "https://apps.test",
+    repositoryFullName: "example/repo",
+    repositoryId: "repo",
   };
   const record = initialRepositoryProductionRecord(scope, {
+    creatorRoles: ["approver"],
     sessionId: "session",
     sourceSha: "a".repeat(40),
-    creatorRoles: ["approver"],
     storage: { kind: "none" },
   });
   record.creatorActorId = "creator";
@@ -40,12 +40,12 @@ const fixture = () => {
     state: "pending",
   };
   const context: RepositoryProductionEffectContext = {
-    row: { operationRef: repositoryProductionOperationRef(scope), revision: 1, record },
-    effect: "creator-access",
     assertCurrent: async () => {},
     checkpoint: async (value) => {
       record.workerCheckpoints.push(value);
     },
+    effect: "creator-access",
+    row: { operationRef: repositoryProductionOperationRef(scope), record, revision: 1 },
   };
   return context;
 };
@@ -54,18 +54,18 @@ describe("approved creator role revisions", () => {
     const context = fixture();
     const commands: AppAccessCommand[] = [];
     const update = createRepositoryProductionRoleUpdater({
-      readMembers: async () => [{ id: "creator" }],
       execute: async (_context, command) => {
         commands.push(command);
       },
+      readMembers: async () => [{ id: "creator" }],
     });
     expect(await update(context)).toBe("applied");
     expect(commands).toEqual([
       {
         action: "change-role",
+        clientRequestId: "11111111-1111-4111-a111-111111111111",
         memberId: "creator",
         roles: ["approver"],
-        clientRequestId: "11111111-1111-4111-a111-111111111111",
       },
     ]);
   });
@@ -78,18 +78,18 @@ describe("approved creator role revisions", () => {
     revision.roles = [];
     const commands: AppAccessCommand[] = [];
     const update = createRepositoryProductionRoleUpdater({
-      readMembers: async () => [{ id: "creator" }],
       execute: async (_context, command) => {
         commands.push(command);
       },
+      readMembers: async () => [{ id: "creator" }],
     });
     expect(await update(context)).toBe("applied");
     expect(commands).toEqual([
       {
         action: "change-role",
+        clientRequestId: "11111111-1111-4111-a111-111111111111",
         memberId: "creator",
         roles: [],
-        clientRequestId: "11111111-1111-4111-a111-111111111111",
       },
     ]);
   });
@@ -97,10 +97,10 @@ describe("approved creator role revisions", () => {
     const context = fixture();
     const commands: AppAccessCommand[] = [];
     const update = createRepositoryProductionRoleUpdater({
-      readMembers: async () => [],
       execute: async (_context, command) => {
         commands.push(command);
       },
+      readMembers: async () => [],
     });
     expect(await update(context)).toBe("skipped");
     expect(commands).toEqual([]);
@@ -111,7 +111,6 @@ describe("approved creator role revisions", () => {
     let active = true;
     let interrupted = false;
     const update = createRepositoryProductionRoleUpdater({
-      readMembers: async () => (active ? [{ id: "creator" }] : []),
       execute: async (_context, command) => {
         commands.push(command);
         if (!interrupted) {
@@ -121,20 +120,21 @@ describe("approved creator role revisions", () => {
         }
         active = true;
       },
+      readMembers: async () => (active ? [{ id: "creator" }] : []),
     });
     await expect(update(context)).rejects.toThrow("lost after role revocation");
     expect(() => {
       assertNoConflictingCreatorRoleUpdate({
-        row: context.row,
         commandId: "new-remove",
         pendingCommandIds: ["11111111-1111-4111-a111-111111111111"],
+        row: context.row,
       });
     }).toThrow();
     expect(() => {
       assertNoConflictingCreatorRoleUpdate({
-        row: context.row,
         commandId: "11111111-1111-4111-a111-111111111111",
         pendingCommandIds: ["11111111-1111-4111-a111-111111111111"],
+        row: context.row,
       });
     }).not.toThrow();
     expect(await update(context)).toBe("applied");
@@ -145,9 +145,9 @@ describe("approved creator role revisions", () => {
     const context = fixture();
     expect(() => {
       assertNoConflictingCreatorRoleUpdate({
-        row: context.row,
         commandId: "saved-remove",
         pendingCommandIds: ["saved-remove"],
+        row: context.row,
       });
     }).not.toThrow();
   });

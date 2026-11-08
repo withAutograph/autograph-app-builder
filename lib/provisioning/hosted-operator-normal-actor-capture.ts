@@ -113,8 +113,8 @@ const readBody = async (request: Request) => {
 };
 const ack = (body: { authorized: true } | { captured: true }, status = 200) =>
   Response.json(body, {
-    status,
     headers: { "cache-control": "no-store", "referrer-policy": "no-referrer" },
+    status,
   });
 
 /** Two-phase private Auth sender protocol; never consumes the normal-owner callback nonce. */
@@ -286,7 +286,7 @@ export const createNormalActorCaptureHandler =
     } catch {
       return Response.json(
         { error: "realm_browser_session_capture_unavailable" },
-        { status: 403, headers: { "cache-control": "no-store", "referrer-policy": "no-referrer" } },
+        { headers: { "cache-control": "no-store", "referrer-policy": "no-referrer" }, status: 403 },
       );
     }
   };

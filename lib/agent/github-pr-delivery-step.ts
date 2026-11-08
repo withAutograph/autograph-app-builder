@@ -77,12 +77,17 @@ export async function continueGitHubPrDelivery(
     return { status: "revision-changed" as const };
   }
   const approvedByCallId = ctx.callId;
-  const effect = {
+  const effect: Pick<
+    Parameters<typeof run>[0],
+    "approvedByCallId" | "proposalDigest" | "reviewedTarget" | "reconciledHeadSha"
+  > = {
     approvedByCallId,
     proposalDigest,
     reviewedTarget,
-    ...(reconciliationDigest === undefined ? {} : { reconciledHeadSha: reviewedTarget.headSha }),
   };
+  if (reconciliationDigest !== undefined) {
+    effect.reconciledHeadSha = reviewedTarget.headSha;
+  }
   const activeEffect = { ...effect, abortSignal: ctx.abortSignal };
   if (observed.state === "merged" && observed.mergeCommitSha !== undefined) {
     if (readyAt !== undefined && observed.readyAt === readyAt) {
@@ -100,11 +105,11 @@ export async function continueGitHubPrDelivery(
       observed,
       runReady: async (reconcileOnly) => {
         ctx.abortSignal.throwIfAborted();
-        return await run({
-          ...activeEffect,
-          kind: "pr-ready",
-          ...(reconcileOnly ? { reconcileOnly } : {}),
-        });
+        const readyEffect: Parameters<typeof run>[0] = { ...activeEffect, kind: "pr-ready" };
+        if (reconcileOnly) {
+          readyEffect.reconcileOnly = reconcileOnly;
+        }
+        return await run(readyEffect);
       },
     });
   }

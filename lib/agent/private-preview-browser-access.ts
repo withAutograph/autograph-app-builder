@@ -117,11 +117,17 @@ export const withPrivatePreviewBrowserAccess = async <T>(input: {
   });
   const digest = createHash("sha256").update(content).digest("hex");
   const run = async (operation: "prepare" | "seal" | "remove") => {
-    const result = await input.sandbox.run({
-      command: fileOperation(file, operation, digest),
-      workingDirectory: input.root,
-      ...(operation === "remove" ? {} : { abortSignal: input.signal }),
-    });
+    const commandInput = (): Parameters<SandboxSession["run"]>[0] => {
+      const request: Parameters<SandboxSession["run"]>[0] = {
+        command: fileOperation(file, operation, digest),
+        workingDirectory: input.root,
+      };
+      if (operation !== "remove") {
+        request.abortSignal = input.signal;
+      }
+      return request;
+    };
+    const result = await input.sandbox.run(commandInput());
     if (result.exitCode !== 0) {
       throw new PrivatePreviewBrowserPrerequisiteError();
     }

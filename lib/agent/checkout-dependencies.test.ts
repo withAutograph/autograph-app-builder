@@ -145,10 +145,10 @@ describe("replacement checkout dependencies", () => {
       throw new Error("Missing install attempt");
     }
     expect(install).toMatchObject({
-      executionCommand: "bun install --frozen-lockfile",
       dispatchedCommandDigest: createHash("sha256")
         .update(workspaceBinInstallCommand("/workspace/repository", true))
         .digest("hex"),
+      executionCommand: "bun install --frozen-lockfile",
     });
     expect(install.excerpt.length).toBeLessThanOrEqual(2400);
     expect(install.truncated).toBe(true);
@@ -472,7 +472,7 @@ describe("saved validation dependency recovery", () => {
       onAttempt: vi.fn((attempt: DependencyAttemptResult) => {
         attempts.push(attempt);
       }),
-      prepareInstall: vi.fn(async () => {}),
+      prepareInstall: vi.fn<() => Promise<void>>().mockResolvedValue(),
     };
   };
 
@@ -498,7 +498,7 @@ describe("saved validation dependency recovery", () => {
       exitCode: 0,
       recoveryOfValidationFailure: request.failure,
     });
-    const installed = request.attempts[1];
+    const [, installed] = request.attempts;
     if (installed === undefined || request.logStore === undefined) {
       throw new Error("Missing install logs");
     }
@@ -613,8 +613,8 @@ describe("authored workspace preview dependencies", () => {
     expect(attempts).toHaveLength(1);
     expect(attempts[0]).toMatchObject({
       command: "dependency-install",
-      exitCode: 1,
       completion: "complete",
+      exitCode: 1,
     });
   });
 

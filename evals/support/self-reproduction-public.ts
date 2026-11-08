@@ -67,7 +67,7 @@ const redactObservationUrls = (entry: unknown): unknown => {
   if (Array.isArray(entry)) {
     return entry.map(redactObservationUrls);
   }
-  if (entry && typeof entry === "object") {
+  if (entry !== null && typeof entry === "object") {
     return Object.fromEntries(
       Object.entries(entry).map(([key, item]) => [key, redactObservationUrls(item)]),
     );
@@ -93,10 +93,22 @@ export const recordPublicObservation = (outputDir: string, record: unknown) => {
   );
 };
 
+interface WorkingAppObservation {
+  availability: "reported_ready" | "expired" | "unavailable" | "unassessed";
+  reason: string;
+  expiresAt?: string;
+  verifiedAt?: string;
+}
+
+interface PublicRpcPrefix {
+  jsonrpc: "2.0";
+  id?: number;
+}
+
 export const publicObservationReport = (state: PublicState, nowMs = Date.now()) => {
   const receipt = state.session?.workingPreview;
   const failed = state.session?.status === "failed" || state.session?.status === "cancelled";
-  let availability: "reported_ready" | "expired" | "unavailable" | "unassessed" = "unassessed";
+  let availability: WorkingAppObservation["availability"] = "unassessed";
   let reason = "No working-app receipt was exposed by the public session.";
   if (failed || receipt === null) {
     availability = "unavailable";
@@ -110,31 +122,35 @@ export const publicObservationReport = (state: PublicState, nowMs = Date.now()) 
       ? "The working-app preview receipt has expired."
       : "The Builder reported runtime readiness at verifiedAt; current reachability and product behavior still require browser assessment.";
   }
-  return sanitizePublicObservation({
+  const report = {
     ...state,
     comparison: "unassessed",
     elapsedMs: nowMs - Date.parse(state.startedAt),
     note: "A completed Builder session or HTTP-ready preview does not prove a working independent replica. Compare user-visible behavior separately.",
     outOfBoxProof: false,
-    previewObservation: {
-      backendCorrectness: "unassessed",
-      browserInteraction: "unassessed",
-      fixtureUi: {
-        functionality: "fixtures-only",
-        present: state.session?.uiPreview !== undefined,
-      },
-      independentChildCreation: "unassessed",
-      observedAt: new Date(nowMs).toISOString(),
-      prototype: {
-        functionality: "visual-prototype",
-        present: state.session?.prototype !== undefined,
-      },
-      workingApp: {
-        availability,
-        reason,
-        ...(receipt ? { expiresAt: receipt.expiresAt, verifiedAt: receipt.verifiedAt } : {}),
-      },
+  };
+  const preview = {
+    backendCorrectness: "unassessed",
+    browserInteraction: "unassessed",
+    fixtureUi: {
+      functionality: "fixtures-only",
+      present: state.session?.uiPreview !== undefined,
     },
+    independentChildCreation: "unassessed",
+    observedAt: new Date(nowMs).toISOString(),
+    prototype: {
+      functionality: "visual-prototype",
+      present: state.session?.prototype !== undefined,
+    },
+  };
+  const workingApp: WorkingAppObservation = { availability, reason };
+  if (receipt) {
+    workingApp.expiresAt = receipt.expiresAt;
+    workingApp.verifiedAt = receipt.verifiedAt;
+  }
+  return sanitizePublicObservation({
+    ...report,
+    previewObservation: { ...preview, workingApp },
     redaction:
       "Shareable URLs retain origins only. Original public responses and usable preview URLs remain in owner-only transcript.private.jsonl and state.json; do not share these private files.",
   });
@@ -142,11 +158,9 @@ export const publicObservationReport = (state: PublicState, nowMs = Date.now()) 
 
 export const validatePublicEndpoint = (endpoint: string) => {
   const url = new URL(endpoint);
+  const credentialsOrQuery = url.username || url.password || url.search || url.hash;
   if (
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash ||
+    credentialsOrQuery ||
     (url.protocol !== "https:" &&
       !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)))
   ) {
@@ -224,8 +238,13 @@ export const makePublicTransport = async (
   ): Promise<unknown> => {
     sequence += 1;
     const id = sequence;
-    const response = await fetch(url, {
-      body: JSON.stringify({ jsonrpc: "2.0", ...(notification ? {} : { id }), method, params }),
+    const performFetch = fetch;
+    const rpc: PublicRpcPrefix = { jsonrpc: "2.0" };
+    if (!notification) {
+      rpc.id = id;
+    }
+    const response = await performFetch(url, {
+      body: JSON.stringify({ ...rpc, method, params }),
       credentials: "omit",
       headers: publicRequestHeaders(session, bearerToken),
       method: "POST",
@@ -242,7 +261,7 @@ export const makePublicTransport = async (
       return undefined;
     }
     let envelope: { id?: number; result?: unknown; error?: unknown };
-    if (response.headers.get("content-type")?.includes("text/event-stream")) {
+    if (response.headers.get("content-type")?.includes("text/event-stream") ?? false) {
       const reader = response.body?.getReader();
       if (!reader) {
         throw new Error("Missing public MCP response body");
@@ -330,7 +349,10 @@ export const makePublicTransport = async (
         content?: { type: string; text?: string }[];
       };
       recordSafely({ at: new Date().toISOString(), direction: "response", name, result });
-      if (result.isError && !eveSessionResultSchema.safeParse(result.structuredContent).success) {
+      if (
+        (result.isError ?? false) &&
+        !eveSessionResultSchema.safeParse(result.structuredContent).success
+      ) {
         throw new Error("Public App Builder tool returned an error; see transcript");
       }
       return redactTransportToken(
@@ -396,7 +418,7 @@ const observeOriginalStart = async (
     observe(
       await transport.call("autograph_get", { clientRequestId: originalStart.clientRequestId }),
     );
-  if (state.startSubmitted) {
+  if (state.startSubmitted ?? false) {
     if (await recover()) {
       return true;
     }
@@ -469,12 +491,14 @@ const validateResponses = (session: EveSessionResult, responses: Responses) => {
       throw new Error("Question requires an ordinary answer");
     }
     const { response } = item;
-    if (
-      response.kind === "answer" &&
-      ((!request.allowFreeform && !response.optionId) ||
-        (response.optionId && !request.options?.some((option) => option.id === response.optionId)))
-    ) {
-      throw new Error("Answer must use a supported option");
+    if (response.kind === "answer") {
+      const missingRequiredOption = !request.allowFreeform && !response.optionId;
+      if (
+        missingRequiredOption ||
+        (response.optionId && !request.options?.some((option) => option.id === response.optionId))
+      ) {
+        throw new Error("Answer must use a supported option");
+      }
     }
   }
 };
@@ -522,7 +546,7 @@ const submitResponse = async (options: SessionOptions, accept: AcceptSession) =>
   if (!pending || !state.session) {
     throw new Error("Missing pending response session");
   }
-  const sessionId = state.session.sessionId;
+  const { sessionId } = state.session;
   const result = eveSessionResultSchema.parse(
     await transport.call("autograph_respond", { ...pending, sessionId }),
   );

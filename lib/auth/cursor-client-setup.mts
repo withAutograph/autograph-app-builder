@@ -7,16 +7,13 @@ import { setupCursorClient } from "./cursor-client";
 import { readPreviewOAuthContractConfig } from "./preview-oauth-contract";
 
 const [flag, fd, resourceFlag, resource] = process.argv.slice(2);
-if (
-  process.argv.length !== 6 ||
-  flag !== "--database-url-fd" ||
-  fd !== "0" ||
-  resourceFlag !== "--resource" ||
-  !resource
-) {
-  throw new Error(
-    "Use hosted:cursor-client-setup with --resource and its private database URL fd.",
-  );
+const usageError =
+  "Use hosted:cursor-client-setup with --resource and its private database URL fd.";
+if (process.argv.length !== 6 || flag !== "--database-url-fd" || fd !== "0") {
+  throw new Error(usageError);
+}
+if (resourceFlag !== "--resource" || !resource) {
+  throw new Error(usageError);
 }
 readPreviewOAuthContractConfig({
   BETTER_AUTH_URL: `${new URL(resource).origin}/api/auth`,

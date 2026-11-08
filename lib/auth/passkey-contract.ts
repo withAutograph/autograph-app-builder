@@ -7,7 +7,7 @@ interface PasskeyErrorEnvelope {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function passkeyErrorCode(value: unknown): string | undefined {
-  if (!value || typeof value !== "object") {
+  if (value === null || typeof value !== "object") {
     return undefined;
   }
 

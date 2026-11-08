@@ -1,5 +1,7 @@
+const mockModelCapability = "mock-model";
+
 export const TEST_CAPABILITIES = [
-  "mock-model",
+  mockModelCapability,
   "simulated-target",
   "simulated-publication",
 ] as const;
@@ -27,27 +29,32 @@ export function testCapabilityEnabled(
   environment: Readonly<Record<string, string | undefined>>,
   injected: unknown,
 ): boolean {
-  if (capability === "mock-model" && environment.APP_BUILDER_TEST_MODEL !== "1") {
+  if (capability === mockModelCapability && environment.APP_BUILDER_TEST_MODEL !== "1") {
     return false;
   }
-  if (environment.APP_BUILDER_REAL_SANDBOX === "1" && capability !== "mock-model") {
+  if (environment.APP_BUILDER_REAL_SANDBOX === "1" && capability !== mockModelCapability) {
     return false;
   }
   if (typeof injected !== "object" || injected === null) {
     return false;
   }
   const candidate = injected as Partial<InjectedTestCapability>;
-  return (
-    Object.isFrozen(candidate) &&
-    Object.keys(candidate).toSorted().join(",") === "capabilities,id,version" &&
-    candidate.version === 1 &&
-    typeof candidate.id === "string" &&
-    /^[0-9a-f]{64}$/u.test(candidate.id) &&
-    environment.APP_BUILDER_TEST_CAPABILITY_ID === candidate.id &&
-    exactCapabilities(candidate.capabilities) &&
-    Object.isFrozen(candidate.capabilities) &&
-    candidate.capabilities.includes(capability)
-  );
+  if (
+    !Object.isFrozen(candidate) ||
+    Object.keys(candidate).toSorted().join(",") !== "capabilities,id,version" ||
+    candidate.version !== 1 ||
+    typeof candidate.id !== "string"
+  ) {
+    return false;
+  }
+  if (
+    !/^[0-9a-f]{64}$/u.test(candidate.id) ||
+    environment.APP_BUILDER_TEST_CAPABILITY_ID !== candidate.id ||
+    !exactCapabilities(candidate.capabilities)
+  ) {
+    return false;
+  }
+  return Object.isFrozen(candidate.capabilities) && candidate.capabilities.includes(capability);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

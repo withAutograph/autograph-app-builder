@@ -24,6 +24,7 @@ vi.mock("./builder-shell", () => ({
 }));
 
 const id = "123e4567-e89b-42d3-a456-426614174001";
+const handoffPath = `/handoff/${id}`;
 const params = Promise.resolve({ id });
 afterEach(() => vi.clearAllMocks());
 
@@ -32,7 +33,7 @@ describe("authenticated handoff page", () => {
     server.load.mockImplementation(() => Promise.resolve());
     await expect(HandoffContent({ params })).rejects.toThrow("redirect:");
     expect(server.redirect).toHaveBeenCalledWith(
-      `/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${id}`)}`,
+      `/auth/sign-in?callbackURL=${encodeURIComponent(handoffPath)}`,
     );
     expect(server.load.mock.calls[0]?.[0].headers.get("cookie")).toBe("web-session");
   });
@@ -88,12 +89,8 @@ describe("authenticated handoff page", () => {
       expect(html).toContain("Help customers");
       expect(html).toContain("QuickBooks");
       if (code === "credential_unavailable") {
-        expect(html).toContain(
-          `/github/installations?returnTo=${encodeURIComponent(`/handoff/${id}`)}`,
-        );
-        expect(html).toContain(
-          `/vercel/installations?returnTo=${encodeURIComponent(`/handoff/${id}`)}`,
-        );
+        expect(html).toContain(`/github/installations?returnTo=${encodeURIComponent(handoffPath)}`);
+        expect(html).toContain(`/vercel/installations?returnTo=${encodeURIComponent(handoffPath)}`);
       } else {
         expect(html).not.toContain("Reconnect");
       }

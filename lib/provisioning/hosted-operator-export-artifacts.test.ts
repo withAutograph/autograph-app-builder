@@ -53,7 +53,7 @@ const dataset = (contents: Uint8Array[], worker: TenantExportWorkerInput = wire.
     return {
       kind: "data",
       name: `table-${String(index + 1).padStart(6, "0")}.ndjson`,
-      table: { schema: "public", name: `business_${index}` },
+      table: { name: `business_${index}`, schema: "public" },
       rowCount: bytes.byteLength === 0 ? "0" : "1",
       byteLength: String(bytes.length),
       sha256: hash(bytes),
@@ -90,8 +90,11 @@ const dataset = (contents: Uint8Array[], worker: TenantExportWorkerInput = wire.
     readManifest: vi.fn(async () => await Promise.resolve(manifestBytes)),
     readMember,
   };
-  return { manifest, manifestBytes, source, readMember };
+  return { manifest, manifestBytes, readMember, source };
 };
+const artifactStorageKey = (owned: OperatorArtifactContext, ref: string, index: number) =>
+  JSON.stringify([owned, ref, index]);
+
 const fixture = () => {
   const rows = new Map<string, string>();
   let revoked = false;
@@ -103,12 +106,10 @@ const fixture = () => {
       throw new Error("revoked");
     }
   });
-  const key = (owned: OperatorArtifactContext, ref: string, index: number) =>
-    JSON.stringify([owned, ref, index]);
   const store: OperatorArtifactStore = {
     async put(owned, chunk) {
       await current();
-      const id = key(owned, chunk.artifactRef, chunk.chunkIndex);
+      const id = artifactStorageKey(owned, chunk.artifactRef, chunk.chunkIndex);
       const old = rows.get(id);
       if (old !== undefined && old !== chunk.content) {
         throw new Error("Immutable content differs");
@@ -124,7 +125,7 @@ const fixture = () => {
       if (unavailable) {
         throw new Error("Read outcome unknown");
       }
-      return rows.get(key(owned, ref, index));
+      return rows.get(artifactStorageKey(owned, ref, index));
     },
   };
   return {
@@ -160,21 +161,21 @@ test("streams arbitrary binary segments and opaque business bytes; preserves exa
   );
   const data = dataset([body, new Uint8Array()]);
   const completion = await f.artifacts.publish({
-    context,
-    worker: wire.worker,
-    source: data.source,
     assertCurrent: f.current,
+    context,
+    source: data.source,
+    worker: wire.worker,
   });
   expect(await f.artifacts.inspect({ context, worker: wire.worker })).toEqual({
-    status: "complete",
     completion,
+    status: "complete",
   });
   expect(
     await readTenantExportManifest({
-      store: f.store,
-      context,
-      worker: wire.worker,
       completion,
+      context,
+      store: f.store,
+      worker: wire.worker,
     }),
   ).toEqual(data.manifest);
   expect(
@@ -201,10 +202,10 @@ test("zero-row tenant and zero-byte member complete without data chunks", async 
     const f = fixture();
     const data = dataset(contents);
     const completion = await f.artifacts.publish({
-      context,
-      worker: wire.worker,
-      source: data.source,
       assertCurrent: f.current,
+      context,
+      source: data.source,
+      worker: wire.worker,
     });
     expect(completion.byteLength).toBe("0");
     expect(completion.rowCount).toBe("0");
@@ -220,18 +221,18 @@ test("same-attempt completion is reconciled before reading source, including los
   f.failAck();
   await expect(
     f.artifacts.publish({
-      context,
-      worker: wire.worker,
-      source: data.source,
       assertCurrent: f.current,
+      context,
+      source: data.source,
+      worker: wire.worker,
     }),
   ).rejects.toThrow();
   data.source.readManifest = vi.fn(() => Promise.reject(new Error("must not reread")));
   const completion = await f.artifacts.publish({
-    context,
-    worker: wire.worker,
-    source: data.source,
     assertCurrent: f.current,
+    context,
+    source: data.source,
+    worker: wire.worker,
   });
   expect(completion.rowCount).toBe("1");
   expect(data.source.readManifest).not.toHaveBeenCalled();
@@ -246,10 +247,10 @@ test("unknown reads never become absent or launch another source read", async ()
   });
   await expect(
     f.artifacts.publish({
-      context,
-      worker: wire.worker,
-      source: data.source,
       assertCurrent: f.current,
+      context,
+      source: data.source,
+      worker: wire.worker,
     }),
   ).rejects.toThrow();
   expect(data.source.readManifest).not.toHaveBeenCalled();
@@ -288,10 +289,10 @@ test("new attempts are isolated and reject different scope, data or manifest byt
   const f = fixture();
   const data = dataset([Buffer.from("original\n")]);
   await f.artifacts.publish({
-    context,
-    worker: wire.worker,
-    source: data.source,
     assertCurrent: f.current,
+    context,
+    source: data.source,
+    worker: wire.worker,
   });
   const worker = {
     ...wire.worker,
@@ -300,7 +301,7 @@ test("new attempts are isolated and reject different scope, data or manifest byt
   };
   expect(await f.artifacts.inspect({ context, worker })).toEqual({ status: "incomplete" });
   const next = dataset([Buffer.from("different\n")], worker);
-  await f.artifacts.publish({ context, worker, source: next.source, assertCurrent: f.current });
+  await f.artifacts.publish({ assertCurrent: f.current, context, source: next.source, worker });
   expect(await f.artifacts.inspect({ context, worker })).toMatchObject({ status: "complete" });
   await expect(
     f.artifacts.publish({
@@ -342,10 +343,10 @@ const completedFixture = async () => {
     authority,
     target: { ...context.target, projectId: "original-project", branch: "original-branch" },
     originalSetup: {
-      operationRef: "40000000-0000-4000-8000-000000000004",
-      planDigest: "1".repeat(64),
       approvalId: "setup-approval",
       approvedByCallId: "setup-call",
+      operationRef: "40000000-0000-4000-8000-000000000004",
+      planDigest: "1".repeat(64),
     },
     scope: wire.worker.scope,
     resource: wire.worker.resource,
@@ -353,18 +354,18 @@ const completedFixture = async () => {
     selection: wire.worker.selection,
     format: wire.worker.format,
     destination: {
-      kind: "owner-private-builder-artifact",
       artifactPrefix: `_protected-operator/artifacts/tenant-export/${wire.worker.exportId}`,
+      kind: "owner-private-builder-artifact",
     },
   });
   const planDigest = tenantExportPlanDigest(plan);
   const worker = { ...wire.worker, planDigest };
   const data = dataset([Buffer.from('{"note":"business is opaque"}\n')], worker);
   const completion = await f.artifacts.publish({
-    context,
-    worker,
-    source: data.source,
     assertCurrent: f.current,
+    context,
+    source: data.source,
+    worker,
   });
   const record = tenantExportJournalRecordSchema.parse({
     kind: "app-export",
@@ -380,11 +381,11 @@ const completedFixture = async () => {
     state: "complete",
     approval: {
       action: "export",
-      planRef: plan.planRef,
-      planDigest,
-      idempotencyKey: "export-call",
       approvalId: "export-approval",
       approvedByCallId: "export-call",
+      idempotencyKey: "export-call",
+      planDigest,
+      planRef: plan.planRef,
     },
     attempts: [{ attemptId: worker.attemptId, snapshotId: worker.snapshotId, state: "complete" }],
     completion,
@@ -398,15 +399,15 @@ const completedFixture = async () => {
     }
   };
   const reader = createTenantExportReader({
-    store: f.store,
+    assertCurrentOwner,
     authenticate,
     readCompletion,
-    assertCurrentOwner,
+    store: f.store,
   });
   const request = new Request(
     `https://builder.example/api/hosted-operator/exports/${worker.exportId}`,
   );
-  return { ...f, data, worker, record, reader, request, authenticate, readCompletion };
+  return { ...f, authenticate, data, readCompletion, reader, record, request, worker };
 };
 
 test("owner downloads only the completed private index, exact manifest and named data", async () => {
@@ -470,10 +471,10 @@ test("missing or tampered pages fail without treating unreadable completion as a
   const f = fixture();
   const data = dataset([Buffer.from("retained business bytes\n")]);
   const completion = await f.artifacts.publish({
-    context,
-    worker: wire.worker,
-    source: data.source,
     assertCurrent: f.current,
+    context,
+    source: data.source,
+    worker: wire.worker,
   });
   const file = data.manifest.files.at(0);
   const chunk = file?.chunks.at(0);

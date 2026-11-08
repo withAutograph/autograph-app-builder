@@ -60,7 +60,7 @@ const atomicMetadata = async (
   value: ManagedRuntimeCurrent | z.infer<typeof managedRuntimeReadySchema>,
 ) => {
   const temporary = `${file}.${randomUUID()}.tmp`;
-  await writeFile(temporary, JSON.stringify(value), { mode: 0o600, flag: "wx" });
+  await writeFile(temporary, JSON.stringify(value), { flag: "wx", mode: 0o600 });
   await rename(temporary, file);
 };
 /** Input contains no selector/lifecycle/transport bearers. Runtime credentials are unlinked before app spawn. */
@@ -101,7 +101,7 @@ export const runManagedRuntimeEntry = async <Configuration>(
     ? AbortSignal.any([parentSignal, ownership.signal])
     : ownership.signal;
   const currentPath = path.join(parsed.rootDirectory, "current.json");
-  await mkdir(parsed.rootDirectory, { recursive: true, mode: 0o700 });
+  await mkdir(parsed.rootDirectory, { mode: 0o700, recursive: true });
   await atomicMetadata(currentPath, {
     ...initial,
     leaseExpiresAt: managedRuntimeOwnerLease(initial.leaseExpiresAt),
@@ -148,11 +148,11 @@ export const runManagedRuntimeEntry = async <Configuration>(
   // Arrusted's app:runtime reads its binding from this private state directory
   // before launching an app. Preserve the same resource across process replacement.
   const appStateDirectory = path.join(parsed.rootDirectory, "app-state");
-  await mkdir(appStateDirectory, { recursive: true, mode: 0o700 });
+  await mkdir(appStateDirectory, { mode: 0o700, recursive: true });
   await writeFile(
     path.join(appStateDirectory, "environment.json"),
     JSON.stringify(appEnvironment),
-    { mode: 0o600, flag: "wx" },
+    { flag: "wx", mode: 0o600 },
   );
   const launchSameEnvironment = createManagedOwnedChildLauncher({
     executable: "mise",
@@ -167,10 +167,9 @@ export const runManagedRuntimeEntry = async <Configuration>(
     },
   });
   const supervisor = createManagedRuntimeSupervisor({
-    identity,
-    expiresAt: Date.parse(initial.leaseExpiresAt),
-    ownershipSignal,
     assertCurrent,
+    expiresAt: Date.parse(initial.leaseExpiresAt),
+    identity,
     launchSameEnvironment,
     observeReadiness: async ({ signal }) => {
       try {
@@ -185,21 +184,24 @@ export const runManagedRuntimeEntry = async <Configuration>(
         return false;
       }
     },
+    ownershipSignal,
   });
   const ipc = await startManagedRuntimeIpc({
     lifecycleSha256: parsed.lifecycleSha256,
-    supervisor,
     rootDirectory: parsed.rootDirectory,
+    supervisor,
   });
+  const { profile: publicProfile, transportSha256, actors, appPort } = parsed;
+  const expiresAt = Date.parse(initial.leaseExpiresAt);
   const bridge = createManagedRuntimeBridge({
+    actors,
+    appPort,
+    expiresAt,
     identity,
-    profile: parsed.profile,
-    transportSha256: parsed.transportSha256,
-    actors: parsed.actors,
-    appPort: parsed.appPort,
-    expiresAt: Date.parse(initial.leaseExpiresAt),
     ownershipSignal,
+    profile: publicProfile,
     readCurrent,
+    transportSha256,
     verification,
   });
   let closing: Promise<void> | undefined;
@@ -233,17 +235,17 @@ export const runManagedRuntimeEntry = async <Configuration>(
     const listening = once(bridge.server, "listening");
     bridge.server.listen(parsed.bridgePort, "0.0.0.0");
     await listening;
-    await supervisor.execute({ operation: "start-same-environment", commandId: randomUUID() });
+    await supervisor.execute({ commandId: randomUUID(), operation: "start-same-environment" });
     let ready = await supervisor.execute({
-      operation: "observe-readiness",
       commandId: randomUUID(),
+      operation: "observe-readiness",
     });
     while (ready.state !== "ready") {
       await assertCurrent();
       // oxlint-disable-next-line eslint/no-await-in-loop -- Observe actual app startup under the owned runtime expiry.
       await delay(250, undefined, { signal: ownershipSignal });
       // oxlint-disable-next-line eslint/no-await-in-loop -- Each readiness observation has its own retained operation identity.
-      ready = await supervisor.execute({ operation: "observe-readiness", commandId: randomUUID() });
+      ready = await supervisor.execute({ commandId: randomUUID(), operation: "observe-readiness" });
     }
     const current = { ...initial, state: "ready" as const };
     await atomicMetadata(currentPath, { ...(await readCurrent()), state: "ready" });

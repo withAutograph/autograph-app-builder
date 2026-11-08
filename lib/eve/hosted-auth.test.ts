@@ -43,7 +43,10 @@ describe("hosted Eve authorization", () => {
       throw new Error("Expected authorization to fail.");
     } catch (error) {
       expect(error).toBeInstanceOf(HostedAuthorizationError);
-      expect((error as HostedAuthorizationError).code).toBe(code);
+      if (!(error instanceof HostedAuthorizationError)) {
+        throw error;
+      }
+      expect(error.code).toBe(code);
     }
   });
 });
