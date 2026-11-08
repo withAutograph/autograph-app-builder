@@ -62,6 +62,15 @@ import {
   streamProcessStdout,
 } from "./captured-process-output";
 
+const absentOrFile = "absent-or-file";
+const repositoryBootstrapClaim = ".repository-bootstrap-claim";
+const canonicalFreshTemplateRequired =
+  "The canonical fresh-template workspace is required for bootstrap.";
+const emptyDirectory = "empty-directory";
+const gitAbsolutePathFormat = "--path-format=absolute";
+const stageOwned = "stage-owned";
+const stageReadyPhase = "stage-ready";
+
 export interface FreshBootstrapFaultHooks {
   afterLockReady?: (pid: number) => void | Promise<void>;
   afterPendingJournal?: () => void | Promise<void>;
@@ -666,7 +675,7 @@ const assertContainedStatePath = async (
       (value.isDirectory() && (value.mode & 0o777) !== 0o700) ||
       (isLeaf && leaf === "directory" && !value.isDirectory()) ||
       (isLeaf &&
-        leaf === "absent-or-file" &&
+        leaf === absentOrFile &&
         // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
         (!value.isFile() || (value.mode & 0o777) !== 0o600 || value.nlink !== 1)) ||
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -695,9 +704,9 @@ const atomicWrite = async (
   value: string,
 ): Promise<void> => {
   await durableDirectory(capability, nodePath.dirname(path));
-  await assertContainedStatePath(capability, path, "absent-or-file");
+  await assertContainedStatePath(capability, path, absentOrFile);
   const temporary = `${path}.${randomUUID()}.tmp`;
-  await assertContainedStatePath(capability, temporary, "absent-or-file");
+  await assertContainedStatePath(capability, temporary, absentOrFile);
   const handle = await open(
     temporary,
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -721,7 +730,7 @@ const atomicWrite = async (
   } finally {
     await handle.close();
   }
-  await assertContainedStatePath(capability, path, "absent-or-file");
+  await assertContainedStatePath(capability, path, absentOrFile);
   await rename(temporary, path);
   await syncDirectory(nodePath.dirname(path));
 };
@@ -732,7 +741,7 @@ const createInitialJournal = async (
   receipt: FreshBootstrapPendingReceipt,
 ): Promise<void> => {
   await durableDirectory(capability, nodePath.dirname(path));
-  await assertContainedStatePath(capability, path, "absent-or-file");
+  await assertContainedStatePath(capability, path, absentOrFile);
   const candidate = `${path}.${randomUUID()}.pending`;
   const handle = await open(
     candidate,
@@ -807,7 +816,7 @@ const acquireLease = async (
   expectedPriorDigest?: string,
 ): Promise<Lease> => {
   await durableDirectory(capability, nodePath.dirname(path));
-  await assertContainedStatePath(capability, path, "absent-or-file");
+  await assertContainedStatePath(capability, path, absentOrFile);
   try {
     const handle = await open(
       path,
@@ -837,7 +846,7 @@ const acquireLease = async (
       throw error;
     }
   }
-  await assertContainedStatePath(capability, path, "absent-or-file");
+  await assertContainedStatePath(capability, path, absentOrFile);
   const state = await lstat(path);
   await assertExactExecutable(capability.lockHelperIdentity);
   await assertExactExecutable(capability.systemNodeIdentity);
@@ -961,7 +970,7 @@ const quiesceAbandonedLease = async (
   path: string,
   expectedActiveDigest: string,
 ): Promise<{ markerDigest: string; release: () => Promise<void> }> => {
-  await assertContainedStatePath(capability, path, "absent-or-file");
+  await assertContainedStatePath(capability, path, absentOrFile);
   const state = await lstat(path);
   await assertExactExecutable(capability.lockHelperIdentity);
   await assertExactExecutable(capability.systemNodeIdentity);
@@ -1112,7 +1121,7 @@ const exactSourceTree = async (
       !safeSourcePath(path) ||
       path
         .split("/")
-        .some((part) => [".git", ".repository-bootstrap-claim"].includes(part.toLowerCase()))
+        .some((part) => [".git", repositoryBootstrapClaim].includes(part.toLowerCase()))
     ) {
       throw new Error(
         "Fresh bootstrap rejects submodules, symlinks, reserved names, and unsafe paths.",
@@ -1166,7 +1175,7 @@ const exactPreparedSourceTree = async (
       paths.has(file.path) ||
       file.path
         .split("/")
-        .some((part) => [".git", ".repository-bootstrap-claim"].includes(part.toLowerCase()))
+        .some((part) => [".git", repositoryBootstrapClaim].includes(part.toLowerCase()))
     ) {
       throw new Error("The prepared fresh-template manifest is invalid.");
     }
@@ -1239,13 +1248,13 @@ const exactResultTree = async (input: {
       throw new Error("The fresh-template source changed after review.");
     }
   } else if (input.sourceWorkspace === undefined) {
-    throw new Error("The canonical fresh-template workspace is required for bootstrap.");
+    throw new Error(canonicalFreshTemplateRequired);
   }
   let sourceFiles: readonly ExactFile[];
   if (receipt.version === SOURCE_RECEIPT_VERSION) {
     const { sourceWorkspace } = input;
     if (sourceWorkspace === undefined) {
-      throw new Error("The canonical fresh-template workspace is required for bootstrap.");
+      throw new Error(canonicalFreshTemplateRequired);
     }
     sourceFiles = await exactPreparedSourceTree(sourceWorkspace);
   } else {
@@ -1256,7 +1265,7 @@ const exactResultTree = async (input: {
     if (
       change.path
         .split("/")
-        .some((part) => [".git", ".repository-bootstrap-claim"].includes(part.toLowerCase()))
+        .some((part) => [".git", repositoryBootstrapClaim].includes(part.toLowerCase()))
     ) {
       throw new Error("The reviewed bootstrap change uses a reserved nodePath.");
     }
@@ -1375,7 +1384,7 @@ const inspectDestinationPrestate = async (input: {
     return { destinationPath: destination, kind: "absent", parent };
   }
   if (
-    input.expected !== "empty-directory" ||
+    input.expected !== emptyDirectory ||
     value.isSymbolicLink() ||
     !value.isDirectory() ||
     value.uid !== process.geteuid?.() ||
@@ -1392,7 +1401,7 @@ const inspectDestinationPrestate = async (input: {
   }
   return {
     destination: await identity(destination),
-    kind: "empty-directory",
+    kind: emptyDirectory,
     parent,
   };
 };
@@ -1432,7 +1441,7 @@ export const deriveFreshBootstrapProposal = async (input: {
       : await realpath(
           git(capability, sourceReceipt.sourcePath, [
             "rev-parse",
-            "--path-format=absolute",
+            gitAbsolutePathFormat,
             "--git-common-dir",
           ]).trim(),
         );
@@ -1574,7 +1583,7 @@ const assertSourceUnchanged = async (
   const receipt = parseSourceReceipt(sourceReceipt);
   if (receipt.version === SOURCE_RECEIPT_VERSION) {
     if (sourceWorkspace === undefined) {
-      throw new Error("The canonical fresh-template workspace is required for bootstrap.");
+      throw new Error(canonicalFreshTemplateRequired);
     }
     await sourceWorkspace.reverify();
     return;
@@ -1609,7 +1618,7 @@ const assertPrestate = async (
     }
     return;
   }
-  if (proposal.destinationPrestate.kind !== "empty-directory") {
+  if (proposal.destinationPrestate.kind !== emptyDirectory) {
     throw new Error("The approved absent destination now exists.");
   }
   if (
@@ -2078,10 +2087,10 @@ const assertExactRepository = async (
   const ref = `refs/heads/${proposal.repositoryIdentity.initialBranch}`;
   const rawManifest = await rawWorktreeManifest(root, proposal, options.allowClaimMarker === true);
   const absoluteGitDirectory = await realpath(
-    git(capability, root, ["rev-parse", "--path-format=absolute", "--git-dir"]).trim(),
+    git(capability, root, ["rev-parse", gitAbsolutePathFormat, "--git-dir"]).trim(),
   );
   const absoluteCommonDirectory = await realpath(
-    git(capability, root, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim(),
+    git(capability, root, ["rev-parse", gitAbsolutePathFormat, "--git-common-dir"]).trim(),
   );
   const remotes = git(capability, root, ["remote"]).split("\n").filter(Boolean);
   const refs = git(capability, root, ["for-each-ref", "--format=%(refname)%00%(objectname)"])
@@ -2197,7 +2206,7 @@ const atomicPublish = async (
       BigInt(proposal.destinationPrestate.parent.nlink) + BigInt(increment),
     );
     const approvedEmpty =
-      proposal.destinationPrestate.kind === "empty-directory"
+      proposal.destinationPrestate.kind === emptyDirectory
         ? proposal.destinationPrestate.destination
         : undefined;
     if (
@@ -2293,7 +2302,7 @@ const atomicPublish = async (
         (await pathState(proposal.stagingPath)) !== "directory" ||
         JSON.stringify(await identity(proposal.stagingPath)) !==
           JSON.stringify(
-            proposal.destinationPrestate.kind === "empty-directory"
+            proposal.destinationPrestate.kind === emptyDirectory
               ? {
                   ...proposal.destinationPrestate.destination,
                   path: proposal.stagingPath,
@@ -2317,7 +2326,7 @@ const removeVerifiedSwappedEmptyDirectory = async (
   capability: FreshBootstrapCapability,
   proposal: FreshBootstrapProposal,
 ): Promise<void> => {
-  if (proposal.destinationPrestate.kind !== "empty-directory") {
+  if (proposal.destinationPrestate.kind !== emptyDirectory) {
     return;
   }
   const state = await pathState(proposal.stagingPath);
@@ -2451,7 +2460,7 @@ export const readFreshBootstrapJournal = async (input: {
   ) {
     throw new Error("The fresh-bootstrap journal path is not identity-bound.");
   }
-  await assertContainedStatePath(capability, input.proposal.journalPath, "absent-or-file");
+  await assertContainedStatePath(capability, input.proposal.journalPath, absentOrFile);
   let bytes;
   try {
     bytes = await readFile(input.proposal.journalPath, "utf-8");
@@ -2523,7 +2532,7 @@ const executeBootstrap = async (input: {
         if ((await pathState(input.proposal.stagingPath)) !== "absent") {
           throw new Error("The intent journal no longer matches the bootstrap stage.");
         }
-      } else if (layout.phase === "stage-owned" || layout.phase === "stage-ready") {
+      } else if (layout.phase === stageOwned || layout.phase === stageReadyPhase) {
         if (
           (await pathState(input.proposal.stagingPath)) !== "directory" ||
           JSON.stringify(await identity(input.proposal.stagingPath)) !==
@@ -2559,9 +2568,9 @@ const executeBootstrap = async (input: {
   }
   let stageCreated = (await pathState(input.proposal.stagingPath)) === "directory";
   let stageReady =
-    existingJournal?.status !== "succeeded" && existingJournal?.layout.phase === "stage-ready";
+    existingJournal?.status !== "succeeded" && existingJournal?.layout.phase === stageReadyPhase;
   let stageReadyIdentity =
-    existingJournal?.status !== "succeeded" && existingJournal?.layout.phase === "stage-ready"
+    existingJournal?.status !== "succeeded" && existingJournal?.layout.phase === stageReadyPhase
       ? existingJournal.layout.stageIdentity
       : undefined;
   let destinationPublished = false;
@@ -2588,7 +2597,7 @@ const executeBootstrap = async (input: {
         priorLeaseMarkerDigest,
         stageCreated
           ? {
-              phase: stageReady ? "stage-ready" : "stage-owned",
+              phase: stageReady ? stageReadyPhase : stageOwned,
               stageIdentity: await identity(input.proposal.stagingPath),
             }
           : { phase: "intent" },
@@ -2613,7 +2622,7 @@ const executeBootstrap = async (input: {
         verification = undefined;
       }
       if (verification === undefined) {
-        if (input.proposal.destinationPrestate.kind !== "empty-directory") {
+        if (input.proposal.destinationPrestate.kind !== emptyDirectory) {
           throw new Error("The destination conflicts with recovery state.");
         }
         await assertPrestate(capability, input.proposal);
@@ -2628,7 +2637,7 @@ const executeBootstrap = async (input: {
           recoveryOfDigest: input.recoveryOfDigest,
           verification,
         };
-        if (input.proposal.destinationPrestate.kind === "empty-directory") {
+        if (input.proposal.destinationPrestate.kind === emptyDirectory) {
           successInput.swappedOldIdentity = await identity(input.proposal.stagingPath);
         }
         const success = successReceipt(successInput);
@@ -2650,7 +2659,7 @@ const executeBootstrap = async (input: {
         lease.markerDigest,
         priorLeaseMarkerDigest,
         {
-          phase: "stage-owned",
+          phase: stageOwned,
           stageIdentity: await identity(input.proposal.stagingPath),
         },
       );
@@ -2699,7 +2708,7 @@ const executeBootstrap = async (input: {
         lease.markerDigest,
         priorLeaseMarkerDigest,
         {
-          phase: "stage-ready",
+          phase: stageReadyPhase,
           stageIdentity: claimedReadyIdentity,
         },
       );
@@ -2715,7 +2724,7 @@ const executeBootstrap = async (input: {
         lease.markerDigest,
         priorLeaseMarkerDigest,
         {
-          phase: "stage-ready",
+          phase: stageReadyPhase,
           stageIdentity: stageReadyIdentity,
         },
       );
@@ -2754,7 +2763,7 @@ const executeBootstrap = async (input: {
       recoveryOfDigest: input.recoveryOfDigest,
       verification,
     };
-    if (input.proposal.destinationPrestate.kind === "empty-directory") {
+    if (input.proposal.destinationPrestate.kind === emptyDirectory) {
       successInput.swappedOldIdentity = await identity(input.proposal.stagingPath);
     }
     const success = successReceipt(successInput);
@@ -2783,7 +2792,7 @@ const executeBootstrap = async (input: {
       }
     } else if (stageCreated) {
       layout = {
-        phase: stageReady ? "stage-ready" : "stage-owned",
+        phase: stageReady ? stageReadyPhase : stageOwned,
         stageIdentity: await identity(input.proposal.stagingPath),
       };
     } else {

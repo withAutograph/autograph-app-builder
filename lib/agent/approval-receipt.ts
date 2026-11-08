@@ -25,6 +25,13 @@ import type {
 import type { ExistingDraftUpdateProposal } from "@/lib/repository/github-draft-update";
 import type { ExistingDraftReconciliationProposal } from "@/lib/repository/github-draft-reconciliation";
 
+const APPROVAL_RECEIPT_FORMAT = "autograph-eve-approval-receipt-v2";
+const ACCEPT_APP_SPEC_OUTCOME = "accept-appspec";
+const CREATE_DRAFT_PR_OUTCOME = "create-draft-pr";
+const UPDATE_DRAFT_PR_OUTCOME = "update-draft-pr";
+const AUTH_MEMBERSHIP_EFFECT = "auth-membership";
+const LOCAL_APPROVAL_SUBJECT_FORMAT = "autograph-local-approval-subject-v1";
+
 export const gitObjectIdSchema = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
@@ -33,21 +40,26 @@ export const approvalReceiptSchema = z
   .strictObject({
     baseRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]+$/u),
     baseSha: gitObjectIdSchema,
-    format: z.literal("autograph-eve-approval-receipt-v2"),
-    outcome: z.enum(["accept-appspec", "accept_change_set", "create-draft-pr", "update-draft-pr"]),
+    format: z.literal(APPROVAL_RECEIPT_FORMAT),
+    outcome: z.enum([
+      ACCEPT_APP_SPEC_OUTCOME,
+      "accept_change_set",
+      CREATE_DRAFT_PR_OUTCOME,
+      UPDATE_DRAFT_PR_OUTCOME,
+    ]),
     phase: z.enum(["appspec", "change_set", "publication", "draft_update"]),
     repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u),
     repositoryId: z.string().regex(/^\d+$/u),
     subjectDigest: digest,
   })
   .superRefine((receipt, context) => {
-    let expectedOutcome = "create-draft-pr";
+    let expectedOutcome = CREATE_DRAFT_PR_OUTCOME;
     if (receipt.phase === "appspec") {
-      expectedOutcome = "accept-appspec";
+      expectedOutcome = ACCEPT_APP_SPEC_OUTCOME;
     } else if (receipt.phase === "change_set") {
       expectedOutcome = "accept_change_set";
     } else if (receipt.phase === "draft_update") {
-      expectedOutcome = "update-draft-pr";
+      expectedOutcome = UPDATE_DRAFT_PR_OUTCOME;
     }
     if (receipt.outcome !== expectedOutcome) {
       context.addIssue({
@@ -109,8 +121,8 @@ export const approvalReceiptForDraftProposal = (
 ): ApprovalReceipt =>
   approvalReceiptSchema.parse({
     ...approvalTargetFromDraftProposal(proposal),
-    format: "autograph-eve-approval-receipt-v2",
-    outcome: "create-draft-pr",
+    format: APPROVAL_RECEIPT_FORMAT,
+    outcome: CREATE_DRAFT_PR_OUTCOME,
     phase: "publication",
     subjectDigest: proposal.digest,
   });
@@ -151,8 +163,8 @@ export const approvalReceiptForExistingDraftUpdate = (
 ): ApprovalReceipt =>
   approvalReceiptSchema.parse({
     ...approvalTargetFromDraftHead(proposal),
-    format: "autograph-eve-approval-receipt-v2",
-    outcome: "update-draft-pr",
+    format: APPROVAL_RECEIPT_FORMAT,
+    outcome: UPDATE_DRAFT_PR_OUTCOME,
     phase: "draft_update",
     subjectDigest: proposal.digest,
   });
@@ -165,13 +177,13 @@ export function assertApprovalReceipt(input: {
   subjectDigest: string;
 }): ApprovalReceipt {
   const actual = parseApprovalReceipt(input.actual);
-  let expectedOutcome = "create-draft-pr";
+  let expectedOutcome = CREATE_DRAFT_PR_OUTCOME;
   if (input.phase === "appspec") {
-    expectedOutcome = "accept-appspec";
+    expectedOutcome = ACCEPT_APP_SPEC_OUTCOME;
   } else if (input.phase === "change_set") {
     expectedOutcome = "accept_change_set";
   } else if (input.phase === "draft_update") {
-    expectedOutcome = "update-draft-pr";
+    expectedOutcome = UPDATE_DRAFT_PR_OUTCOME;
   }
   const fields: readonly (readonly [string, string, string])[] = [
     ["phase", actual.phase, input.phase],
@@ -298,7 +310,7 @@ const operatorEffectSummaries = (plan: HostedOperatorPlan) => {
   for (const effect of plan.effects) {
     if (
       effect.kind === "access" ||
-      effect.kind === "auth-membership" ||
+      effect.kind === AUTH_MEMBERSHIP_EFFECT ||
       effect.kind === "auth-signup-policy"
     )
       continue;
@@ -324,7 +336,7 @@ const operatorActorLookups = (plan: HostedOperatorPlan) => {
   return { actorByKey, organizationById };
 };
 const operatorMembershipNames = (plan: HostedOperatorPlan) => {
-  if (!planHasEffect(plan, "auth-membership")) return [];
+  if (!planHasEffect(plan, AUTH_MEMBERSHIP_EFFECT)) return [];
   const membership = plan.authMembership;
   if (membership === undefined)
     return plan.normalActorProgram?.organizations.map((organization) => organization.name) ?? [];
@@ -334,7 +346,7 @@ const operatorMembershipNames = (plan: HostedOperatorPlan) => {
 };
 const operatorOwnedOrganizations = (plan: HostedOperatorPlan) => {
   const membership = plan.authMembership;
-  if (!planHasEffect(plan, "auth-membership") || membership === undefined) return [];
+  if (!planHasEffect(plan, AUTH_MEMBERSHIP_EFFECT) || membership === undefined) return [];
   return membership.kind === "create-owned-organization" ? [membership] : membership.organizations;
 };
 const operatorInstallationScopeSummary = (plan: HostedOperatorPlan) => {
@@ -351,7 +363,7 @@ const operatorMembershipSummary = (plan: HostedOperatorPlan) => {
   const program = plan.normalActorProgram;
   const membershipNames = operatorMembershipNames(plan);
   const { actorByKey, organizationById } = operatorActorLookups(plan);
-  const memberLines = planHasEffect(plan, "auth-membership")
+  const memberLines = planHasEffect(plan, AUTH_MEMBERSHIP_EFFECT)
     ? (program?.memberships ?? []).map((grant) => {
         const actor = actorByKey.get(grant.actorKey);
         const person =
@@ -632,8 +644,8 @@ function otherPublicApprovalDescription(input: unknown, toolName?: string): stri
         appId,
         artifactRevision: digest,
         eligibilityDigest: digest,
-        format: z.literal("autograph-local-approval-subject-v1"),
-        outcome: z.literal("accept-appspec"),
+        format: z.literal(LOCAL_APPROVAL_SUBJECT_FORMAT),
+        outcome: z.literal(ACCEPT_APP_SPEC_OUTCOME),
         phase: z.literal("appspec"),
         sourceSha: gitObjectIdSchema,
         sourceTree: gitObjectIdSchema,
@@ -644,8 +656,8 @@ function otherPublicApprovalDescription(input: unknown, toolName?: string): stri
         appId: record.appId,
         artifactRevision: record.expectedArtifactRevision,
         eligibilityDigest: record.expectedEligibilityDigest,
-        format: "autograph-local-approval-subject-v1",
-        outcome: "accept-appspec",
+        format: LOCAL_APPROVAL_SUBJECT_FORMAT,
+        outcome: ACCEPT_APP_SPEC_OUTCOME,
         phase: "appspec",
         sourceSha: record.expectedSourceSha,
         sourceTree: record.expectedSourceTree,
@@ -665,13 +677,13 @@ function otherPublicApprovalDescription(input: unknown, toolName?: string): stri
         : undefined;
     const parsed = z
       .strictObject({
-        format: z.literal("autograph-local-approval-subject-v1"),
+        format: z.literal(LOCAL_APPROVAL_SUBJECT_FORMAT),
         outcome: z.literal("accept_change_set"),
         phase: z.literal("change_set"),
         subjectDigest: digest,
       })
       .safeParse({
-        format: "autograph-local-approval-subject-v1",
+        format: LOCAL_APPROVAL_SUBJECT_FORMAT,
         outcome: "accept_change_set",
         phase: "change_set",
         subjectDigest: changeSet?.digest,

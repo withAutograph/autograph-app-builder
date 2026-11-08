@@ -59,6 +59,13 @@ import { compareOverlayPaths } from "./target-apply";
 import { resolveAllowedRepository } from "./supported-template";
 import { runSequentially } from "../async-sequential";
 
+const unavailableDiagnosticLog = "an unavailable private diagnostic log";
+const absentOrDirectory = "absent-or-directory";
+const absentOrRegular = "absent-or-regular";
+const gitAbsolutePathFormat = "--path-format=absolute";
+const gitAbsoluteGitDir = "--absolute-git-dir";
+const gitSymbolicFullName = "--symbolic-full-name";
+
 const { dirname, isAbsolute, relative, resolve: pathResolve, sep } = nodePath;
 
 export interface BranchWorktreePublicationFaultHooks {
@@ -279,7 +286,7 @@ const gitOutput = async (
   if (status !== 0) {
     const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
     throw new Error(
-      `Git ${options.operation ?? args[0] ?? "command"} failed for ${root} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? "an unavailable private diagnostic log"}.`,
+      `Git ${options.operation ?? args[0] ?? "command"} failed for ${root} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? unavailableDiagnosticLog}.`,
     );
   }
   await finishGitDiagnosticCapture(diagnosticCapture, false);
@@ -338,7 +345,7 @@ const gitNullRecords = async function* gitNullRecords(
       const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
       diagnosticsFinished = true;
       throw new Error(
-        `Git ${operation} failed for ${root} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? "an unavailable private diagnostic log"}.`,
+        `Git ${operation} failed for ${root} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? unavailableDiagnosticLog}.`,
       );
     }
     await finishGitDiagnosticCapture(diagnosticCapture, false);
@@ -391,7 +398,7 @@ export const hashBranchPublicationSourceBlob = async (
   if (status !== 0) {
     const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
     throw new Error(
-      `Git could not read source blob ${objectId} from ${root} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? "an unavailable private diagnostic log"}.`,
+      `Git could not read source blob ${objectId} from ${root} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? unavailableDiagnosticLog}.`,
     );
   }
   await finishGitDiagnosticCapture(diagnosticCapture, false);
@@ -507,8 +514,8 @@ const assertContainedNoLinkPath = async (
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         if (
           options.leaf === undefined ||
-          options.leaf === "absent-or-directory" ||
-          options.leaf === "absent-or-regular"
+          options.leaf === absentOrDirectory ||
+          options.leaf === absentOrRegular
         ) {
           return;
         }
@@ -527,14 +534,14 @@ const assertContainedNoLinkPath = async (
     }
     if (
       isLeaf &&
-      (options.leaf === "directory" || options.leaf === "absent-or-directory") &&
+      (options.leaf === "directory" || options.leaf === absentOrDirectory) &&
       !state.isDirectory()
     ) {
       throw new Error("The builder-owned publication directory is unsafe.");
     }
     if (
       isLeaf &&
-      (options.leaf === "regular" || options.leaf === "absent-or-regular") &&
+      (options.leaf === "regular" || options.leaf === absentOrRegular) &&
       !state.isFile()
     ) {
       throw new Error("The builder-owned publication file is unsafe.");
@@ -548,7 +555,7 @@ const assertContainedNoLinkPath = async (
     }
     if (
       isLeaf &&
-      (options.leaf === "regular" || options.leaf === "absent-or-regular") &&
+      (options.leaf === "regular" || options.leaf === absentOrRegular) &&
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       ((state.mode & 0o777) !== 0o600 || state.nlink !== 1)
     ) {
@@ -564,7 +571,7 @@ const assertContainedNoLinkPath = async (
 const assertPublicationLayoutSafe = async (): Promise<void> => {
   await runSequentially(["journals", "staging", "worktrees"] as const, async (family) => {
     await assertContainedNoLinkPath(pathResolve(publicationRoot(), family), {
-      leaf: "absent-or-directory",
+      leaf: absentOrDirectory,
     });
   });
 };
@@ -640,7 +647,7 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
   const path = pathResolve(publicationRoot(), "locks", `${identity}.lock`);
   const directory = dirname(path);
   await durableDirectory(directory);
-  await assertContainedNoLinkPath(path, { leaf: "absent-or-regular" });
+  await assertContainedNoLinkPath(path, { leaf: absentOrRegular });
   try {
     const state = await lstat(path);
     if (!state.isFile() || state.isSymbolicLink()) {
@@ -811,9 +818,9 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
 
 const atomicWrite = async (path: string, value: string): Promise<void> => {
   await durableDirectory(dirname(path));
-  await assertContainedNoLinkPath(path, { leaf: "absent-or-regular" });
+  await assertContainedNoLinkPath(path, { leaf: absentOrRegular });
   const temporary = `${path}.${randomUUID()}.tmp`;
-  await assertContainedNoLinkPath(temporary, { leaf: "absent-or-regular" });
+  await assertContainedNoLinkPath(temporary, { leaf: absentOrRegular });
   const handle = await open(
     temporary,
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -827,7 +834,7 @@ const atomicWrite = async (path: string, value: string): Promise<void> => {
   } finally {
     await handle.close();
   }
-  await assertContainedNoLinkPath(path, { leaf: "absent-or-regular" });
+  await assertContainedNoLinkPath(path, { leaf: absentOrRegular });
   await rename(temporary, path);
   await syncDirectory(dirname(path), true);
 };
@@ -837,9 +844,9 @@ const createInitialJournal = async (
   journal: BranchWorktreePublicationPendingReceipt,
 ): Promise<void> => {
   await durableDirectory(dirname(path));
-  await assertContainedNoLinkPath(path, { leaf: "absent-or-regular" });
+  await assertContainedNoLinkPath(path, { leaf: absentOrRegular });
   const candidate = `${path}.${randomUUID()}.pending`;
-  await assertContainedNoLinkPath(candidate, { leaf: "absent-or-regular" });
+  await assertContainedNoLinkPath(candidate, { leaf: absentOrRegular });
   const handle = await open(
     candidate,
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -854,7 +861,7 @@ const createInitialJournal = async (
     await handle.close();
   }
   try {
-    await assertContainedNoLinkPath(path, { leaf: "absent-or-regular" });
+    await assertContainedNoLinkPath(path, { leaf: absentOrRegular });
     await link(candidate, path);
     await syncDirectory(dirname(path), true);
   } finally {
@@ -879,7 +886,7 @@ export const readBranchWorktreePublicationJournal = async (
       : proposalOrIdentity.publicationIdentityDigest;
   try {
     const path = journalPath(identity);
-    await assertContainedNoLinkPath(path, { leaf: "absent-or-regular" });
+    await assertContainedNoLinkPath(path, { leaf: absentOrRegular });
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     const handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
     let contents: string;
@@ -1124,7 +1131,7 @@ const assertOwnedPartialWorktree = async (
   };
   const commonGitDirectoryValue = await git(proposal.sourcePath, [
     "rev-parse",
-    "--path-format=absolute",
+    gitAbsolutePathFormat,
     "--git-common-dir",
   ]);
   const commonGitDirectory = await realpath(commonGitDirectoryValue.trim());
@@ -1248,11 +1255,11 @@ const createOrRepairExactWorktree = async (
   }
   if (await pathExists(proposal.worktreePath)) {
     try {
-      await git(proposal.worktreePath, ["rev-parse", "--absolute-git-dir"]);
+      await git(proposal.worktreePath, ["rev-parse", gitAbsoluteGitDir]);
       const worktreeBranch =
         registration === undefined
           ? undefined
-          : await git(proposal.worktreePath, ["rev-parse", "--symbolic-full-name", "HEAD"]);
+          : await git(proposal.worktreePath, ["rev-parse", gitSymbolicFullName, "HEAD"]);
       if (registration === undefined || worktreeBranch?.trim() !== expectedBranch) {
         throw new Error("The existing worktree does not match durable publication intent.");
       }
@@ -1357,7 +1364,7 @@ const materializeAtomically = async (
           if (status !== 0) {
             const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
             throw new Error(
-              `Git could not materialize ${entry.path} from ${proposal.sourcePath} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? "an unavailable private diagnostic log"}.`,
+              `Git could not materialize ${entry.path} from ${proposal.sourcePath} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? unavailableDiagnosticLog}.`,
             );
           }
           await finishGitDiagnosticCapture(diagnosticCapture, false);
@@ -1476,8 +1483,8 @@ const inspectBranchPublicationSource = async (input: {
   const [headShaValue, headTreeValue, headReferenceValue, gitDirectoryValue] = await Promise.all([
     git(canonicalPath, ["rev-parse", "HEAD"]),
     git(canonicalPath, ["rev-parse", "HEAD^{tree}"]),
-    git(canonicalPath, ["rev-parse", "--symbolic-full-name", "HEAD"]),
-    git(canonicalPath, ["rev-parse", "--absolute-git-dir"]),
+    git(canonicalPath, ["rev-parse", gitSymbolicFullName, "HEAD"]),
+    git(canonicalPath, ["rev-parse", gitAbsoluteGitDir]),
   ]);
   const [headSha, headTree, headReference, gitDirectoryPath] = await Promise.all([
     Promise.resolve(headShaValue.trim()),
@@ -1491,7 +1498,7 @@ const inspectBranchPublicationSource = async (input: {
   ]);
   const indexPathValue = await git(canonicalPath, [
     "rev-parse",
-    "--path-format=absolute",
+    gitAbsolutePathFormat,
     "--git-path",
     "index",
   ]);
@@ -1553,7 +1560,7 @@ export const deriveBranchWorktreePublicationProposal = async (input: {
   const rootState = await lstat(root);
   const commonGitDirectoryValue = await git(source.canonicalPath, [
     "rev-parse",
-    "--path-format=absolute",
+    gitAbsolutePathFormat,
     "--git-common-dir",
   ]);
   const commonGitDirectory = await realpath(commonGitDirectoryValue.trim());
@@ -1819,13 +1826,13 @@ const worktreeSnapshot = async (proposal: BranchWorktreePublicationProposal) => 
   }
   const [rootStat, gitDirectoryValue] = await Promise.all([
     stat(root),
-    git(root, ["rev-parse", "--absolute-git-dir"]),
+    git(root, ["rev-parse", gitAbsoluteGitDir]),
   ]);
   const gitDirectoryPath = await realpath(gitDirectoryValue.trim());
   const gitDirectoryStat = await stat(gitDirectoryPath);
   const indexPathValue = await git(root, [
     "rev-parse",
-    "--path-format=absolute",
+    gitAbsolutePathFormat,
     "--git-path",
     "index",
   ]);
@@ -1834,7 +1841,7 @@ const worktreeSnapshot = async (proposal: BranchWorktreePublicationProposal) => 
   const [headShaValue, headTreeValue, headReferenceValue, remoteValue] = await Promise.all([
     git(root, ["rev-parse", "HEAD"]),
     git(root, ["rev-parse", "HEAD^{tree}"]),
-    git(root, ["rev-parse", "--symbolic-full-name", "HEAD"]),
+    git(root, ["rev-parse", gitSymbolicFullName, "HEAD"]),
     git(root, ["remote", "-v"]),
   ]);
   return {

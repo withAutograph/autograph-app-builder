@@ -575,12 +575,21 @@ export const createHostedOperatorNormalAuthClient = (options: {
         input,
         "list_members",
       );
-      return await request("list_members", "organization/list-members", membersSchema, undefined, {
+      const query: NonNullable<Parameters<typeof request>[4]> = {
         organizationId: parsed.organizationId,
-        ...(parsed.userId === undefined
-          ? {}
-          : { filterField: "userId", filterValue: parsed.userId, filterOperator: "eq" }),
-      });
+      };
+      if (parsed.userId !== undefined) {
+        query.filterField = "userId";
+        query.filterValue = parsed.userId;
+        query.filterOperator = "eq";
+      }
+      return await request(
+        "list_members",
+        "organization/list-members",
+        membersSchema,
+        undefined,
+        query,
+      );
     },
     exportStorageState() {
       const now = Date.now();

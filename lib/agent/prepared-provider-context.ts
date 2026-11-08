@@ -10,6 +10,12 @@ import type { RepositoryAccessToolInput } from "./repository-access-tool";
 import { readJsonStringChecks } from "./streaming-json-pointer";
 import { readPreparedHandoffContext } from "./handoff-context";
 
+const PROVIDER_UNAVAILABLE = "provider-unavailable";
+const AUTHORIZATION_REQUIRED = "authorization-required";
+const REVIEW_SELECTION = "review-selection";
+const RESOURCE_UNAVAILABLE = "resource-unavailable";
+const RETRY_AFTER_HEADER = "retry-after";
+
 // Cache infrastructure only. Handoff, membership, bindings, and decrypted
 // credentials are re-read for the authenticated tenant on each invocation.
 let providerDatabase: ReturnType<typeof openHostedPostgresDatabase> | undefined;
@@ -96,11 +102,11 @@ export type PreparedVercelAccess =
 const unavailable = (): PreparedVercelAccess => ({
   action: "retry",
   retryable: true,
-  status: "provider-unavailable",
+  status: PROVIDER_UNAVAILABLE,
 });
 const reconnect = (): PreparedVercelAccess => ({
   action: "reconnect",
-  status: "authorization-required",
+  status: AUTHORIZATION_REQUIRED,
 });
 
 type VercelProjectAccessStage = "credential-read" | "provider-fetch" | "provider-json";
@@ -110,8 +116,8 @@ const vercelProjectAccessReasons = {
   scopeMismatch: "scope-mismatch",
   rateLimited: "rate-limited",
   projectUnavailable: "project-unavailable",
-  authorizationRequired: "authorization-required",
-  providerUnavailable: "provider-unavailable",
+  authorizationRequired: AUTHORIZATION_REQUIRED,
+  providerUnavailable: PROVIDER_UNAVAILABLE,
   projectResponseMismatch: "project-response-mismatch",
   readFailed: "read-failed",
 } as const;
@@ -193,7 +199,7 @@ const readVercelProjectAccess = async (input: {
         expectedScopeIdMatches: binding.scopeId === input.expectedScope?.id,
         expectedScopeTypeMatches: binding.scopeType === input.expectedScope?.type,
       }));
-      return { action: "review-selection", status: "resource-unavailable" };
+      return { action: REVIEW_SELECTION, status: RESOURCE_UNAVAILABLE };
     }
     diagnosticStage = "provider-fetch";
     const url = new URL(
@@ -213,7 +219,7 @@ const readVercelProjectAccess = async (input: {
       redirect: "error",
       signal: AbortSignal.timeout(20_000),
     });
-    if (response.status === 403 && response.headers.has("retry-after")) {
+    if (response.status === 403 && response.headers.has(RETRY_AFTER_HEADER)) {
       recordVercelProjectAccessFailure(() => ({
         stage: diagnosticStage,
         reason: vercelProjectAccessReasons.rateLimited,
@@ -228,17 +234,17 @@ const readVercelProjectAccess = async (input: {
         stage: diagnosticStage,
         reason: vercelProjectAccessReasons.projectUnavailable,
         httpStatus: response.status,
-        retryAfterPresent: response.headers.has("retry-after"),
+        retryAfterPresent: response.headers.has(RETRY_AFTER_HEADER),
       }));
       await response.body?.cancel();
-      return { action: "review-selection", status: "resource-unavailable" };
+      return { action: REVIEW_SELECTION, status: RESOURCE_UNAVAILABLE };
     }
     if ([401, 403].includes(response.status)) {
       recordVercelProjectAccessFailure(() => ({
         stage: diagnosticStage,
         reason: vercelProjectAccessReasons.authorizationRequired,
         httpStatus: response.status,
-        retryAfterPresent: response.headers.has("retry-after"),
+        retryAfterPresent: response.headers.has(RETRY_AFTER_HEADER),
       }));
       await response.body?.cancel();
       return reconnect();
@@ -248,7 +254,7 @@ const readVercelProjectAccess = async (input: {
         stage: diagnosticStage,
         reason: vercelProjectAccessReasons.providerUnavailable,
         httpStatus: response.status,
-        retryAfterPresent: response.headers.has("retry-after"),
+        retryAfterPresent: response.headers.has(RETRY_AFTER_HEADER),
       }));
       await response.body?.cancel();
       return unavailable();
@@ -379,7 +385,7 @@ export async function readPreparedVercelAccess(input: {
   }
   if (project !== undefined) {
     if (project.installationId !== installationId) {
-      return { action: "review-selection", status: "resource-unavailable" };
+      return { action: REVIEW_SELECTION, status: RESOURCE_UNAVAILABLE };
     }
     return await readVercelProjectAccess({
       authority: input.authority,
@@ -426,13 +432,13 @@ export async function readPreparedVercelAccess(input: {
     });
     // Classify status before reading provider bodies, which can contain secrets
     // or an HTML outage page. Match the existing provider credential semantics.
-    if (response.status === 403 && response.headers.has("retry-after")) {
+    if (response.status === 403 && response.headers.has(RETRY_AFTER_HEADER)) {
       await response.body?.cancel();
       return unavailable();
     }
     if (response.status === 404) {
       await response.body?.cancel();
-      return { action: "review-selection", status: "resource-unavailable" };
+      return { action: REVIEW_SELECTION, status: RESOURCE_UNAVAILABLE };
     }
     if ([401, 403].includes(response.status)) {
       await response.body?.cancel();
@@ -487,7 +493,7 @@ export function createPreparedAppContextReader(input: {
             .github(sessionAuth, withPreparedGitHubSelection({ repository }, intent))
             .catch((): RepositoryAccessResult => ({
               repository: parseRepositoryReference(repository),
-              status: "provider-unavailable",
+              status: PROVIDER_UNAVAILABLE,
             }))
         : Promise.resolve(),
       input.vercel(sessionAuth, intent).catch(unavailable),
@@ -518,19 +524,19 @@ export function createPreparedAppContextReader(input: {
                     },
                   }
                 : {}),
-              ...(github.status === "authorization-required"
+              ...(github.status === AUTHORIZATION_REQUIRED
                 ? {
                     action: "reconnect" as const,
                     reconnectUrl: reconnectUrl("github"),
                   }
                 : {}),
-              ...(github.status === "provider-unavailable"
+              ...(github.status === PROVIDER_UNAVAILABLE
                 ? { action: "retry" as const, retryable: true }
                 : {}),
             }
           : { status: "not-prepared" as const },
         vercel:
-          vercel.status === "authorization-required"
+          vercel.status === AUTHORIZATION_REQUIRED
             ? { ...vercel, reconnectUrl: reconnectUrl("vercel") }
             : vercel,
       },

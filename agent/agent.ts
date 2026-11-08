@@ -182,6 +182,14 @@ export const vendorOnboardingCompleteAppSpec = `${vendorOnboardingAppSpec}
 }
 \`\`\``;
 
+const existingRepositorySourceKind = "existing-repository";
+const freshTemplateSourceKind = "fresh-template";
+const markdownMediaType = "text/markdown";
+const vendorOnboardingAppSpecPath = "prototype/vendor-onboarding/app-spec.md";
+const lostResponsePhrase = "lost response";
+const staleBranchWorktreeMessage =
+  "Stale branch-worktree publication was rejected without creating a branch or worktree.";
+
 const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   const message = (lastUserMessage ?? "").toLowerCase();
   if (message.includes("component-backed renewal review ui")) {
@@ -196,7 +204,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           {
             input: {
               path: developmentInspectionPath({ requestedPath }),
-              sourceKind: "existing-repository",
+              sourceKind: existingRepositorySourceKind,
             },
             name: "inspect_source",
           },
@@ -253,7 +261,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           {
             input: {
               path: developmentInspectionPath({ requestedPath: requestedRepositoryPath }),
-              sourceKind: "existing-repository",
+              sourceKind: existingRepositorySourceKind,
             },
             name: "inspect_source",
           },
@@ -302,7 +310,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       {
         content: vendorOnboardingAppSpec,
         mediaType: "text/markdown" as const,
-        path: "prototype/vendor-onboarding/app-spec.md",
+        path: vendorOnboardingAppSpecPath,
       },
     ].find(({ path: artifactPath }) => !recordedPaths.has(artifactPath));
     if (missingArtifact !== undefined) {
@@ -320,8 +328,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     }
     const appSpecArtifacts = artifacts.filter(
       (artifact) =>
-        (artifact.output as { path?: string } | undefined)?.path ===
-        "prototype/vendor-onboarding/app-spec.md",
+        (artifact.output as { path?: string } | undefined)?.path === vendorOnboardingAppSpecPath,
     );
     const acceptanceResults = toolResults.filter(({ name }) => name === "accept_app_spec");
     const latestAcceptance = acceptanceResults.at(-1);
@@ -355,8 +362,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           {
             input: {
               content: vendorOnboardingCompleteAppSpec,
-              mediaType: "text/markdown",
-              path: "prototype/vendor-onboarding/app-spec.md",
+              mediaType: markdownMediaType,
+              path: vendorOnboardingAppSpecPath,
             },
             name: "record_prototype_artifact",
           },
@@ -476,7 +483,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           {
             input: {
               content: "# Build handoff\n",
-              mediaType: "text/markdown",
+              mediaType: markdownMediaType,
               path: "prototype/parallel-proof/app-spec.md",
             },
             name: "record_prototype_artifact",
@@ -484,7 +491,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           {
             input: {
               content: "# Decisions\n",
-              mediaType: "text/markdown",
+              mediaType: markdownMediaType,
               path: "prototype/parallel-proof/decisions.md",
             },
             name: "record_prototype_artifact",
@@ -591,7 +598,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     message.includes("prepare offline target dependencies") ||
     message.includes("prepare target dependencies")
   ) {
-    const lostResponse = message.includes("lost response");
+    const lostResponse = message.includes(lostResponsePhrase);
     const statusResult = [...toolResults]
       .toReversed()
       .find(({ name }) => name === "workspace_status");
@@ -673,7 +680,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     message.includes("apply with a stale proposal digest")
   ) {
     const stale = message.includes("stale proposal digest");
-    const lostResponse = message.includes("lost response");
+    const lostResponse = message.includes(lostResponsePhrase);
     const applications = toolResults.filter(({ name }) => name === "apply_app_creation");
     let requiredResults = 1;
     if (lostResponse) {
@@ -772,7 +779,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         {
           input: {
             content,
-            mediaType: "text/markdown",
+            mediaType: markdownMediaType,
             path: "prototype/expense-review/app-spec.md",
           },
           name: "record_prototype_artifact",
@@ -786,7 +793,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     message.includes("validate with a stale apply digest")
   ) {
     const stale = message.includes("stale apply digest");
-    const lostResponse = message.includes("lost response");
+    const lostResponse = message.includes(lostResponsePhrase);
     const validations = toolResults.filter(({ name }) => name === "validate_app_creation");
     let requiredResults = 1;
     if (lostResponse) {
@@ -1016,7 +1023,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const latestStatusIndex = toolResults.findLastIndex(
       ({ name }) => name === "artifact_workflow_status",
     );
-    if (message.includes("lost response") && latestRecoveryIndex > latestStatusIndex) {
+    if (message.includes(lostResponsePhrase) && latestRecoveryIndex > latestStatusIndex) {
       return { toolCalls: [{ input: {}, name: "artifact_workflow_status" }] };
     }
     const status = [...toolResults]
@@ -1031,7 +1038,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           freshBootstrap?: { digest?: string; proposalDigest?: string };
         }
       | undefined;
-    if (workflow?.phase === "published_fresh_bootstrap" && message.includes("lost response")) {
+    if (workflow?.phase === "published_fresh_bootstrap" && message.includes(lostResponsePhrase)) {
       return "The lost-response recovery retry reused the exact durable fresh-bootstrap success receipt without redispatching recovery or another publication tool.";
     }
     if (
@@ -1114,7 +1121,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     }
     if (latestStatus.isError || latestStatus.output === undefined) {
       return stale
-        ? "Stale branch-worktree publication was rejected without creating a branch or worktree."
+        ? staleBranchWorktreeMessage
         : "Branch-worktree publication preconditions were rejected without mutating the source checkout.";
     }
     const output = latestStatus.output as Record<string, unknown>;
@@ -1188,7 +1195,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     }
     if (latestMutation?.isError === true && latestMutationIndex < latestBranchStatusIndex) {
       return stale
-        ? "Stale branch-worktree publication was rejected without creating a branch or worktree."
+        ? staleBranchWorktreeMessage
         : "Branch-worktree publication was canceled or rejected; the reviewed receipt was preserved.";
     }
     if (latestMutationIndex < latestBranchStatusIndex) {
@@ -1205,7 +1212,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     }
     if (latestMutation?.isError) {
       return stale
-        ? "Stale branch-worktree publication was rejected without creating a branch or worktree."
+        ? staleBranchWorktreeMessage
         : "Branch-worktree publication was canceled or rejected; the reviewed receipt was preserved.";
     }
     const result = latestMutation?.output as { status?: string } | undefined;
@@ -1615,7 +1622,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
             {
               input: {
                 content: appSpec,
-                mediaType: "text/markdown",
+                mediaType: markdownMediaType,
                 path: `prototype/${appId}/app-spec.md`,
               },
               name: "record_prototype_artifact",
@@ -1702,9 +1709,9 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       /prepare (?:supported repository|fresh template) at (?<path>\/\S+)/iu,
     )?.[1];
     const sourceKind = message.includes("prepare fresh template at ")
-      ? "fresh-template"
-      : "existing-repository";
-    if (sourceKind === "existing-repository" && path === undefined) {
+      ? freshTemplateSourceKind
+      : existingRepositorySourceKind;
+    if (sourceKind === existingRepositorySourceKind && path === undefined) {
       return "The configured test repository is missing.";
     }
     const inspectionResult = toolResults.find(({ name }) => name === "inspect_source");
@@ -1713,7 +1720,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         toolCalls: [
           {
             input:
-              sourceKind === "fresh-template"
+              sourceKind === freshTemplateSourceKind
                 ? {
                     sourceKind,
                     ...(hasTestCapability("simulated-target") && path !== undefined
@@ -1739,7 +1746,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return "The configured repository could not be inspected.";
     }
     const acquisitionResult = toolResults.find(({ name }) => name === "approve_source_acquisition");
-    if (sourceKind === "fresh-template" && acquisitionResult === undefined) {
+    if (sourceKind === freshTemplateSourceKind && acquisitionResult === undefined) {
       if (inspected?.digest === undefined) {
         return "The configured source receipt is incomplete.";
       }
@@ -1755,7 +1762,9 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (acquisitionResult?.isError) {
       const sourceStatus = toolResults.find(({ name }) => name === "source_status");
       if (sourceStatus === undefined) {
-        return { toolCalls: [{ input: { sourceKind: "fresh-template" }, name: "source_status" }] };
+        return {
+          toolCalls: [{ input: { sourceKind: freshTemplateSourceKind }, name: "source_status" }],
+        };
       }
       return "Fresh-template acquisition was canceled or became stale; no workspace was materialized.";
     }

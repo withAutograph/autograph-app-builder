@@ -5,6 +5,19 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, test } from "vitest";
 
+const ORIGINAL_TURN_ID = "turn-original";
+const TOOL_RESULT_KIND = "tool-result";
+const ORIGINAL_DEFERRED_CALL_ID = "original-deferred";
+const ORIGINAL_NATIVE_CALL_ID = "original-native";
+const TOOL_APPROVAL_RESPONSE_TYPE = "tool-approval-response";
+const DEFERRED_WORKFLOW_KEY = "workflow:deferred";
+const TOOL_APPROVAL_REQUEST_TYPE = "tool-approval-request";
+const ORIGINAL_OWNER_ID = "original-owner";
+const EVE_TURN_STEP_NAME = "step//eve//turnStep";
+const OPAQUE_CALL_ID = "opaque-call";
+const OPAQUE_APPROVAL_ID = "opaque-approval";
+const MIXED_NATIVE_CALL_ID = "mixed-native";
+
 const require = createRequire(import.meta.url);
 const eve = path.dirname(require.resolve("eve/package.json"));
 const load = (name) => import(pathToFileURL(path.join(eve, "dist/src", name)).href);
@@ -45,11 +58,11 @@ setLogRecordSubscriber((record) => {
 const ownerRunId = "wrun_physical_original";
 const logicalSessionId = "wrun_logical_original";
 const eventId = (slot) => `evnt_${String(slot).padStart(26, "0")}`;
-const batchEvent = { sequence: 1, stepIndex: 1, turnId: "turn-original" };
-const emission = { sessionStarted: true, sequence: 1, stepIndex: 2, turnId: "turn-original" };
+const batchEvent = { sequence: 1, stepIndex: 1, turnId: ORIGINAL_TURN_ID };
+const emission = { sessionStarted: true, sequence: 1, stepIndex: 2, turnId: ORIGINAL_TURN_ID };
 const actualRuntimeResult = {
-  kind: "tool-result",
-  callId: "original-deferred",
+  kind: TOOL_RESULT_KIND,
+  callId: ORIGINAL_DEFERRED_CALL_ID,
   toolName: "deferred",
   output: { value: "actual-native-outcome" },
 };
@@ -76,7 +89,7 @@ const fixture = async (options = {}) => {
       "eve.runtime.hitl.approvedTools": options.denied === true ? [] : ["native"],
       "fixture.authority": {
         grant: options.denied === true ? null : originalGrant,
-        pending: [{ callId: "original-native", scope: originalGrant }],
+        pending: [{ callId: ORIGINAL_NATIVE_CALL_ID, scope: originalGrant }],
       },
       "fixture.program": { phase: "source-planned", arbitraryNestedState: { keep: true } },
     },
@@ -93,15 +106,15 @@ const fixture = async (options = {}) => {
         role: "tool",
         content: [
           {
-            type: "tool-approval-response",
+            type: TOOL_APPROVAL_RESPONSE_TYPE,
             approvalId: "original-request",
             approved: options.denied !== true,
           },
           ...(options.denied === true
             ? [
                 {
-                  type: "tool-result",
-                  toolCallId: "original-native",
+                  type: TOOL_RESULT_KIND,
+                  toolCallId: ORIGINAL_NATIVE_CALL_ID,
                   toolName: "native",
                   output: { type: "execution-denied", reason: "original denial" },
                 },
@@ -118,10 +131,10 @@ const fixture = async (options = {}) => {
     tasks: [
       {
         kind: "workflow-task",
-        callId: "original-deferred",
+        callId: ORIGINAL_DEFERRED_CALL_ID,
         toolName: "deferred",
         input: {},
-        workflowId: "workflow:deferred",
+        workflowId: DEFERRED_WORKFLOW_KEY,
       },
     ],
     responseMessages: [
@@ -130,15 +143,20 @@ const fixture = async (options = {}) => {
         content: [
           {
             type: "tool-call",
-            toolCallId: "original-native",
+            toolCallId: ORIGINAL_NATIVE_CALL_ID,
             toolName: "native",
             input: { value: "exact-original-input" },
           },
-          { type: "tool-call", toolCallId: "original-deferred", toolName: "deferred", input: {} },
           {
-            type: "tool-approval-request",
+            type: "tool-call",
+            toolCallId: ORIGINAL_DEFERRED_CALL_ID,
+            toolName: "deferred",
+            input: {},
+          },
+          {
+            type: TOOL_APPROVAL_REQUEST_TYPE,
             approvalId: "original-request",
-            toolCallId: "original-native",
+            toolCallId: ORIGINAL_NATIVE_CALL_ID,
           },
         ],
       },
@@ -174,7 +192,7 @@ const fixture = async (options = {}) => {
   const sourcePair = {
     serializedContext: {
       "eve.sessionId": logicalSessionId,
-      "eve.auth": { principalId: "original-owner" },
+      "eve.auth": { principalId: ORIGINAL_OWNER_ID },
       "fixture.privateContext": { original: true },
     },
     sessionState: createDurableSessionState({ session: source }),
@@ -192,7 +210,7 @@ const fixture = async (options = {}) => {
       ? {
           delivery: {
             kind: "deliver",
-            auth: { principalId: "original-owner" },
+            auth: { principalId: ORIGINAL_OWNER_ID },
             payloads: [{ message: "already admitted" }],
           },
         }
@@ -207,7 +225,7 @@ const fixture = async (options = {}) => {
       {
         runId: ownerRunId,
         stepId: "prior",
-        stepName: "step//eve//turnStep",
+        stepName: EVE_TURN_STEP_NAME,
         status: "completed",
         input: await args(sourcePair),
         output: await output({ action: "park", ...sourcePair }),
@@ -218,7 +236,7 @@ const fixture = async (options = {}) => {
       {
         runId: ownerRunId,
         stepId: "terminal",
-        stepName: "step//eve//turnStep",
+        stepName: EVE_TURN_STEP_NAME,
         status: options.failedTurn === true ? "failed" : "completed",
         input: await args({ ...sourcePair, input: incoming }),
         ...(options.failedTurn === true
@@ -241,7 +259,7 @@ const fixture = async (options = {}) => {
     steps.set("historical", {
       runId: ownerRunId,
       stepId: "historical",
-      stepName: "step//eve//turnStep",
+      stepName: EVE_TURN_STEP_NAME,
       status: "failed",
       input: await args(sourcePair),
       error: { name: "older failure" },
@@ -251,7 +269,7 @@ const fixture = async (options = {}) => {
     steps.set("unreadable", {
       runId: ownerRunId,
       stepId: "unreadable",
-      stepName: "step//eve//turnStep",
+      stepName: EVE_TURN_STEP_NAME,
       status: "completed",
       output: new Uint8Array([99, 1, 2, 3]),
     });
@@ -296,8 +314,8 @@ const fixture = async (options = {}) => {
             data: {
               ...emission,
               result: {
-                kind: "tool-result",
-                callId: "original-native",
+                kind: TOOL_RESULT_KIND,
+                callId: ORIGINAL_NATIVE_CALL_ID,
                 toolName: "native",
                 output: "may-have-written",
               },
@@ -324,7 +342,7 @@ const fixture = async (options = {}) => {
         ]
       : []),
     ...(options.cancelled === true
-      ? [{ type: "turn.cancelled", data: { sequence: 1, turnId: "turn-original" } }]
+      ? [{ type: "turn.cancelled", data: { sequence: 1, turnId: ORIGINAL_TURN_ID } }]
       : []),
   ];
   const world = {
@@ -410,7 +428,10 @@ const resumeSynthetic = async (ready, denied) => {
         },
       },
     ],
-    ["deferred", { name: "deferred", inputSchema: z.object({}), workflowId: "workflow:deferred" }],
+    [
+      "deferred",
+      { name: "deferred", inputSchema: z.object({}), workflowId: DEFERRED_WORKFLOW_KEY },
+    ],
   ]);
   const model = new MockLanguageModelV4({
     doGenerate: async ({ prompt }) => {
@@ -421,7 +442,7 @@ const resumeSynthetic = async (ready, denied) => {
       for (const name of ["native", "deferred"]) {
         assert.equal(
           content.filter(
-            (part) => part.type === "tool-result" && part.toolCallId === `original-${name}`,
+            (part) => part.type === TOOL_RESULT_KIND && part.toolCallId === `original-${name}`,
           ).length,
           1,
         );
@@ -435,11 +456,11 @@ const resumeSynthetic = async (ready, denied) => {
     },
   });
   const ctx = new ContextContainer();
-  const auth = { authenticator: "test", principalId: "original-owner", principalType: "user" };
+  const auth = { authenticator: "test", principalId: ORIGINAL_OWNER_ID, principalType: "user" };
   ctx.set(SessionKey, {
     sessionId: logicalSessionId,
     auth: { current: auth, initiator: auth },
-    turn: { id: "turn-original" },
+    turn: { id: ORIGINAL_TURN_ID },
   });
   assert.equal(executions, 0);
   const result = await contextStorage.run(ctx, () =>
@@ -532,23 +553,29 @@ test("diagnostic never serializes prompts, tool names, arguments, outputs or pro
       content: [
         {
           type: "tool-call",
-          toolCallId: "opaque-call",
+          toolCallId: OPAQUE_CALL_ID,
           toolName: secret,
           input: { secret },
           providerOptions: { openai: { secret } },
         },
-        { type: "tool-approval-request", approvalId: "opaque-approval", toolCallId: "opaque-call" },
+        {
+          type: TOOL_APPROVAL_REQUEST_TYPE,
+          approvalId: OPAQUE_APPROVAL_ID,
+          toolCallId: OPAQUE_CALL_ID,
+        },
       ],
     },
     {
       role: "tool",
-      content: [{ type: "tool-approval-response", approvalId: "opaque-approval", approved: true }],
+      content: [
+        { type: TOOL_APPROVAL_RESPONSE_TYPE, approvalId: OPAQUE_APPROVAL_ID, approved: true },
+      ],
     },
     {
       role: "tool",
       content: [
         {
-          type: "tool-result",
+          type: TOOL_RESULT_KIND,
           toolCallId: "another-call",
           toolName: secret,
           output: { type: "text", value: secret },
@@ -562,12 +589,12 @@ test("diagnostic never serializes prompts, tool names, arguments, outputs or pro
   assert.equal(summary.orphanResultCount, 1);
   assert.equal(summary.terminalApprovedResponseCount, 1);
   assert.equal(
-    summary.sample.find((value) => value.idHash === protocolIdentityHash("opaque-call"))
+    summary.sample.find((value) => value.idHash === protocolIdentityHash(OPAQUE_CALL_ID))
       .resultCount,
     0,
   );
   const serialized = JSON.stringify(summary);
-  for (const forbidden of [secret, "opaque-call", "opaque-approval", "another-call"]) {
+  for (const forbidden of [secret, OPAQUE_CALL_ID, OPAQUE_APPROVAL_ID, "another-call"]) {
     assert.equal(serialized.includes(forbidden), false);
   }
   assert.deepEqual(messages, before);
@@ -601,23 +628,29 @@ test("actual SDK exposes retained mixed orphan without inventing or replaying it
       content: [
         {
           type: "tool-call",
-          toolCallId: "mixed-native",
+          toolCallId: MIXED_NATIVE_CALL_ID,
           toolName: "native",
           input: { value: "private-input" },
         },
         { type: "tool-call", toolCallId: "mixed-deferred", toolName: "deferred", input: {} },
-        { type: "tool-approval-request", approvalId: "mixed-approval", toolCallId: "mixed-native" },
+        {
+          type: TOOL_APPROVAL_REQUEST_TYPE,
+          approvalId: "mixed-approval",
+          toolCallId: MIXED_NATIVE_CALL_ID,
+        },
       ],
     },
     {
       role: "tool",
-      content: [{ type: "tool-approval-response", approvalId: "mixed-approval", approved: true }],
+      content: [
+        { type: TOOL_APPROVAL_RESPONSE_TYPE, approvalId: "mixed-approval", approved: true },
+      ],
     },
     {
       role: "tool",
       content: [
         {
-          type: "tool-result",
+          type: TOOL_RESULT_KIND,
           toolCallId: "mixed-deferred",
           toolName: "deferred",
           output: { type: "text", value: "actual saved deferred outcome" },
@@ -641,7 +674,10 @@ test("actual SDK exposes retained mixed orphan without inventing or replaying it
         },
       },
     ],
-    ["deferred", { name: "deferred", inputSchema: z.object({}), workflowId: "workflow:deferred" }],
+    [
+      "deferred",
+      { name: "deferred", inputSchema: z.object({}), workflowId: DEFERRED_WORKFLOW_KEY },
+    ],
   ]);
   const model = new MockLanguageModelV4({
     doGenerate: ({ prompt }) => {
@@ -674,7 +710,7 @@ test("actual SDK exposes retained mixed orphan without inventing or replaying it
   ctx.set(SessionKey, {
     sessionId: logicalSessionId,
     auth: { current: auth, initiator: auth },
-    turn: { id: "turn-original" },
+    turn: { id: ORIGINAL_TURN_ID },
   });
   await contextStorage.run(ctx, () =>
     createToolLoopHarness({ tools, resolveModel: () => Promise.resolve(model) })(session),
@@ -688,7 +724,7 @@ test("actual SDK exposes retained mixed orphan without inventing or replaying it
   assert.equal(diagnostic.fields.sdkInput.missingResultCount, 1);
   assert.equal(diagnostic.fields.sdkBeforeProvider.missingResultCount, 1);
   const missing = diagnostic.fields.sdkBeforeProvider.sample.find(
-    (value) => value.idHash === protocolIdentityHash("mixed-native"),
+    (value) => value.idHash === protocolIdentityHash(MIXED_NATIVE_CALL_ID),
   );
   assert.equal(missing.callCount, 1);
   assert.equal(missing.resultCount, 0);
@@ -703,7 +739,7 @@ test("a mixed orphan without trusted repeatability remains uncertain and retains
   const summary = summarizeModelProtocol(f.latest.history);
   assert.equal(summary.missingResultCount, 1);
   assert.equal(
-    summary.sample.find((value) => value.idHash === protocolIdentityHash("original-native"))
+    summary.sample.find((value) => value.idHash === protocolIdentityHash(ORIGINAL_NATIVE_CALL_ID))
       .resultCount,
     0,
   );
@@ -714,7 +750,7 @@ test("a mixed orphan without trusted repeatability remains uncertain and retains
   assert.equal(diagnostic.fields.latestCoordination.callParts, 0);
   assert.equal(
     diagnostic.fields.nativeResults.sample.some(
-      (value) => value.idHash === protocolIdentityHash("original-native"),
+      (value) => value.idHash === protocolIdentityHash(ORIGINAL_NATIVE_CALL_ID),
     ),
     false,
   );

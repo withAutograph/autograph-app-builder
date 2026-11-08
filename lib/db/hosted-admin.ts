@@ -52,22 +52,30 @@ export const hostedTenantAuthoritySchema = z
     }
   });
 
+const membershipSeedAction = "membership.seed";
+const membershipRevokeAction = "membership.revoke";
+const retentionApplyAction = "retention.apply";
+const tenantDeleteAction = "tenant.delete";
+
 const requestBase = {
   authority: hostedTenantAuthoritySchema,
   requestedAt: instantSchema,
   version: z.literal(1),
 };
 
-const seedPlanSchema = z.strictObject({ ...requestBase, action: z.literal("membership.seed") });
-const revokePlanSchema = z.strictObject({ ...requestBase, action: z.literal("membership.revoke") });
+const seedPlanSchema = z.strictObject({ ...requestBase, action: z.literal(membershipSeedAction) });
+const revokePlanSchema = z.strictObject({
+  ...requestBase,
+  action: z.literal(membershipRevokeAction),
+});
 const retentionPlanSchema = z.strictObject({
   ...requestBase,
-  action: z.literal("retention.apply"),
+  action: z.literal(retentionApplyAction),
   deleteBefore: instantSchema,
 });
 const deletePlanSchema = z.strictObject({
   ...requestBase,
-  action: z.literal("tenant.delete"),
+  action: z.literal(tenantDeleteAction),
   membershipRevokedBefore: instantSchema,
 });
 
@@ -99,7 +107,12 @@ const effectsSchema = z.strictObject({
 });
 
 export const hostedAdminReceiptSchema = z.strictObject({
-  action: z.enum(["membership.seed", "membership.revoke", "retention.apply", "tenant.delete"]),
+  action: z.enum([
+    membershipSeedAction,
+    membershipRevokeAction,
+    retentionApplyAction,
+    tenantDeleteAction,
+  ]),
   appliedAt: instantSchema,
   authorityDigest: sha256Schema,
   database: z.strictObject({
@@ -151,7 +164,7 @@ export interface HostedAdminStore {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalRequest(request: HostedAdminPlanRequest): string {
-  if (request.action === "retention.apply") {
+  if (request.action === retentionApplyAction) {
     return JSON.stringify({
       action: request.action,
       authority: request.authority,
@@ -160,7 +173,7 @@ function canonicalRequest(request: HostedAdminPlanRequest): string {
       version: request.version,
     });
   }
-  if (request.action === "tenant.delete") {
+  if (request.action === tenantDeleteAction) {
     return JSON.stringify({
       action: request.action,
       authority: request.authority,
@@ -192,7 +205,7 @@ export function planHostedAdminRequest(input: unknown) {
     requestedAt: request.requestedAt,
     requiredConfirmationDigest: digest(`confirm\n${canonicalRequest(request)}`),
     version: 1 as const,
-    ...(request.action === "retention.apply"
+    ...(request.action === retentionApplyAction
       ? { deleteBeforeDigest: digest(request.deleteBefore) }
       : {}),
   };
@@ -215,7 +228,7 @@ export async function executeHostedAdminRequest(input: {
 }): Promise<HostedAdminReceipt> {
   const request = hostedAdminApplyRequestSchema.parse(input.request);
   let planRequest: HostedAdminPlanRequest;
-  if (request.action === "retention.apply") {
+  if (request.action === retentionApplyAction) {
     planRequest = {
       action: request.action,
       authority: request.authority,
@@ -223,7 +236,7 @@ export async function executeHostedAdminRequest(input: {
       requestedAt: request.requestedAt,
       version: request.version,
     };
-  } else if (request.action === "tenant.delete") {
+  } else if (request.action === tenantDeleteAction) {
     planRequest = {
       action: request.action,
       authority: request.authority,
@@ -250,13 +263,13 @@ export async function executeHostedAdminRequest(input: {
     throw new Error("Hosted database action plan is stale.");
   }
   if (
-    request.action === "retention.apply" &&
+    request.action === retentionApplyAction &&
     Date.parse(request.deleteBefore) >= requestedAtEpochMs
   ) {
     throw new Error("Hosted retention cutoff must precede the plan.");
   }
   if (
-    request.action === "tenant.delete" &&
+    request.action === tenantDeleteAction &&
     Date.parse(request.membershipRevokedBefore) > requestedAtEpochMs - 5 * 60_000
   ) {
     throw new Error("Hosted tenant deletion requires a five-minute revocation drain.");
@@ -264,7 +277,7 @@ export async function executeHostedAdminRequest(input: {
 
   let effects = { ...emptyEffects };
   switch (request.action) {
-    case "membership.seed": {
+    case membershipSeedAction: {
       const result = await input.store.seedMembership({
         authority: request.authority,
         now: new Date(nowEpochMs),
@@ -272,7 +285,7 @@ export async function executeHostedAdminRequest(input: {
       effects.membershipRowsAffected = result.membershipRowsAffected;
       break;
     }
-    case "membership.revoke": {
+    case membershipRevokeAction: {
       const result = await input.store.revokeMembership({
         authority: request.authority,
         now: new Date(nowEpochMs),
@@ -280,7 +293,7 @@ export async function executeHostedAdminRequest(input: {
       effects.membershipRowsAffected = result.membershipRowsAffected;
       break;
     }
-    case "retention.apply": {
+    case retentionApplyAction: {
       const result = await input.store.applyRetention({
         authority: request.authority,
         deleteBefore: new Date(request.deleteBefore),
@@ -288,7 +301,7 @@ export async function executeHostedAdminRequest(input: {
       effects = { ...effects, ...result };
       break;
     }
-    case "tenant.delete": {
+    case tenantDeleteAction: {
       const result = await input.store.deleteTenant({
         authority: request.authority,
         membershipRevokedBefore: new Date(request.membershipRevokedBefore),

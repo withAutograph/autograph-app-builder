@@ -17,6 +17,13 @@ import { originalCssSource } from "./css-source-map";
 import type { CssSourceMap } from "./css-source-map";
 import { runSequentially } from "../../lib/async-sequential";
 
+const TOKEN_REFERENCE = "token-reference";
+const MATCHING_LITERAL = "matching-literal";
+const UNMATCHED_LITERAL = "unmatched-literal";
+const SEMANTIC_TOKEN_REFERENCE = "semantic-token-reference";
+const GENERATED_OVERRIDE = "generated-override";
+const INHERITED_SHARED = "inherited-shared";
+
 export const viewports = [
   { height: 900, name: "desktop", width: 1440 },
   { height: 1080, name: "desktop-wide", width: 1920 },
@@ -106,7 +113,7 @@ export function classifyStyle(values: string[], computed: string, tokenValues: s
     return "unassessed" as const;
   }
   if (/var\(--/u.test(value)) {
-    return "token-reference" as const;
+    return TOKEN_REFERENCE;
   }
   if (
     /^(?<value>0(?:px|rem|em)?|auto|normal|none|inherit|initial|transparent)$/u.test(value) ||
@@ -114,9 +121,7 @@ export function classifyStyle(values: string[], computed: string, tokenValues: s
   ) {
     return "structural" as const;
   }
-  return tokenValues.includes(computed)
-    ? ("matching-literal" as const)
-    : ("unmatched-literal" as const);
+  return tokenValues.includes(computed) ? MATCHING_LITERAL : UNMATCHED_LITERAL;
 }
 
 type BrowserStyleObservation = Observation & {
@@ -887,29 +892,29 @@ export async function measureStyles(
           classification = "unknown";
         }
         if (
-          classification === "token-reference" &&
+          classification === TOKEN_REFERENCE &&
           declarations.some((v) =>
             [...v.matchAll(/var\((?<name>--[\w-]+)/gu)].some((m) => !(m[1] in tokens)),
           )
         ) {
           classification = "unassessed";
         }
-        if (classification === "token-reference") {
-          classification = "semantic-token-reference";
+        if (classification === TOKEN_REFERENCE) {
+          classification = SEMANTIC_TOKEN_REFERENCE;
         }
-        if (generated && classification === "unmatched-literal") {
-          classification = "generated-override";
+        if (generated && classification === UNMATCHED_LITERAL) {
+          classification = GENERATED_OVERRIDE;
         }
         if (
           !generated &&
           (arrustedSharedSource(path) || Boolean(mappedShared)) &&
-          classification !== "semantic-token-reference" &&
-          classification !== "matching-literal" &&
+          classification !== SEMANTIC_TOKEN_REFERENCE &&
+          classification !== MATCHING_LITERAL &&
           classification !== "structural"
         ) {
-          classification = "inherited-shared";
+          classification = INHERITED_SHARED;
         }
-        if (classification === "unassessed" || classification === "unmatched-literal") {
+        if (classification === "unassessed" || classification === UNMATCHED_LITERAL) {
           classification = "unknown";
         }
         // Structural layout values are not adherence evidence, so exclude them
@@ -967,7 +972,7 @@ export async function measureStyles(
           origin = "shared-rule";
         }
         if (provenance === "shared" && inheritedDeclaration) {
-          origin = "inherited-shared";
+          origin = INHERITED_SHARED;
         }
         if (generated) {
           origin = "generated-rule";
@@ -975,11 +980,11 @@ export async function measureStyles(
         let verdict: BrowserStyleObservation["verdict"] = "unassessed";
         if (
           provenance === "generated" &&
-          (classification === "matching-literal" || classification === "generated-override")
+          (classification === MATCHING_LITERAL || classification === GENERATED_OVERRIDE)
         ) {
           verdict = "nonconforming";
         }
-        if (provenance === "generated" && classification === "semantic-token-reference") {
+        if (provenance === "generated" && classification === SEMANTIC_TOKEN_REFERENCE) {
           verdict = "conforming";
         }
         observations.push({
@@ -1013,10 +1018,10 @@ export async function measureStyles(
         );
         const counts = Object.fromEntries(
           [
-            "semantic-token-reference",
-            "matching-literal",
-            "generated-override",
-            "inherited-shared",
+            SEMANTIC_TOKEN_REFERENCE,
+            MATCHING_LITERAL,
+            GENERATED_OVERRIDE,
+            INHERITED_SHARED,
             "unknown",
           ].map((key) => [key, items.filter((o) => o.classification === key).length]),
         );
@@ -1032,7 +1037,7 @@ export async function measureStyles(
                   (items.filter(
                     (item) =>
                       item.provenance === "generated" &&
-                      item.classification === "semantic-token-reference",
+                      item.classification === SEMANTIC_TOKEN_REFERENCE,
                   ).length /
                     assessed) *
                     100,

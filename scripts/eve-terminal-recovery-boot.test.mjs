@@ -8,6 +8,15 @@ import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { it, vi } from "vitest";
 
+const DISPOSE_INBOX_CALL = "dispose-inbox";
+const CHILD_WORKFLOW_RUN_ID = "wrun-child";
+const TERMINAL_RECOVERY_KIND = "terminal-recovery";
+const AWAIT_INPUT_CALL = "await-input";
+const RECEIPT_COMMIT_CALL = "receipt-commit";
+const ORIGINAL_TURN_ID = "turn-original";
+const ORIGINAL_COMMAND_HOOK = "original-command-hook";
+const FOREIGN_OWNER_ID = "foreign-owner";
+
 const require = createRequire(import.meta.url);
 const sdk = pathToFileURL(
   `${path.resolve(process.env.EVE_RECOVERY_NATIVE_ROOT ?? path.dirname(require.resolve("eve/package.json")))}/dist/src/`,
@@ -87,7 +96,7 @@ const bootFixture = () => {
       queue.unshift(...items);
     },
     async dispose() {
-      calls.push(["dispose-inbox"]);
+      calls.push([DISPOSE_INBOX_CALL]);
     },
   };
   const ports = {
@@ -96,7 +105,7 @@ const bootFixture = () => {
       return inbox;
     },
     getWorkflowMetadata() {
-      return { workflowRunId: "wrun-child" };
+      return { workflowRunId: CHILD_WORKFLOW_RUN_ID };
     },
     getWritable() {
       calls.push(["writable"]);
@@ -126,13 +135,13 @@ const bootFixture = () => {
       resolveActivation({
         kind: "activate-terminal-recovery",
         operationId: descriptor.operationId,
-        ownerRunId: "wrun-child",
+        ownerRunId: CHILD_WORKFLOW_RUN_ID,
       }),
     cancel: () => interrupt({ kind: "cancel" }),
   };
 };
 const inputFor = (cp = checkpoint()) => ({
-  kind: "terminal-recovery",
+  kind: TERMINAL_RECOVERY_KIND,
   checkpoint: cp,
   descriptor,
   provenance,
@@ -156,7 +165,7 @@ it("native boot preserves exact checkpoint, grant, replay input and logical iden
   fixture.activate();
   const result = await promise;
   assert.equal(result.session.sessionId, descriptor.logicalSessionId);
-  assert.equal(result.session.streamRunId, "wrun-child");
+  assert.equal(result.session.streamRunId, CHILD_WORKFLOW_RUN_ID);
   assert.equal(result.session.sessionWritable, "new-stream");
   assert.equal(result.session.serializedContext, input.checkpoint.serializedContext);
   assert.equal(result.session.sessionState, input.checkpoint.sessionState);
@@ -165,16 +174,16 @@ it("native boot preserves exact checkpoint, grant, replay input and logical iden
   assert.equal(result.session.awaitFirstMessage, false);
   assert.deepEqual(result.session.anchor, { kind: "self" });
   assert.equal(
-    fixture.calls.some(([name]) => name === "dispose-inbox"),
+    fixture.calls.some(([name]) => name === DISPOSE_INBOX_CALL),
     false,
   );
 });
-it.each([undefined, "await-input"])(
+it.each([undefined, AWAIT_INPUT_CALL])(
   "pre-activation cancellation runs no session or stream and releases claims (%s)",
   async (resumePhase) => {
     const fixture = bootFixture();
     const input = inputFor();
-    if (resumePhase === "await-input") {
+    if (resumePhase === AWAIT_INPUT_CALL) {
       input.provenance = { ...input.provenance, resumePhase };
       input.replayInput = undefined;
     }
@@ -187,7 +196,7 @@ it.each([undefined, "await-input"])(
       false,
     );
     assert.equal(
-      fixture.calls.some(([name]) => name === "dispose-inbox"),
+      fixture.calls.some(([name]) => name === DISPOSE_INBOX_CALL),
       true,
     );
   },
@@ -257,7 +266,7 @@ const recoveryFixture = () => {
       return receipt;
     },
     async commitReceipt(input) {
-      calls.push("receipt-commit");
+      calls.push(RECEIPT_COMMIT_CALL);
       if (!allowed) {
         throw new Error("cancelled");
       }
@@ -292,11 +301,11 @@ const recoveryFixture = () => {
       calls.push("start");
       assert.equal(input.checkpoint.serializedContext, cp.serializedContext);
       hook = {
-        runId: "wrun-child",
+        runId: CHILD_WORKFLOW_RUN_ID,
         metadata: Promise.resolve({
           recoveryBinding: {
             ...descriptor,
-            ownerRunId: "wrun-child",
+            ownerRunId: CHILD_WORKFLOW_RUN_ID,
             provenance: input.provenance,
           },
         }),
@@ -338,7 +347,7 @@ it("canonical receipt precedes activation and exact retry after closed inbox nev
   assert.equal(first.kind, "accepted");
   assert.equal(f.calls.includes("activate"), false);
   await native.activateTerminalSession({ auth, descriptor, ports: f.ports }, f.deps);
-  assert.ok(f.calls.indexOf("receipt-commit") < f.calls.indexOf("activate"));
+  assert.ok(f.calls.indexOf(RECEIPT_COMMIT_CALL) < f.calls.indexOf("activate"));
   const second = await native.recoverTerminalSession({ auth, descriptor, ports: f.ports }, f.deps);
   assert.deepEqual(second, first);
   await native.activateTerminalSession({ auth, descriptor, ports: f.ports }, f.deps);
@@ -380,7 +389,7 @@ it("changed authority after boot prevents receipt and activation", async () => {
     native.recoverTerminalSession({ auth, descriptor, ports: f.ports }, f.deps),
     /cancelled/u,
   );
-  assert.equal(f.calls.includes("receipt-commit"), false);
+  assert.equal(f.calls.includes(RECEIPT_COMMIT_CALL), false);
   assert.equal(f.calls.includes("activate"), false);
 });
 it("uncertain effects never start a physical owner or synthesize results", async () => {
@@ -423,7 +432,7 @@ it("source policy honors original initial default and rejects missing recovered 
   );
   assert.equal(native.terminalRecoveryPolicy({ kind: "handoff", checkpoint: {} }), undefined);
   assert.equal(
-    native.terminalRecoveryPolicy({ kind: "terminal-recovery", checkpoint: checkpoint() })
+    native.terminalRecoveryPolicy({ kind: TERMINAL_RECOVERY_KIND, checkpoint: checkpoint() })
       .sessionTimeoutMs,
     false,
   );
@@ -455,7 +464,7 @@ it("recovered first turn admits a queued cancellation before any turn step", asy
     inbox,
     queue: new SessionInputQueue(),
     cursor: {
-      sessionState: { emissionState: { sequence: 1, stepIndex: 1, turnId: "turn-original" } },
+      sessionState: { emissionState: { sequence: 1, stepIndex: 1, turnId: ORIGINAL_TURN_ID } },
     },
   });
   execution.runTurnSteps = async () => {
@@ -584,7 +593,7 @@ it("two-phase preparation parks the actual native boot until canonical child act
   f.deps.start = async (input) => {
     await start(input);
     pending = bootTerminalRecoveryOwnerWithPorts(
-      { ...input, kind: "terminal-recovery", ownerDeploymentId: "deployment-current" },
+      { ...input, kind: TERMINAL_RECOVERY_KIND, ownerDeploymentId: "deployment-current" },
       boot.ports,
     );
     await delay(0);
@@ -618,14 +627,14 @@ const historicalInbox = () => [
   {
     runId: descriptor.sourceOwnerRunId,
     eventId: `evnt_${String(8).padStart(26, "0")}`,
-    correlationId: "original-command-hook",
+    correlationId: ORIGINAL_COMMAND_HOOK,
     slot: 8,
-    payload: { kind: "cancel", turnId: "turn-original" },
+    payload: { kind: "cancel", turnId: ORIGINAL_TURN_ID },
   },
   {
     runId: descriptor.sourceOwnerRunId,
     eventId: `evnt_${String(9).padStart(26, "0")}`,
-    correlationId: "original-command-hook",
+    correlationId: ORIGINAL_COMMAND_HOOK,
     slot: 9,
     payload: {
       kind: "send",
@@ -637,14 +646,14 @@ const historicalInbox = () => [
   {
     runId: descriptor.sourceOwnerRunId,
     eventId: `evnt_${String(10).padStart(26, "0")}`,
-    correlationId: "original-command-hook",
+    correlationId: ORIGINAL_COMMAND_HOOK,
     slot: 10,
-    payload: { kind: "cancel", turnId: "turn-original" },
+    payload: { kind: "cancel", turnId: ORIGINAL_TURN_ID },
   },
 ];
 const historicalInput = () => {
   const input = inputFor();
-  input.checkpoint.sessionState.emissionState.turnId = "turn-original";
+  input.checkpoint.sessionState.emissionState.turnId = ORIGINAL_TURN_ID;
   return { ...input, carriedInbox: historicalInbox() };
 };
 it("receipt-bound historical FIFO reaches real ActiveTurn cancellation and retains the accepted SEND", async () => {
@@ -714,12 +723,12 @@ it("a newly accepted preactivation Stop vetoes boot without restoring historical
     false,
   );
 });
-for (const mutation of ["foreign-owner", "duplicate-event", "wrong-turn"]) {
+for (const mutation of [FOREIGN_OWNER_ID, "duplicate-event", "wrong-turn"]) {
   it(`historical command ${mutation} cannot enter a recovery owner`, async () => {
     const f = bootFixture();
     const input = historicalInput();
-    if (mutation === "foreign-owner") {
-      input.carriedInbox[0].runId = "foreign-owner";
+    if (mutation === FOREIGN_OWNER_ID) {
+      input.carriedInbox[0].runId = FOREIGN_OWNER_ID;
     }
     if (mutation === "duplicate-event") {
       input.carriedInbox[1].eventId = input.carriedInbox[0].eventId;
@@ -801,10 +810,10 @@ it("an idle recovery owner enters the actual inbox wait without admitting a mode
       Object.assign(activation, { getConflict: () => Promise.resolve(), dispose: vi.fn() }),
   };
   const input = {
-    kind: "terminal-recovery",
+    kind: TERMINAL_RECOVERY_KIND,
     descriptor,
     checkpoint: checkpoint(),
-    provenance: { ...provenance, resumePhase: "await-input" },
+    provenance: { ...provenance, resumePhase: AWAIT_INPUT_CALL },
     activationToken: "idle-activation",
     ownerDeploymentId: "deployment",
   };
