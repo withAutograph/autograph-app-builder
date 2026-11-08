@@ -500,12 +500,6 @@ export default defineConfig({
     {
       // Preserve documented test and tool invocation paths.
       files: [
-        ".storybook/visual/app-builder.visual.spec.ts",
-        "playwright.design-quality.config.ts",
-        "playwright.product-quality.config.ts",
-        "playwright.production-navigation.config.ts",
-        "playwright.storybook.config.ts",
-        "vitest.shims.d.ts",
         "evals/g2-model.vitest.config.mts",
         "evals/g2-provider-brief-first-attempt.model.test.ts",
         "evals/product-quality/product-quality.visual.playwright.ts",

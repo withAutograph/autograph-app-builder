@@ -416,7 +416,7 @@ try {
   await run(process.execPath, [
     "node_modules/playwright/cli.js",
     "test",
-    "--config=playwright.production-navigation.config.ts",
+    "--config=playwright-production-navigation.config.ts",
     ...reporter.args,
   ]);
 } finally {
