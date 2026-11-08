@@ -58,20 +58,20 @@ const fixture = () => {
   const compilation = {
     context: {
       authority: {
-        issuer: "https://builder.example/api/auth",
         audience: "https://builder.example/mcp",
-        workspaceId: "workspace",
+        issuer: "https://builder.example/api/auth",
         ownerUserId: "owner",
+        workspaceId: "workspace",
       },
       target: { appId: "fixture-app", sessionId: "original-public-session" },
     },
     release: { status: "not-required" as const },
   };
   const validation = {
-    resolvedTree: "3".repeat(40),
     commands: [{ command: "mise app:check", exitCode: 0 }],
-    validatedByCallId: "validate",
     compilation,
+    resolvedTree: "3".repeat(40),
+    validatedByCallId: "validate",
   };
   const review = createReconciliationReviewReceipt({
     version: 1,
@@ -202,9 +202,9 @@ const fixture = () => {
       sourceReceipt: { digest: sourceDigest, sourceKind: "fresh-template" },
       githubSource: source,
       reviewReceipt: {
-        digest: originReviewDigest,
         appSpecDigest: digest,
         changeSetDigest: sourceDigest,
+        digest: originReviewDigest,
       },
     },
     "autograph-app-builder.draft-reconciliation.v1": candidate,
@@ -554,8 +554,8 @@ it("retains historical runtime-result vetoes outside the latest candidate", () =
   const [latest] = f.input.payload.candidates;
   const older = {
     ...latest,
-    origin: { slot: 1 },
     incoming: { runtimeResults: { results: [{ callId: f.call.toolCallId }] } },
+    origin: { slot: 1 },
   };
   expect(
     authorizeRepeatableDraftReconciliationCalls({

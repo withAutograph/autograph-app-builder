@@ -122,7 +122,7 @@ const createRecoveredBuild = async (store: InMemoryHostedEveStore, appId: string
     session: child,
     result: { cursor: 0, events: [], sessionId: child.sessionId, status: "waiting" },
   });
-  return { original, child };
+  return { child, original };
 };
 
 const fixture = async () => {
@@ -181,19 +181,19 @@ const fixture = async () => {
   );
   const route = createAppAccessRouteHandler({ execute, origin, read, resolveOwner });
   return {
-    selected,
-    unrelated,
-    sessions,
-    resolveOwner,
-    route,
-    reads,
     execute,
-    setSignedIn: (value: HostedSessionTenantAuthority | null) => {
-      signedIn = value;
-    },
+    reads,
+    resolveOwner,
     revoke: () => {
       activeMember = false;
     },
+    route,
+    selected,
+    sessions,
+    setSignedIn: (value: HostedSessionTenantAuthority | null) => {
+      signedIn = value;
+    },
+    unrelated,
   };
 };
 const request = (sessionId: string) =>
@@ -306,9 +306,9 @@ describe("recovered web app access owner", () => {
   it("refuses a cancelled current worker without falling back to the old original", async () => {
     const f = await fixture();
     await f.sessions.recordCancellationIntent({
+      nowEpochMs: 200,
       principal,
       sessionId: f.selected.child.sessionId,
-      nowEpochMs: 200,
     });
     const { sessionId } = f.selected.original;
     const response = await f.route(request(sessionId), sessionId);

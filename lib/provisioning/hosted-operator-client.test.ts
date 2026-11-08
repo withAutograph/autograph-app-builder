@@ -506,10 +506,10 @@ describe("operator request transport", () => {
 describe("continuity planning failure diagnostics", () => {
   it("preserves malformed request validation without fetching or resolving a token", async () => {
     const authority = {
-      issuer: "https://builder.fixture.test",
       audience: "https://builder.fixture.test/mcp",
-      workspaceId: "workspace",
+      issuer: "https://builder.fixture.test",
       ownerUserId: "owner",
+      workspaceId: "workspace",
     };
     const token = vi.fn<() => Promise<string>>().mockResolvedValue("private-bearer");
     const transport = vi.fn<typeof fetch>();
@@ -605,10 +605,10 @@ describe("saved continuity read diagnostics", () => {
     ],
   ] as const)("reports %s without exposing private details", async (stage, token, fetcher) => {
     const authority = {
-      issuer: "https://builder.fixture.test/api/auth",
       audience: "https://builder.fixture.test/mcp",
-      workspaceId: "workspace",
+      issuer: "https://builder.fixture.test/api/auth",
       ownerUserId: "owner",
+      workspaceId: "workspace",
     };
     const clientInput: Parameters<typeof createHostedOperatorClient>[0] = {
       endpoint: "https://operator.example",

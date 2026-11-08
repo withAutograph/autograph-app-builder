@@ -1008,10 +1008,10 @@ const renewedDelivery = (gateway: boolean, addAppGrant = false) => {
 };
 
 it.each([
-  { gateway: false, addAppGrant: false },
-  { gateway: true, addAppGrant: false },
-  { gateway: false, addAppGrant: true },
-  { gateway: true, addAppGrant: true },
+  { addAppGrant: false, gateway: false },
+  { addAppGrant: false, gateway: true },
+  { addAppGrant: true, gateway: false },
+  { addAppGrant: true, gateway: true },
 ])(
   "retains an approved renewal's existing delivery without POST (%j)",
   async ({ gateway, addAppGrant }) => {
@@ -1289,11 +1289,11 @@ const narrowedGateway = async () => {
   const f = fixture(current, null, true);
   f.input.gatewayDeliveryProvenance = [
     {
+      approvalId: "original-approval",
+      approvedByCallId: "original-approved-call",
       operationRef: f.input.operationRef,
       plan: original,
       planDigest: operatorPlanDigest(original),
-      approvalId: "original-approval",
-      approvedByCallId: "original-approved-call",
     },
   ];
   f.deployment.meta.autograph_operator_plan = operatorPlanDigest(original);
@@ -1883,9 +1883,9 @@ it("reobserves a completed app candidate under its original delivery identity be
   const gatewayInput = {
     ...f.input,
     effect: {
+      description: "Bind Gateway",
       id: "gateway-bindings",
       kind: "gateway-bindings" as const,
-      description: "Bind Gateway",
     },
   };
   const original = structuredClone(gatewayInput.deliveryCandidates ?? []);
