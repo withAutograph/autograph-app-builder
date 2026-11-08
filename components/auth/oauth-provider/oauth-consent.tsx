@@ -72,12 +72,13 @@ export function OAuthConsent({ className }: OAuthConsentProps) {
   const policyUrl = sanitizeOAuthClientUrl(client?.policy_uri);
   const termsUrl = sanitizeOAuthClientUrl(client?.tos_uri);
   const requestResolved = request !== undefined;
-  const invalidRequest =
-    requestResolved &&
-    (!request.clientId ||
-      (!isSessionPending && !session) ||
-      publicClient.isError ||
-      (!publicClient.isPending && session && !client));
+  let invalidRequest = requestResolved && !request.clientId;
+  if (requestResolved && !invalidRequest) {
+    invalidRequest = (!isSessionPending && !session) || publicClient.isError;
+    if (!invalidRequest && !publicClient.isPending) {
+      invalidRequest = Boolean(session && !client);
+    }
+  }
   const canRespond = Boolean(request?.clientId && session && client && !consent.isPending);
 
   if (invalidRequest === true) {

@@ -13,12 +13,14 @@ type SignalTarget = Readonly<{
   off: (signal: DevelopmentSignal, listener: () => void) => unknown;
 }>;
 
+interface DevelopmentShutdown {
+  readonly signal: AbortSignal;
+  readonly exitCode: () => number;
+  readonly dispose: () => void;
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function createDevelopmentShutdown(target: SignalTarget = process): Readonly<{
-  signal: AbortSignal;
-  exitCode: () => number;
-  dispose: () => void;
-}> {
+export function createDevelopmentShutdown(target: SignalTarget = process): DevelopmentShutdown {
   const controller = new AbortController();
   let exitCode = 0;
   const interrupt = () => {

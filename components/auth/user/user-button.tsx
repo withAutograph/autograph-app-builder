@@ -53,6 +53,7 @@ export function UserButton({
 
   const { isPending: settingActiveSession } = useSetActiveSession(authClient);
   const { data: session, isPending: sessionPending } = useSession(authClient);
+  const showUserView = Boolean(session) || sessionPending || settingActiveSession;
 
   const pluginMenuItems = plugins.flatMap(
     (plugin) =>
@@ -74,7 +75,7 @@ export function UserButton({
           <UserAvatar />
         ) : (
           <>
-            {session || sessionPending || settingActiveSession ? (
+            {showUserView ? (
               <UserView isPending={settingActiveSession} />
             ) : (
               <>
