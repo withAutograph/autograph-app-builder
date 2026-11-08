@@ -210,28 +210,28 @@ test("owned process replacement retains launch environment and idempotent comman
   try {
     const commandId = randomUUID();
     const [first, retry] = await Promise.all([
-      f.supervisor.execute({ operation: "start-same-environment", commandId }),
-      f.supervisor.execute({ operation: "start-same-environment", commandId }),
+      f.supervisor.execute({ commandId, operation: "start-same-environment" }),
+      f.supervisor.execute({ commandId, operation: "start-same-environment" }),
     ]);
     expect(first).toEqual(retry);
     expect(first.process?.generation).toBe(1);
-    await f.supervisor.execute({ operation: "observe-readiness", commandId: randomUUID() });
+    await f.supervisor.execute({ commandId: randomUUID(), operation: "observe-readiness" });
     const stopped = await f.supervisor.execute({
-      operation: "stop-and-wait",
       commandId: randomUUID(),
+      operation: "stop-and-wait",
     });
     expect(stopped.process?.exit?.observedAt).toBeDefined();
     expect(stopped.state).toBe("stopped");
     f.environment.APP_FIXTURE_VALUE = "caller-mutated-after-capture";
     await writeFile(f.script, f.source("two"));
     const next = await f.supervisor.execute({
-      operation: "start-same-environment",
       commandId: randomUUID(),
+      operation: "start-same-environment",
     });
     expect(next.process?.generation).toBe(2);
     const ready = await f.supervisor.execute({
-      operation: "observe-readiness",
       commandId: randomUUID(),
+      operation: "observe-readiness",
     });
     expect(ready.state).toBe("ready");
     const raw: unknown = JSON.parse(await readFile(f.observation, "utf-8"));
@@ -240,7 +240,7 @@ test("owned process replacement retains launch environment and idempotent comman
       revision: "two",
       value: "same-approved-environment",
     });
-    await expect(f.supervisor.execute({ operation: "stop-and-wait", commandId })).rejects.toThrow();
+    await expect(f.supervisor.execute({ commandId, operation: "stop-and-wait" })).rejects.toThrow();
     const current = await f.supervisor.execute({ operation: "status" });
     expect(current.process?.generation).toBe(2);
     expect(current.state).toBe("ready");
@@ -295,22 +295,22 @@ test("owned wrapper replacement waits for its TERM-resistant server descendant a
     },
   });
   try {
-    await supervisor.execute({ operation: "start-same-environment", commandId: randomUUID() });
-    await supervisor.execute({ operation: "observe-readiness", commandId: randomUUID() });
+    await supervisor.execute({ commandId: randomUUID(), operation: "start-same-environment" });
+    await supervisor.execute({ commandId: randomUUID(), operation: "observe-readiness" });
     const before = z
       .object({ generation: z.number(), pid: z.number() })
       .parse(JSON.parse(await readFile(observation, "utf-8")));
     const stopped = await supervisor.execute({
-      operation: "stop-and-wait",
       commandId: randomUUID(),
+      operation: "stop-and-wait",
     });
     expect(stopped.state).toBe("stopped");
     expect(() => process.kill(before.pid, 0)).toThrow();
     await expect(exchange({ port })).rejects.toThrow();
-    await supervisor.execute({ operation: "start-same-environment", commandId: randomUUID() });
+    await supervisor.execute({ commandId: randomUUID(), operation: "start-same-environment" });
     const ready = await supervisor.execute({
-      operation: "observe-readiness",
       commandId: randomUUID(),
+      operation: "observe-readiness",
     });
     expect(ready.state).toBe("ready");
     const response = await exchange({ port });
@@ -338,26 +338,26 @@ test("private IPC requires its own capability, rejects arbitrary lifecycle input
       lifecycleCapability: capabilities.private.suiteSelector,
     });
     await expect(
-      invalid.execute({ operation: "start-same-environment", commandId: randomUUID() }),
+      invalid.execute({ commandId: randomUUID(), operation: "start-same-environment" }),
     ).rejects.toThrow();
     const client = createManagedRuntimeIpcClient({
       socketPath: ipc.socketPath,
       lifecycleCapability: capabilities.private.lifecycle,
     });
     const commandId = randomUUID();
-    const first = await client.execute({ operation: "start-same-environment", commandId });
-    expect(await client.execute({ operation: "start-same-environment", commandId })).toEqual(first);
+    const first = await client.execute({ commandId, operation: "start-same-environment" });
+    expect(await client.execute({ commandId, operation: "start-same-environment" })).toEqual(first);
     expect(
       managedLifecycleCommandSchema.safeParse({
-        operation: "stop-and-wait",
         commandId: randomUUID(),
+        operation: "stop-and-wait",
         pid: 1,
       }).success,
     ).toBe(false);
     expect(
       managedLifecycleCommandSchema.safeParse({
-        operation: "start-same-environment",
         commandId: randomUUID(),
+        operation: "start-same-environment",
         env: { ARBITRARY: "value" },
       }).success,
     ).toBe(false);
@@ -372,14 +372,14 @@ test("private IPC requires its own capability, rejects arbitrary lifecycle input
 test("lost ownership refuses further lifecycle effects and a closed supervisor cannot relaunch", async () => {
   const f = await processFixture();
   try {
-    await f.supervisor.execute({ operation: "start-same-environment", commandId: randomUUID() });
+    await f.supervisor.execute({ commandId: randomUUID(), operation: "start-same-environment" });
     f.loseOwnership();
     await expect(
-      f.supervisor.execute({ operation: "start-same-environment", commandId: randomUUID() }),
+      f.supervisor.execute({ commandId: randomUUID(), operation: "start-same-environment" }),
     ).rejects.toThrow();
     await f.supervisor.close();
     await expect(
-      f.supervisor.execute({ operation: "start-same-environment", commandId: randomUUID() }),
+      f.supervisor.execute({ commandId: randomUUID(), operation: "start-same-environment" }),
     ).rejects.toThrow();
   } finally {
     await f.close();

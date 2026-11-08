@@ -69,16 +69,16 @@ const program = normalActorProgramSchema.parse({
   origin: "https://apps.example.com",
   actors: [
     {
+      account: "create-email-password",
       actorKey: "owner",
       email: "owner@example.com",
       name: "Owner",
-      account: "create-email-password",
     },
-    { actorKey: "peer", email: "peer@example.com", name: "Peer", account: "create-email-password" },
+    { account: "create-email-password", actorKey: "peer", email: "peer@example.com", name: "Peer" },
   ],
   organizations: [
-    { organizationId: "org-one", ownerActorKey: "owner", name: "One", slug: "one" },
-    { organizationId: "org-two", ownerActorKey: "owner", name: "Two", slug: "two" },
+    { name: "One", organizationId: "org-one", ownerActorKey: "owner", slug: "one" },
+    { name: "Two", organizationId: "org-two", ownerActorKey: "owner", slug: "two" },
   ],
   memberships: [
     { actorKey: "owner", organizationId: "org-one", role: "owner" },
@@ -105,24 +105,24 @@ const plan = hostedOperatorPlanSchema.parse({
     sessionId: target.sessionId,
   },
   appDatabase: {
-    resourceId: "app-resource",
     database: "normal",
     migratorRole: "normal_owner",
+    resourceId: "app-resource",
     runtimeRole: "normal_runtime",
   },
   authDatabase: {
-    resourceId: "auth-resource",
     database: "auth",
     migratorRole: "auth_owner",
+    resourceId: "auth-resource",
     runtimeRole: "auth_runtime",
   },
   contextId: "accepted-spec",
   cost: { class: "shared-recovery-group", description: "Approved normal accounts", owner: "owner" },
   effects: [
     {
+      description: "Capture approved actual accounts",
       id: "normal-accounts",
       kind: "normal-accounts",
-      description: "Capture approved actual accounts",
     },
   ],
   installer: { reference: "owned-worker", sha256: "a".repeat(64) },
@@ -509,20 +509,20 @@ const fixture = async (publicRelease?: {
       gatewayDelivery: { ...plan.gatewayDelivery, gitSha: "b".repeat(40) },
       effects: [
         {
+          description: "Auth resource",
           id: "auth-resources",
           kind: "resources",
           resourceId: plan.authDatabase.resourceId,
-          description: "Auth resource",
         },
         {
+          description: "App resource",
           id: "app-resources",
           kind: "resources",
           resourceId: plan.appDatabase.resourceId,
-          description: "App resource",
         },
-        { id: "auth-schema", kind: "install", description: "Observe Auth schema" },
-        { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway binding" },
-        { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
+        { description: "Observe Auth schema", id: "auth-schema", kind: "install" },
+        { description: "Gateway binding", id: "gateway-bindings", kind: "gateway-bindings" },
+        { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
       ],
     });
     const deps: ProtectedHostedOperatorDependencies = {
@@ -876,8 +876,8 @@ describe("normal organization owner proof collector", () => {
   );
   afterEach(() => vi.restoreAllMocks());
   it.each([
-    { status: 401, contentType: "text/html", valid: false },
-    { status: 503, contentType: "application/vnd.realm-operator-proof+json", valid: true },
+    { contentType: "text/html", status: 401, valid: false },
+    { contentType: "application/vnd.realm-operator-proof+json", status: 503, valid: true },
   ])(
     "reports only closed proof response facts for $status",
     async ({ status, contentType, valid }) => {
@@ -885,8 +885,8 @@ describe("normal organization owner proof collector", () => {
       const f = await fixture();
       f.proofResponse(
         new Response("private cookie JWT URL actor", {
-          status,
           headers: { "content-type": contentType },
+          status,
         }),
       );
       await expect(f.collect(await f.input("org-one"))).rejects.toMatchObject({

@@ -700,13 +700,13 @@ describe("draft reconciliation command progress", () => {
     expect(mocks.compile).toHaveBeenCalledOnce();
     expect(mocks.check).toHaveBeenCalledTimes(2);
     expect(mocks.candidate?.validation).toMatchObject({
-      compilation: { release: { selection: { releaseId: "captured-release" } } },
       commands: [
         { command: installCommand, exitCode: 0 },
         { command: schemaCommand, exitCode: 0 },
         { command: checkCommand, exitCode: 0 },
         { command: testCommand, exitCode: 0 },
       ],
+      compilation: { release: { selection: { releaseId: "captured-release" } } },
     });
   });
 
@@ -776,34 +776,34 @@ describe("draft reconciliation command progress", () => {
 
   it.each([
     {
+      current: installCommand,
       kind: "install",
       original: "mise exec -- bun install --frozen-lockfile",
-      current: installCommand,
     },
     {
+      current: uncompiledBuild,
       kind: "check",
       original: "mise run --skip-tools app:check spend-review",
-      current: uncompiledBuild,
     },
     {
+      current: uncompiledBuild,
       kind: "check",
       original: "mise run --no-deps --skip-tools app:check spend-review",
-      current: uncompiledBuild,
     },
     {
+      current: uncompiledBuild,
       kind: "check",
       original: "mise run --no-deps --skip-deps --skip-tools app:check spend-review",
-      current: uncompiledBuild,
     },
     {
+      current: "mise run --no-deps --skip-tools app:test spend-review 1/1",
       kind: "check",
       original: "mise run --skip-tools app:test spend-review 1/1",
-      current: "mise run --no-deps --skip-tools app:test spend-review 1/1",
     },
     {
+      current: "mise run --no-deps --skip-tools check:vercel-services",
       kind: "additional",
       original: "mise run --skip-tools check:vercel-services",
-      current: "mise run --no-deps --skip-tools check:vercel-services",
     },
   ] as const)(
     "continues retained $kind metadata with explicit setup flags and keeps completed work",
@@ -1347,8 +1347,6 @@ describe("draft reconciliation command progress", () => {
       expect(mocks.browser).toHaveBeenCalledWith(
         expect.objectContaining({
           appId: "spend-review",
-          root: changedRoot,
-          signal: abortSignal,
           execution: {
             appId: "spend-review",
             root: changedRoot,
@@ -1358,6 +1356,8 @@ describe("draft reconciliation command progress", () => {
             signal: abortSignal,
             state: mocks.workflow,
           },
+          root: changedRoot,
+          signal: abortSignal,
         }),
       );
       expect(mocks.local).not.toHaveBeenCalled();
@@ -1365,10 +1365,10 @@ describe("draft reconciliation command progress", () => {
   );
 
   it.each([
-    { isIncremental: false, cancelled: false },
-    { isIncremental: true, cancelled: false },
-    { isIncremental: false, cancelled: true },
-    { isIncremental: true, cancelled: true },
+    { cancelled: false, isIncremental: false },
+    { cancelled: false, isIncremental: true },
+    { cancelled: true, isIncremental: false },
+    { cancelled: true, isIncremental: true },
   ])(
     "stops refused/cancelled binding before browser dispatch, incremental=$isIncremental cancelled=$cancelled",
     async ({ isIncremental, cancelled }) => {
