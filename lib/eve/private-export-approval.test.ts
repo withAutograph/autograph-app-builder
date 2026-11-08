@@ -30,16 +30,16 @@ const plan = hostedTenantExportPlanSchema.parse({
   planRef: `_protected-operator/export-plans/${fixture.worker.exportId}`,
   authority,
   target: {
-    sessionId: "session",
     appId: fixture.worker.scope.appId,
-    projectId: "project",
     branch: "preview",
+    projectId: "project",
+    sessionId: "session",
   },
   originalSetup: {
-    operationRef: "40000000-0000-4000-8000-000000000004",
-    planDigest: "a".repeat(64),
     approvalId: "setup-approval",
     approvedByCallId: "setup-call",
+    operationRef: "40000000-0000-4000-8000-000000000004",
+    planDigest: "a".repeat(64),
   },
   scope: fixture.worker.scope,
   resource: fixture.worker.resource,
@@ -47,8 +47,8 @@ const plan = hostedTenantExportPlanSchema.parse({
   selection: fixture.worker.selection,
   format: fixture.worker.format,
   destination: {
-    kind: "owner-private-builder-artifact",
     artifactPrefix: `_protected-operator/artifacts/tenant-export/${fixture.worker.exportId}`,
+    kind: "owner-private-builder-artifact",
   },
 });
 const request = {
@@ -249,7 +249,7 @@ describe("approval history binding and cancellation", () => {
       const history = vi.fn((startIndex: number, onEvent: (event: MessageStreamEvent) => void) => {
         expect(startIndex).toBe(0);
         onEvent(settled());
-        return Promise.resolve({ nextNativeIndex: 1, nativeTailIndex: 0, complete: true });
+        return Promise.resolve({ complete: true, nativeTailIndex: 0, nextNativeIndex: 1 });
       });
       const receipt = await readPrivateOperatorApproval({
         owner: { ...owner, adapterSessionId: "native-replacement", adapterGeneration: 2 },
@@ -288,9 +288,9 @@ describe("approval history binding and cancellation", () => {
             onEvent(event);
           }
           return Promise.resolve({
-            nextNativeIndex: 2,
-            nativeTailIndex: oldTail.length - 1,
             complete: false,
+            nativeTailIndex: oldTail.length - 1,
+            nextNativeIndex: 2,
           });
         },
       }),
@@ -305,7 +305,7 @@ describe("approval history binding and cancellation", () => {
       observation: { state: checkpoint, save },
       readHistory: (start) => {
         expect(start).toBe(0);
-        return Promise.resolve({ nextNativeIndex: 0, nativeTailIndex: -1, complete: true });
+        return Promise.resolve({ complete: true, nativeTailIndex: -1, nextNativeIndex: 0 });
       },
     });
     expect(result).toBeNull();
@@ -329,7 +329,7 @@ describe("approval history binding and cancellation", () => {
       readHistory: (_start, onEvent) => {
         onEvent(requested());
         onEvent(settled("owner", "cancelled"));
-        return Promise.resolve({ nextNativeIndex: 2, nativeTailIndex: 1, complete: true });
+        return Promise.resolve({ complete: true, nativeTailIndex: 1, nextNativeIndex: 2 });
       },
     });
     expect(checkpoint?.capture.entries[0]?.completedCancelled).toBe(true);
@@ -351,7 +351,7 @@ describe("approval history binding and cancellation", () => {
           expect(start).toBe(2);
           onEvent(pending);
           onEvent(approved);
-          return Promise.resolve({ nextNativeIndex: 4, nativeTailIndex: 4, complete: false });
+          return Promise.resolve({ complete: false, nativeTailIndex: 4, nextNativeIndex: 4 });
         },
       }),
     ).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
@@ -362,7 +362,7 @@ describe("approval history binding and cancellation", () => {
         readHistory: (start, onEvent) => {
           expect(start).toBe(4);
           onEvent(requested({ toolName: "unrelated-tool" }));
-          return Promise.resolve({ nextNativeIndex: 5, nativeTailIndex: 5, complete: false });
+          return Promise.resolve({ complete: false, nativeTailIndex: 5, nextNativeIndex: 5 });
         },
       }),
     ).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
@@ -372,7 +372,7 @@ describe("approval history binding and cancellation", () => {
       observation: { state: checkpoint, save },
       readHistory: (start) => {
         expect(start).toBe(0);
-        return Promise.resolve({ nextNativeIndex: 0, nativeTailIndex: -1, complete: true });
+        return Promise.resolve({ complete: true, nativeTailIndex: -1, nextNativeIndex: 0 });
       },
     });
     expect(result).toBeNull();
@@ -411,7 +411,7 @@ describe("approval history binding and cancellation", () => {
           readHistory: (_start, onEvent) => {
             onEvent(requested());
             onEvent(settled());
-            return Promise.resolve({ nextNativeIndex: 2, nativeTailIndex: 1, complete: true });
+            return Promise.resolve({ complete: true, nativeTailIndex: 1, nextNativeIndex: 2 });
           },
         }),
       ).toBeNull();
@@ -439,9 +439,9 @@ describe("approval history binding and cancellation", () => {
             }
             onEvent(cancelled);
             return Promise.resolve({
-              nextNativeIndex: otherRequest ? 4 : 3,
-              nativeTailIndex: 4,
               complete: false,
+              nativeTailIndex: 4,
+              nextNativeIndex: otherRequest ? 4 : 3,
             });
           },
         }),
@@ -458,7 +458,7 @@ describe("approval history binding and cancellation", () => {
           }),
         readHistory: (start) => {
           expect(start).toBe(0);
-          return Promise.resolve({ nextNativeIndex: 0, nativeTailIndex: -1, complete: true });
+          return Promise.resolve({ complete: true, nativeTailIndex: -1, nextNativeIndex: 0 });
         },
       });
       expect(receipt).toBeNull();
@@ -472,7 +472,7 @@ describe("approval history binding and cancellation", () => {
             createPrivateTenantExportApprovalCapture({ ...options, callId: "export-call", state }),
           readHistory: (start) => {
             expect(start).toBe(0);
-            return Promise.resolve({ nextNativeIndex: 0, nativeTailIndex: -1, complete: true });
+            return Promise.resolve({ complete: true, nativeTailIndex: -1, nextNativeIndex: 0 });
           },
         });
         expect(unaffected?.approvalId).toBe("human-request");
@@ -498,7 +498,7 @@ describe("approval history binding and cancellation", () => {
         readHistory: (_start, onEvent) => {
           onEvent(requested());
           onEvent(settled());
-          return Promise.resolve({ nextNativeIndex: 2, nativeTailIndex: 2, complete: false });
+          return Promise.resolve({ complete: false, nativeTailIndex: 2, nextNativeIndex: 2 });
         },
       }),
     ).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
@@ -509,7 +509,7 @@ describe("approval history binding and cancellation", () => {
       readHistory: (start, onEvent) => {
         expect(start).toBe(2);
         onEvent(settled("owner", "cancelled"));
-        return Promise.resolve({ nextNativeIndex: 3, nativeTailIndex: 2, complete: true });
+        return Promise.resolve({ complete: true, nativeTailIndex: 2, nextNativeIndex: 3 });
       },
     });
     expect(result).toBeNull();
@@ -534,7 +534,7 @@ it("rechecks a quiet native tail without rewriting unchanged approval progress",
   });
   const assertOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
   const readHistory = vi.fn(() =>
-    Promise.resolve({ nextNativeIndex: 0, nativeTailIndex: -1, complete: true }),
+    Promise.resolve({ complete: true, nativeTailIndex: -1, nextNativeIndex: 0 }),
   );
   const read = () =>
     readPrivateOperatorApproval({
