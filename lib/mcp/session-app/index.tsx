@@ -1,5 +1,5 @@
 import { App } from "@modelcontextprotocol/ext-apps";
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 
 import packageManifest from "../../../package.json";
@@ -49,7 +49,7 @@ function SessionAppContainer() {
     () => latestResult,
   );
   const capabilities = app.getHostCapabilities();
-  const automaticRefresh = useRef(createBoundedAuthorizationRefresh());
+  const [automaticRefresh] = useState(createBoundedAuthorizationRefresh);
   const authorizationRequestKey = sessionAuthorizationRefreshKey(
     result,
     identityInvitationState?.invitations ?? [],
@@ -73,8 +73,8 @@ function SessionAppContainer() {
   }, [capabilities?.serverTools, result]);
 
   useEffect(() => {
-    automaticRefresh.current.reset(authorizationRequestKey);
-  }, [authorizationRequestKey]);
+    automaticRefresh.reset(authorizationRequestKey);
+  }, [authorizationRequestKey, automaticRefresh]);
 
   useEffect(() => {
     if (!authorizationRequestKey || !capabilities?.serverTools) {
@@ -85,7 +85,7 @@ function SessionAppContainer() {
         return;
       }
       const now = Date.now();
-      if (!automaticRefresh.current.claim(authorizationRequestKey, now)) {
+      if (!automaticRefresh.claim(authorizationRequestKey, now)) {
         return;
       }
       // Refresh is deliberately fire-and-forget from the focus handler.
@@ -103,7 +103,7 @@ function SessionAppContainer() {
       window.removeEventListener("focus", checkAfterReturn);
       document.removeEventListener("visibilitychange", checkAfterReturn);
     };
-  }, [authorizationRequestKey, capabilities?.serverTools, refresh]);
+  }, [authorizationRequestKey, automaticRefresh, capabilities?.serverTools, refresh]);
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function respond(responses: SessionResponse[]) {

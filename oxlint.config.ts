@@ -645,10 +645,6 @@ export default defineConfig({
       rules: { "react-doctor/no-derived-state-effect": "off" },
     },
     {
-      files: ["lib/mcp/session-app/index.tsx"],
-      rules: { "react-doctor/rerender-lazy-ref-init": "off" },
-    },
-    {
       files: [draftAutosavePath],
       rules: { "sonarjs/pseudo-random": "off" },
     },
@@ -892,7 +888,6 @@ export default defineConfig({
         "github/no-inner-html": "off",
         "react-doctor/no-secrets-in-client-code": "off",
         "sonarjs/code-eval": "off",
-        "sonarjs/hardcoded-secret-signatures": "off",
         "sonarjs/no-clear-text-protocols": "off",
         "sonarjs/no-hardcoded-ip": "off",
         "sonarjs/no-hardcoded-passwords": "off",

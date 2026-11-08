@@ -246,7 +246,7 @@ describe("Vercel integration security", () => {
 
   it("verifies the exact raw Vercel webhook body", () => {
     const body = JSON.stringify({ type: "integration-configuration.removed" });
-    const secret = "client-secret";
+    const secret = randomBytes(32).toString("hex");
     const signature = createHmac("sha1", secret).update(body).digest("hex");
     expect(verifyVercelWebhook({ body, secret, signature })).toBe(true);
     expect(verifyVercelWebhook({ body: `${body} `, secret, signature })).toBe(false);
