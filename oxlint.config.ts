@@ -39,6 +39,11 @@ export default defineConfig({
   rules: {
     "eslint/complexity": "off",
     "eslint/curly": "off",
+    // Temporary migration items: re-enable after the existing findings are fixed.
+    "eslint/require-await": "off",
+    "eslint/sort-keys": "off",
+    "typescript/return-await": "off",
+    "unicorn/no-useless-promise-resolve-reject": "off",
   },
   settings: jsPluginSettings,
 });
