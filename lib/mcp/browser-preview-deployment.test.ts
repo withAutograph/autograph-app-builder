@@ -228,11 +228,11 @@ describe("deployment Browser preview route", () => {
   it("scopes receipt reads to the authenticated workspace and returns only verification fields", async () => {
     const fixture = ownedFixture();
     providers.receipt.mockResolvedValue({
-      operationId: "operation",
       logicalSessionId: "wrun_original",
-      sourceOwnerRunId: "wrun_source",
+      operationId: "operation",
       ownerRunId: "wrun_recovered",
       provenance: { checkpointOwnerRunId: "wrun_checkpoint", sourceEventId: "private" },
+      sourceOwnerRunId: "wrun_source",
     });
     const response = await fixture.handler.readRecoveryReceipt(fixture.request, {
       sessionId: fixture.publicId,

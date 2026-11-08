@@ -7,12 +7,12 @@ import {
 
 describe("authorization focus refresh", () => {
   it("refreshes pending app identity links even without a human response request", () => {
-    const result = { sessionId: "session", cursor: 1, events: [], status: "working" as const };
+    const result = { cursor: 1, events: [], sessionId: "session", status: "working" as const };
     const key = sessionAuthorizationRefreshKey(result, [
       {
         callId: "call",
-        url: "https://apps.example.com/sign-in",
         expiresAt: "2099-01-01T00:00:00Z",
+        url: "https://apps.example.com/sign-in",
       },
     ]);
     const refresh = createBoundedAuthorizationRefresh();

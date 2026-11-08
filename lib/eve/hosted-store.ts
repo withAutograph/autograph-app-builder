@@ -508,7 +508,7 @@ const reportInvalidStartAlias = (
   }
 };
 
-const hostedOperationCommonShape = {
+const hostedOperationCommonFields = {
   clientRequestId: z.string().min(1).max(200),
   createdAtEpochMs: z.number().int().nonnegative(),
   internalBuildContinuation: internalBuildContinuationSchema.optional(),
@@ -531,18 +531,18 @@ const hostedOperationCommonShape = {
 export const hostedOperationRecordSchema = z
   .discriminatedUnion("state", [
     z.strictObject({
-      ...hostedOperationCommonShape,
+      ...hostedOperationCommonFields,
       sessionId: z.string().min(1).max(200).optional(),
       state: z.literal("reserved"),
     }),
     z.strictObject({
-      ...hostedOperationCommonShape,
+      ...hostedOperationCommonFields,
       safeErrorCode: z.string().min(1).max(100),
       sessionId: z.string().min(1).max(200).optional(),
       state: z.literal("submission_unknown"),
     }),
     z.strictObject({
-      ...hostedOperationCommonShape,
+      ...hostedOperationCommonFields,
       result: eveSessionResultSchema,
       sessionId: z.string().min(1).max(200),
       sessionRecordDigest: z
@@ -552,7 +552,7 @@ export const hostedOperationRecordSchema = z
       state: z.literal("succeeded"),
     }),
     z.strictObject({
-      ...hostedOperationCommonShape,
+      ...hostedOperationCommonFields,
       safeErrorCode: z.string().min(1).max(100),
       sessionId: z.string().min(1).max(200).optional(),
       state: z.literal("rejected"),
