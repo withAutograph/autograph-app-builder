@@ -357,6 +357,21 @@ const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending
   };
 };
 
+const changeBeforeLivePreflight = (f: ReturnType<typeof fixture>, change: () => void) => {
+  const collect = f.dependencies.collectLineagePreflight;
+  if (collect === undefined) {
+    throw new Error("Missing lineage preflight fixture");
+  }
+  let initialCollected = false;
+  f.dependencies.collectLineagePreflight = async (input) => {
+    if (initialCollected) {
+      change();
+    }
+    initialCollected = true;
+    return await collect(input);
+  };
+};
+
 describe("live native execution transfer", () => {
   it("stops the verified physical inbox owner while preserving the authority anchor", async () => {
     const f = fixture();
@@ -1066,23 +1081,6 @@ describe("owned running-lineage execution transfer", () => {
       }
     }
     return { ...f, parents };
-  };
-  const changeBeforeLivePreflight = (
-    f: ReturnType<typeof terminalAncestors>,
-    change: () => void,
-  ) => {
-    const collect = f.dependencies.collectLineagePreflight;
-    if (collect === undefined) {
-      throw new Error("Missing lineage preflight fixture");
-    }
-    let initialCollected = false;
-    f.dependencies.collectLineagePreflight = async (input) => {
-      if (initialCollected) {
-        change();
-      }
-      initialCollected = true;
-      return await collect(input);
-    };
   };
   it("recovers the same idle checkpoint through long terminal ancestry without repeated history scans", async () => {
     const f = terminalAncestors();

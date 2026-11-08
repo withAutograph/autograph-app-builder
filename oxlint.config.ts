@@ -357,7 +357,6 @@ export default defineConfig({
         sharedLintFile30,
         sharedLintFile12,
         "scripts/design-quality/rescore.mts",
-        "scripts/eve-eval-fetch-preload.mjs",
         "scripts/smoke-portable-plugin.mts",
         sharedLintFile4,
         "scripts/test-portable-release.mts",
@@ -563,7 +562,6 @@ export default defineConfig({
       files: [
         "lib/agent/prior-validated-private-artifact.test.ts",
         "lib/agent/product-behavior-validation.test.ts",
-        "lib/eve/native-live-quiescence.test.ts",
         "lib/eve/private-hosted-approval.test.ts",
         "lib/eve/test-support/draft-reviewed-recovery.ts",
         "lib/provisioning/builder-session-destination.test.ts",
