@@ -223,7 +223,6 @@ const fixture = (captureExisting = false, selectedProgram = program) => {
       expect(current.record.leaseId).toBe(row.record.leaseId);
     },
     store: {
-      read: async () => structuredClone(row),
       compareAndSet: async (input) => {
         if (input.expectedRevision !== row.revision) {
           return undefined;
@@ -234,6 +233,7 @@ const fixture = (captureExisting = false, selectedProgram = program) => {
         };
         return structuredClone(row);
       },
+      read: async () => structuredClone(row),
     },
   };
   const assertCurrent = async () => {
@@ -448,9 +448,9 @@ describe("normal actor operations", () => {
     const originalProgram = normalActorProgramSchema.parse({
       ...program,
       actors: [{ ...program.actors[0], account: "capture-existing" }],
-      organizations: [],
-      memberships: [],
       appAccess: [],
+      memberships: [],
+      organizations: [],
     });
     const f = fixture(false, originalProgram);
     let now = Date.now();
@@ -500,7 +500,7 @@ describe("normal actor operations", () => {
     f.dependencies.assertCurrentPlan = authorizeCurrent;
     const installPlan = (selected: typeof plan, operationRef: string, callId: string) => {
       const approvalId = `${callId}-approval`;
-      approvals.set(callId, { id: approvalId, digest: operatorPlanDigest(selected) });
+      approvals.set(callId, { digest: operatorPlanDigest(selected), id: approvalId });
       f.row.record.approvedByCallId = callId;
       f.row.record.operator = {
         mode: "protected-operator-v1",
@@ -898,9 +898,9 @@ describe("normal actor operations", () => {
       const capturedProgram = normalActorProgramSchema.parse({
         ...program,
         actors: [{ ...program.actors[0], account: "capture-existing" }],
-        organizations: [],
-        memberships: [],
         appAccess: [],
+        memberships: [],
+        organizations: [],
       });
       const f = fixture(false, capturedProgram);
       await expect(f.operations.ensureNormalActorCapture(f.preflight)).rejects.toThrow(
@@ -1186,9 +1186,9 @@ describe("normal actor operations", () => {
       const capturedProgram = normalActorProgramSchema.parse({
         ...program,
         actors: [{ ...program.actors[0], account: "capture-existing" }],
-        organizations: [],
-        memberships: [],
         appAccess: [],
+        memberships: [],
+        organizations: [],
       });
       const f = fixture(false, capturedProgram);
       await expect(f.operations.ensureNormalActorCapture(f.preflight)).rejects.toThrow(
@@ -1252,10 +1252,10 @@ describe("normal actor operations", () => {
 describe("safe save-wrapper observation outside journal CAS", () => {
   it("reduces only four full save-wrapper checks with the same real journal and outward Auth calls", async () => {
     const actors = Array.from({ length: 8 }, (_, index) => ({
+      account: "create-email-password" as const,
       actorKey: `actor-${index}`,
       email: `actor${index}@example.com`,
       name: `Actor ${index}`,
-      account: "create-email-password" as const,
     }));
     const selectedProgram = normalActorProgramSchema.parse({
       ...program,

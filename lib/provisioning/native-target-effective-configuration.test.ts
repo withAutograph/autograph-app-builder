@@ -315,9 +315,9 @@ describe("owner-authorized native target configuration", () => {
     const readReady = vi.fn().mockResolvedValue(undefined);
     expect(
       await resolveNativeTargetEffectiveConfiguration({
+        appId: "sibling",
         configuration: base,
         invocation: ownerContext,
-        appId: "sibling",
         readReady,
       }),
     ).toEqual(base);
@@ -327,9 +327,9 @@ describe("owner-authorized native target configuration", () => {
     const readReady = vi.fn().mockRejectedValue(new HostedOperatorError("authorization_required"));
     await expect(
       resolveNativeTargetEffectiveConfiguration({
+        appId: "sibling",
         configuration: configuration(),
         invocation: ownerContext,
-        appId: "sibling",
         readReady,
       }),
     ).rejects.toMatchObject({ code: "authorization_required" });
@@ -345,9 +345,9 @@ describe("owner-authorized native target configuration", () => {
       }
       await expect(
         resolveNativeTargetEffectiveConfiguration({
+          appId: "new-app",
           configuration: configuration(),
           invocation: ownerContext,
-          appId: "new-app",
           readReady: vi.fn().mockResolvedValue(registration),
         }),
       ).rejects.toMatchObject({ code: "resource_mismatch" });
@@ -360,15 +360,15 @@ describe("owner-authorized native target configuration", () => {
         await Promise.resolve(ready(appId)),
     );
     const first = await resolveNativeTargetEffectiveConfiguration({
+      appId: "first",
       configuration: base,
       invocation: ownerContext,
-      appId: "first",
       readReady,
     });
     const second = await resolveNativeTargetEffectiveConfiguration({
+      appId: "second",
       configuration: base,
       invocation: { ...ownerContext, adapterGeneration: 3 },
-      appId: "second",
       readReady,
     });
     expect(first.catalogAppIds).toEqual(["sibling", "first"]);
@@ -382,9 +382,9 @@ describe("owner-authorized native target configuration", () => {
     const handler = createHostedOperatorNativeHandler({
       createRequestDependencies: async (incoming) => {
         const effective = await resolveNativeTargetEffectiveConfiguration({
+          appId: "new-app",
           configuration: configuration(),
           invocation: incoming,
-          appId: "new-app",
           readReady,
         });
         return {
@@ -481,9 +481,9 @@ describe("owner-authorized native target configuration", () => {
   });
   it("opens the control plane only after resolution using the exact effective snapshot", async () => {
     const effective = await resolveNativeTargetEffectiveConfiguration({
+      appId: "new-app",
       configuration: configuration(),
       invocation: ownerContext,
-      appId: "new-app",
       readReady: vi.fn().mockResolvedValue(ready()),
     });
     const openControlPlane = vi
@@ -494,8 +494,8 @@ describe("owner-authorized native target configuration", () => {
       return effective;
     });
     const loader = createRequestScopedHostedOperatorDependencies({
-      resolveConfiguration,
       openControlPlane,
+      resolveConfiguration,
     });
     const incoming = request();
     await expect(loader(incoming)).rejects.toThrow("fixture-stop-before-private-io");
@@ -513,9 +513,9 @@ describe("owner-authorized native target configuration", () => {
   });
   it("supports the real normal Auth transport app lookup with the same effective target", async () => {
     const effective = await resolveNativeTargetEffectiveConfiguration({
+      appId: "new-app",
       configuration: configuration(),
       invocation: ownerContext,
-      appId: "new-app",
       readReady: vi.fn().mockResolvedValue(ready()),
     });
     const current = vi.fn().mockResolvedValue(undefined);
@@ -599,9 +599,9 @@ describe("ready target selected resource custody", () => {
     const f = resourceProfileFixture();
     const selectResourceConfiguration = vi.fn(() => f.selected);
     const effective = await resolveNativeTargetEffectiveConfiguration({
+      appId: "new-app",
       configuration: f.base,
       invocation: ownerContext,
-      appId: "new-app",
       readReady: () => Promise.resolve(f.registration),
       selectResourceConfiguration,
     });
@@ -630,9 +630,9 @@ describe("ready target selected resource custody", () => {
     const f = resourceProfileFixture();
     await expect(
       resolveNativeTargetEffectiveConfiguration({
+        appId: "new-app",
         configuration: f.base,
         invocation: ownerContext,
-        appId: "new-app",
         readReady: () => Promise.resolve(f.registration),
       }),
     ).rejects.toMatchObject({ code: "resource_mismatch" });
@@ -654,9 +654,9 @@ describe("ready target selected resource custody", () => {
       }
       await expect(
         resolveNativeTargetEffectiveConfiguration({
+          appId: "new-app",
           configuration: f.base,
           invocation: ownerContext,
-          appId: "new-app",
           readReady: () => Promise.resolve(f.registration),
           selectResourceConfiguration: () => f.selected,
         }),
@@ -685,9 +685,9 @@ it.each(["auth-database", "gateway-origin"] as const)(
     );
     await expect(
       resolveNativeTargetEffectiveConfiguration({
+        appId: "new-app",
         configuration: f.base,
         invocation: ownerContext,
-        appId: "new-app",
         readReady: () => Promise.resolve(f.registration),
         selectResourceConfiguration: () => f.selected,
       }),
@@ -731,9 +731,9 @@ it("accepts ordinary source, deployment and worker-byte changes while retaining 
   };
   f.selected.sandbox.workers["new-app"] = updatedWorker;
   const effective = await resolveNativeTargetEffectiveConfiguration({
+    appId: "new-app",
     configuration: f.base,
     invocation: ownerContext,
-    appId: "new-app",
     readReady: () => Promise.resolve(f.registration),
     selectResourceConfiguration: () => f.selected,
   });
@@ -759,9 +759,9 @@ it.each(["operator", "builder-callback"] as const)(
     }
     await expect(
       resolveNativeTargetEffectiveConfiguration({
+        appId: "new-app",
         configuration: f.base,
         invocation: ownerContext,
-        appId: "new-app",
         readReady: () => Promise.resolve(f.registration),
         selectResourceConfiguration: () => f.selected,
       }),
@@ -808,9 +808,9 @@ describe("explicit standard single-project destination", () => {
       const value = standard();
       const readReady = vi.fn().mockResolvedValue(registered ? ready("sibling") : undefined);
       const result = await resolveNativeTargetEffectiveConfiguration({
+        appId: "sibling",
         configuration: value,
         invocation: "current-owner",
-        appId: "sibling",
         readReady,
       });
       expect(readReady).toHaveBeenCalledWith("current-owner", "sibling");
@@ -858,9 +858,9 @@ describe("explicit standard single-project destination", () => {
     }
     await expect(
       resolveNativeTargetEffectiveConfiguration({
+        appId: "sibling",
         configuration: value,
         invocation: "current-owner",
-        appId: "sibling",
         readReady: vi.fn().mockResolvedValue(ready("sibling")),
       }),
     ).rejects.toMatchObject({ code: "resource_mismatch" });
@@ -869,9 +869,9 @@ describe("explicit standard single-project destination", () => {
   it("does not bypass a revoked canonical owner", async () => {
     await expect(
       resolveNativeTargetEffectiveConfiguration({
+        appId: "sibling",
         configuration: standard(),
         invocation: "revoked-owner",
-        appId: "sibling",
         readReady: vi.fn().mockRejectedValue(new HostedOperatorError("authorization_required")),
       }),
     ).rejects.toMatchObject({ code: "authorization_required" });
@@ -880,9 +880,9 @@ describe("explicit standard single-project destination", () => {
   it("does not invent an unconfigured app from a legacy registration", async () => {
     await expect(
       resolveNativeTargetEffectiveConfiguration({
+        appId: "new-app",
         configuration: standard(),
         invocation: "current-owner",
-        appId: "new-app",
         readReady: vi.fn().mockResolvedValue(ready("new-app")),
       }),
     ).rejects.toMatchObject({ code: "resource_mismatch" });
@@ -911,9 +911,9 @@ describe("explicit standard single-project destination", () => {
       const value = standard();
       const readReady = vi.fn().mockResolvedValue(registered ? ready("sibling") : undefined);
       const result = await resolveNativeTargetEffectiveConfiguration({
+        appId: "sibling",
         configuration: value,
         invocation: "current-owner",
-        appId: "sibling",
         readReady,
       });
       expect(readReady).toHaveBeenCalledWith("current-owner", "sibling");
@@ -961,9 +961,9 @@ describe("explicit standard single-project destination", () => {
     }
     await expect(
       resolveNativeTargetEffectiveConfiguration({
+        appId: "sibling",
         configuration: value,
         invocation: "current-owner",
-        appId: "sibling",
         readReady: vi.fn().mockResolvedValue(ready("sibling")),
       }),
     ).rejects.toMatchObject({ code: "resource_mismatch" });
@@ -972,9 +972,9 @@ describe("explicit standard single-project destination", () => {
   it("does not bypass a revoked canonical owner", async () => {
     await expect(
       resolveNativeTargetEffectiveConfiguration({
+        appId: "sibling",
         configuration: standard(),
         invocation: "revoked-owner",
-        appId: "sibling",
         readReady: vi.fn().mockRejectedValue(new HostedOperatorError("authorization_required")),
       }),
     ).rejects.toMatchObject({ code: "authorization_required" });
@@ -983,9 +983,9 @@ describe("explicit standard single-project destination", () => {
   it("does not invent an unconfigured app from a legacy registration", async () => {
     await expect(
       resolveNativeTargetEffectiveConfiguration({
+        appId: "new-app",
         configuration: standard(),
         invocation: "current-owner",
-        appId: "new-app",
         readReady: vi.fn().mockResolvedValue(ready("new-app")),
       }),
     ).rejects.toMatchObject({ code: "resource_mismatch" });

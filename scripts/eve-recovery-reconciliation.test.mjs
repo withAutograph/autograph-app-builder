@@ -615,21 +615,16 @@ const fixture = async (options = {}) => {
     },
   };
   const { boundOwnerRunId, readOperations } = await attachHandoffWorld({
+    events,
     options,
     sourcePair,
-    world,
-    events,
     steps,
+    world,
   });
   const snapshotKey = await attachNativeSnapshot(world, nativeEvents, options.snapshot);
   let authorized = false;
   const collect = collectorFor(options)({
     getWorld: async () => await Promise.resolve(world),
-    resolveRunEncryptionKey: async () => {
-      await Promise.resolve();
-      return key;
-    },
-    hydrateWorkflowArguments: (...values) => serialization.hydrateWorkflowArguments(...values),
     hydrateHookPayload: async (value, _runId, payloadKey) =>
       serialization.deserializePreparedReplayPayload(
         await serialization.prepareReplayPayload(value, payloadKey),
@@ -637,13 +632,18 @@ const fixture = async (options = {}) => {
       ),
     hydrateStepArguments: (...values) => serialization.hydrateStepArguments(...values),
     hydrateStepReturnValue: (...values) => serialization.hydrateStepReturnValue(...values),
-    readDurableSession,
-    requireEventSlot: (id) => Number(id.slice(5)),
+    hydrateWorkflowArguments: (...values) => serialization.hydrateWorkflowArguments(...values),
     now: () => 0,
+    readDurableSession,
     async *readNativeEvents(runId) {
       yield* options.snapshot === true
         ? readTerminalNativeEventsSnapshot(world, runId, snapshotKey)
         : nativeEvents;
+    },
+    requireEventSlot: (id) => Number(id.slice(5)),
+    resolveRunEncryptionKey: async () => {
+      await Promise.resolve();
+      return key;
     },
   });
   const collected = await collect({

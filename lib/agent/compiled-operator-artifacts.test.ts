@@ -78,12 +78,12 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("./workflow-state", () => ({ appBuilderWorkflowState: { get: () => mocks.state } }));
 vi.mock("./draft-reconciliation-state", () => ({
-  draftReconciliationState: { get: () => mocks.candidate },
   assertRetainedDraftReconciliationCompletion: (completion: DraftReconciliationCompletion) => {
     if (completion !== mocks.completion) {
       throw new Error("completion_context_missing");
     }
   },
+  draftReconciliationState: { get: () => mocks.candidate },
 }));
 vi.mock("../provisioning/hosted-operator-owner-context", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -951,16 +951,11 @@ describe("owned compiled artifact workflow hook", () => {
       return { adapterSessionId: "adapter-child", recoveryBinding, snapshot: snapshot() };
     });
     const service = createHostedEveSessionService({
-      principal,
-      store,
       assertNativeRecoveryOwner: async () => {},
       assertSendDeliveryOwner: async () => {},
+      principal,
+      store,
       transport: {
-        start,
-        send,
-        get: async () => snapshot(),
-        cancel: async () => snapshot(),
-        respond: async () => snapshot(),
         activateRecovery: async ({ operationId }) => {
           const operation = await store.getPrivateOperation(principal, operationId);
           const child = await store.getSession(principal, operation?.sessionId ?? "missing");
@@ -969,6 +964,11 @@ describe("owned compiled artifact workflow hook", () => {
           }
           return child.nativeRecoveryBinding;
         },
+        cancel: async () => snapshot(),
+        get: async () => snapshot(),
+        respond: async () => snapshot(),
+        send,
+        start,
       },
     });
     const source = await service.start({
@@ -1201,9 +1201,9 @@ describe("owned compiled artifact workflow hook", () => {
     });
     const client = createHostedOperatorClient({
       endpoint: "https://operator.example",
+      fetch: fetcher,
       ownerContext: owner,
       token: async () => "synthetic-workload",
-      fetch: fetcher,
     });
     const bindingRequest = { action: "bindings" as const, operationRef, selection };
     await expect(client.bindings(bindingRequest)).resolves.toMatchObject({

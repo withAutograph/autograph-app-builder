@@ -85,11 +85,11 @@ it("settles native approval before dispatch, preserves results and authorizers, 
   const answer = async (session, decisions) => {
     const events = [];
     const run = createToolLoopHarness({
-      tools,
       handleEvent: async (streamEvent) => {
         await Promise.resolve(events.push(streamEvent));
       },
       resolveModel: async () => await Promise.reject(new Error("unexpected model call")),
+      tools,
     });
     let result = await run(session, {
       attributedInputResponses: Object.entries(decisions).map(([name, optionId]) => ({
@@ -179,12 +179,12 @@ it("settles native approval before dispatch, preserves results and authorizers, 
   delete initial.state;
   initial.history = [];
   const generated = await contextStorage.run(ctx, () =>
-    createToolLoopHarness({ tools, resolveModel: async () => await Promise.resolve(model) })(
-      initial,
-      {
-        message: "do work",
-      },
-    ),
+    createToolLoopHarness({
+      resolveModel: async () => await Promise.resolve(model),
+      tools,
+    })(initial, {
+      message: "do work",
+    }),
   );
   assert.equal(getPendingInputBatches(generated.session.state).length, 1);
   assert.equal(getPendingCoordinationBatch(generated.session.state).tasks.length, 1);
@@ -196,9 +196,9 @@ it("settles native approval before dispatch, preserves results and authorizers, 
     const [pending] = getPendingInputBatches(generated.session.state);
     const generatedEvents = [];
     const run = createToolLoopHarness({
-      tools,
       handleEvent: async (e) => await Promise.resolve(generatedEvents.push(e)),
       resolveModel: async () => await Promise.reject(new Error("unexpected replay model call")),
+      tools,
     });
     const generatedResult = await run(generated.session, {
       attributedInputResponses: [
@@ -232,9 +232,9 @@ it("settles native approval before dispatch, preserves results and authorizers, 
     "request-one": "old-identity",
   };
   const changedRun = createToolLoopHarness({
-    tools,
-    toolReplayIdentity: () => "new-identity",
     resolveModel: async () => await Promise.reject(new Error("unexpected model call")),
+    toolReplayIdentity: () => "new-identity",
+    tools,
   });
   await assert.rejects(
     changedRun(changed, {
@@ -254,20 +254,20 @@ it("settles native approval before dispatch, preserves results and authorizers, 
     },
   };
   const authorizedGenerated = await contextStorage.run(ctx, () =>
-    createToolLoopHarness({ tools, resolveModel: async () => await Promise.resolve(model) })(
-      initial,
-      {
-        message: "do work",
-      },
-    ),
+    createToolLoopHarness({
+      resolveModel: async () => await Promise.resolve(model),
+      tools,
+    })(initial, {
+      message: "do work",
+    }),
   );
   const [authorizedPending] = getPendingInputBatches(authorizedGenerated.session.state);
   assert.deepEqual(authorizedPending.responseAuthRequiredRequestIds, [
     authorizedPending.requests[0].requestId,
   ]);
   const authorizedRun = createToolLoopHarness({
-    tools,
     resolveModel: async () => await Promise.reject(new Error("unexpected model call")),
+    tools,
   });
   let authorized = await contextStorage.run(ctx, () =>
     authorizedRun(authorizedGenerated.session, {
@@ -381,7 +381,10 @@ it.each([
         });
       },
     });
-    const run = createToolLoopHarness({ tools, resolveModel: () => Promise.resolve(model) });
+    const run = createToolLoopHarness({
+      resolveModel: () => Promise.resolve(model),
+      tools,
+    });
     const invoke = (session, input) => contextStorage.run(ctx, () => run(session, input));
     const initial = {
       agent: { system: "", tools: [], modelReference: { id: "model", provider: "test" } },
@@ -414,9 +417,9 @@ it.each([
       const abort = new AbortController();
       abort.abort(new Error("cancelled before replay"));
       const cancelled = createToolLoopHarness({
-        tools,
         abortSignal: abort.signal,
         resolveModel: () => Promise.resolve(model),
+        tools,
       });
       await assert.rejects(
         contextStorage.run(ctx, () =>
@@ -766,12 +769,12 @@ it.each(["generic", "typed"])(
     };
     const before = JSON.stringify(session.state);
     const run = createToolLoopHarness({
-      tools,
       abortSignal: abort.signal,
       resolveModel: () => {
         models += 1;
         return Promise.reject(new Error("must not resolve model"));
       },
+      tools,
     });
     await assert.rejects(
       contextStorage.run(ctx, () => run(session)),

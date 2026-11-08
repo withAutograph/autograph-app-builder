@@ -348,6 +348,7 @@ const fixture = async (options = {}) => {
       : []),
   ];
   const world = {
+    events: { list: async () => await Promise.resolve({ data: events, hasMore: false }) },
     runs: {
       get: async () =>
         await Promise.resolve({
@@ -356,7 +357,6 @@ const fixture = async (options = {}) => {
           input: "original-entry-retained",
         }),
     },
-    events: { list: async () => await Promise.resolve({ data: events, hasMore: false }) },
     steps: {
       get: async (runId, id) => {
         assert.equal(runId, ownerRunId);
@@ -367,16 +367,16 @@ const fixture = async (options = {}) => {
   let authorized = false;
   const collect = createTerminalRecoveryCandidateCollector({
     getWorld: async () => await Promise.resolve(world),
-    resolveRunEncryptionKey: async () => {
-      await Promise.resolve();
-    },
     hydrateStepArguments: (...values) => serialization.hydrateStepArguments(...values),
     hydrateStepReturnValue: (...values) => serialization.hydrateStepReturnValue(...values),
-    readDurableSession,
-    requireEventSlot: (id) => Number(id.slice(5)),
     now: () => 0,
+    readDurableSession,
     async *readNativeEvents() {
       yield* nativeEvents;
+    },
+    requireEventSlot: (id) => Number(id.slice(5)),
+    resolveRunEncryptionKey: async () => {
+      await Promise.resolve();
     },
   });
   const collected = await collect({
@@ -392,14 +392,14 @@ const fixture = async (options = {}) => {
   assert.equal(authorized, true);
   return {
     collected,
-    source,
-    latest,
-    sourcePair,
-    latestPair,
-    originalGrant,
-    incoming,
     events,
+    incoming,
+    latest,
+    latestPair,
     nativeEvents,
+    originalGrant,
+    source,
+    sourcePair,
   };
 };
 
@@ -466,7 +466,7 @@ const resumeSynthetic = async (ready, denied) => {
   });
   assert.equal(executions, 0);
   const result = await contextStorage.run(ctx, () =>
-    createToolLoopHarness({ tools, resolveModel: async () => await Promise.resolve(model) })(
+    createToolLoopHarness({ resolveModel: async () => await Promise.resolve(model), tools })(
       session,
       {
         runtimeActionResults: ready.replayInput.runtimeResults.results,
