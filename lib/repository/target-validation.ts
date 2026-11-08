@@ -767,32 +767,35 @@ export const executeProposalBoundValidation = (input: {
     }
     commands.push(commandReceipt);
     if (result.exitCode !== 0) {
+      const { attempt } = input;
+      const reason =
+        toolingFailure.classification() === undefined ? "command-failed" : "tooling-prerequisite";
+      const commandFailure: NonNullable<TargetValidationFailureReceipt["commandFailure"]> = {
+        exitCode: result.exitCode,
+        name: planned.name,
+      };
+      if (toolingFailure.classification() !== undefined) {
+        commandFailure.failureClass = toolingFailure.classification();
+        commandFailure.hint =
+          toolingFailure.classification() === "missing-app-task"
+            ? missingAppTaskHint
+            : toolingFailureHint;
+      }
+      if (
+        /(?:script not found|missing script|task .* not found)/iu.test(
+          `${result.stderr}\n${result.stdout}`,
+        )
+      ) {
+        commandFailure.hint =
+          "The repository app task is unavailable. Check the supported mise task and app package scripts before retrying.";
+      }
       return {
         ok: false,
         receipt: failureReceipt(
-          input.attempt,
+          attempt,
           commands,
-          toolingFailure.classification() === undefined ? "command-failed" : "tooling-prerequisite",
-          {
-            exitCode: result.exitCode,
-            name: planned.name,
-            ...(toolingFailure.classification() === undefined
-              ? {}
-              : {
-                  failureClass: toolingFailure.classification(),
-                  hint:
-                    toolingFailure.classification() === "missing-app-task"
-                      ? missingAppTaskHint
-                      : toolingFailureHint,
-                }),
-            ...(/(?:script not found|missing script|task .* not found)/iu.test(
-              `${result.stderr}\n${result.stdout}`,
-            )
-              ? {
-                  hint: "The repository app task is unavailable. Check the supported mise task and app package scripts before retrying.",
-                }
-              : {}),
-          },
+          reason,
+          commandFailure,
           compilerDiagnostics(
             `${durableOutput?.stderr.excerpt ?? result.stderr}\n${durableOutput?.stdout.excerpt ?? result.stdout}`,
           ),

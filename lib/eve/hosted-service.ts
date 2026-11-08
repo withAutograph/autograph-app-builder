@@ -3215,17 +3215,21 @@ export function createHostedEveSessionService(input: {
             throw activationFailure;
           }
         }
-        const nativeReadObservation: NativeSendReadObservation = {
+        const nativeReadProgress: Pick<NativeSendReadObservation, "nativeStartIndex"> &
+          Partial<NativeSendReadObservation> = {
           nativeStartIndex: nativeObservationState?.nextNativeIndex ?? 0,
-          ...(spool.observation.nextNativeIndex === undefined
-            ? {}
-            : { nativeNextIndex: spool.observation.nextNativeIndex }),
-          ...(spool.observation.nativeTailIndex === undefined
-            ? {}
-            : { nativeTailIndex: spool.observation.nativeTailIndex }),
-          ...(spool.observation.observationComplete === undefined
-            ? {}
-            : { observationComplete: spool.observation.observationComplete }),
+        };
+        if (spool.observation.nextNativeIndex !== undefined) {
+          nativeReadProgress.nativeNextIndex = spool.observation.nextNativeIndex;
+        }
+        if (spool.observation.nativeTailIndex !== undefined) {
+          nativeReadProgress.nativeTailIndex = spool.observation.nativeTailIndex;
+        }
+        if (spool.observation.observationComplete !== undefined) {
+          nativeReadProgress.observationComplete = spool.observation.observationComplete;
+        }
+        const nativeReadObservation: NativeSendReadObservation = {
+          ...nativeReadProgress,
           currentTurnPresent: spool.observation.activeTurnId !== undefined,
         };
         const sendRead: SendReadEvidence = {

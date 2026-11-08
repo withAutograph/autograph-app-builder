@@ -37,6 +37,11 @@ interface SourceInspectionContinuation {
   path: string;
 }
 
+interface SourceFilePage {
+  continuation?: SourceInspectionContinuation;
+  file?: SourceInspectionFile;
+}
+
 interface SourceInspectionListing {
   availablePathCount?: number;
   availablePaths?: string[];
@@ -122,7 +127,7 @@ const readSourceFilePage = async function readSourceFilePage(
     offsetBytes: number;
     path: string;
   },
-): Promise<{ continuation?: SourceInspectionContinuation; file?: SourceInspectionFile } | null> {
+): Promise<SourceFilePage | null> {
   const { appId, expectedDigest, files, listing, missingPaths, offsetBytes, path } = input;
   const content = await sandbox.readTextFile({ path: `repository/${path}` });
   if (content === null) {
@@ -146,14 +151,16 @@ const readSourceFilePage = async function readSourceFilePage(
   try {
     chunk = largestUtf8PayloadChunk({
       content,
-      makePayload: (chunkContent, nextOffsetBytes) =>
-        sourceInspectionEvent({
+      makePayload: (chunkContent, nextOffsetBytes) => {
+        const output: SourceInspectionOutput = {
           ...payloadBase,
           files: [...files, { content: chunkContent, digest, offsetBytes, path }],
-          ...(nextOffsetBytes < Buffer.byteLength(content, "utf-8")
-            ? { continuation: { digest, offsetBytes: nextOffsetBytes, path } }
-            : {}),
-        }),
+        };
+        if (nextOffsetBytes < Buffer.byteLength(content, "utf-8")) {
+          output.continuation = { digest, offsetBytes: nextOffsetBytes, path };
+        }
+        return sourceInspectionEvent(output);
+      },
       offsetBytes,
     });
   } catch (error) {
@@ -166,12 +173,13 @@ const readSourceFilePage = async function readSourceFilePage(
     }
     throw error;
   }
-  return {
+  const result: SourceFilePage = {
     file: { content: chunk.content, digest, offsetBytes, path },
-    ...(chunk.nextOffsetBytes < Buffer.byteLength(content, "utf-8")
-      ? { continuation: { digest, offsetBytes: chunk.nextOffsetBytes, path } }
-      : {}),
   };
+  if (chunk.nextOffsetBytes < Buffer.byteLength(content, "utf-8")) {
+    result.continuation = { digest, offsetBytes: chunk.nextOffsetBytes, path };
+  }
+  return result;
 };
 
 type AppBuilderState = ReturnType<typeof appBuilderWorkflowState.get>;
@@ -316,14 +324,17 @@ export const buildSourceInspectionOutput = async function buildSourceInspectionO
       break;
     }
   }
-  const response: SourceInspectionOutput = {
-    appId,
-    ...listing,
-    ...(nextPathIndex < availablePaths.length ? { nextPathIndex } : {}),
-    files,
-    ...(missingPaths.length === 0 ? {} : { missingPaths }),
-    ...(continuation === undefined ? {} : { continuation }),
-  };
+  const header: Omit<SourceInspectionOutput, "files"> = { appId, ...listing };
+  if (nextPathIndex < availablePaths.length) {
+    header.nextPathIndex = nextPathIndex;
+  }
+  const response: SourceInspectionOutput = { ...header, files };
+  if (missingPaths.length !== 0) {
+    response.missingPaths = missingPaths;
+  }
+  if (continuation !== undefined) {
+    response.continuation = continuation;
+  }
   if (serializedPayloadBytes(sourceInspectionEvent(response)) > EVE_MAX_PAYLOAD_BYTES) {
     throw new Error(
       "The requested source inspection metadata exceeds Eve's provider transport envelope. Request fewer paths in one call, then continue with the returned file digest and byte offset.",

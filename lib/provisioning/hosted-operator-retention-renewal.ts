@@ -379,6 +379,30 @@ export const readPendingRetentionRenewalPlan = (
     : undefined;
 };
 
+const renewalDeliveryProvenanceEntry = (
+  approvedByCallId: string,
+  prior: HostedOperatorRecord & { approvalId: string },
+): RetentionRenewalDeliveryProvenance => {
+  const entry: Omit<RetentionRenewalDeliveryProvenance, "plan" | "planDigest"> = {
+    approvedByCallId,
+    approvalId: prior.approvalId,
+    deliveryCandidates: (prior.deliveryCandidates ?? []).filter(
+      (candidate) => candidate.operationRef === prior.operationRef,
+    ),
+    gatewayDeliveryCandidates: (prior.gatewayDeliveryCandidates ?? []).filter(
+      (candidate) => candidate.operationRef === prior.operationRef,
+    ),
+    operationRef: prior.operationRef,
+  };
+  if (prior.pendingEffectId !== undefined) {
+    entry.pendingEffectId = prior.pendingEffectId;
+  }
+  if (prior.pendingEffectAttempt !== undefined) {
+    entry.pendingEffectAttempt = structuredClone(prior.pendingEffectAttempt);
+  }
+  return { ...entry, plan: prior.plan, planDigest: prior.planDigest };
+};
+
 /** Historical app/Gateway candidates remain paired with their original approved source metadata. */
 export const retentionRenewalDeliveryProvenance = (
   record: HostedRuntimeJournalRecord | undefined,
@@ -393,23 +417,7 @@ export const retentionRenewalDeliveryProvenance = (
       continue;
     }
     const { approvedByCallId, operator: prior } = retained;
-    provenance.push({
-      approvedByCallId,
-      approvalId: prior.approvalId,
-      deliveryCandidates: (prior.deliveryCandidates ?? []).filter(
-        (candidate) => candidate.operationRef === prior.operationRef,
-      ),
-      gatewayDeliveryCandidates: (prior.gatewayDeliveryCandidates ?? []).filter(
-        (candidate) => candidate.operationRef === prior.operationRef,
-      ),
-      operationRef: prior.operationRef,
-      ...(prior.pendingEffectId === undefined ? {} : { pendingEffectId: prior.pendingEffectId }),
-      ...(prior.pendingEffectAttempt === undefined
-        ? {}
-        : { pendingEffectAttempt: structuredClone(prior.pendingEffectAttempt) }),
-      plan: prior.plan,
-      planDigest: prior.planDigest,
-    });
+    provenance.push(renewalDeliveryProvenanceEntry(approvedByCallId, prior));
   }
   return provenance;
 };

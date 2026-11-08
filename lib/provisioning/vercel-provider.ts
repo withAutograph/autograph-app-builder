@@ -295,9 +295,15 @@ export async function provisionVercelProject(input: {
             } else if (created.status === 429) {
               code = "provider_rate_limited";
             }
+            const failure: Pick<
+              Extract<VercelProvisionResult, { status: "failed" }>,
+              "code" | "providerDiagnostic"
+            > = { code };
+            if (providerDiagnostic !== undefined) {
+              failure.providerDiagnostic = providerDiagnostic;
+            }
             return {
-              code,
-              ...(providerDiagnostic === undefined ? {} : { providerDiagnostic }),
+              ...failure,
               retryable: created.status === 429,
               status: "failed",
             };
@@ -394,12 +400,20 @@ export async function provisionVercelProject(input: {
       }
       return failure;
     }
-    return {
+    const failure: Pick<
+      Extract<VercelProvisionResult, { status: "failed" }>,
+      "code" | "providerDiagnostic"
+    > = {
       code:
         error instanceof Error && error.message === "credential-rejected"
           ? "credential_unavailable"
           : "provider_unavailable",
-      ...(providerDiagnostic === undefined ? {} : { providerDiagnostic }),
+    };
+    if (providerDiagnostic !== undefined) {
+      failure.providerDiagnostic = providerDiagnostic;
+    }
+    return {
+      ...failure,
       retryable: true,
       status: "failed",
     };

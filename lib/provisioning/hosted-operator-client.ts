@@ -73,12 +73,16 @@ const continuityReadAction = "continuity-read";
 const continuityBindingReadAction = "continuity-binding-read";
 
 /** Match the protected operator's function duration without changing unrelated fetches. */
-export const createHostedOperatorDispatcher = (factory?: Agent.Options["factory"]) =>
-  new Agent({
+export const createHostedOperatorDispatcher = (factory?: Agent.Options["factory"]) => {
+  const options: Agent.Options = {
     bodyTimeout: 1_800_000,
     headersTimeout: 1_800_000,
-    ...(factory === undefined ? {} : { factory }),
-  });
+  };
+  if (factory !== undefined) {
+    options.factory = factory;
+  }
+  return new Agent(options);
+};
 const operatorDispatcher = createHostedOperatorDispatcher();
 
 const bindingSchema = z.strictObject({
@@ -436,23 +440,24 @@ export const createHostedOperatorClient = (input: {
       ) {
         const diagnostic = continuityReadDiagnosticStageSchema.safeParse(stage);
         if (diagnostic.success) {
-          throw new HostedOperatorError(
-            error instanceof HostedOperatorError ? error.code : "operator_unavailable",
-            {
-              cause: error,
-              continuityReadStage:
-                error instanceof HostedOperatorError && error.continuityReadStage !== undefined
-                  ? error.continuityReadStage
-                  : diagnostic.data,
-              ...(error instanceof HostedOperatorError && error.recoveryStage !== undefined
-                ? { recoveryStage: error.recoveryStage }
-                : {}),
-              ...(error instanceof HostedOperatorError &&
-              error.recoveryProgressAdvanced !== undefined
-                ? { recoveryProgressAdvanced: error.recoveryProgressAdvanced }
-                : {}),
-            },
-          );
+          const code = error instanceof HostedOperatorError ? error.code : "operator_unavailable";
+          const options: NonNullable<ConstructorParameters<typeof HostedOperatorError>[1]> = {
+            cause: error,
+            continuityReadStage:
+              error instanceof HostedOperatorError && error.continuityReadStage !== undefined
+                ? error.continuityReadStage
+                : diagnostic.data,
+          };
+          if (error instanceof HostedOperatorError && error.recoveryStage !== undefined) {
+            options.recoveryStage = error.recoveryStage;
+          }
+          if (
+            error instanceof HostedOperatorError &&
+            error.recoveryProgressAdvanced !== undefined
+          ) {
+            options.recoveryProgressAdvanced = error.recoveryProgressAdvanced;
+          }
+          throw new HostedOperatorError(code, options);
         }
       }
       throw error;
