@@ -292,14 +292,18 @@ function createStore(sql: Sql): PreviewActivationStore {
           const now = new Date(input.requestedAt);
           await transaction`insert into "user" (id, name, email, email_verified, created_at, updated_at) values (${input.userId}, ${input.githubLogin}, ${input.email}, true, ${now}, ${now})`;
           userRowsAffected = 1;
-        } else if (
-          users.length !== 1 ||
-          users[0]?.id !== input.userId ||
-          users[0]?.email !== input.email ||
-          users[0]?.name !== input.githubLogin ||
-          users[0]?.email_verified !== true
-        ) {
-          throw new Error("Invited user identity conflicts with an existing row.");
+        } else {
+          const identityConflict = "Invited user identity conflicts with an existing row.";
+          if (
+            users.length !== 1 ||
+            users[0]?.id !== input.userId ||
+            users[0]?.email !== input.email
+          ) {
+            throw new Error(identityConflict);
+          }
+          if (users[0]?.name !== input.githubLogin || users[0]?.email_verified !== true) {
+            throw new Error(identityConflict);
+          }
         }
         if (accounts.length === 0) {
           const now = new Date(input.requestedAt);

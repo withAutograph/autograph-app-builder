@@ -347,13 +347,31 @@ export const registerDevelopmentPackage = async (input: {
   if (
     !Array.isArray(parsed.installed) ||
     parsed.installed.length !== 1 ||
-    installed?.pluginId !== DEVELOPMENT_PLUGIN_SELECTOR ||
+    installed?.pluginId !== DEVELOPMENT_PLUGIN_SELECTOR
+  ) {
+    throw new Error(
+      `Codex did not report the exact project-scoped ${DEVELOPMENT_PLUGIN_SELECTOR} installation.`,
+    );
+  }
+  if (
     installed.name !== DEVELOPMENT_PLUGIN_NAME ||
     installed.marketplaceName !== DEVELOPMENT_MARKETPLACE_NAME ||
-    installed.version !== input.version ||
+    installed.version !== input.version
+  ) {
+    throw new Error(
+      `Codex did not report the exact project-scoped ${DEVELOPMENT_PLUGIN_SELECTOR} installation.`,
+    );
+  }
+  if (
     installed.installed !== true ||
     installed.source?.source !== "local" ||
-    installed.source.path !== path.join(marketplaceRoot, "plugins", DEVELOPMENT_PLUGIN_NAME) ||
+    installed.source.path !== path.join(marketplaceRoot, "plugins", DEVELOPMENT_PLUGIN_NAME)
+  ) {
+    throw new Error(
+      `Codex did not report the exact project-scoped ${DEVELOPMENT_PLUGIN_SELECTOR} installation.`,
+    );
+  }
+  if (
     installed.marketplaceSource?.sourceType !== "local" ||
     installed.marketplaceSource.source !== marketplaceRoot
   ) {

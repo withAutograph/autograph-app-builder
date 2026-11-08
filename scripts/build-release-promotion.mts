@@ -27,14 +27,16 @@ const repositoryRoot = await realpath(path.resolve("."));
 const outputInput = option("--output");
 const endpoint = `${releaseEndpoint(option("--endpoint"))}/mcp`;
 const deploymentUrl = new URL(option("--deployment-url"));
+const invalidDeploymentUrl = "Deployment URL must be one exact provider-owned Vercel origin.";
 if (
   deploymentUrl.protocol !== "https:" ||
   !deploymentUrl.hostname.endsWith(".vercel.app") ||
-  deploymentUrl.pathname !== "/" ||
-  deploymentUrl.search ||
-  deploymentUrl.hash
+  deploymentUrl.pathname !== "/"
 ) {
-  throw new Error("Deployment URL must be one exact provider-owned Vercel origin.");
+  throw new Error(invalidDeploymentUrl);
+}
+if (deploymentUrl.search || deploymentUrl.hash) {
+  throw new Error(invalidDeploymentUrl);
 }
 if (!path.isAbsolute(outputInput)) {
   throw new Error("Release output must be absolute.");

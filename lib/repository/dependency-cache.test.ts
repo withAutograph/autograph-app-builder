@@ -177,17 +177,20 @@ function liveDependencySourceFixture(input?: { packageJson?: string; ordinarySou
   }));
   const dependencyInputs = Object.fromEntries(
     sourceFiles
-      .filter(
-        ({ path }) =>
-          path === ".config/mise/config.toml" ||
-          path === ".config/mise/mise.lock" ||
+      .filter(({ path }) => {
+        if (path === ".config/mise/config.toml" || path === ".config/mise/mise.lock") {
+          return true;
+        }
+        if (
           path === "package.json" ||
           path === "bun.lock" ||
           path === "Cargo.toml" ||
-          path === "Cargo.lock" ||
-          path.endsWith("/package.json") ||
-          path.endsWith("/Cargo.toml"),
-      )
+          path === "Cargo.lock"
+        ) {
+          return true;
+        }
+        return path.endsWith("/package.json") || path.endsWith("/Cargo.toml");
+      })
       .map(({ path, sha256 }) => [path, sha256]),
   );
   return { contents, dependencyInputs, sourceFiles };

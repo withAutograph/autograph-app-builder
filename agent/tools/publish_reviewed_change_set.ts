@@ -311,9 +311,10 @@ export default defineTool({
       expected: expectedPending,
       operation: "local-publication terminal recording",
       transition: (current) => {
+        const differentPendingCall =
+          current.phase !== "publication_pending" || current.publicationCallId !== ctx.callId;
         if (
-          current.phase !== "publication_pending" ||
-          current.publicationCallId !== ctx.callId ||
+          differentPendingCall ||
           current.publicationProposal.digest !== proposal.digest ||
           current.sourceReceipt.digest !== workflow.sourceReceipt.digest ||
           current.reviewReceipt.digest !== workflow.reviewReceipt.digest

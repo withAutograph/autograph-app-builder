@@ -89,12 +89,15 @@ export function renderReport(report: {
     .map(([group, title]) => {
       const entries = observations
         .map((o, index) => ({ index, o }))
-        .filter(({ o }) =>
-          group === "unknown"
-            ? o.provenance === "unknown" ||
+        .filter(({ o }) => {
+          if (group === "unknown") {
+            return (
+              o.provenance === "unknown" ||
               (o.provenance === "generated" && o.verdict === "unassessed")
-            : o.provenance === group && (group === "shared" || o.verdict === "nonconforming"),
-        );
+            );
+          }
+          return o.provenance === group && (group === "shared" || o.verdict === "nonconforming");
+        });
       const visible = group === "unknown" ? entries.slice(0, 30) : entries;
       return `<details${group === "generated" ? " open" : ""}><summary>${title} (${entries.length})</summary>${visible.map(({ o, index }) => location(o, index)).join("") || "No findings in assessed evidence."}${visible.length < entries.length ? '<p>Showing 30 representative unknowns. <a href="report.json">Download every observation and source location</a>.</p>' : ""}</details>`;
     })

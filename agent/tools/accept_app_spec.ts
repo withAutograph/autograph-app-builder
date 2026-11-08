@@ -144,13 +144,15 @@ export default defineTool({
       throw new Error("Start a workspace before creating an implementation plan.");
     }
     const path = `prototype/${appId}/app-spec.md`;
-    const artifact = current.artifacts.find(
-      (candidate) =>
-        candidate.path === path &&
-        candidate.sessionId === ctx.session.id &&
+    const artifact = current.artifacts.find((candidate) => {
+      if (candidate.path !== path || candidate.sessionId !== ctx.session.id) {
+        return false;
+      }
+      return (
         (expectedArtifactDigest === undefined || candidate.digest === expectedArtifactDigest) &&
-        (expectedArtifactRevision === undefined || candidate.revision === expectedArtifactRevision),
-    );
+        (expectedArtifactRevision === undefined || candidate.revision === expectedArtifactRevision)
+      );
+    });
     if (artifact === undefined) {
       throw new Error("Create a product design before creating its implementation plan.");
     }

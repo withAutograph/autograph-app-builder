@@ -19,15 +19,14 @@ export const readNavigationFixture = function readNavigationFixture() {
   );
   const origin = new URL(fixture.origin);
   const database = new URL(fixture.databaseUrl);
-  if (
-    origin.protocol !== "https:" ||
-    origin.hostname !== "localhost" ||
-    !origin.port ||
+  const invalidOrigin =
+    origin.protocol !== "https:" || origin.hostname !== "localhost" || !origin.port;
+  const invalidDatabase = () =>
     database.protocol !== "postgresql:" ||
     database.hostname !== "127.0.0.1" ||
     !database.port ||
-    !/^\/autograph_navigation_[a-z0-9_]+$/u.test(database.pathname)
-  ) {
+    !/^\/autograph_navigation_[a-z0-9_]+$/u.test(database.pathname);
+  if (invalidOrigin || invalidDatabase()) {
     throw new Error("Production navigation requires its isolated loopback fixture.");
   }
   return fixture;

@@ -295,7 +295,13 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
       metadata === null ||
       typeof metadata !== "object" ||
       Array.isArray(metadata) ||
-      Object.getPrototypeOf(metadata) !== Object.prototype ||
+      Object.getPrototypeOf(metadata) !== Object.prototype
+    ) {
+      throw new Error(
+        `${path.relative(pluginRoot, skillPath)} field metadata must map string keys to string values.`,
+      );
+    }
+    if (
       Object.entries(metadata).some(
         ([key, value]) => typeof key !== "string" || typeof value !== "string",
       )

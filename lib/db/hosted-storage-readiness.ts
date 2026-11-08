@@ -925,9 +925,11 @@ export async function loadHostedStorageContract(repositoryRoot: string) {
         "0016_emulate_preview_state",
         "0021_builder_draft_active_revision",
       ].includes(migration.tag) &&
-        /\b(?:UPDATE|INSERT\s+INTO)\b/iu.test(migration.content)) ||
-      /\bALTER\b[\s\S]*\bDROP\b/iu.test(migration.content)
+        /\b(?:UPDATE|INSERT\s+INTO)\b/iu.test(migration.content))
     ) {
+      throw new Error("Hosted storage migration is not additive-only.");
+    }
+    if (/\bALTER\b[\s\S]*\bDROP\b/iu.test(migration.content)) {
       throw new Error("Hosted storage migration is not additive-only.");
     }
   }

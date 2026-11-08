@@ -186,9 +186,9 @@ if (finding.status === "ready") {
         }
         await mkdir(path.join(output, "screenshots"), { mode: 0o700, recursive: true });
         await page.screenshot({ fullPage: true, path: path.join(output, screenshot) });
+        const responseFailed = response === null || !response.ok();
         const failed =
-          response === null ||
-          !response.ok() ||
+          responseFailed ||
           consoleErrors.length > 0 ||
           pageErrors.length > 0 ||
           brief?.status === "failed";
