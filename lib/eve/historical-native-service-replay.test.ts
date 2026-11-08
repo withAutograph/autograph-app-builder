@@ -17,6 +17,12 @@ import {
   nativeTargetRequiredProjectProtection,
 } from "../provisioning/native-target-onboarding-contract";
 
+interface ReplayReceiptUpdate {
+  privateApprovalReceipts?: Parameters<
+    NonNullable<HostedEveStore["observeSessionPaged"]>
+  >[0]["verifiedReplayReceipts"];
+}
+
 const principal = {
   audience: "autograph-app-builder",
   issuer: "https://identity.example.test",
@@ -302,11 +308,14 @@ describe("service recovery of historical native approval", () => {
           ({ metadata } = input);
           revision += 1;
           const next = `sha256:${revision.toString(16).padStart(64, "0")}`;
+          const previous = { ...current };
+          const receiptUpdate: ReplayReceiptUpdate = {};
+          if (input.verifiedReplayReceipts !== undefined) {
+            receiptUpdate.privateApprovalReceipts = input.verifiedReplayReceipts;
+          }
           current = durableHostedSessionRecordSchema.parse({
-            ...current,
-            ...(input.verifiedReplayReceipts === undefined
-              ? {}
-              : { privateApprovalReceipts: input.verifiedReplayReceipts }),
+            ...previous,
+            ...receiptUpdate,
             checkpointDigest: next,
             checkpointRef: { ...current.checkpointRef, digest: next },
             updatedAtEpochMs: input.nowEpochMs,

@@ -172,10 +172,13 @@ const historyFixture = () => {
           failTable = undefined;
           throw new Error("Injected database write failure.");
         }
-        const values = (Array.isArray(input) ? input : [input]).map((row) => ({
-          ...row,
-          ...(name === "agent_session_checkpoint_manifest" ? { publishedAt: null } : {}),
-        }));
+        const values = (Array.isArray(input) ? input : [input]).map((row) => {
+          const value = { ...row };
+          if (name === "agent_session_checkpoint_manifest") {
+            value.publishedAt = null;
+          }
+          return value;
+        });
         calls.push({ kind: "insert", rowCount: values.length, table: name });
         rows.set(name, [...(rows.get(name) ?? []), ...values]);
       },

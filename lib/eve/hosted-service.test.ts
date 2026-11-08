@@ -784,16 +784,19 @@ const started = async function started(input?: {
 }) {
   const store = input?.store ?? new InMemoryHostedEveStore();
   const adapter = input?.transport ?? transport();
-  const service = createHostedEveSessionService({
+  const options: Parameters<typeof createHostedEveSessionService>[0] = {
     now: input?.now ?? (() => 1000),
     principal: input?.principal ?? principal,
     store,
     transport: adapter,
-    ...(input?.beforeRead === undefined ? {} : { beforeRead: input.beforeRead }),
-    ...(input?.sessionTimeoutPolicy === undefined
-      ? {}
-      : { sessionTimeoutPolicy: input.sessionTimeoutPolicy }),
-  });
+  };
+  if (input?.beforeRead !== undefined) {
+    options.beforeRead = input.beforeRead;
+  }
+  if (input?.sessionTimeoutPolicy !== undefined) {
+    options.sessionTimeoutPolicy = input.sessionTimeoutPolicy;
+  }
+  const service = createHostedEveSessionService(options);
   const result = await service.start({
     clientRequestId: "request_1",
     prompt: "Build an app",
