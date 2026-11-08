@@ -435,18 +435,15 @@ it("persists the actual adapter rejection with the pending key and never retries
     return await originalFetch(url, init);
   });
   const handler = createPublicReleaseHandler({
+    applyEffect: async (context) => {
+      await f.provider.bindRuntime(context);
+    },
+    assertApproved: async () => {},
+    assertAuthorized: async () => {},
+    observe: async () => ({ status: "pending" }),
+    reconcileEffect: async (context) => await f.provider.reconcileBindings(context),
+    resolve: async () => f.plan,
     store: {
-      async reserve(plan) {
-        row ??= {
-          operationRef: publicReleaseOperationRef(plan),
-          revision: 1,
-          record: initialPublicReleaseRecord(plan),
-        };
-        return structuredClone(row);
-      },
-      async read() {
-        return row === undefined ? undefined : structuredClone(row);
-      },
       async compareAndSet(prior, record) {
         if (row?.revision !== prior.revision) {
           // oxlint-disable-next-line unicorn/no-useless-undefined -- A stale durable compare-and-set returns no record.
@@ -455,16 +452,19 @@ it("persists the actual adapter rejection with the pending key and never retries
         row = { ...row, record, revision: row.revision + 1 };
         return structuredClone(row);
       },
+      async read() {
+        return row === undefined ? undefined : structuredClone(row);
+      },
+      async reserve(plan) {
+        row ??= {
+          operationRef: publicReleaseOperationRef(plan),
+          revision: 1,
+          record: initialPublicReleaseRecord(plan),
+        };
+        return structuredClone(row);
+      },
     },
-    resolve: async () => f.plan,
-    assertAuthorized: async () => {},
-    assertApproved: async () => {},
     withTargetLease: async (_invocation, _plan, run) => await run(),
-    reconcileEffect: async (context) => await f.provider.reconcileBindings(context),
-    applyEffect: async (context) => {
-      await f.provider.bindRuntime(context);
-    },
-    observe: async () => ({ status: "pending" }),
   });
   const selected = await handler.plan(f.invocation, f.plan.selection.appId);
   await expect(
@@ -568,8 +568,8 @@ it("takes a current owner-bound active deployment snapshot without selecting or 
   const f = fixture();
   const read = createPublicReleaseVercelActiveDeploymentSnapshot({
     assertCurrent: () => f.deps.assertCurrent(f.invocation, f.plan, false),
-    readCredential: () => f.deps.readCredential(f.invocation, f.plan),
     fetch: f.fetcher,
+    readCredential: () => f.deps.readCredential(f.invocation, f.plan),
   });
   const scope = {
     ...f.plan.project,
@@ -587,8 +587,8 @@ it("records absent Production activation explicitly rather than inventing a depl
   f.fetcher.mockResolvedValueOnce(Response.json({ ...f.project, targets: { production: null } }));
   const read = createPublicReleaseVercelActiveDeploymentSnapshot({
     assertCurrent: () => f.deps.assertCurrent(f.invocation, f.plan, false),
-    readCredential: () => f.deps.readCredential(f.invocation, f.plan),
     fetch: f.fetcher,
+    readCredential: () => f.deps.readCredential(f.invocation, f.plan),
   });
   expect(
     await read({

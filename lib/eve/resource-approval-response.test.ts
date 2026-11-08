@@ -609,10 +609,10 @@ describe("resource approval response acknowledgement", () => {
     });
     const respond = vi.fn();
     const service = createHostedEveSessionService({
+      assertSendDeliveryOwner: async () => {},
+      now: () => 4000,
       principal,
       store,
-      now: () => 4000,
-      assertSendDeliveryOwner: async () => {},
       transport: {
         get: vi.fn(async () => {
           throw new HostedSessionReadTimeoutError();
@@ -737,7 +737,7 @@ const postgresSettlementFixture = (changedSession = session, changedMetadata = m
           },
         ];
       }
-      queries.push({ table, params: query.params });
+      queries.push({ params: query.params, table });
       if (query.sql.endsWith("for update")) {
         locks.push(table);
       }
@@ -762,7 +762,7 @@ const postgresSettlementFixture = (changedSession = session, changedMetadata = m
     throw new Error("Proof read escaped the locked transaction");
   });
   const store = createPostgresHostedEveStore(database);
-  return { store, locks, queries, update };
+  return { locks, queries, store, update };
 };
 
 // oxlint-enable sonarjs/no-nested-functions, promise/prefer-await-to-callbacks

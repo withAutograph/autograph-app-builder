@@ -294,20 +294,20 @@ describe("automatic observation of one approved execution", () => {
       value: {
         identityInput: null,
         result: {
-          status: "planned",
-          operationRef: f.approved.operationRef,
-          planDigest: f.approved.planDigest,
           nextAction: {
             approval: "normal-plan-approval",
             input: {
               appId: f.approved.appId,
               branch: f.approved.branch,
-              projectId: f.approved.projectId,
               environment: f.approved.environment,
               operation: "prepare",
+              projectId: f.approved.projectId,
             },
             tool: "plan-app-hosted-runtime",
           },
+          operationRef: f.approved.operationRef,
+          planDigest: f.approved.planDigest,
+          status: "planned",
         },
       },
     });

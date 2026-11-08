@@ -267,7 +267,7 @@ const workflowContext = (response: ToolInputResponse) => {
       throw new Error("No provider authorization is expected");
     },
   };
-  return { context, ask };
+  return { ask, context };
 };
 
 describe("hosted runtime Auth identity handoff", () => {
@@ -569,11 +569,11 @@ it("reports actual approval evaluator entry and preserves its denied response", 
       },
       readPrior,
       {
-        onStarted: () => {
-          reportRuntimePreparationStarted(ctx.session.id, "approval_evaluation");
-        },
         onFailure: (caught) => {
           reportRuntimePreparationFailure(ctx.session.id, "approval_evaluation", caught);
+        },
+        onStarted: () => {
+          reportRuntimePreparationStarted(ctx.session.id, "approval_evaluation");
         },
       },
     );
@@ -685,10 +685,10 @@ describe("confirmed Gateway build failure recovery", () => {
           input: {
             appId: input.appId,
             branch: input.branch,
-            projectId: input.projectId,
             environment: "preview",
-            operation: "prepare",
             normalActorProgram: participantInput.plan.normalActorProgram,
+            operation: "prepare",
+            projectId: input.projectId,
           },
           tool: "plan-app-hosted-runtime",
         },

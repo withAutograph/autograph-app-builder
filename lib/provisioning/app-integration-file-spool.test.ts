@@ -207,7 +207,7 @@ const fixture = (
     signal: new AbortController().signal,
     assertCurrent: vi.fn(async () => {}),
   };
-  return { input, createSandbox, stop, files };
+  return { createSandbox, files, input, stop };
 };
 const config = {
   image: "pinned-control",
