@@ -370,15 +370,29 @@ workspace. The tenant journal must independently contain that canonical
 successful publication, and GitHub must report its reviewed revision as merged
 in the same repository and installation. A moved head needs the existing
 provider-verified published reconciliation; a private candidate cannot prove it.
+A later reconciliation review may retain the original publication seal while
+carrying a newer review or draft-update binding. Builder resolves that original
+proposal and its last published reconciliation through the shared owned-candidate
+lineage, rather than requiring the original seal to describe the later review.
+An inherited draft-update binding permits this path only with the same retained
+owned publication and actual merged-head proof; open or uncertain PRs continue
+through their existing update or reconciliation workflow.
 This proof authorizes review of the current app-owned changes, without reading
 the original starter manifest or republishing the app's unchanged files.
+Its candidate paths also retain app-owned changes from earlier completed private
+iterations of the same session, app and source workspace. Thus a later repair
+cannot drop an unpublished configuration change, addition or deletion from a
+prior repair. The original whole-app creation and other apps or platform paths
+are excluded. Current destination preimages and the current private bytes decide
+the new diff; unchanged or reverted paths add no publication change.
 
 A sealed-only proposal with no publication journal remains an initial
 publication and retains full-app completeness. An optional legacy publication
 marker neither proves a merge nor replaces the journal; a contradictory marker
 is never silently replaced. The new review reads current immutable destination
-preimages and invalidates the old acceptance and seal. The creator must accept
-and approve the newly sealed publication through Builder. The original source,
+preimages and invalidates the old acceptance, seal and active draft-update
+binding only after the owned merge is verified. Historical lineage remains
+intact. The creator must accept and approve the newly sealed publication through Builder. The original source,
 private edits, workspace and app resources remain intact. A merged PR is used
 only as prior authoring provenance here; native deployment activation remains
 provider-owned.

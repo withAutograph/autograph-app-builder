@@ -21,6 +21,12 @@ import {
 } from "./workflow-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import type { ExistingAppChange } from "./existing-app-changes";
+import type { DraftReconciliationCandidate } from "./draft-reconciliation-state";
+import { resolveDraftReviewedWorkflow } from "./draft-reviewed-lineage";
+import { resolveGitHubPrDeliverySubject } from "./github-pr-delivery-subject";
+import { currentDraftCandidateSource } from "./published-draft-repair";
+
+const iterationOperation = "iterate-existing-app";
 
 // oxlint-disable-next-line sonarjs/max-union-size -- These are the exact settled private workflow phases, not a new phase model.
 type Settled = Extract<
@@ -220,60 +226,101 @@ export const priorResumedBuildDraftProposal = (
   return base?.phase === "reviewed" ? base.githubDraftProposal?.proposal : undefined;
 };
 
+const sameOwnedAppRepairSource = (
+  { sessionId: owner, approvedBase: base }: RepairHistoryEntry,
+  state: Extract<AppBuilderWorkflowState, { phase: "validated" | "reviewed" }>,
+  sessionId: string,
+) =>
+  [
+    owner === sessionId,
+    base.appSpec.appId === state.appSpec.appId,
+    base.appSpec.digest === state.appSpec.digest,
+    base.sourceReceipt.digest === state.sourceReceipt.digest,
+    base.githubSource?.digest === state.githubSource?.digest,
+    base.workspace.workspaceId === state.workspace.workspaceId,
+    base.workspace.workspacePath === state.workspace.workspacePath,
+    base.workspace.workspaceDigest === state.workspace.workspaceDigest,
+    base.workspace.sourceSha === state.workspace.sourceSha,
+    base.workspace.sourceTree === state.workspace.sourceTree,
+    base.applyReceipt.applyRoot === state.applyReceipt.applyRoot,
+  ].every(Boolean);
+
 /** Lookup context for a new revision; only the provider can prove the prior PR merged. */
 export const priorOwnedAppDraftPublication = (
   state: Extract<AppBuilderWorkflowState, { phase: "validated" | "reviewed" }>,
   sessionId: string,
+  candidate: DraftReconciliationCandidate | null = null,
 ) => {
   if (
     state.sourceReceipt.sourceKind !== "fresh-template" ||
     !("operation" in state.proposal.target) ||
-    state.proposal.target.operation !== "iterate-existing-app"
+    state.proposal.target.operation !== iterationOperation
   ) {
     return;
   }
-  const entry = existingAppRepairHistory
+  const history = existingAppRepairHistory
     .get()
-    .findLast(({ sessionId: owner, approvedBase: base }) =>
-      [
-        owner === sessionId,
-        base.phase === "reviewed" && base.githubDraftProposal !== undefined,
-        base.appSpec.appId === state.appSpec.appId,
-        base.appSpec.digest === state.appSpec.digest,
-        base.sourceReceipt.digest === state.sourceReceipt.digest,
-        base.githubSource?.digest === state.githubSource?.digest,
-        base.workspace.workspaceId === state.workspace.workspaceId,
-        base.workspace.workspacePath === state.workspace.workspacePath,
-        base.workspace.workspaceDigest === state.workspace.workspaceDigest,
-        base.workspace.sourceSha === state.workspace.sourceSha,
-        base.workspace.sourceTree === state.workspace.sourceTree,
-        base.applyReceipt.applyRoot === state.applyReceipt.applyRoot,
-      ].every(Boolean),
-    );
-  const base = entry?.approvedBase;
-  if (base?.phase !== "reviewed" || base.githubDraftProposal === undefined) {
-    return;
+    .filter((record) => sameOwnedAppRepairSource(record, state, sessionId));
+  // Retain paths from actual completed private iterations, never the original
+  // whole-app creation snapshot. Only fresh current bytes enter the new review.
+  const appChangedPaths = [
+    ...new Set(
+      history.flatMap(({ approvedBase: base }) =>
+        "operation" in base.proposal.target && base.proposal.target.operation === iterationOperation
+          ? (base.applyReceipt.changes ?? []).flatMap(({ path }) =>
+              path.startsWith(`apps/${state.appSpec.appId}/`) ? [path] : [],
+            )
+          : [],
+      ),
+    ),
+  ].toSorted();
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Each retained record must pass independent publication lineage checks before exposing lookup context.
+  for (const { approvedBase: base } of history.toReversed()) {
+    const reviewed = resolveDraftReviewedWorkflow(base, candidate);
+    const delivery = resolveGitHubPrDeliverySubject(base, candidate);
+    if (reviewed === undefined || delivery === undefined) {
+      continue;
+    }
+    // Only the central candidate predicate can connect a later review to its
+    // original publication. Private candidate proposals never prove publication.
+    const verifiedCandidate = currentDraftCandidateSource(base, candidate) !== undefined;
+    const candidateProposal = verifiedCandidate ? candidate?.publicationScope?.proposal : undefined;
+    const binding = reviewed.githubDraftProposal;
+    const proposal = candidateProposal ?? binding?.proposal;
+    const destination = reviewed.githubDestinationReview;
+    const initialSeal =
+      binding !== undefined &&
+      destination !== undefined &&
+      binding.sourceReceiptDigest === reviewed.sourceReceipt.digest &&
+      binding.destinationReviewDigest === destination.digest &&
+      binding.proposal.reviewDigest === reviewed.reviewReceipt.digest &&
+      binding.proposal.changeSetDigest === reviewed.reviewReceipt.changeSetDigest;
+    const retainedSeal =
+      verifiedCandidate &&
+      binding !== undefined &&
+      binding.sourceReceiptDigest === reviewed.sourceReceipt.digest &&
+      (candidateProposal !== undefined || binding.destinationReviewDigest === destination?.digest);
+    if (
+      proposal === undefined ||
+      delivery.proposalDigest !== proposal.digest ||
+      delivery.installationId === undefined ||
+      (!initialSeal && !retainedSeal && candidateProposal === undefined) ||
+      reviewed.reviewReceipt.appSpecDigest !== reviewed.appSpec.digest ||
+      (state.publishedGitHubDraftProposalDigest !== undefined &&
+        state.publishedGitHubDraftProposalDigest !== proposal.digest)
+    ) {
+      continue;
+    }
+    return {
+      proposal,
+      installationId: delivery.installationId,
+      reviewed,
+      ...(appChangedPaths.length === 0 ? {} : { appChangedPaths }),
+      ...(delivery.reconciliation === undefined ? {} : { reconciliation: delivery.reconciliation }),
+    };
   }
-  const { proposal } = base.githubDraftProposal;
-  const destination = base.githubDestinationReview;
-  if (
-    destination === undefined ||
-    base.githubDraftProposal.sourceReceiptDigest !== base.sourceReceipt.digest ||
-    base.githubDraftProposal.destinationReviewDigest !== destination.digest ||
-    proposal.reviewDigest !== base.reviewReceipt.digest ||
-    proposal.changeSetDigest !== base.reviewReceipt.changeSetDigest ||
-    base.reviewReceipt.appSpecDigest !== base.appSpec.digest ||
-    (state.publishedGitHubDraftProposalDigest !== undefined &&
-      state.publishedGitHubDraftProposalDigest !== proposal.digest)
-  ) {
-    return;
-  }
-  return {
-    proposal,
-    installationId: destination.installation.installationId,
-    reviewed: base,
-  };
 };
+
 const validateRepairChanges = (changes: readonly ExistingAppChange[], current: Proposed) => {
   const paths = new Set<string>();
   for (const change of changes) {
@@ -340,7 +387,7 @@ const inspectUnapprovedPlan = (
 ) => {
   if (
     !("operation" in current.proposal.target) ||
-    current.proposal.target.operation !== "iterate-existing-app" ||
+    current.proposal.target.operation !== iterationOperation ||
     !("iteration" in current.proposal.target) ||
     current.proposal.plannedByCallId.length === 0
   ) {

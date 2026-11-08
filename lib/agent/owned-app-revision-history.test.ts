@@ -9,6 +9,14 @@ import {
   priorOwnedAppDraftPublication,
 } from "./existing-app-repair-planning";
 import { appBuilderWorkflowState } from "./workflow-state";
+import { freshFixture } from "../eve/test-support/draft-reviewed-recovery";
+import { resolveGitHubPrDeliverySubject } from "./github-pr-delivery-subject";
+import {
+  deriveNormalizedChangeSet,
+  createReviewedChangeSetReceipt,
+} from "../repository/reviewed-change-set";
+import type { DraftReconciliationCandidate } from "./draft-reconciliation-state";
+import type { ExistingDraftReconciliationProposal } from "../repository/github-draft-reconciliation";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 
 type Reviewed = Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
@@ -285,5 +293,195 @@ it("keeps the app available when another app has a more recent history entry", (
     expect(priorOwnedAppDraftPublication(f.current, sessionId)?.proposal.digest).toBe(
       f.prior.githubDraftProposal?.proposal.digest,
     );
+  });
+});
+
+const reconciledFixture = async (marker = true) => {
+  const f = await freshFixture();
+  const { proposal: canonical, publication } = f.candidate.publicationScope;
+  const laterReview = createReviewedChangeSetReceipt(
+    deriveNormalizedChangeSet(
+      f.reviewed.applyReceipt,
+      f.reviewed.validationReceipt,
+      digest("a"),
+      digest("b"),
+    ),
+    "later-reconciliation-review",
+  );
+  // SAFETY: Actual provider-bound publication and source receipts come from the
+  // controlled fixture. The destination binding is lookup metadata only.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- The helper's consumed immutable fields are supplied; provider effects are absent.
+  const base = {
+    ...f.reviewed,
+    reviewReceipt: laterReview,
+    githubDestinationReview: { digest: digest("c"), installation: { installationId: "10" } },
+    githubDraftProposal: {
+      proposal: canonical,
+      sourceReceiptDigest: f.reviewed.sourceReceipt.digest,
+      destinationReviewDigest: digest("c"),
+    },
+  } as unknown as Reviewed;
+  const reconciliation: ExistingDraftReconciliationProposal = {
+    version: 1,
+    intendedOutcome: "reconcile-existing-draft-pull-request",
+    repositoryId: canonical.repositoryId,
+    owner: canonical.owner,
+    name: canonical.name,
+    pullRequestNumber: publication.pullRequestNumber,
+    pullRequestId: publication.pullRequestId,
+    branchName: canonical.branchName,
+    baseBranch: canonical.baseBranch,
+    expectedHeadSha: publication.branchSha,
+    expectedHeadTree: publication.branchTree,
+    expectedBaseSha: canonical.baseSha,
+    expectedBaseTree: canonical.baseTree,
+    resolvedTree: "e".repeat(40),
+    originMarker: publication.idempotencyKey,
+    priorPublicationDigest: publication.digest,
+    installationIdentityDigest: canonical.installationIdentityDigest,
+    reviewDigest: laterReview.digest,
+    baseChangesDigest: laterReview.changeSetDigest,
+    headChangesDigest: laterReview.changeSetDigest,
+    idempotencyKey: digest("f"),
+    digest: digest("e"),
+    approvedPaths: canonical.approvedPaths,
+  };
+  const candidate: DraftReconciliationCandidate = {
+    ...f.candidate,
+    originalReviewDigest: laterReview.digest,
+    reviewedLineage: base,
+    publishedReconciliation: reconciliation,
+    proposal: { ...reconciliation, digest: digest("9"), resolvedTree: "9".repeat(40) },
+  };
+  const current: Current = {
+    ...base,
+    proposal: {
+      ...base.proposal,
+      target: { ...base.proposal.target, operation: "iterate-existing-app" },
+    },
+  };
+  if (!marker) {
+    delete current.publishedGitHubDraftProposalDigest;
+    delete base.publishedGitHubDraftProposalDigest;
+  }
+  existingAppRepairHistory.update(() => [
+    {
+      sessionId,
+      requestDigest: digest("d"),
+      proposalDigest: current.proposal.digest,
+      previousWorkflow: base,
+      approvedBase: base,
+    },
+  ]);
+  return { base, canonical, candidate, current, reconciliation };
+};
+
+it.each([true, false])(
+  "recovers the original publication after a later reconciliation review (marker %s)",
+  async (marker) => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const f = await reconciledFixture(marker);
+      expect(f.base.reviewReceipt.digest).not.toBe(f.canonical.reviewDigest);
+      expect(resolveGitHubPrDeliverySubject(f.base, f.candidate)?.proposalDigest).toBe(
+        f.canonical.digest,
+      );
+      const history = structuredClone(existingAppRepairHistory.get());
+      const result = priorOwnedAppDraftPublication(f.current, sessionId, f.candidate);
+      expect(result).toMatchObject({
+        proposal: f.canonical,
+        installationId: "10",
+        reconciliation: f.reconciliation,
+      });
+      expect(result?.reconciliation).not.toEqual(f.candidate.proposal);
+      expect(existingAppRepairHistory.get()).toEqual(history);
+      // A subsequent private revision keeps the same published lookup; its new
+      // private proposal and review cannot become the published reconciliation.
+      const next = { ...f.current, proposal: { ...f.current.proposal, digest: digest("8") } };
+      expect(priorOwnedAppDraftPublication(next, sessionId, f.candidate)?.reconciliation).toEqual(
+        f.reconciliation,
+      );
+    });
+  },
+);
+
+it("recovers an owned canonical publication scope when the later review has no original seal", async () => {
+  await contextStorage.run(new ContextContainer(), async () => {
+    const f = await reconciledFixture();
+    delete f.base.githubDraftProposal;
+    delete f.base.githubDestinationReview;
+    expect(priorOwnedAppDraftPublication(f.current, sessionId, f.candidate)?.proposal).toEqual(
+      f.canonical,
+    );
+  });
+});
+
+it.each(["app", "source", "review", "installation", "publication"] as const)(
+  "rejects foreign %s candidate lineage before exposing reconciled lookup",
+  async (binding) => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const f = await reconciledFixture();
+      if (binding === "app") {
+        f.candidate.appId = "another-app";
+      }
+      if (binding === "source") {
+        f.candidate.githubSourceDigest = digest("8");
+      }
+      if (binding === "review") {
+        f.candidate.originalReviewDigest = digest("8");
+      }
+      if (binding === "publication") {
+        f.current.publishedGitHubDraftProposalDigest = digest("8");
+      }
+      if (binding === "installation" && f.candidate.publishedOrigin !== undefined) {
+        // Corrupting a signed origin must fail its existing exact receipt guard.
+        f.candidate.publishedOrigin.installationId = "another-installation";
+        expect(() => priorOwnedAppDraftPublication(f.current, sessionId, f.candidate)).toThrow();
+        return;
+      }
+      expect(priorOwnedAppDraftPublication(f.current, sessionId, f.candidate)).toBeUndefined();
+    });
+  },
+);
+
+it("retains total unpublished app changes across config and Auth private iterations", () => {
+  within(() => {
+    const f = fixture();
+    const [initial] = existingAppRepairHistory.get();
+    if (initial === undefined) {
+      throw new Error("Missing fixture history");
+    }
+    const config = structuredClone(f.prior);
+    Reflect.set(config.proposal.target, "operation", "iterate-existing-app");
+    config.proposal.digest = digest("8");
+    config.applyReceipt.changes = [
+      { path: "apps/orchard/next.config.ts", kind: "modified" },
+      { path: "apps/orchard/src/new.ts", kind: "added" },
+      { path: "apps/orchard/src/retired.ts", kind: "deleted" },
+      { path: "apps/orchard/src/reverted.ts", kind: "modified" },
+      { path: "apps/another-app/page.tsx", kind: "modified" },
+      { path: "packages/platform/index.ts", kind: "modified" },
+    ];
+    f.prior.applyReceipt.changes = [{ path: "apps/orchard/unchanged-initial.ts", kind: "added" }];
+    const foreign = structuredClone(config);
+    foreign.sourceReceipt.digest = digest("9");
+    foreign.applyReceipt.changes = [{ path: "apps/orchard/foreign-source.ts", kind: "modified" }];
+    existingAppRepairHistory.update(() => [
+      { ...initial, approvedBase: foreign },
+      initial,
+      {
+        ...initial,
+        proposalDigest: f.current.proposal.digest,
+        previousWorkflow: config,
+        approvedBase: config,
+      },
+    ]);
+    expect(priorOwnedAppDraftPublication(f.current, sessionId)).toMatchObject({
+      appChangedPaths: [
+        "apps/orchard/next.config.ts",
+        "apps/orchard/src/new.ts",
+        "apps/orchard/src/retired.ts",
+        "apps/orchard/src/reverted.ts",
+      ],
+    });
   });
 });
