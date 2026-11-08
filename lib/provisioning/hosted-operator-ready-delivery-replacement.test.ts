@@ -51,15 +51,15 @@ const externalPolicy: ExternallyManagedTrustedSources = {
   mode: "externally-managed-trusted-sources",
   teamId: "team-notes",
   appPreview: {
+    from: "preview",
     sourceProjectId: "project-gateway",
     targetProjectId: "project-notes",
-    from: "preview",
     to: "preview",
   },
   gatewayPreview: {
+    from: "preview",
     sourceProjectId: "project-notes",
     targetProjectId: "project-gateway",
-    from: "preview",
     to: "preview",
   },
   observedAt: "2026-10-19T10:00:00Z",
@@ -347,13 +347,13 @@ describe("native externally managed policy recovery integration", () => {
     async (planningCase) => {
       const f = fixture();
       f.record.operator.plan.appTrustedSources = {
-        gatewayPreview: { projectId: "project-gateway", from: "preview", to: "preview" },
+        gatewayPreview: { from: "preview", projectId: "project-gateway", to: "preview" },
       };
       requireFixtureValue(
         f.record.operator.plan.gatewayBindings,
         "gateway bindings",
       ).trustedSources = {
-        appPreview: { projectId: "project-notes", from: "preview", to: "preview" },
+        appPreview: { from: "preview", projectId: "project-notes", to: "preview" },
       };
       f.record.operator.planDigest = operatorPlanDigest(f.record.operator.plan);
       f.record.operator.deliveredDeploymentId = "ready-notes";
@@ -695,7 +695,7 @@ describe("native externally managed policy recovery integration", () => {
       }
       if (change === "policy-write") {
         plan.appTrustedSources = {
-          gatewayPreview: { projectId: "project-gateway", from: "preview", to: "preview" },
+          gatewayPreview: { from: "preview", projectId: "project-gateway", to: "preview" },
         };
       }
       expect(hostedOperatorPlanSchema.safeParse(plan).success).toBe(false);
@@ -1673,14 +1673,14 @@ describe("explicit READY delivery replacement", () => {
     const { record, candidate } = fixture();
     record.operator.gatewayDeliveryCandidates = [
       {
-        deploymentId: "historical-gateway",
-        operationRef: "c1d096d4-d743-46d7-a4db-c20e67ca65a4",
-        projectId: "project-gateway",
         branch: "gateway/notes",
-        repoId: "repo-gateway",
-        readyState: "READY",
-        origin: "https://historical-gateway.example.test",
+        deploymentId: "historical-gateway",
         gatewayAliasAttempted: true,
+        operationRef: "c1d096d4-d743-46d7-a4db-c20e67ca65a4",
+        origin: "https://historical-gateway.example.test",
+        projectId: "project-gateway",
+        readyState: "READY",
+        repoId: "repo-gateway",
       },
     ];
     expect(isReadyDeliveryReplacementSuccessor(record, candidate, now)).toBe(true);

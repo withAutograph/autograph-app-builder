@@ -29,22 +29,22 @@ import type { createHostedOperatorControlPlane } from "./hosted-operator-deploym
 const worker = {
   executablePath: "/trusted/install",
   id: "trusted-installer",
-  sha256: "a".repeat(64),
   operationScope: "generated-app-release-install-v1" as const,
+  sha256: "a".repeat(64),
   subcommand: "protected-generated-app-install" as const,
 };
 const resource = (name: string) => ({
   database: name,
   migratorRole: `${name}_owner`,
-  runtimeRole: `${name}_runtime`,
   resourceId: `${name}-resource`,
+  runtimeRole: `${name}_runtime`,
 });
 const workload = {
   audience: "https://vercel.com/team",
+  environment: "preview" as const,
   issuer: "https://oidc.vercel.com/team",
   ownerId: "team",
   projectId: "builder",
-  environment: "preview" as const,
   subject: "builder-workload",
 };
 const configuration = (): HostedOperatorSourceConfiguration => ({
@@ -59,7 +59,6 @@ const configuration = (): HostedOperatorSourceConfiguration => ({
   authDatabase: resource("auth"),
   builderCallbackOrigin: "https://builder.example",
   catalogAppIds: ["sibling"],
-  teamId: "team",
   gateway: {
     authBrowserOrigin: "https://auth.example",
     branch: "main",
@@ -71,12 +70,6 @@ const configuration = (): HostedOperatorSourceConfiguration => ({
     publicOrigin: "https://apps.example",
     repoId: "gateway-repository",
     workload: { ...workload, projectId: "gateway" },
-  },
-  operator: {
-    deploymentId: "operator-deployment",
-    environment: "preview",
-    origin: "https://operator.example",
-    projectId: "operator",
   },
   nativeNeon: {
     configuration: {
@@ -103,16 +96,23 @@ const configuration = (): HostedOperatorSourceConfiguration => ({
       projectId: "shared-neon",
     },
   },
+  operator: {
+    deploymentId: "operator-deployment",
+    environment: "preview",
+    origin: "https://operator.example",
+    projectId: "operator",
+  },
   sandbox: {
     accessWorker: worker,
-    authWorker: worker,
     authProposal: { executablePath: "/trusted/propose", id: "proposal", sha256: "c".repeat(64) },
-    resourcesWorker: worker,
+    authWorker: worker,
     image: "trusted-image",
     projectId: "operator",
+    resourcesWorker: worker,
     teamId: "team",
     workers: { sibling: worker },
   },
+  teamId: "team",
   workloadPolicy: workload,
 });
 const ready = (
@@ -128,47 +128,8 @@ const ready = (
     sourceFilesOutsideRootDirectory: true,
   };
   const result: NativeTargetReadyRegistration = {
-    kind: "native-target-onboarding",
-    version: 1,
-    stage: "ready",
+    acceptedCreation: { acceptedAt: time, attemptId, projectId: `project-${appId}` },
     appId,
-    planDigest: "a".repeat(64),
-    previousAttempts: [],
-    plan: {
-      version: 1,
-      appId,
-      branch: "main",
-      appDatabase: resource(appId.replaceAll("-", "_")),
-      productRoles: [],
-      worker: sourceCapture === undefined ? worker : { ...worker, sourceCapture },
-      origin: {
-        adapterGeneration: 1,
-        adapterSessionId: "original-adapter",
-        appSpecDigest: "b".repeat(64),
-        publicSessionId: "original-session",
-        release: {
-          artifactRef: "private-artifact",
-          id: "release-original",
-          manifestSha256: "c".repeat(64),
-          schemaSha256: "d".repeat(64),
-        },
-      },
-      project: {
-        name: appId,
-        teamId: "team",
-        installationId: "installation",
-        projectSettings,
-        protection: nativeTargetRequiredProjectProtection,
-      },
-      nativeNeon: {
-        approvalReference: "original-approved-native-scope",
-        nativeStore: configuration().nativeNeon.configuration.nativeStore,
-        scope: configuration().nativeNeon.scope,
-      },
-      cost: { description: "Approved native target", ownership: "current-owner" },
-      retention: { policy: "retain" },
-      conflictPolicy: "stop-on-conflict",
-    },
     approval: {
       callId: "call",
       observedAt: time,
@@ -186,19 +147,58 @@ const ready = (
       startedAt: time,
     },
     dispatchAuthorizedAt: time,
-    acceptedCreation: { acceptedAt: time, attemptId, projectId: `project-${appId}` },
+    kind: "native-target-onboarding",
+    plan: {
+      appDatabase: resource(appId.replaceAll("-", "_")),
+      appId,
+      branch: "main",
+      conflictPolicy: "stop-on-conflict",
+      cost: { description: "Approved native target", ownership: "current-owner" },
+      nativeNeon: {
+        approvalReference: "original-approved-native-scope",
+        nativeStore: configuration().nativeNeon.configuration.nativeStore,
+        scope: configuration().nativeNeon.scope,
+      },
+      origin: {
+        adapterGeneration: 1,
+        adapterSessionId: "original-adapter",
+        appSpecDigest: "b".repeat(64),
+        publicSessionId: "original-session",
+        release: {
+          artifactRef: "private-artifact",
+          id: "release-original",
+          manifestSha256: "c".repeat(64),
+          schemaSha256: "d".repeat(64),
+        },
+      },
+      productRoles: [],
+      project: {
+        installationId: "installation",
+        name: appId,
+        projectSettings,
+        protection: nativeTargetRequiredProjectProtection,
+        teamId: "team",
+      },
+      retention: { policy: "retain" },
+      version: 1,
+      worker: sourceCapture === undefined ? worker : { ...worker, sourceCapture },
+    },
+    planDigest: "a".repeat(64),
+    previousAttempts: [],
     registration: {
       attemptId,
       observed: {
-        projectId: `project-${appId}`,
-        name: appId,
-        teamId: "team",
         installationId: "installation",
+        name: appId,
+        projectId: `project-${appId}`,
         projectSettings,
         protection: nativeTargetRequiredProjectProtection,
+        teamId: "team",
       },
       observedAt: time,
     },
+    stage: "ready",
+    version: 1,
   };
   result.planDigest = nativeTargetOnboardingPlanDigest(result.plan);
   result.approval.planDigest = result.planDigest;
@@ -270,9 +270,9 @@ describe("owner-authorized native target configuration", () => {
   it("preserves the captured worker receipt from its exact approved registration", async () => {
     const registration = ready("new-app", capturedGenericWorkerFixture.sourceCapture);
     const effective = await resolveNativeTargetEffectiveConfiguration({
+      appId: registration.appId,
       configuration: configuration(),
       invocation: ownerContext,
-      appId: registration.appId,
       readReady: () => Promise.resolve(registration),
     });
     expect(effective.sandbox.workers[registration.appId]?.sourceCapture).toEqual(
@@ -285,9 +285,9 @@ describe("owner-authorized native target configuration", () => {
     const registration = ready();
     const readReady = vi.fn().mockResolvedValue(registration);
     const effective = await resolveNativeTargetEffectiveConfiguration({
+      appId: registration.appId,
       configuration: base,
       invocation: ownerContext,
-      appId: registration.appId,
       readReady,
     });
     expect(readReady).toHaveBeenCalledExactlyOnceWith(ownerContext, "new-app");
@@ -429,9 +429,9 @@ describe("owner-authorized native target configuration", () => {
           throw new Error("Unexpected fixture request");
         }
         const effective = await resolveNativeTargetEffectiveConfiguration({
+          appId: parsed.appId,
           configuration: configuration(),
           invocation: incoming,
-          appId: parsed.appId,
           readReady,
         });
         return {
@@ -469,7 +469,7 @@ describe("owner-authorized native target configuration", () => {
     const valid = dependencies();
     valid.authorize = vi.fn().mockRejectedValue(new HostedOperatorError("authorization_required"));
     const handler = createHostedOperatorNativeHandler({
-      createRequestDependencies: vi.fn().mockResolvedValue({ dependencies: valid, close }),
+      createRequestDependencies: vi.fn().mockResolvedValue({ close, dependencies: valid }),
     });
     const result = await handler(request());
     expect(await result.json()).toMatchObject({ status: "blocked" });
