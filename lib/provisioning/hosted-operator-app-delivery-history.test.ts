@@ -303,10 +303,10 @@ it("accepts additive historical metadata while retaining owned delivery scope", 
     })),
   });
   expect(parsed.retainedAppDeliveries?.[0]).toMatchObject({
-    projectId: selection.projectId,
-    operationRef,
     delivery: oldPlan.delivery,
     managedEnvironment: old.managedEnvironment,
+    operationRef,
+    projectId: selection.projectId,
   });
   expect(parsed.retainedAppDeliveries?.[0]).not.toHaveProperty("advisory");
   expect(() =>

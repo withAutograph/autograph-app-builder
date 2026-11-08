@@ -67,12 +67,12 @@ const fixture = () => {
   const persistPartial = vi.fn().mockResolvedValue(true);
   const publishVerified = vi.fn().mockResolvedValue(true);
   return {
+    assertOwner,
     binding,
     checkpoint,
-    trustedEvents: () => stream(events),
-    assertOwner,
     persistPartial,
     publishVerified,
+    trustedEvents: () => stream(events),
   };
 };
 describe("historical approval replay orchestration", () => {
@@ -98,7 +98,7 @@ describe("historical approval replay orchestration", () => {
         progress: progress(true),
       });
     });
-    await expect(runHistoricalApprovalReplay({ ...f, progress: first, observe })).resolves.toEqual({
+    await expect(runHistoricalApprovalReplay({ ...f, observe, progress: first })).resolves.toEqual({
       status: "ready",
     });
     expect(f.publishVerified).toHaveBeenCalledWith(progress(true), checkpoint);

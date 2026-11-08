@@ -31,7 +31,7 @@ const fixture = () => {
     appSpecDigest: appSpec.digest,
     applyRoot: workspace.workspacePath,
   };
-  return { appSpec, sourceReceipt, proposal, workspace, applyReceipt };
+  return { appSpec, applyReceipt, proposal, sourceReceipt, workspace };
 };
 test("saved proposal/apply provenance identifies old bytes after live workspace metadata was overlaid", () => {
   const state = fixture();

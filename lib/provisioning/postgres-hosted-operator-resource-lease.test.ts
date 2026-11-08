@@ -279,11 +279,11 @@ describe("dedicated-session protected resource lease", () => {
     }
     const otherApp = hostedOperatorPlanSchema.parse({
       ...legacy,
-      selection: { ...legacy.selection, projectId: "other-app" },
       deploymentBoundary: {
         ...boundary,
         app: { ...boundary.app, projectId: "other-app" },
       },
+      selection: { ...legacy.selection, projectId: "other-app" },
     });
     const shared = hostedOperatorVercelProjectLockKeys(legacy, context.target.scopeId).filter(
       (key) => hostedOperatorVercelProjectLockKeys(otherApp, context.target.scopeId).includes(key),

@@ -77,9 +77,9 @@ describe("sealed Realm continuation authority", () => {
     (reason) => {
       const auth = authFor(reason);
       expect(auth.current).toMatchObject({
-        principalType: "service",
         issuer: service.issuer,
         principalId: service.principalId,
+        principalType: "service",
       });
       expect(auth.initiator).toEqual(initiator);
       const claim = readVerifiedRealmContinuationAuthority(auth, options);
