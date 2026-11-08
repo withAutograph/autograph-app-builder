@@ -52,6 +52,9 @@ import type {
   RepositoryProductionRequestOwner,
 } from "./repository-production-dispatcher";
 import { readRepositoryProductionConfiguration } from "./repository-production-configuration";
+import type { RepositoryProductionRepository } from "./repository-production-configuration";
+import { createRepositoryProductionManagementResolver } from "./repository-production-management-subject";
+import type { RepositoryProductionManagementSubject } from "./repository-production-management-subject";
 import { resolveRepositoryProductionDestination } from "./repository-production-destination";
 import {
   repositoryProductionApprovalInput,
@@ -205,7 +208,10 @@ export const createRepositoryProductionNativeHandler =
       const store = createPostgresRepositoryProductionStore(database);
       const accessJournal = createPostgresAppAccessOperationStore(database);
       const builderOrigin = new URL(settings.issuer).origin;
-      const records = new Map<string, Awaited<ReturnType<typeof resolve>>>();
+      const records = new Map<
+        string,
+        RepositoryProductionManagementSubject<RepositoryProductionRepository>
+      >();
       const readSession = (owner: RepositoryProductionRequestOwner) =>
         readCanonicalAppOwnerSession(ownerDeps, {
           authority: owner.ownerContext.authority,
@@ -311,8 +317,51 @@ export const createRepositoryProductionNativeHandler =
         const existing = await store.read(scope);
         if (existing?.record.intent.creatorEmail !== undefined)
           intent.creatorEmail = existing.record.intent.creatorEmail;
-        const result = { assertCurrentOwner, capture, description, intent, owner, profile, scope };
+        const result = {
+          assertCurrentOwner,
+          capture,
+          description,
+          intent,
+          owner,
+          profile,
+          scope,
+          publishedDescription:
+            selection?.publishedSource !== undefined || destination !== undefined,
+        };
         records.set(key(scope), result);
+        return result;
+      };
+      const resolveManagement = createRepositoryProductionManagementResolver({
+        repositories: configuration.repositories,
+        readSession: async (owner) => {
+          await readSession(owner);
+        },
+        store,
+        resolveCurrent: resolve,
+        readCapture: async (artifactContext, storage, assertCurrentOwner) => {
+          const selections = createPostgresOperatorArtifactSelections({
+            assertCurrentOwner,
+            database,
+          });
+          const selection = await selections.readExact?.(artifactContext, {
+            artifactRef: storage.artifactRef,
+          });
+          if (
+            !selection ||
+            selection.releaseId !== storage.releaseId ||
+            selection.manifestSha256 !== storage.manifestSha256
+          ) {
+            throw new Error("repository_production_capture_unavailable");
+          }
+          return await createOperatorArtifactPublication({
+            assertCurrentOwner,
+            store: createPostgresOperatorArtifactStore({ assertCurrentOwner, database }),
+          }).readGeneratedRelease(artifactContext, selection);
+        },
+      });
+      const managed = async (owner: RepositoryProductionRequestOwner) => {
+        const result = await resolveManagement(owner);
+        records.set(key(result.scope), result);
         return result;
       };
       const current = async (scope: RepositoryProductionScope) => {
@@ -327,7 +376,7 @@ export const createRepositoryProductionNativeHandler =
         const { appId } = scope;
         const { sessionId } = row.record.ownerContext;
         const { ownerContext } = row.record;
-        return await resolve({ appId, ownerContext, sessionId });
+        return await managed({ appId, ownerContext, sessionId });
       };
       const assertAuthorized = async (
         scope: RepositoryProductionScope,
@@ -673,6 +722,9 @@ export const createRepositoryProductionNativeHandler =
           realm,
           appUrl: async (scope) => {
             const known = await current(scope);
+            if (!known.description) {
+              throw new AppAccessError("app_access_unavailable");
+            }
             return new URL(
               known.description.app.browserEntryPath ??
                 known.description.app.routes[0] ??
@@ -684,7 +736,7 @@ export const createRepositoryProductionNativeHandler =
             (await store.read(scope))?.record.intent.creatorRoles ??
             (await current(scope)).intent.creatorRoles,
           resolve: async (owner) => {
-            const known = await resolve(owner);
+            const known = await managed(owner);
             const row = await store.read(known.scope);
             const state = row
               ? await setup(known.scope).status(known.scope, row.record.intent)
@@ -707,12 +759,16 @@ export const createRepositoryProductionNativeHandler =
                 label: id,
               })),
               canManage: true,
-              appUrl: new URL(
-                known.description.app.browserEntryPath ??
-                  known.description.app.routes[0] ??
-                  `/${known.scope.appId}`,
-                known.scope.publicOrigin,
-              ).toString(),
+              ...(known.description
+                ? {
+                    appUrl: new URL(
+                      known.description.app.browserEntryPath ??
+                        known.description.app.routes[0] ??
+                        `/${known.scope.appId}`,
+                      known.scope.publicOrigin,
+                    ).toString(),
+                  }
+                : {}),
               creator: {
                 ...identity,
                 status: creatorRemoved
@@ -737,7 +793,7 @@ export const createRepositoryProductionNativeHandler =
             return resolved;
           },
           assertAuthorized: async (owner, scope, mutating) => {
-            const resolved = await resolve(owner);
+            const resolved = await managed(owner);
             if (!isDeepStrictEqual(resolved.scope, scope)) {
               throw new Error("repository_production_scope_denied");
             }
@@ -864,7 +920,7 @@ export const createRepositoryProductionNativeHandler =
           await createOperatorWorkloadVerifier(configured(scope).authWorkload)(callback);
         },
         readSetup: async (owner) => {
-          const found = await resolve(owner);
+          const found = await managed(owner);
           const row = await store.read(found.scope);
           return row
             ? await setup(found.scope).status(found.scope, row.record.intent)
@@ -953,7 +1009,7 @@ export const createRepositoryProductionNativeHandler =
         management: {
           ...management,
           execute: async (owner, command) => {
-            const found = await resolve(owner);
+            const found = await managed(owner);
             const row = await store.read(found.scope);
             if (
               command.action === retrySetupAction &&

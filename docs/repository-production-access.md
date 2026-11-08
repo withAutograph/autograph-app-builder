@@ -122,6 +122,18 @@ actual approval from Builder's private history. A caller-supplied approval ID
 alone is insufficient. Source hashes remain diagnostics; the reviewed resource,
 schema, organization and role effects determine approval identity.
 
+People, saved setup status and retry resolve the unique approved setup belonging
+to the live canonical app owner and original session. A newer private draft does
+not replace its scope, roles, database or approved release. Persistent apps read
+the exact retained artifact, release and manifest already saved in that setup;
+optional publication metadata is not another management gate. Live ownership,
+workspace membership, approval and physical fences remain required. New setup
+and revision planning still resolve their own reviewed publication destination.
+Frontend-only management allocates no database. A verified current published
+description in the same saved scope may supply its routing hint; without one,
+People and retry omit Open app, and invitation creation reports the existing
+service issue instead of inventing a destination.
+
 For a persistent app, setup records its owned database, roles, and encrypted
 credentials in the existing provisioning journal before any provider write.
 It allocates the database, prepares and verifies the creator's one-time Auth

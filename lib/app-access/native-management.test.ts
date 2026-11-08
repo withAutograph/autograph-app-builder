@@ -12,6 +12,11 @@ import type { RepositoryProductionManagementDependencies } from "./native-manage
 import type { AppAccessOperationRow } from "./management";
 import type { AppAccessOwner } from "./operator-client";
 import type { AppAccessCommand } from "./contracts";
+import { createRepositoryProductionManagementResolver } from "../provisioning/repository-production-management-subject";
+import { resolveRepositoryProductionDestination } from "../provisioning/repository-production-destination";
+import { repositoryProductionApprovalDigest } from "../provisioning/repository-production-approval";
+import type { AppDescription } from "../repository/app-description";
+import { AppAccessError } from "./errors";
 
 const scope: RepositoryProductionScope = {
   appId: "test-app",
@@ -293,6 +298,8 @@ const harness = (roleless = false, generated = false) => {
   };
   const service = createRepositoryProductionManagement(deps);
   return {
+    deps,
+    setup,
     creatorChoices,
     accessWrites,
     admissionActive: () => admissionActive,
@@ -339,6 +346,121 @@ const harness = (roleless = false, generated = false) => {
 };
 
 describe("native app access recovery", () => {
+  it.each([true, false])(
+    "keeps saved frontend People usable with current published routing=%s",
+    async (published) => {
+      const h = harness(true);
+      h.setup.record.ownerContext = owner.ownerContext;
+      h.setup.record.approval = {
+        approvalId: "approval",
+        approvedByCallId: "call",
+        planDigest: repositoryProductionApprovalDigest(scope, h.setup.record.intent),
+      };
+      const profile = {
+        workspaceId: scope.authority.workspaceId,
+        repositoryId: scope.repositoryId,
+        repositoryFullName: scope.repositoryFullName,
+        projectId: scope.projectId,
+        organization: { id: scope.organizationId, name: "Team" },
+        publicOrigin: scope.publicOrigin,
+      };
+      const description: AppDescription = {
+        version: 1,
+        app: {
+          id: scope.appId,
+          routes: ["/test-app"],
+          browserEntryPath: "/app-entry",
+          workspacePath: "apps/test-app",
+        },
+        backend: { kind: "static" },
+        validation: { browser: null, check: { task: "check" }, test: null },
+      };
+      let ownerActive = true;
+      const readSession = async () => {
+        if (!ownerActive) {
+          throw new Error("owner revoked");
+        }
+      };
+      const resolve = createRepositoryProductionManagementResolver({
+        repositories: [profile],
+        store: { read: async () => h.setup },
+        readSession,
+        readCapture: async () => {
+          throw new Error("frontend must not read app database artifacts");
+        },
+        resolveCurrent: async () => {
+          if (!published) {
+            resolveRepositoryProductionDestination({
+              appId: scope.appId,
+              appSpecDigest: "a".repeat(64),
+              workspaceId: scope.authority.workspaceId,
+              repositories: [profile],
+            });
+          }
+          return {
+            assertCurrentOwner: readSession,
+            description,
+            publishedDescription: true,
+            intent: h.setup.record.intent,
+            owner,
+            profile,
+            scope,
+          };
+        },
+      });
+      const appUrl = async () => {
+        const found = await resolve(owner);
+        if (!found.description) {
+          throw new AppAccessError("app_access_unavailable");
+        }
+        return new URL(
+          found.description.app.browserEntryPath ?? found.description.app.routes[0],
+          found.scope.publicOrigin,
+        ).toString();
+      };
+      const service = createRepositoryProductionManagement({
+        ...h.deps,
+        appUrl,
+        resolve: async () => {
+          const found = await resolve(owner);
+          const base = await h.deps.resolve(owner);
+          return {
+            ...base,
+            scope: found.scope,
+            ...(found.description ? { appUrl: await appUrl() } : {}),
+          };
+        },
+        assertAuthorized: async () => {
+          const found = await resolve(owner);
+          await found.assertCurrentOwner();
+        },
+        withLease: async (_scope, run) => await run(readSession),
+      });
+      const before = structuredClone(h.setup);
+      const snapshot = await service.read(owner);
+      expect(snapshot.appUrl).toBe(published ? "https://apps.test/app-entry" : undefined);
+      const command = {
+        action: "invite" as const,
+        email: "guest@example.test",
+        roles: [],
+        clientRequestId: randomUUID(),
+      };
+      if (published) {
+        const invited = await service.execute(owner, command);
+        expect(invited.invitations[0]?.email).toBe(command.email);
+      } else {
+        await expect(service.execute(owner, command)).rejects.toMatchObject({
+          code: "app_access_unknown",
+        });
+      }
+      expect(h.invites.size).toBe(published ? 1 : 0);
+      expect(h.sends.length).toBe(published ? 1 : 0);
+      expect(h.setup).toEqual(before);
+      expect(h.accessWrites).toEqual([]);
+      ownerActive = false;
+      await expect(service.read(owner)).rejects.toThrow("owner revoked");
+    },
+  );
   it("journals a creator delivery choice once without granting app permissions", async () => {
     const h = harness();
     const command = {
