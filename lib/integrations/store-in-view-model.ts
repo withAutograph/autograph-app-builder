@@ -85,7 +85,7 @@ export function githubStoreInViewModel(input: {
   }
 
   let description = "Update which repositories Autograph can access.";
-  if (desiredRepository) {
+  if (desiredRepository !== undefined) {
     description =
       input.action === "connect"
         ? `Connect GitHub so Autograph can access ${desiredRepository}.`

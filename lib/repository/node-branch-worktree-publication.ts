@@ -762,7 +762,7 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
     promise: ready,
     reject: rejectReady,
     resolve: resolveReady,
-  } = Promise.withResolvers<undefined>();
+  }: PromiseWithResolvers<void> = Promise.withResolvers();
   const timeout = setTimeout(() => {
     holder.kill();
     rejectReady(new Error("The OS publication lock did not become ready."));
@@ -787,7 +787,7 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
       rejectReady(new Error("The OS publication lock handshake failed."));
       return;
     }
-    resolveReady(undefined);
+    resolveReady();
   });
   await ready;
   const lockLostError = () => {
