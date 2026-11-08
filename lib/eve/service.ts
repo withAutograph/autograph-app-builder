@@ -783,7 +783,9 @@ export function createLocalEveSessionService(
     consumeResponse(state, sessionId, response, modelTurnTimeoutMs, {
       cancelTurn: async (turnId) =>
         await sessionFor(sessionId).cancel(turnId === undefined ? undefined : { turnId }),
-      consumeDurableTail: (observeEvent) => consumeDurableTail(sessionId, observeEvent),
+      consumeDurableTail: (observeEvent) => {
+        consumeDurableTail(sessionId, observeEvent);
+      },
       appendEvent: (events, event) => appendLocalEvent(sessionId, events, event),
     });
   }
@@ -1572,7 +1574,7 @@ export function createEveSessionService(
               cancelRecovery: async (sessionId: string) => {
                 await recovery.cancel(sessionId);
               },
-              recoverTerminal: async (sessionId: string, requestId: string) =>
+              recoverTerminal: async (sessionId: string, requestId: string) => {
                 await recovery.recover(client, sessionId, requestId, async (body) => {
                   const response = await fetch(new URL("/eve/v1/session", url.origin), {
                     method: "POST",
@@ -1582,7 +1584,8 @@ export function createEveSessionService(
                   });
                   if (!response.ok) throw new LocalSessionRecoveryUnavailableError();
                   return localRecoveryResponseSchema.parse(await response.json());
-                }),
+                });
+              },
             }),
       },
     );
