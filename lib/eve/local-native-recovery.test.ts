@@ -20,7 +20,7 @@ afterEach(async () => {
   vi.unstubAllEnvs();
   await Promise.all(
     roots.splice(0).map(async (root) => {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }),
   );
 });
@@ -91,7 +91,7 @@ const fixture = async () => {
       : recovery.ports.commitReceipt({ ...call, recoveryBinding: binding }));
     return { sessionId: binding.ownerRunId, recoveryBinding: binding };
   });
-  return { root, cycle, environment, recovery, client, snapshots, auth, post };
+  return { auth, client, cycle, environment, post, recovery, root, snapshots };
 };
 
 describe("local native terminal recovery authority", () => {

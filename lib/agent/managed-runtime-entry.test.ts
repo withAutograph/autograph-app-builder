@@ -141,8 +141,8 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
         ["scripts/build-managed-runtime-worker.mjs", selectedArrustedRoot, executable, target],
         {
           cwd: process.cwd(),
-          timeout: 30_000,
           encoding: "utf-8",
+          timeout: 30_000,
         },
       );
       const build: unknown = JSON.parse(built.stdout);
@@ -243,7 +243,7 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
       for (const bearer of Object.values(capabilities.private)) {
         expect(inputText).not.toContain(bearer);
       }
-      await writeFile(inputFile, inputText, { mode: 0o600, flag: "wx" });
+      await writeFile(inputFile, inputText, { flag: "wx", mode: 0o600 });
       owned = await createManagedOwnedChildLauncher({
         executable,
         args: ["protected-managed-app-runtime", "--input-file", inputFile],
@@ -421,7 +421,7 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
       ).rejects.toThrow();
     } finally {
       await owned?.terminate();
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { force: true, recursive: true });
     }
   },
   60_000,
@@ -447,7 +447,7 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
           executable,
           `bun-${process.platform}-${process.arch === "arm64" ? "arm64" : "x64"}`,
         ],
-        { cwd: process.cwd(), timeout: 30_000, encoding: "utf-8" },
+        { cwd: process.cwd(), encoding: "utf-8", timeout: 30_000 },
       );
       await installRepositoryRuntimeShim(directory, selectedArrustedRoot);
       // The real entry's readiness HTTP request establishes this barrier. The
@@ -524,7 +524,7 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
         lifecycleSha256: capabilities.lifecycleSha256,
         transportSha256: capabilities.projection.transportSha256,
       });
-      await writeFile(inputFile, JSON.stringify(input), { mode: 0o600, flag: "wx" });
+      await writeFile(inputFile, JSON.stringify(input), { flag: "wx", mode: 0o600 });
       owned = await createManagedOwnedChildLauncher({
         executable,
         args: ["protected-managed-app-runtime", "--input-file", inputFile],
@@ -564,7 +564,7 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
       // a PID, command, app effect or production restart API.
       await writeFile(path.join(directory, "cleanup-request"), "cleanup");
       await owned?.terminate();
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { force: true, recursive: true });
     }
   },
   60_000,

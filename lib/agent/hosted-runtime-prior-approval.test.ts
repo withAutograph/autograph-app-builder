@@ -59,7 +59,7 @@ const fixture = async () => {
     send: async () => await Promise.resolve(snapshot),
     start: async () => await Promise.resolve({ adapterSessionId: "owned-adapter", snapshot }),
   };
-  const service = createHostedEveSessionService({ principal, store, transport, now: () => 10 });
+  const service = createHostedEveSessionService({ now: () => 10, principal, store, transport });
   const started = await service.start({ clientRequestId: randomUUID(), prompt: "Build an app" });
   const saved = await store.getSession(principal, started.sessionId);
   if (saved?.version !== 2) {
@@ -208,8 +208,8 @@ const fixture = async () => {
     getSandbox: async () => await Promise.reject(new Error("No Sandbox in approval fixture")),
   };
   const reader = createHostedRuntimePriorApprovalReader({
-    store,
     now: () => Date.parse("2026-10-14T12:00:00Z"),
+    store,
   });
   const read = async (
     requested: HostedRuntimeApprovalEnvelope,
@@ -539,8 +539,8 @@ const nativeApprovalCapture = (
       fetchImplementation,
     });
   });
-  const read = createHostedRuntimeExecutionApprovalReader({ readPrior: f.reader, capture });
-  return { read, capture, fetchImplementation };
+  const read = createHostedRuntimeExecutionApprovalReader({ capture, readPrior: f.reader });
+  return { capture, fetchImplementation, read };
 };
 const retainedApprovalCapture = async (
   f: Awaited<ReturnType<typeof fixture>>,
@@ -609,7 +609,7 @@ const retainedApprovalCapture = async (
       metadata,
     }),
   );
-  return { native, metadata, ref, read, getSession };
+  return { getSession, metadata, native, read, ref };
 };
 
 describe("Builder-local approval capture before execution", () => {
@@ -817,10 +817,10 @@ describe("owned approved operation reference", () => {
     );
     expect(loaded.input).toEqual(f.input);
     expect(loaded.snapshot).toEqual({
-      sessionId: f.saved.sessionId,
-      adapterSessionId: f.saved.adapterSessionId,
       adapterGeneration: f.saved.adapterGeneration,
+      adapterSessionId: f.saved.adapterSessionId,
       cancellationRevision: 0,
+      sessionId: f.saved.sessionId,
     });
     await reader.assertCurrent(loaded.snapshot, f.context, f.operator);
     const prior = await f.read(loaded.input, f.context);

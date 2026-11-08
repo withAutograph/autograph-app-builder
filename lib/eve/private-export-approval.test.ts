@@ -162,7 +162,7 @@ describe("native private tenant export approval", () => {
 });
 
 describe("resumable export approval capture", () => {
-  const options = { plan, request, principal: { ...authority, scopes: ["autograph:send"] } };
+  const options = { plan, principal: { ...authority, scopes: ["autograph:send"] }, request };
   it("retains a pending exact-intent pair across readers and filters the requested call", () => {
     const prefix = createPrivateTenantExportApprovalCapture(options);
     prefix.observe(requested());
@@ -231,7 +231,7 @@ describe("approval history binding and cancellation", () => {
     adapterSessionId: "native-original",
     adapterGeneration: 1,
   });
-  const options = { plan, request, principal: owner.principal };
+  const options = { plan, principal: owner.principal, request };
   const binding = {
     adapterSessionId: owner.adapterSessionId,
     adapterGeneration: owner.adapterGeneration,
@@ -273,10 +273,10 @@ describe("approval history binding and cancellation", () => {
       return Promise.resolve();
     };
     const shared = {
-      owner,
+      assertOwner: async () => {},
       capture: (state?: Parameters<typeof createPrivateTenantExportApprovalCapture>[0]["state"]) =>
         createPrivateTenantExportApprovalCapture({ ...options, state }),
-      assertOwner: async () => {},
+      owner,
     };
     await expect(
       readPrivateOperatorApproval({
@@ -302,7 +302,7 @@ describe("approval history binding and cancellation", () => {
     const result = await readPrivateOperatorApproval({
       ...shared,
       owner: { ...owner, adapterSessionId: "replacement", adapterGeneration: 2 },
-      observation: { state: checkpoint, save },
+      observation: { save, state: checkpoint },
       readHistory: (start) => {
         expect(start).toBe(0);
         return Promise.resolve({ complete: true, nativeTailIndex: -1, nextNativeIndex: 0 });
@@ -318,10 +318,10 @@ describe("approval history binding and cancellation", () => {
       return Promise.resolve();
     };
     const shared = {
-      owner,
+      assertOwner: async () => {},
       capture: (state?: Parameters<typeof createPrivateTenantExportApprovalCapture>[0]["state"]) =>
         createPrivateTenantExportApprovalCapture({ ...options, state }),
-      assertOwner: async () => {},
+      owner,
     };
     await readPrivateOperatorApproval({
       ...shared,
@@ -346,7 +346,7 @@ describe("approval history binding and cancellation", () => {
     await expect(
       readPrivateOperatorApproval({
         ...shared,
-        observation: { state: checkpoint, save },
+        observation: { save, state: checkpoint },
         readHistory: (start, onEvent) => {
           expect(start).toBe(2);
           onEvent(pending);
@@ -358,7 +358,7 @@ describe("approval history binding and cancellation", () => {
     await expect(
       readPrivateOperatorApproval({
         ...shared,
-        observation: { state: checkpoint, save },
+        observation: { save, state: checkpoint },
         readHistory: (start, onEvent) => {
           expect(start).toBe(4);
           onEvent(requested({ toolName: "unrelated-tool" }));
@@ -369,7 +369,7 @@ describe("approval history binding and cancellation", () => {
     const result = await readPrivateOperatorApproval({
       ...shared,
       owner: { ...owner, adapterSessionId: "replacement", adapterGeneration: 2 },
-      observation: { state: checkpoint, save },
+      observation: { save, state: checkpoint },
       readHistory: (start) => {
         expect(start).toBe(0);
         return Promise.resolve({ complete: true, nativeTailIndex: -1, nextNativeIndex: 0 });
@@ -431,7 +431,7 @@ describe("approval history binding and cancellation", () => {
       await expect(
         readPrivateOperatorApproval({
           ...shared,
-          observation: { state: checkpoint, save },
+          observation: { save, state: checkpoint },
           readHistory: (start, onEvent) => {
             expect(start).toBe(2);
             if (otherRequest) {
@@ -449,7 +449,7 @@ describe("approval history binding and cancellation", () => {
       const receipt = await readPrivateOperatorApproval({
         ...shared,
         owner: { ...owner, adapterSessionId: "replacement", adapterGeneration: 2 },
-        observation: { state: checkpoint, save },
+        observation: { save, state: checkpoint },
         capture: (state) =>
           createPrivateTenantExportApprovalCapture({
             ...options,
@@ -467,7 +467,7 @@ describe("approval history binding and cancellation", () => {
         const unaffected = await readPrivateOperatorApproval({
           ...shared,
           owner: { ...owner, adapterSessionId: "replacement", adapterGeneration: 2 },
-          observation: { state: checkpoint, save },
+          observation: { save, state: checkpoint },
           capture: (state) =>
             createPrivateTenantExportApprovalCapture({ ...options, callId: "export-call", state }),
           readHistory: (start) => {
@@ -486,10 +486,10 @@ describe("approval history binding and cancellation", () => {
       return Promise.resolve();
     };
     const shared = {
-      owner,
+      assertOwner: async () => {},
       capture: (state?: Parameters<typeof createPrivateTenantExportApprovalCapture>[0]["state"]) =>
         createPrivateTenantExportApprovalCapture({ ...options, state }),
-      assertOwner: async () => {},
+      owner,
     };
     await expect(
       readPrivateOperatorApproval({
@@ -505,7 +505,7 @@ describe("approval history binding and cancellation", () => {
     expect(checkpoint?.nextNativeIndex).toBe(2);
     const result = await readPrivateOperatorApproval({
       ...shared,
-      observation: { state: checkpoint, save },
+      observation: { save, state: checkpoint },
       readHistory: (start, onEvent) => {
         expect(start).toBe(2);
         onEvent(settled("owner", "cancelled"));
@@ -539,7 +539,7 @@ it("rechecks a quiet native tail without rewriting unchanged approval progress",
   const read = () =>
     readPrivateOperatorApproval({
       owner,
-      observation: { state: checkpoint, save },
+      observation: { save, state: checkpoint },
       capture: (state) =>
         createPrivateTenantExportApprovalCapture({ plan, request, principal, state }),
       assertOwner,

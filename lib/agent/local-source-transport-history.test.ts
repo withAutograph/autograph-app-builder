@@ -261,7 +261,7 @@ test("actual source-preparation service retains old validation workflow while Na
       };
       const noOpHistory = [legacyEvent, failedPlanning, noOpEvent];
       const afterNoOp = await readCompletedLocalSourceTransport(
-        { sessionId: "saved-session", expected: compatibility },
+        { expected: compatibility, sessionId: "saved-session" },
         {
           environment,
           readAuthority: () => Promise.resolve({ kind: "local", ownerUid: 1, stateRoot }),
@@ -487,7 +487,7 @@ test("failed tool results, observed metadata and foreign/incomplete history cann
     ).toThrow("another workspace");
     await expect(
       readCompletedLocalSourceTransport(
-        { sessionId: "saved-session", expected },
+        { expected, sessionId: "saved-session" },
         {
           environment,
           readAuthority: () => Promise.resolve({ kind: "local", ownerUid: 1, stateRoot }),
@@ -514,7 +514,7 @@ test("failed tool results, observed metadata and foreign/incomplete history cann
     }
     await expect(
       readCompletedLocalSourceTransport(
-        { sessionId: "saved-session", ownerRunId: "foreign-child", expected },
+        { expected, ownerRunId: "foreign-child", sessionId: "saved-session" },
         {
           environment,
           readAuthority: () => Promise.resolve({ kind: "local", ownerUid: 1, stateRoot }),
@@ -526,7 +526,7 @@ test("failed tool results, observed metadata and foreign/incomplete history cann
     let reads = 0;
     await expect(
       readCompletedLocalSourceTransport(
-        { sessionId: "saved-session", expected },
+        { expected, sessionId: "saved-session" },
         {
           environment,
           readAuthority: () => {
@@ -626,7 +626,7 @@ test("missing cycle variable uses the same owned cycle and stitches actual SDK h
         Promise.resolve({ kind: "local" as const, ownerUid: process.getuid?.() ?? 0, stateRoot }),
     };
     const stitched = await readCompletedLocalSourceTransport(
-      { sessionId: "saved-session", expected },
+      { expected, sessionId: "saved-session" },
       dependencies,
     );
     expect(stitched?.workspaceDigest).toBe(overlay.workspaceDigest);
@@ -634,10 +634,10 @@ test("missing cycle variable uses the same owned cycle and stitches actual SDK h
     // prepared-session stream anchor after supported native recovery.
     const callback = await readCompletedLocalSourceTransport(
       {
-        sessionId: "saved-session",
-        ownerRunId: "callback-step-owner",
-        ownerAnchorRunId: "recovered-session",
         expected,
+        ownerAnchorRunId: "recovered-session",
+        ownerRunId: "callback-step-owner",
+        sessionId: "saved-session",
       },
       dependencies,
     );
@@ -645,30 +645,30 @@ test("missing cycle variable uses the same owned cycle and stitches actual SDK h
     await expect(
       readCompletedLocalSourceTransport(
         {
-          sessionId: "saved-session",
-          ownerRunId: "callback-step-owner",
-          ownerAnchorRunId: "foreign-anchor",
           expected,
+          ownerAnchorRunId: "foreign-anchor",
+          ownerRunId: "callback-step-owner",
+          sessionId: "saved-session",
         },
         dependencies,
       ),
     ).rejects.toThrow("owner changed");
     await expect(
       readCompletedLocalSourceTransport(
-        { sessionId: "saved-session", ownerAnchorRunId: "recovered-session", expected },
+        { expected, ownerAnchorRunId: "recovered-session", sessionId: "saved-session" },
         dependencies,
       ),
     ).rejects.toThrow("owner changed");
     await expect(
       readCompletedLocalSourceTransport(
-        { sessionId: "saved-session", ownerRunId: "callback-step-owner", expected },
+        { expected, ownerRunId: "callback-step-owner", sessionId: "saved-session" },
         dependencies,
       ),
     ).rejects.toThrow("owner changed");
 
     await expect(
       readCompletedLocalSourceTransport(
-        { sessionId: "saved-session", expected },
+        { expected, sessionId: "saved-session" },
         {
           ...dependencies,
           environment: {
@@ -680,7 +680,7 @@ test("missing cycle variable uses the same owned cycle and stitches actual SDK h
     ).rejects.toThrow();
     await expect(
       readCompletedLocalSourceTransport(
-        { sessionId: "saved-session", expected },
+        { expected, sessionId: "saved-session" },
         {
           ...dependencies,
           environment: {

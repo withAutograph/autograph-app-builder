@@ -269,7 +269,6 @@ const fixture = async (publicRelease?: {
       expect(current.record.leaseId).toBeUndefined();
     },
     store: {
-      read: async () => structuredClone(row),
       compareAndSet: async (input) => {
         if (input.expectedRevision !== row.revision) {
           return undefined;
@@ -280,6 +279,7 @@ const fixture = async (publicRelease?: {
         };
         return structuredClone(row);
       },
+      read: async () => structuredClone(row),
     },
   };
   const normalFetch: typeof fetch = async (url, init) => {
@@ -383,8 +383,8 @@ const fixture = async (publicRelease?: {
     await assertAuthorized();
   });
   const collect = createHostedOperatorNormalActorProofCollector({
-    journalPorts,
     assertPlanningAuthorized,
+    journalPorts,
     normalRealmFetch: async (input) => {
       expect(input.origin).toBe(program.origin);
       return normalFetch;
