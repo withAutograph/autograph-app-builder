@@ -20,26 +20,26 @@ const required = <T>(value: T | undefined): T => {
 };
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const authority = {
-  issuer: "https://builder.fixture.test/api/auth",
   audience: "https://builder.fixture.test/mcp",
+  issuer: "https://builder.fixture.test/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
 const target = {
   appId: "orchard",
-  sessionId: "session",
   branch: "feature",
   environment: "preview" as const,
-  projectId: "prj_app",
   installationId: "installation",
+  projectId: "prj_app",
   scopeId: "team",
   scopeType: "team" as const,
+  sessionId: "session",
 };
 const context: HostedOperatorContext = { authority, target };
 const gateway = {
-  projectId: "prj_gateway",
-  ownerId: "team",
   environment: "preview" as const,
+  ownerId: "team",
+  projectId: "prj_gateway",
   publicOrigin: "https://gateway.fixture.test",
 };
 const sha = "a".repeat(40);
@@ -49,10 +49,10 @@ const preparedPlan = hostedOperatorPlanSchema.parse({
   contextId: "accepted-spec",
   selection: {
     appId: target.appId,
-    sessionId: target.sessionId,
     branch: target.branch,
     environment: target.environment,
     projectId: target.projectId,
+    sessionId: target.sessionId,
   },
   access: [{ actorId: "actor", organizationId: "org", roles: ["ordinary_role"] }],
   appDatabase: {
@@ -80,8 +80,8 @@ const preparedPlan = hostedOperatorPlanSchema.parse({
   retention: { expiresAt: "2099-01-01T00:00:00Z", policy: "owned cleanup" },
   publicGateway: {
     branch: "gateway-main",
-    projectId: gateway.projectId,
     origin: gateway.publicOrigin,
+    projectId: gateway.projectId,
   },
   gatewayDelivery: {
     branch: "gateway-main",
@@ -89,17 +89,17 @@ const preparedPlan = hostedOperatorPlanSchema.parse({
     projectId: gateway.projectId,
     repoId: "gateway-repo",
   },
-  delivery: { projectId: target.projectId, branch: target.branch, repoId: "app-repo", gitSha: sha },
+  delivery: { branch: target.branch, gitSha: sha, projectId: target.projectId, repoId: "app-repo" },
   deploymentBoundary: {
     authority,
     teamId: "team",
-    app: { projectId: target.projectId, branch: target.branch, environment: "preview" },
+    app: { branch: target.branch, environment: "preview", projectId: target.projectId },
     gateway: { branch: "gateway-main", environment: "preview", projectId: gateway.projectId },
     operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
     verification: {
       gatewayOrigin: gateway.publicOrigin,
-      publicOrigin: gateway.publicOrigin,
       jwksUrl: `${gateway.publicOrigin}/_platform/jwks.json`,
+      publicOrigin: gateway.publicOrigin,
     },
   },
   effects: [
@@ -160,10 +160,10 @@ const fixture = () => {
     authority,
     target,
     originalSetup: {
-      operationRef: randomUUID(),
-      planDigest: "d".repeat(64),
       approvalId: "original-approval",
       approvedByCallId: "original-call",
+      operationRef: randomUUID(),
+      planDigest: "d".repeat(64),
     },
     preparedPlan,
     runtime: {
@@ -257,12 +257,12 @@ const fixture = () => {
   });
   const rows: Row[] = [
     {
+      comment: "native",
       id: "native",
       key: "PLATFORM_GATEWAY_PROJECT_BINDINGS",
-      value: "native-private-config",
-      type: "encrypted",
       target: ["preview"],
-      comment: "native",
+      type: "encrypted",
+      value: "native-private-config",
     },
     {
       id: "sibling",
@@ -525,12 +525,12 @@ it("does not repeat an unknown unobserved environment POST or adopt a foreign va
   expect(f.calls.filter((c) => c.method === "POST")).toHaveLength(1);
   const key = f.record.environmentWrites[0].key;
   f.rows.push({
+    comment: `App Builder managed runtime ${f.record.requestId}`,
     id: "foreign",
     key,
-    value: "foreign",
-    type: "encrypted",
     target: ["preview"],
-    comment: `App Builder managed runtime ${f.record.requestId}`,
+    type: "encrypted",
+    value: "foreign",
   });
   await expect(f.publish()).rejects.toMatchObject({ code: "reconciliation_required" });
   expect(f.calls.filter((c) => c.method === "POST")).toHaveLength(1);

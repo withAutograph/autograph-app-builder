@@ -69,8 +69,8 @@ vi.mock("../repository/target-planning", () => ({
   fixtureTargetCommandExecutor: () => ({}),
   sandboxTargetCommandExecutor: () => ({}),
   targetExecutionBinding: () => ({
-    fixture: true,
     dependencyCacheDigest: "cache",
+    fixture: true,
     imageDigest: "image",
   }),
 }));
@@ -115,12 +115,12 @@ const fixture = (phase: "planned" | "identity_resolved", compute = profile()) =>
     artifacts: [],
     sourceReceipt: { digest: "source" },
     workspace: {
-      workspaceId: "workspace",
-      workspacePath: "/workspace/repository",
+      eligibilityDigest: "eligible",
       sourceSha: "source-sha",
       sourceTree: "source-tree",
       workspaceDigest: "workspace",
-      eligibilityDigest: "eligible",
+      workspaceId: "workspace",
+      workspacePath: "/workspace/repository",
     },
     dependencyReceipt: { digest: "dependency" },
     identityReceipt: { digest: "identity" },
@@ -233,8 +233,8 @@ const approveRepairFixture = (state: AppBuilderWorkflowState) => {
 };
 const repairFiles = [
   {
-    path: "apps/example/.config/mise/config.toml",
     content: "# Enables discovery of generated app-scoped mise tasks.\n",
+    path: "apps/example/.config/mise/config.toml",
   },
 ];
 
@@ -552,7 +552,7 @@ describe("explicit same-app private repair through the real planning producer", 
       ).rejects.toThrow("exact reviewed");
       await expect(
         prepareAppCreation(
-          { existingAppChanges: [{ path: "apps/foreign/page.tsx", content: "x" }] },
+          { existingAppChanges: [{ content: "x", path: "apps/foreign/page.tsx" }] },
           context,
         ),
       ).rejects.toThrow("path");

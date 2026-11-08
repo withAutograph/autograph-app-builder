@@ -38,8 +38,8 @@ const diagnosticRequest = () => new Request("https://operator.test/v1/runtime");
 
 const fixture = tenantExportWireFixtureSchema.parse(wire);
 const authority = {
-  issuer: "https://builder.test/api/auth",
   audience: "https://builder.test/mcp",
+  issuer: "https://builder.test/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
@@ -57,37 +57,37 @@ const context: HostedOperatorContext = {
   },
 };
 const selection = {
-  version: 1 as const,
-  kind: "tenant-export-plan" as const,
   authority,
-  target: {
-    appId: context.target.appId,
-    sessionId: context.target.sessionId,
-    branch: context.target.branch,
-    projectId: context.target.projectId,
-  },
+  format: fixture.worker.format,
+  kind: "tenant-export-plan" as const,
   originalSetup: {
-    operationRef: "40000000-0000-4000-8000-000000000004",
-    planDigest: "a".repeat(64),
     approvalId: "setup-human",
     approvedByCallId: "setup-call",
+    operationRef: "40000000-0000-4000-8000-000000000004",
+    planDigest: "a".repeat(64),
   },
-  scope: fixture.worker.scope,
-  resource: fixture.worker.resource,
   release: fixture.worker.release,
+  resource: fixture.worker.resource,
+  scope: fixture.worker.scope,
   selection: fixture.worker.selection,
-  format: fixture.worker.format,
+  target: {
+    appId: context.target.appId,
+    branch: context.target.branch,
+    projectId: context.target.projectId,
+    sessionId: context.target.sessionId,
+  },
+  version: 1 as const,
 };
 const completionFor = (worker: TenantExportWorkerInput): ExportCompletion => ({
   attemptId: worker.attemptId,
-  snapshotId: worker.snapshotId,
+  byteLength: fixture.manifest.byteLength,
+  fileCount: "2",
   manifest: {
     ...fixture.manifestMember,
     artifactRef: `_protected-operator/artifacts/tenant-export/${worker.exportId}/${worker.attemptId}/manifest/${fixture.manifestMember.sha256}`,
   },
-  fileCount: "2",
   rowCount: "1",
-  byteLength: fixture.manifest.byteLength,
+  snapshotId: worker.snapshotId,
 });
 const setup = () => {
   let record: HostedTenantExportExecutionRecord | undefined;
@@ -172,7 +172,7 @@ const setup = () => {
     prepareWorker: vi.fn<HostedTenantExportDependencies["prepareWorker"]>(
       async (_context, _worker, assertCurrent) => {
         await assertCurrent();
-        return { sandboxId: "trusted-private-vm", descriptor: fixture.descriptor };
+        return { descriptor: fixture.descriptor, sandboxId: "trusted-private-vm" };
       },
     ),
     runWorker: vi.fn<HostedTenantExportDependencies["runWorker"]>(
@@ -197,12 +197,12 @@ const setup = () => {
     ),
   };
   return {
-    dependencies,
-    operations: createHostedTenantExportOperations(dependencies),
-    read,
     approve() {
       approved = true;
     },
+    dependencies,
+    operations: createHostedTenantExportOperations(dependencies),
+    read,
     revoke() {
       owner = false;
     },
@@ -410,8 +410,8 @@ describe("protected tenant export orchestration", () => {
     );
     f.dependencies.inspect = vi.fn<HostedTenantExportDependencies["inspect"]>(
       async (_context, worker) => ({
-        status: "complete",
         completion: completionFor(worker),
+        status: "complete",
       }),
     );
     expect(await f.operations.execute(context, planned.request, "retry")).toMatchObject({
@@ -427,7 +427,7 @@ describe("protected tenant export orchestration", () => {
     f.dependencies.prepareWorker = vi.fn<HostedTenantExportDependencies["prepareWorker"]>(
       async () => {
         f.revoke();
-        return { sandboxId: "trusted-private-vm", descriptor: fixture.descriptor };
+        return { descriptor: fixture.descriptor, sandboxId: "trusted-private-vm" };
       },
     );
     await expect(f.operations.execute(context, planned.request, "export-call")).rejects.toThrow(
@@ -513,13 +513,13 @@ describe("existing operator transport export dispatch", () => {
     });
     const client = createHostedOperatorClient({
       endpoint: "https://operator.test",
-      ownerContext,
-      sessionId: selected.sessionId,
-      token: async () => "workload-token",
       fetch: async (url, init) => {
         expect(init).toHaveProperty("dispatcher");
         return await handler(new Request(url instanceof Request ? url.url : url, init));
       },
+      ownerContext,
+      sessionId: selected.sessionId,
+      token: async () => "workload-token",
     });
     const planned = await client.planTenantExport(selected, "customer-one", "original-request");
     const savedBeforeRead = f.read();
@@ -701,6 +701,7 @@ describe("existing operator transport export dispatch", () => {
       });
       const client = createHostedOperatorClient({
         endpoint: "https://operator.test",
+        fetch: transport,
         ownerContext: {
           adapterGeneration: 1,
           adapterSessionId: "adapter",
@@ -710,7 +711,6 @@ describe("existing operator transport export dispatch", () => {
           sessionId: context.target.sessionId,
         },
         token: async () => "workload-token",
-        fetch: transport,
       });
       await expect(client.exportTenantData(planned.request, "export-call")).rejects.toBeInstanceOf(
         HostedOperatorTransportUnknown,
@@ -740,10 +740,10 @@ describe("export planning failure boundaries", () => {
   };
   const input = {
     action: "export-plan" as const,
-    selection: { ...context.target, environment: "preview" as const },
     customerId: "customer-one",
     idempotencyKey: "diagnostic-request",
     ownerContext,
+    selection: { ...context.target, environment: "preview" as const },
   };
 
   it.each([
@@ -791,11 +791,11 @@ describe("export planning failure boundaries", () => {
     const consoleSink = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       const dispatch = createTenantExportDispatcher({
-        store: f.dependencies.store,
-        operations: createHostedTenantExportOperations(f.dependencies),
-        verifyWorkload: stage === "dispatcher_workload_verification" ? reject : async () => {},
         authorize: stage === "dispatcher_owner_authorization" ? reject : async () => context,
         authorizeRead: async (_request, selected) => selected,
+        operations: createHostedTenantExportOperations(f.dependencies),
+        store: f.dependencies.store,
+        verifyWorkload: stage === "dispatcher_workload_verification" ? reject : async () => {},
       });
       const outcome = dispatch(diagnosticRequest(), input);
       await (stage === "plan_reservation_match"
@@ -843,21 +843,21 @@ describe("export planning failure boundaries", () => {
     const consoleSink = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       const dispatch = createTenantExportDispatcher({
+        authorize: async () => context,
+        authorizeRead: async (_request, selected) => selected,
+        operations: f.operations,
         store: {
           read: async () => {
             throw failure;
           },
         },
-        operations: f.operations,
         verifyWorkload: async () => {},
-        authorize: async () => context,
-        authorizeRead: async (_request, selected) => selected,
       });
       await expect(
         dispatch(diagnosticRequest(), {
           action: "export-status",
-          ownerContext,
           exportId: "40000000-0000-4000-8000-000000000004",
+          ownerContext,
         }),
       ).rejects.toBe(failure);
       expect(consoleSink).not.toHaveBeenCalled();
@@ -920,19 +920,19 @@ describe("approved installed tenant export scope", () => {
         tenantExportTransportRequestSchema.parse({
           action: "export-plan",
           idempotencyKey: "owned-selection",
-          selection: {
-            appId: context.target.appId,
-            branch: context.target.branch,
-            environment: "preview",
-            projectId: context.target.projectId,
-            sessionId: context.target.sessionId,
-          },
           ownerContext: {
             adapterGeneration: 1,
             adapterSessionId: "adapter",
             authority,
             kind: "direct",
             principal: { ...authority, scopes: ["autograph:send"] },
+            sessionId: context.target.sessionId,
+          },
+          selection: {
+            appId: context.target.appId,
+            branch: context.target.branch,
+            environment: "preview",
+            projectId: context.target.projectId,
             sessionId: context.target.sessionId,
           },
           ...(semantic ? { customerScope: "owner-organization" } : { customerId: "customer-one" }),
@@ -971,13 +971,6 @@ describe("approved installed tenant export scope", () => {
   it("requires exactly one raw or semantic export selection", () => {
     const base = {
       action: "export-plan",
-      selection: {
-        appId: context.target.appId,
-        branch: context.target.branch,
-        environment: "preview",
-        projectId: context.target.projectId,
-        sessionId: context.target.sessionId,
-      },
       idempotencyKey: "selection",
       ownerContext: {
         adapterGeneration: 1,
@@ -985,6 +978,13 @@ describe("approved installed tenant export scope", () => {
         authority,
         kind: "direct",
         principal: { ...authority, scopes: ["autograph:send"] },
+        sessionId: context.target.sessionId,
+      },
+      selection: {
+        appId: context.target.appId,
+        branch: context.target.branch,
+        environment: "preview",
+        projectId: context.target.projectId,
         sessionId: context.target.sessionId,
       },
     };
@@ -1023,66 +1023,66 @@ describe("incremental canonical export approval history", () => {
     f.dependencies.readApproval = vi.fn<HostedTenantExportDependencies["readApproval"]>(
       async (_context, request, callId, observation) =>
         await readPrivateOperatorApproval({
-          owner,
-          observation,
-          capture: (state) =>
-            createPrivateTenantExportApprovalCapture({
-              plan: f.read().journal.plan,
-              request,
-              principal: owner.principal,
-              callId,
-              state,
-            }),
           assertOwner: async () => {
             await f.dependencies.assertOwner(context);
           },
+          capture: (state) =>
+            createPrivateTenantExportApprovalCapture({
+              callId,
+              plan: f.read().journal.plan,
+              principal: owner.principal,
+              request,
+              state,
+            }),
+          observation,
+          owner,
           readHistory: async (startIndex, onEvent) => {
             starts.push(startIndex);
             if (startIndex === 0) {
               onEvent({
-                type: "input.requested",
-                meta: { at: "2026-10-21T00:00:00Z", id: "requested" },
                 data: {
+                  requests: [
+                    {
+                      action: {
+                        callId: "export-call",
+                        input: { ...request, plan: f.read().journal.plan },
+                        kind: "tool-call",
+                        toolName: "export-app-hosted-data",
+                      },
+                      kind: "tool-approval",
+                      prompt: "Export?",
+                      requestId: "human-approval",
+                    },
+                  ],
                   sequence: 1,
                   stepIndex: 0,
                   turnId: "turn",
-                  requests: [
-                    {
-                      kind: "tool-approval",
-                      requestId: "human-approval",
-                      prompt: "Export?",
-                      action: {
-                        kind: "tool-call",
-                        toolName: "export-app-hosted-data",
-                        callId: "export-call",
-                        input: { ...request, plan: f.read().journal.plan },
-                      },
-                    },
-                  ],
                 },
+                meta: { at: "2026-10-21T00:00:00Z", id: "requested" },
+                type: "input.requested",
               });
               if (options.revoke === true) {
                 f.revoke();
               }
               return {
-                nextNativeIndex: 1,
-                nativeTailIndex: 1,
                 complete: options.fullNoReceipt === true,
+                nativeTailIndex: 1,
+                nextNativeIndex: 1,
               };
             }
             onEvent({
-              type: "approval.settled",
-              meta: { at: "2026-10-21T00:00:01Z", id: "settled" },
               data: {
+                outcome: "approved",
+                requestId: "human-approval",
+                responderPrincipalId: "owner",
                 sequence: 2,
                 stepIndex: 0,
                 turnId: "turn",
-                requestId: "human-approval",
-                responderPrincipalId: "owner",
-                outcome: "approved",
               },
+              meta: { at: "2026-10-21T00:00:01Z", id: "settled" },
+              type: "approval.settled",
             });
-            return { nextNativeIndex: 2, nativeTailIndex: 1, complete: true };
+            return { complete: true, nativeTailIndex: 1, nextNativeIndex: 2 };
           },
         }),
     );

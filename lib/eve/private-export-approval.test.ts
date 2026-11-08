@@ -18,10 +18,10 @@ import { publicApprovalDescription } from "../agent/approval-receipt";
 
 const fixture = tenantExportWireFixtureSchema.parse(wire);
 const authority = {
-  issuer: "https://builder.test/api/auth",
   audience: "https://builder.test/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.test/api/auth",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 const plan = hostedTenantExportPlanSchema.parse({
   version: 1,

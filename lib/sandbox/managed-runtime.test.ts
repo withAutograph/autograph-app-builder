@@ -28,11 +28,11 @@ const identity: ManagedRuntimeIdentity = {
   intentId: "10000000-0000-4000-8000-000000000001",
   approvalRef: "approved-suite",
   owner: {
-    issuer: "https://builder.example/api/auth",
     audience: "https://builder.example/mcp",
-    workspaceId: "workspace",
+    issuer: "https://builder.example/api/auth",
     ownerUserId: "owner",
     sessionId: "saved-session",
+    workspaceId: "workspace",
   },
   appId: "orchard",
   runtimeAttemptId: "20000000-0000-4000-8000-000000000002",
@@ -183,7 +183,7 @@ const processFixture = async () => {
           const raw: unknown = JSON.parse(await readFile(observation, "utf-8"));
           expect(z.object({ pid: z.number() }).parse(raw).pid).toBe(pid);
         },
-        { timeout: 2000, interval: 10 },
+        { interval: 10, timeout: 2000 },
       );
       return true;
     },
@@ -289,7 +289,7 @@ test("owned wrapper replacement waits for its TERM-resistant server descendant a
           const response = await exchange({ port });
           expect(JSON.parse(response.body.toString())).toMatchObject({ generation });
         },
-        { timeout: 2000, interval: 25 },
+        { interval: 25, timeout: 2000 },
       );
       return true;
     },

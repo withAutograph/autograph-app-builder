@@ -379,9 +379,9 @@ describe("closed Neon consent diagnostics", () => {
   it("ignores hostile inventory descriptors without replacing the caller failure", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const descriptor: Parameters<typeof reportOperatorInventoryReadFailure>[1] = {
-      target: "inventory",
       operation: "project",
       phase: "fetch",
+      target: "inventory",
     };
     const hostileDescriptor = new Proxy(descriptor, {
       ownKeys() {
@@ -890,7 +890,7 @@ describe("private operator planning stage observer", () => {
     ] as const) {
       const metadata: HostedOperatorConsentMetadata = {
         ...value,
-        planningFailure: { stage: "plan_validation", errorClass: "unexpected" },
+        planningFailure: { errorClass: "unexpected", stage: "plan_validation" },
       };
       Object.defineProperty(metadata.planningFailure, field, { enumerable: true, value: invalid });
       report(metadata);
@@ -1373,14 +1373,14 @@ it("keeps preparation failure reporting nonthrowing for hostile errors and throw
 
 it.each([
   {
-    metadata: { stage: "schema_replan", domain_code: "migration_contention", private: secret },
-    expected: { stage: "schema_replan", domain_code: "migration_contention" },
+    metadata: { domain_code: "migration_contention", private: secret, stage: "schema_replan" },
+    expected: { domain_code: "migration_contention", stage: "schema_replan" },
   },
   {
-    metadata: { stage: "schema_replan", domain_code: secret },
+    metadata: { domain_code: secret, stage: "schema_replan" },
     expected: { stage: "schema_replan" },
   },
-  { metadata: { stage: secret, domain_code: "migration_contention" }, expected: undefined },
+  { metadata: { domain_code: "migration_contention", stage: secret }, expected: undefined },
   {
     metadata: Object.defineProperty({}, "stage", {
       get() {
@@ -1479,7 +1479,7 @@ describe("normal actor proof failure diagnostics", () => {
       throw new Error(secret);
     });
     const failure = Object.defineProperties(
-      { stage: "proof_response", httpStatus: 600 },
+      { httpStatus: 600, stage: "proof_response" },
       {
         cookiePresent: { get: getter },
         redirected: { value: secret },
@@ -1537,9 +1537,9 @@ describe("normal actor proof failure diagnostics", () => {
 describe("closed normal Auth execution diagnostics", () => {
   it("retains actual client metadata and the original rejection without inspecting private error content", async () => {
     const error = new NormalAuthClientError("auth_rejected", {
-      operation: "invite_member",
-      httpStatus: 403,
       authCode: "YOU_ARE_NOT_ALLOWED_TO_INVITE_USERS_TO_THIS_ORGANIZATION",
+      httpStatus: 403,
+      operation: "invite_member",
       retryAfterMs: 1500,
     });
     const getter = vi.fn(() => {
@@ -1641,7 +1641,7 @@ describe("closed normal Auth execution diagnostics", () => {
     const inherited = new NormalAuthClientError("auth_rejected");
     Reflect.deleteProperty(inherited, "operation");
     Reflect.deleteProperty(inherited, "httpStatus");
-    const inheritedPrototype = { operation: "list_members", httpStatus: 403 };
+    const inheritedPrototype = { httpStatus: 403, operation: "list_members" };
     Object.setPrototypeOf(inheritedPrototype, NormalAuthClientError.prototype);
     Object.setPrototypeOf(inherited, inheritedPrototype);
     reportOperatorExecutionFailure(secret, "resource_lease", inherited, sink);
@@ -1694,7 +1694,7 @@ describe("closed normal Auth execution diagnostics", () => {
       accessor,
       invalid,
       inherited,
-      { name: "NormalAuthClientError", code: "auth_rejected", operation: "list_members" },
+      { code: "auth_rejected", name: "NormalAuthClientError", operation: "list_members" },
     ]) {
       reportOperatorExecutionFailure(secret, "resource_lease", error, sink);
     }
@@ -2049,9 +2049,9 @@ describe("continuity planning failure diagnostics", () => {
   it("rejects extra error details at the closed diagnostic sink", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const failure = {
-      stage: "port_observation" as const,
-      errorClass: "unexpected" as const,
       details: secret,
+      errorClass: "unexpected" as const,
+      stage: "port_observation" as const,
     };
     createHostedOperatorConsentDiagnostic(
       secret,
@@ -2127,9 +2127,9 @@ describe("closed export planning diagnostics", () => {
   it("rejects extra export failure properties instead of logging them", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const failure = {
-      stage: "release_match" as const,
-      errorClass: "operator_error" as const,
       details: secret,
+      errorClass: "operator_error" as const,
+      stage: "release_match" as const,
     };
     createHostedOperatorConsentDiagnostic(
       secret,
@@ -2170,7 +2170,7 @@ describe("runtime identity failure diagnostics", () => {
     reportOperatorRuntimeIdentityFailure(secret, { stage: "identity", reason: secret }, sink);
     reportOperatorRuntimeIdentityFailure(
       secret,
-      Object.create({ stage: "identity", reason: "actor_mismatch" }),
+      Object.create({ reason: "actor_mismatch", stage: "identity" }),
       sink,
     );
     reportOperatorRuntimeIdentityFailure(
@@ -2188,7 +2188,7 @@ describe("runtime identity failure diagnostics", () => {
     expect(() => {
       reportOperatorRuntimeIdentityFailure(
         secret,
-        { stage: "authority", reason: "read_failed" },
+        { reason: "read_failed", stage: "authority" },
         () => {
           throw new Error(secret);
         },
