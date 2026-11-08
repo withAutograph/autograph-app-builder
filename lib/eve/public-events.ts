@@ -580,12 +580,16 @@ export const createInstalledPrototypeReferenceReducer = (input: {
         latest = projected.data;
       }
     },
-    checkpoint: (): InstalledPrototypeReferenceState =>
-      installedPrototypeReferenceStateSchema.parse({
+    checkpoint: (): InstalledPrototypeReferenceState => {
+      const checkpoint: InstalledPrototypeReferenceState = {
         requested: [...requested],
         requestedUiPreview: [...requestedUiPreview],
-        ...(latest === undefined ? {} : { latest }),
-      }),
+      };
+      if (latest !== undefined) {
+        checkpoint.latest = latest;
+      }
+      return installedPrototypeReferenceStateSchema.parse(checkpoint);
+    },
     snapshot: () => latest,
   };
 };
@@ -1042,15 +1046,21 @@ export const createInstalledPrototypeProjector = (
   };
 
   return {
-    checkpoint: () =>
-      installedPrototypeProjectorStateSchema.parse({
+    checkpoint: () => {
+      const checkpoint: InstalledPrototypeProjectorState = {
         artifactReadRequests: [...artifactReadRequests],
         readChunks: [...readChunks],
         requested: [...requested],
         transfers: [...transfers],
-        ...(expectedChunkedPreview === undefined ? {} : { expectedChunkedPreview }),
-        ...(latest === undefined ? {} : { latest }),
-      }),
+      };
+      if (expectedChunkedPreview !== undefined) {
+        checkpoint.expectedChunkedPreview = expectedChunkedPreview;
+      }
+      if (latest !== undefined) {
+        checkpoint.latest = latest;
+      }
+      return installedPrototypeProjectorStateSchema.parse(checkpoint);
+    },
     current: () => latest,
     observe,
   };

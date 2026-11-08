@@ -55,9 +55,9 @@ const fixture = (initial: GitHubPrDeliveryObservation, onClaim?: () => void) => 
     ),
   };
   const provider = {
-    inspect: vi.fn(() => Promise.resolve(initial)),
-    markReady: vi.fn(() => Promise.resolve(ready)),
-    merge: vi.fn(() => Promise.resolve(merged)),
+    inspect: vi.fn<() => Promise<GitHubPrDeliveryObservation>>().mockResolvedValue(initial),
+    markReady: vi.fn<() => Promise<GitHubPrDeliveryObservation>>().mockResolvedValue(ready),
+    merge: vi.fn<() => Promise<GitHubPrDeliveryObservation>>().mockResolvedValue(merged),
   };
   const execute = (
     intent: GitHubPrEffectIntent,

@@ -1540,7 +1540,7 @@ export const createGitHubAppHttpProvider = (input: {
       if (!Array.isArray(pulls.body)) {
         throw new TypeError(invalidResponseMessage);
       }
-      const candidates = pulls.body;
+      const candidates: unknown[] = pulls.body;
       if (candidates.length > 1) {
         throw new Error(invalidResponseMessage);
       }
