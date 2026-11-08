@@ -2284,9 +2284,9 @@ export function createHostedEveSessionService(input: {
   };
 
   // oxlint-disable-next-line eslint/func-style -- Preserve the existing hoisted canonical mutation helper.
-  async function mutate<T extends { clientRequestId: string }>(options: {
+  async function mutate(options: {
     kind: HostedOperationKind;
-    request: T;
+    request: { clientRequestId: string };
     sessionId?: string;
     resumeSessionId?: string;
     nativeRecovery?: Omit<NativeRecoveryDescriptor, "operationId">;

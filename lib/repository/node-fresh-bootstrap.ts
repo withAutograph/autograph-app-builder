@@ -899,7 +899,8 @@ const acquireLease = async (
   holder.stderr.on("data", (chunk: string) => {
     helperError = `${helperError}${chunk}`.slice(-2000);
   });
-  const { promise: exited, resolve: resolveExit } = Promise.withResolvers<void>();
+  const { promise: exited, resolve: resolveExit }: PromiseWithResolvers<void> =
+    Promise.withResolvers();
   holder.once("error", (error) => {
     terminal = error;
     resolveExit();
@@ -912,7 +913,7 @@ const acquireLease = async (
     }
     resolveExit();
   });
-  const { promise: ready, reject, resolve } = Promise.withResolvers<void>();
+  const { promise: ready, reject, resolve }: PromiseWithResolvers<void> = Promise.withResolvers();
   const timeout = setTimeout(() => {
     holder.kill("SIGKILL");
     reject(new Error("Lease timeout."));
@@ -1019,11 +1020,12 @@ const quiesceAbandonedLease = async (
   let stderr = "";
   holder.stderr.setEncoding("utf-8");
   holder.stderr.on("data", (chunk: string) => (stderr += chunk));
-  const { promise: exited, resolve: resolveExit } = Promise.withResolvers<void>();
+  const { promise: exited, resolve: resolveExit }: PromiseWithResolvers<void> =
+    Promise.withResolvers();
   holder.once("exit", () => {
     resolveExit();
   });
-  const { promise: ready, reject, resolve } = Promise.withResolvers<void>();
+  const { promise: ready, reject, resolve }: PromiseWithResolvers<void> = Promise.withResolvers();
   const timeout = setTimeout(() => {
     holder.kill("SIGKILL");
     reject(new Error("Lease quiescence timeout."));

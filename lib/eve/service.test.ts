@@ -239,7 +239,7 @@ describe("local Eve acceptance", () => {
   });
 
   it("keeps buffered progress readable while a clean response close tails a live turn", async () => {
-    const tailReady = Promise.withResolvers<void>();
+    const tailReady: PromiseWithResolvers<void> = Promise.withResolvers();
     const response = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
@@ -563,7 +563,7 @@ describe("local Eve acceptance", () => {
   });
 
   it("makes an active local turn resumable after its Eve child restarts", async () => {
-    const oldResponseOpen = Promise.withResolvers<void>();
+    const oldResponseOpen: PromiseWithResolvers<void> = Promise.withResolvers();
     const oldResponse = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
@@ -1043,7 +1043,7 @@ describe("local Eve acceptance", () => {
   });
 
   it("keeps get, send, and cancel independent while rejecting a non-outstanding response", async () => {
-    const cancelled = Promise.withResolvers<void>();
+    const cancelled: PromiseWithResolvers<void> = Promise.withResolvers();
     const response = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => {

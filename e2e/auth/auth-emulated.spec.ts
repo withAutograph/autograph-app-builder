@@ -731,9 +731,9 @@ test("a session created after context issuance blocks registration", async ({ co
   reportPasskeyFailures(page);
   const authenticator = await VirtualAuthenticator.create(context, page);
   // Keep callback fixtures scoped to this scenario.
-  const optionsResponse = Promise.withResolvers<void>();
+  const optionsResponse: PromiseWithResolvers<void> = Promise.withResolvers();
   const { promise: optionsResponseMayContinue, resolve: releaseOptionsResponse } = optionsResponse;
-  const generatedOptions = Promise.withResolvers<void>();
+  const generatedOptions: PromiseWithResolvers<void> = Promise.withResolvers();
   const { promise: optionsGenerated, resolve: markOptionsGenerated } = generatedOptions;
   let sessionPage: Page | undefined;
 

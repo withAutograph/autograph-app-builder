@@ -762,7 +762,7 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
     promise: ready,
     reject: rejectReady,
     resolve: resolveReady,
-  } = Promise.withResolvers<void>();
+  }: PromiseWithResolvers<void> = Promise.withResolvers();
   const timeout = setTimeout(() => {
     holder.kill();
     rejectReady(new Error("The OS publication lock did not become ready."));

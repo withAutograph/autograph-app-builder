@@ -16,6 +16,20 @@ if ((await realpath(bun)) !== bun || !binary.isFile()) {
   throw new Error("An absolute declared Bun executable is required.");
 }
 const root = await mkdtemp(path.join(tmpdir(), "builder-workspace-dependency-proof-"));
+const channel = (readable: Readable) =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      readable.on("data", (chunk: Buffer) => {
+        controller.enqueue(chunk);
+      });
+      readable.once("end", () => {
+        controller.close();
+      });
+      readable.once("error", (error: Error) => {
+        controller.error(error);
+      });
+    },
+  });
 const run = (args: string[], workingDirectory: string) => {
   const child = spawnChild(bun, args, {
     cwd: workingDirectory,
@@ -32,20 +46,6 @@ const run = (args: string[], workingDirectory: string) => {
       resolve({ exitCode: code ?? 1 });
     });
   });
-  const channel = (readable: Readable) =>
-    new ReadableStream<Uint8Array>({
-      start(controller) {
-        readable.on("data", (chunk: Buffer) => {
-          controller.enqueue(chunk);
-        });
-        readable.once("end", () => {
-          controller.close();
-        });
-        readable.once("error", (error: Error) => {
-          controller.error(error);
-        });
-      },
-    });
   return {
     stdout: channel(child.stdout),
     stderr: channel(child.stderr),

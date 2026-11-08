@@ -6,17 +6,18 @@ import path from "node:path";
 import type { BuilderSandboxSession } from "../sandbox/builder-sandbox";
 import { prepareDevelopmentSandboxWorkspace } from "./supported-template";
 
+const write = (base: string, file: string, content: string) => {
+  const target = path.join(base, file);
+  mkdirSync(path.dirname(target), { recursive: true });
+  writeFileSync(target, content);
+};
+
 export const localPlanningSourceArchiveFixture = async () => {
   const root = realpathSync(mkdtempSync(path.join(tmpdir(), "owned-archive-source-")));
   const source = path.join(root, "source");
   const workspace = path.join(root, "workspace");
   mkdirSync(source);
   mkdirSync(workspace);
-  const write = (base: string, file: string, content: string) => {
-    const target = path.join(base, file);
-    mkdirSync(path.dirname(target), { recursive: true });
-    writeFileSync(target, content);
-  };
   const git = (...args: string[]) =>
     execFileSync(
       "/usr/bin/git",

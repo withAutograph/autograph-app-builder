@@ -5,6 +5,8 @@ import jsPlugins, { jsPluginSettings } from "ultracite/oxlint/js-plugins";
 import next from "ultracite/oxlint/next";
 import nextJsPlugins from "ultracite/oxlint/next/js-plugins";
 
+const previewActivationCli = "lib/db/preview-activation-cli.mts";
+
 export default defineConfig({
   extends: [core, next, jsPlugins, nextJsPlugins, antiSlop],
   ignorePatterns: core.ignorePatterns,
@@ -13,6 +15,65 @@ export default defineConfig({
     typeAware: true,
   },
   overrides: [
+    {
+      // Existing findings awaiting behavior-preserving contract changes.
+      files: [
+        "lib/auth/postgres-organization-user-authority.ts",
+        "lib/repository/local-publication.ts",
+      ],
+      rules: { "typescript/no-unnecessary-type-parameters": "off" },
+    },
+    {
+      // Existing findings awaiting behavior-preserving contract changes.
+      files: [
+        "lib/agent/application-review-context-store.test.ts",
+        "lib/agent/fresh-bootstrap-source.test.ts",
+        "lib/agent/github-destination-review-workflow.test.ts",
+        "lib/agent/prior-validated-private-artifact.test.ts",
+        "lib/agent/product-behavior-validation.test.ts",
+        "lib/eve/native-live-quiescence.test.ts",
+        "lib/eve/private-hosted-approval.test.ts",
+        "lib/eve/test-support/draft-reviewed-recovery.ts",
+        "lib/provisioning/builder-session-destination.test.ts",
+        "lib/provisioning/hosted-continuity-approval-recovery.test.ts",
+        "lib/provisioning/hosted-operator-composition.test.ts",
+        "lib/provisioning/hosted-operator-deployment.ts",
+        "lib/provisioning/hosted-operator-export-artifacts.test.ts",
+        "lib/provisioning/hosted-operator-export.test.ts",
+        "lib/provisioning/hosted-operator-participant-successor.test.ts",
+        "lib/provisioning/hosted-operator-unapproved-actor-journal.test.ts",
+        "lib/provisioning/public-release-dispatcher.ts",
+        "lib/provisioning/repository-production-setup.test.ts",
+        "lib/repository/canonical-acquisition-alignment.test.ts",
+        "lib/repository/local-planning-source.test.ts",
+        "lib/repository/local-preview-auth-origin.test.ts",
+        "lib/sandbox/managed-runtime.test.ts",
+        "oxlint.config.ts",
+        "scripts/eve-eval-fetch-preload.mjs",
+        "scripts/eve-recovery-holder-observation.test.mjs",
+      ],
+      rules: { "unicorn/consistent-function-scoping": "off" },
+    },
+    {
+      // Preserve existing rejection handling until its value contract is narrowed.
+      files: ["scripts/release-publish.mts", "scripts/self-reproduction-live.mts"],
+      rules: { "typescript/use-unknown-in-catch-callback-variable": "off" },
+    },
+    {
+      // Preserve explicit boolean distinctions in existing boundary checks.
+      files: [
+        ".storybook/main.ts",
+        "app/ui/use-builder-draft-autosave.ts",
+        "components/auth/oauth-provider/oauth-consent.tsx",
+        "lib/auth/postgres-organization-user-authority.ts",
+        previewActivationCli,
+        "lib/db/preview-activation-invited-user.ts",
+        "lib/provisioning/repository-production-native.ts",
+        "lib/repository/fresh-bootstrap.ts",
+        "lib/repository/github-publication.ts",
+      ],
+      rules: { "typescript/no-unnecessary-boolean-literal-compare": "off" },
+    },
     {
       // Existing explicit undefined values awaiting contract review.
       files: [
@@ -29,7 +90,7 @@ export default defineConfig({
         "lib/agent/prepare-app-creation-projection.test.ts",
         "lib/agent/review-applied-product-source.test.ts",
         "lib/db/migrate-execution.test.ts",
-        "lib/db/preview-activation-cli.mts",
+        previewActivationCli,
         "lib/handoff/deployment.test.ts",
         "lib/handoff/page-data.test.ts",
         "lib/provisioning/hosted-operator-ready-delivery-replacement.test.ts",
@@ -131,7 +192,7 @@ export default defineConfig({
         "evals/support/self-reproduction-reference-lifecycle.ts",
         "lib/auth/cursor-client-setup.mts",
         "lib/auth/preview-oauth-deployment.ts",
-        "lib/db/preview-activation-cli.mts",
+        previewActivationCli,
         "lib/integrations/preview-emulate-handler.ts",
       ],
       rules: { "sonarjs/no-wildcard-import": "off" },
@@ -156,11 +217,8 @@ export default defineConfig({
   ],
   rules: {
     // Temporary migration baseline; remove these as findings are fixed.
-    "typescript/no-unnecessary-boolean-literal-compare": "off",
     "typescript/promise-function-async": "off",
     "typescript/switch-exhaustiveness-check": "off",
-    "typescript/no-unnecessary-type-parameters": "off",
-    "typescript/use-unknown-in-catch-callback-variable": "off",
     "anti-slop/no-conditional-empty-object-spread": "off",
     "anti-slop/no-known-value-widening": "off",
     "anti-slop/no-runtime-typeof": "off",
@@ -217,7 +275,6 @@ export default defineConfig({
     "typescript/strict-boolean-expressions": "off",
     "typescript/strict-void-return": "off",
     "typescript/unbound-method": "off",
-    "unicorn/consistent-function-scoping": "off",
     "eslint/complexity": "off",
     // Temporary migration items: re-enable after the existing findings are fixed.
     "eslint/sort-keys": "off",
