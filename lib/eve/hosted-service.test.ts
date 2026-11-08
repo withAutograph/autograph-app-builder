@@ -251,10 +251,10 @@ describe("failed public session native recovery", () => {
           adapterSessionId: "run_child",
         });
         if (retry === "GET")
-          await service.get({ sessionId: committed.sessionId, cursor: 0, limit: 100 });
+          await service.get({ cursor: 0, limit: 100, sessionId: committed.sessionId });
         if (retry === "stop-before-activation") {
           expect(
-            await service.get({ sessionId: committed.sessionId, cursor: 0, limit: 100 }),
+            await service.get({ cursor: 0, limit: 100, sessionId: committed.sessionId }),
           ).toMatchObject({ status: "cancelled" });
           expect(await service.start(request)).toEqual(committed.result);
           expect(ownerEffects).toBe(0);
@@ -278,7 +278,7 @@ describe("failed public session native recovery", () => {
       expect(
         await service.start({ clientRequestId: "recover", resumeSessionId: first.sessionId }),
       ).toEqual(resumed);
-      await service.get({ sessionId: resumed.sessionId, cursor: 0, limit: 100 });
+      await service.get({ cursor: 0, limit: 100, sessionId: resumed.sessionId });
       expect(activatedReceipts.size).toBe(1);
       expect(ownerEffects).toBe(1);
       expect(resumed.sessionId).not.toBe(first.sessionId);
@@ -287,8 +287,8 @@ describe("failed public session native recovery", () => {
         expect.objectContaining({
           prompt: "",
           recovery: expect.objectContaining({
-            sourcePublicSessionId: first.sessionId,
             sourceOwnerRunId: "run_parent",
+            sourcePublicSessionId: first.sessionId,
           }),
         }),
       );
@@ -315,7 +315,7 @@ describe("failed public session native recovery", () => {
           cancellationRevision: 1,
           resumedCancellationRevision: 1,
         });
-        const observed = await service.get({ sessionId: resumed.sessionId, cursor: 0, limit: 100 });
+        const observed = await service.get({ cursor: 0, limit: 100, sessionId: resumed.sessionId });
         expect(observed.status).not.toBe("cancelled");
         expect(await service.start(request)).toEqual(resumed);
         expect(activatedReceipts.size).toBe(1);
@@ -323,7 +323,7 @@ describe("failed public session native recovery", () => {
         expect(adapter.start).toHaveBeenCalledTimes(2);
         await service.cancel({ sessionId: resumed.sessionId });
         expect(
-          await service.get({ sessionId: resumed.sessionId, cursor: 0, limit: 100 }),
+          await service.get({ cursor: 0, limit: 100, sessionId: resumed.sessionId }),
         ).toMatchObject({ status: "cancelled" });
         expect(await readOriginal(principal, resumed.sessionId)).toMatchObject({
           cancellationRevision: 2,

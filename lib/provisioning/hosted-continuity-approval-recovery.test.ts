@@ -141,9 +141,6 @@ const composed = async () => {
   const client = () => {
     const operations = createHostedContinuityOperations(f.deps);
     const dispatcher = createContinuityDispatcher({
-      store: f.deps.store,
-      operations,
-      verifyWorkload,
       authorize,
       authorizeRead: async (request, current) => {
         await verifyWorkload(request);
@@ -154,30 +151,30 @@ const composed = async () => {
         return current;
       },
       bindWorkload: () => {},
+      operations,
+      store: f.deps.store,
+      verifyWorkload,
     });
     const handler = createProtectedHostedOperatorHandler({
-      authorize,
       assertAuthorized: unexpected,
+      authorize,
+      bindings: unexpected,
+      continuityRequest: dispatcher,
+      executeEffect: unexpected,
       plan: unexpected,
       readApproval: unexpected,
-      withResourceLease: unexpected,
       reconcile: unexpected,
-      executeEffect: unexpected,
-      verify: unexpected,
-      bindings: unexpected,
       store: {
+        compareAndSet: unexpected,
         read: unexpected,
         reserve: unexpected,
-        compareAndSet: unexpected,
         reserveFenceGeneration: unexpected,
       },
-      continuityRequest: dispatcher,
+      verify: unexpected,
+      withResourceLease: unexpected,
     });
     return createHostedOperatorClient({
       endpoint: "https://operator.fixture.test",
-      ownerContext,
-      sessionId: context.target.sessionId,
-      token: async () => "controlled-workload",
       fetch: async (url, init) => {
         const request = new Request(url instanceof Request ? url.url : url, init);
         const { action } = continuityTransportRequestSchema.parse(await request.clone().json());
@@ -188,23 +185,26 @@ const composed = async () => {
         }
         return result;
       },
+      ownerContext,
+      sessionId: context.target.sessionId,
+      token: async () => "controlled-workload",
     });
   };
   return {
-    f,
-    saved,
-    events,
-    starts,
     client,
-    setPageSize: (value: number) => {
-      pageSize = value;
-    },
-    setHistoryUnavailable: (value: boolean) => {
-      historyUnavailable = value;
-    },
+    events,
+    f,
     loseNextExecuteResponse: () => {
       loseExecuteResponse = true;
     },
+    saved,
+    setHistoryUnavailable: (value: boolean) => {
+      historyUnavailable = value;
+    },
+    setPageSize: (value: number) => {
+      pageSize = value;
+    },
+    starts,
   };
 };
 

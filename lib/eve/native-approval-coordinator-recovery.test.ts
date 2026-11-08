@@ -71,7 +71,7 @@ beforeAll(async () => {
 });
 afterAll(() => {
   if (fixtureDirectory) {
-    rmSync(fixtureDirectory, { recursive: true, force: true });
+    rmSync(fixtureDirectory, { force: true, recursive: true });
   }
 });
 
@@ -147,10 +147,10 @@ const setup = async (
   expect(ingested.kind).toBe("continue-coordination");
   return {
     authorizer,
-    tools,
-    session: ingested.session,
     run: (prepareTools?: CoordinatorInput["prepareTools"]) =>
       run({ now: 2, session: ingested.session, tools, abortSignal, prepareTools }),
+    session: ingested.session,
+    tools,
   };
 };
 

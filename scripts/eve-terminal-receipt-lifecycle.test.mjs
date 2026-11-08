@@ -45,10 +45,10 @@ const terminalReceiptLifecycle = async (reconciliationKind) => {
   const store = new InMemoryHostedEveStore();
   const failed = { events: [], status: "failed" };
   const ports = createNativeRecoveryBinding({
-    store,
     assertOwner: async (source) => {
       assert.equal(source.principal.ownerUserId, principal.ownerUserId);
     },
+    store,
   });
   const frontier = Object.freeze({ kind: "fixture-candidate" });
   const collectedOwners = [];
@@ -203,7 +203,7 @@ const terminalReceiptLifecycle = async (reconciliationKind) => {
   assert.equal(next.nativeRecovery.originalAuthoritySessionId, original.sessionId);
   assert.equal(next.nativeRecoveryReceipt, undefined);
   assert.deepEqual(collectedOwners, [
-    { ownerRunId: oldReceipt.ownerRunId, logicalSessionId: originalLogicalSessionId },
+    { logicalSessionId: originalLogicalSessionId, ownerRunId: oldReceipt.ownerRunId },
   ]);
   assert.deepEqual(reconciled, [frontier]);
   // An exact retry checks this same operation; it never substitutes a fresh owner

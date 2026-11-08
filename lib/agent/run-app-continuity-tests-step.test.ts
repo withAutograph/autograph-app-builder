@@ -57,12 +57,12 @@ const fixture = async () => {
   });
   f.deps.readApproval = async () => capture.read();
   const client = {
-    sessionId: context.target.sessionId,
-    readContinuity: async (intentId: string) => await f.operations.readPlan(context, intentId),
     continuityApproval: async (request: typeof saved.request) =>
       await f.operations.approval(context, request),
+    readContinuity: async (intentId: string) => await f.operations.readPlan(context, intentId),
     runContinuity: async (request: typeof saved.request, callId: string) =>
       await f.operations.execute(context, request, callId),
+    sessionId: context.target.sessionId,
   };
   hooks.client.mockResolvedValue(client);
   const ctx = z.custom<Parameters<typeof runHostedContinuityStep>[1]>().parse({
@@ -111,7 +111,7 @@ const fixture = async () => {
       },
     });
   };
-  return { f, saved, capture, client, ctx, approve };
+  return { approve, capture, client, ctx, f, saved };
 };
 
 it("server-loads the complete saved plan from compact arguments and never executes before native settlement", async () => {

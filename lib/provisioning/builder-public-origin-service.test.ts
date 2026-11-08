@@ -75,9 +75,9 @@ describe("normal saved-app public origin choice", () => {
   it("lists eligible domains and saves an explicit verified choice without provisioning or transferring an approval", async () => {
     const f = setup();
     expect(await f.service.read(principal, "saved")).toMatchObject({
-      scope,
       expected,
       origins: ["https://first.example", "https://second.example"],
+      scope,
       selectedPublicOrigin: null,
     });
     await f.service.select(principal, input);
@@ -86,9 +86,9 @@ describe("normal saved-app public origin choice", () => {
     expect(f.store.select).toHaveBeenCalledWith(
       expect.objectContaining({
         authority,
-        scope,
         expectedPublicOrigin: null,
         publicOrigin: input.publicOrigin,
+        scope,
       }),
     );
   });

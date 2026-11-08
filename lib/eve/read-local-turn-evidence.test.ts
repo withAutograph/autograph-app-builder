@@ -28,7 +28,7 @@ afterEach(async () => {
   vi.unstubAllEnvs();
   await Promise.all(
     roots.splice(0).map(async (root) => {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }),
   );
 });
@@ -85,7 +85,7 @@ const fixture = async (port = 2100) => {
   const send = vi.spyOn(ClientSession.prototype, "send");
   const cancel = vi.spyOn(ClientSession.prototype, "cancel");
   const clear = vi.spyOn(ClientSession.prototype, "clear");
-  return { root, cycleRoot, cycleFile, serverFile, events, snapshot, client, send, cancel, clear };
+  return { cancel, clear, client, cycleFile, cycleRoot, events, root, send, serverFile, snapshot };
 };
 describe("local execution evidence read path", () => {
   it("observes the exact local accepted turn without submitting any control or changing cursor", async () => {

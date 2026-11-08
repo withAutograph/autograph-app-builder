@@ -218,7 +218,7 @@ describe("Builder Vercel provider", () => {
       expect(sdk.get.mock.calls.map(([options]) => options.resume)).toEqual([false, false]);
     } finally {
       vi.unstubAllEnvs();
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
 
