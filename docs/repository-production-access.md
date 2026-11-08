@@ -133,11 +133,31 @@ to private access; it does not infer public access from a static backend.
 The native deployment provider continues to own deployment and activation.
 There is no external product-test or synthetic-data release requirement here.
 
-The creator receives a Builder-managed, one-time invitation through the saved
-Builder account. Email is a delivery address, never account-linking authority.
-The protected Auth service supplies the actual verified actor and session.
-After sign-in, its workload-authenticated completion callback resumes the
-original Builder setup. It grants organization membership only at member
+The creator receives a Builder-managed, one-time invitation. The normal Production
+plan accepts an optional `creatorEmail`, includes it in setup consent, and carries
+it through protected preparation. Without an explicit choice, an already verified
+same-owner account in the same Auth realm is reused with its actual source
+invitation email; otherwise delivery defaults to the verified Builder account.
+The People page shows the saved account and can choose another email before any
+Auth invitation, actor or access grant exists. That authenticated owner command
+is delivery intent only. Email never substitutes for the real Auth actor and
+verified session returned through the existing callback. Explicitly choosing a
+different account cannot borrow another linked account's identity.
+
+A recipient choice is checkpointed under the existing app lock and original
+operation. An uncreated historical creator frame can recover through this normal
+command after authoritative Auth absence is read back. Its original frame,
+database, credentials, approved resource intent and selected destination stay
+intact. A lost command reply reuses its request identity. Existing invitations,
+actors and grants cannot be replaced; uncertain reads or create dispatches remain
+locked to their recorded recipient. New create dispatch is recorded before the
+provider write. The existing fixed invitation identity and create-conflict checks
+continue to prevent overwriting a concurrently created invitation.
+
+A retained frame without an actual Auth invitation exposes no sign-in URL. Builder
+shows Retry setup and resumes the same operation; a generic unauthenticated Auth
+page is not evidence that a message was sent. The authenticated callback resumes
+the original Builder setup. It grants organization membership only at member
 level, plus the app's reviewed roles. Creator access and subsequent invitations
 use the same protected Auth and generated-data workers.
 

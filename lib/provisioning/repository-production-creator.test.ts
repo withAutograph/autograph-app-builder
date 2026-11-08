@@ -2,6 +2,10 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { createAppAccessManagementService } from "../app-access/management";
+import type { AppAccessOperationRow } from "../app-access/management";
+import { createRepositoryProductionSetup } from "./repository-production-setup";
+import { repositoryProductionApprovalDigest } from "./repository-production-approval";
 import { createRepositoryProductionCreator } from "./repository-production-creator";
 import {
   initialRepositoryProductionRecord,
@@ -10,6 +14,7 @@ import {
 import type {
   RepositoryProductionRow,
   RepositoryProductionScope,
+  RepositoryProductionRecord,
 } from "./repository-production-contract";
 import type { RepositoryProductionEffectContext } from "./repository-production-setup";
 
@@ -32,6 +37,9 @@ type StoredInvitation = Record<string, z.infer<ReturnType<typeof z.json>>>;
 const harness = (
   options: {
     scope?: RepositoryProductionScope;
+    ownerEmail?: string;
+    creatorEmail?: string;
+    persistent?: boolean;
     realmDigest?: string;
     candidates?: { row: RepositoryProductionRow; invitation: StoredInvitation | null }[];
   } = {},
@@ -42,35 +50,51 @@ const harness = (
     revision: 0,
     record: initialRepositoryProductionRecord(targetScope, {
       creatorRoles: ["editor"],
+      ...(options.creatorEmail === undefined ? {} : { creatorEmail: options.creatorEmail }),
       sessionId: "original-session",
       sourceSha: "a".repeat(40),
-      storage: { kind: "none" },
+      storage: options.persistent
+        ? {
+            kind: "postgres",
+            artifactRef: "artifact",
+            releaseId: "release",
+            manifestSha256: "c".repeat(64),
+            databaseEnvironment: "APP_DATABASE_URL",
+          }
+        : { kind: "none" },
     }),
   };
   let invitation: Record<string, z.infer<ReturnType<typeof z.json>>> | null = null;
   const requests: { action: string; operationRef: string; frameCount: number }[] = [];
   const resumes: string[] = [];
   let failAfterCreate = false;
+  let failBeforeCreate = false;
   let failAfterLink = false;
   let authorized = true;
+  let unknownRead = false;
   let clock = new Date("2026-11-06T10:00:00.000Z");
   const assertAuthorized = async () => {
     if (!authorized) {
       throw new Error("denied");
     }
   };
-  const context = (): RepositoryProductionEffectContext => ({
-    row,
-    effect: "creator-access",
-    assertCurrent: assertAuthorized,
-    checkpoint: async (value) => {
-      row = {
-        ...row,
-        revision: row.revision + 1,
-        record: { ...row.record, workerCheckpoints: [...row.record.workerCheckpoints, value] },
-      };
-    },
-  });
+  const context = (): RepositoryProductionEffectContext => {
+    let { revision } = row;
+    return {
+      row,
+      effect: "creator-access",
+      assertCurrent: assertAuthorized,
+      checkpoint: async (value) => {
+        if (revision !== row.revision) throw new Error("concurrent journal update");
+        row = {
+          ...row,
+          revision: row.revision + 1,
+          record: { ...row.record, workerCheckpoints: [...row.record.workerCheckpoints, value] },
+        };
+        ({ revision } = row);
+      },
+    };
+  };
   const bridge = createRepositoryProductionCreator({
     assertAuthorized,
     builderOrigin: "https://builder.example",
@@ -91,6 +115,10 @@ const harness = (
         frameCount: row.record.workerCheckpoints.length,
       });
       if (parsed.action === "create") {
+        if (failBeforeCreate) {
+          failBeforeCreate = false;
+          throw new Error("uncertain create response");
+        }
         if (invitation !== null) {
           throw new Error("duplicate create");
         }
@@ -134,12 +162,15 @@ const harness = (
     },
     now: () => clock,
     readCurrent: async () => row,
-    readInvitation: async (saved) =>
-      saved.operationRef === row.operationRef
+    readInvitation: async (saved) => {
+      if (unknownRead) throw new Error("unavailable Auth read");
+      return saved.operationRef === row.operationRef
         ? invitation
-        : options.candidates?.find((candidate) => candidate.row.operationRef === saved.operationRef)
-            ?.invitation,
-    readOwner: async () => ({ email: "Creator@Example.com" }),
+        : (options.candidates?.find(
+            (candidate) => candidate.row.operationRef === saved.operationRef,
+          )?.invitation ?? null);
+    },
+    readOwner: async () => ({ email: options.ownerEmail ?? "Creator@Example.com" }),
     realmDigest: () => options.realmDigest ?? "e".repeat(64),
     resume: async (_row, sessionId) => {
       resumes.push(sessionId);
@@ -152,9 +183,60 @@ const harness = (
     requests,
     resumes,
     row: () => row,
+    compareAndSet: async (before: RepositoryProductionRow, record: RepositoryProductionRecord) => {
+      if (before.revision !== row.revision) return undefined;
+      row = { ...row, revision: row.revision + 1, record: structuredClone(record) };
+      return structuredClone(row);
+    },
+    approveAllocated: () => {
+      row = {
+        ...row,
+        record: {
+          ...row.record,
+          privateState: { sealed: "retained" },
+          approval: {
+            approvalId: "setup-approval-A",
+            approvedByCallId: "setup-call",
+            planDigest: repositoryProductionApprovalDigest(targetScope, row.record.intent),
+          },
+          effects: {
+            ...row.record.effects,
+            "allocate-storage": { state: "applied" },
+            "install-schema": {
+              state: "pending",
+              attemptId: "11111111-1111-4111-a111-111111111111",
+            },
+          },
+        },
+      };
+    },
     invitation: () => invitation,
+    absentLegacy: () => {
+      invitation = null;
+      row = {
+        ...row,
+        record: {
+          ...row.record,
+          workerCheckpoints: row.record.workerCheckpoints.filter(
+            (value) =>
+              z
+                .object({ kind: z.literal("repository-production-creator-link-v1") })
+                .safeParse(value).success,
+          ),
+        },
+      };
+    },
+    unknownRead: () => {
+      unknownRead = true;
+    },
+    bindActor: () => {
+      row = { ...row, record: { ...row.record, creatorActorId: "already-bound" } };
+    },
     patchInvitation: (value: Record<string, z.infer<ReturnType<typeof z.json>>>) => {
       invitation = { ...invitation, ...value };
+    },
+    interruptCreate: () => {
+      failBeforeCreate = true;
     },
     loseCreateResponse: () => {
       failAfterCreate = true;
@@ -209,6 +291,259 @@ describe("Production creator continuation", () => {
     original.completeCreator();
     return { row: original.row(), invitation: original.invitation() };
   };
+
+  it("recovers an uncreated legacy invitation for the selected account in the same operation", async () => {
+    const h = harness({ ownerEmail: "builder@example.com", persistent: true });
+    await h.bridge.prepare(h.context());
+    h.absentLegacy();
+    const operation = h.row().operationRef;
+    const resource = structuredClone(h.row().record.resource);
+    const requestId = randomUUID();
+    await h.bridge.chooseRecipient(h.context(), "app@example.com", requestId);
+    await h.bridge.chooseRecipient(h.context(), "app@example.com", requestId);
+    expect(await h.bridge.describe(h.row())).toMatchObject({
+      status: "failed",
+      retryable: true,
+      email: "app@example.com",
+      canChooseAccount: true,
+    });
+    expect(await h.bridge.describe(h.row())).not.toHaveProperty("signInUrl");
+    await h.bridge.prepare(h.context());
+    expect(h.row().operationRef).toBe(operation);
+    expect(h.row().record.resource).toEqual(resource);
+    expect(h.invitation()).toMatchObject({
+      email: "app@example.com",
+      verifiedActorId: null,
+      status: "pending",
+    });
+    expect(await h.bridge.readCreator(h.row())).toHaveProperty("signInUrl");
+  });
+
+  it("runs a real People choice through pending setup and a lost create reply without restoring the older plan account", async () => {
+    const h = harness({ creatorEmail: "plan-A@example.com", persistent: true });
+    h.approveAllocated();
+    const original = structuredClone(h.row());
+    const setup = createRepositoryProductionSetup({
+      store: {
+        read: async () => structuredClone(h.row()),
+        reserve: async () => {
+          throw new Error("must retain setup");
+        },
+        compareAndSet: h.compareAndSet,
+      },
+      assertAuthorized: async (target, requested) => {
+        expect(repositoryProductionApprovalDigest(target, requested)).toBe(
+          h.row().record.approval?.planDigest,
+        );
+      },
+      withLease: async (_scope, run) => await run(async () => {}),
+      reservePrivateState: async () => {
+        throw new Error("must retain credentials");
+      },
+      prepareCreatorIdentity: h.bridge.prepare,
+      readCreatorIdentity: async (row) => {
+        const proof = await h.bridge.readCreator(row);
+        return "state" in proof ? proof : { state: "verified", actorId: proof.actorId };
+      },
+      apply: async () => {
+        throw new Error("must wait for the real Auth session");
+      },
+      reconcile: async ({ effect }) => {
+        if (effect !== "allocate-storage") throw new Error("must not query uninstalled schema");
+        return { state: "applied", receipt: { retained: true } };
+      },
+    });
+    const rows = new Map<string, AppAccessOperationRow>();
+    const owner = {
+      appId: scope.appId,
+      sessionId: "original-session",
+      ownerContext: {
+        kind: "direct" as const,
+        authority: scope.authority,
+        principal: { ...scope.authority, scopes: ["autograph:session"] },
+        sessionId: "original-session",
+        adapterSessionId: "adapter",
+        adapterGeneration: 1,
+      },
+    };
+    const service = createAppAccessManagementService({
+      resolve: async () => ({
+        scope,
+        appName: "Equipment log",
+        organizationName: "Dev",
+        roles: [{ id: "editor", label: "Editor" }],
+        canManage: true,
+        creator: await h.bridge.describe(h.row()),
+      }),
+      assertAuthorized: async () => {},
+      readPeople: async () => ({ members: [], invitations: [] }),
+      withLease: async (_scope, run) => await run(async () => {}),
+      journal: {
+        pending: async () => [...rows.values()].filter((entry) => entry.record.state === "pending"),
+        reserve: async (record) => {
+          const id = record.command.clientRequestId;
+          const saved = rows.get(id) ?? { record, revision: 1 };
+          rows.set(id, saved);
+          return saved;
+        },
+        update: async (before, record) => {
+          const id = record.command.clientRequestId;
+          if (rows.get(id)?.revision !== before.revision) return undefined;
+          const saved = { record, revision: before.revision + 1 };
+          rows.set(id, saved);
+          return saved;
+        },
+        findInvitation: async () => undefined,
+      },
+      execute: async (_scope, command, effect) => {
+        if (command.action !== "choose-creator-account") throw new Error("unexpected action");
+        await h.bridge.chooseRecipient(
+          { ...h.context(), assertCurrent: effect.assertCurrent },
+          command.email,
+          effect.operationRef,
+        );
+        await setup.prepare(scope, h.row().record.intent);
+        return "applied";
+      },
+      reconcile: async () => "absent",
+      readVerifiedInvitation: async () => undefined,
+      enrollInvitee: async () => {
+        throw new Error("must not grant");
+      },
+      reconcileInvitee: async () => "unknown",
+      acceptInvitation: async () => {
+        throw new Error("must not grant");
+      },
+    });
+    const command = {
+      action: "choose-creator-account" as const,
+      email: "chosen-B@example.com",
+      clientRequestId: randomUUID(),
+    };
+    h.loseCreateResponse();
+    await expect(service.execute(owner, command)).rejects.toMatchObject({
+      code: "app_access_unknown",
+    });
+    await expect(service.execute(owner, command)).resolves.toMatchObject({
+      creator: { email: "chosen-b@example.com", status: "sign_in_required" },
+    });
+    expect(h.invitation()).toMatchObject({ email: "chosen-b@example.com", verifiedActorId: null });
+    expect(h.row().record.intent).toEqual(original.record.intent);
+    expect(h.row().record.approval).toEqual(original.record.approval);
+    expect(h.row().operationRef).toBe(original.operationRef);
+    expect(h.row().record.resource).toEqual(original.record.resource);
+    expect(h.row().record.privateState).toEqual(original.record.privateState);
+    expect(h.requests.filter((request) => request.action === "create")).toHaveLength(1);
+    expect(h.requests.filter((request) => request.action === "send")).toHaveLength(1);
+    expect(h.row().record.effects["creator-access"].state).toBe("idle");
+  });
+
+  it("does not let an older setup recipient silently undo an explicit People choice", async () => {
+    const h = harness({ creatorEmail: "original-plan@example.com" });
+    await h.bridge.chooseRecipient(h.context(), "chosen@example.com", randomUUID());
+    await h.bridge.prepare(h.context());
+    expect(h.invitation()?.email).toBe("chosen@example.com");
+  });
+
+  it("does not change the selected account after an uncertain create dispatch", async () => {
+    const h = harness();
+    h.interruptCreate();
+    await expect(h.bridge.prepare(h.context())).rejects.toThrow();
+    expect(h.invitation()).toBeNull();
+    await expect(
+      h.bridge.chooseRecipient(h.context(), "other@example.com", randomUUID()),
+    ).rejects.toThrow();
+    expect(await h.bridge.describe(h.row())).toMatchObject({
+      status: "failed",
+      retryable: true,
+      canChooseAccount: false,
+    });
+    await h.bridge.prepare(h.context());
+    expect(h.invitation()?.email).toBe("creator@example.com");
+  });
+
+  it("allows one concurrent recipient choice and preserves its stable operation", async () => {
+    const h = harness();
+    const operation = h.row().operationRef;
+    const first = h.context();
+    const second = h.context();
+    const outcomes = await Promise.allSettled([
+      h.bridge.chooseRecipient(first, "first@example.com", randomUUID()),
+      h.bridge.chooseRecipient(second, "second@example.com", randomUUID()),
+    ]);
+    expect(outcomes.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(h.row().operationRef).toBe(operation);
+    expect(h.requests).toEqual([]);
+    await h.bridge.prepare(h.context());
+    expect(["first@example.com", "second@example.com"]).toContain(h.invitation()?.email);
+  });
+
+  it("keeps an initially selected account through verified access and an ordinary revision", async () => {
+    const h = harness({ creatorEmail: "app@example.com" });
+    await h.bridge.prepare(h.context());
+    expect(h.invitation()?.email).toBe("app@example.com");
+    h.patchInvitation({
+      status: "accepted",
+      verifiedActorId: "real-auth-actor",
+      verifiedSessionId: "auth-session",
+    });
+    h.completeCreator();
+    const requests = h.requests.length;
+    h.revise();
+    await h.bridge.prepare(h.context());
+    expect(h.requests).toHaveLength(requests);
+    expect(await h.bridge.readCreator(h.row())).toMatchObject({ actorId: "real-auth-actor" });
+  });
+
+  it("does not expose a sign-in link for an invitation that has not been created", async () => {
+    const h = harness();
+    await h.bridge.prepare(h.context());
+    h.absentLegacy();
+    expect(await h.bridge.readCreator(h.row())).not.toHaveProperty("signInUrl");
+    expect(await h.bridge.describe(h.row())).toMatchObject({
+      status: "failed",
+      retryable: true,
+      canChooseAccount: true,
+    });
+  });
+
+  it("preserves existing invitations, bound actors and uncertain reads when choosing an account", async () => {
+    for (const state of ["invitation", "actor", "grant", "unknown"] as const) {
+      const h = harness();
+      await h.bridge.prepare(h.context());
+      if (state !== "invitation") h.absentLegacy();
+      if (state === "actor") h.bindActor();
+      if (state === "grant") h.completeCreator();
+      if (state === "unknown") h.unknownRead();
+      const before = structuredClone(h.row());
+      await expect(
+        h.bridge.chooseRecipient(h.context(), "other@example.com", randomUUID()),
+      ).rejects.toThrow();
+      expect(h.row()).toEqual(before);
+    }
+  });
+
+  it("reuses the linked account email across apps and does not borrow it for an explicitly different account", async () => {
+    const source = await linkedOwner();
+    const next = harness({
+      scope: { ...scope, appId: "linked-app" },
+      ownerEmail: "different-builder@example.com",
+      candidates: [source],
+    });
+    await next.bridge.prepare(next.context());
+    expect(next.invitation()?.email).toBe(source.invitation?.email);
+    expect(next.requests.map((request) => request.action)).toEqual(["create", "link-creator"]);
+    const explicit = harness({ scope: { ...scope, appId: "explicit-app" }, candidates: [source] });
+    await explicit.bridge.chooseRecipient(
+      explicit.context(),
+      "another-app-account@example.com",
+      randomUUID(),
+    );
+    await explicit.bridge.prepare(explicit.context());
+    expect(explicit.invitation()?.email).toBe("another-app-account@example.com");
+    expect(explicit.requests.map((request) => request.action)).toEqual(["create", "send"]);
+    expect(explicit.invitation()?.verifiedActorId).toBeNull();
+  });
 
   it("reuses the verified owner identity for a different app without sending another sign-in email", async () => {
     const source = await linkedOwner();
@@ -408,7 +743,8 @@ describe("Production creator continuation", () => {
   it("keeps read/status side-effect free and never resends unknown delivery automatically", async () => {
     const h = harness();
     expect(await h.bridge.readCreator(h.row())).toEqual({ state: "required" });
-    expect(await h.bridge.describe(h.row())).toEqual({ status: "setting_up" });
+    expect(await h.bridge.describe(h.row())).toMatchObject({ status: "setting_up" });
+    expect(await h.bridge.readRecipient(h.row())).toBeUndefined();
     expect(h.requests).toEqual([]);
     await h.bridge.prepare(h.context());
     h.patchInvitation({ deliveryStatus: "unknown" });

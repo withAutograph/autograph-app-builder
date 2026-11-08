@@ -10,6 +10,15 @@ import type {
 import type { RepositoryProductionEffectContext } from "./repository-production-setup";
 
 type Json = z.infer<ReturnType<typeof z.json>>;
+export class RepositoryProductionCreatorRecipientLockedError extends Error {
+  constructor() {
+    super("repository_production_creator_recipient_locked");
+    this.name = "RepositoryProductionCreatorRecipientLockedError";
+  }
+}
+
+const CREATOR_RECIPIENT_KIND = "repository-production-creator-recipient-v1";
+const CREATOR_CREATE_DISPATCH_KIND = "repository-production-creator-create-dispatched-v1";
 const CREATOR_LINK_KIND = "repository-production-creator-link-v1";
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -17,6 +26,7 @@ const linkedCreatorSchema = z.strictObject({
   sourceInvitationId: z.uuid(),
   sourceScopeDigest: digest,
   actorId: id,
+  email: z.email().optional(),
 });
 const frameSchema = z.strictObject({
   version: z.literal(1),
@@ -35,6 +45,23 @@ const frameSchema = z.strictObject({
     .optional(),
 });
 type CreatorFrame = z.infer<typeof frameSchema>;
+const recipientSchema = z.strictObject({
+  version: z.literal(1),
+  kind: z.literal(CREATOR_RECIPIENT_KIND),
+  invitationId: z.uuid(),
+  scopeDigest: digest,
+  requestId: z.uuid(),
+  email: z.email(),
+  setupApprovalId: id.optional(),
+  baseFrameDigest: digest.optional(),
+});
+const createDispatchSchema = z.strictObject({
+  version: z.literal(1),
+  kind: z.literal(CREATOR_CREATE_DISPATCH_KIND),
+  invitationId: z.uuid(),
+  email: z.email(),
+});
+
 const invitationSchema = z.object({
   id: z.uuid(),
   workspaceId: id,
@@ -129,7 +156,7 @@ export const createRepositoryProductionCreator = (
   const expiresAt = () => new Date(now().getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
   const returnUrl = (sessionId: string) =>
     `${origin.origin}/builds/${encodeURIComponent(sessionId)}/access`;
-  const frameFor = (row: RepositoryProductionRow): CreatorFrame | undefined => {
+  const originalFrameFor = (row: RepositoryProductionRow): CreatorFrame | undefined => {
     const frames: CreatorFrame[] = [];
     for (const value of row.record.workerCheckpoints) {
       if (z.object({ kind: z.literal(CREATOR_LINK_KIND) }).safeParse(value).success) {
@@ -153,13 +180,119 @@ export const createRepositoryProductionCreator = (
     }
     return frames.at(-1);
   };
+  const current = async (context: RepositoryProductionEffectContext) => {
+    await context.assertCurrent();
+    const row = await deps.readCurrent(context.row.record.scope);
+    if (row === undefined) {
+      throw new Error("repository_production_creator_setup_missing");
+    }
+    await deps.assertAuthorized(row);
+    return row;
+  };
+  const recipientFor = (row: RepositoryProductionRow) => {
+    const choices = row.record.workerCheckpoints.flatMap((value) =>
+      z.object({ kind: z.literal(CREATOR_RECIPIENT_KIND) }).safeParse(value).success
+        ? [recipientSchema.parse(value)]
+        : [],
+    );
+    const seen = new Set<string>();
+    for (const choice of choices) {
+      if (
+        choice.invitationId !== repositoryProductionOperationRef(row.record.scope) ||
+        choice.scopeDigest !== repositoryProductionDigest(row.record.scope) ||
+        seen.has(choice.requestId)
+      ) {
+        throw new Error("repository_production_creator_recipient_mismatch");
+      }
+      seen.add(choice.requestId);
+    }
+    return choices.at(-1);
+  };
+  const frameFor = (row: RepositoryProductionRow): CreatorFrame | undefined => {
+    const frame = originalFrameFor(row);
+    const choice = recipientFor(row);
+    if (frame === undefined || choice === undefined) return frame;
+    if (
+      choice.baseFrameDigest === undefined
+        ? frame.email !== choice.email
+        : choice.baseFrameDigest !== repositoryProductionDigest({ ...frame, renewal: null })
+    ) {
+      throw new Error("repository_production_creator_recipient_mismatch");
+    }
+    const { linkedCreator: linked, ...base } = frame;
+    return {
+      ...base,
+      email: choice.email,
+      ...(linked?.email === choice.email ? { linkedCreator: linked } : {}),
+    };
+  };
+  const dispatchedCreate = (row: RepositoryProductionRow) =>
+    row.record.workerCheckpoints.some((value) => {
+      if (!z.object({ kind: z.literal(CREATOR_CREATE_DISPATCH_KIND) }).safeParse(value).success)
+        return false;
+      const dispatch = createDispatchSchema.parse(value);
+      if (dispatch.invitationId !== repositoryProductionOperationRef(row.record.scope))
+        throw new Error("repository_production_creator_owner_mismatch");
+      return true;
+    });
+  const canChoose = (row: RepositoryProductionRow) =>
+    row.record.creatorActorId === undefined &&
+    row.record.effects["creator-access"].state === "idle" &&
+    !dispatchedCreate(row);
+  const chooseRecipient = async (
+    context: RepositoryProductionEffectContext,
+    email: string,
+    requestId: string,
+  ) => {
+    const selectedEmail = z.email().parse(email).toLowerCase();
+    z.uuid().parse(requestId);
+    let row = await current(context);
+    const previous = recipientFor(row);
+    if (previous?.requestId === requestId) {
+      if (previous.email !== selectedEmail)
+        throw new Error("repository_production_creator_recipient_mismatch");
+      return;
+    }
+    if (
+      row.record.workerCheckpoints.some((value) => {
+        const choice = recipientSchema.safeParse(value);
+        return choice.success && choice.data.requestId === requestId;
+      })
+    )
+      throw new Error("repository_production_creator_recipient_mismatch");
+    if (!canChoose(row)) throw new RepositoryProductionCreatorRecipientLockedError();
+    const original = originalFrameFor(row);
+    // Only an authoritative absence allows changing delivery. An uncertain read never authorizes replacement.
+    if (
+      (await deps.readInvitation(row, repositoryProductionOperationRef(row.record.scope))) !== null
+    ) {
+      throw new RepositoryProductionCreatorRecipientLockedError();
+    }
+    row = await current(context);
+    if (!canChoose(row) || recipientFor(row)?.requestId !== previous?.requestId)
+      throw new RepositoryProductionCreatorRecipientLockedError();
+    await context.checkpoint({
+      version: 1,
+      kind: CREATOR_RECIPIENT_KIND,
+      invitationId: repositoryProductionOperationRef(row.record.scope),
+      scopeDigest: repositoryProductionDigest(row.record.scope),
+      requestId,
+      email: selectedEmail,
+      ...(row.record.approval === undefined
+        ? {}
+        : { setupApprovalId: row.record.approval.approvalId }),
+      ...(original === undefined
+        ? {}
+        : { baseFrameDigest: repositoryProductionDigest({ ...original, renewal: null }) }),
+    });
+  };
   const read = async (
     row: RepositoryProductionRow,
     frame: CreatorFrame,
   ): Promise<Invitation | undefined> => {
     await deps.assertAuthorized(row);
     const raw = await deps.readInvitation(row, frame.invitationId);
-    if (raw === null || raw === undefined) {
+    if (raw === null) {
       return undefined;
     }
     const value = invitationSchema.parse(raw);
@@ -181,16 +314,7 @@ export const createRepositoryProductionCreator = (
     }
     return value;
   };
-  const current = async (context: RepositoryProductionEffectContext) => {
-    await context.assertCurrent();
-    const row = await deps.readCurrent(context.row.record.scope);
-    if (row === undefined) {
-      throw new Error("repository_production_creator_setup_missing");
-    }
-    await deps.assertAuthorized(row);
-    return row;
-  };
-  const linkedCreator = async (row: RepositoryProductionRow) => {
+  const linkedCreator = async (row: RepositoryProductionRow, email?: string) => {
     const authority = repositoryProductionDigest(row.record.scope.authority);
     const realm = deps.realmDigest(row.record.scope);
     for await (const candidate of deps.linkedCreatorCandidates(row)) {
@@ -204,11 +328,16 @@ export const createRepositoryProductionCreator = (
       const frame = frameFor(candidate);
       if (frame?.realmDigest === realm) {
         const invitation = await read(candidate, frame);
-        if (invitation?.status === "accepted" && isVerified(invitation, frame)) {
+        if (
+          invitation?.status === "accepted" &&
+          isVerified(invitation, frame) &&
+          (email === undefined || invitation.email.toLowerCase() === email)
+        ) {
           return linkedCreatorSchema.parse({
             sourceInvitationId: invitation.id,
             sourceScopeDigest: invitation.scopeDigest,
             actorId: invitation.verifiedActorId,
+            email: invitation.email.toLowerCase(),
           });
         }
       }
@@ -249,6 +378,14 @@ export const createRepositoryProductionCreator = (
     let row = await current(context);
     let invitation = await read(row, frame);
     if (invitation === undefined) {
+      if (!dispatchedCreate(row)) {
+        await context.checkpoint({
+          version: 1,
+          kind: CREATOR_CREATE_DISPATCH_KIND,
+          invitationId: frame.invitationId,
+          email: frame.email,
+        });
+      }
       await invoke(context, frame, "create", {
         action: "create",
         invitation: {
@@ -272,7 +409,9 @@ export const createRepositoryProductionCreator = (
       await invoke(context, frame, "link-creator", {
         action: "link-creator",
         invitationId: frame.invitationId,
-        ...frame.linkedCreator,
+        sourceInvitationId: frame.linkedCreator.sourceInvitationId,
+        sourceScopeDigest: frame.linkedCreator.sourceScopeDigest,
+        actorId: frame.linkedCreator.actorId,
       });
       invitation = await read(await current(context), frame);
       if (invitation === undefined || !isVerified(invitation, frame)) {
@@ -311,12 +450,36 @@ export const createRepositoryProductionCreator = (
     }
   };
   return {
+    chooseRecipient,
+    async readRecipient(row: RepositoryProductionRow) {
+      await deps.assertAuthorized(row);
+      return frameFor(row)?.email ?? recipientFor(row)?.email ?? row.record.intent.creatorEmail;
+    },
     async prepare(context: RepositoryProductionEffectContext) {
-      const row = await current(context);
+      let row = await current(context);
+      const requested = row.record.intent.creatorEmail;
+      const choice = recipientFor(row);
+      if (
+        requested !== undefined &&
+        frameFor(row)?.email !== requested &&
+        choice?.email !== requested &&
+        (choice === undefined || choice.setupApprovalId !== row.record.approval?.approvalId)
+      ) {
+        await chooseRecipient(
+          context,
+          requested,
+          operationId(
+            repositoryProductionOperationRef(row.record.scope),
+            `recipient:${row.record.approval?.approvalId ?? requested}`,
+          ),
+        );
+        row = await current(context);
+      }
       let frame = frameFor(row);
       if (frame === undefined) {
         const owner = await deps.readOwner(row);
-        const linked = await linkedCreator(row);
+        const selectedEmail = recipientFor(row)?.email;
+        const linked = await linkedCreator(row, selectedEmail);
         const createFrameInput = (): z.input<typeof frameSchema> => {
           const frameInput: z.input<typeof frameSchema> = {
             version: 1,
@@ -324,7 +487,7 @@ export const createRepositoryProductionCreator = (
             invitationId: repositoryProductionOperationRef(row.record.scope),
             scopeDigest: repositoryProductionDigest(row.record.scope),
             sessionId: row.record.intent.sessionId,
-            email: owner.email.toLowerCase(),
+            email: selectedEmail ?? linked?.email ?? owner.email.toLowerCase(),
             roles: [...new Set(row.record.intent.creatorRoles)].toSorted(),
             returnUrl: returnUrl(row.record.intent.sessionId),
             expiresAt: expiresAt(),
@@ -362,9 +525,12 @@ export const createRepositoryProductionCreator = (
             Date.parse(invitation?.expiresAt ?? frame.expiresAt) + 1,
           ),
         ).toISOString();
-        frame = { ...frame, renewal: { requestId, expiresAt: expiry } };
+        const renewal = { requestId, expiresAt: expiry };
+        frame = { ...frame, renewal };
         await context.assertCurrent();
-        await context.checkpoint(frame);
+        const original = originalFrameFor(row);
+        if (original === undefined) throw new Error("repository_production_creator_setup_missing");
+        await context.checkpoint({ ...original, renewal });
       }
       await ensure(context, frame);
     },
@@ -375,7 +541,8 @@ export const createRepositoryProductionCreator = (
         return { state: "required" };
       }
       const value = await read(row, frame);
-      if (value !== undefined && isVerified(value, frame) && value.verifiedActorId !== null) {
+      if (value === undefined) return { state: "required" };
+      if (isVerified(value, frame) && value.verifiedActorId !== null) {
         return {
           kind: "managed-invitation",
           invitationId: frame.invitationId,
@@ -393,19 +560,41 @@ export const createRepositoryProductionCreator = (
       await deps.assertAuthorized(row);
       const frame = frameFor(row);
       if (frame === undefined) {
-        return { status: "setting_up" as const };
+        const absent =
+          (await deps.readInvitation(row, repositoryProductionOperationRef(row.record.scope))) ===
+          null;
+        const owner = await deps.readOwner(row);
+        return {
+          status: "setting_up" as const,
+          email:
+            recipientFor(row)?.email ?? row.record.intent.creatorEmail ?? owner.email.toLowerCase(),
+          canChooseAccount: absent && canChoose(row),
+        };
       }
       const value = await read(row, frame);
-      if (value !== undefined && isVerified(value, frame)) {
+      if (value === undefined)
+        return {
+          status: "failed" as const,
+          email: frame.email,
+          canChooseAccount: canChoose(row),
+          retryable: true,
+          message:
+            "Your app sign-in setup has not finished. Retry setup to continue with your saved app.",
+        };
+      if (isVerified(value, frame)) {
         return {
           status:
             row.record.effects["creator-access"].state === "applied"
               ? ("ready" as const)
               : ("setting_up" as const),
+          email: frame.email,
+          canChooseAccount: false,
         };
       }
       return {
         status: "sign_in_required" as const,
+        email: frame.email,
+        canChooseAccount: false,
         signInUrl: signInUrl(row, frame),
         expiresAt: value?.expiresAt ?? frame.renewal?.expiresAt ?? frame.expiresAt,
         message:

@@ -150,6 +150,26 @@ const fixture = () => {
   };
 };
 describe("Builder-owned Production setup", () => {
+  it("retains allocation and its pending schema when an approved recipient is selected", async () => {
+    const f = fixture();
+    f.setIdentity(false);
+    await f.service.prepare(scope, intent);
+    const saved = f.read();
+    if (!saved) throw new Error("missing saved setup");
+    const resource = structuredClone(saved.record.resource);
+    const credentials = structuredClone(saved.record.privateState);
+    saved.record.effects["install-schema"] = {
+      state: "pending",
+      attemptId: "11111111-1111-4111-a111-111111111111",
+    };
+    await f.service.prepare(scope, { ...intent, creatorEmail: "chosen@example.com" });
+    expect(f.read()?.record.intent.creatorEmail).toBe("chosen@example.com");
+    expect(f.read()?.record.resource).toEqual(resource);
+    expect(f.read()?.record.privateState).toEqual(credentials);
+    expect(f.calls.filter((call) => call === "allocate-storage")).toHaveLength(1);
+    expect(f.read()?.record.effects["install-schema"].state).toBe("pending");
+  });
+
   it.each([true, false])(
     "adds storage for existing compatible members without restoring a removed creator (creator active: %s)",
     async (creatorActive) => {

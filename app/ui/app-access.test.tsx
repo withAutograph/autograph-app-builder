@@ -41,6 +41,18 @@ const snapshot: AppAccessSnapshot = {
   ],
   sessionId: "saved-app-session",
 };
+const missingInvitation: AppAccessSnapshot = {
+  ...snapshot,
+  creator: {
+    status: "failed",
+    email: "original@example.com",
+    canChooseAccount: true,
+    retryable: true,
+    message: "Your app invitation is not ready yet. Retry setup to continue.",
+  },
+  invitations: [],
+  members: [],
+};
 const roots: ReturnType<typeof createRoot>[] = [];
 const render = async (node: ReactNode) => {
   const container = document.createElement("div");
@@ -62,6 +74,19 @@ const click = async (container: HTMLElement, label: string) => {
   }
   await act(async () => {
     button.click();
+    await Promise.resolve();
+  });
+};
+const chooseCreatorEmail = async (container: HTMLElement, value: string) => {
+  const form = container.querySelector<HTMLFormElement>(
+    'form[aria-label="Choose your app account"]',
+  );
+  const email = form?.querySelector<HTMLInputElement>('input[type="email"]');
+  if (!form || !email) throw new Error("Expected the app account choice form");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(email, value);
+    email.dispatchEvent(new Event("input", { bubbles: true }));
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     await Promise.resolve();
   });
 };
@@ -104,6 +129,127 @@ describe("Builder app access", () => {
     ).not.toBeNull();
     expect(container.querySelector('input[type="checkbox"]')).toBeNull();
     expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it("shows the saved creator account and submits an explicit email choice without granting access", async () => {
+    const onAction = vi.fn<() => void>();
+    const container = await render(
+      <AppAccessView data={missingInvitation} disabled={false} onAction={onAction} />,
+    );
+    expect(container.textContent).toContain("original@example.com");
+    expect(onAction).not.toHaveBeenCalled();
+    await chooseCreatorEmail(container, "chosen@example.com");
+    expect(onAction).toHaveBeenCalledExactlyOnceWith({
+      action: "choose-creator-account",
+      email: "chosen@example.com",
+    });
+    expect(container.textContent).not.toContain("Your access is ready.");
+  });
+
+  it("retries a missing invitation inside Builder without offering its unusable sign-in link", async () => {
+    const onAction = vi.fn<() => void>();
+    const container = await render(
+      <AppAccessView
+        data={{
+          ...missingInvitation,
+          creator: {
+            ...missingInvitation.creator,
+            signInUrl: "https://apps.example.com/not-created",
+          },
+        }}
+        disabled={false}
+        onAction={onAction}
+      />,
+    );
+    expect(container.querySelector('a[href="https://apps.example.com/not-created"]')).toBeNull();
+    expect(container.textContent).toContain("original@example.com");
+    await click(container, "Retry setup");
+    expect(onAction).toHaveBeenCalledWith({ action: "retry-setup" });
+  });
+
+  it.each([
+    { canManage: true, canChooseAccount: false },
+    { canManage: false, canChooseAccount: true },
+  ])(
+    "keeps a locked creator email visible without offering unauthorized account changes (%j)",
+    async ({ canManage, canChooseAccount }) => {
+      const container = await render(
+        <AppAccessView
+          data={{
+            ...snapshot,
+            canManage,
+            creator: {
+              status: "sign_in_required",
+              email: "chosen@example.com",
+              canChooseAccount,
+              signInUrl: "https://apps.example.com/connect",
+              expiresAt: "2099-01-01T00:00:00Z",
+            },
+          }}
+          disabled={false}
+          onAction={vi.fn<() => void>()}
+        />,
+      );
+      expect(container.textContent).toContain("chosen@example.com");
+      expect(container.querySelector('form[aria-label="Choose your app account"]')).toBeNull();
+      expect(container.querySelector('a[href="https://apps.example.com/connect"]')).not.toBeNull();
+    },
+  );
+
+  it("prevents a creator account choice while another access update is pending", async () => {
+    const onAction = vi.fn<() => void>();
+    const container = await render(
+      <AppAccessView data={missingInvitation} disabled={true} onAction={onAction} />,
+    );
+    const form = container.querySelector<HTMLFormElement>(
+      'form[aria-label="Choose your app account"]',
+    );
+    expect(form?.querySelector<HTMLInputElement>('input[type="email"]')?.disabled).toBe(true);
+    await chooseCreatorEmail(container, "chosen@example.com");
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it("reuses the same creator account choice after a lost reply and shows the confirmed address", async () => {
+    const requests: object[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(Response.json(missingInvitation))),
+    );
+    continuation.mockImplementation(async (_previous, input) => {
+      requests.push(z.object({ command: appAccessCommandSchema }).parse(input).command);
+      if (requests.length === 1) throw new TypeError("Connection interrupted");
+      return {
+        status: "ready",
+        snapshot: {
+          ...missingInvitation,
+          creator: {
+            status: "sign_in_required",
+            email: "chosen@example.com",
+            canChooseAccount: false,
+            signInUrl: "https://apps.example.com/connect",
+            expiresAt: "2099-01-01T00:00:00Z",
+          },
+        },
+      };
+    });
+    const container = await render(
+      <AppAccessPage sessionId={snapshot.sessionId} continueAction={continuation} />,
+    );
+    await chooseCreatorEmail(container, "chosen@example.com");
+    const form = container.querySelector<HTMLFormElement>(
+      'form[aria-label="Choose your app account"]',
+    );
+    expect(form?.querySelector<HTMLInputElement>('input[type="email"]')?.disabled).toBe(true);
+    await click(container, "Retry the same update");
+    expect(requests).toHaveLength(2);
+    expect(requests[1]).toEqual(requests[0]);
+    expect(requests[0]).toMatchObject({
+      action: "choose-creator-account",
+      email: "chosen@example.com",
+    });
+    expect(container.textContent).toContain("chosen@example.com");
+    expect(container.querySelector('form[aria-label="Choose your app account"]')).toBeNull();
+    expect(container.querySelector('a[href="https://apps.example.com/connect"]')).not.toBeNull();
   });
 
   it("renews an expired sign-in through Builder without opening the stale link", async () => {

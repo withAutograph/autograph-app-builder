@@ -160,6 +160,15 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
         next.workerCheckpoints = row.record.workerCheckpoints;
         await save(next);
       }
+      if (
+        intent.creatorEmail !== undefined &&
+        row.record.intent.creatorEmail !== intent.creatorEmail
+      ) {
+        await save({
+          ...row.record,
+          intent: { ...row.record.intent, creatorEmail: intent.creatorEmail },
+        });
+      }
       await assertCurrent();
       if (row.record.intent.storage.kind !== "none" && row.record.privateState === undefined) {
         const privateState = await ports.reservePrivateState(row);
