@@ -77,8 +77,8 @@ export const projectNormalActorRuntime = (input: {
       const storageState = `${actor.actorKey}-${actor.session.reference}.storage.json`;
       files[storageState] = JSON.stringify(actor.storageState);
       actors.push({
-        actorKey: actor.actorKey,
         actorId,
+        actorKey: actor.actorKey,
         organizationId: null,
         roles: [],
         storageState,
@@ -88,11 +88,11 @@ export const projectNormalActorRuntime = (input: {
       const references = new Set<string>();
       for (const membership of memberships) {
         const scoped = scopedSessionFor({
-          state,
-          program,
-          actorKey: actor.actorKey,
           actorId,
+          actorKey: actor.actorKey,
           organizationId: membership.organizationId,
+          program,
+          state,
         });
         const { reference, realmSessionId } = scoped.session;
         // Active organization belongs to the real Realm session; one session cannot attest two contexts.
@@ -108,8 +108,8 @@ export const projectNormalActorRuntime = (input: {
             grant.actorKey === actor.actorKey && grant.organizationId === membership.organizationId,
         );
         actors.push({
-          actorKey: actor.actorKey,
           actorId,
+          actorKey: actor.actorKey,
           organizationId: membership.organizationId,
           roles: [...(access?.roles ?? [])],
           storageState,
@@ -117,5 +117,5 @@ export const projectNormalActorRuntime = (input: {
       }
     }
   }
-  return { origin: program.origin, identities: { version: 1, actors }, files };
+  return { files, identities: { actors, version: 1 }, origin: program.origin };
 };
