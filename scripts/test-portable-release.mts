@@ -18,6 +18,7 @@ const run = async (script: string, args: string[], expected = 0) => {
   const child = spawn(process.execPath, [...process.execArgv, `scripts/${script}`, ...args], {
     stdio: expected === 0 ? "inherit" : "ignore",
   });
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
   const [code] = await Promise.race([
     // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
     once(child, "error").then(([error]) => {
@@ -76,6 +77,7 @@ try {
   await runSequentially([first, second], async (output) => {
     await run("build-portable-release.mts", ["--endpoint", endpoint, "--output", output]);
   });
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
   const portableManifest = JSON.parse(await readFile("plugin.json", "utf-8"));
   const archiveName = `app-builder-${portableManifest.version}.tar.gz`;
   const marketplaceArchiveName = `app-builder-codex-marketplace-${portableManifest.version}.tar.gz`;
@@ -89,6 +91,7 @@ try {
   if (!firstMarketplaceArchive.equals(secondMarketplaceArchive)) {
     throw new Error("Codex marketplace archive is not reproducible.");
   }
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
   const firstReceipt = JSON.parse(await readFile(join(first, RELEASE_RECEIPT_FILE), "utf-8"));
   const secondReceipt: unknown = JSON.parse(
     await readFile(join(second, RELEASE_RECEIPT_FILE), "utf-8"),
@@ -123,6 +126,7 @@ try {
     env: { LC_ALL: "C", NODE_ENV: "test", PATH: SYSTEM_EXECUTABLE_PATH },
     stdio: "inherit",
   });
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
   const marketplaceManifest = JSON.parse(
     await readFile(join(marketplace, ".agents/plugins/marketplace.json"), "utf-8"),
   );
@@ -139,6 +143,7 @@ try {
   if (!codexPluginRootStat.isDirectory()) {
     throw new Error("Codex marketplace source path did not resolve to the packaged plugin.");
   }
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
   const codexAdapter = JSON.parse(await readFile(join(codexPluginRoot, ".mcp.json"), "utf-8"));
   if (codexAdapter.mcpServers?.["app-builder"]?.url !== `${endpoint}/mcp`) {
     throw new Error("Codex marketplace did not bind the release endpoint.");
@@ -146,6 +151,7 @@ try {
   if (codexAdapter.mcpServers?.["app-builder"]?.oauth_resource !== `${endpoint}/mcp`) {
     throw new Error("Codex marketplace did not bind the OAuth resource.");
   }
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
   const codexManifest = JSON.parse(
     await readFile(join(codexPluginRoot, ".codex-plugin/plugin.json"), "utf-8"),
   );
@@ -187,6 +193,7 @@ try {
     const root = join(temp, `tampered-${name}`);
     await cp(first, root, { recursive: true });
     const path = join(root, RELEASE_RECEIPT_FILE);
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
     const receipt = JSON.parse(await readFile(path, "utf-8"));
     // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing portable release fixture boundary.
     mutation(receipt);
@@ -248,6 +255,7 @@ try {
   const missingAssetArchive = deterministicGzip(deterministicTar(missingAssetFiles));
   await writeFile(missingAssetArchivePath, missingAssetArchive);
   const missingAssetReceiptPath = join(missingMarketplaceAsset, RELEASE_RECEIPT_FILE);
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
   const missingAssetReceipt = JSON.parse(await readFile(missingAssetReceiptPath, "utf-8"));
   missingAssetReceipt.codexMarketplaceArchive.sha256 = sha256(missingAssetArchive);
   await writeFile(missingAssetReceiptPath, `${JSON.stringify(missingAssetReceipt, null, 2)}\n`);
@@ -269,6 +277,7 @@ try {
   const tamperedAssetArchive = deterministicGzip(deterministicTar(tamperedAssetFiles));
   await writeFile(tamperedAssetArchivePath, tamperedAssetArchive);
   const tamperedAssetReceiptPath = join(tamperedMarketplaceAsset, RELEASE_RECEIPT_FILE);
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
   const tamperedAssetReceipt = JSON.parse(await readFile(tamperedAssetReceiptPath, "utf-8"));
   tamperedAssetReceipt.codexMarketplaceArchive.sha256 = sha256(tamperedAssetArchive);
   const tamperedAssetFile = tamperedAssetFiles.get(missingAssetPath);
@@ -320,6 +329,7 @@ try {
   const treeDriftArchive = deterministicGzip(deterministicTar(treeDriftFiles));
   await writeFile(treeDriftArchivePath, treeDriftArchive);
   const treeDriftReceiptPath = join(fullyReboundTreeDrift, RELEASE_RECEIPT_FILE);
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
   const treeDriftReceipt = JSON.parse(await readFile(treeDriftReceiptPath, "utf-8"));
   treeDriftReceipt.codexMarketplaceArchive.sha256 = sha256(treeDriftArchive);
   treeDriftReceipt.codexMarketplaceAssets[missingAssetPath] = sha256(treeDriftBytes);
@@ -352,6 +362,7 @@ try {
   const installedTamper = join(temp, "tampered-installs");
   await cp(installs, installedTamper, { recursive: true });
   const codexHarness = join(installedTamper, "codex", "client-harness.json");
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
   const harness = JSON.parse(await readFile(codexHarness, "utf-8"));
   harness.transport.url = "https://wrong.autograph.dev/mcp";
   await writeFile(codexHarness, `${JSON.stringify(harness, null, 2)}\n`);

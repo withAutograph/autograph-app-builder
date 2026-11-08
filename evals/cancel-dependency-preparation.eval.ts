@@ -24,6 +24,7 @@ export default defineEval({
           return false;
         }
         try {
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
           const state = JSON.parse(reply.slice(reply.indexOf("{")));
           return (
             // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-argument -- Inspect the existing workflow fixture digest.

@@ -13,6 +13,7 @@ interface CodexOAuthOptions {
   oauth?: { callback_url: string; client_id: string };
 }
 
+// oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
 const portable = JSON.parse(await readFile(path.resolve("plugin.json"), "utf-8"));
 const connectionIndex = process.argv.indexOf("--connection-id");
 const connectionId = connectionIndex === -1 ? undefined : process.argv[connectionIndex + 1];
@@ -50,13 +51,14 @@ if (hasSuppliedEndpoint) {
 }
 
 const portableMcpPath = path.resolve("mcp.json");
+// oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
 const portableMcp = JSON.parse(await readFile(portableMcpPath, "utf-8"));
 // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-argument -- Preserve the existing package manifest JSON boundary.
 const portableServerNames = Object.keys(portableMcp.mcpServers ?? {});
 if (portableServerNames.length !== 1 || portableServerNames[0] !== AUTOGRAPH_MCP_SERVER_NAME) {
   throw new Error(`mcp.json must declare exactly one ${AUTOGRAPH_MCP_SERVER_NAME} MCP server.`);
 }
-// oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
+// oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing parsed JSON boundary.; Preserve the existing dynamic value boundary.
 const portableServer = portableMcp.mcpServers[AUTOGRAPH_MCP_SERVER_NAME];
 if (
   !portableServer ||
@@ -70,11 +72,11 @@ if (
 assertAutographMcpEndpoint(portableServer.url, { release: false });
 
 const manifestBase = {
-  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing parsed JSON boundary.; Preserve the existing dynamic value boundary.
   author: portable.author,
-  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing parsed JSON boundary.; Preserve the existing dynamic value boundary.
   description: portable.description,
-  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing parsed JSON boundary.; Preserve the existing dynamic value boundary.
   homepage: portable.homepage,
   interface: {
     brandColor: "#111827",
@@ -86,7 +88,7 @@ const manifestBase = {
       "Build an event planning app for coordinating guests, schedules, and tasks",
       "Design a customer feedback app with a clear review workflow",
     ],
-    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing parsed JSON boundary.; Preserve the existing dynamic value boundary.
     developerName: portable.author.name,
     displayName: "Autograph App Builder",
     logo: "./assets/autograph-icon.png",
@@ -94,19 +96,19 @@ const manifestBase = {
       "Use Autograph App Builder to design, plan, create, validate, and separately publish apps in explicitly supported repositories.",
     screenshots: [],
     shortDescription: "Design and create apps with Autograph",
-    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing parsed JSON boundary.; Preserve the existing dynamic value boundary.
     websiteURL: portable.homepage,
   },
-  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing parsed JSON boundary.; Preserve the existing dynamic value boundary.
   keywords: portable.keywords,
-  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing parsed JSON boundary.; Preserve the existing dynamic value boundary.
   license: portable.license,
-  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing parsed JSON boundary.; Preserve the existing dynamic value boundary.
   name: portable.name,
-  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing parsed JSON boundary.; Preserve the existing dynamic value boundary.
   repository: portable.repository,
   skills: "./skills/",
-  // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
+  // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing parsed JSON boundary.; Preserve the existing dynamic value boundary.
   version: portable.version,
 };
 const manifest: typeof manifestBase & { apps?: string; mcpServers?: string } = manifestBase;

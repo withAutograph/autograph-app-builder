@@ -50,6 +50,7 @@ describe("session-bound repository access receipt", () => {
     expect(retried).toEqual(first);
     expect(first).toMatchObject({
       confirmedByCallId: "call_one",
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       digest: expect.stringMatching(/^[0-9a-f]{64}$/u),
       providerAccessDigest: accessDigest,
       repository: {

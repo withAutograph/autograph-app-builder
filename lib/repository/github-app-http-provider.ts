@@ -98,6 +98,7 @@ const providerHttpStatus = (error: unknown): number | undefined => {
   if (typeof status !== "number" || !Number.isInteger(status)) {
     return;
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve absent GitHub provider results and errors.
   return status >= 400 && status <= 599 ? status : undefined;
 };
 
@@ -638,6 +639,7 @@ export const createGitHubAppHttpProvider = (input: {
       return;
     }
     const repositoryId = decimalProperty(response.body, "id");
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve absent GitHub provider results and errors.
     return await repositoryById(
       repositoryId,
       stringProperty(response.body, "default_branch"),
@@ -1683,6 +1685,7 @@ export const createGitHubAppHttpProvider = (input: {
         throw new Error("fresh-repository-marker-mismatch");
       }
       const repository = publicRepositorySnapshot(snapshot);
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve absent GitHub provider results and errors.
       return {
         idempotencyKey: proposal.idempotencyKey,
         initialCommit: {
@@ -1734,6 +1737,7 @@ export const createGitHubAppHttpProvider = (input: {
         expected: [200],
         path: `/repositories/${snapshot.repositoryId}`,
       });
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve absent GitHub provider results and errors.
       return {
         ...publicRepositorySnapshot(snapshot),
         archived: booleanProperty(response.body, "archived"),
@@ -1784,6 +1788,7 @@ export const createGitHubAppHttpProvider = (input: {
             entry.before = change.before;
           }
           if (change.kind !== "deleted") {
+            // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
             entry.after = Object.fromEntries([
               ["path", change.path],
               ["mode", change.after.mode === "755" ? "100755" : "100644"],

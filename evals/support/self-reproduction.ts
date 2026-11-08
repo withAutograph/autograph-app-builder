@@ -79,6 +79,7 @@ function clientImportGraph(files: SourceFile[]) {
       for (const extension of codeExtensions) {
         const candidate = `${prefix}${extension}`;
         if (byPath.has(candidate)) {
+          // oxlint-disable-next-line typescript/consistent-return -- Preserve absent source import resolution.
           return candidate;
         }
       }

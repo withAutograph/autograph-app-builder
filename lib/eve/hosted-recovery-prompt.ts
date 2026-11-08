@@ -22,6 +22,7 @@ export function recoveryPromptForSession(record: DurableHostedSessionRecord): st
     (event) => event.type === "assistant_message",
   ).length;
   const excerpted = historicalMessageCount > 20 || messages.length >= 12_000;
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve absence when there is no recovery prompt.
   return [
     "Continue this interrupted Autograph App Builder session from its durable checkpoint.",
     dependencyRecovery,

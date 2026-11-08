@@ -100,6 +100,7 @@ function SessionAppContainer() {
     };
     window.addEventListener("focus", checkAfterReturn);
     document.addEventListener("visibilitychange", checkAfterReturn);
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve conditional visibility-listener cleanup.
     return () => {
       window.removeEventListener("focus", checkAfterReturn);
       document.removeEventListener("visibilitychange", checkAfterReturn);

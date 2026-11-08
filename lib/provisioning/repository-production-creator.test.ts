@@ -223,6 +223,7 @@ const harness = (
         return;
       }
       row = { ...row, revision: row.revision + 1, record: structuredClone(record) };
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional creator journal fixture results.
       return structuredClone(row);
     },
     approveAllocated: () => {
@@ -432,6 +433,7 @@ describe("Production creator continuation", () => {
           }
           const saved = { record, revision: before.revision + 1 };
           rows.set(id, saved);
+          // oxlint-disable-next-line typescript/consistent-return -- Preserve optional creator journal fixture results.
           return saved;
         },
         // oxlint-disable-next-line unicorn/no-useless-undefined -- Model an invitation lookup with no result.

@@ -98,6 +98,7 @@ describe("destination adapters", () => {
       if (!serializedPayload) {
         throw new Error("Handoff prompt payload not found");
       }
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
       const payload = JSON.parse(serializedPayload);
       expect(payload).toEqual({
         clientRequestId: `web-handoff:${id}`,

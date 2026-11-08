@@ -278,8 +278,10 @@ describe("real Better Auth Preview OAuth handler", () => {
     });
     expect(refreshed.status).toBe(200);
     await expect(refreshed.json()).resolves.toMatchObject({
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       access_token: expect.any(String),
       expires_in: 300,
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       refresh_token: expect.any(String),
       scope: requestedScope,
       token_type: "Bearer",

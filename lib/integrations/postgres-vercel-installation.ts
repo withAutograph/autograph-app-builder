@@ -71,6 +71,7 @@ export async function readActiveVercelInstallationToken(input: {
     }
     throw error;
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve absent installation and continuation results.
   return {
     binding: {
       active: row.active,
@@ -143,6 +144,7 @@ export function createPostgresVercelAuthorizationStateStore(
       if (row.resumeKey) {
         returnState.resumeKey = row.resumeKey;
       }
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve absent installation and continuation results.
       return parseProviderConnectionReturn(returnState);
     },
     async create(input) {
@@ -186,6 +188,7 @@ export function createPostgresVercelAuthorizationStateStore(
       if (rows[0].resumeKey) {
         returnState.resumeKey = rows[0].resumeKey;
       }
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve absent installation and continuation results.
       return parseProviderConnectionReturn(returnState);
     },
   };

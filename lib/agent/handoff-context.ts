@@ -36,6 +36,7 @@ export function createPreparedHandoffReader(input: {
     }
     // Initial redemption checks expiry. A trusted session retains its prepared
     // context afterwards, including when its engine is restarted or recovered.
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve absent handoff context during recovery.
     return record.intent;
   };
 }
@@ -93,6 +94,7 @@ export async function readPreparedHandoffContext(sessionAuth: unknown) {
     throw error;
   });
   // oxlint-enable promise/prefer-await-to-callbacks
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve absent handoff context during recovery.
   return await (
     await deploymentReader
   )(sessionAuth);

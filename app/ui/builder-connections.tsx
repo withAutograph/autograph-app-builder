@@ -235,6 +235,7 @@ export function ConnectionDrawer({
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     dialog.showModal();
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve conditional dialog effect cleanup.
     return () => {
       dialog.close();
       document.body.style.overflow = previousOverflow;

@@ -146,6 +146,7 @@ export function generatedCssRule(
   const matchingShared = shared.filter(
     (rule) => key(rule.selector, rule.property, rule.value) === tuple,
   );
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve optional generated CSS evidence.
   return loaded.length === 1 && matchingGenerated.length === 1 && !matchingShared.length
     ? loaded[0]
     : undefined;

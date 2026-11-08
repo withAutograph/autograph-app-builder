@@ -12,6 +12,7 @@ if (origin.protocol !== "https:" || origin.pathname !== "/") {
 }
 
 const manifestPath = path.resolve("mcp.json");
+// oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
 const manifest = JSON.parse(await readFile(manifestPath, "utf-8"));
 // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
 manifest.mcpServers["app-builder"].url = `${origin.origin}/mcp`;

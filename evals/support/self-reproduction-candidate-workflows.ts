@@ -52,6 +52,7 @@ export interface CandidateWorkflowOutcome {
   evidence?: { buttons: string[]; headings: string[]; mutationPaths: string[] };
 }
 
+/* oxlint-disable typescript/consistent-return -- Preserve early outcomes in the serialized browser workflow. */
 /** Evaluator-owned browser checks. Serialized into Sandbox, never supplied to generation. */
 export const exerciseCandidateBrowserWorkflows = async (
   browser: CandidateBrowser,
@@ -422,6 +423,7 @@ export const exerciseCandidateBrowserWorkflows = async (
   }
   return outcomes;
 };
+/* oxlint-enable typescript/consistent-return */
 
 export const sandboxCandidateWorkflowComparison = () => {
   const script = `

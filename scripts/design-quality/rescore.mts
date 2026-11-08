@@ -7,6 +7,7 @@ import { renderReport } from "./report";
 // repeated browser capture, regeneration, dependency preparation or Sandbox.
 const directory = path.resolve(process.argv[2] ?? "");
 const brief = await readFile(process.argv[3], "utf-8");
+// oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
 const report = JSON.parse(await readFile(path.join(directory, "report.json"), "utf-8"));
 // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
 report.judge = await judgeDesign({
@@ -20,7 +21,7 @@ report.judge = await judgeDesign({
       state: c.state,
     }),
   ),
-  // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-call -- Preserve the saved report handling and its existing failure behavior.
+  // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-call, typescript/no-unsafe-assignment -- Preserve the saved report handling and its existing failure behavior.; Preserve the existing dynamic value boundary.
   images: report.captures.map((c: { name: string; width: number; height: number }) => ({
     ...c,
     path: path.join(directory, `${c.name}.png`),

@@ -23,6 +23,7 @@ const argument = (name: string) => {
   if (!value || value.startsWith("--")) {
     throw new Error(`Missing value for ${name}.`);
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve optional command-line argument results.
   return value;
 };
 
@@ -84,6 +85,7 @@ await Promise.all(
     await cp(sourceFile, path.join(core, sourcePath), { recursive: true });
   }),
 );
+// oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
 const mcp = JSON.parse(await readFile(path.join(core, "mcp.json"), "utf-8"));
 mcp.mcpServers["app-builder"].url = `${endpoint}/mcp`;
 await writeFile(path.join(core, "mcp.json"), `${JSON.stringify(mcp, null, 2)}\n`);
@@ -152,6 +154,7 @@ async function collectFiles(root: string, directory: string): Promise<Map<string
 }
 const files = await collectFiles(output, core);
 const archive = deterministicGzip(deterministicTar(files));
+// oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
 const portable = JSON.parse(await readFile(path.join(core, pluginManifestName), "utf-8"));
 const archiveName = `${portable.name}-${portable.version}.tar.gz`;
 await writeFile(path.join(output, archiveName), archive);
@@ -164,6 +167,7 @@ await mkdir(path.join(marketplacePluginRoot, ".codex-plugin"), {
   recursive: true,
 });
 await cp(core, marketplacePluginRoot, { recursive: true });
+// oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
 const codexManifest = JSON.parse(
   await readFile(path.resolve(".codex-plugin/plugin.json"), "utf-8"),
 );
@@ -228,6 +232,7 @@ await writeFile(
       plugins: [
         {
           category: "Developer Tools",
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
           name: portable.name,
           policy: {
             authentication: "ON_USE",
@@ -297,10 +302,12 @@ const receipt = {
   ),
   endpoint: `${endpoint}/mcp`,
   format: "autograph-portable-plugin-release-v3",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
   name: portable.name,
   source,
   specification: "1.0.0",
   tools,
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
   version: portable.version,
 };
 await writeFile(path.join(output, "release-receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);

@@ -199,6 +199,7 @@ export function exactClassSelector(selector: string | undefined) {
   if (!selector || !/^\.[A-Za-z_-][A-Za-z0-9_-]*$/u.test(selector.trim())) {
     return;
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve optional class selector and token results.
   return selector.trim().slice(1);
 }
 
@@ -282,6 +283,7 @@ export function escapedTailwindClassToken(selector: string | undefined) {
       return;
     }
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve optional class selector and token results.
   return token;
 }
 

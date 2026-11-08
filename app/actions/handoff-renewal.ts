@@ -60,6 +60,7 @@ function toControlData(
   if (!value) {
     return;
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve absent handoff control data.
   return {
     cursorInstallReady: value.cursorInstallReady,
     destination: value.destination,

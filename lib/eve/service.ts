@@ -373,6 +373,7 @@ function localEveRestartGeneration(
   if (path === undefined) {
     throw new Error("The local Eve cycle binding was unavailable.");
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional local Eve cycle binding.
   return readLocalEveCycleBinding(path);
 }
 

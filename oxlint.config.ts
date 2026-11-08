@@ -21,8 +21,6 @@ export default defineConfig({
     "anti-slop/require-safety-comment-for-type-assertion": "off",
     "sonarjs/cognitive-complexity": "off",
     "sonarjs/no-undefined-assignment": "off",
-    "typescript/consistent-return": "off",
-    "typescript/no-unsafe-assignment": "off",
     "typescript/no-unsafe-type-assertion": "off",
     "typescript/strict-boolean-expressions": "off",
     "eslint/complexity": "off",

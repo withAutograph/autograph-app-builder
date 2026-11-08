@@ -202,6 +202,7 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
   return {
     contents,
     contract,
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
     dirtyPaths: [...value.dirtyPaths],
     sourcePath: value.sourcePath,
     sourceSha: value.sourceSha,

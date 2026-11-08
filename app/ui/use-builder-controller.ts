@@ -659,6 +659,7 @@ export function useBuilderController({
     const frame = window.requestAnimationFrame(() => {
       document.querySelector<HTMLElement>(`#${id}`)?.focus();
     });
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve conditional effect cleanup behavior.
     return () => {
       window.cancelAnimationFrame(frame);
     };
@@ -865,6 +866,7 @@ export function useBuilderController({
     const timer = window.setTimeout(() => {
       setDraftSyncNotice("");
     }, 4000);
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve conditional effect cleanup behavior.
     return () => {
       window.clearTimeout(timer);
     };

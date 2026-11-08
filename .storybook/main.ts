@@ -54,6 +54,7 @@ const config: StorybookConfig = {
       ? existingAliases
       : Object.entries(existingAliases).map(([find, replacement]) => ({
           find,
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
           replacement,
         }));
     const storybookBuilderActions = path.join(import.meta.dirname, "builder-actions.ts");
@@ -104,6 +105,7 @@ const config: StorybookConfig = {
           find: "@flags-sdk/vercel",
           replacement: path.join(import.meta.dirname, "vercel-flags-adapter.ts"),
         },
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
         ...aliases,
       ],
     };

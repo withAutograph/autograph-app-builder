@@ -142,6 +142,7 @@ const schemaVersion = (schema: unknown) => {
   if (typeof schema !== "string") {
     return;
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve an absent schema version result.
   return /\/schemas\/(?<version>[^/]+)\/(?:plugin|mcp)\.schema\.json$/u.exec(schema)?.[1];
 };
 

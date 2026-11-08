@@ -675,9 +675,11 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
   let native: Record<string, unknown> | undefined;
   for (const match of rawOutput.matchAll(/(?:^|\n)(?=\{)/gu)) {
     try {
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
       const parsed = JSON.parse(rawOutput.slice(match.index + match[0].length));
       // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       if (Array.isArray(parsed.results)) {
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
         native = parsed;
         break;
       }

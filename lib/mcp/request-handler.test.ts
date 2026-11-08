@@ -923,6 +923,7 @@ describe("request-scoped MCP service selection", () => {
     ];
     const projections = await Promise.all(
       responses.map(async (response) => ({
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
         body: await response.json(),
         cache: response.headers.get("cache-control"),
         status: response.status,

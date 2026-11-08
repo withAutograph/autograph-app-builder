@@ -488,6 +488,7 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
     `/api/builder/handoffs/${new URL(handoffUrl).pathname.split("/").at(-1)}`,
   );
   expect(response.ok()).toBe(true);
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
   const saved = await response.json();
   // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
   expect(saved.status).toBe("prepared");

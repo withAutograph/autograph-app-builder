@@ -399,6 +399,7 @@ const sourceEntry = async (sourceRoot: string, path: string) => {
     );
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve the missing source entry result.
       return;
     }
     throw error;

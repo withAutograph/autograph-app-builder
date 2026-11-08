@@ -57,6 +57,7 @@ const routingUnavailable = (error: unknown) => {
   if (!(error instanceof Error)) {
     return false;
   }
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
   const message = Object.getOwnPropertyDescriptor(error, "message")?.value;
   return (
     message === "repository_production_source_unavailable" ||

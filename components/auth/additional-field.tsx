@@ -1,4 +1,4 @@
-/* oxlint-disable typescript/no-unsafe-member-access -- Preserve the existing untyped input and rendering boundary. */
+/* oxlint-disable typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing untyped input and rendering boundary. */
 "use client";
 
 import { resolveInputType } from "@better-auth-ui/core";

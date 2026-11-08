@@ -521,9 +521,10 @@ const validatedHostedOperatorApprovalPlan = (
     parsed.data.selection.projectId !== record.projectId ||
     parsed.data.selection.branch !== record.branch
   ) {
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional descriptions explicitly return no public approval.
+    // oxlint-disable-next-line unicorn/no-useless-undefined, typescript/consistent-return -- Preserve absent or validated approval plan results. Optional descriptions explicitly return no public approval.
     return undefined;
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve absent or validated approval plan results.
   return parsed.data;
 };
 

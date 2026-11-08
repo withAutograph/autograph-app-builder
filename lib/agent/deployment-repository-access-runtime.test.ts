@@ -56,6 +56,7 @@ function memoryContinuationStore(): RepositoryAccessContinuationStore & {
         return;
       }
       record.authorizedAt ??= input.now;
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional authorization and consumption fixture results.
       return record;
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -85,6 +86,7 @@ function memoryContinuationStore(): RepositoryAccessContinuationStore & {
         return;
       }
       record.consumedAt = input.now;
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional authorization and consumption fixture results.
       return record;
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -434,6 +436,7 @@ describe("deployment repository access authorization", () => {
 
     fixture.makeAvailable();
     await expect(complete()).resolves.toEqual({
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       token: expect.stringMatching(/^[0-9a-f]{64}$/u),
     });
     expect(fixture.continuationStore.records[0]?.consumedAt).toBeInstanceOf(Date);

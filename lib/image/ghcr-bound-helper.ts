@@ -170,6 +170,7 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
   if (!Array.isArray(records) || records.length !== 1) {
     throw new Error("GitHub authentication status was ambiguous.");
   }
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
   const [record] = records;
   if (typeof record !== "object" || record === null || Array.isArray(record)) {
     throw new Error(malformedAuthenticationStatus);
@@ -450,7 +451,9 @@ async function runBoundedGh(args: readonly string[]): Promise<Buffer> {
     terminate();
   }, ghTimeoutMs);
   try {
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
     const [code] = await once(child, "close");
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
     const status = code ?? -1;
     if (timedOut || overflow || status !== 0) {
       throw new Error("GitHub credential read-back failed.");

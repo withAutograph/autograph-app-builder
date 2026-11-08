@@ -34,6 +34,7 @@ describe("high-fidelity design guidance", () => {
       appId: "request-review",
       catalogGaps: [],
       files: [{ content, path: "src/routes/index.tsx" }],
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
       manifest: JSON.parse(manifest),
       routes: ["/"],
     });

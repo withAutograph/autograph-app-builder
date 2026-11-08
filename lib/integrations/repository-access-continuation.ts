@@ -133,6 +133,7 @@ export function createRepositoryAccessContinuationService(input: {
       }
       callback.searchParams.set("provider", "github");
       callback.searchParams.set("status", "connected");
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional continuation authorization and inspection results.
       return callback.toString();
     },
 
@@ -250,6 +251,7 @@ export function createRepositoryAccessContinuationService(input: {
       if (record.selectedInstallationId) {
         response.selectedInstallationId = record.selectedInstallationId;
       }
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional continuation authorization and inspection results.
       return response;
     },
   };

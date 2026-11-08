@@ -839,10 +839,12 @@ describe("offline dependency cache", () => {
       bootstrapVersion: 3,
       closure: {
         cargoHomeDigest: liveCargoHomeDigest,
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         cargoHomePath: expect.stringMatching(
           /^\/workspace\/\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/x86_64\/cargo-home$/u,
         ),
         nodeModulesDigest: liveNodeModulesDigest,
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         nodeModulesPath: expect.stringMatching(
           /^\/workspace\/\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/x86_64\/source\/node_modules$/u,
         ),
@@ -850,6 +852,7 @@ describe("offline dependency cache", () => {
         workspaceNodeModules: [],
       },
       dependencyInputs: originalDependencyInputs,
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       dependencyKey: expect.stringMatching(/^[0-9a-f]{64}$/u),
       scope: "live-template-execution",
       version: 4,
@@ -894,6 +897,7 @@ describe("offline dependency cache", () => {
     expect(fixture.writeTextFile).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         path: expect.stringMatching(
           /^\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/x86_64\/manifest\.json$/u,
         ),
@@ -1046,6 +1050,7 @@ describe("offline dependency cache", () => {
     expect(linkCommand).not.toContain("ln -s");
     expect(writeTextFile).toHaveBeenCalledWith(
       expect.objectContaining({
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         content: expect.stringContaining(
           `/opt/app-builder/dependencies/${archiveDigest}/node_modules`,
         ),
@@ -1108,6 +1113,7 @@ describe("offline dependency cache", () => {
     expect(developmentLinkCommand).not.toContain("ln -s");
     expect(writeTextFile).toHaveBeenCalledWith(
       expect.objectContaining({
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         path: expect.stringContaining(".app-builder/dependency-layouts/"),
       }),
     );

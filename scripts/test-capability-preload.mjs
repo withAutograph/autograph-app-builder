@@ -43,7 +43,9 @@ if (
 }
 const require = createRequire(import.meta.url);
 /** @type {typeof import("../lib/testing/test-capability-registry.cjs")} */
+// oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
 const registry = require(path.resolve(repositoryRoot, "lib/testing/test-capability-registry.cjs"));
+// oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
 const workerThreads = require("node:worker_threads");
 const allowedWorkerEnvironment = new Set([
   "HOME",
@@ -74,6 +76,7 @@ function workerEnvironment(source, eveProfile, eveEnvelope) {
   const environment = { PATH: "/usr/bin:/bin" };
   for (const name of allowedWorkerEnvironment) {
     if (name !== "EVE_DEV_WORKER_APP_ROOT" && source[name] !== undefined) {
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
       environment[name] = source[name];
     }
   }
@@ -146,7 +149,7 @@ function readFdFrame() {
 function readPortFrame(port) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing worker and capability data boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-argument, typescript/no-unsafe-assignment -- Preserve the existing worker and capability data boundary.; Preserve the existing dynamic value boundary.
     const value = receiveMessageOnPort(port)?.message;
     if (value !== undefined) {
       return value;
@@ -162,6 +165,7 @@ function contextForProcess() {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requestAuthorization() {
   const context = contextForProcess();
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
   const port =
     !isMainThread && workerData !== null && typeof workerData === "object"
       ? workerData[workerPortKey]
@@ -169,6 +173,7 @@ function requestAuthorization() {
   if (!isMainThread && port === undefined) {
     throw new Error("Structural test Worker authorization was absent.");
   }
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
   const delegatedPublicKey =
     !isMainThread && workerData !== null && typeof workerData === "object"
       ? workerData[`${workerPortKey}PublicKey`]
@@ -219,18 +224,21 @@ function requestAuthorization() {
   if (derivedPublic !== response.publicKey) {
     throw new Error("Structural test delegation key did not match.");
   }
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing assignment while its type remains unresolved.
   const proof = { ...response };
   delete proof.delegationPrivateKey;
   const capability = registry.complete(process, proof);
   return {
     capability,
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing assignment while its type remains unresolved.
     gateAEvalProfile: response.gateAEvalProfile,
     privateKey,
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing assignment while its type remains unresolved.
     publicKey: response.publicKey,
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// eslint-disable-next-line eslint/func-style, typescript/consistent-return -- Preserve optional worker filename detection. Preserve function declaration hoisting and initialization timing.
 function workerFilename(value) {
   try {
     return realpathSync(value instanceof URL ? fileURLToPath(value) : String(value));
@@ -288,6 +296,7 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
         return;
       }
       const channel = new MessageChannel();
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing assignment while its type remains unresolved.
       const existingData =
         typeof options.workerData === "object" && options.workerData !== null
           ? options.workerData
@@ -314,10 +323,13 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
           NODE_OPTIONS: isTimeoutFixture === true ? undefined : `--import=${preloadUrl}`,
         },
         execArgv: [],
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing assignment while its type remains unresolved.
         transferList: [...(options.transferList ?? []), channel.port2],
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
         workerData: {
           ...existingData,
           [workerPortKey]: channel.port2,
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
           [`${workerPortKey}PublicKey`]: publicKey,
           [workerProfileKey]: eveProfile ? "eve" : "vitest",
           [eveWorkerEnvelopeKey]: eveEnvelope,
@@ -365,11 +377,15 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
         }
         const proof = {
           authorization: randomBytes(32).toString("hex"),
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
           capabilities,
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
           context: request.context,
           expiresAt: Date.now() + 5000,
           gateAEvalProfile: nestedGateAEvalProfile,
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
           nonce: request.nonce,
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
           publicKey,
           version: 2,
         };
@@ -394,7 +410,9 @@ try {
   const eveProfile = isMainThread
     ? process.env.EVE_DEV_WORKER_APP_ROOT === repositoryRoot
     : workerData?.[workerProfileKey] === "eve";
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
   const eveEnvelope = workerData?.[eveWorkerEnvelopeKey];
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
   const workerGateAEvalProfile = workerData?.[gateAEvalProfileKey];
   if (
     !isMainThread &&
@@ -402,6 +420,7 @@ try {
   ) {
     throw new Error("The delegated Gate A eval profile did not match.");
   }
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing assignment while its type remains unresolved.
   const gateAEvalProfileToInstall = isMainThread
     ? authorization.gateAEvalProfile
     : workerGateAEvalProfile;

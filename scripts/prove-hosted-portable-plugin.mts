@@ -14,6 +14,7 @@ const argument = (name: string) => {
   if (!value || value.startsWith("--")) {
     throw new Error(`Missing value for ${name}.`);
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve optional command-line argument results.
   return value;
 };
 

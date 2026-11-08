@@ -19,6 +19,7 @@ function pageData(
   if (!row) {
     return;
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve absent draft and authentication results.
   return builderDraftPageDataSchema.parse({
     draftId: row.draftId,
     record: row.record,
@@ -40,6 +41,7 @@ export async function getAuthenticatedBuilderDraftContext(input: {
     return;
   }
   const preview = readPreviewOAuthRuntimeConfig(input.environment);
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve absent draft and authentication results.
   return {
     authority: {
       audience: preview.resource,
@@ -63,6 +65,7 @@ export async function readAuthenticatedActiveBuilderDraft(input: {
   if (!context) {
     return;
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve absent draft and authentication results.
   return pageData(await context.drafts.readActive(context.authority));
 }
 
@@ -80,6 +83,7 @@ export async function readAuthenticatedBuilderDraft(input: {
   // An opaque, tenant-authorized draft ID is used for provider-return
   // recovery. It must remain readable after the active draft has been
   // archived by a handoff; only the active-draft query filters by status.
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve absent draft and authentication results.
   return pageData(row);
 }
 

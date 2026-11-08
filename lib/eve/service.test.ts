@@ -431,6 +431,7 @@ describe("local Eve acceptance", () => {
       }),
     ).resolves.toMatchObject({
       cursor: 2,
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       events: expect.arrayContaining([
         expect.objectContaining({
           text: "Your plan is ready.",
@@ -1109,6 +1110,7 @@ describe("local Eve acceptance", () => {
       await expect(
         service.get({ cursor: 0, limit: 100, sessionId: start.sessionId }),
       ).resolves.toMatchObject({
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         events: expect.arrayContaining([
           expect.objectContaining({ status: "cancelled", type: "status" }),
         ]),
@@ -1289,6 +1291,7 @@ describe("local Eve acceptance", () => {
         service.get({ cursor: 1, limit: 100, sessionId: started.sessionId }),
       ).resolves.toMatchObject({
         cursor: 4,
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         inputRequests: expect.arrayContaining([
           expect.objectContaining({ requestId: "request-source" }),
           expect.objectContaining({ requestId: "request-plan" }),
@@ -1325,6 +1328,7 @@ describe("local Eve acceptance", () => {
       expect(result.events).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
+            // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
             request: expect.objectContaining({ requestId: "request-source" }),
             type: "input_required",
           }),
@@ -1413,6 +1417,7 @@ describe("local public session recovery", () => {
     expect(result).toMatchObject({
       cursor: 2,
       error: { code: "session_recovery_unavailable" },
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       events: expect.arrayContaining([expect.objectContaining({ type: "input_required" })]),
       sessionId,
       status: "failed",

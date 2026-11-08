@@ -347,6 +347,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         return;
       }
       try {
+        // oxlint-disable-next-line typescript/consistent-return -- Preserve optional acceptance output parsing.
         return JSON.parse(latestAcceptance.output.replace(/^Error:\s*/u, "")) as {
           code?: string;
           issues?: { code?: string }[];

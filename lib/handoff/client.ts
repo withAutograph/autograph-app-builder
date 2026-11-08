@@ -68,5 +68,6 @@ export function buildCursorInstallUrl(mcpUrl: string, ready: boolean) {
   const encoded = btoa(
     Array.from(new TextEncoder().encode(config), (byte) => String.fromCodePoint(byte)).join(""),
   );
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional Cursor installation URL.
   return `cursor://anysphere.cursor-deeplink/mcp/install?name=Autograph&config=${encodeURIComponent(encoded)}`;
 }

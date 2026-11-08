@@ -320,6 +320,7 @@ describe("Vercel integration security", () => {
               return;
             }
             consumed = true;
+            // oxlint-disable-next-line typescript/consistent-return -- Preserve optional continuation consumption results.
             return recoveredReturnState;
           },
           async create() {},

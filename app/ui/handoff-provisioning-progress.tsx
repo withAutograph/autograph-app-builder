@@ -135,6 +135,7 @@ export function HandoffProvisioningProgress({
       source.addEventListener("open", onOpen, { signal: listeners.signal });
       source.addEventListener("error", onError, { signal: listeners.signal });
     }
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve conditional event-stream cleanup.
     return () => {
       closed = true;
       listeners.abort();

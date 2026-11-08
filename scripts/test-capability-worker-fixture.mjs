@@ -14,6 +14,7 @@ import { once } from "node:events";
 /** @param {unknown} value @returns {value is () => unknown} */
 const isCapabilityAccessor = (value) => typeof value === "function";
 
+// oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing assignment while its type remains unresolved.
 const accessor =
   process[Symbol.for("withAutograph.autograph-app-builder.test-capability-registry.v2")];
 /** @type {unknown} */
@@ -45,6 +46,7 @@ if (workerData?.spawnNested === true) {
   const { Worker } = await import("node:worker_threads");
   const nested = new Worker(new URL(import.meta.url));
   /** @type {[NestedWorkerResult]} */
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
   const [nestedResult] = await once(nested, "message");
   nestedCapability = nestedResult.capability;
   nestedAppRoot = nestedResult.appRoot;

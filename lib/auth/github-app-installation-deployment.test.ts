@@ -553,6 +553,7 @@ describe("GitHub App installation routes", () => {
     );
     expect(onConnected).toHaveBeenCalledWith({
       authority,
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       returnState: expect.objectContaining({
         resumeKey: "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0",
       }),

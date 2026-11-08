@@ -107,6 +107,7 @@ export const githubInstallationAuthorizationDiagnostic = (error: unknown) => {
   if (error.installationValidation !== undefined) {
     diagnostic.installationValidation = error.installationValidation;
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional installation diagnostic.
   return diagnostic;
 };
 

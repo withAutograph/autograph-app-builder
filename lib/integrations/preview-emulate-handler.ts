@@ -105,6 +105,7 @@ function handler(environment: NodeJS.ProcessEnv) {
     return;
   }
   if (active?.namespace === emulation.namespace) {
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional emulation handler result.
     return active.handler;
   }
   const created = createPreviewEmulateHandler({
@@ -113,6 +114,7 @@ function handler(environment: NodeJS.ProcessEnv) {
     githubAppPrivateKey: environment.EMULATE_PREVIEW_GITHUB_APP_PRIVATE_KEY,
   });
   active = { handler: created, namespace: emulation.namespace };
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional emulation handler result.
   return created;
 }
 

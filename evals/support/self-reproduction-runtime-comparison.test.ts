@@ -29,6 +29,7 @@ describe("live sandbox comparison", () => {
     expect(result.artifacts[0]?.content).toEqual(new Uint8Array([1, 2]));
     expect(session.writeTextFile).toHaveBeenCalledWith({
       content: JSON.stringify(payload),
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       path: expect.stringMatching(/^\.self-reproduction-comparison\/[^/]+\/input\.json$/u),
     });
     expect(session.run.mock.calls[0]).not.toContain(payload.text);

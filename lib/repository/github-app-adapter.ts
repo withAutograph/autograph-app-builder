@@ -580,6 +580,7 @@ export function createGitHubAppPublicationAdapter(
         repository: repositoryObservation(snapshot.repository, identity.digest),
         version: GITHUB_PUBLICATION_VERSION,
       };
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional repository inspection outcomes.
       return { ...unsigned, digest: hash(unsigned) };
     },
     inspectInstallation,

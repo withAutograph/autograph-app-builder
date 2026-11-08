@@ -54,6 +54,7 @@ function handoffStore(): BuilderHandoffStore {
         return;
       }
       if (record.sessionId !== undefined && record.sessionId !== "") {
+        // oxlint-disable-next-line typescript/consistent-return -- Preserve optional handoff and authority fixture results.
         return record;
       }
       const bound = {
@@ -62,6 +63,7 @@ function handoffStore(): BuilderHandoffStore {
         sessionId: input.sessionId,
       };
       records.set(record.handoffId, bound);
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional handoff and authority fixture results.
       return bound;
     },
     read,
@@ -172,6 +174,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
           ) {
             return;
           }
+          // oxlint-disable-next-line typescript/consistent-return -- Preserve optional handoff and authority fixture results.
           return structuredClone(journalRow);
         },
       );
@@ -187,6 +190,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
           if (workspaces.length !== 1) {
             return;
           }
+          // oxlint-disable-next-line typescript/consistent-return -- Preserve optional handoff and authority fixture results.
           return {
             audience: resource,
             issuer,

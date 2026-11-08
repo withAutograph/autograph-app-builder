@@ -372,10 +372,11 @@ export const evaluateCandidateRuntime = async (input: {
       const manifest = await handle.session.readTextFile({
         path: `apps/${input.candidateAppId}/.next/routes-manifest.json`,
       });
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
       const routes = JSON.parse(manifest ?? "{}");
       // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
       if (typeof routes.basePath === "string") {
-        // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
+        // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing untyped input or fixture boundary.; Preserve the existing dynamic value boundary.
         runtimeBasePath = routes.basePath;
       }
     } catch {
@@ -427,7 +428,9 @@ export const evaluateCandidateRuntime = async (input: {
       controller.signal,
     );
     commands.push(probe);
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
     const probes = probe.exitCode === 0 ? JSON.parse(probe.stdout.trim()) : [];
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
     const root = Array.isArray(probes)
       ? probes.find((item: { id?: unknown }) => item.id === "root")
       : undefined;
@@ -451,6 +454,7 @@ export const evaluateCandidateRuntime = async (input: {
       );
       commands.push(browser);
       if (browser.exitCode === 0) {
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
         const browserProbes = JSON.parse(browser.stdout.trim());
         if (Array.isArray(browserProbes)) {
           // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-call -- Keep the runtime-provided probe collection and its existing behavior.
@@ -471,6 +475,7 @@ export const evaluateCandidateRuntime = async (input: {
     }
     return {
       commands,
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
       probes: Array.isArray(probes) ? probes : [],
       producer: "evaluator",
       reason:

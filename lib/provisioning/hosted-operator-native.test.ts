@@ -74,7 +74,7 @@ describe("separate native operator host", () => {
     expect(readFileSync(path.join(root, "vercel.json"), "utf-8")).toContain("next build");
   });
   it("the actual entrypoint returns503 until a real factory is statically wired, without readiness claims", async () => {
-    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing untyped input or fixture boundary.; Preserve the existing assignment while its type remains unresolved.
     const response = await entrypoint.fetch(request());
     // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
     expect(response.status).toBe(503);
@@ -86,7 +86,7 @@ describe("separate native operator host", () => {
   it.each(["/v1/repository-production", "/v1/repository-production/access/complete"])(
     "dispatches Production ingress independently of Preview configuration: %s",
     async (route) => {
-      // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing untyped input or fixture boundary.; Preserve the existing assignment while its type remains unresolved.
       const response = await entrypoint.fetch(
         new Request(`https://operator.example.test${route}`, { method: "POST" }),
       );
@@ -99,7 +99,7 @@ describe("separate native operator host", () => {
     },
   );
   it("dispatches the exact possession ingress before full runtime initialization", async () => {
-    // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing untyped input or fixture boundary.; Preserve the existing assignment while its type remains unresolved.
     const response = await entrypoint.fetch(
       new Request("https://operator.example.test/v1/key-custody/possession"),
     );

@@ -92,8 +92,10 @@ const firstVisible = async (locators: Locator[]) => {
         // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
         .catch(() => false)
     ) {
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve absent locator results and recursive lookup.
       return locator.first();
     }
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve absent locator results and recursive lookup.
     return await find(index + 1);
   };
   return await find(0);
@@ -253,6 +255,7 @@ const referenceAdapter = (
         const handoffId = new URL(restored.url()).pathname.split("/").at(-1);
         const statusPath = `/api/builder/handoffs/${handoffId}`;
         const ownerResponse = await restored.request.get(statusPath);
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
         const ownerBody = await ownerResponse.json();
         // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
         const ownerCanRead = ownerResponse.ok() && ownerBody.status === "prepared";
@@ -274,6 +277,7 @@ const referenceAdapter = (
           const strangerSession = await currentSession(stranger);
           const strangerId = sessionUserId(strangerSession);
           const response = await stranger.request.get(statusPath);
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
           const body = await response.json();
           const isDistinctUser =
             ownerCanRead && typeof strangerId === "string" && strangerId !== ownerId;

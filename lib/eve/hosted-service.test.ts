@@ -293,6 +293,7 @@ describe("failed public session native recovery", () => {
       expect(adapter.start).toHaveBeenLastCalledWith(
         expect.objectContaining({
           prompt: "",
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
           recovery: expect.objectContaining({
             sourceOwnerRunId: "run_parent",
             sourcePublicSessionId: first.sessionId,
@@ -848,6 +849,7 @@ describe("delayed durable session reads", () => {
       cursor,
       error: {
         code: "builder_operation_still_running",
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         message: expect.stringContaining("Building the app in its private workspace"),
       },
       events: [],
@@ -1044,6 +1046,7 @@ describe("hosted Eve service core", () => {
     expect(adapter.start).toHaveBeenLastCalledWith(
       expect.objectContaining({
         prompt: "",
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         recovery: expect.objectContaining({
           sourcePublicSessionId: first.result.sessionId,
           sourceOwnerRunId: "eve_failed",

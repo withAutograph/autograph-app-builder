@@ -174,8 +174,10 @@ function matchedSelector(match: {
   }
   const indexes = match.matchingSelectors;
   if (indexes?.length === 1) {
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve optional browser evidence and source-map results.
     return selectors[indexes[0]]?.text;
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve optional browser evidence and source-map results.
   return selectors.length === 1 ? selectors[0]?.text : undefined;
 }
 
@@ -212,8 +214,10 @@ export const sourcePath = (value: string | undefined) => {
   }
   try {
     const url = new URL(value);
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve optional browser evidence and source-map results.
     return url.protocol === "file:" ? decodeURIComponent(url.pathname) : url.pathname;
   } catch {
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve optional browser evidence and source-map results.
     return value.split(/[?#]/u, 1)[0];
   }
 };
@@ -285,6 +289,7 @@ export function mappedSharedCssRule(input: {
       candidate.source.column === mapped.column;
     return sourceMatches && candidate.property === property && candidate.value === value;
   });
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve optional browser evidence and source-map results.
   return declarations.length === 1 ? declarations[0] : undefined;
 }
 
@@ -533,6 +538,7 @@ export async function measureStyles(
         return;
       }
       if (sourceMaps.has(styleSheetId)) {
+        // oxlint-disable-next-line typescript/consistent-return -- Preserve optional browser evidence and source-map results.
         return sourceMaps.get(styleSheetId);
       }
       const header = headers.get(styleSheetId);
@@ -578,7 +584,9 @@ export async function measureStyles(
       }
       let map: CssSourceMap | undefined;
       try {
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
         const parsed = text ? JSON.parse(text) : undefined;
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
         const hasValidSources =
           parsed &&
           // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
@@ -594,12 +602,14 @@ export async function measureStyles(
           // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
           typeof parsed.mappings === "string"
         ) {
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
           map = parsed;
         }
       } catch {
         /* Source maps are optional evidence. */
       }
       sourceMaps.set(styleSheetId, map);
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional browser evidence and source-map results.
       return map;
     };
     const { root } = await session.send("DOM.getDocument");

@@ -218,6 +218,7 @@ export async function ensurePreviewSessionOrganization(input: {
     }
   }
 
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional authenticated organization result.
   return {
     organization: ensured,
     user: current.user,

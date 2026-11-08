@@ -92,6 +92,7 @@ const run = async (command: string, args: string[], input?: string) => {
     child.stdin?.end(input);
   }
   try {
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
     const [code, signal] = await once(child, "close");
     if (code !== 0) {
       throw new Error(`${command} exited with ${code ?? signal}`);

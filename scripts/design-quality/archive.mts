@@ -34,6 +34,7 @@ if (
   throw new Error("Supply --report-dir and a lowercase kebab-case --name");
 }
 const input = path.resolve(values["report-dir"]);
+// oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
 const report = JSON.parse(await readFile(path.join(input, "report.json"), "utf-8"));
 // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing archived report JSON boundary.
 const timestamp = new Date(report.createdAt).toISOString();
@@ -86,6 +87,7 @@ lines.push(
   "| --- | --- | --- |",
 );
 if (report.adherence) {
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
   const a = report.adherence;
   lines.splice(
     8,
@@ -187,11 +189,13 @@ for (const day of await readdir(archiveRoot, { withFileTypes: true })) {
     if (!run.isDirectory()) {
       continue;
     }
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+    // oxlint-disable-next-line eslint/no-await-in-loop, typescript/no-unsafe-assignment -- preserve intentional sequential control flow; Preserve the existing dynamic value boundary.
     const saved = await readArchivedReport(path.join(archiveRoot, day.name, run.name));
     if (saved !== null) {
       rows.push({
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
         date: saved.createdAt,
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
         name: saved.archive.name,
         path: `${day.name}/${run.name}`,
         score: saved.judge.subjectiveScore ?? "not scored",

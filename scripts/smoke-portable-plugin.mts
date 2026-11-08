@@ -13,6 +13,7 @@ const argument = (name: string) => {
   if (!value || value.startsWith("--")) {
     throw new Error(`Missing value for ${name}.`);
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve optional command-line argument results.
   return value;
 };
 const releaseValue = argument("--release");
@@ -22,6 +23,7 @@ if (!releaseValue || !installValue) {
 }
 const releaseRoot = path.resolve(releaseValue);
 const installRoot = path.resolve(installValue);
+// oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
 const receipt = JSON.parse(await readFile(path.join(releaseRoot, "release-receipt.json"), "utf-8"));
 if (
   receipt.format !== "autograph-portable-plugin-release-v3" ||
@@ -48,10 +50,11 @@ const marketplaceArchive = await readFile(
 if (sha256(marketplaceArchive) !== receipt.codexMarketplaceArchive.sha256) {
   throw new Error("Codex marketplace digest did not match its receipt.");
 }
+// oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
 const discovery = JSON.parse(
   await readFile(path.join(releaseRoot, "mock/tools-list.json"), "utf-8"),
 );
-// oxlint-disable-next-line typescript/no-unsafe-call -- Discovery is read from the generated MCP response without changing its error behavior.
+// oxlint-disable-next-line typescript/no-unsafe-call, typescript/no-unsafe-assignment -- Discovery is read from the generated MCP response without changing its error behavior.; Preserve the existing dynamic value boundary.
 const discovered = discovery.result?.tools?.map((tool: { name?: unknown }) => tool.name);
 if (JSON.stringify(discovered) !== JSON.stringify(TOOL_NAMES)) {
   throw new Error("Offline MCP discovery did not return the exact five tools.");
@@ -92,7 +95,9 @@ await Promise.all(
       readFile(path.join(root, "client-harness.json"), "utf-8"),
       readFile(path.join(root, "installation-receipt.json"), "utf-8"),
     ]);
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
     const harness = JSON.parse(harnessBytes);
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
     const installation = JSON.parse(installationBytes);
     if (
       harness.format !== "agent-plugins-client-harness-v2" ||

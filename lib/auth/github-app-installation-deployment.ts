@@ -369,6 +369,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
       if (!authority || !input.repositoryAccess) {
         return;
       }
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional connection authority and target outcomes.
       return await input.repositoryAccess.inspect({ authority, continuationId });
     },
   };
@@ -462,6 +463,7 @@ export function getGitHubAppInstallationDeploymentHandlers(
       if (session === undefined) {
         return;
       }
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional connection authority and target outcomes.
       return {
         audience: config.resource,
         issuer: config.issuer,
@@ -475,6 +477,7 @@ export function getGitHubAppInstallationDeploymentHandlers(
       if (!returnState.resumeKey) {
         return;
       }
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional connection authority and target outcomes.
       return await repositoryAccessContinuations.authorize({
         authority,
         continuationId: returnState.resumeKey,
@@ -520,7 +523,7 @@ export function createGitHubAppInstallationDeploymentHandler(
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// eslint-disable-next-line eslint/func-style, typescript/consistent-return -- Preserve optional connection authority and target outcomes. Preserve function declaration hoisting and initialization timing.
 export async function verifiedGitHubConnectionTarget(input: {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
   headers: Headers;

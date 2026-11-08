@@ -226,6 +226,7 @@ export function createBuilderHandoffService(input: {
         return;
       }
       const stored = await input.store.findLatestPending({ authority });
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional owned handoff result.
       return stored ? requireOwnedRecord(stored, { authority }) : undefined;
     },
 

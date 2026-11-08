@@ -465,7 +465,9 @@ describe("preview command termination", () => {
     exited.resolve(null);
     await cleanup;
     expect(settled).toBe(true);
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
     expect(command.kill).toHaveBeenCalledWith("SIGTERM", { abortSignal: expect.any(AbortSignal) });
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
     expect(command.wait).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
   });
 

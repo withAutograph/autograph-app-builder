@@ -33,6 +33,7 @@ function cookieValue(request: Request, name: string) {
   for (const part of cookie.split(";")) {
     const [key, ...value] = part.trim().split("=");
     if (key === name) {
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve an absent cookie result.
       return decodeURIComponent(value.join("="));
     }
   }

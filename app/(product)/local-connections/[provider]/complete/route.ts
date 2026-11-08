@@ -33,6 +33,7 @@ function validEmulatorRedirect(input: {
   ) {
     return;
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve invalid emulator redirects as absent.
   return destination;
 }
 

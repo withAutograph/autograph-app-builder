@@ -251,6 +251,7 @@ export function createBuilderDraftOutbox<T>(
         withDatabase(
           async (database) => {
             const transaction = database.transaction(storeName, "readonly");
+            // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
             const result = await requestResult(transaction.objectStore(storeName).get(options.key));
             await transactionResult(transaction);
             return result as BuilderDraftOutboxEntry<T> | undefined;

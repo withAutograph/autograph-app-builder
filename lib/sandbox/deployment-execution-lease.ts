@@ -188,6 +188,7 @@ export async function acquireHostedSandboxExecutionLease(input: {
       lease: result.lease,
       store,
     });
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve absent leases and existing authority failures.
     return result.lease;
   } catch (error) {
     const evidence = await stopWithin(input.sandbox);
@@ -228,6 +229,7 @@ export async function assertHostedSandboxCommandAuthority(input: {
     });
     commandAuthorities.set(input.sessionId, { ...active, lease });
   }
+  // oxlint-disable-next-line typescript/consistent-return -- Preserve absent leases and existing authority failures.
   return lease;
 }
 

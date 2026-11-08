@@ -54,6 +54,7 @@ function memoryStore(): BuilderProvisionJournalStore {
         updatedAt: input.now,
       };
       rows.set(id, next);
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve compare-and-set fixture results and misses.
       return structuredClone(next);
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -323,6 +324,7 @@ describe("builder provisioning journal", () => {
         if (collisions <= 9) {
           return;
         }
+        // oxlint-disable-next-line typescript/consistent-return -- Preserve compare-and-set fixture results and misses.
         return await underlying.compareAndSet(input);
       },
     };

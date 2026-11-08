@@ -528,7 +528,7 @@ describe("Vercel project provisioning", () => {
       // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture fetch-input coercion used for routing or assertions.
       const path = new URL(String(url)).pathname;
       if (init?.method === "POST") {
-        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
+        // oxlint-disable-next-line typescript/no-base-to-string, typescript/no-unsafe-assignment -- Preserve the fixture request-body coercion used by this assertion.; Preserve the existing JSON parsing boundary.
         const body = JSON.parse(String(init.body));
         // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
         expect(body.name).toBe("apps-vendor-portal-a1b2c3");

@@ -299,6 +299,7 @@ export function createServicePrototypePreviewResolver(input: {
         await delay(100);
       }
     });
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional prototype lookup result.
     return prototype;
   };
 }

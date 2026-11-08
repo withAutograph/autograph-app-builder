@@ -48,6 +48,7 @@ const storyVercelScopes: {
   },
 ];
 
+// oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing assignment while its type remains unresolved.
 export const storyIntegrations = {
   github: {
     scopes: storyGithubScopes,
@@ -92,6 +93,7 @@ export const storyForm: BuilderForm = {
   vercelInstallationId: storyVercelInstallationId,
 };
 
+// oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing assignment while its type remains unresolved.
 export const storyProvisioning = {
   appId: storyAppId,
   github: {

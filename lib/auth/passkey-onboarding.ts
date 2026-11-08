@@ -426,6 +426,7 @@ export function createPasskeyOnboardingPlugin(input: {
                       message: "Passkey workspace setup failed.",
                     });
                   }
+                  // oxlint-disable-next-line typescript/consistent-return -- Preserve the passkey hook's optional return behavior.
                   return {
                     data: {
                       ...session,

@@ -219,6 +219,7 @@ export async function verifyPortableProofArtifact(input: {
   if (!marketplaceAdapterBytes) {
     throw new Error(`Codex marketplace omitted ${marketplaceAdapterPath}.`);
   }
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
   const marketplaceAdapter = JSON.parse(Buffer.from(marketplaceAdapterBytes).toString("utf-8"));
   if (
     JSON.stringify(marketplaceAdapter) !==
@@ -240,6 +241,7 @@ export async function verifyPortableProofArtifact(input: {
   if (!codexManifestBytes) {
     throw new Error(`Codex marketplace omitted ${codexManifestPath}.`);
   }
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
   const codexManifest = JSON.parse(Buffer.from(codexManifestBytes).toString("utf-8"));
   if (
     // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.

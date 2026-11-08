@@ -165,6 +165,7 @@ export const writeSupplementaryAssessment = async (input: {
   for (const path of ["observations.json", "source-evidence.json", "report.md"]) {
     await copy(reviewRoot, path, SOURCE_REVIEW);
   }
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
   const originalReport = JSON.parse(
     await readFile(nodePath.join(parityRoot, REPORT_FILE), "utf-8"),
   );
@@ -227,6 +228,7 @@ export const writeSupplementaryAssessment = async (input: {
   if (input.referenceCapturesDirectory) {
     const captureRoot = await realpath(input.referenceCapturesDirectory);
     await copy(captureRoot, "capture-provenance.json", "reference-captures");
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
     const captureMetadata = JSON.parse(
       await readFile(nodePath.join(captureRoot, "capture-provenance.json"), "utf-8"),
     );
@@ -243,6 +245,7 @@ export const writeSupplementaryAssessment = async (input: {
       if (copied.has(candidate) && copied.has(reference)) {
         screenshotPairs.push({
           candidate,
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
           qualification:
             // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing parsed JSON boundary.
             typeof captureMetadata.comparisonQualification === "string"

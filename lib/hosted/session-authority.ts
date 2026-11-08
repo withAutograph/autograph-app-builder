@@ -155,6 +155,7 @@ export function sourceHandoffIdForSessionAuth(
     if (current?.authenticator === "mcp-oauth-jwks" || current?.principalType === "service") {
       throw new HostedSessionAuthorityError("invalid");
     }
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve the absent source handoff result.
     return;
   }
   exactForwardedSessionAuthority(sessionAuth);

@@ -49,10 +49,12 @@ function route(input: { authenticated?: boolean } = {}) {
           return;
         }
         if (record.sessionId !== undefined || record.expiresAt > renewalInput.now) {
+          // oxlint-disable-next-line typescript/consistent-return -- Preserve optional renewal fixture outcomes.
           return { disposition: "existing", record };
         }
         const updated = { ...record, expiresAt: renewalInput.expiresAt };
         rows.set(record.handoffId, updated);
+        // oxlint-disable-next-line typescript/consistent-return -- Preserve optional renewal fixture outcomes.
         return { disposition: "renewed", record: updated };
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double

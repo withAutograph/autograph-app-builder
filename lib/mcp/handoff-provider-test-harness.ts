@@ -122,7 +122,7 @@ export function preparedProviderFixture(input: {
       expect(headers.get("authorization")).toMatch(/^bearer ey/iu);
       if (url.pathname.endsWith("/access_tokens")) {
         expect(init?.method).toBe("POST");
-        // oxlint-disable-next-line typescript/no-base-to-string -- Preserve the fixture request-body coercion used by this assertion.
+        // oxlint-disable-next-line typescript/no-base-to-string, typescript/no-unsafe-assignment -- Preserve the fixture request-body coercion used by this assertion.; Preserve the existing JSON parsing boundary.
         const body = JSON.parse(String(init?.body));
         // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-argument -- Inspect the provider test parsed permission payload.
         expect(Object.values(body.permissions).every((permission) => permission === "read")).toBe(
@@ -131,7 +131,7 @@ export function preparedProviderFixture(input: {
         return Response.json(
           {
             expires_at: new Date(Date.now() + 3_600_000).toISOString(),
-            // oxlint-disable-next-line typescript/no-unsafe-member-access -- Preserve the existing untyped input or fixture boundary.
+            // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/no-unsafe-assignment -- Preserve the existing untyped input or fixture boundary.; Preserve the existing dynamic value boundary.
             permissions: body.permissions,
             token: githubToken(),
           },

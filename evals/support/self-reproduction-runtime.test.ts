@@ -175,6 +175,7 @@ describe("self-reproduction candidate runtime", () => {
     expect(fixture.spawn).toHaveBeenCalledOnce();
     expect(fixture.spawn).toHaveBeenCalledWith(
       expect.objectContaining({
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         command: expect.stringContaining("PORT=3000"),
       }),
     );

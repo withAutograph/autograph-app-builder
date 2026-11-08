@@ -256,7 +256,7 @@ export const readReference = async (arrustedRoot: string): Promise<Reference> =>
   for (const manifest of manifests) {
     let pkg: PackageJson | undefined;
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, typescript/no-unsafe-assignment -- preserve intentional sequential control flow; Preserve the existing JSON parsing boundary.
       pkg = JSON.parse(await readFile(nodePath.join(arrustedRoot, manifest), "utf-8"));
     } catch {
       pkg = undefined;

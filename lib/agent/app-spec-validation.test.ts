@@ -144,6 +144,7 @@ describe("build-ready AppSpec validation", () => {
     expect(diagnostic).toMatchObject({
       buildHandoffExample: BUILD_READY_HANDOFF_EXAMPLE,
       code: "app_spec_invalid",
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       instruction: expect.stringContaining("without asking the user"),
     });
     expect(diagnostic).not.toHaveProperty("requiredHeadings");

@@ -203,8 +203,10 @@ function hostedFixture(
         throw new Error("fixture transport failure");
       }
       if (options.denialFailure.kind === "http500") {
+        // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional simulated denial response.
         return new Response("", { status: 500 });
       }
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional simulated denial response.
       return rpc(body.id, {
         isError: "not-a-boolean",
         structuredContent: session(String(args.sessionId), "working", 0),
@@ -383,7 +385,9 @@ describe("hosted portable fresh-client proof", () => {
       missingAuthRejected: true,
       mutualWorkspaceDenial: true,
       oauthMetadataBound: true,
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       publicResponseDisclosureScanDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       publicResponsesScanned: expect.any(Number),
       publicationEvidenceProved: true,
       responseBatchCount: 2,

@@ -44,6 +44,7 @@ function memoryStore(): BuilderHandoffStore {
         return;
       }
       if (record.sessionId !== undefined) {
+        // oxlint-disable-next-line typescript/consistent-return -- Preserve optional handoff fixture outcomes.
         return record;
       }
       const updated = {
@@ -53,6 +54,7 @@ function memoryStore(): BuilderHandoffStore {
       };
       byId.set(record.handoffId, updated);
       byRequest.set(JSON.stringify([record.authority, record.creationRequestId]), updated);
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional handoff fixture outcomes.
       return updated;
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -66,11 +68,13 @@ function memoryStore(): BuilderHandoffStore {
         return;
       }
       if (record.sessionId !== undefined || record.expiresAt > input.now) {
+        // oxlint-disable-next-line typescript/consistent-return -- Preserve optional handoff fixture outcomes.
         return { disposition: "existing", record };
       }
       const updated = { ...record, expiresAt: input.expiresAt };
       byId.set(record.handoffId, updated);
       byRequest.set(JSON.stringify([record.authority, record.creationRequestId]), updated);
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve optional handoff fixture outcomes.
       return { disposition: "renewed", record: updated };
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double

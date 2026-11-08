@@ -311,6 +311,7 @@ export const priorOwnedAppDraftPublication = (
     ) {
       continue;
     }
+    // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional prior publication result.
     return {
       proposal,
       installationId: delivery.installationId,

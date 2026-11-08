@@ -115,6 +115,7 @@ describe("Preview OAuth runtime configuration", () => {
     expect(fetchImplementation).toHaveBeenCalledWith(
       "https://api.github.com/user/emails",
       expect.objectContaining({
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         headers: expect.objectContaining({
           Authorization: "Bearer sensitive-access-token",
         }),

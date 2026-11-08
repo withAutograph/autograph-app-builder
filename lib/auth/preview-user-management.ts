@@ -135,6 +135,7 @@ export function createPreviewUserManagementLifecycle(authority: PreviewOrganizat
         const ensured = await authority.ensureOrganizationForVerifiedUser({
           userId: session.userId,
         });
+        // oxlint-disable-next-line typescript/consistent-return -- Preserve the auth hook's optional transformed value.
         return {
           data: {
             ...session,
@@ -165,6 +166,7 @@ export function createPreviewUserManagementLifecycle(authority: PreviewOrganizat
       if (!user.emailVerified) {
         throw identityUnavailable();
       }
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve the auth hook's optional transformed value.
       return {
         data: {
           ...user,

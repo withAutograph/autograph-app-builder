@@ -118,6 +118,7 @@ export function createPostgresPreviewOrganizationAuthority(
         return;
       }
       const activeOrganization = await exactActiveOrganization(database, authority, ownerUserId);
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve absent workspace authority as undefined.
       return activeOrganization?.workspaceId;
     },
 

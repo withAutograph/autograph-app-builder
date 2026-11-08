@@ -23,6 +23,7 @@ function decodeVlq(encodedValue: string, start: number) {
     shift += 5;
     if (digit < 32) {
       const decodedValue = Math.floor(result / 2);
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve absent or decoded source-map results.
       return { index, value: result % 2 === 1 ? -decodedValue : decodedValue };
     }
   }
@@ -115,6 +116,7 @@ export function originalCssSource(
       if (typeof path !== "string" || !path) {
         return;
       }
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve absent or decoded source-map results.
       return {
         column: candidate.originalColumn + 1,
         line: candidate.originalLine + 1,

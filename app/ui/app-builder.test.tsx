@@ -908,8 +908,11 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(builderActions.saveActiveBuilderDraft).toHaveBeenCalledWith(
       expect.objectContaining({
         expectedRevision: 0,
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         record: expect.objectContaining({
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
           draft: expect.objectContaining({
+            // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
             form: expect.objectContaining({ brief: "Keep this draft." }),
           }),
         }),
@@ -942,8 +945,11 @@ describe("Vercel-faithful App Builder flow", () => {
     await act(async () => await vi.advanceTimersByTimeAsync(500));
     expect(builderActions.saveActiveBuilderDraft).toHaveBeenCalledWith(
       expect.objectContaining({
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         record: expect.objectContaining({
+          // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
           draft: expect.objectContaining({
+            // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
             form: expect.objectContaining({ brief: "Claim this anonymous brief." }),
           }),
         }),
@@ -1355,9 +1361,12 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(builderActions.continueBuilderHandoff).toHaveBeenCalledWith(
       undefined,
       expect.objectContaining({
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         creationRequestId: expect.any(String),
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         draftCheckpoint: { draftId: expect.any(String), revision: expect.any(Number) },
         provisioningEnabled: false,
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         requestId: expect.any(String),
         version: 1,
       }),

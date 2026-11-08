@@ -761,6 +761,7 @@ export function createPreviewOAuthServer(input: {
       config.environment === "preview" ? "Autograph App Builder Preview" : "Autograph App Builder",
     basePath: "/api/auth",
     baseURL: resourceOrigin,
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing assignment while its type remains unresolved.
     database: input.database,
     plugins: [
       ...previewUserManagementPlugins(
@@ -885,6 +886,7 @@ export function createPreviewOAuthServer(input: {
           typeof user.email !== "string" ||
           user.email.trim().length === 0
         ) {
+          // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional user-info validation result.
           return {
             error: "verified_provider_identity_required",
             errorDescription: "Use GitHub or Vercel with a verified email address.",

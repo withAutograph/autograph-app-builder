@@ -62,6 +62,7 @@ describe("Preview OAuth deployment handlers", () => {
     });
     expect(setActiveOrganization).toHaveBeenCalledWith({
       body: { organizationId: "organization_one" },
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       headers: expect.any(Headers),
     });
   });

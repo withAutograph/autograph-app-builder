@@ -238,6 +238,7 @@ export const readyReplacementHistory = (
         now,
       )
     ) {
+      // oxlint-disable-next-line typescript/consistent-return -- Preserve the optional recovery predecessor result.
       return predecessor;
     }
   }

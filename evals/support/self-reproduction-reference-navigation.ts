@@ -139,6 +139,7 @@ export const runReferenceNavigationEvidence = async (input: {
   );
   let report = {};
   try {
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing JSON parsing boundary.
     report = JSON.parse(await readFile(reportPath, "utf-8"));
   } catch {
     /* Missing reporter evidence remains unassessed. */

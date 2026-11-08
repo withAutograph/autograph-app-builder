@@ -440,6 +440,7 @@ describe("prototype artifact receipts", () => {
     }
     expect(diagnostic).toMatchObject({
       code: "app_spec_invalid",
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       issues: expect.arrayContaining([expect.objectContaining({ code: "build_ready_intent" })]),
     });
   });

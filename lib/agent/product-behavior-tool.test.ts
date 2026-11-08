@@ -160,6 +160,7 @@ describe("verify_app_behavior", () => {
     expect(result).toMatchObject({ eligibility: "current", evidence, productStatus: "unassessed" });
     expect(mocks.readback).toHaveBeenCalledWith(
       expect.objectContaining({
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
         authority: expect.objectContaining({ launchUrl: mocks.preview.receipt.url }),
         scenario,
       }),

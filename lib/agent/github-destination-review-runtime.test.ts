@@ -617,6 +617,7 @@ describe("same-session post-merge destination review", () => {
     expect(f.readTextFile).toHaveBeenCalled();
     expect(f.inspectPr).not.toHaveBeenCalled();
     expect(f.inspectDestinationFiles).toHaveBeenCalledWith({
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing asymmetric test matcher.
       paths: expect.arrayContaining([path, "apps/example/package.json"]),
       repository,
     });
