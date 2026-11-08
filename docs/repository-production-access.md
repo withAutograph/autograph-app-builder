@@ -191,6 +191,16 @@ existing creator-role continuation. Saved per-member request identities survive
 interruption so a retry neither enrolls a new actor nor repeats a completed grant.
 
 The runtime binding cannot adopt or overwrite an unrelated existing variable.
+Persistent apps bind their plain `<APP>_APP_BOUNDARY` alongside their encrypted
+database variable. The app prefix is its uppercase ID with hyphens replaced by
+underscores. Public verifier facts reuse the approved Gateway origin/JWKS
+projection; runtime facts come from the saved owned database and the same
+restricted credential being bound. Passwords and migrator details are excluded.
+Both variables retain their own dispatch checkpoint and exact owned readback.
+An older credential-only receipt resumes only runtime binding to add the missing
+metadata, retaining completed schema, resources and access. Status and automatic
+completion share that readiness check. Frontend-only apps stay on shared Auth
+without allocating storage or fabricating a database boundary.
 An earlier delivery path's existing database must be reconciled to its original
 ownership before enabling this path for that app. A response lost after binding
 creation can be recovered from the owned provider record and expected value.

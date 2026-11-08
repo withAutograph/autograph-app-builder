@@ -252,7 +252,11 @@ const fixture = async (
       authRuntime: "postgresql://auth_r:secret@ep-test.neon.tech/auth",
       oidcToken: "private-token",
     }),
-    runtimeBinding: { apply: vi.fn(), reconcile: async () => ({ state: "applied", receipt: {} }) },
+    runtimeBinding: {
+      isReady: () => true,
+      apply: vi.fn(),
+      reconcile: async () => ({ state: "applied", receipt: {} }),
+    },
     frontendAccess: {
       apply: async () => {
         throw new Error("unexpected legacy identity");
@@ -330,6 +334,7 @@ describe("concrete protected Production worker composition", () => {
       const f = await fixture();
       f.context.effect = "install-schema";
       f.context.row.record.intent.creatorRoles = roles;
+      expect(f.workers.isRuntimeBindingReady(f.context.row)).toBe(true);
       await f.workers.apply(f.context);
       await expect(f.workers.reconcile(f.context)).resolves.toMatchObject({ state: "applied" });
       expect(f.calls.map((call) => [call.operation, call.readOnly])).toEqual([
@@ -571,6 +576,7 @@ describe("concrete protected Production worker composition", () => {
   });
   it("frontend-only setup uses the shared Auth worker and never starts an app database worker", async () => {
     const f = await fixture(true);
+    expect(f.workers.isRuntimeBindingReady(f.context.row)).toBe(true);
     await f.workers.apply(f.context);
     expect(f.calls.every((call) => call.operation === "auth-management")).toBe(true);
     expect((await f.workers.reconcile(f.context)).state).toBe("applied");

@@ -61,6 +61,8 @@ export interface RepositoryProductionSetupPorts {
   ) => Promise<"applied" | "skipped">;
   reconcileAppAccessUpgrade?: (context: RepositoryProductionEffectContext) => Promise<void>;
   readCreatorIdentity: (row: RepositoryProductionRow) => Promise<RepositoryProductionIdentity>;
+  /** Persistent apps need their owned public ingress metadata as well as the credential binding. */
+  isRuntimeBindingReady?: (row: RepositoryProductionRow) => boolean;
   reconcile: (
     context: RepositoryProductionEffectContext,
   ) => Promise<RepositoryProductionObservation>;
@@ -73,6 +75,7 @@ export interface RepositoryProductionSetupResult {
   expiresAt?: string;
 }
 const CREATOR_ACCESS_EFFECT = "creator-access";
+const BIND_RUNTIME_EFFECT = "bind-runtime";
 
 const unfinished = (record: RepositoryProductionRecord) =>
   record.appAccessUpgrade?.state === "pending" ||
@@ -81,7 +84,7 @@ const unfinished = (record: RepositoryProductionRecord) =>
 const selectedEffects = (record: RepositoryProductionRecord): RepositoryProductionEffect[] =>
   record.intent.storage.kind === "none"
     ? ["creator-access"]
-    : ["allocate-storage", "install-schema", CREATOR_ACCESS_EFFECT, "bind-runtime"];
+    : ["allocate-storage", "install-schema", CREATOR_ACCESS_EFFECT, BIND_RUNTIME_EFFECT];
 
 /** Same-app delivery continuation; no Preview prerequisite, deployment mutation or product-test gate. */
 export const createRepositoryProductionSetup = (ports: RepositoryProductionSetupPorts) => ({
@@ -169,12 +172,23 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
           intent: { ...row.record.intent, creatorEmail: intent.creatorEmail },
         });
       }
+      const runtimeOnly =
+        row.record.intent.storage.kind === "postgres" &&
+        row.record.appAccessUpgrade?.state !== "pending" &&
+        row.record.creatorRoleUpdate?.state !== "pending" &&
+        selectedEffects(row.record)
+          .filter((effect) => effect !== BIND_RUNTIME_EFFECT)
+          .every((effect) => row.record.effects[effect].state === "applied") &&
+        ports.isRuntimeBindingReady?.(row) === false;
       await assertCurrent();
       if (row.record.intent.storage.kind !== "none" && row.record.privateState === undefined) {
         const privateState = await ports.reservePrivateState(row);
         await save({ ...row.record, privateState });
       }
       for (const effect of selectedEffects(row.record)) {
+        if (runtimeOnly && effect !== BIND_RUNTIME_EFFECT) {
+          continue;
+        }
         await assertCurrent();
         const context = (): RepositoryProductionEffectContext => ({
           row,
@@ -342,9 +356,11 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
     if (unfinished(row.record)) {
       return { operationRef: row.operationRef, state: "reconciling" };
     }
-    const complete = selectedEffects(row.record).every(
-      (effect) => row.record.effects[effect].state === "applied",
-    );
+    const complete =
+      selectedEffects(row.record).every(
+        (effect) => row.record.effects[effect].state === "applied",
+      ) &&
+      (row.record.intent.storage.kind === "none" || ports.isRuntimeBindingReady?.(row) !== false);
     return { operationRef: row.operationRef, state: complete ? "ready" : "checking-access" };
   },
 });
