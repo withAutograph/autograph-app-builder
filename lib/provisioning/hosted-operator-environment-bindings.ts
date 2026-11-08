@@ -343,11 +343,9 @@ const providerRejection = async (response: Response) => {
   if (body !== null && !body.locked && !bodyUsed) {
     await body.cancel();
   }
-  return {
-    httpStatus,
-    reason: providerFailure.gitRelated ? "git_reference_rejection" : "provider_rejected",
-    providerCode: providerFailure.providerCode,
-  } as const;
+  const reason = providerFailure.gitRelated ? "git_reference_rejection" : "provider_rejected";
+  const { providerCode } = providerFailure;
+  return { httpStatus, providerCode, reason } as const;
 };
 const createFailureReporter = (
   sessionId: string,
@@ -358,15 +356,8 @@ const createFailureReporter = (
     reason: "input_rejected",
   };
   return {
-    stage: () => failure.stage,
-    trustedSources: (
-      visibility: NonNullable<HostedEnvironmentBindingFailure["trustedSourcesVisibility"]>,
-      approvedSourcePresent: boolean,
-      approvedPairCovered: boolean,
-    ) => {
-      failure.trustedSourcesVisibility = visibility;
-      failure.approvedSourcePresent = approvedSourcePresent;
-      failure.approvedPairCovered = approvedPairCovered;
+    report: () => {
+      reportHostedEnvironmentBindingFailure(sessionId, failure, sink);
     },
     requestTarget: (requestTarget: HostedEnvironmentBindingFailure["requestTarget"]) => {
       if (requestTarget === undefined) {
@@ -394,8 +385,15 @@ const createFailureReporter = (
         failure.httpStatus = httpStatus;
       }
     },
-    report: () => {
-      reportHostedEnvironmentBindingFailure(sessionId, failure, sink);
+    stage: () => failure.stage,
+    trustedSources: (
+      visibility: NonNullable<HostedEnvironmentBindingFailure["trustedSourcesVisibility"]>,
+      approvedSourcePresent: boolean,
+      approvedPairCovered: boolean,
+    ) => {
+      failure.trustedSourcesVisibility = visibility;
+      failure.approvedSourcePresent = approvedSourcePresent;
+      failure.approvedPairCovered = approvedPairCovered;
     },
   };
 };

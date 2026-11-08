@@ -198,7 +198,7 @@ const readManifestEnvelope = async (input: {
   ) {
     throw operatorArtifactUnavailable();
   }
-  return { manifest, bytes };
+  return { bytes, manifest };
 };
 
 export const readTenantExportManifest = async (

@@ -388,19 +388,23 @@ export async function readPreparedVercelAccess(input: {
     if (project.installationId !== installationId) {
       return { action: REVIEW_SELECTION, status: RESOURCE_UNAVAILABLE };
     }
+    const { authority } = input;
+    const { scope: expectedScope } = project;
+    const { requireServicesRoot, requirePublicAppConfiguration, requireExpectedRepositoryId } =
+      input;
+    const { projectId, name: projectName } = project;
     const projectAccessInput: Omit<
       Parameters<typeof readVercelProjectAccess>[0],
       "readCredential"
     > = {
-      authority: input.authority,
-      expectedScope: project.scope,
-      requireServicesRoot: input.requireServicesRoot,
-      requirePublicAppConfiguration: input.requirePublicAppConfiguration,
-      requireExpectedRepositoryId: input.requireExpectedRepositoryId,
-
+      authority,
+      expectedScope,
       installationId,
-      projectId: project.projectId,
-      projectName: project.name,
+      projectId,
+      projectName,
+      requireExpectedRepositoryId,
+      requirePublicAppConfiguration,
+      requireServicesRoot,
     };
     if (input.fetch !== undefined) {
       projectAccessInput.fetch = input.fetch;

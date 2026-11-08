@@ -88,13 +88,13 @@ export const createManagedOwnedChildLauncher = (input: {
   return async (): Promise<ManagedOwnedChild> => {
     const child: ChildProcess = spawn(launch.executable, [...launch.args], {
       cwd: launch.cwd,
+      detached: true,
       // Node accepts arbitrary string environment entries; Next adds a required
       // NODE_ENV to ProcessEnv for its own server, not this owned child.
       // SAFETY: Every supplied value is a string; no host environment is inherited.
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Adapt the Next-augmented Node declaration without adding an app environment variable.
       env: { ...launch.appEnvironment } as NodeJS.ProcessEnv,
       stdio: "ignore",
-      detached: true,
     });
     let failure = false;
     const closed = new Promise<ManagedChildExit>((resolve) => {

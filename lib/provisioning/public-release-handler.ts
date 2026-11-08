@@ -129,7 +129,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
     ) {
       throw unavailable();
     }
-    return { row, plan };
+    return { plan, row };
   };
   const observeDelivery = async (
     invocation: PublicReleaseInvocation,
