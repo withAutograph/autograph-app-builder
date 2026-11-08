@@ -322,7 +322,7 @@ export const fixture = () => {
     selectedOrigin: current.origin,
     serializedContext: currentContext,
   };
-  return { input, reviewed, candidate, currentContext, old, current };
+  return { candidate, current, currentContext, input, old, reviewed };
 };
 
 const installation = (operation: "resolve-existing-source" | "publish-draft-pull-request") =>
@@ -431,16 +431,16 @@ export const freshFixture = async () => {
     throw new Error("Unexpected provider effect");
   };
   const adapter: GitHubPublicationAdapter = {
+    createPrivateFreshHistoryRepository: unavailable,
+    inspectDestination: unavailable,
+    inspectDraftPublication: async () => readBack,
+    inspectExistingDraft: unavailable,
+    inspectFreshRepositoryOutcome: unavailable,
     inspectInstallation: async (operation) =>
       operation === "resolve-existing-source" ? resolutionInstallation : publicationInstallation,
     inspectRepository: async () => resolutionRepository,
-    inspectDraftPublication: async () => readBack,
-    inspectExistingDraft: unavailable,
-    updateExistingDraft: unavailable,
-    inspectDestination: unavailable,
-    inspectFreshRepositoryOutcome: unavailable,
-    createPrivateFreshHistoryRepository: unavailable,
     publishDraftPullRequest: unavailable,
+    updateExistingDraft: unavailable,
   };
   const [publication, source] = await Promise.all([
     publishApprovedDraftPullRequest({
@@ -767,36 +767,36 @@ export const nativeFixture = async (
   };
   const collectorPorts = {
     getWorld: async () => world,
-    resolveRunEncryptionKey: async () => {
-      /* Controlled fixture checkpoints are not encrypted. */
-    },
     hydrateStepArguments: (value: unknown, run: string, key: unknown) =>
       serialization.hydrateStepArguments(value, run, key, []),
     hydrateStepReturnValue: (value: unknown, run: string, key: unknown) =>
       serialization.hydrateStepReturnValue(value, run, key),
+    now: () => 0,
     readDurableSession,
-    requireEventSlot: (id: string) => Number(id.slice(5)),
     async *readNativeEvents() {
       yield* [];
     },
-    now: () => 0,
+    requireEventSlot: (id: string) => Number(id.slice(5)),
+    resolveRunEncryptionKey: async () => {
+      /* Controlled fixture checkpoints are not encrypted. */
+    },
   };
   const { createHistoricalCheckpointVisitor } = await load(
     "execution/session/historical-checkpoints.js",
   );
   const historicalPorts = {
     ...collectorPorts,
-    hydrateWorkflowArguments: (value: unknown, run: string, key: unknown) =>
-      serialization.hydrateWorkflowArguments(value, run, key),
-    hydrateHookPayload: async (value: unknown, _run: string, key: unknown) =>
-      serialization.deserializePreparedReplayPayload(
-        await serialization.prepareReplayPayload(value, key),
-      ),
     guardWorld: (value: typeof world) => value,
     guardedDependencies: (_authorize: unknown, value: typeof world) => ({
       ...collectorPorts,
       getWorld: async () => value,
     }),
+    hydrateHookPayload: async (value: unknown, _run: string, key: unknown) =>
+      serialization.deserializePreparedReplayPayload(
+        await serialization.prepareReplayPayload(value, key),
+      ),
+    hydrateWorkflowArguments: (value: unknown, run: string, key: unknown) =>
+      serialization.hydrateWorkflowArguments(value, run, key),
   };
   const visitHistoricalCheckpoints = createHistoricalCheckpointVisitor(historicalPorts);
   const collect = createTerminalRecoveryCandidateCollector(collectorPorts);
@@ -805,25 +805,25 @@ export const nativeFixture = async (
   let denied = false;
   const starts: unknown[] = [];
   const ports = {
-    authorize: async () => {
-      if (denied) {
-        throw new Error("owner revoked");
-      }
-    },
-    readReceipt: async () => receipt,
-    commitReceipt: async ({ recoveryBinding }: { recoveryBinding: unknown }) => {
-      receipt = recoveryBinding;
-      return recoveryBinding;
-    },
-    authorizeActivation: async () => {
-      throw new Error("unexpected activation");
-    },
     applicationStateRecovery: {
       contextKey: draftReviewedLineageContextKey,
       field: "reviewedLineage",
       recover: async (input: Parameters<typeof recoverDraftReviewedLineage>[0]) =>
         recoverDraftReviewedLineage(input),
     },
+    authorize: async () => {
+      if (denied) {
+        throw new Error("owner revoked");
+      }
+    },
+    authorizeActivation: async () => {
+      throw new Error("unexpected activation");
+    },
+    commitReceipt: async ({ recoveryBinding }: { recoveryBinding: unknown }) => {
+      receipt = recoveryBinding;
+      return recoveryBinding;
+    },
+    readReceipt: async () => receipt,
   };
   const stopReceipts = new Set<string>();
   const activatedHooks = new Set<string>();
@@ -890,20 +890,20 @@ export const nativeFixture = async (
   };
   return {
     ...f,
-    ports,
-    deps,
-    starts,
-    world,
-    stopReceipts,
     activations: () => activatedHooks.size,
+    deps,
+    ports,
+    revoke: () => {
+      denied = true;
+    },
     setEffectConflict: (value: boolean) => {
       effectConflict = value;
     },
     setNativeStatus: (value: string) => {
       nativeStatus = value;
     },
-    revoke: () => {
-      denied = true;
-    },
+    starts,
+    stopReceipts,
+    world,
   };
 };

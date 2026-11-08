@@ -142,20 +142,20 @@ try {
   );
   const pending = await store.compareAndSet(initial, {
     ...initial.record,
-    effects: { ...initial.record.effects, "bind-production-runtime": "pending" },
     bindings: { INVOICE_APP_DATABASE_URL: { state: "pending" } },
+    effects: { ...initial.record.effects, "bind-production-runtime": "pending" },
   });
   assert.ok(pending);
   assert.equal(await store.compareAndSet(initial, initial.record), undefined);
   const accepted = await store.compareAndSet(pending, {
     ...pending.record,
-    bindings: { INVOICE_APP_DATABASE_URL: { state: "pending", acceptedEnvId: "env-observed" } },
+    bindings: { INVOICE_APP_DATABASE_URL: { acceptedEnvId: "env-observed", state: "pending" } },
   });
   assert.ok(accepted);
   await assert.rejects(
     store.compareAndSet(accepted, {
       ...accepted.record,
-      bindings: { INVOICE_APP_DATABASE_URL: { state: "pending", acceptedEnvId: "foreign-env" } },
+      bindings: { INVOICE_APP_DATABASE_URL: { acceptedEnvId: "foreign-env", state: "pending" } },
     }),
   );
   await assert.rejects(
@@ -166,56 +166,56 @@ try {
   );
   const verified = await store.compareAndSet(accepted, {
     ...accepted.record,
-    bindings: { INVOICE_APP_DATABASE_URL: { state: "applied", acceptedEnvId: "env-observed" } },
+    bindings: { INVOICE_APP_DATABASE_URL: { acceptedEnvId: "env-observed", state: "applied" } },
   });
   assert.ok(verified);
   await assert.rejects(
     store.compareAndSet(verified, {
       ...verified.record,
-      bindings: { INVOICE_APP_DATABASE_URL: { state: "pending", acceptedEnvId: "env-observed" } },
+      bindings: { INVOICE_APP_DATABASE_URL: { acceptedEnvId: "env-observed", state: "pending" } },
     }),
   );
   const owner = operatorOwnerContextSchema.parse({
-    kind: "direct",
+    adapterGeneration: 1,
+    adapterSessionId: "native",
     authority,
+    kind: "direct",
     principal: { ...authority, scopes: ["autograph:send"] },
     sessionId: plan.selection.sessionId,
-    adapterSessionId: "native",
-    adapterGeneration: 1,
   });
   const checkpointInput = {
-    database: drizzle(writer, { schema }),
-    plan,
-    owner,
     assertCurrentOwner: async () => {
       await Promise.resolve();
     },
+    database: drizzle(writer, { schema }),
+    owner,
+    plan,
   };
   const checkpoint = createPublicReleaseApprovalCheckpoint(checkpointInput);
   assert.equal(await checkpoint.read(), undefined);
   const observation = {
-    adapterSessionId: "native",
     adapterGeneration: 1,
-    nextNativeIndex: 5,
+    adapterSessionId: "native",
     capture: {
+      entries: [
+        {
+          approved: false,
+          callId: "call",
+          cancelled: true,
+          completedApproved: false,
+          completedCancelled: true,
+          requestId: "approval",
+        },
+      ],
+      ownerUserId: authority.ownerUserId,
       request: {
         action: "public-release" as const,
         planRef: publicReleaseOperationRef(plan),
         planDigest: publicReleasePlanDigest(plan),
         idempotencyKey: plan.selection.appId,
       },
-      ownerUserId: authority.ownerUserId,
-      entries: [
-        {
-          requestId: "approval",
-          callId: "call",
-          approved: false,
-          cancelled: true,
-          completedApproved: false,
-          completedCancelled: true,
-        },
-      ],
     },
+    nextNativeIndex: 5,
   };
   await checkpoint.save(observation);
   const resumedCheckpoint = createPublicReleaseApprovalCheckpoint(checkpointInput);
@@ -224,52 +224,52 @@ try {
   await assert.rejects(
     resumedCheckpoint.save({
       ...observation,
-      nextNativeIndex: 6,
       capture: { ...observation.capture, entries: [] },
+      nextNativeIndex: 6,
     }),
   );
   await assert.rejects(resumedCheckpoint.save({ ...observation, adapterSessionId: "foreign" }));
   await checkpoint.save({ ...observation, nextNativeIndex: 7 });
   await assert.rejects(resumedCheckpoint.save({ ...observation, nextNativeIndex: 8 }));
   const privateTarget = {
-    authority,
     appId: plan.selection.appId,
-    sessionId: plan.selection.sessionId,
+    authority,
     projectId: plan.project.projectId,
+    sessionId: plan.selection.sessionId,
   };
   const privateStore = createPublicReleaseRuntimeConfigurationStore({
-    target: privateTarget,
+    assertCurrentOwner: checkpointInput.assertCurrentOwner,
 
     database: drizzle(writer, { schema }),
     keyring: { tokenKey: Buffer.alloc(32, 9), tokenKeyVersion: "fixture-v1" },
-    assertCurrentOwner: checkpointInput.assertCurrentOwner,
+    target: privateTarget,
   });
   const privateScope = {
-    authority,
     appId: plan.selection.appId,
-    sessionId: plan.selection.sessionId,
+    authority,
     projectId: plan.project.projectId,
+    publicOrigin: plan.publicOrigin,
+    releaseId: plan.runtime.releaseId,
     runtimeOperationRef: plan.runtime.operationRef,
     runtimePlanDigest: plan.runtime.planDigest,
-    releaseId: plan.runtime.releaseId,
-    publicOrigin: plan.publicOrigin,
+    sessionId: plan.selection.sessionId,
   };
   const prepared = await privateStore.reserve(privateScope, () =>
     createFreshPublicAuthValues({
       appId: plan.selection.appId,
-      publicOrigin: plan.publicOrigin,
       authResource: {
-        hostname: "ep-synthetic.aws.neon.tech",
-        port: 5432,
         database: "isolated_auth",
-        schema: "public",
-        runtimeRole: "app_auth_runtime",
+        hostname: "ep-synthetic.aws.neon.tech",
         migratorRole: "auth_migrator",
-        neon: { projectId: "synthetic", branchId: "non-default" },
+        neon: { branchId: "non-default", projectId: "synthetic" },
+        port: 5432,
+        runtimeRole: "app_auth_runtime",
+        schema: "public",
       },
       authRuntimeUrl:
         "postgresql://app_auth_runtime:private-fixture-password@ep-synthetic.aws.neon.tech/isolated_auth?sslmode=verify-full",
       productionDatabaseIdentity: "ep-production.aws.neon.tech/neondb",
+      publicOrigin: plan.publicOrigin,
     }),
   );
   const privateValues = await privateStore.read(privateScope);
@@ -290,21 +290,21 @@ try {
   await assert.rejects(privateStore.read({ ...privateScope, projectId: "foreign" }));
   await assert.rejects(
     createPublicReleaseRuntimeConfigurationStore({
+      assertCurrentOwner: checkpointInput.assertCurrentOwner,
       database: drizzle(writer, { schema }),
       keyring: { tokenKey: Buffer.alloc(32, 8), tokenKeyVersion: "fixture-v1" },
-      target: privateTarget,
 
-      assertCurrentOwner: checkpointInput.assertCurrentOwner,
+      target: privateTarget,
     }).read(privateScope),
   );
   const seedInput = {
+    assertCurrentOwner: checkpointInput.assertCurrentOwner,
     database: drizzle(writer, { schema }),
     keyring: { tokenKey: Buffer.alloc(32, 9), tokenKeyVersion: "fixture-v1" },
-    assertCurrentOwner: checkpointInput.assertCurrentOwner,
     scope: {
       ...privateTarget,
-      publicOrigin: plan.publicOrigin,
       authResourceIdentity: "e".repeat(64),
+      publicOrigin: plan.publicOrigin,
     },
   };
   const seed = await reservePublicReleaseAuthSeed(seedInput);
@@ -323,21 +323,21 @@ try {
   assert.notEqual(otherSeed.BETTER_AUTH_SECRET, seed.BETTER_AUTH_SECRET);
   let fence: (() => Promise<void>) | undefined;
   const targetLease = createPublicReleaseTargetLease({
-    databaseUrl: dsn.toString(),
-    store,
     assertCurrent: async () => {
       await Promise.resolve();
     },
-    lockKeys: () => ["owned-project-fixture"],
     bindFence: (current) => {
       fence = current;
     },
+    databaseUrl: dsn.toString(),
+    lockKeys: () => ["owned-project-fixture"],
+    store,
   });
   await targetLease(
     {
       authority,
-      sessionId: plan.selection.sessionId,
       callId: "call",
+      sessionId: plan.selection.sessionId,
       signal: new AbortController().signal,
     },
     plan,
@@ -357,7 +357,7 @@ try {
       );
       const advanced = await store.compareAndSet(approvalRecorded, {
         ...approvalRecorded.record,
-        executionLease: { leaseId: randomUUID(), fenceGeneration: 2 },
+        executionLease: { fenceGeneration: 2, leaseId: randomUUID() },
       });
       assert.ok(advanced);
       await assert.rejects(fence());
@@ -384,10 +384,10 @@ try {
   });
   const freshNormalSetup = retainedOperatorAuthSchema.parse({
     ...retainedFixture,
+    gatewayEnvironment: undefined,
     operationRef: randomUUID(),
     plan: freshNormalPlan,
     planDigest: operatorPlanDigest(freshNormalPlan),
-    gatewayEnvironment: undefined,
     receipts: retainedFixture.receipts.filter((receipt) =>
       freshNormalPlan.effects.some((effect) => effect.id === receipt.effectId),
     ),
@@ -395,59 +395,59 @@ try {
   const issuer = "https://oidc.vercel.com/team";
   const audience = "https://vercel.com/team";
   const realmConfiguration: PublicRealmLinkSourceConfiguration = {
-    teamId: fixtureBoundary.teamId,
-    gateway: { projectId: fixtureTarget.projectId },
     builderCallbackOrigin: "https://builder.example",
-    operator: { origin: "https://operator.example" },
-    workloadPolicy: {
-      issuer,
-      audience,
-      projectId: "builder",
-      ownerId: fixtureBoundary.teamId,
-      environment: "production",
-      subject: "explicit-reviewed-builder-production",
-    },
+    gateway: { projectId: fixtureTarget.projectId },
     nativeNeon: {
       configuration: {
         operator: {
-          issuer,
           audience,
-          projectId: "operator",
-          ownerId: fixtureBoundary.teamId,
           environment: "preview",
+          issuer,
+          ownerId: fixtureBoundary.teamId,
+          projectId: "operator",
         },
       },
     },
+    operator: { origin: "https://operator.example" },
     standardRuntime: {
       publicRealmWorkload: {
-        issuer,
         audience,
-        projectId: fixtureTarget.projectId,
-        ownerId: fixtureBoundary.teamId,
         environment: "production",
+        issuer,
+        ownerId: fixtureBoundary.teamId,
+        projectId: fixtureTarget.projectId,
         subject: "explicit-reviewed-app-production",
       },
     },
+    teamId: fixtureBoundary.teamId,
+    workloadPolicy: {
+      audience,
+      environment: "production",
+      issuer,
+      ownerId: fixtureBoundary.teamId,
+      projectId: "builder",
+      subject: "explicit-reviewed-builder-production",
+    },
   };
   const enrollmentInput = {
-    database: drizzle(writer, { schema }),
-    keyring: seedInput.keyring,
-    configuration: realmConfiguration,
-    owner: { authority, appId: fixtureTarget.appId, sessionId: fixtureTarget.sessionId },
-    originalSetup: freshNormalSetup,
-    publicOrigin: requiredFixture(freshNormalPlan.publicGateway).origin,
+    assertCurrentOwner: checkpointInput.assertCurrentOwner,
     authResource: {
-      version: 1 as const,
+      database: freshNormalPlan.authDatabase.database,
       environment: "preview" as const,
       hostname: freshNormalPlan.neon.endpoint,
-      port: 5432 as const,
-      database: freshNormalPlan.authDatabase.database,
-      schema: "public" as const,
-      runtimeRole: freshNormalPlan.authDatabase.runtimeRole,
       migratorRole: freshNormalPlan.authDatabase.migratorRole,
-      neon: { projectId: freshNormalPlan.neon.projectId, branchId: freshNormalPlan.neon.branchId },
+      neon: { branchId: freshNormalPlan.neon.branchId, projectId: freshNormalPlan.neon.projectId },
+      port: 5432 as const,
+      runtimeRole: freshNormalPlan.authDatabase.runtimeRole,
+      schema: "public" as const,
+      version: 1 as const,
     },
-    assertCurrentOwner: checkpointInput.assertCurrentOwner,
+    configuration: realmConfiguration,
+    database: drizzle(writer, { schema }),
+    keyring: seedInput.keyring,
+    originalSetup: freshNormalSetup,
+    owner: { appId: fixtureTarget.appId, authority, sessionId: fixtureTarget.sessionId },
+    publicOrigin: requiredFixture(freshNormalPlan.publicGateway).origin,
   };
   const enrollment = await resolvePublicRealmEnrollment(enrollmentInput);
   assert.deepEqual(await resolvePublicRealmEnrollment(enrollmentInput), enrollment);
@@ -455,11 +455,11 @@ try {
   assert.equal(enrollment.linkConfiguration.identityHandoff.sender.environment, "production");
   await assert.rejects(
     readPublicRealmLinkConfiguration({
-      database: enrollmentInput.database,
-      keyring: enrollmentInput.keyring,
-      authority: { ...authority, ownerUserId: "foreign" },
-      enrollmentRef: enrollment.enrollmentRef,
       assertCurrentOwner: checkpointInput.assertCurrentOwner,
+      authority: { ...authority, ownerUserId: "foreign" },
+      database: enrollmentInput.database,
+      enrollmentRef: enrollment.enrollmentRef,
+      keyring: enrollmentInput.keyring,
     }),
   );
   const [sealedEnrollment] =
@@ -469,9 +469,9 @@ try {
     false,
   );
   await proveOwnedAppResourceCustody({
+    context: runtimeFixtureContext,
     database: drizzle(writer, { schema }),
     keyring: seedInput.keyring,
-    context: runtimeFixtureContext,
     setup: freshNormalSetup,
   });
   const otherRef = randomUUID();
@@ -489,5 +489,5 @@ try {
   if (started) {
     run("pg_ctl", ["-D", pgdata, "-m", "immediate", "-w", "stop"]);
   }
-  await rm(scratch, { recursive: true, force: true });
+  await rm(scratch, { force: true, recursive: true });
 }

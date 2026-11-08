@@ -275,10 +275,10 @@ export const hostedOperatorAuthSignupPolicySchema =
 export type HostedOperatorAuthSignupPolicy = z.infer<typeof hostedOperatorAuthSignupPolicySchema>;
 export const hostedOperatorAuthSignupPolicyInputSchema =
   hostedOperatorAuthSignupPolicyFieldsSchema.omit({
-    policyId: true,
-    authResourceId: true,
     appId: true,
+    authResourceId: true,
     origin: true,
+    policyId: true,
   });
 export type HostedOperatorAuthSignupPolicyInput = z.infer<
   typeof hostedOperatorAuthSignupPolicyInputSchema

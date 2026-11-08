@@ -116,35 +116,35 @@ const operationRef = "00000000-0000-4000-8000-000000000001";
 export const observedAt = "2026-10-14T12:00:00Z";
 const sourceWorkload = {
   audience: "https://vercel.com/team",
+  environment: "preview" as const,
   issuer: "https://oidc.vercel.com/team",
   ownerId: "team",
   projectId: "builder",
-  environment: "preview" as const,
   subject: "builder-workload",
 };
 const desiredPlan = () =>
   hostedOperatorPlanSchema.parse({
     ...bootstrapPlan(),
     normalActorProgram: normalActorProgramSchema.parse({
-      version: 1,
-      appId: context.target.appId,
-      origin: TEST_APP_ORIGIN,
       actors: [
         {
+          account: "create-email-password",
           actorKey: "owner",
           email: "owner@example.test",
           name: "Owner",
-          account: "create-email-password",
         },
       ],
-      organizations: [],
-      memberships: [],
       appAccess: [],
+      appId: context.target.appId,
+      memberships: [],
+      organizations: [],
+      origin: TEST_APP_ORIGIN,
+      version: 1,
     }),
     publicGateway: {
-      projectId: "gateway",
       branch: context.target.branch,
       origin: TEST_APP_ORIGIN,
+      projectId: "gateway",
     },
     deploymentBoundary: {
       authority,
@@ -162,9 +162,9 @@ const desiredPlan = () =>
         environment: "preview",
       },
       operator: {
-        projectId: "operator",
         deploymentId: "operator-deployment",
         environment: "preview",
+        projectId: "operator",
       },
       verification: {
         gatewayOrigin: "https://gateway.example",
@@ -175,23 +175,23 @@ const desiredPlan = () =>
     gatewayBindings: {
       authBrowserOrigin: TEST_APP_ORIGIN,
       builderCallbackOrigin: "https://builder.example",
-      operatorOrigin: "https://operator.example",
       catalogAppIds: [context.target.appId],
+      operatorOrigin: "https://operator.example",
       sourceWorkload,
     },
     gatewayDelivery: {
-      projectId: "gateway",
       branch: context.target.branch,
-      repoId: "gateway-repo",
       gitSha: "c".repeat(40),
+      projectId: "gateway",
+      repoId: "gateway-repo",
     },
     effects: [
       ...bootstrapPlan().effects,
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway configuration" },
+      { description: "Gateway configuration", id: "gateway-bindings", kind: "gateway-bindings" },
       {
+        description: "Gateway delivery",
         id: GATEWAY_DELIVERY_EFFECT,
         kind: GATEWAY_DELIVERY_EFFECT,
-        description: "Gateway delivery",
       },
     ],
   });
@@ -260,10 +260,10 @@ export const captureFixture = () => {
     ...template.normalActorProgram,
     actors: [
       {
+        account: "capture-existing",
         actorKey: "owner",
         email: "owner@example.test",
         name: "Owner",
-        account: "capture-existing",
       },
     ],
   });
@@ -272,10 +272,10 @@ export const captureFixture = () => {
     actors: [
       ...original.actors,
       {
+        account: "create-email-password",
         actorKey: "reviewer",
         email: "reviewer@example.test",
         name: "Reviewer",
-        account: "create-email-password",
       },
     ],
   });
@@ -288,8 +288,8 @@ export const captureFixture = () => {
   record.retainedAuth = retainedOperatorAuthFromJournal(record);
   const accountPlan = hostedOperatorPlanSchema.parse({
     ...authPlan,
+    effects: [{ description: "Accounts", id: "normal-accounts", kind: "normal-accounts" }],
     stage: "auth-participants",
-    effects: [{ id: "normal-accounts", kind: "normal-accounts", description: "Accounts" }],
   });
   const accountRef = "00000000-0000-4000-8000-000000000002";
   const preparation = {
@@ -319,8 +319,8 @@ export const captureFixture = () => {
     gatewayDelivery: { ...authPlan.gatewayDelivery, gitRef: undefined },
     effects: [
       ...authPlan.effects.slice(0, 3),
-      { id: "app-access", kind: "access", description: "Grant" },
-      { id: "app-bindings", kind: "bindings", description: "Bind" },
+      { description: "Grant", id: "app-access", kind: "access" },
+      { description: "Bind", id: "app-bindings", kind: "bindings" },
       ...authPlan.effects.slice(3),
     ],
   });
