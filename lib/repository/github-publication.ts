@@ -1185,19 +1185,19 @@ export const repositoryKeys = [
 export function createRepositoryObservation(
   input: Omit<GitHubRepositoryObservation, "version" | "digest">,
 ): GitHubRepositoryObservation {
-  if (
-    !isDecimal(input.repositoryId) ||
-    !safeName(input.owner) ||
-    !safeName(input.name) ||
+  const invalidRepositoryIdentity =
+    !isDecimal(input.repositoryId) || !safeName(input.owner) || !safeName(input.name);
+  const invalidRepositoryRevision = () =>
     input.visibility !== "private" ||
     !safeBranch(input.defaultBranch) ||
     !isObjectId(input.headSha) ||
-    !isObjectId(input.headTree) ||
+    !isObjectId(input.headTree);
+  const invalidInstallationOrGate = () =>
     !isDigest(input.installationIdentityDigest) ||
     !exactKeys(input.releaseGate, ["name", "configured"]) ||
     input.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
-    typeof input.releaseGate.configured !== "boolean"
-  ) {
+    typeof input.releaseGate.configured !== "boolean";
+  if (invalidRepositoryIdentity || invalidRepositoryRevision() || invalidInstallationOrGate()) {
     throw new Error("The repository observation is invalid.");
   }
   const unsigned = { version: GITHUB_PUBLICATION_VERSION, ...input };
@@ -1362,17 +1362,20 @@ export function assertExactImmutableGitHubSourceReceipt(
   }
   assertExactRepositoryObservation(sourceReceipt.repository);
   exactDigest(sourceReceipt, "Immutable GitHub source receipt");
-  if (
+  const invalidSourceRevision =
     sourceReceipt.version !== GITHUB_PUBLICATION_VERSION ||
     !safeHeadRef(sourceReceipt.resolvedRef) ||
     !isObjectId(sourceReceipt.resolvedSha) ||
-    !isObjectId(sourceReceipt.resolvedTree) ||
+    !isObjectId(sourceReceipt.resolvedTree);
+  const invalidSourceAuthority = () =>
     !isDigest(sourceReceipt.installationIdentityDigest) ||
-    sourceReceipt.resolvedByCallId.trim().length === 0 ||
+    sourceReceipt.resolvedByCallId.trim().length === 0;
+  const repositoryMismatch = () =>
     sourceReceipt.repository.headSha !== sourceReceipt.resolvedSha ||
     sourceReceipt.repository.headTree !== sourceReceipt.resolvedTree ||
-    sourceReceipt.repository.installationIdentityDigest !== sourceReceipt.installationIdentityDigest
-  ) {
+    sourceReceipt.repository.installationIdentityDigest !==
+      sourceReceipt.installationIdentityDigest;
+  if (invalidSourceRevision || invalidSourceAuthority() || repositoryMismatch()) {
     throw new Error("The immutable GitHub source receipt is malformed.");
   }
 }
