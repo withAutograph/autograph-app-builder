@@ -33,8 +33,8 @@ describe("app access Server Action boundary", () => {
       return Promise.resolve(Response.json(snapshot));
     });
     const action = createAppAccessAction({ origin: "https://builder.example", handle });
-    expect(await action(input, incoming())).toEqual({ status: "ready", snapshot });
-    expect(await action(input, incoming())).toEqual({ status: "ready", snapshot });
+    expect(await action(input, incoming())).toEqual({ snapshot, status: "ready" });
+    expect(await action(input, incoming())).toEqual({ snapshot, status: "ready" });
     expect(handle).toHaveBeenCalledWith(expect.any(Request), snapshot.sessionId);
     expect(requests[0]?.headers.get("cookie")).toBe("session=owner-cookie");
     expect(await requests[0]?.json()).toEqual(input.command);
