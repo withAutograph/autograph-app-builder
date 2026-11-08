@@ -583,12 +583,12 @@ it.each([400, 503])(
         providerRequests += 1;
         return Promise.reject(
           new APICallError({
-            message: "Synthetic nonretryable provider rejection",
-            url: "https://synthetic.invalid/model",
-            requestBodyValues: {},
-            statusCode,
-            responseBody: "synthetic rejection",
             isRetryable: false,
+            message: "Synthetic nonretryable provider rejection",
+            requestBodyValues: {},
+            responseBody: "synthetic rejection",
+            statusCode,
+            url: "https://synthetic.invalid/model",
           }),
         );
       },

@@ -318,7 +318,7 @@ describe("owned compiled artifact workflow hook", () => {
     const input = frame();
     await expect(
       recordPublishedOperatorSourceForSession({ ...input, publishedSource }),
-    ).resolves.toMatchObject({ status: "recorded", selection: { ...selected, publishedSource } });
+    ).resolves.toMatchObject({ selection: { ...selected, publishedSource }, status: "recorded" });
     const context = { authority, target: { appId: input.appId, sessionId: "durable-original" } };
     expect(mocks.readSelection).toHaveBeenCalledWith(context, digest);
     expect(mocks.record).toHaveBeenCalledWith(context, input.callId, {
@@ -558,12 +558,12 @@ describe("owned compiled artifact workflow hook", () => {
         ...(initial ? { initialPublication: true as const } : {}),
       });
       expect(result).toMatchObject({
-        status: "recorded",
         destination: {
           appId: input.appId,
           appSpecDigest: digest,
           publishedSource: historicalSource,
         },
+        status: "recorded",
       });
       expect(mocks.recordDestination).toHaveBeenCalledWith(
         { authority, target: { appId: input.appId, sessionId: "durable-original" } },
@@ -599,8 +599,8 @@ describe("owned compiled artifact workflow hook", () => {
       publishedSource: historicalSource,
     });
     expect(result).toMatchObject({
-      status: "recorded",
       destination: { appId: completion.appId, publishedSource: historicalSource },
+      status: "recorded",
     });
     expect(mocks.recordDestination).toHaveBeenCalledWith(
       completion.compilation.context,
@@ -1022,9 +1022,9 @@ describe("owned compiled artifact workflow hook", () => {
     expect(resumed).toMatchObject({ cancellationRevision: 1, resumedCancellationRevision: 1 });
     const owner = await resolve();
     expect(owner).toMatchObject({
-      sessionId: source.sessionId,
-      adapterSessionId: "adapter-child",
       adapterGeneration: 1,
+      adapterSessionId: "adapter-child",
+      sessionId: source.sessionId,
     });
     await expect(
       resolver({
@@ -1070,27 +1070,27 @@ describe("owned compiled artifact workflow hook", () => {
         description: `Approved ${kind}`,
       })),
       publicGateway: {
-        projectId: "gateway-owned",
         branch: "gateway",
         origin: "https://app.example",
+        projectId: "gateway-owned",
       },
       appDatabase: {
-        resourceId: "owned-app",
         database: "app",
         migratorRole: "app_owner",
+        resourceId: "owned-app",
         runtimeRole: "app_runtime",
       },
       authDatabase: {
-        resourceId: "owned-auth",
         database: "auth",
         migratorRole: "auth_owner",
+        resourceId: "owned-auth",
         runtimeRole: "auth_runtime",
       },
       neon: {
-        projectId: "neon-owned",
         branchId: "branch-owned",
-        endpoint: "ep-owned.neon.tech",
         connectionRef: "owner-connection",
+        endpoint: "ep-owned.neon.tech",
+        projectId: "neon-owned",
         source: "synthetic-only",
       },
       installer: { reference: "fixed-installer", sha256: "b".repeat(64) },
@@ -1102,19 +1102,19 @@ describe("owned compiled artifact workflow hook", () => {
       retention: { expiresAt: "2030-01-01T00:00:00Z", policy: "Retain approved Preview" },
       cost: {
         class: "independent-service",
-        owner: authority.ownerUserId,
         description: "Owned fixture only",
+        owner: authority.ownerUserId,
       },
       deploymentBoundary: {
         authority,
         teamId: "team-owned",
         app: { projectId: selection.projectId, branch: selection.branch, environment: "preview" },
-        gateway: { projectId: "gateway-owned", branch: "gateway", environment: "preview" },
-        operator: { projectId: "builder", deploymentId: "operator", environment: "production" },
+        gateway: { branch: "gateway", environment: "preview", projectId: "gateway-owned" },
+        operator: { deploymentId: "operator", environment: "production", projectId: "builder" },
         verification: {
           gatewayOrigin: "https://gateway.example",
-          publicOrigin: "https://app.example",
           jwksUrl: "https://gateway.example/_platform/jwks.json",
+          publicOrigin: "https://app.example",
         },
       },
     });
