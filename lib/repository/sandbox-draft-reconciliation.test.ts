@@ -2087,7 +2087,7 @@ cp.spawn = (command, args, options) => {
   ])("retains %s alongside an attached dependency view", async (kind) => {
     const f = registeredFixture();
     const links = await attachDependencies(f, true);
-    const selected = links[0];
+    const [selected] = links;
     if (selected === undefined) {
       throw new Error("Missing fixture dependency link");
     }

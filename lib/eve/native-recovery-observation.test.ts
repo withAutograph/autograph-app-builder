@@ -176,7 +176,7 @@ it("uses the authenticated existing observation route once without session start
     expectedOwnerRunId: "failed-receipt-owner",
   });
   expect(request).toHaveBeenCalledOnce();
-  const [url, init] = request.mock.calls[0];
+  const [[url, init]] = request.mock.calls;
   expect(url).toBe("https://builder.example.test/eve/v1/session");
   expect(JSON.parse(z.string().parse(init?.body))).toMatchObject({
     forwardedPrincipal: { current: { principalId: principal.ownerUserId } },
@@ -205,7 +205,7 @@ it("observes exact source coordinates through the protected route without recove
   });
   await adapter.observeSource?.({ principal, source });
   expect(request).toHaveBeenCalledOnce();
-  const call = request.mock.calls[0];
+  const [call] = request.mock.calls;
   const body: unknown = JSON.parse(z.string().parse(call?.[1]?.body));
   expect(body).toMatchObject({ recoveryPhase: "inspect-source", sourceObservation: source });
   expect(body).not.toHaveProperty("operationId");

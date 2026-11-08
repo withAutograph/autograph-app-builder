@@ -176,7 +176,7 @@ it("does not authorize other tools, denied approvals, completed calls, or missin
 
 it("validates every old candidate while selecting the greatest slot without changing input", () => {
   const input = fixture();
-  const latest = input.payload.candidates[0];
+  const [latest] = input.payload.candidates;
   const older = structuredClone(latest);
   older.origin.slot = 2;
   older.sessionState.snapshot.session.history = [];

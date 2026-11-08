@@ -781,7 +781,7 @@ describe("closed runtime identity refusal diagnostics", () => {
         f.input.plan.normalActorPreparation.accountPlanDigest = "f".repeat(64);
       }
       if (stage === "projection") {
-        const actor = f.state.actors[0];
+        const [actor] = f.state.actors;
         if (actor === undefined) {
           throw new Error("missing fixture actor");
         }

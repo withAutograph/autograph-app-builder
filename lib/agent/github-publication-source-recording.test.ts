@@ -206,7 +206,7 @@ const completionFixture = (): DraftReconciliationCompletion => ({
 });
 
 const recoveryCompletionFixture = (): DraftReconciliationCompletion => {
-  const completion = hooks.completions[0];
+  const [completion] = hooks.completions;
   if (completion === undefined) {
     throw new Error("Expected original retained completion");
   }
@@ -348,7 +348,7 @@ describe("publication records actual source for its compiled app release", () =>
       if (!("status" in found) || found.status !== "publication-recovery") {
         throw new Error("Expected retained recovery discovery");
       }
-      const recovery = found.recoveries[0];
+      const [recovery] = found.recoveries;
       if (recovery === undefined) {
         throw new Error("Expected original retained completion");
       }
@@ -462,7 +462,7 @@ describe("publication records actual source for its compiled app release", () =>
   });
 
   it("uses normal approved read-only reconciliation to associate a current equivalent capture without Git writes", async () => {
-    const completion = hooks.completions[0];
+    const [completion] = hooks.completions;
     hooks.applied.mockResolvedValue({
       applied: true,
       observation: { repositoryId: "repository", headSha: "verified-existing-head" },
@@ -536,7 +536,7 @@ describe("publication records actual source for its compiled app release", () =>
   });
 
   it("recovers an accepted write/readback failure after the candidate is lost, with zero further Git writes", async () => {
-    const completion = hooks.completions[0];
+    const [completion] = hooks.completions;
     hooks.reconcile.mockRejectedValueOnce(
       new Error("GitHub accepted update; readback unavailable"),
     );
@@ -561,7 +561,7 @@ describe("publication records actual source for its compiled app release", () =>
   });
 
   it("recovers an original publication after a new candidate changes without inspecting it", async () => {
-    const original = hooks.completions[0];
+    const [original] = hooks.completions;
     hooks.candidate = {
       ...hooks.candidate,
       root: "/workspace/new-candidate",

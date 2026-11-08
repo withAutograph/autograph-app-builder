@@ -338,7 +338,7 @@ it("leaves native result and incoming runtime outcome reconciliation to their or
       },
     }),
   ).toEqual([]);
-  const candidate = f.input.payload.candidates[0];
+  const [candidate] = f.input.payload.candidates;
   expect(
     authorizeRepeatableDraftReconciliationCalls({
       ...f.input,
@@ -493,7 +493,8 @@ it("rejects ambiguous latest checkpoints, unknown arguments and native mode chan
 });
 it("rejects changed sealed merge bytes, review scope and current source", () => {
   const merge = fixture();
-  const after = merge.completion.review.baseChanges[0].after;
+  const [change] = merge.completion.review.baseChanges;
+  const { after } = change;
   if (after === undefined) {
     throw new Error("The added-file fixture requires after bytes.");
   }
@@ -525,7 +526,7 @@ it("retains the approved publication installation digest binding", () => {
 
 it("validates old histories and preserves latest selection across unordered candidates", () => {
   const f = fixture();
-  const latest = f.input.payload.candidates[0];
+  const [latest] = f.input.payload.candidates;
   const older = structuredClone(latest);
   older.origin.slot = 1;
   older.sessionState.snapshot.session.history = [];
@@ -550,7 +551,7 @@ it("validates old histories and preserves latest selection across unordered cand
 });
 it("retains historical runtime-result vetoes outside the latest candidate", () => {
   const f = fixture();
-  const latest = f.input.payload.candidates[0];
+  const [latest] = f.input.payload.candidates;
   const older = {
     ...latest,
     origin: { slot: 1 },

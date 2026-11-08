@@ -498,7 +498,7 @@ describe("saved validation dependency recovery", () => {
       exitCode: 0,
       recoveryOfValidationFailure: request.failure,
     });
-    const installed = request.attempts[1];
+    const [, installed] = request.attempts;
     if (installed === undefined || request.logStore === undefined) {
       throw new Error("Missing install logs");
     }

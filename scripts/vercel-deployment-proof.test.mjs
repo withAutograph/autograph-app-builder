@@ -9,9 +9,8 @@ import { test } from "vitest";
 const deploymentStatusesEndpoint = "repos/example/builder/deployments/1/statuses";
 
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf-8");
-const block = workflow
-  .split("      - name: Require exact Vercel Git deployment\n")[1]
-  .split("      - uses: actions/upload-artifact@v4")[0];
+const [, deploymentStep] = workflow.split("      - name: Require exact Vercel Git deployment\n");
+const [block] = deploymentStep.split("      - uses: actions/upload-artifact@v4");
 const script = block
   .split("        run: |\n")[1]
   .split("\n")

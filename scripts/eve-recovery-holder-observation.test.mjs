@@ -183,7 +183,7 @@ it("observes a real occupied logical inbox held by a distinct physical owner wit
     f.seen.bindings.every((binding) => binding.holderOwnerRunId === f.holderOwnerRunId),
     true,
   );
-  const summary = f.summaries[0];
+  const [summary] = f.summaries;
   assert.equal(summary.event, "eve.terminal_recovery_inbox_holder");
   assert.equal(summary.outcome, "observed");
   assert.equal(summary.entryKind, TERMINAL_RECOVERY_KIND);

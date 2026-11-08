@@ -157,7 +157,7 @@ describe("current frozen proposal inspection", () => {
           if (!("iteration" in state.proposal.target)) {
             throw new Error("fixture");
           }
-          const change = state.proposal.target.iteration.changes[0];
+          const [change] = state.proposal.target.iteration.changes;
           if (!change?.after) {
             throw new Error("fixture");
           }

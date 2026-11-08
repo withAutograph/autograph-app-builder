@@ -94,7 +94,7 @@ describe("Production setup consent", () => {
           type: "input.requested",
         },
       ]);
-      const publicRequest = outstandingInstalledEveRequests([pending])[0];
+      const [publicRequest] = outstandingInstalledEveRequests([pending]);
       expect(publicRequest?.description).toContain(scope.appId);
       expect(publicRequest?.description).toContain(scope.repositoryFullName);
       expect(publicRequest?.description).toContain(
@@ -123,7 +123,7 @@ describe("Production setup consent", () => {
     if (pending.type !== "input.requested") {
       throw new Error("Expected the approval request");
     }
-    const approval = pending.data.requests[0];
+    const [approval] = pending.data.requests;
     if (approval.kind !== "tool-approval") {
       throw new Error("Expected the tool approval");
     }
