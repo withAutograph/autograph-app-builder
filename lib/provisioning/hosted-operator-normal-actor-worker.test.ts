@@ -401,25 +401,25 @@ const fixture = () => {
     },
   };
   return {
-    worker,
-    input,
-    execute,
-    inspect,
-    createLauncher,
-    getOidcToken,
     configuration,
-    retained,
+    createLauncher,
     deps,
+    execute,
     files,
+    getOidcToken,
+    input,
+    inspect,
+    retained,
+    revoke() {
+      authorized = false;
+    },
     selectStatus(value: typeof status) {
       status = value;
     },
     unknown() {
       unknown = true;
     },
-    revoke() {
-      authorized = false;
-    },
+    worker,
   };
 };
 describe("actual selected organization worker adapter", () => {

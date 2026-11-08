@@ -196,24 +196,24 @@ const setup = () => {
   const requests: string[] = [];
   const bound: string[] = [];
   const stats = {
-    storeReads: 0,
-    reservations: 0,
     authorizations: 0,
-    readAuthorizations: 0,
-    starts: 0,
+    bound,
+    closes: 0,
     publishes: 0,
+    readAuthorizations: 0,
+    requests,
+    reservations: 0,
+    revokes: 0,
+    starts: 0,
+    storeReads: 0,
     suiteDispatches: 0,
     suiteInspections: 0,
-    closes: 0,
-    revokes: 0,
-    requests,
-    bound,
   };
   const faults = {
-    mutateCarrier: false,
+    invalidToken: false,
     loseExecuteResponse: false,
     loseSuiteResult: false,
-    invalidToken: false,
+    mutateCarrier: false,
   };
   const bindings = new WeakMap<
     HostedOperatorContext,
@@ -238,6 +238,15 @@ const setup = () => {
   };
   const dependencies: HostedContinuityDependencies = {
     store: {
+      async compareAndSet(input) {
+        if (record?.revision !== input.expectedRevision) {
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing rows and CAS conflicts are explicit optional store results.
+          return undefined;
+        }
+        record = continuityRecordSchema.parse(input.record);
+        snapshots.push(read());
+        return read();
+      },
       async read(input) {
         stats.storeReads += 1;
         if (
@@ -255,15 +264,6 @@ const setup = () => {
           throw new Error("Duplicate controlled reserve");
         }
         stats.reservations += 1;
-        record = continuityRecordSchema.parse(input.record);
-        snapshots.push(read());
-        return read();
-      },
-      async compareAndSet(input) {
-        if (record?.revision !== input.expectedRevision) {
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing rows and CAS conflicts are explicit optional store results.
-          return undefined;
-        }
         record = continuityRecordSchema.parse(input.record);
         snapshots.push(read());
         return read();

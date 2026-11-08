@@ -348,7 +348,7 @@ describe("framework upgrade planning and apply", () => {
     };
     expect(
       overlayChanges(iterationBaselineSnapshot(changed, planned.baseline), changed).map(
-        ({ path, kind }) => ({ path, kind }),
+        ({ path, kind }) => ({ kind, path }),
       ),
     ).toEqual([
       { kind: "added", path: "bun.lock" },
@@ -431,10 +431,10 @@ describe("framework upgrade planning and apply", () => {
   });
   it("exports approved shared framework files for both ordinary and baseline app review", () => {
     const changes = [
-      { path: "apps/example/app/page.tsx", kind: "modified" as const },
-      { path: "package.json", kind: "modified" as const },
-      { path: "bun.lock", kind: "modified" as const },
-      { path: "apps/other/app/page.tsx", kind: "modified" as const },
+      { kind: "modified" as const, path: "apps/example/app/page.tsx" },
+      { kind: "modified" as const, path: "package.json" },
+      { kind: "modified" as const, path: "bun.lock" },
+      { kind: "modified" as const, path: "apps/other/app/page.tsx" },
     ];
     const reviewed = reviewableChanges(changes, "example", true, true);
     expect(reviewed.map(({ path }) => path)).toEqual([

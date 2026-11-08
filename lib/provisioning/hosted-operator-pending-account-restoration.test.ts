@@ -358,8 +358,8 @@ describe("pending account restoration after completed infrastructure", () => {
     const current = required(before.operator);
     await expect(f.run()).resolves.toMatchObject({
       operationRef: accountOperationRef,
-      planDigest: original.accountPlanDigest,
       plan: original.accountPlan,
+      planDigest: original.accountPlanDigest,
     });
     const after = f.row.record;
     expect(
@@ -376,15 +376,15 @@ describe("pending account restoration after completed infrastructure", () => {
     expect(after.privateState).toEqual(before.privateState);
     expect(after.approvedByCallId).toBe(original.accountApprovedByCallId);
     expect(after.operator).toMatchObject({
-      operationRef: accountOperationRef,
       approvalId: original.accountApprovalId,
-      planDigest: original.accountPlanDigest,
-      plan: original.accountPlan,
-      receipts: [],
       authPreparation: current.authPreparation,
-      gatewayEnvironment: current.gatewayEnvironment,
-      gatewayDeliveryCandidates: current.gatewayDeliveryCandidates,
       deliveredGatewayDeploymentId: current.deliveredGatewayDeploymentId,
+      gatewayDeliveryCandidates: current.gatewayDeliveryCandidates,
+      gatewayEnvironment: current.gatewayEnvironment,
+      operationRef: accountOperationRef,
+      plan: original.accountPlan,
+      planDigest: original.accountPlanDigest,
+      receipts: [],
     });
     expect(after.pendingAccountRestorations).toEqual([
       {
@@ -704,8 +704,8 @@ it("archives only accepted old-adapter continuation and stale hook while preserv
   expect(f.row.record.realmIdentityWait).toBeUndefined();
   expect(f.row.record.realmContinuation).toBeUndefined();
   expect(f.row.record.pendingAccountRestorations?.[0]).toMatchObject({
-    realmIdentityWait: before.realmIdentityWait,
     realmContinuation: before.realmContinuation,
+    realmIdentityWait: before.realmIdentityWait,
   });
 });
 
@@ -1102,8 +1102,8 @@ it.each(["past", "absent", "account"] as const)(
       expect(f.row.record.accountPreparation).toEqual(before.accountPreparation);
       expect(f.row.record.privateState).toEqual(before.privateState);
       expect(f.row.record.pendingAccountRestorations?.[0]).toMatchObject({
-        realmContinuation: before.realmContinuation,
         executionObservation: before.executionObservation,
+        realmContinuation: before.realmContinuation,
       });
       expect(f.row.record.pendingAccountRestorations?.[0].realmIdentityWait).toEqual(
         before.realmIdentityWait,

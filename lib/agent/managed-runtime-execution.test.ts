@@ -463,36 +463,36 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
     await runtime.start(context, record, capabilities, guard, checkpoint);
   };
   return {
-    runtime,
-    deps,
-    provider,
-    files,
-    commands,
-    profile,
-    capabilities,
-    guard,
-    checkpoint,
-    start,
-    workerCommand,
-    suiteCommand,
-    source,
-    readSourceCreates: () => sourceCreates,
-    setSourceBytes: (bytes: Buffer) => {
-      sourceBytes = bytes;
+    addEnvironment: (key: string, value: string) => {
+      environment = { ...environment, [key]: value };
     },
+    capabilities,
+    checkpoint,
+    commands,
+    deps,
+    files,
+    guard,
+    profile,
+    provider,
     read: () => structuredClone(record),
+    readSourceCreates: () => sourceCreates,
     replace: (next: ContinuityRecord) => {
       record = continuityRecordSchema.parse(next);
     },
+    runtime,
     setName: (name: string) => {
       providerName = name;
     },
     setSession: (id: string) => {
       providerSessionId = id;
     },
-    addEnvironment: (key: string, value: string) => {
-      environment = { ...environment, [key]: value };
+    setSourceBytes: (bytes: Buffer) => {
+      sourceBytes = bytes;
     },
+    source,
+    start,
+    suiteCommand,
+    workerCommand,
   };
 };
 
@@ -952,10 +952,10 @@ describe("managed runtime execution through supported SDK ports", () => {
     const previousReads = vi.mocked(f.deps.readPublicJwks).mock.calls.length;
     await f.start();
     expect(f.read().locator).toMatchObject({
-      worker: retained?.worker,
+      attemptId: retained?.attemptId,
       commandId: retained?.commandId,
       providerSessionId: retained?.providerSessionId,
-      attemptId: retained?.attemptId,
+      worker: retained?.worker,
     });
     expect(vi.mocked(f.provider.runCommand).mock.calls).toEqual([]);
     expect(vi.mocked(f.deps.readPublicJwks).mock.calls.length).toBe(previousReads);

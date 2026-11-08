@@ -107,7 +107,7 @@ const fixture = (
     clientFactory: (input) =>
       createHostedOperatorNormalAuthClient({ ...input, fetch: privateFetch }),
   };
-  return { auth, ports, requests, getState: () => state };
+  return { auth, getState: () => state, ports, requests };
 };
 
 describe("normal actor preparation", () => {
@@ -117,7 +117,7 @@ describe("normal actor preparation", () => {
       throw new Error("approval_required");
     };
     await expect(
-      prepareNormalActorAccounts({ program, operationRef, ports: local.ports }),
+      prepareNormalActorAccounts({ operationRef, ports: local.ports, program }),
     ).rejects.toThrow("approval_required");
     expect(local.requests).toEqual([]);
     expect(local.getState().actors.every((actor) => actor.credentials === undefined)).toBe(true);
@@ -126,15 +126,15 @@ describe("normal actor preparation", () => {
   it("recovers a lost real signup reply using retained credentials and the same actual account", async () => {
     const local = fixture({ loseFirstSignupReply: true });
     await expect(
-      prepareNormalActorAccounts({ program, operationRef, ports: local.ports }),
+      prepareNormalActorAccounts({ operationRef, ports: local.ports, program }),
     ).rejects.toThrow("transport_failed");
     const interrupted = local.getState();
     expect(interrupted.actors[0]?.signup).toBe("attempted");
     expect(interrupted.actors[0]?.credentials?.password.length).toBeGreaterThanOrEqual(32);
     const resumed = await prepareNormalActorAccounts({
-      program,
       operationRef,
       ports: local.ports,
+      program,
       state: interrupted,
     });
     expect(
@@ -158,13 +158,13 @@ describe("normal actor preparation", () => {
 
   it("re-authenticates a completed created actor with the retained password and never repeats signup", async () => {
     const local = fixture();
-    const first = await prepareNormalActorAccounts({ program, operationRef, ports: local.ports });
+    const first = await prepareNormalActorAccounts({ operationRef, ports: local.ports, program });
     const revoked = structuredClone(first.state);
     revoked.actors[0].storageState = { cookies: [], origins: [] };
     const resumed = await prepareNormalActorAccounts({
-      program,
       operationRef,
       ports: local.ports,
+      program,
       state: revoked,
     });
     expect(resumed.state.actors[0]?.session?.actorId).toBe(first.state.actors[0]?.session?.actorId);
@@ -176,7 +176,7 @@ describe("normal actor preparation", () => {
 
   it("requires ordinary reconnection for an expired existing capture instead of creating an account", async () => {
     const local = fixture();
-    const first = await prepareNormalActorAccounts({ program, operationRef, ports: local.ports });
+    const first = await prepareNormalActorAccounts({ operationRef, ports: local.ports, program });
     const existingProgram = normalActorProgramSchema.parse({
       ...program,
       actors: program.actors.map((actor) => ({ ...actor, account: "capture-existing" })),
@@ -190,9 +190,9 @@ describe("normal actor preparation", () => {
     const before = local.requests.length;
     await expect(
       prepareNormalActorAccounts({
-        program: existingProgram,
         operationRef,
         ports: local.ports,
+        program: existingProgram,
         state: existing,
       }),
     ).rejects.toThrow("capture_required");
@@ -203,7 +203,7 @@ describe("normal actor preparation", () => {
 
   it("requires resolved-ID public approval before the organization or invitation stage", async () => {
     const local = fixture();
-    const first = await prepareNormalActorAccounts({ program, operationRef, ports: local.ports });
+    const first = await prepareNormalActorAccounts({ operationRef, ports: local.ports, program });
     const effects: string[] = [];
     const ports: NormalActorPreparationPorts = {
       ...local.ports,
@@ -224,7 +224,7 @@ describe("normal actor preparation", () => {
     };
     const before = local.requests.length;
     await expect(
-      prepareNormalActorMemberships({ program, operationRef, state: first.state, ports }),
+      prepareNormalActorMemberships({ operationRef, ports, program, state: first.state }),
     ).rejects.toThrow("resolved_approval_required");
     expect(effects).toEqual([]);
     expect(local.requests.slice(before)).toEqual([]);
@@ -233,9 +233,9 @@ describe("normal actor preparation", () => {
   it("reconciles a lost real invitation reply without resending and verifies normal acceptance", async () => {
     const local = fixture({ loseFirstInvitationReply: true });
     const prepared = await prepareNormalActorAccounts({
-      program,
       operationRef,
       ports: local.ports,
+      program,
     });
     let organizationPrepared = false;
     const ports: NormalActorPreparationPorts = {
@@ -257,15 +257,15 @@ describe("normal actor preparation", () => {
       reconcileOrganization: async () => (organizationPrepared ? "applied" : "absent"),
     };
     await expect(
-      prepareNormalActorMemberships({ program, operationRef, ports, state: prepared.state }),
+      prepareNormalActorMemberships({ operationRef, ports, program, state: prepared.state }),
     ).rejects.toThrow("transport_failed");
     const interrupted = local.getState();
     expect(interrupted.memberships[1]?.status).toBe("attempted");
     expect(interrupted.memberships[1]?.invitationId).toBeUndefined();
     const resumed = await prepareNormalActorMemberships({
-      program,
       operationRef,
       ports,
+      program,
       state: interrupted,
     });
     expect(resumed.state.memberships.every((member) => member.status === "complete")).toBe(true);
@@ -276,7 +276,7 @@ describe("normal actor preparation", () => {
       local.requests.filter((path) => path === "/api/auth/organization/accept-invitation"),
     ).toHaveLength(1);
     expect(resolvedNormalActorAccess(program, resumed.state)).toEqual(resumed.proposedAccess);
-    await prepareNormalActorMemberships({ program, operationRef, ports, state: resumed.state });
+    await prepareNormalActorMemberships({ operationRef, ports, program, state: resumed.state });
     expect(
       local.requests.filter((path) => path === "/api/auth/organization/invite-member"),
     ).toHaveLength(1);
@@ -288,9 +288,9 @@ describe("normal actor preparation", () => {
   it("rejects swapped actual identities and extra membership authority in retained state", async () => {
     const local = fixture();
     const prepared = await prepareNormalActorAccounts({
-      program,
       operationRef,
       ports: local.ports,
+      program,
     });
     const swapped = structuredClone(prepared.state);
     swapped.actors[1].session = swapped.actors[0].session;
@@ -326,9 +326,9 @@ describe("normal actor preparation", () => {
     });
     const local = fixture({ program: twoOrganizations });
     const accounts = await prepareNormalActorAccounts({
-      program: twoOrganizations,
       operationRef,
       ports: local.ports,
+      program: twoOrganizations,
     });
     expect(
       accounts.state.organizationSessions?.every((entry) => entry.selection === "pending"),
@@ -445,9 +445,9 @@ describe("normal actor preparation", () => {
   it("does not treat a pending candidate as selected and rejects contradictory organization session evidence", async () => {
     const local = fixture();
     const prepared = await prepareNormalActorAccounts({
-      program,
       operationRef,
       ports: local.ports,
+      program,
     });
     const pending = prepared.state.organizationSessions?.at(0);
     if (!pending) {
@@ -473,7 +473,7 @@ describe("normal actor preparation", () => {
 
   it("requires an additional real capture for an existing actor in another organization", async () => {
     const local = fixture();
-    const actual = await prepareNormalActorAccounts({ program, operationRef, ports: local.ports });
+    const actual = await prepareNormalActorAccounts({ operationRef, ports: local.ports, program });
     const owner = actual.state.actors.find((actor) => actor.actorKey === "owner");
     if (!owner?.session || !owner.storageState) {
       throw new Error("Missing ordinary authenticated owner");
@@ -507,7 +507,7 @@ describe("normal actor preparation", () => {
       },
     };
     await expect(
-      prepareNormalActorAccounts({ program: capturedProgram, operationRef, ports }),
+      prepareNormalActorAccounts({ operationRef, ports, program: capturedProgram }),
     ).rejects.toThrow("normal_actor_session_selection_required");
     expect(additionalRequests).toEqual(["owner:org-two"]);
     expect(
@@ -581,7 +581,7 @@ describe("internal actor save observation wrappers", () => {
         checkpoints += 1;
         await originalCheckpoint(state);
       };
-      await prepareNormalActorAccounts({ program, operationRef, ports: local.ports });
+      await prepareNormalActorAccounts({ operationRef, ports: local.ports, program });
       return { full, observation, checkpoints, requests: local.requests };
     };
     const fallback = await run(false);
@@ -600,7 +600,7 @@ describe("internal actor save observation wrappers", () => {
         throw new Error(reason);
       };
       await expect(
-        prepareNormalActorAccounts({ program, operationRef, ports: local.ports }),
+        prepareNormalActorAccounts({ operationRef, ports: local.ports, program }),
       ).rejects.toThrow(reason);
       expect(local.requests).toEqual([]);
       expect(local.getState().actors.every((actor) => actor.credentials === undefined)).toBe(true);
