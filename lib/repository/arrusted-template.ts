@@ -62,7 +62,12 @@ async function acquisitionStage<T>(
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function receiptReadinessDigest(input: Record<string, unknown>) {
+function receiptReadinessDigest(
+  input: Pick<
+    Awaited<ReturnType<typeof readSandboxGitHubSourceSnapshot>>,
+    "sourceSha" | "sourceTree"
+  >,
+) {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }
 

@@ -759,7 +759,20 @@ describe("native externally managed policy recovery integration", () => {
           },
         ),
       };
-      const raw: Record<string, Record<string, unknown>> = {};
+      const raw: Record<
+        string,
+        {
+          id: string;
+          projectId: string;
+          ownerId: string;
+          readyState: string;
+          target: string | null;
+          url: string;
+          gitSource: object;
+          meta: unknown;
+          oidcTokenClaims?: { environment: string };
+        }
+      > = {};
       const metadata = (kind: string, op = f.original) => ({
         autograph_operator_effect: requireFixtureValue(
           op.plan.effects.find((effect) => effect.kind === kind),

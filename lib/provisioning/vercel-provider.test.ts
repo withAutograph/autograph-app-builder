@@ -390,7 +390,7 @@ describe("Vercel project provisioning", () => {
         expect(value.pathname).not.toContain("deployments");
         if (init?.method === "POST") {
           created = true;
-          const body = JSON.parse(String(init.body));
+          const body: unknown = JSON.parse(String(init.body));
           expect(body).not.toHaveProperty("ssoProtection");
           expect(body).not.toHaveProperty("oidcTokenConfig");
           expect(body).toMatchObject({

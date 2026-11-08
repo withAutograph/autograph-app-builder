@@ -68,6 +68,7 @@ delete process.env.NODE_OPTIONS;
 /** @param {ReturnType<typeof captureEveWorkerEnvelope> | undefined} eveEnvelope - Authorized Eve worker environment. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function workerEnvironment(source, eveProfile, eveEnvelope) {
+  /** @type {NodeJS.ProcessEnv} */
   const environment = { PATH: "/usr/bin:/bin" };
   for (const name of allowedWorkerEnvironment) {
     if (name !== "EVE_DEV_WORKER_APP_ROOT" && source[name] !== undefined) {
@@ -105,6 +106,7 @@ function canonical(proof) {
     ]),
   );
 }
+/** @param {unknown} value @param {string[]} keys */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactKeys(value, keys) {
   return (
