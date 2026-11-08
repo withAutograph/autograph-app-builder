@@ -8,10 +8,15 @@ import nextJsPlugins from "ultracite/oxlint/next/js-plugins";
 const previewActivationCli = "lib/db/preview-activation-cli.mts";
 
 const githubProviderPath = "lib/provisioning/github-provider.ts";
-const handoffProgressPath = "app/ui/handoff-provisioning-progress.tsx";
 const productionCreatorTestPath = "lib/provisioning/repository-production-creator.test.ts";
 
-const baselinePath1 = "app/ui/handoff-controls.tsx";
+const handoffControlsPath = "app/ui/handoff-controls.tsx";
+
+const handoffProgressPath = "app/ui/handoff-provisioning-progress.tsx";
+const builderControllerPath = "app/ui/use-builder-controller.ts";
+const draftAutosavePath = "app/ui/use-builder-draft-autosave.ts";
+const productionSetupTestPath = "lib/provisioning/repository-production-setup.test.ts";
+const eveEvalPreloadPath = "scripts/eve-eval-fetch-preload.mjs";
 
 export default defineConfig({
   extends: [core, next, jsPlugins, nextJsPlugins, antiSlop],
@@ -21,6 +26,36 @@ export default defineConfig({
     typeAware: true,
   },
   overrides: [
+    {
+      // Preserve existing callback return contracts pending review.
+      files: [
+        ".storybook/create-app/layouts.tsx",
+        "app/ui/builder-connections.tsx",
+        "app/ui/builder-destination.tsx",
+        "app/ui/builder-form.tsx",
+        "app/ui/builder-model-controls.tsx",
+        "app/ui/builder-provider-controls.tsx",
+        "app/ui/handoff-controls.tsx",
+        handoffProgressPath,
+        "app/ui/route-error.test.tsx",
+        builderControllerPath,
+        draftAutosavePath,
+        "components/auth/passkey/add-passkey-dialog.tsx",
+        "components/auth/passkey/delete-passkey-dialog.tsx",
+        "components/auth/passkey/passkey.tsx",
+        "components/auth/passkey/rename-passkey-dialog.tsx",
+        "components/auth/provider-button.tsx",
+        "components/auth/settings/security/fresh-session-prompt.tsx",
+        "components/auth/sign-out.tsx",
+        "components/create-app/provider-choice-section.tsx",
+        "lib/eve/service.ts",
+        "lib/mcp/session-app/approval-request.tsx",
+        "lib/mcp/session-app/view.tsx",
+        productionSetupTestPath,
+        eveEvalPreloadPath,
+      ],
+      rules: { "typescript/no-confusing-void-expression": "off" },
+    },
     {
       // Preserve ordering in existing sequential operations.
       files: [
@@ -32,22 +67,22 @@ export default defineConfig({
       rules: { "eslint/no-await-in-loop": "off" },
     },
     {
-      files: ["app/ui/use-builder-controller.ts"],
+      files: [builderControllerPath],
       rules: { "react-doctor/no-pass-data-to-parent": "off" },
     },
     {
-      files: [baselinePath1, "components/auth/sign-up.tsx"],
+      files: [handoffControlsPath, "components/auth/sign-up.tsx"],
       rules: { "react-doctor/no-giant-component": "off" },
     },
     {
-      files: [baselinePath1, "app/ui/handoff-provisioning-progress.tsx"],
+      files: [handoffControlsPath, handoffProgressPath],
       rules: { "react-doctor/effect-needs-cleanup": "off" },
     },
     {
       files: [
         "app/(product)/auth/setting-up/page.tsx",
         "app/ui/builder-continuation.tsx",
-        baselinePath1,
+        handoffControlsPath,
       ],
       rules: { "react-doctor/nextjs-no-client-side-redirect": "off" },
     },
@@ -69,7 +104,7 @@ export default defineConfig({
       rules: { "react-doctor/async-parallel": "off" },
     },
     {
-      files: [baselinePath1],
+      files: [handoffControlsPath],
       rules: { "react-doctor/no-chain-state-updates": "off" },
     },
     {
@@ -117,7 +152,7 @@ export default defineConfig({
       rules: { "react-doctor/js-hoist-intl": "off" },
     },
     {
-      files: [baselinePath1],
+      files: [handoffControlsPath],
       rules: { "react-doctor/no-fetch-in-effect": "off" },
     },
     {
@@ -133,7 +168,7 @@ export default defineConfig({
       rules: { "react-doctor/rerender-lazy-ref-init": "off" },
     },
     {
-      files: ["app/ui/use-builder-draft-autosave.ts"],
+      files: [draftAutosavePath],
       rules: { "sonarjs/pseudo-random": "off" },
     },
     {
@@ -217,13 +252,13 @@ export default defineConfig({
         "lib/provisioning/hosted-operator-participant-successor.test.ts",
         "lib/provisioning/hosted-operator-unapproved-actor-journal.test.ts",
         "lib/provisioning/public-release-dispatcher.ts",
-        "lib/provisioning/repository-production-setup.test.ts",
+        productionSetupTestPath,
         "lib/repository/canonical-acquisition-alignment.test.ts",
         "lib/repository/local-planning-source.test.ts",
         "lib/repository/local-preview-auth-origin.test.ts",
         "lib/sandbox/managed-runtime.test.ts",
         "oxlint.config.ts",
-        "scripts/eve-eval-fetch-preload.mjs",
+        eveEvalPreloadPath,
         "scripts/eve-recovery-holder-observation.test.mjs",
       ],
       rules: { "unicorn/consistent-function-scoping": "off" },
@@ -237,7 +272,7 @@ export default defineConfig({
       // Preserve explicit boolean distinctions in existing boundary checks.
       files: [
         ".storybook/main.ts",
-        "app/ui/use-builder-draft-autosave.ts",
+        draftAutosavePath,
         "components/auth/oauth-provider/oauth-consent.tsx",
         "lib/auth/postgres-organization-user-authority.ts",
         previewActivationCli,
@@ -254,9 +289,9 @@ export default defineConfig({
         "app/actions/builder.test.ts",
         "app/ui/app-builder.test.tsx",
         "app/ui/builder-draft-outbox.ts",
-        baselinePath1,
+        handoffControlsPath,
         handoffProgressPath,
-        "app/ui/use-builder-controller.ts",
+        builderControllerPath,
         "components/auth/passkey/add-passkey-dialog.tsx",
         "lib/agent/deployment-repository-access-runtime.test.ts",
         "lib/agent/fresh-published-draft-preparation.test.ts",
@@ -291,8 +326,8 @@ export default defineConfig({
         "lib/provisioning/repository-production-creator.ts",
         productionCreatorTestPath,
         "lib/provisioning/repository-production-native.ts",
-        "lib/provisioning/repository-production-setup.test.ts",
-        "scripts/eve-eval-fetch-preload.mjs",
+        productionSetupTestPath,
+        eveEvalPreloadPath,
       ],
       rules: { "eslint/curly": "off" },
     },
@@ -413,7 +448,6 @@ export default defineConfig({
     "sonarjs/too-many-break-or-continue-in-loop": "off",
     "typescript/consistent-return": "off",
     "typescript/no-base-to-string": "off",
-    "typescript/no-confusing-void-expression": "off",
     "typescript/no-unsafe-argument": "off",
     "typescript/no-unsafe-assignment": "off",
     "typescript/no-unsafe-member-access": "off",
