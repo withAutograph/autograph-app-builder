@@ -1025,10 +1025,10 @@ export const ghcrCredentialEnvironment = function ghcrCredentialEnvironment(
   return environment;
 };
 
-export const hasExactKeys = function hasExactKeys<Value extends object>(
+export const hasExactKeys = function hasExactKeys<Value extends object, Key extends string>(
   value: Value,
-  expected: readonly string[] & readonly (keyof Value | string)[],
-): boolean {
+  expected: readonly Key[],
+): value is Value & Record<Key, unknown> {
   const actual = Object.keys(value).toSorted();
   const wanted = [...expected].toSorted();
   return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
@@ -1063,44 +1063,39 @@ const requireCurrentGhcrLogin = function requireCurrentGhcrLogin(provenance: Ima
     throw new Error(invalidReceiptMessage);
   }
   if (
-    (result as { status?: unknown }).status !== "credential-matched" ||
-    (result as { registry?: unknown }).registry !== "ghcr.io" ||
-    (result as { schema?: unknown }).schema !== "ghcr-login-v3"
+    result.status !== "credential-matched" ||
+    result.registry !== "ghcr.io" ||
+    result.schema !== "ghcr-login-v3"
   ) {
     throw new Error(invalidReceiptMessage);
   }
   if (
-    (result as { authenticationProvider?: unknown }).authenticationProvider !==
-      `gh@${githubCliVersion}-keyring` ||
-    (result as { operatorApprovalTransport?: unknown }).operatorApprovalTransport !==
-      "one-time-stdin" ||
-    (result as { keyringReadbackTransport?: unknown }).keyringReadbackTransport !==
-      "github-cli-keyring" ||
-    (result as { providerMutation?: unknown }).providerMutation !== "none"
+    result.authenticationProvider !== `gh@${githubCliVersion}-keyring` ||
+    result.operatorApprovalTransport !== "one-time-stdin" ||
+    result.keyringReadbackTransport !== "github-cli-keyring" ||
+    result.providerMutation !== "none"
   ) {
     throw new Error(invalidReceiptMessage);
   }
   if (
-    (result as { provenanceDigest?: unknown }).provenanceDigest !== provenance.digest ||
-    (result as { authenticationBoundaryDigest?: unknown }).authenticationBoundaryDigest !==
-      hashArtifact(JSON.stringify(binding)) ||
-    JSON.stringify((result as { authenticationBoundary?: unknown }).authenticationBoundary) !==
-      JSON.stringify(binding)
+    result.provenanceDigest !== provenance.digest ||
+    result.authenticationBoundaryDigest !== hashArtifact(JSON.stringify(binding)) ||
+    JSON.stringify(result.authenticationBoundary) !== JSON.stringify(binding)
   ) {
     throw new Error(invalidReceiptMessage);
   }
   if (
-    typeof (result as { username?: unknown }).username !== "string" ||
-    !/^[a-f0-9]{64}$/u.test(String((result as { identityDigest?: unknown }).identityDigest))
+    typeof result.username !== "string" ||
+    !/^[a-f0-9]{64}$/u.test(String(result.identityDigest))
   ) {
     throw new Error(invalidReceiptMessage);
   }
-  const { username } = result as { username: string };
+  const { username } = result;
   assertGhcrUsername(username);
   return {
     binding,
     identity: {
-      digest: String((result as { identityDigest: string }).identityDigest),
+      digest: String(result.identityDigest),
       provenanceDigest: provenance.digest,
       stateDigest: binding.state.digest,
       username,
@@ -1501,6 +1496,7 @@ const inspectRemoteImageUnlocked = function inspectRemoteImageUnlocked(
     provenance,
   );
   const login = requireCurrentGhcrLogin(provenance);
+  // SAFETY: Receipt results come from JSON; these guards require a non-null object before reading unknown fields.
   if (
     typeof push.result !== "object" ||
     push.result === null ||
@@ -1572,6 +1568,7 @@ const preloadImageUnlocked = function preloadImageUnlocked(
     provenance,
   );
   if (existing !== undefined) {
+    // SAFETY: Receipt results come from JSON; these guards require a non-null object before reading unknown fields.
     if (
       typeof existing.result !== "object" ||
       existing.result === null ||
@@ -1587,6 +1584,7 @@ const preloadImageUnlocked = function preloadImageUnlocked(
     remoteImageReceiptKind,
     provenance,
   );
+  // SAFETY: Receipt results come from JSON; these guards require a non-null object before reading unknown fields.
   if (
     typeof remote.result !== "object" ||
     remote.result === null ||
@@ -1601,6 +1599,7 @@ const preloadImageUnlocked = function preloadImageUnlocked(
     imagePushReceiptKind,
     provenance,
   );
+  // SAFETY: Receipt results come from JSON; these guards require a non-null object before reading unknown fields.
   if (
     typeof push.result !== "object" ||
     push.result === null ||
@@ -1720,6 +1719,7 @@ const proveSandboxImageUnlocked = function proveSandboxImageUnlocked(
     provenance,
   );
   if (existing !== undefined) {
+    // SAFETY: Receipt results come from JSON; these guards require a non-null object before reading unknown fields.
     if (
       typeof existing.result !== "object" ||
       existing.result === null ||
@@ -1739,6 +1739,7 @@ const proveSandboxImageUnlocked = function proveSandboxImageUnlocked(
     imagePreloadReceiptKind,
     provenance,
   );
+  // SAFETY: Receipt results come from JSON; these guards require a non-null object before reading unknown fields.
   if (
     typeof preload.result !== "object" ||
     preload.result === null ||

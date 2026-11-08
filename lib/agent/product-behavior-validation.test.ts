@@ -604,7 +604,8 @@ describe("behavior evidence invalidation during validation repair", () => {
     };
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     const failed = await validateAppCreation.execute({ implementationFiles: [] }, context as never);
-    expect(JSON.parse(String(log.mock.calls.at(-1)?.[0])) as unknown).toEqual({
+    const lastRecord: unknown = JSON.parse(String(log.mock.calls.at(-1)?.[0]));
+    expect(lastRecord).toEqual({
       callId: context.callId,
       detail: "needs_repair",
       event: "app_builder.validation_phase",

@@ -282,6 +282,7 @@ const gitOutput = async (
     });
   }
   child.stderr.pipe(diagnosticCapture.writer);
+  // SAFETY: ChildProcess close emits an exit code and termination signal, each nullable.
   const [status, signal] = (await once(child, "close")) as [number | null, NodeJS.Signals | null];
   if (status !== 0) {
     const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
@@ -313,12 +314,14 @@ const gitNullRecords = async function* gitNullRecords(
     env: gitEnvironment(),
     stdio: ["ignore", "pipe", "pipe"],
   });
+  // SAFETY: ChildProcess close emits an exit code and termination signal, each nullable.
   const closed = once(child, "close") as Promise<[number | null, NodeJS.Signals | null]>;
   child.stderr.pipe(diagnosticCapture.writer);
   let remainder = Buffer.alloc(0);
   let completed = false;
   let diagnosticsFinished = false;
   try {
+    // SAFETY: Spawned stdout is a byte stream and no text encoding is set.
     for await (const chunk of child.stdout as AsyncIterable<Buffer>) {
       let offset = 0;
       while (offset < chunk.length) {
@@ -389,8 +392,10 @@ export const hashBranchPublicationSourceBlob = async (
   });
   const hash = createHash("sha256");
   const chunks: Buffer[] = [];
+  // SAFETY: ChildProcess close emits an exit code and termination signal, each nullable.
   const closed = once(child, "close") as Promise<[number | null, NodeJS.Signals | null]>;
   child.stderr.pipe(diagnosticCapture.writer);
+  // SAFETY: Spawned stdout is a byte stream and no text encoding is set.
   // oxlint-disable-next-line eslint/no-await-in-loop -- hash Git blob data incrementally
   for await (const chunk of child.stdout as AsyncIterable<Buffer>) {
     hash.update(chunk);
@@ -995,6 +1000,7 @@ const exactStateMatches = (state: FileState, expected: FileState): boolean =>
 
 const fileDigest = async (path: string): Promise<string> => {
   const hash = createHash("sha256");
+  // SAFETY: createReadStream has no encoding option, so it yields Buffer chunks.
   // oxlint-disable-next-line eslint/no-await-in-loop -- hash file data incrementally
   for await (const chunk of createReadStream(path) as AsyncIterable<Buffer>) {
     hash.update(chunk);
@@ -1361,8 +1367,10 @@ const materializeAtomically = async (
             { env: gitEnvironment(), stdio: ["ignore", "pipe", "pipe"] },
           );
           const hash = createHash("sha256");
+          // SAFETY: ChildProcess close emits an exit code and termination signal, each nullable.
           const closed = once(child, "close") as Promise<[number | null, NodeJS.Signals | null]>;
           child.stderr.pipe(diagnosticCapture.writer);
+          // SAFETY: Spawned stdout is a byte stream and no text encoding is set.
           // oxlint-disable-next-line eslint/no-await-in-loop -- stream Git blob bytes into the staged file
           for await (const chunk of child.stdout as AsyncIterable<Buffer>) {
             hash.update(chunk);
