@@ -5,6 +5,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
+interface FixtureMcpServers {
+  "app-builder": { type: string; url: string };
+  alternate?: { type: string; url: string };
+}
+
 const runGenerator = async (cwd: string, endpoint: string) => {
   let stderr = "";
   const child = spawn(
@@ -39,24 +44,24 @@ const writeFixture = async (
       version,
     }),
   );
+  const mcpPath = path.join(root, "mcp.json");
+  const mcpServers: FixtureMcpServers = {
+    "app-builder": {
+      type: "streamable-http",
+      url: "http://127.0.0.1:3000/mcp",
+    },
+  };
+  if (extraServer) {
+    mcpServers.alternate = {
+      type: "streamable-http",
+      url: "https://preview.autograph.dev/alternate",
+    };
+  }
   await writeFile(
-    path.join(root, "mcp.json"),
+    mcpPath,
     JSON.stringify({
       $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
-      mcpServers: {
-        "app-builder": {
-          type: "streamable-http",
-          url: "http://127.0.0.1:3000/mcp",
-        },
-        ...(extraServer
-          ? {
-              alternate: {
-                type: "streamable-http",
-                url: "https://preview.autograph.dev/alternate",
-              },
-            }
-          : {}),
-      },
+      mcpServers,
     }),
   );
 };

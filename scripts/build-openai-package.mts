@@ -60,7 +60,7 @@ if (
 }
 assertAutographMcpEndpoint(portableServer.url, { release: false });
 
-const manifest = {
+const manifestBase = {
   author: portable.author,
   description: portable.description,
   homepage: portable.homepage,
@@ -89,9 +89,14 @@ const manifest = {
   repository: portable.repository,
   skills: "./skills/",
   version: portable.version,
-  ...(hasConnectionId ? { apps: "./.app.json" } : {}),
-  ...(hasEndpoint ? { mcpServers: "./.mcp.json" } : {}),
 };
+const manifest: typeof manifestBase & { apps?: string; mcpServers?: string } = manifestBase;
+if (hasConnectionId) {
+  manifest.apps = "./.app.json";
+}
+if (hasEndpoint) {
+  manifest.mcpServers = "./.mcp.json";
+}
 const apps = hasConnectionId ? { apps: { "app-builder": { id: connectionId } } } : { apps: {} };
 await mkdir(path.resolve(".codex-plugin"), { recursive: true });
 await writeFile(

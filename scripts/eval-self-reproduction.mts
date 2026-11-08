@@ -235,10 +235,18 @@ const runConfiguredWorkflowAdapters = async (candidateRoot: string | undefined) 
   }
   const referenceUrl = values["reference-url"] ?? process.env.SELF_REPRODUCTION_REFERENCE_URL;
   const candidateUrl = values["candidate-url"] ?? process.env.SELF_REPRODUCTION_CANDIDATE_URL;
+  const adapterOptions: Omit<Parameters<WorkflowAdapterFactory>[0], "outputRoot"> = {};
+  if (referenceUrl !== undefined && referenceUrl !== "") {
+    adapterOptions.referenceUrl = referenceUrl;
+  }
+  if (referenceFixtureRoot !== undefined && referenceFixtureRoot !== "") {
+    adapterOptions.referenceFixtureRoot = referenceFixtureRoot;
+  }
+  if (candidateUrl !== undefined && candidateUrl !== "") {
+    adapterOptions.candidateUrl = candidateUrl;
+  }
   const adapters = await createWorkflowAdapters({
-    ...(referenceUrl ? { referenceUrl } : {}),
-    ...(referenceFixtureRoot ? { referenceFixtureRoot } : {}),
-    ...(candidateUrl ? { candidateUrl } : {}),
+    ...adapterOptions,
     outputRoot: output,
   });
   const adapterSides = (["reference", "candidate"] as const).filter((side) => adapters[side]);
@@ -590,14 +598,18 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
     });
     child.on("close", (exitCode, signal) => {
       clearTimeout(timer);
-      if (force) {
+      if (force !== undefined) {
         clearTimeout(force);
       }
       process.removeListener("SIGINT", onInt);
       process.removeListener("SIGTERM", onTerm);
       stdout.end();
       stderr.end();
-      resultPromise.resolve({ exitCode, signal, ...(spawnError ? { error: spawnError } : {}) });
+      const result: Awaited<typeof resultPromise.promise> = { exitCode, signal };
+      if (spawnError) {
+        result.error = spawnError;
+      }
+      resultPromise.resolve(result);
     });
   }
   const result = await resultPromise.promise;
