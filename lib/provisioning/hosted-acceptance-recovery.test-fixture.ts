@@ -68,28 +68,27 @@ export const context: HostedOperatorContext = {
   },
 };
 export const preparedPlan = hostedOperatorPlanSchema.parse({
-  version: 1,
-  action: "prepare",
   access: [{ actorId: "actor-one", organizationId: "organization-one", roles: ["custom_role"] }],
+  action: "prepare",
   appDatabase: {
     database: "app_db",
     migratorRole: "app_migrator",
-    runtimeRole: "app_runtime",
     resourceId: "app-resource",
+    runtimeRole: "app_runtime",
   },
   authDatabase: {
     database: "auth_db",
     migratorRole: "auth_migrator",
-    runtimeRole: "auth_runtime",
     resourceId: "auth-resource",
+    runtimeRole: "auth_runtime",
   },
   contextId: "ordinary-planning-context",
   cost: { class: "shared-recovery-group", description: "Controlled fixture", owner: "Fixture" },
   effects: [
-    { id: "resources", kind: "resources", description: "Prepare resources" },
-    { id: "install", kind: "install", description: "Install app" },
-    { id: "access", kind: "access", description: "Authorize app" },
-    { id: "bindings", kind: "bindings", description: "Bind runtime" },
+    { description: "Prepare resources", id: "resources", kind: "resources" },
+    { description: "Install app", id: "install", kind: "install" },
+    { description: "Authorize app", id: "access", kind: "access" },
+    { description: "Bind runtime", id: "bindings", kind: "bindings" },
   ],
   installer: { reference: "shared-installer", sha256: "a".repeat(64) },
   neon: {
@@ -108,6 +107,7 @@ export const preparedPlan = hostedOperatorPlanSchema.parse({
     projectId: context.target.projectId,
     sessionId: context.target.sessionId,
   },
+  version: 1,
 });
 export const selection = {
   version: 1 as const,
@@ -441,7 +441,7 @@ export const installManagedAcceptanceSuite = (
                   expect(response.status).toBe(200);
                   await response.text();
                 },
-                { timeout: 3000, interval: 25 },
+                { interval: 25, timeout: 3000 },
               );
               return true;
             },

@@ -1109,15 +1109,15 @@ export const assessApplicationSourceRound = async (
     const blockedWithVerifiedFindings = async (reason: string) =>
       await preserveVerifiedFindings(
         {
+          blocked,
+          finish,
           input,
-          state,
           invocation,
-          reviewer,
           policyId,
           prior: continuation?.priorReviewerEvidence,
           readRedactions,
-          finish,
-          blocked,
+          reviewer,
+          state,
         },
         reason,
       );

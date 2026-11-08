@@ -20,6 +20,7 @@ import { createRepositoryProductionManagement } from "../app-access/native-manag
 import { createPostgresAppAccessOperationStore } from "../app-access/postgres-store";
 import { AppAccessError } from "../app-access/errors";
 import type { AppAccessCommand } from "../app-access/contracts";
+import type { ManagedAppAccess } from "../app-access/management";
 import { readRepositoryProductionApproval } from "../eve/private-repository-production-approval";
 import { readHostedOperatorOwnerReaderConfiguration } from "./hosted-operator-owner-context";
 import {
@@ -231,13 +232,13 @@ export const createRepositoryProductionNativeHandler =
         });
         const capture = selection
           ? await createOperatorArtifactPublication({
-              store: createPostgresOperatorArtifactStore({ database, assertCurrentOwner }),
+              store: createPostgresOperatorArtifactStore({ assertCurrentOwner, database }),
               assertCurrentOwner,
             }).readGeneratedRelease(artifactContext, selection)
           : undefined;
         const description =
           capture?.description ??
-          (await createCapturedAppDescriptionStore({ database, assertCurrentOwner }).read(
+          (await createCapturedAppDescriptionStore({ assertCurrentOwner, database }).read(
             artifactContext,
             spec.appSpecDigest,
           ));
@@ -483,28 +484,28 @@ export const createRepositoryProductionNativeHandler =
             ...workers(scope),
             prepareCreatorIdentity: (context) => creator.prepare(context),
             reconcileAppAccessUpgrade: createRepositoryProductionAccessUpgrader({
+              execute: async (context, command) => {
+                await managementFor(() => context.assertCurrent(), command, true).execute(
+                  (await current(scope)).owner,
+                  command,
+                );
+              },
               readMembers: async (context) =>
                 z
                   .array(z.object({ id: z.string(), roles: z.array(z.string()) }))
                   .parse(await authRequest(context, { action: listMembersAction }, true)),
+            }),
+            reconcileCreatorRoles: createRepositoryProductionRoleUpdater({
               execute: async (context, command) => {
                 await managementFor(() => context.assertCurrent(), command, true).execute(
                   (await current(scope)).owner,
                   command,
                 );
               },
-            }),
-            reconcileCreatorRoles: createRepositoryProductionRoleUpdater({
               readMembers: async (context) =>
                 z
                   .array(z.object({ id: z.string() }))
                   .parse(await authRequest(context, { action: listMembersAction }, true)),
-              execute: async (context, command) => {
-                await managementFor(() => context.assertCurrent(), command, true).execute(
-                  (await current(scope)).owner,
-                  command,
-                );
-              },
             }),
           },
           async (target, intent, run) =>
@@ -649,7 +650,7 @@ export const createRepositoryProductionNativeHandler =
                     .parse(await authRequest(readContext(row), { action: listMembersAction }, true))
                     .some((person) => person.id === row.record.creatorActorId)
                 : false;
-            return {
+            const resolved: ManagedAppAccess = {
               scope: known.scope,
               appName: known.scope.appId,
               organizationName: known.profile.organization.name,
@@ -673,18 +674,17 @@ export const createRepositoryProductionNativeHandler =
                     : state.state === "identity-required"
                       ? ("sign_in_required" as const)
                       : ("setting_up" as const),
-                ...("signInUrl" in state && state.signInUrl !== undefined
-                  ? { signInUrl: state.signInUrl }
-                  : {}),
-                ...(creatorRemoved
-                  ? {
-                      message:
-                        "Your app access was removed. Restore it from People or contact your workspace owner.",
-                      retryable: false,
-                    }
-                  : {}),
               },
             };
+            if ("signInUrl" in state && state.signInUrl !== undefined) {
+              resolved.creator.signInUrl = state.signInUrl;
+            }
+            if (creatorRemoved) {
+              resolved.creator.message =
+                "Your app access was removed. Restore it from People or contact your workspace owner.";
+              resolved.creator.retryable = false;
+            }
+            return resolved;
           },
           assertAuthorized: async (owner, scope, mutating) => {
             const resolved = await resolve(owner);
