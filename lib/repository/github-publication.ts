@@ -1046,17 +1046,17 @@ export async function readExactGitHubPublicationContent(input: {
         kind: change.kind,
         path: change.path,
       });
-      continue;
+    } else {
+      if (change.before === undefined) {
+        throw new Error("The reviewed modification preimage is missing.");
+      }
+      changes.push({
+        after: { ...change.after, bytes },
+        before: change.before,
+        kind: change.kind,
+        path: change.path,
+      });
     }
-    if (change.before === undefined) {
-      throw new Error("The reviewed modification preimage is missing.");
-    }
-    changes.push({
-      after: { ...change.after, bytes },
-      before: change.before,
-      kind: change.kind,
-      path: change.path,
-    });
   }
   const content: GitHubDraftPullRequestContent = {
     approvedPaths: input.review.approvedPaths,

@@ -96,7 +96,6 @@ export default defineConfig({
         "lib/provisioning/hosted-operator-retention-renewal.ts",
         "lib/provisioning/public-release-handler.ts",
         "lib/provisioning/repository-production-setup.ts",
-        sharedLintFile11,
         "lib/repository/local-planning-source-capture.ts",
         "lib/repository/local-source-baseline-store.ts",
         sharedLintFile21,
