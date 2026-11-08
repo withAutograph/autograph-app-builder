@@ -9,7 +9,7 @@ import {
 } from "./arrusted-template-reader";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();
+const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" });
 
 afterEach(() => {
   vi.restoreAllMocks();

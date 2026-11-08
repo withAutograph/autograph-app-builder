@@ -430,7 +430,7 @@ const requirementRow = (requirement: Assessment["rows"][number]) =>
 type ReportGap = Record<string, unknown>;
 
 const gapRow = (gap: ReportGap) =>
-  `<li><strong>${escape(String(gap.priority).toUpperCase())}: ${escape(String(gap.title))}</strong><p>${escape(String(gap.expected))}</p><p>${escape(String(gap.recommendation))}</p><small>${escape(String(gap.confirmed ? "Observed failure; see retained evidence" : "Incomplete assessment; see status and reason"))}</small></li>`;
+  `<li><strong>${escape(String(gap.priority).toUpperCase())}: ${escape(String(gap.title))}</strong><p>${escape(String(gap.expected))}</p><p>${escape(String(gap.recommendation))}</p><small>${escape(gap.confirmed ? "Observed failure; see retained evidence" : "Incomplete assessment; see status and reason")}</small></li>`;
 
 const captureFileLink = (item: { label: string }, file: string) => {
   const link = `<a href="${escape(file)}">${escape(basename(file))}</a>`;

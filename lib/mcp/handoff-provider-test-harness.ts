@@ -105,7 +105,7 @@ export function preparedProviderFixture(input: {
   isActiveMember: (authority: HostedSessionTenantAuthority) => Promise<boolean>;
 }) {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-  const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();
+  const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" });
   let credentialRevision = 1;
   let vercelStatus = 200;
   const githubToken = () => `ghs_mock_server_installation_token_${credentialRevision}`;

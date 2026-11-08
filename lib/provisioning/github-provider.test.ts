@@ -50,7 +50,7 @@ const config = {
   appId: "123",
   clientId: "client-id",
   clientSecret: "client-secret-value-long-enough",
-  privateKey: privateKey.export({ format: "pem", type: "pkcs8" }).toString(),
+  privateKey: privateKey.export({ format: "pem", type: "pkcs8" }),
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
