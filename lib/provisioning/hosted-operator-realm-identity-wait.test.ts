@@ -118,15 +118,15 @@ const plan = hostedOperatorPlanSchema.parse({
     },
   },
   deploymentBoundary: {
-    authority,
-    teamId: "team",
     app: { branch: "preview", environment: "preview", projectId: "project" },
+    authority,
     gateway: { branch: "preview", environment: "preview", projectId: "gateway-project" },
     operator: {
       deploymentId: "operator-deployment",
       environment: "preview",
       projectId: "operator-project",
     },
+    teamId: "team",
     verification: {
       gatewayOrigin: "https://gateway.test",
       jwksUrl: "https://gateway.test/_platform/jwks.json",
@@ -304,9 +304,9 @@ describe("approved Realm identity wait registration", () => {
       adapterSessionId: f.registration.adapterSessionId,
       approvedPlanDigest: f.registration.input.planDigest,
       callId: f.registration.callId,
+      hook: { keyVersion: "wait-v1" },
       nonceSha256: realmIdentityNonceSha256(nonce),
       operationRef: f.registration.input.operationRef,
-      hook: { keyVersion: "wait-v1" },
     });
     expect(wait?.hook.encryptedToken).not.toBe(token);
     expect(JSON.stringify(after)).not.toContain(token);
@@ -442,14 +442,14 @@ describe("canonical identity event delivery and acknowledgment", () => {
     f.consume();
     const observation = await f.observe(context);
     const eventId = realmContinuationDispatchId(requireFixture(observation));
-    expect(await f.run.delivery(context)).toEqual({ token, eventId, observed: false });
+    expect(await f.run.delivery(context)).toEqual({ eventId, observed: false, token });
     const result = await f.run.acknowledge(context, { ...f.registration, eventId });
-    expect(result).toEqual({ status: "consumed", eventId });
+    expect(result).toEqual({ eventId, status: "consumed" });
     expect(JSON.stringify(result)).not.toContain(token);
     expect(JSON.stringify(result)).not.toContain("private-canonical-proof");
     expect(f.row().record.realmIdentityWait?.eventId).toBe(eventId);
     expect(f.row().record.realmIdentityWait?.observedAt).toBeDefined();
-    expect(await f.run.delivery(context)).toEqual({ token, eventId, observed: true });
+    expect(await f.run.delivery(context)).toEqual({ eventId, observed: true, token });
     const acknowledged = f.row().record.realmIdentityWait?.observedAt;
     f.setTime("2026-10-15T01:00:00.000Z");
     await f.run.acknowledge(context, { ...f.registration, eventId });
@@ -461,12 +461,12 @@ describe("canonical identity event delivery and acknowledgment", () => {
     await f.run.register(context, f.registration);
     f.setTime("2026-10-17T00:00:00.000Z");
     const delivery = await f.run.delivery(context);
-    expect(delivery).toMatchObject({ token, observed: false });
+    expect(delivery).toMatchObject({ observed: false, token });
     const result = await f.run.acknowledge(context, {
       ...f.registration,
       eventId: requireFixture(delivery).eventId,
     });
-    expect(result).toEqual({ status: "expired", eventId: delivery?.eventId });
+    expect(result).toEqual({ eventId: delivery?.eventId, status: "expired" });
     expect(f.row().record.operator?.identityLink?.proofRef).toBeUndefined();
     expect(f.row().record.operator?.identityLink?.consumedAt).toBeUndefined();
   });

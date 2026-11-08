@@ -169,9 +169,9 @@ vi.mock("./compiled-operator-artifacts", () => ({
 }));
 
 const tools = [
-  { name: "initial publication", tool: publishTool, publish: hooks.publish },
-  { name: "existing draft update", tool: updateTool, publish: hooks.update },
-  { name: "draft reconciliation", tool: reconcileTool, publish: hooks.reconcile },
+  { name: "initial publication", publish: hooks.publish, tool: publishTool },
+  { name: "existing draft update", publish: hooks.update, tool: updateTool },
+  { name: "draft reconciliation", publish: hooks.reconcile, tool: reconcileTool },
 ];
 const input = {
   expectedProposalDigest: "a".repeat(64),
@@ -227,7 +227,7 @@ describe("publication records actual source for its compiled app release", () =>
     hooks.candidate = structuredClone(originalCandidate);
     hooks.state = structuredClone(originalState);
     hooks.completions = [completionFixture()];
-    hooks.inspect.mockResolvedValue({ unresolvedConflicts: [], resolvedTree: "tree" });
+    hooks.inspect.mockResolvedValue({ resolvedTree: "tree", unresolvedConflicts: [] });
     hooks.candidate.publishedReconciliation = undefined;
   });
 
@@ -578,7 +578,7 @@ describe("publication records actual source for its compiled app release", () =>
   });
 
   it("keeps fresh publication checkout checks and never writes a changed tree", async () => {
-    hooks.inspect.mockResolvedValue({ unresolvedConflicts: [], resolvedTree: "changed-tree" });
+    hooks.inspect.mockResolvedValue({ resolvedTree: "changed-tree", unresolvedConflicts: [] });
     // SAFETY: Minimal production tool context with trusted ports mocked.
     await expect(reconcileTool.execute(input, ctx as never)).rejects.toThrow("checkout changed");
     expect(hooks.reconcile).not.toHaveBeenCalled();

@@ -371,11 +371,11 @@ describe("hosted operator owner context", () => {
         parentCancellationRevision: 0,
         ownerRunId: "adapter-child",
         provenance: {
+          checkpointVersion: 1,
           kind: "failed-turn-input",
-          sourceStepId: "step_1",
           sourceEventId: "event_1",
           sourceSlot: 1,
-          checkpointVersion: 1,
+          sourceStepId: "step_1",
         },
       },
     });
@@ -682,18 +682,18 @@ describe("Realm service continuation live owner checks", () => {
   const service = readRealmContinuationServiceIdentity({
     EVE_HOSTED_ADAPTER: "1",
     EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
-    VERCEL_ENV: "preview",
     EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
     EVE_HOSTED_VERCEL_TEAM_SLUG: "withautograph",
+    VERCEL_ENV: "preview",
   });
   const config = { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" };
   const realmContinuation = { config, service };
   const serviceAuth = (
     overrides: {
       adapterSessionId?: string;
-      ownerSessionId?: string;
       direct?: boolean;
       expired?: boolean;
+      ownerSessionId?: string;
     } = {},
   ) => {
     const original = realmContinuationInitiatorSchema.parse(
@@ -701,7 +701,7 @@ describe("Realm service continuation live owner checks", () => {
     );
     const reason: RealmContinuationAuthority["reason"] =
       overrides.expired === true
-        ? { kind: "expired-technical-wait", expiresAt: "2026-10-01T00:00:00.000Z" }
+        ? { expiresAt: "2026-10-01T00:00:00.000Z", kind: "expired-technical-wait" }
         : { kind: "consumed-proof", proofRef: "private-proof-ref", proofSha256: "c".repeat(64) };
     return createRealmContinuationServiceAuth({
       ...realmContinuation,
@@ -735,10 +735,10 @@ describe("Realm service continuation live owner checks", () => {
       const f = fixture({ realmContinuation });
       const result = await f.resolver(input(serviceAuth({ expired })));
       expect(result).toMatchObject({
+        adapterSessionId: "adapter-current",
         authority,
         principal,
         sessionId: "public-session-1",
-        adapterSessionId: "adapter-current",
       });
       expect(JSON.stringify(result)).not.toContain("private-proof-ref");
       expect(result.realmContinuation?.sealedAuthority).toBeDefined();
@@ -791,9 +791,9 @@ describe("approval history for recovered public grant authority", () => {
   const recovered = (kind: "direct" | "handoff") => {
     const source = durableHostedSessionRecordSchema.parse({
       ...(kind === "direct" ? directSessionRecord() : session),
-      status: "failed",
       resumability: "terminal",
       stage: "needs_attention",
+      status: "failed",
     });
     const child = durableHostedSessionRecordSchema.parse({
       ...source,
@@ -818,11 +818,11 @@ describe("approval history for recovered public grant authority", () => {
         parentCancellationRevision: 0,
         ownerRunId: "recovered-adapter",
         provenance: {
+          checkpointVersion: 1,
           kind: "failed-turn-input",
-          sourceStepId: "source-step",
           sourceEventId: "source-event",
           sourceSlot: 0,
-          checkpointVersion: 1,
+          sourceStepId: "source-step",
         },
       },
     });
