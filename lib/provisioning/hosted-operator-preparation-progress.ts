@@ -39,11 +39,21 @@ export const readOperatorPreparationProgress = (
   const missingEffectKinds = [...missingKinds];
   const pendingEffect = plan.effects.find((effect) => effect.id === operator.pendingEffectId);
   const preparation = record.accountPreparation;
-  const progress: OperatorPreparationProgress = {
-    ...(plan.stage === undefined ? {} : { planStage: plan.stage }),
-    lease,
+  const stage: Pick<OperatorPreparationProgress, "planStage"> = {};
+  if (plan.stage !== undefined) {
+    stage.planStage = plan.stage;
+  }
+  const pending = { ...stage, lease };
+  const pendingDetails: typeof pending &
+    Pick<OperatorPreparationProgress, "hasPendingEffect" | "pendingEffectKind"> = {
+    ...pending,
     hasPendingEffect: operator.pendingEffectId !== undefined,
-    ...(pendingEffect === undefined ? {} : { pendingEffectKind: pendingEffect.kind }),
+  };
+  if (pendingEffect !== undefined) {
+    pendingDetails.pendingEffectKind = pendingEffect.kind;
+  }
+  const progress: OperatorPreparationProgress = {
+    ...pendingDetails,
     hasPendingAttempt: operator.pendingEffectAttempt !== undefined,
     allPlanEffectsReceipted: missingEffectKinds.length === 0,
     missingEffectKinds,

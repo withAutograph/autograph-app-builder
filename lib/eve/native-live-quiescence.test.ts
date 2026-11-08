@@ -422,7 +422,7 @@ describe("live native execution transfer", () => {
   it("rejects source inspection mixed with recovery dispatch fields before native reads", async () => {
     const f = fixture();
     const authorizeSourceObservation = vi.fn(() =>
-      Promise.resolve({ ownerRunId: "old-native", logicalSessionId: "logical" }),
+      Promise.resolve({ logicalSessionId: "logical", ownerRunId: "old-native" }),
     );
     for (const forbidden of [
       { recovery: descriptor },
@@ -593,7 +593,7 @@ describe("native recovery refusal diagnostics", () => {
             ports: {
               ...f.ports,
               authorizeSourceObservation: () =>
-                Promise.resolve({ ownerRunId: "old-native", logicalSessionId: "logical" }),
+                Promise.resolve({ logicalSessionId: "logical", ownerRunId: "old-native" }),
             },
           },
           () => Promise.resolve(f.dependencies),
@@ -727,7 +727,7 @@ describe("native refusal boundary observation", () => {
           runId: "old-native",
           status: anchorStatus,
           unsettledStepIds: ["private-canary-step"],
-          stepCounts: { completed: 4, pending: 1, running: 2, failed: 3, cancelled: 0, unknown: 0 },
+          stepCounts: { cancelled: 0, completed: 4, failed: 3, pending: 1, running: 2, unknown: 0 },
         }),
       );
       f.dependencies.inspectSource = inspectSource;
@@ -749,7 +749,7 @@ describe("native refusal boundary observation", () => {
             ports: {
               ...f.ports,
               authorizeSourceObservation: () =>
-                Promise.resolve({ ownerRunId: "old-native", logicalSessionId: "logical" }),
+                Promise.resolve({ logicalSessionId: "logical", ownerRunId: "old-native" }),
             },
           },
           () => Promise.resolve(f.dependencies),
@@ -826,7 +826,7 @@ it("continues exact-source collection after step inspection fails, retaining aut
         ports: {
           ...f.ports,
           authorizeSourceObservation: () =>
-            Promise.resolve({ ownerRunId: "old-native", logicalSessionId: "logical" }),
+            Promise.resolve({ logicalSessionId: "logical", ownerRunId: "old-native" }),
         },
       },
       () => Promise.resolve(f.dependencies),
@@ -870,7 +870,7 @@ it("returns a safe private summary for collector errors after successful owner a
         ports: {
           ...f.ports,
           authorizeSourceObservation: () =>
-            Promise.resolve({ ownerRunId: "old-native", logicalSessionId: "logical" }),
+            Promise.resolve({ logicalSessionId: "logical", ownerRunId: "old-native" }),
         },
       },
       () => Promise.resolve(f.dependencies),
@@ -894,7 +894,7 @@ it("fails closed without a summary or private reads when owner authorization is 
   const f = fixture();
   const authorizeSourceObservation = vi
     .fn()
-    .mockResolvedValueOnce({ ownerRunId: "old-native", logicalSessionId: "logical" })
+    .mockResolvedValueOnce({ logicalSessionId: "logical", ownerRunId: "old-native" })
     .mockRejectedValue(new Error("private-canary-owner"));
   const info = vi.spyOn(console, "info").mockImplementation(() => {});
   try {
@@ -941,7 +941,7 @@ it("relays the actual native diagnostic response through postMutation on the sta
           ports: {
             ...f.ports,
             authorizeSourceObservation: () =>
-              Promise.resolve({ ownerRunId: "old-native", logicalSessionId: "logical" }),
+              Promise.resolve({ logicalSessionId: "logical", ownerRunId: "old-native" }),
           },
         },
         () => Promise.resolve(f.dependencies),
@@ -992,7 +992,7 @@ it("relays dependency-load failure only after successful exact source authorizat
         ports: {
           ...f.ports,
           authorizeSourceObservation: () =>
-            Promise.resolve({ ownerRunId: "old-native", logicalSessionId: "logical" }),
+            Promise.resolve({ logicalSessionId: "logical", ownerRunId: "old-native" }),
         },
       },
       () => Promise.reject(new ReferenceError("private-canary-module")),
@@ -1477,11 +1477,11 @@ it("GET-only opaque preflight relays complete owned-lineage facts without stoppi
       status: "running",
       unsettledStepIds: [],
       stepCounts: {
+        cancelled: 0,
         completed: id === "old-native" ? 20 : 6,
+        failed: 0,
         pending: 0,
         running: 0,
-        failed: 0,
-        cancelled: 0,
         unknown: 0,
       },
     });
@@ -1497,7 +1497,7 @@ it("GET-only opaque preflight relays complete owned-lineage facts without stoppi
           ports: {
             ...f.ports,
             authorizeSourceObservation: () =>
-              Promise.resolve({ ownerRunId: "old-native", logicalSessionId: "logical" }),
+              Promise.resolve({ logicalSessionId: "logical", ownerRunId: "old-native" }),
           },
         },
         () => Promise.resolve(f.dependencies),

@@ -58,11 +58,11 @@ const target = {
 };
 const context = { authority, target };
 const program = normalActorProgramSchema.parse({
-  appAccess: [],
-  appId: target.appId,
   actors: [
     { account: "capture-existing", actorKey: "owner", email: "owner@example.test", name: "Owner" },
   ],
+  appAccess: [],
+  appId: target.appId,
   memberships: [],
   organizations: [],
   origin: "https://apps.example.com",
@@ -621,12 +621,12 @@ describe("approved additive capture participant state", () => {
         });
       }
       const ownerContext = operatorOwnerContextSchema.parse({
-        kind: "direct",
+        adapterGeneration: 1,
+        adapterSessionId: "adapter",
         authority,
+        kind: "direct",
         principal: { ...authority, scopes: ["autograph:send"] },
         sessionId: target.sessionId,
-        adapterSessionId: "adapter",
-        adapterGeneration: 1,
       });
       const scopes = [
         {
@@ -1038,12 +1038,12 @@ describe("approved additive capture participant state", () => {
       f.approve();
       await f.operations.ensureNormalActorCapture(f.input);
       const ownerContext = operatorOwnerContextSchema.parse({
-        kind: "direct",
+        adapterGeneration: 1,
+        adapterSessionId: "adapter",
         authority,
+        kind: "direct",
         principal: { ...authority, scopes: ["autograph:send"] },
         sessionId: target.sessionId,
-        adapterSessionId: "adapter",
-        adapterGeneration: 1,
       });
       const receipts = [
         {

@@ -920,25 +920,25 @@ describe("fresh normal same-project runtime assembly", () => {
     const f = fixture();
     const result = await f.resolve(request(f.body));
     expect(result.gateway).toMatchObject({
-      projectId: f.destination.projectId,
-      repoId: "123",
       branch: f.selected.publishedSource.branch,
-      gitSha: f.selected.publishedSource.gitSha,
-      publicOrigin: "https://apps-new-app.vercel.app",
       environment: "preview",
+      gitSha: f.selected.publishedSource.gitSha,
+      projectId: f.destination.projectId,
+      publicOrigin: "https://apps-new-app.vercel.app",
+      repoId: "123",
     });
     expect(result.gateway.deploymentId).toBeUndefined();
     expect(result.sandbox.workers["new-app"]).toEqual(capturedGenericWorkerFixture);
     expect(result.standardRuntime?.publicRealmWorkload).toMatchObject({
       environment: "production",
-      projectId: f.destination.projectId,
       ownerId: f.destination.teamId,
+      projectId: f.destination.projectId,
       subject: "explicitly-reviewed-production-gateway",
     });
     expect(result.standardRuntime?.publicRealmWorkload).toMatchObject({
       environment: "production",
-      projectId: f.destination.projectId,
       ownerId: f.destination.teamId,
+      projectId: f.destination.projectId,
       subject: "explicitly-reviewed-production-gateway",
     });
     expect(result.applications["new-app"]).toMatchObject({
@@ -1204,19 +1204,19 @@ describe("fresh normal same-project runtime assembly", () => {
     const f = fixture();
     const result = await f.resolve(request(f.body));
     expect(result.gateway).toMatchObject({
-      projectId: f.destination.projectId,
-      repoId: "123",
       branch: f.selected.publishedSource.branch,
-      gitSha: f.selected.publishedSource.gitSha,
-      publicOrigin: "https://apps-new-app.vercel.app",
       environment: "preview",
+      gitSha: f.selected.publishedSource.gitSha,
+      projectId: f.destination.projectId,
+      publicOrigin: "https://apps-new-app.vercel.app",
+      repoId: "123",
     });
     expect(result.gateway.deploymentId).toBeUndefined();
     expect(result.sandbox.workers["new-app"]).toEqual(capturedGenericWorkerFixture);
     expect(result.standardRuntime?.publicRealmWorkload).toMatchObject({
       environment: "production",
-      projectId: f.destination.projectId,
       ownerId: f.destination.teamId,
+      projectId: f.destination.projectId,
       subject: "explicitly-reviewed-production-gateway",
     });
     expect(result.applications["new-app"]).toMatchObject({
