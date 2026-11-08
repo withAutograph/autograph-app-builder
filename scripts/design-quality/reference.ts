@@ -159,13 +159,11 @@ const literalValues = (type: ts.Type): string[] | undefined => {
   );
   const values = members
     .map((member) => {
-      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-      if (member.flags & ts.TypeFlags.StringLiteral) {
-        return (member as ts.StringLiteralType).value;
+      if (member.isStringLiteral()) {
+        return member.value;
       }
-      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-      if (member.flags & ts.TypeFlags.NumberLiteral) {
-        return String((member as ts.NumberLiteralType).value);
+      if (member.isNumberLiteral()) {
+        return String(member.value);
       }
       return null;
     })
@@ -204,7 +202,7 @@ const primitiveKinds = (type: ts.Type): PublicProp["primitiveKinds"] => {
       return undefined;
     }
   }
-  return [...kinds].toSorted() as PublicProp["primitiveKinds"];
+  return [...kinds].toSorted();
 };
 
 const propsForExport = (

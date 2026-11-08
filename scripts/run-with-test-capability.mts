@@ -141,7 +141,10 @@ function exactParentArguments(): readonly string[] {
         env: { LC_ALL: "C", NODE_ENV: "test", PATH: testExecutablePath },
       }),
     ) as unknown;
-    if (!Array.isArray(observed) || observed.some((entry) => typeof entry !== "string")) {
+    if (
+      !Array.isArray(observed) ||
+      !observed.every((entry): entry is string => typeof entry === "string")
+    ) {
       throw new Error("The structural test launcher argv was invalid.");
     }
     const cwd = execFileSync("/usr/sbin/lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"], {
@@ -155,7 +158,7 @@ function exactParentArguments(): readonly string[] {
     if (cwd === undefined || realpathSync(cwd) !== realpathSync(repositoryRoot)) {
       throw new Error("The structural test launcher cwd was invalid.");
     }
-    return observed as string[];
+    return observed;
   }
   throw new Error("Structural test launcher inspection is unsupported.");
 }
