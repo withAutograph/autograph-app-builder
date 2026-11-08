@@ -82,8 +82,9 @@ export const exerciseCandidateBrowserWorkflows = async (
     const check = (id: string, passed: boolean | null, detail: string) =>
       assertions.push({ detail, id, passed });
     const button = (name: RegExp) => page.getByRole("button", { name }).first();
-    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+    // oxlint-disable-next-line github/no-then, typescript/promise-function-async -- Preserve the existing rejection handling and settlement behavior. Preserve the returned promise and synchronous throw behavior.
     const exists = (locator: CandidateLocator) => locator.isVisible().catch(() => false);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const text = () => page.locator("body").textContent();
     let outcome: CandidateWorkflowOutcome = {
       assertions: [],

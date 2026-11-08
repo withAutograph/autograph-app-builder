@@ -94,6 +94,7 @@ const availablePort = async (requestedPort = 0): Promise<number> => {
   return port;
 };
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 const probe = (url: string): Promise<boolean> => {
   const deferred = Promise.withResolvers<boolean>();
   {

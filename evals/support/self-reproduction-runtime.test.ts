@@ -9,6 +9,7 @@ import {
 
 const backend = (results: { exitCode: number; stdout?: string; stderr?: string }[]) => {
   const shutdown = vi.fn<() => Promise<void>>().mockResolvedValue();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const run = vi.fn(() => {
     const result = results.shift();
     if (!result) {
@@ -18,16 +19,20 @@ const backend = (results: { exitCode: number; stdout?: string; stderr?: string }
   });
   const writeTextFile = vi.fn<() => Promise<void>>().mockResolvedValue();
   const writeBinaryFile = vi.fn<() => Promise<void>>().mockResolvedValue();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const spawn = vi.fn(() =>
     Promise.resolve({
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       kill: () => Promise.resolve(),
       stderr: new ReadableStream<Uint8Array>(),
       stdout: new ReadableStream<Uint8Array>(),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       wait: () => Promise.resolve({ exitCode: 0 }),
     }),
   );
   const session = {
     id: "sandbox-fixture",
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     readTextFile: () => Promise.resolve(JSON.stringify({ basePath: "" })),
     run,
     spawn,
@@ -51,6 +56,7 @@ const backend = (results: { exitCode: number; stdout?: string; stderr?: string }
   } satisfies SandboxSession & { id: string };
   return {
     backend: {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       open: () =>
         Promise.resolve({
           id: "sandbox-fixture",
@@ -155,6 +161,7 @@ describe("self-reproduction candidate runtime", () => {
         ]),
       },
     ]);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const onReady = vi.fn(({ baseURL }: { baseURL: string }) => {
       expect(baseURL).toBe("http://127.0.0.1:3000");
       expect(fixture.shutdown).not.toHaveBeenCalled();
@@ -208,6 +215,7 @@ describe("self-reproduction candidate runtime", () => {
   it("classifies provider creation failure as unavailable infrastructure", async () => {
     const receipt = await evaluateCandidateRuntime({
       backend: {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         open: () => Promise.reject(new Error("Vercel OIDC credential unavailable")),
       },
       candidateAppId: "candidate",

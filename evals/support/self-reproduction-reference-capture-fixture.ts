@@ -145,9 +145,11 @@ export const createReferenceCaptureFixture =
   };
 
 const prepareDefaultReferenceCapture = createReferenceCaptureFixture<Page>(
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   () => import("../../e2e/support/harness"),
 );
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 export const prepareReferenceCaptureFixture = (
   ...args:
     | [page: Page, input: ReferenceCaptureInput]

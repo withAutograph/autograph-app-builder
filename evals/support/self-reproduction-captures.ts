@@ -274,6 +274,7 @@ export async function runPairedCaptureEvidence(input: {
   launch?: () => Promise<Browser>;
 }): Promise<PairedCaptureRun> {
   const run = createPairedCaptureRunner(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     input.launch ?? (() => chromium.launch({ headless: true })),
   );
   return await run(input);

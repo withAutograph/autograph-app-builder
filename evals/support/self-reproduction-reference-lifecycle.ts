@@ -27,12 +27,14 @@ export const exerciseReferenceLifecycle = async (input: {
   const snapshots = new Map<string, HostedEngineSnapshot>();
   const counts = { cancels: 0, sends: 0, starts: 0 };
   const transport: HostedEveTransport = {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     cancel: ({ adapterSessionId }) => {
       counts.cancels += 1;
       const value = snapshot("cancelled");
       snapshots.set(adapterSessionId, value);
       return Promise.resolve(value);
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     get: ({ adapterSessionId }) => {
       const value = snapshots.get(adapterSessionId);
       if (!value) {
@@ -40,6 +42,7 @@ export const exerciseReferenceLifecycle = async (input: {
       }
       return Promise.resolve(value);
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     respond: () => Promise.reject(new Error("This fixture does not support approval responses.")),
     send: async ({ adapterSessionId, onAccepted }) => {
       counts.sends += 1;
@@ -62,6 +65,7 @@ export const exerciseReferenceLifecycle = async (input: {
       snapshots.set(adapterSessionId, value);
       return value;
     },
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     start: () => {
       counts.starts += 1;
       const adapterSessionId = randomUUID();

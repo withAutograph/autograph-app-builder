@@ -196,6 +196,7 @@ export default defineTool({
       sandbox,
     };
     if (fixture) {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       applyInput.snapshotter = (fixtureSandbox, applyRoot) =>
         inspectFixtureApplyOverlay(fixtureSandbox, applyRoot, current.appSpec.appId);
     }

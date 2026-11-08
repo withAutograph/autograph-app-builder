@@ -48,6 +48,7 @@ export const createDefaultFrameworkAdapter = <PageInput = unknown>(input: {
   return {
     exerciseBrowser:
       input.browserFixture ??
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       (() =>
         Promise.resolve({
           artifacts: [],
@@ -57,6 +58,7 @@ export const createDefaultFrameworkAdapter = <PageInput = unknown>(input: {
         })),
     instantNavigationRecipe:
       input.navigationFixture ??
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       (() =>
         Promise.resolve({
           disposition: "not-run",
@@ -66,6 +68,7 @@ export const createDefaultFrameworkAdapter = <PageInput = unknown>(input: {
         })),
     reviewSource:
       input.sourceReview ??
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       (() =>
         Promise.resolve({
           artifacts: [],

@@ -22,6 +22,7 @@ export default defineTool({
       throw new Error("Finish the accepted app's pending work before saving its source");
     }
     const store = createLocalApplicationSourceStore(process.env);
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const assertCurrent = () => {
       ctx.abortSignal?.throwIfAborted();
       if (!isDeepStrictEqual(current, appBuilderWorkflowState.get())) {

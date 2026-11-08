@@ -22,16 +22,19 @@ export default defineEval({
     ]);
     try {
       const destination = path.join(fixture.allowedRoot, "canceled");
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       await withFreshBootstrapTestCapability(fixture.capability, () =>
         session.send(`Publish fresh repository bootstrap at ${destination}.`),
       );
       session.requireInputRequest({ toolName: "publish_fresh_repository" });
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const turn1 = await withFreshBootstrapTestCapability(fixture.capability, () =>
         session.respondAll("cancel"),
       );
       t.succeeded();
       t.check(turn1.message, includes("canceled, stale, or recovery-required"));
 
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const turn2 = await withFreshBootstrapTestCapability(fixture.capability, () =>
         session.send(
           `Inspect fresh repository bootstrap at ${path.join(fixture.allowedRoot, "stale")} with stale review.`,

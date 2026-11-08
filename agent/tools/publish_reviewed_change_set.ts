@@ -258,6 +258,7 @@ export default defineTool({
     const result = await publishReviewedChangeSet({
       proposal,
       publishedByCallId,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       readOverlayFile: (path) =>
         hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
         workflow.appSpec.appId === "publication-precondition-failure"

@@ -103,18 +103,23 @@ async function release(
 export const createReleaseSandboxComputeHook = (dependencies: ReleaseDependencies) =>
   defineHook({
     events: {
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       "session.completed"(_event, ctx) {
         return release(ctx, "session-completed", dependencies);
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       "session.failed"(_event, ctx) {
         return release(ctx, "session-failed", dependencies);
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       "turn.cancelled"(_event, ctx) {
         return release(ctx, "turn-cancelled", dependencies);
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       "turn.completed"(_event, ctx) {
         return release(ctx, "turn-completed", dependencies);
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       "turn.failed"(_event, ctx) {
         return release(ctx, "turn-failed", dependencies);
       },
@@ -144,6 +149,7 @@ export const createReleaseSandboxComputeHook = (dependencies: ReleaseDependencie
           restoreSelectedGitHubSandboxSource({
             accessReceipt: repositoryAccessReceiptState.get(),
             githubSource,
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
             runtime: () => repositoryAccessRuntimeForSession(ctx.session.auth),
             sessionId: ctx.session.id,
           });

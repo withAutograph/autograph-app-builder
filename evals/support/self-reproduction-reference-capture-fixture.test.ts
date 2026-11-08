@@ -11,6 +11,7 @@ const fixture = vi.hoisted(() => ({
 }));
 const harness = {
   appOrigin: "https://localhost:3001",
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   currentSession: () => Promise.resolve({ user: { id: "synthetic-owner" } }),
   databaseUrl: "postgresql://synthetic",
   finishOAuth: fixture.authenticate,
@@ -22,6 +23,7 @@ vi.mock("postgres", () => ({ default: () => Object.assign(fixture.query, { end: 
 const page = {
   getByLabel: (name: string) => ({
     fill: vi.fn(),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     inputValue: () =>
       Promise.resolve(
         name === "App Name" ? selfReproductionDraft.appName : selfReproductionDraft.brief,
@@ -96,6 +98,7 @@ it("captures three restored contexts without waiting for a new write acknowledge
       ...page,
       getByLabel: (name: string) => ({
         fill,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         inputValue: () =>
           Promise.resolve(
             name === "App Name" ? selfReproductionDraft.appName : selfReproductionDraft.brief,

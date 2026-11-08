@@ -32,6 +32,7 @@ export default defineTool({
       } else if (input.sourceKind === "fresh-template") {
         const receipt = await acquireCanonicalArrustedTemplate({
           callId: ctx.callId,
+          // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
           sandbox: () => ctx.getSandbox(),
           sessionId: ctx.session.id,
         });

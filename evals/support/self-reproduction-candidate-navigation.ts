@@ -67,6 +67,7 @@ export const exerciseCandidateNavigation = async (
         brief,
         docs,
         page.getByRole("button", { exact: true, name: "Continue to review" }),
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       ].map((control) => control.waitFor({ state: "visible", timeout: 10_000 })),
     );
   } catch {

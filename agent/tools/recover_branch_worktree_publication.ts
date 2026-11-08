@@ -40,11 +40,13 @@ export default defineTool({
     const result = await recoverBranchWorktreePublication({
       expectedJournalDigest,
       proposal: expectedProposal,
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       readOverlayFile: (path) =>
         ctx
           .getSandbox()
           // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
           .then((sandbox) => sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` })),
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       readOverlayFileStream: (path) =>
         // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
         ctx.getSandbox().then((sandbox) => sandbox.readFile({ path: `${relativeRoot}/${path}` })),

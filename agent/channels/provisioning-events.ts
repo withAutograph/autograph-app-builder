@@ -483,11 +483,13 @@ export const createProvisioningEventsChannel = (
   // Eve's Vercel route transform preserves /eve/v1, so registrations include that prefix.
   return defineChannel({
     routes: [
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       POST("/eve/v1/internal/hosted-operator/realm-continuation", (request, { attachSession }) =>
         handlers.dispatch(request, attachSession),
       ),
       POST(
         "/eve/v1/internal/hosted-operator/realm-continuation/reconcile",
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         (request, { attachSession }) => handlers.reconcile(request, attachSession),
       ),
     ],

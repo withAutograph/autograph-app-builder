@@ -88,6 +88,7 @@ export const writeSupplementaryAssessment = async (input: {
     throw new Error("Supplementary output must be outside the App Builder source tree.");
   }
   const roots = await Promise.all(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     [input.runDirectory, input.sourceReviewDirectory].map((rootPath) => realpath(rootPath)),
   );
   const [parityRoot, reviewRoot] = roots;
@@ -185,16 +186,19 @@ export const writeSupplementaryAssessment = async (input: {
     prefix: string,
   ): Promise<Observation> => ({
     ...value,
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     artifacts: await Promise.all(value.artifacts.map((path) => copy(root, path, prefix))),
     assertions: await Promise.all(
       value.assertions.map(async (assertion) => ({
         ...assertion,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         artifacts: await Promise.all(assertion.artifacts.map((path) => copy(root, path, prefix))),
       })),
     ),
   });
   for (const side of sides) {
     evidence[side].observations = await Promise.all(
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       evidence[side].observations.map((item) => rebase(item, parityRoot, "original")),
     );
     for (const raw of review.observations?.[side] ?? []) {
@@ -259,6 +263,7 @@ export const writeSupplementaryAssessment = async (input: {
       }
     }
   }
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
   const assessment = await assessParity(evidence, (path) => Promise.resolve(copied.has(path)));
   // Source failures still need their retained source evidence to count as assessed.
   for (const row of assessment.rows) {

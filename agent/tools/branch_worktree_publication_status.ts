@@ -29,6 +29,7 @@ const branchWorkflow = () => {
   return workflow;
 };
 
+// oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
 export const exactBranchWorktreePublicationProposal = (input: { expectedReviewDigest: string }) => {
   const workflow = branchWorkflow();
   if (workflow.reviewReceipt.digest !== input.expectedReviewDigest) {
@@ -48,6 +49,7 @@ export default defineTool({
     if (workflow.reviewReceipt.digest !== input.expectedReviewDigest) {
       throw new Error("The reviewed receipt changed before publication status.");
     }
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const proposal = await (() => {
       if (workflow.phase === "reviewed") {
         return exactBranchWorktreePublicationProposal(input);

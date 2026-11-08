@@ -22,12 +22,14 @@ export default defineEval({
     ]);
     try {
       const destination = path.join(fixture.allowedRoot, "absent");
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const publication = await withFreshBootstrapTestCapability(fixture.capability, () =>
         session.send(`Publish fresh repository bootstrap at ${destination}.`),
       );
 
       session.requireInputRequest({ toolName: "publish_fresh_repository" });
       publication.event("input.requested", { count: 1 });
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       const turn1 = await withFreshBootstrapTestCapability(fixture.capability, () =>
         session.respondAll("approve"),
       );

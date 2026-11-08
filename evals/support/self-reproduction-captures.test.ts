@@ -40,6 +40,7 @@ describe("paired capture orchestration", () => {
     await expect(
       runPairedCaptureEvidence({
         adapters: {},
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         launch: () => Promise.reject(failure),
         outputRoot: "/unused",
       }),
@@ -48,11 +49,14 @@ describe("paired capture orchestration", () => {
   it("captures all desktop states separately, records inert controls, and closes contexts", async () => {
     const root = await mkdtemp(nodePath.join(tmpdir(), "parity-capture-test-"));
     const close = vi.fn(async () => {});
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const newContext = vi.fn(() =>
       Promise.resolve({
         close,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         newPage: () =>
           Promise.resolve({
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
             screenshot: ({ path }: { path: string }) => writeFile(path, "test screenshot bytes"),
           }),
       }),
@@ -71,6 +75,7 @@ describe("paired capture orchestration", () => {
           passed: state !== "keyboard",
         }));
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       prepare: () => Promise.resolve({ ready: true }),
     };
     try {
@@ -124,6 +129,7 @@ describe("paired capture orchestration", () => {
     };
     try {
       const browser = {
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         newContext: () => Promise.reject(new Error("Browser disconnected")),
       };
       const result = await captureParity({
@@ -144,11 +150,14 @@ describe("paired capture orchestration", () => {
     const root = await mkdtemp(nodePath.join(tmpdir(), "parity-capture-manifest-"));
     const closeBrowser = vi.fn(async () => {});
     const closeContext = vi.fn(async () => {});
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
     const newContext = vi.fn(() =>
       Promise.resolve({
         close: closeContext,
+        // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
         newPage: () =>
           Promise.resolve({
+            // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
             screenshot: ({ path }: { path: string }) => writeFile(path, "png"),
           }),
       }),
@@ -162,6 +171,7 @@ describe("paired capture orchestration", () => {
         }
         return requirement.assertions.map((id) => ({ detail: "Observed.", id, passed: true }));
       },
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       prepare: () => Promise.resolve({ ready: true }),
     };
     try {
