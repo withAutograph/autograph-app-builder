@@ -109,7 +109,6 @@ export default defineConfig({
         sharedLintFile21,
         nodeFreshBootstrapPath,
         "lib/repository/node-local-publication.ts",
-        "lib/repository/sandbox-draft-reconciliation.test.ts",
         "lib/repository/target-validation.ts",
         "lib/sandbox/vercel-backend.ts",
         "lib/testing/eve-eval-lifecycle.ts",
@@ -119,7 +118,6 @@ export default defineConfig({
         "scripts/design-quality/css-source-map.ts",
         "scripts/design-quality/reference.ts",
         sharedLintFile31,
-        sharedLintFile32,
       ],
       rules: { "sonarjs/too-many-break-or-continue-in-loop": "off" },
     },
@@ -184,7 +182,6 @@ export default defineConfig({
         "components/auth/user/user-button.tsx",
         "evals/support/product-quality.ts",
         sharedLintFile7,
-        "evals/support/self-reproduction-parity-evidence.test.ts",
         "evals/support/self-reproduction-preview-observation.ts",
         "evals/support/self-reproduction-public.ts",
         "lib/agent/component-composition-policy.ts",
@@ -606,7 +603,6 @@ export default defineConfig({
       // Retain existing receiver and callback behavior pending review.
       files: [
         "lib/auth/preview-auth-ui.test.ts",
-        "lib/auth/preview-cimd-transport.ts",
         sharedLintFile18,
         productionCreatorTestPath,
       ],

@@ -1703,27 +1703,24 @@ describe("isolated draft reconciliation", () => {
       async run(command: Parameters<SandboxSession["run"]>[0]) {
         const result = await originalRun(command);
         for (const line of git(checkout, "worktree", "list", "--porcelain").split("\n")) {
-          if (!line.startsWith("worktree ")) {
-            continue;
+          if (line.startsWith("worktree ")) {
+            const reportedRoot = line.slice("worktree ".length);
+            const relative = path.relative(realpathSync(f.root), realpathSync(reportedRoot));
+            if (relative.startsWith(".app-builder/draft-reconcile/")) {
+              const root = path.join(f.root, relative);
+              if (!attached.has(root)) {
+                const view = path.join(
+                  realpathSync(f.root),
+                  ".app-builder/dependency-views/checkout",
+                  digest(root),
+                  "apps/demo/node_modules",
+                );
+                mkdirSync(view, { recursive: true });
+                symlinkSync(view, path.join(root, "apps/demo/node_modules"));
+                attached.add(root);
+              }
+            }
           }
-          const reportedRoot = line.slice("worktree ".length);
-          const relative = path.relative(realpathSync(f.root), realpathSync(reportedRoot));
-          if (!relative.startsWith(".app-builder/draft-reconcile/")) {
-            continue;
-          }
-          const root = path.join(f.root, relative);
-          if (attached.has(root)) {
-            continue;
-          }
-          const view = path.join(
-            realpathSync(f.root),
-            ".app-builder/dependency-views/checkout",
-            digest(root),
-            "apps/demo/node_modules",
-          );
-          mkdirSync(view, { recursive: true });
-          symlinkSync(view, path.join(root, "apps/demo/node_modules"));
-          attached.add(root);
         }
         return result;
       },
