@@ -686,7 +686,6 @@ describe("shared host protection plan successor", () => {
     const originalPlan = hostedOperatorPlanSchema.parse({
       ...base,
       access: [],
-      stage: "auth-bootstrap",
       effects: [
         {
           description: "Prepare Auth",
@@ -711,16 +710,17 @@ describe("shared host protection plan successor", () => {
       gatewayBindings: {
         ...base.gatewayBindings,
         trustedSources: {
-          builderProduction: { projectId: "builder", from: "production", to: "preview" },
-          operatorPreview: { projectId: "operator", from: "preview", to: "preview" },
+          builderProduction: { from: "production", projectId: "builder", to: "preview" },
+          operatorPreview: { from: "preview", projectId: "operator", to: "preview" },
         },
       },
       gatewayDelivery: {
         branch: selection.branch,
+        gitSha: "1".repeat(40),
         projectId: "prj_gateway",
         repoId: "gateway-repo",
-        gitSha: "1".repeat(40),
       },
+      stage: "auth-bootstrap",
     });
     f.deps.plan = async () => originalPlan;
     const original = await prepared(f);
@@ -742,12 +742,12 @@ describe("shared host protection plan successor", () => {
     }
     const successorPlan = hostedOperatorPlanSchema.parse({
       ...originalPlan,
-      gatewayBindings: { ...originalPlan.gatewayBindings, trustedSources: undefined },
       effects: originalPlan.effects.map((effect) =>
         effect.kind === "gateway-bindings"
           ? { ...effect, description: "Bind shared Gateway environment" }
           : effect,
       ),
+      gatewayBindings: { ...originalPlan.gatewayBindings, trustedSources: undefined },
     });
     f.deps.plan = async () => successorPlan;
     return { execute, f, original, originalPlan, previous, successorPlan };
@@ -771,8 +771,8 @@ describe("shared host protection plan successor", () => {
       createSharedHostProtectionSuccessorPlan(
         {
           ...previous.record,
-          leaseId: "active",
           leaseExpiresAt: new Date(now + 1000).toISOString(),
+          leaseId: "active",
         },
         now,
       ),
@@ -814,9 +814,9 @@ describe("shared host protection plan successor", () => {
           assetSha256: "1".repeat(64),
           catalogFingerprint: "2".repeat(64),
           database: original.plan.authDatabase.database,
+          observedAt: new Date().toISOString(),
           runtimeRole: original.plan.authDatabase.runtimeRole,
           targetDigest: "b".repeat(64),
-          observedAt: new Date().toISOString(),
         },
         identityLink: link,
         plan: candidate,
@@ -833,20 +833,20 @@ describe("shared host protection plan successor", () => {
     f.row = { ...previous, record: hostedRuntimeJournalRecordSchema.parse(record) };
     const statusRequest = {
       action: "status" as const,
-      selection,
       operationRef: original.operationRef,
+      selection,
     };
     expect(await f.client.request(statusRequest)).toMatchObject({ status: "auth-schema-prepared" });
     f.row = {
       ...previous,
       record: {
         ...record,
-        leaseId: original.operationRef,
         leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+        leaseId: original.operationRef,
         operator: {
           ...record.operator,
-          pendingEffectId: undefined,
           pendingEffectAttempt: undefined,
+          pendingEffectId: undefined,
           receipts: candidate.effects.map((effect) => ({
             effectId: effect.id,
             observedAt: new Date().toISOString(),
@@ -919,12 +919,12 @@ describe("shared host protection plan successor", () => {
     reconcile.mockImplementation(async (input) =>
       input.effect.kind === "gateway-bindings"
         ? {
-            status: "applied",
             receipt: {
               effectId: input.effect.id,
               observedAt: new Date().toISOString(),
               resourceVersion: "fresh-owned-environment",
             },
+            status: "applied",
           }
         : await originalReconcile(input),
     );
@@ -967,12 +967,12 @@ describe("shared host protection plan successor", () => {
     const uncertain = {
       branch: selection.branch,
       deploymentId: "uncertain",
+      gatewayAliasAttempted: true,
       operationRef: original.operationRef,
       origin: "https://uncertain-gateway.example",
       projectId: "prj_gateway",
-      repoId: "gateway-repo",
       readyState: "READY",
-      gatewayAliasAttempted: true,
+      repoId: "gateway-repo",
     };
     prior.gatewayDeliveryCandidates = [uncertain];
     f.row = previous;
@@ -1102,7 +1102,7 @@ describe("pending app installer repair", () => {
       effects: plan.effects.flatMap((effect) =>
         effect.id === appInstallId
           ? [
-              { id: "auth-schema", kind: "install", description: "Prepare shared Auth schema" },
+              { description: "Prepare shared Auth schema", id: "auth-schema", kind: "install" },
               effect,
             ]
           : [effect],
@@ -1207,7 +1207,6 @@ describe("pending native app project settings repair", () => {
     const f = fixture();
     const originalPlan = hostedOperatorPlanSchema.parse({
       ...plan,
-      stage: "app",
       delivery: {
         branch: selection.branch,
         gitSha: "1".repeat(40),
@@ -1218,6 +1217,7 @@ describe("pending native app project settings repair", () => {
         ...plan.effects,
         { description: "Deploy accepted app source", id: "delivery", kind: "delivery" },
       ],
+      stage: "app",
     });
     f.deps.plan = async () => originalPlan;
     const original = await prepared(f);
@@ -1383,7 +1383,6 @@ describe("pending native app project settings repair", () => {
     } as const;
     const originalPlan = hostedOperatorPlanSchema.parse({
       ...plan,
-      stage: "app",
       delivery: {
         branch: selection.branch,
         gitSha: "1".repeat(40),
@@ -1395,6 +1394,7 @@ describe("pending native app project settings repair", () => {
         ...plan.effects,
         { description: "Deploy accepted app source", id: "delivery", kind: "delivery" },
       ],
+      stage: "app",
     });
     f.deps.plan = async () => originalPlan;
     const original = await prepared(f);
@@ -1723,7 +1723,7 @@ describe("APP Gateway source continuation", () => {
         effectId: "auth-owned-organization",
         fenceGeneration: input.fenceGeneration,
         operationId: input.operationRef,
-        receipt: { state: "applied", readbackSha256: "e".repeat(64) },
+        receipt: { readbackSha256: "e".repeat(64), state: "applied" },
         resourceId: originalPlan.authDatabase.resourceId,
         sequence: 1,
         tenantId: "synthetic-org",
@@ -1770,12 +1770,12 @@ describe("APP Gateway source continuation", () => {
       expect(input.workerCheckpoints).toEqual(pending.workerCheckpoints);
       expect(f.row?.record.operator?.pendingEffectAttempt).toEqual(pending.pendingEffectAttempt);
       return {
-        status: "applied",
         receipt: {
           effectId: input.effect.id,
           observedAt: new Date().toISOString(),
           resourceVersion: "owned-organization-observed",
         },
+        status: "applied",
       };
     };
     f.deps.executeEffect = vi.fn<ProtectedHostedOperatorDependencies["executeEffect"]>(
@@ -1783,18 +1783,18 @@ describe("APP Gateway source continuation", () => {
     );
     const lostResponse = createHostedOperatorClient({
       endpoint: "https://operator.example",
-      ownerContext,
-      token: async () => "fixture-service-identity",
       fetch: async (url, init) => {
         const result = await f.handler(new Request(url instanceof Request ? url.url : url, init));
         expect(operatorPublicResultSchema.parse(await result.json())).toMatchObject({
-          status: "planned",
           operationRef: original.operationRef,
-          planDigest: original.planDigest,
           plan: originalPlan,
+          planDigest: original.planDigest,
+          status: "planned",
         });
         throw new Error("Controlled response loss after original execution settled");
       },
+      ownerContext,
+      token: async () => "fixture-service-identity",
     });
     await expect(lostResponse.request(original)).rejects.toMatchObject({
       name: "HostedOperatorTransportUnknown",
@@ -1943,8 +1943,8 @@ describe("APP Gateway source continuation", () => {
       createAppGatewaySourceSuccessorPlan(
         {
           ...clear,
-          leaseId: "owned-active",
           leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+          leaseId: "owned-active",
         },
         desired,
         Date.now(),
@@ -1957,12 +1957,12 @@ describe("APP Gateway source continuation", () => {
       {
         branch: selection.branch,
         deploymentId: "unknown-gateway",
+        gatewayAliasAttempted: true,
         operationRef: clear.operator.operationRef,
         origin: "https://pending-gateway.example.test",
         projectId: "prj_gateway",
         readyState: "BUILDING",
         repoId: "gateway-repo",
-        gatewayAliasAttempted: true,
       },
     ];
     expect(createAppGatewaySourceSuccessorPlan(clear, desired, Date.now())).toBeUndefined();

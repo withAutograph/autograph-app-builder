@@ -355,7 +355,7 @@ describe("approved hosted runtime consumers", () => {
       root: context.root,
     });
     await runtime.runTask({
-      browserSelection: { testName: "@acceptance", workers: 1, retries: 0, maxFailures: 1 },
+      browserSelection: { maxFailures: 1, retries: 0, testName: "@acceptance", workers: 1 },
       task: "test-e2e",
     });
     expect(fixture.provider.runCommand).toHaveBeenLastCalledWith(
@@ -678,13 +678,13 @@ describe("approved hosted runtime consumers", () => {
       logs: () =>
         Object.assign(
           (async function* output() {
-            yield { stream: "stdout" as const, data: `out ${selector.slice(0, 14)}` };
-            yield { stream: "stderr" as const, data: `err ${lifecycle.slice(0, 13)}` };
+            yield { data: `out ${selector.slice(0, 14)}`, stream: "stdout" as const };
+            yield { data: `err ${lifecycle.slice(0, 13)}`, stream: "stderr" as const };
             yield {
-              stream: "stdout" as const,
               data: `${selector.slice(14)} captured-private-session done`,
+              stream: "stdout" as const,
             };
-            yield { stream: "stderr" as const, data: `${lifecycle.slice(13)} done` };
+            yield { data: `${lifecycle.slice(13)} done`, stream: "stderr" as const };
           })(),
           { close: fixture.close },
         ),
@@ -748,7 +748,7 @@ describe("approved hosted runtime consumers", () => {
         command.logs = () =>
           Object.assign(
             (async function* failedOutput() {
-              yield { stream: "stdout" as const, data: "before SDK failure" };
+              yield { data: "before SDK failure", stream: "stdout" as const };
               throw failure === "kill" ? new Error("controlled iteration failure") : privateError;
             })(),
             { close: fixture.close },
@@ -773,7 +773,7 @@ describe("approved hosted runtime consumers", () => {
       await expect(
         runtime.runTask({
           task: "test-e2e",
-          ...(failure === "resume" ? { commandId: "retained-command", allowDispatch: false } : {}),
+          ...(failure === "resume" ? { allowDispatch: false, commandId: "retained-command" } : {}),
         }),
       ).rejects.toThrow("SDK failure [REDACTED] and [REDACTED]");
       if (failure === "resume") {

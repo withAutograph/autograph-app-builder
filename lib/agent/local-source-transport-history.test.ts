@@ -91,9 +91,9 @@ test("actual source-preparation service retains old validation workflow while Na
       {
         sessionId: "saved-session",
         expected: {
+          sourcePath: f.source,
           workspaceId: f.original.workspaceId,
           workspacePath: f.original.workspacePath,
-          sourcePath: f.source,
         },
       },
       {
@@ -134,9 +134,9 @@ test("actual source-preparation service retains old validation workflow while Na
       const normalized = completedLocalSourceTransport(
         [result(reconciled.workspace, "completed", "new-plan")],
         {
+          sourcePath: f.source,
           workspaceId: f.original.workspaceId,
           workspacePath: f.original.workspacePath,
-          sourcePath: f.source,
         },
       );
       expect(
@@ -172,9 +172,9 @@ test("actual source-preparation service retains old validation workflow while Na
         reconciledByCallId: "new-plan",
       };
       const compatibility = {
+        sourcePath: f.source,
         workspaceId: frozen.workspaceId,
         workspacePath: frozen.workspacePath,
-        sourcePath: f.source,
         reconciliation: {
           appId: appSpec.appId,
           currentWorkspace: frozen,
@@ -348,9 +348,9 @@ test("actual source-preparation service retains old validation workflow while Na
       }
       expect(() =>
         completedLocalSourceTransport([legacyEvent], {
+          sourcePath: f.source,
           workspaceId: frozen.workspaceId,
           workspacePath: frozen.workspacePath,
-          sourcePath: f.source,
         }),
       ).toThrow("another workspace or source");
       expect(() =>
@@ -477,9 +477,9 @@ test("failed tool results, observed metadata and foreign/incomplete history cann
       EVE_HOSTED_ADAPTER: "0",
     };
     const expected = {
+      sourcePath: f.source,
       workspaceId: f.original.workspaceId,
       workspacePath: f.original.workspacePath,
-      sourcePath: f.source,
     };
     expect(completedLocalSourceTransport([result(f.original, "failed")], expected)).toBeUndefined();
     expect(() =>
@@ -565,9 +565,9 @@ test("missing cycle variable uses the same owned cycle and stitches actual SDK h
     throw new Error("Missing fixture recovery");
   }
   const expected = {
+    sourcePath: f.source,
     workspaceId: f.original.workspaceId,
     workspacePath: f.original.workspacePath,
-    sourcePath: f.source,
   };
   f.write(f.source, "shared.txt", "genuine later source overlay\n");
   const overlay = await prepareDevelopmentSandboxWorkspace(f.source, f.sandbox, "overlay");
