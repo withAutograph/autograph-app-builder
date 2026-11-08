@@ -234,7 +234,7 @@ function providerFetch(input?: {
       body = JSON.parse(init.body) as unknown;
     }
     calls.push({ body, init, url });
-    if (input?.fail) {
+    if (input?.fail ?? false) {
       return json({ message: "private-key-material" }, 500);
     }
     if (url.endsWith("/app/installations/456")) {
@@ -250,7 +250,7 @@ function providerFetch(input?: {
         {
           permissions: {
             ...requested,
-            ...(input?.extraPermission ? { issues: "write" } : {}),
+            ...((input?.extraPermission ?? false) ? { issues: "write" } : {}),
           },
           token: "ghs_operation_scoped_installation_token",
         },

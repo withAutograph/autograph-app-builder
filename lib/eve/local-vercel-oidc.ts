@@ -306,7 +306,7 @@ export const validateLocalVercelOidcClaims = (input: {
   if (
     claims.iat > input.nowEpochSeconds ||
     claims.nbf > input.nowEpochSeconds ||
-    (!input.allowExpired && claims.exp <= input.nowEpochSeconds) ||
+    (!(input.allowExpired ?? false) && claims.exp <= input.nowEpochSeconds) ||
     claims.nbf < claims.iat ||
     claims.exp - claims.iat > 43_200
   ) {

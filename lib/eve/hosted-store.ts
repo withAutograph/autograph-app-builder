@@ -475,7 +475,7 @@ export const hostedSessionCreationDigest = (record: HostedSessionRecord): string
         principal: parsed.principal,
         sessionId: parsed.sessionId,
         version: 1,
-        ...(parsed.version === 2 && parsed.sourceHandoffId
+        ...(parsed.version === 2 && (parsed.sourceHandoffId ?? "") !== ""
           ? { sourceHandoffId: parsed.sourceHandoffId }
           : {}),
       }),

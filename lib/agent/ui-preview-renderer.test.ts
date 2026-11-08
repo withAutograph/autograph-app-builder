@@ -95,7 +95,7 @@ describe("preview stylesheet provenance", () => {
       /sourceMappingURL=data:application\/json[^,]*,(?<sourceMap>[^*]+?)\s*\*\//u,
     )?.[1];
     expect(sourceMap).toBeDefined();
-    if (!sourceMap) {
+    if (sourceMap === undefined) {
       throw new Error("Inline source map is missing");
     }
     const map = JSON.parse(Buffer.from(sourceMap, "base64").toString("utf-8")) as {

@@ -13,7 +13,7 @@ export const productAcceptanceObligations = (
   let fence: string | undefined;
   for (const line of lines) {
     const marker = /^\s*(?<marker>```+|~~~+)/u.exec(line)?.groups?.marker;
-    if (marker) {
+    if (marker !== undefined) {
       if (fence === undefined) {
         fence = marker.charAt(0);
       } else if (marker.startsWith(fence)) {

@@ -2164,7 +2164,7 @@ const assertExactRepository = async (
     JSON.stringify([...looseObjects].toSorted()) !==
       JSON.stringify([...reachableObjects].toSorted()) ||
     git(capability, root, ["status", "--porcelain=v1", "--untracked-files=all"]).trim() !==
-      (options.allowClaimMarker ? `?? ${proposal.claimMarkerName}` : "") ||
+      ((options.allowClaimMarker ?? false) ? `?? ${proposal.claimMarkerName}` : "") ||
     JSON.stringify(observed) !== JSON.stringify(proposal.exactTree) ||
     JSON.stringify(rawManifest) !== JSON.stringify(proposal.exactTree)
   ) {
@@ -2826,7 +2826,7 @@ const executeBootstrap = async (input: {
     } catch {
       leaseHeld = false;
     }
-    if (leaseHeld && !input.hooks?.preserveNonterminalJournal) {
+    if (leaseHeld && !(input.hooks?.preserveNonterminalJournal ?? false)) {
       await atomicWrite(capability, input.proposal.journalPath, `${JSON.stringify(failure)}\n`);
     }
     if (!leaseHeld) {

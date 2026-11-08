@@ -726,7 +726,7 @@ describe("installed Eve 0.68 projection", () => {
   it("rejects unmatched, failed, wrong-tool, and digest-mismatched prototypes", () => {
     const valid = recordedPrototypeEvents();
     const [, result] = valid;
-    if (!result) {
+    if (result === undefined) {
       throw new Error("expected a prototype result fixture");
     }
     expect(latestInstalledPrototype([result])).toBeUndefined();
