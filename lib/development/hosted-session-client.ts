@@ -288,13 +288,16 @@ export const connectHostedSession = async (input: {
         if (!hostedSessionTools.some((tool) => tool === name)) {
           throw new Error("Only the five public Builder tools are supported.");
         }
-        const result = await rpc("mcpServer/tool/call", {
+        const params: JSONObject = {
           threadId: thread.thread.id,
           server: serverName,
           tool: name,
           arguments: args,
-          ...(meta === undefined ? {} : { _meta: meta }),
-        });
+        };
+        if (meta !== undefined) {
+          params._meta = meta;
+        }
+        const result = await rpc("mcpServer/tool/call", params);
         if (!isCallToolResult(result)) {
           throw failure();
         }

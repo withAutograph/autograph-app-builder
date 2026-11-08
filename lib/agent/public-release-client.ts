@@ -83,16 +83,16 @@ export const publicReleaseClientForContext = async (ctx: WorkflowStepToolContext
     plan: async (
       appId: string,
       integrationCapability?: z.infer<typeof appIntegrationCapabilityPointerSchema>,
-    ) =>
-      await send(
-        {
-          ...common,
-          action: "public-release-plan",
-          appId,
-          ...(integrationCapability === undefined ? {} : { integrationCapability }),
-        },
-        publicReleasePlanResultSchema,
-      ),
+    ) => {
+      const request: Extract<
+        z.infer<typeof publicReleaseTransportRequestSchema>,
+        { action: "public-release-plan" }
+      > = { ...common, action: "public-release-plan", appId };
+      if (integrationCapability !== undefined) {
+        request.integrationCapability = integrationCapability;
+      }
+      return await send(request, publicReleasePlanResultSchema);
+    },
     release: async (input: PublicReleaseApprovalInput) =>
       await send({ ...common, action: "public-release-run", input }, publicReleaseResultSchema),
     observe: async (input: PublicReleaseApprovalInput) =>

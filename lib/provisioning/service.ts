@@ -391,10 +391,10 @@ export function projectBuilderProvisioning(row: BuilderProvisionJournalRow) {
       outcomeKnown: state.outcomeKnown ?? false,
       provider: operation,
       recoveryAction,
-      ...(state.lastProviderDiagnostic === undefined
-        ? {}
-        : { lastProviderDiagnostic: state.lastProviderDiagnostic }),
     };
+    if (state.lastProviderDiagnostic !== undefined) {
+      diagnostic.lastProviderDiagnostic = state.lastProviderDiagnostic;
+    }
     if (state.nextRetryAt) {
       diagnostic.nextRetryAt = state.nextRetryAt;
     }

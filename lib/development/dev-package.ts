@@ -206,7 +206,7 @@ export const createDevelopmentPackage = async (input: {
         mode: 0o600,
       }),
     ]);
-    const receipt = {
+    const receiptBase = {
       digest: sha256(
         JSON.stringify({
           endpoint,
@@ -222,9 +222,17 @@ export const createDevelopmentPackage = async (input: {
       format: "autograph-development-package-v2",
       marketplace: DEVELOPMENT_MARKETPLACE_NAME,
       mcpAppPreview: false,
-      ...(input.hostedSession === undefined
-        ? {}
-        : { hostedSessionResource: input.hostedSession.resourceUrl, execution: "hosted" }),
+    } as const;
+    const withHosted: typeof receiptBase & {
+      hostedSessionResource?: string;
+      execution?: "hosted";
+    } = receiptBase;
+    if (input.hostedSession !== undefined) {
+      withHosted.hostedSessionResource = input.hostedSession.resourceUrl;
+      withHosted.execution = "hosted";
+    }
+    const receipt = {
+      ...withHosted,
       mcpServer,
       plugin: DEVELOPMENT_PLUGIN_NAME,
       publication: false,

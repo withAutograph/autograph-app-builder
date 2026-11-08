@@ -24,23 +24,19 @@ export const observePrivateComputeLimits = async (input: {
     readOwnerBoundLocalFile(path.join(input.repositoryRoot, ".vercel/project.json")),
   );
   try {
-    const { stdout } = await execute(
-      input.vercelExecutable,
-      ["api", `/v2/teams/${project.orgId}`, "--scope", project.orgId],
-      {
-        cwd: input.repositoryRoot,
-        signal: input.signal,
-        maxBuffer: Infinity,
-        env: {
-          HOME: input.environment.HOME,
-          PATH: input.environment.PATH,
-          NODE_ENV: "development",
-          ...(input.environment.XDG_DATA_HOME === undefined
-            ? {}
-            : { XDG_DATA_HOME: input.environment.XDG_DATA_HOME }),
-        },
-      },
-    );
+    const { vercelExecutable: executable } = input;
+    const args = ["api", `/v2/teams/${project.orgId}`, "--scope", project.orgId];
+    const cwd = input.repositoryRoot;
+    const { signal } = input;
+    const env: NodeJS.ProcessEnv = {
+      HOME: input.environment.HOME,
+      PATH: input.environment.PATH,
+      NODE_ENV: "development",
+    };
+    if (input.environment.XDG_DATA_HOME !== undefined) {
+      env.XDG_DATA_HOME = input.environment.XDG_DATA_HOME;
+    }
+    const { stdout } = await execute(executable, args, { cwd, signal, maxBuffer: Infinity, env });
     const team = teamSchema.parse(JSON.parse(stdout));
     if (team.id !== project.orgId || team.limited === true) {
       throw new Error("Provider team unavailable");

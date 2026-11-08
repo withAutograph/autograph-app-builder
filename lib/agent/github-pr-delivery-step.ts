@@ -105,11 +105,11 @@ export async function continueGitHubPrDelivery(
       observed,
       runReady: async (reconcileOnly) => {
         ctx.abortSignal.throwIfAborted();
-        return await run({
-          ...activeEffect,
-          kind: "pr-ready",
-          ...(reconcileOnly ? { reconcileOnly } : {}),
-        });
+        const readyEffect: Parameters<typeof run>[0] = { ...activeEffect, kind: "pr-ready" };
+        if (reconcileOnly) {
+          readyEffect.reconcileOnly = reconcileOnly;
+        }
+        return await run(readyEffect);
       },
     });
   }

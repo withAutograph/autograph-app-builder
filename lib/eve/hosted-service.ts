@@ -2027,14 +2027,16 @@ export function createHostedEveSessionService(input: {
     let cursor: SendAcknowledgementCursor | undefined;
     let queued: UnsettledSendAcknowledgement | undefined;
     do {
+      const pageDetails: Pick<Parameters<typeof read>[0], "principal" | "sessionId"> &
+        Partial<Parameters<typeof read>[0]> = { principal, sessionId };
+      if (operationId !== undefined) {
+        pageDetails.operationId = operationId;
+      }
+      if (cursor !== undefined) {
+        pageDetails.cursor = cursor;
+      }
       // oxlint-disable-next-line eslint/no-await-in-loop -- Each keyset page depends on the preceding cursor; there is no total scan cap.
-      const page = await readPage({
-        principal,
-        sessionId,
-        ...(operationId === undefined ? {} : { operationId }),
-        ...(cursor === undefined ? {} : { cursor }),
-        limit: 100,
-      });
+      const page = await readPage({ ...pageDetails, limit: 100 });
       for (const acknowledgement of page.acknowledgements) {
         const operation = requireOwnedOperation(acknowledgement.operation, {
           clientRequestId: acknowledgement.operation.clientRequestId,

@@ -6,7 +6,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { SandboxSession } from "eve/sandbox";
+import type { RuntimeSandboxSession, SandboxEnvironment, SandboxSession } from "eve/sandbox";
+import type { ToolContext } from "eve/tools";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
@@ -46,6 +47,7 @@ const unexpectedSandboxOperation = (): never => {
   throw new Error("Unexpected sandbox operation in test fixture");
 };
 const sandboxDefaults = {
+  delete: unexpectedSandboxOperation,
   readBinaryFile: unexpectedSandboxOperation,
   readFile: unexpectedSandboxOperation,
   readTextFile: unexpectedSandboxOperation,
@@ -53,11 +55,14 @@ const sandboxDefaults = {
   resolvePath: unexpectedSandboxOperation,
   run: unexpectedSandboxOperation,
   spawn: unexpectedSandboxOperation,
+  stop: unexpectedSandboxOperation,
   writeBinaryFile: unexpectedSandboxOperation,
   writeFile: unexpectedSandboxOperation,
   writeTextFile: unexpectedSandboxOperation,
-} satisfies SandboxSession;
-const createSandbox = <T extends Partial<SandboxSession>>(overrides: T): SandboxSession & T => ({
+} satisfies RuntimeSandboxSession;
+const createSandbox = <T extends Partial<SandboxSession>>(
+  overrides: T,
+): RuntimeSandboxSession & T => ({
   ...sandboxDefaults,
   ...overrides,
 });
@@ -355,13 +360,27 @@ const fixture = () => {
     reviewedLineage: structuredClone(reviewed),
   };
   draftReconciliationState.update(() => candidate);
-  const context = (signal = new AbortController().signal, sessionId = "owner-session") =>
-    ({
-      abortSignal: signal,
-      callId: "candidate-check",
-      getSandbox: async () => sandbox,
-      session: { id: sessionId, auth: {} },
-    }) as Parameters<typeof validateCreation.execute>[1];
+  const context = (
+    signal = new AbortController().signal,
+    sessionId = "owner-session",
+  ): ToolContext => ({
+    abortSignal: signal,
+    callId: "candidate-check",
+    getSandbox: async (environment?: SandboxEnvironment<object | undefined>) => {
+      if (environment !== undefined) {
+        throw new Error("Unexpected sandbox environment in test fixture");
+      }
+      return sandbox;
+    },
+    getToken: unexpectedSandboxOperation,
+    requireAuth: unexpectedSandboxOperation,
+    session: {
+      auth: { current: null, initiator: null },
+      id: sessionId,
+      turn: { id: "fixture-turn", sequence: 0 },
+    },
+    toolName: "validate_app_creation",
+  });
   vi.spyOn(artifacts, "publishCompiledOperatorArtifactsForSession").mockResolvedValue({
     compilation: {
       context: {
