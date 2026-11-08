@@ -54,8 +54,8 @@ describe("trusted Node launcher", () => {
     );
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
-      root: environment.ARRUSTED_MANAGED_RUNTIME_TEST_ROOT,
       bun: environment.BUN_BINARY,
+      root: environment.ARRUSTED_MANAGED_RUNTIME_TEST_ROOT,
     });
   });
 
@@ -385,15 +385,15 @@ describe("trusted Node launcher", () => {
       const expectedHome = privateHome ? runtimeHome : accountHome;
       const expectedDataHome = privateHome ? undefined : dataHome;
       expect(JSON.parse(result.stdout)).toEqual({
-        result: { refreshed: true },
         home: expectedHome,
         invocations: ["development-env-pull", "owner-bind"].map((operation) => ({
-          operation,
-          home: expectedHome,
           dataHome: expectedDataHome ?? null,
           dataPresent: expectedDataHome !== undefined,
+          home: expectedHome,
+          operation,
           unexpected: [],
         })),
+        result: { refreshed: true },
       });
     },
   );

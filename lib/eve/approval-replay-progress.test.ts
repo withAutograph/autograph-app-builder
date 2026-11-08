@@ -93,9 +93,9 @@ describe("approval replay checkpoint progress", () => {
   it("continues to accept legacy checkpoint metadata without replay progress", () => {
     expect(
       pagedCheckpointMetadataSchema.safeParse({
-        version: 1,
         capturedAtEpochMs: 1,
         status: "waiting",
+        version: 1,
       }).success,
     ).toBe(true);
   });

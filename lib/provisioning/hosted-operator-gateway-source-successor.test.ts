@@ -1823,7 +1823,7 @@ describe("APP Gateway source continuation", () => {
       status: "pending",
       operationRef: original.operationRef,
       planDigest: original.planDigest,
-      execution: { state: "settled", outcome: { status: "planned" } },
+      execution: { outcome: { status: "planned" }, state: "settled" },
     });
     const { readApproval } = f.deps;
     f.deps.readApproval = async (input) =>

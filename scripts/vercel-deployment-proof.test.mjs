@@ -110,7 +110,7 @@ require("node:fs").appendFileSync(process.env.FIXTURE_ROOT+"/waits.jsonl",proces
       proof: readLines("vercel-deployment-proof.json").join("\n"),
     };
   } finally {
-    rmSync(directory, { recursive: true, force: true });
+    rmSync(directory, { force: true, recursive: true });
   }
 };
 

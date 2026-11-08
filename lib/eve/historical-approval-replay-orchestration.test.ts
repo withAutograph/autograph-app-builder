@@ -4,11 +4,11 @@ import type { ApprovalReplayProgress } from "./postgres-hosted-checkpoint-histor
 import { runHistoricalApprovalReplay } from "./historical-approval-replay-orchestration";
 
 const principal = {
-  issuer: "https://identity.example",
   audience: "builder",
-  workspaceId: "workspace",
+  issuer: "https://identity.example",
   ownerUserId: "owner",
   scopes: ["autograph:get"],
+  workspaceId: "workspace",
 };
 const binding = {
   principal,
@@ -23,8 +23,8 @@ const checkpoint = {
   eventCount: 2,
 };
 const events: PublicEveEvent[] = [
-  { type: "status", status: "working", index: 0 },
-  { type: "status", status: "waiting", index: 1 },
+  { index: 0, status: "working", type: "status" },
+  { index: 1, status: "waiting", type: "status" },
 ];
 const stream = async function* stream(items: PublicEveEvent[]) {
   for (const item of items) {
@@ -56,10 +56,10 @@ const progress = (complete: boolean) => ({
     version: 1 as const,
   },
   privateApprovalCaptureState: {
-    sessionId: "session",
-    version: 1 as const,
     pendingRequests: [],
     receipts: [],
+    sessionId: "session",
+    version: 1 as const,
   },
 });
 const fixture = () => {
@@ -133,7 +133,7 @@ describe("historical approval replay orchestration", () => {
     }
     const p = {
       ...progress(true),
-      events: [events[0], { type: "status" as const, status: "cancelled" as const, index: 1 }],
+      events: [events[0], { index: 1, status: "cancelled" as const, type: "status" as const }],
     };
     await expect(
       runHistoricalApprovalReplay({

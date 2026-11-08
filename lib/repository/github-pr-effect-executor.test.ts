@@ -96,8 +96,8 @@ it("uses the original ready journal to confirm a lost response without a second 
   provider.inspect.mockResolvedValueOnce(ready);
   await expect(reconcile(readyIntent)).resolves.toMatchObject({
     approvedByCallId: "original-approval",
-    status: "succeeded",
     evidence: { kind: "pr-ready", readyAt },
+    status: "succeeded",
   });
   expect(provider.markReady).toHaveBeenCalledTimes(1);
 });
@@ -111,7 +111,7 @@ it("claims a single pending intent before concurrent ready calls can write", asy
   await Promise.all([execute(readyIntent), execute(readyIntent, "concurrent-approval")]);
   expect(provider.markReady).toHaveBeenCalledTimes(1);
   expect([...rows.values()]).toMatchObject([
-    { status: "succeeded", evidence: { kind: "pr-ready", readyAt } },
+    { evidence: { kind: "pr-ready", readyAt }, status: "succeeded" },
   ]);
 });
 
@@ -127,8 +127,8 @@ it("reconciles a lost merge response by readback and preserves the original appr
   provider.inspect.mockResolvedValueOnce(merged);
   await expect(reconcile(mergeIntent)).resolves.toMatchObject({
     approvedByCallId: "original-approval",
-    status: "succeeded",
     evidence: { kind: "pr-merge", mergeCommitSha: merged.mergeCommitSha },
+    status: "succeeded",
   });
   expect(provider.merge).toHaveBeenCalledExactlyOnceWith(mergeIntent, readyAt, signal);
 });

@@ -76,7 +76,7 @@ const fixture = async (approval = false) => {
     },
     dispose: async () => {
       await server?.close();
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     },
   };
 };
@@ -120,8 +120,8 @@ test("actual Eve keeps in-flight A, dispatches idle B static/dynamic, restores t
     });
     const held = collect(await created.session.send(staticHold));
     await vi.waitFor(() => access(path.join(first.root, "started")), {
-      timeout: 30_000,
       interval: 20,
+      timeout: 30_000,
     });
     const before = z
       .string()
@@ -136,7 +136,7 @@ test("actual Eve keeps in-flight A, dispatches idle B static/dynamic, restores t
           before,
         );
       },
-      { timeout: 60_000, interval: 50 },
+      { interval: 50, timeout: 60_000 },
     );
     await writeFile(path.join(first.root, "release"), "release");
     assert.deepEqual(await held, { count: 2, generation: "A", nonce: staticHold, sessionId });
@@ -223,7 +223,7 @@ test("actual pending approval survives B activation and restore with its A execu
           prior,
         );
       },
-      { timeout: 60_000, interval: 50 },
+      { interval: 50, timeout: 60_000 },
     );
     await f.stop();
     const restored = await f.start(true);
