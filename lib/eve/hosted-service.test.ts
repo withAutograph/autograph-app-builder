@@ -1559,7 +1559,7 @@ describe("hosted Eve service core", () => {
         throw new HostedAdapterSessionUnavailableError();
       }),
       start: vi
-        .fn()
+        .fn<HostedEveTransport["start"]>()
         .mockResolvedValueOnce({
           adapterSessionId: "eve_input_old",
           snapshot: approvalSnapshot(["approve_one", "approve_two"]),

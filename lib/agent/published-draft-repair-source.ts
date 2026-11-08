@@ -105,7 +105,11 @@ export const assertPublishedDraftRepairSource = (receipt: PublishedDraftRepairSo
 export const createPublishedDraftRepairSource = (
   input: Omit<PublishedDraftRepairSource, "kind" | "version" | "digest">,
 ): PublishedDraftRepairSource => {
-  const unsigned = { kind: publishedDraftRepairKind, version: 1 as const, ...input };
+  const unsigned: Omit<PublishedDraftRepairSource, "digest"> = {
+    kind: publishedDraftRepairKind,
+    version: 1,
+    ...input,
+  };
   const receipt = { ...unsigned, digest: digest(unsigned) };
   assertPublishedDraftRepairSource(receipt);
   return receipt;

@@ -96,7 +96,7 @@ export const sealPublishedDraftRepair = async (input: {
     selectedCheckoutHeadSha: candidate.headSha,
     selectedCheckoutHeadTree: candidate.headTree,
   });
-  const completion = {
+  const completion: Parameters<typeof retainPublishedDraftRepairCompletion>[0] = {
     kind: PUBLISHED_DRAFT_REPAIR,
     proposal,
     review,

@@ -924,7 +924,7 @@ describe("same-origin canonical Eve transport", () => {
       if (String(url).includes("/stream?")) {
         return stream();
       }
-      const body = JSON.parse(String(init?.body));
+      const body: unknown = JSON.parse(String(init?.body));
       expect(body).toMatchObject({
         forwardedPrincipal: {
           current: {
@@ -1752,11 +1752,12 @@ describe("same-origin canonical Eve transport", () => {
   });
 
   it("rejects a stream that is not bound to the pinned Eve 0.68 protocol", async () => {
-    for (const headers of [
+    const headerCases: Record<string, string>[] = [
       { "x-eve-session-id": "wrun_other" },
       { "x-eve-stream-format": "sse" },
       { "x-eve-stream-version": "24" },
-    ]) {
+    ];
+    for (const headers of headerCases) {
       const response = stream();
       for (const [name, value] of Object.entries(headers)) {
         response.headers.set(name, value);
