@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import * as schema from "../db/schema";
+import { oauthClient, oauthClientResource, oauthResource } from "../db/schema";
 import { previewOAuthScopes } from "./preview-oauth-contract";
 import {
   cursorClientId,
@@ -15,10 +15,10 @@ const resource = "https://builder.example.test/mcp";
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function storage() {
   const rows = new Map<unknown, Record<string, unknown>[]>([
-    [schema.oauthClient, []],
-    [schema.oauthClientResource, []],
+    [oauthClient, []],
+    [oauthClientResource, []],
     [
-      schema.oauthResource,
+      oauthResource,
       [
         {
           allowedScopes: [...previewOAuthScopes],
@@ -84,10 +84,10 @@ describe("dedicated Cursor deployment registration", () => {
       ready: true,
       resource,
     });
-    const registered = structuredClone(rows.get(schema.oauthClient));
+    const registered = structuredClone(rows.get(oauthClient));
     await setupCursorClient(database, resource);
-    expect(rows.get(schema.oauthClient)).toEqual(registered);
-    expect(rows.get(schema.oauthClientResource)).toHaveLength(1);
+    expect(rows.get(oauthClient)).toEqual(registered);
+    expect(rows.get(oauthClientResource)).toHaveLength(1);
     insert.mockClear();
     expect(await isCursorClientReady(database, resource)).toBe(true);
     expect(insert).not.toHaveBeenCalled();
@@ -103,21 +103,21 @@ describe("dedicated Cursor deployment registration", () => {
     { scopes: ["admin"] },
   ])("rejects conflicting policy without replacing it: %j", async (change) => {
     const { database, rows } = storage();
-    rows.set(schema.oauthClient, [{ ...cursorClientRegistration(), ...change }]);
-    const before = structuredClone(rows.get(schema.oauthClient));
+    rows.set(oauthClient, [{ ...cursorClientRegistration(), ...change }]);
+    const before = structuredClone(rows.get(oauthClient));
     expect(await isCursorClientReady(database, resource)).toBe(false);
     await expect(setupCursorClient(database, resource)).rejects.toThrow("conflicts");
-    expect(rows.get(schema.oauthClient)).toEqual(before);
-    expect(rows.get(schema.oauthClientResource)).toEqual([]);
+    expect(rows.get(oauthClient)).toEqual(before);
+    expect(rows.get(oauthClientResource)).toEqual([]);
   });
 
   it("requires initialized resources and rejects a foreign resource binding", async () => {
     const { database, rows, insert } = storage();
-    rows.set(schema.oauthResource, []);
+    rows.set(oauthResource, []);
     await expect(setupCursorClient(database, resource)).rejects.toThrow("Initialize");
     expect(insert).not.toHaveBeenCalled();
-    rows.set(schema.oauthClient, [cursorClientRegistration()]);
-    rows.set(schema.oauthClientResource, [
+    rows.set(oauthClient, [cursorClientRegistration()]);
+    rows.set(oauthClientResource, [
       { clientId: cursorClientId, resourceId: "https://other.example/mcp" },
     ]);
     expect(await isCursorClientReady(database, resource)).toBe(false);

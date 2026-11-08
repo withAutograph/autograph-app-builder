@@ -1,5 +1,4 @@
 import { completionGuidance } from "./completion-guidance";
-import type * as ImplementationModule from "./apply-implementation-files";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { ApprovalPolicy } from "eve/tools/approval";
@@ -32,7 +31,7 @@ vi.mock("./workflow-state", () => ({
   updateExactWorkflow: vi.fn(),
 }));
 vi.mock("./apply-implementation-files", async (original) => ({
-  ...(await original<typeof ImplementationModule>()),
+  ...(await original()),
   withImplementationFiles: mocks.wrap,
 }));
 vi.mock("../repository/target-apply", () => ({

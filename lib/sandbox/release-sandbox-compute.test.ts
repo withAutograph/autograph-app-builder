@@ -3,7 +3,10 @@ import { readFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import hook from "../../agent/hooks/release-sandbox-compute";
-import type * as WorkingPreviewModule from "../agent/working-preview-state";
+import type {
+  workingPreviewAttemptState,
+  workingPreviewState,
+} from "../agent/working-preview-state";
 import {
   clearHostedSandboxExecutionLeaseCacheForTest,
   setHostedSandboxExecutionLeaseDependenciesForTest,
@@ -12,7 +15,10 @@ import {
 // These direct hook calls do not run inside Eve's durable state context.
 // An absent preview is the normal initial state for this gate-only fixture.
 vi.mock("../agent/working-preview-state", async (importOriginal) => {
-  const actual = await importOriginal<typeof WorkingPreviewModule>();
+  const actual = await importOriginal<{
+    workingPreviewAttemptState: typeof workingPreviewAttemptState;
+    workingPreviewState: typeof workingPreviewState;
+  }>();
   return {
     ...actual,
     workingPreviewAttemptState: { get: () => null, update: vi.fn() },

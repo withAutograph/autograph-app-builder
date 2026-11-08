@@ -4,7 +4,24 @@ import { deriveBuilderAppId } from "./names";
 import { builderProvisionRequestSchema, builderProvisionResponseSchema } from "./contracts-schema";
 import type { BuilderProvisionRequest, BuilderProvisionResponse } from "./contracts-schema";
 
-export * from "./contracts-schema";
+export {
+  builderProvisionProjectionSchema,
+  builderProvisionRequestSchema,
+  builderProvisionResponseSchema,
+  githubProvisionResultSchema,
+  githubProvisionSuccessSchema,
+  vercelProvisionDiagnosticSchema,
+  vercelProvisionResultSchema,
+  vercelProvisionSuccessSchema,
+} from "./contracts-schema";
+export type {
+  BuilderProvisionProjection,
+  BuilderProvisionRequest,
+  BuilderProvisionResponse,
+  GitHubProvisionResult,
+  VercelProvisionDiagnostic,
+  VercelProvisionResult,
+} from "./contracts-schema";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function builderProvisionRequestDigest(input: BuilderProvisionRequest): string {

@@ -36,6 +36,23 @@ export default defineConfig({
       rules: { "eslint/require-await": "off" },
     },
     {
+      // Retain module namespaces required by flags, live spies, adapters and database schemas.
+      files: [
+        ".config/mise/scripts/repository/test-postgres-sandbox-leases.mts",
+        "app/.well-known/vercel/flags/route.ts",
+        "app/ui/app-builder.test.tsx",
+        "e2e/auth/client-oauth-handoff.spec.ts",
+        "e2e/builder/builder-draft-store.spec.ts",
+        "e2e/builder/builder-handoff.spec.ts",
+        "evals/support/self-reproduction-reference-lifecycle.ts",
+        "lib/auth/cursor-client-setup.mts",
+        "lib/auth/preview-oauth-deployment.ts",
+        "lib/db/preview-activation-cli.mts",
+        "lib/integrations/preview-emulate-handler.ts",
+      ],
+      rules: { "sonarjs/no-wildcard-import": "off" },
+    },
+    {
       // Temporary migration baseline for existing test findings.
       files: ["**/*.{test,spec}.{js,jsx,ts,tsx,mjs,mts,cjs,cts}"],
       rules: {
@@ -132,7 +149,6 @@ export default defineConfig({
     "sonarjs/no-redundant-jump": "off",
     "sonarjs/no-undefined-assignment": "off",
     "sonarjs/no-unused-vars": "off",
-    "sonarjs/no-wildcard-import": "off",
     "sonarjs/pseudo-random": "off",
     "sonarjs/publicly-writable-directories": "off",
     "sonarjs/redundant-type-aliases": "off",
