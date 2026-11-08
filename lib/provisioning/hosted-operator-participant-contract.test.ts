@@ -21,21 +21,21 @@ const program = normalActorProgramSchema.parse({
   origin: "https://public.example.com",
   actors: [
     {
+      account: "create-email-password",
       actorKey: "requester",
       email: "requester@example.com",
       name: "Requester",
-      account: "create-email-password",
     },
     {
+      account: "capture-existing",
       actorKey: "reviewer",
       email: "reviewer@example.com",
       name: "Reviewer",
-      account: "capture-existing",
     },
   ],
   organizations: [
-    { organizationId: "org-one", ownerActorKey: "requester", name: "One", slug: "one" },
-    { organizationId: "org-two", ownerActorKey: "reviewer", name: "Two", slug: "two" },
+    { name: "One", organizationId: "org-one", ownerActorKey: "requester", slug: "one" },
+    { name: "Two", organizationId: "org-two", ownerActorKey: "reviewer", slug: "two" },
   ],
   memberships: [
     { actorKey: "requester", organizationId: "org-one", role: "owner" },
@@ -86,23 +86,23 @@ const base = hostedOperatorPlanSchema.parse({
       projectId: "operator-project",
     },
     authority: {
-      issuer: "https://builder.example.com/api/auth",
       audience: "https://builder.example.com/mcp",
+      issuer: "https://builder.example.com/api/auth",
       ownerUserId: "owner",
       workspaceId: "workspace",
     },
     teamId: "team",
     verification: {
-      publicOrigin: program.origin,
       gatewayOrigin: "https://gateway.example.com",
       jwksUrl: "https://gateway.example.com/_platform/jwks.json",
+      publicOrigin: program.origin,
     },
   },
   effects: [
-    { id: "resources", kind: "resources", description: "Read existing resources" },
-    { id: "install", kind: "install", description: "Install app" },
-    { id: "access", kind: "access", description: "Apply approved roles" },
-    { id: "bindings", kind: "bindings", description: "Bind app" },
+    { description: "Read existing resources", id: "resources", kind: "resources" },
+    { description: "Install app", id: "install", kind: "install" },
+    { description: "Apply approved roles", id: "access", kind: "access" },
+    { description: "Bind app", id: "bindings", kind: "bindings" },
   ],
   installer: { reference: "installer", sha256: "a".repeat(64) },
   neon: {
@@ -124,9 +124,9 @@ const participantPlan = () =>
     resourcesInstaller: { reference: "existing-installer", sha256: "c".repeat(64) },
     effects: [
       {
+        description: "Prepare the approved normal accounts",
         id: "normal-accounts",
         kind: "normal-accounts",
-        description: "Prepare the approved normal accounts",
       },
     ],
   });
@@ -154,8 +154,8 @@ describe("public Gateway origin projection", () => {
     });
     expect(result.publicGateway).toEqual({
       branch: "feature",
-      projectId: "gateway-project",
       origin: publicOrigin,
+      projectId: "gateway-project",
     });
     expect(result.deploymentBoundary?.verification.gatewayOrigin).toBe(generatedOrigin);
     expect(result.deploymentBoundary?.verification.jwksUrl).toBe(inventory.verification.jwksUrl);
@@ -195,8 +195,8 @@ describe("public Gateway origin projection", () => {
     });
     expect(result.publicGateway).toEqual({
       branch: "configured-branch",
-      projectId: "gateway-project",
       origin: publicOrigin,
+      projectId: "gateway-project",
     });
     expect(result.deploymentBoundary?.verification.gatewayOrigin).toBe(generatedOrigin);
     expect(observed.gateway.branch).toBeNull();
@@ -223,10 +223,10 @@ const organization = (
     jwksUrl: "https://gateway.example.com/_platform/jwks.json",
     transportSource: {
       audience: "https://vercel.com/team",
+      environment: "preview",
       issuer: "https://oidc.vercel.com/team",
       ownerId: "team",
       projectId: "operator-project",
-      environment: "preview",
     },
   },
 });
@@ -252,9 +252,9 @@ const resolvedPlan = () =>
     effects: [
       ...base.effects.slice(0, 2),
       {
+        description: "Create approved organizations",
         id: "auth-membership",
         kind: "auth-membership",
-        description: "Create approved organizations",
       },
       ...base.effects.slice(2),
     ],
@@ -300,18 +300,18 @@ describe("participant plan and approval contract", () => {
       },
       effects: [
         {
+          description: "Auth resource",
           id: "auth-resource",
           kind: "resources",
           resourceId: base.authDatabase.resourceId,
-          description: "Auth resource",
         },
         {
+          description: "App resource",
           id: "app-resource",
           kind: "resources",
           resourceId: base.appDatabase.resourceId,
-          description: "App resource",
         },
-        { id: "auth-install", kind: "install", description: "Auth schema" },
+        { description: "Auth schema", id: "auth-install", kind: "install" },
       ],
     });
     expect(bootstrap.normalActorProgram).toEqual(program);
@@ -319,7 +319,7 @@ describe("participant plan and approval contract", () => {
     expect(
       hostedOperatorPlanSchema.safeParse({
         ...bootstrap,
-        effects: [{ id: "accounts", kind: "normal-accounts", description: "premature accounts" }],
+        effects: [{ description: "premature accounts", id: "accounts", kind: "normal-accounts" }],
       }).success,
     ).toBe(false);
   });
@@ -329,7 +329,7 @@ describe("participant plan and approval contract", () => {
       expect(
         hostedOperatorPlanSchema.safeParse({
           ...plan,
-          effects: [...plan.effects, { id: kind, kind, description: "unapproved" }],
+          effects: [...plan.effects, { description: "unapproved", id: kind, kind }],
         }).success,
       ).toBe(false);
     }
@@ -407,7 +407,7 @@ describe("participant plan and approval contract", () => {
       authMembership: organization("legacy-org", "legacy-actor", "Legacy", "legacy"),
       effects: [
         ...base.effects.slice(0, 2),
-        { id: "auth-membership", kind: "auth-membership", description: "Legacy organization" },
+        { description: "Legacy organization", id: "auth-membership", kind: "auth-membership" },
         ...base.effects.slice(2),
       ],
     });

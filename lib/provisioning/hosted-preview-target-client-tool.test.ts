@@ -165,18 +165,18 @@ describe("private hosted runtime planning target", () => {
   it("routes missing normal destination setup to the canonical saved session", async () => {
     hooks.resolve.mockRejectedValueOnce(new HostedOperatorError("builder_destination_required"));
     await expect(planTool.execute(input, toolCtx)).resolves.toMatchObject({
-      status: "blocked",
       code: "builder_destination_required",
       destinationPath: `/builds/${selection.sessionId}/destination`,
+      status: "blocked",
     });
     expect(hooks.request).not.toHaveBeenCalled();
   });
   it("routes missing normal destination setup to the canonical saved session", async () => {
     hooks.resolve.mockRejectedValueOnce(new HostedOperatorError("builder_destination_required"));
     await expect(planTool.execute(input, toolCtx)).resolves.toMatchObject({
-      status: "blocked",
       code: "builder_destination_required",
       destinationPath: `/builds/${selection.sessionId}/destination`,
+      status: "blocked",
     });
     expect(hooks.request).not.toHaveBeenCalled();
   });
@@ -217,12 +217,12 @@ describe("closed export tool pre-dispatch diagnostics", () => {
   ) => {
     expect(console.info).toHaveBeenCalledWith("[builder:hosted-neon-consent]", {
       boundary: "builder",
-      phase: "inline",
-      stage: "operator_request",
-      outcome: "setup_unavailable",
       event: "builder.hosted_neon_consent",
+      exportPlanningFailure: { errorClass, stage },
+      outcome: "setup_unavailable",
+      phase: "inline",
       sessionIdHash: `sha256:${createHash("sha256").update(sessionId).digest("hex")}`,
-      exportPlanningFailure: { stage, errorClass },
+      stage: "operator_request",
     });
     expect(JSON.stringify(vi.mocked(console.info).mock.calls)).not.toContain(customerId);
     expect(JSON.stringify(vi.mocked(console.info).mock.calls)).not.toContain(selection.sessionId);
@@ -404,9 +404,9 @@ describe("saved export lookup tool", () => {
   it("preserves a saved export ownership refusal without returning an intent or replanning", async () => {
     hooks.readExport.mockRejectedValueOnce(new HostedOperatorError("authorization_required"));
     await expect(getTool.execute({ operation: "export", exportId }, toolCtx)).resolves.toEqual({
-      exportId,
       authenticatedBehavior: "unassessed",
       code: "authorization_required",
+      exportId,
       status: "blocked",
     });
     expect(hooks.request).not.toHaveBeenCalled();
@@ -489,9 +489,9 @@ describe("saved continuity lookup tool", () => {
   it("returns an ownership refusal without exposing a saved continuity intent", async () => {
     hooks.readContinuity.mockRejectedValueOnce(new HostedOperatorError("authorization_required"));
     await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toEqual({
-      intentId,
       authenticatedBehavior: "unassessed",
       code: "authorization_required",
+      intentId,
       status: "blocked",
     });
     expect(hooks.request).not.toHaveBeenCalled();
@@ -506,12 +506,12 @@ describe("saved continuity lookup tool", () => {
       }),
     );
     await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toEqual({
-      intentId,
       authenticatedBehavior: "unassessed",
       code: "operator_unavailable",
-      recoveryStage: "canonical_read",
-      recoveryProgressAdvanced: false,
       continuityReadStage: "client_response_validation",
+      intentId,
+      recoveryProgressAdvanced: false,
+      recoveryStage: "canonical_read",
       status: "blocked",
     });
     expect(hooks.readContinuity).toHaveBeenCalledOnce();
@@ -521,9 +521,9 @@ describe("saved continuity lookup tool", () => {
   it("does not invent a stage or expose raw details for an unclassified failure", async () => {
     hooks.readContinuity.mockRejectedValueOnce(new Error("private provider detail"));
     await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toEqual({
-      intentId,
       authenticatedBehavior: "unassessed",
       code: "operator_unavailable",
+      intentId,
       status: "blocked",
     });
   });
