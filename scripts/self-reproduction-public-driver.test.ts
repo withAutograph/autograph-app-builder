@@ -621,7 +621,9 @@ describe("public self-reproduction driver", () => {
       }),
     ).rejects.toThrow("lost response");
     const pending = z
-      .object({ pendingMessage: z.object({ message: z.string() }) })
+      .object({
+        pendingMessage: z.object({ clientRequestId: z.string().min(1), message: z.string() }),
+      })
       .parse(JSON.parse(saved)).pendingMessage;
     expect(pending.message).toBe(message);
     await runPublicSession({

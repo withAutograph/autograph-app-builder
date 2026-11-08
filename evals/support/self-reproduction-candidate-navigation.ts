@@ -1,7 +1,6 @@
 import type { Observation } from "./self-reproduction-parity";
 
 const INFRASTRUCTURE_UNAVAILABLE = "infrastructure-unavailable";
-const MISSING_FUNCTIONALITY = "missing-functionality";
 const CANDIDATE_NAVIGATION_REPORT = "candidate-navigation.json";
 
 export interface CandidateNavigationControl {
@@ -36,6 +35,8 @@ export const exerciseCandidateNavigation = async (
   baseURL: string,
   capture: (state: string) => Promise<void>,
 ): Promise<Observation> => {
+  const INFRASTRUCTURE_UNAVAILABLE = "infrastructure-unavailable";
+  const MISSING_FUNCTIONALITY = "missing-functionality";
   const observation: Observation = {
     artifacts: [],
     assertions: [],
