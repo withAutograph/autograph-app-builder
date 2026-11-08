@@ -97,9 +97,9 @@ describe("private local preview setup", () => {
       })
       .mockResolvedValueOnce({
         exitCode: 1,
-        stdout: "",
         stderr:
           "Authenticated runtime requires schema-declared roles or explicit accepted AppSpec roles in APP_RUNTIME_ROLES",
+        stdout: "",
       });
     const result = await prepareAppLocalPreview({
       appId: "spend-review",
@@ -111,8 +111,8 @@ describe("private local preview setup", () => {
     expect(result.problem).toContain("ordinary implementation repair");
     expect(run).toHaveBeenLastCalledWith({
       command: `${sourceDeclaredToolchainActivationCommand()}\n${localPreviewExecutionCommand("spend-review")}`,
-      workingDirectory: "/workspace/repository",
       env: { APP_RUNTIME_STATE_DIR: runtimeStateDirectory },
+      workingDirectory: "/workspace/repository",
     });
   });
   it("preserves successful empty-role runtime setup instead of imposing an authentication requirement", async () => {
@@ -123,7 +123,7 @@ describe("private local preview setup", () => {
         stderr: "",
         stdout: descriptor({ ...generated, authorization: "app-owned", roles: [] }),
       })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: "Runtime ready", stderr: "" });
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "Runtime ready" });
     const result = await prepareAppLocalPreview({
       appId: "spend-review",
       root: "/workspace/repository",
@@ -132,8 +132,8 @@ describe("private local preview setup", () => {
     expect(result).toMatchObject({ exitCode: 0, status: "prepared" });
     expect(run).toHaveBeenLastCalledWith({
       command: `${sourceDeclaredToolchainActivationCommand()}\n${localPreviewExecutionCommand("spend-review")}`,
-      workingDirectory: "/workspace/repository",
       env: { APP_RUNTIME_STATE_DIR: runtimeStateDirectory },
+      workingDirectory: "/workspace/repository",
     });
   });
 
@@ -209,7 +209,7 @@ describe("private local preview setup", () => {
     const run = vi
       .fn()
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor({ kind: "static" }) })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: "Runtime ready", stderr: "" });
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "Runtime ready" });
     await prepareAppLocalPreview({
       appId: "spend-review",
       root: "/workspace/repository",
@@ -225,7 +225,7 @@ describe("private local preview setup", () => {
   it("retains streamed setup failure diagnostics while redacting split credentials", async () => {
     const run = vi
       .fn()
-      .mockResolvedValue({ exitCode: 0, stdout: descriptor(generated), stderr: "" });
+      .mockResolvedValue({ exitCode: 0, stderr: "", stdout: descriptor(generated) });
     const spawn = vi.fn().mockResolvedValue({
       pid: 1,
       stdout: stream(["Auth setup\n"]),

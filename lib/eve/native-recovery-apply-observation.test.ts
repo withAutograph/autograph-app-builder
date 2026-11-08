@@ -122,8 +122,8 @@ describe("private apply native observation", () => {
     input.payload.candidates[0].serializedContext[authorityKey] = { grant: scope, pending: [] };
     input.payload.candidates[0].serializedContext[workflowKey] = {
       ...input.payload.candidates[0].serializedContext[workflowKey],
-      phase: "applied",
       applyReceipt: {},
+      phase: "applied",
     };
     expect(observePrivateApplyRecoveryCandidate(input).flags).toMatchObject({
       applyReceiptPresent: true,
@@ -135,8 +135,8 @@ describe("private apply native observation", () => {
     });
     input.payload.candidates[0].serializedContext[workflowKey] = {
       ...input.payload.candidates[0].serializedContext[workflowKey],
-      phase: "apply_failed",
       applyFailure: {},
+      phase: "apply_failed",
     };
     expect(observePrivateApplyRecoveryCandidate(input).flags.phaseApplyFailed).toBe(true);
   });

@@ -47,14 +47,14 @@ const fixture = async () => {
     planningStateDigest: "d".repeat(64),
   };
   const decision = {
-    version: 1 as const,
-    kind: "preapproval-authoring-decision-v1" as const,
     adapterSessionId: "logical",
-    turnId: "turn1",
-    turnSequence: 1,
     decision: "runnable" as const,
+    kind: "preapproval-authoring-decision-v1" as const,
     scope,
     scopeDigest: authoringScopeDigest(scope),
+    turnId: "turn1",
+    turnSequence: 1,
+    version: 1 as const,
   };
   const ctx = { session: { id: "logical", turn: { id: "turn1", sequence: 1 } } } as Pick<
     HookContext,
@@ -79,11 +79,11 @@ describe("private local drafting reservation", () => {
       expect(await readFile(path.join(dir, op), "utf-8")).toContain("nonce");
     });
     const input = {
-      sessionId: "logical",
       active: false,
-      pendingInput: false,
-      dispatch,
       assertCurrent: f.assertCurrent,
+      dispatch,
+      pendingInput: false,
+      sessionId: "logical",
     };
     expect(await continueLocalPreapprovalAuthoring(input)).toBe("queued");
     expect(await continueLocalPreapprovalAuthoring(input)).toBe("queued");
@@ -94,11 +94,11 @@ describe("private local drafting reservation", () => {
       "session"
     >;
     const claim = {
+      messageSequence: 0,
       nonce: marker.nonce,
       operationId: marker.operationId,
-      turnId: "turn2",
-      messageSequence: 0,
       scopeDigest: f.decision.scopeDigest,
+      turnId: "turn2",
     };
     expect(await claimLocalAuthoringMessage(ctx, { ...claim, scopeDigest: "d".repeat(64) })).toBe(
       false,
@@ -113,11 +113,11 @@ describe("private local drafting reservation", () => {
       throw new Error("lost ack");
     });
     const input = {
-      sessionId: "logical",
       active: false,
-      pendingInput: false,
-      dispatch,
       assertCurrent: f.assertCurrent,
+      dispatch,
+      pendingInput: false,
+      sessionId: "logical",
     };
     expect(await continueLocalPreapprovalAuthoring(input)).toBe("unknown");
     expect(await continueLocalPreapprovalAuthoring(input)).toBe("unknown");
@@ -132,11 +132,11 @@ describe("private local drafting reservation", () => {
     });
     expect(
       await continueLocalPreapprovalAuthoring({
-        sessionId: "logical",
         active: false,
-        pendingInput: false,
-        dispatch,
         assertCurrent,
+        dispatch,
+        pendingInput: false,
+        sessionId: "logical",
       }),
     ).toBe("blocked");
     expect(dispatch).not.toHaveBeenCalled();
@@ -152,9 +152,9 @@ describe("private local drafting reservation", () => {
       expect(
         await continueLocalPreapprovalAuthoring({
           ...flags,
-          sessionId: "logical",
-          dispatch,
           assertCurrent: f.assertCurrent,
+          dispatch,
+          sessionId: "logical",
         }),
       ).toBe("idle");
     }

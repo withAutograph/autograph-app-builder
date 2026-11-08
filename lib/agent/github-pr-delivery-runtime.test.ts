@@ -87,11 +87,11 @@ const fixture = (receiptRepositoryId = "100") => {
     providerReadBackDigest: "a".repeat(64),
   } satisfies Omit<DraftPullRequestSuccessReceipt, "digest">);
   const observation: GitHubPrDeliveryObservation = {
-    state: "open",
-    draft: true,
-    checks: "pending",
-    headSha: receipt.branchSha,
     baseBranch: receipt.baseBranch,
+    checks: "pending",
+    draft: true,
+    headSha: receipt.branchSha,
+    state: "open",
   };
   const inspect = vi.fn<GitHubPrDeliveryProvider["inspect"]>().mockResolvedValue(observation);
   const unexpected = vi.fn(() => Promise.reject(new Error("Unexpected publication operation")));
@@ -103,8 +103,8 @@ const fixture = (receiptRepositoryId = "100") => {
       createPrivateFreshHistoryRepository: unexpected,
       inspectDestination: unexpected,
       inspectDraftPublication: unexpected,
-      inspectExistingDraft,
       inspectAppliedDraftReconciliation,
+      inspectExistingDraft,
       inspectFreshRepositoryOutcome: unexpected,
       inspectInstallation: unexpected,
       inspectRepository: unexpected,
@@ -142,10 +142,10 @@ it("reports draft checks as deferred using only the session's reviewed publicati
   const { compareAndSet, inspect, observation, proposal, reviewedTarget, runtime, unexpected } =
     fixture();
   mocks.getState.mockReturnValue({
-    phase: "reviewed",
     appSpec: { appId: "demo" },
     githubDestinationReview: { installation: { installationId: "300" } },
     githubDraftProposal: { proposal },
+    phase: "reviewed",
   });
   mocks.runtimeForSession.mockResolvedValue(runtime);
   const auth = { current: { principalId: "fixture-user" } };
