@@ -209,6 +209,7 @@ export async function provisionVercelProject(input: {
     try {
       let uncertainWrite = false;
       for (const candidate of input.persistedCandidates) {
+        // oxlint-disable-next-line react-doctor/js-set-map-lookups -- Re-read candidates after each awaited reconciliation.
         if (!input.persistedAbsentCandidates.includes(candidate)) {
           continue;
         }

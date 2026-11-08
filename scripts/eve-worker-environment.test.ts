@@ -63,6 +63,7 @@ describe("closed Eve worker environment", () => {
   });
 
   it.each([
+    // oxlint-disable-next-line sonarjs/no-clear-text-protocols -- Verify non-loopback HTTP is rejected.
     ["non-loopback", { WORKFLOW_LOCAL_BASE_URL: "http://192.0.2.1:43123" }],
     ["credential", { WORKFLOW_LOCAL_BASE_URL: "http://user@127.0.0.1:43123" }],
     ["path", { WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:43123/path" }],

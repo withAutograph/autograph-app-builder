@@ -14,7 +14,9 @@ vi.mock("./builder-form-islands", () => ({
   BuilderConnections: () => <button type="button">Add a connection</button>,
   BuilderDeployment: () => <button type="button">Choose deployment</button>,
   BuilderDestination: () => <button type="button">Choose destination</button>,
+  // oxlint-disable-next-line sonarjs/function-name -- This mock or harness is named as the React component it represents.
   BuilderModel: () => null,
+  // oxlint-disable-next-line sonarjs/function-name -- This mock or harness is named as the React component it represents.
   BuilderProviderNotices: () => null,
   BuilderStorage: () => <button type="button">Choose storage</button>,
   BuilderSubmit: () => <button type="submit">Create App</button>,

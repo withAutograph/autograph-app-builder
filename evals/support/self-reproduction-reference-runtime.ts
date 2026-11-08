@@ -114,6 +114,7 @@ export const startSelfReproductionReferenceRuntime = async (input: {
 }): Promise<{ receipt: ReferenceRuntimeReceipt; stop: () => Promise<void> }> => {
   const fixtureRoot = path.join(path.resolve(input.runtimeRoot), `reference-${randomUUID()}`);
   assertExternalReferenceRoot(input.sourceRoot, fixtureRoot);
+  // oxlint-disable-next-line react-doctor/async-parallel -- Preserve the sequence of port selection and failures.
   const appPort = await availablePort();
   const databasePort = await availablePort();
   let emulatorPort = await availablePort();

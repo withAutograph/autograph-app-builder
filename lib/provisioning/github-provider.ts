@@ -632,6 +632,7 @@ export async function provisionGitHubRepository(input: {
     try {
       let uncertainWrite = false;
       for (const candidate of input.persistedCandidates) {
+        // oxlint-disable-next-line react-doctor/js-set-map-lookups -- Re-read candidates after each awaited reconciliation.
         if (input.persistedAbsentCandidates.includes(candidate)) {
           uncertainWrite = true;
           // oxlint-disable-next-line eslint/no-await-in-loop -- Inspect all prior candidates before permitting a new write.

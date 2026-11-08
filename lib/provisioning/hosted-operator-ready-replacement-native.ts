@@ -122,8 +122,10 @@ export const createReadyReplacementNativeReader = (ports: {
         }
         const project = z
           .object({ id, accountId: id })
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Verify each candidate's project before its deployment.
           .parse(await request(`/v9/projects/${encodeURIComponent(candidate.projectId)}`));
         const native = deployment.parse(
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Finish this candidate before checking the next.
           await request(`/v13/deployments/${encodeURIComponent(candidate.deploymentId)}`),
         );
         const origin = new URL(`https://${native.url}`);

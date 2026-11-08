@@ -9,7 +9,9 @@ import { describe, expect, it, vi } from "vitest";
 import { createPinnedPreviewLookup, createPreviewCimdTransport } from "./preview-cimd-transport";
 
 const publicAddresses: LookupAddress[] = [
+  // oxlint-disable-next-line sonarjs/no-hardcoded-ip -- Public IPv4 fixture verifies pinned DNS.
   { address: "93.184.216.34", family: 4 },
+  // oxlint-disable-next-line sonarjs/no-hardcoded-ip -- Public IPv6 fixture verifies pinned DNS.
   { address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 },
 ];
 
@@ -137,6 +139,7 @@ describe("Preview CIMD transport", () => {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       resolveHostname: vi.fn(async () => [
         publicAddresses[0],
+        // oxlint-disable-next-line sonarjs/no-hardcoded-ip -- Reject the link-local metadata address.
         { address: "169.254.169.254", family: 4 },
       ]),
     });

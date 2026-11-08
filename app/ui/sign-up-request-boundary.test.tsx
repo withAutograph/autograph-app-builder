@@ -10,7 +10,9 @@ const dependencies = vi.hoisted(() => ({
 vi.mock("next/server", () => ({ connection: dependencies.connection }));
 vi.mock("next/headers", () => ({ headers: dependencies.headers }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
+// oxlint-disable-next-line sonarjs/function-name -- This mock or harness is named as the React component it represents.
 vi.mock("@/components/auth/sign-up", () => ({ SignUp: () => null }));
+// oxlint-disable-next-line sonarjs/function-name -- This mock or harness is named as the React component it represents.
 vi.mock("@/components/auth/auth-continuity", () => ({ AuthContinuity: () => null }));
 vi.mock("@/lib/auth/preview-oauth-deployment", () => ({
   getPreviewOAuthDeploymentOrigin: () => "https://builder.example",

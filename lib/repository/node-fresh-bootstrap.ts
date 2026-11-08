@@ -2114,6 +2114,7 @@ const assertExactRepository = async (
   const destinationIdentity = await identity(root);
   const gitDirectoryIdentity = await identity(gitDirectory);
   const ref = `refs/heads/${proposal.repositoryIdentity.initialBranch}`;
+  // oxlint-disable-next-line react-doctor/async-parallel -- Read the manifest before resolving Git identities.
   const rawManifest = await rawWorktreeManifest(root, proposal, options.allowClaimMarker === true);
   const absoluteGitDirectory = await realpath(
     git(capability, root, ["rev-parse", gitAbsolutePathFormat, "--git-dir"]).trim(),

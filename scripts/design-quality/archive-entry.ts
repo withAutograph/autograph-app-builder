@@ -13,5 +13,6 @@ export async function readArchivedReport(directory: string) {
     }
     throw error;
   }
+  // oxlint-disable-next-line typescript/no-unsafe-return -- Preserve arbitrary valid archived JSON for existing callers.
   return JSON.parse(bytes);
 }

@@ -1028,6 +1028,7 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
     await input.hooks?.afterPendingJournal?.();
     for (let index = 0; index < input.proposal.executionPaths.length; index += 1) {
       const path = input.proposal.executionPaths[index];
+      // oxlint-disable-next-line react-doctor/js-index-maps -- Preserve first-match lookup after each awaited hook.
       const change = input.proposal.changes.find((candidate) => candidate.path === path);
       if (change === undefined) {
         throw new Error(`Missing approved change for ${path}.`);
@@ -1122,6 +1123,7 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
       const observedPost: string[] = [];
       for (let index = 0; index < input.proposal.executionPaths.length; index += 1) {
         const path = input.proposal.executionPaths[index];
+        // oxlint-disable-next-line react-doctor/js-index-maps -- Re-read the first match during asynchronous recovery.
         const change = input.proposal.changes.find((candidate) => candidate.path === path);
         if (change === undefined) {
           uncertainPaths.push(path);
@@ -1178,6 +1180,7 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
       }
       const conflictedPathSet = new Set(conflictedPaths);
       for (const path of observedPost) {
+        // oxlint-disable-next-line react-doctor/js-index-maps -- Preserve first-match lookup during per-path readback.
         const change = input.proposal.changes.find((candidate) => candidate.path === path);
         if (change === undefined) {
           conflictedPaths.push(path);

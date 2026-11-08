@@ -69,11 +69,6 @@ export default defineConfig({
   },
   overrides: [
     {
-      // Exercise rejection of insecure non-loopback endpoints.
-      files: ["scripts/eve-worker-environment.test.ts"],
-      rules: { "sonarjs/no-clear-text-protocols": "off" },
-    },
-    {
       // Preserve existing control flow pending focused review.
       files: [
         ".config/mise/scripts/repository/build-hosted-arrusted-artifact.mts",
@@ -304,40 +299,6 @@ export default defineConfig({
       rules: { "anti-slop/no-known-value-widening": "off" },
     },
     {
-      // Existing findings awaiting a focused migration.
-      files: [
-        "app/**/route.ts",
-        "app/(product)/auth/sign-up/page.tsx",
-        "app/(product)/github/installations/callback/route.ts",
-        "app/(product)/local-connections/[provider]/complete/route.ts",
-        "app/(product)/local-connections/vercel/oauth-callback/route.ts",
-        "app/(product)/local-oauth/[provider]/approve/[approval]/route.ts",
-        "app/(product)/local-oauth/[provider]/approve/route.ts",
-        "app/(product)/preview/[sessionId]/[digest]/route.ts",
-        "app/(product)/settings/account/page.tsx",
-        "app/.well-known/oauth-protected-resource/route.ts",
-        "app/api/builder/draft/route.ts",
-        "app/api/builder/handoffs/[id]/renew/route.ts",
-        "app/api/builder/handoffs/[id]/route.ts",
-        "app/api/builder/handoffs/route.ts",
-        "app/api/builder/provision/stream/route.ts",
-        "app/api/github/webhooks/route.ts",
-        "app/healthz/route.ts",
-        sharedLintFile5,
-        "app/ui/builder-form-content.test.tsx",
-        "app/ui/builder-form-islands.tsx",
-        "app/ui/emulation-approval.tsx",
-        "app/ui/sign-up-request-boundary.test.tsx",
-        "app/ui/use-builder-draft-autosave.test.tsx",
-        sharedLintFile6,
-        "components/create-app/provider-choice-section.tsx",
-        "components/ui/badge.tsx",
-        "components/ui/item.tsx",
-        "e2e/production-navigation/cache-probe.route.ts",
-      ],
-      rules: { "sonarjs/function-name": "off" },
-    },
-    {
       // Existing calls awaiting a focused contract review.
       files: [
         handoffControlsPath,
@@ -480,33 +441,12 @@ export default defineConfig({
       rules: { "typescript/no-confusing-void-expression": "off" },
     },
     {
-      // Preserve ordering in existing sequential operations.
-      files: [
-        "e2e/support/harness.ts",
-        "lib/provisioning/hosted-operator-ready-replacement-native.ts",
-      ],
-      rules: { "eslint/no-await-in-loop": "off" },
-    },
-    {
       files: [
         "app/(product)/auth/setting-up/page.tsx",
         "app/ui/builder-continuation.tsx",
         handoffControlsPath,
       ],
       rules: { "react-doctor/nextjs-no-client-side-redirect": "off" },
-    },
-    {
-      files: [nodeLocalPublicationPath],
-      rules: { "react-doctor/js-index-maps": "off" },
-    },
-    {
-      files: [
-        referenceLifecyclePath,
-        sharedLintFile1,
-        "lib/agent/github-pr-delivery-step.ts",
-        nodeFreshBootstrapPath,
-      ],
-      rules: { "react-doctor/async-parallel": "off" },
     },
     {
       // Git object identity requires the existing SHA-1 format.
@@ -521,16 +461,6 @@ export default defineConfig({
       rules: { "sonarjs/hashing": "off" },
     },
     {
-      // Preserve existing provider and string lookup behavior pending review.
-      files: [
-        "evals/support/product-quality.ts",
-        "lib/auth/cursor-client.ts",
-        githubProviderPath,
-        "lib/provisioning/vercel-provider.ts",
-      ],
-      rules: { "react-doctor/js-set-map-lookups": "off" },
-    },
-    {
       files: [
         "evals/support/self-reproduction-runtime.ts",
         sharedLintFile30,
@@ -539,15 +469,6 @@ export default defineConfig({
         sharedLintFile4,
       ],
       rules: { "typescript/no-unsafe-call": "off" },
-    },
-    {
-      files: [draftAutosavePath],
-      rules: { "sonarjs/pseudo-random": "off" },
-    },
-    {
-      // Preserve existing runtime contracts pending focused migration.
-      files: ["scripts/design-quality/archive-entry.ts"],
-      rules: { "typescript/no-unsafe-return": "off" },
     },
     {
       // Existing findings awaiting behavior-preserving contract changes.
@@ -705,7 +626,6 @@ export default defineConfig({
       rules: {
         "anti-slop/no-module-mocking": "off",
         "sonarjs/code-eval": "off",
-        "sonarjs/no-hardcoded-ip": "off",
       },
     },
   ],

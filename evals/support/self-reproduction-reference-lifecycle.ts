@@ -119,6 +119,7 @@ export const exerciseReferenceLifecycle = async (input: {
     message: "Continue controlled operation",
     sessionId: recovery.sessionId,
   };
+  // oxlint-disable-next-line react-doctor/async-parallel -- The repeated send must follow the first to exercise replay.
   const first = await service().send(request);
   const repeated = await service().send(request);
   const persistedResult = await input.store.getSession(input.principal, recovery.sessionId);

@@ -139,6 +139,7 @@ export async function approveGitHubPrDelivery(
   ctx: ApprovalContext<GitHubPrDeliveryApproval>,
 ): Promise<ApprovalStatus> {
   "use step";
+  // oxlint-disable-next-line react-doctor/async-parallel -- Preserve module initialization and failure order before approval.
   const { appBuilderWorkflowState } = await import("./workflow-state");
   const { draftReconciliationState } = await import("./draft-reconciliation-state");
   const { resolveGitHubPrDeliverySubject } = await import("./github-pr-delivery-subject");

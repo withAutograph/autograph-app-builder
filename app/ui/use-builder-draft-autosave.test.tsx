@@ -23,7 +23,7 @@ let autosave: BuilderDraftAutosave<Snapshot> | undefined;
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line sonarjs/function-name, eslint/func-style -- This mock or harness is named as the React component it represents. Preserve function declaration hoisting and initialization timing.
 function Harness({
   outbox,
   save,
