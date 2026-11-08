@@ -264,6 +264,7 @@ function eveRuntimeWorkerPath() {
     ),
   );
 }
+/** @param {ReturnType<typeof createPrivateKey>} privateKey - Delegation key created by requestAuthorization. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, gateAEvalProfile) {
   const allowed = allowedWorkerPaths();

@@ -234,7 +234,8 @@ export async function inspectOciCandidateArchive(path: string) {
   if (index.schemaVersion !== 2 || !Array.isArray(index.manifests)) {
     throw new Error("Release OCI archive index was invalid.");
   }
-  const candidates = index.manifests.filter(
+  const manifests: unknown[] = index.manifests;
+  const candidates = manifests.filter(
     (
       entry,
     ): entry is {
