@@ -1,4 +1,9 @@
 import { readFile } from "node:fs/promises";
+import { DatabaseSync } from "node:sqlite";
+import type { SQLInputValue } from "node:sqlite";
+import postgres from "postgres";
+import type { Sql } from "postgres";
+import { createInvitedUserProvisioner } from "./preview-activation-invited-user";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -9,6 +14,74 @@ import {
   previewActivationApplyRequestSchema,
 } from "./preview-activation";
 import type { PreviewActivationStore } from "./preview-activation";
+
+// Execute the provisioner's parameterized queries against an in-memory relational
+// database. PostgreSQL row locks are removed because SQLite serializes this
+// single-connection fixture; all writes still run inside the same transaction.
+const activationDatabase = async () => {
+  const db = new DatabaseSync(":memory:");
+  db.exec(`
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE "user" (id text PRIMARY KEY, name text NOT NULL, email text NOT NULL UNIQUE,
+      email_verified boolean NOT NULL, created_at text NOT NULL, updated_at text NOT NULL);
+    CREATE TABLE account (id text PRIMARY KEY, issuer text NOT NULL, account_id text NOT NULL,
+      provider_id text NOT NULL, user_id text NOT NULL REFERENCES "user"(id), password text,
+      created_at text NOT NULL, updated_at text NOT NULL, UNIQUE(issuer, account_id));
+  `);
+  db.exec(await readFile("drizzle/0002_hosted_workspace_membership.sql", "utf-8"));
+  const client = postgres("postgres://fixture.invalid/unused");
+  let transactionCount = 0;
+  const sql = new Proxy(client, {
+    get(_target, property) {
+      if (property === "begin") {
+        return async (operation: (transaction: Sql) => Promise<unknown>) => {
+          transactionCount += 1;
+          db.exec("BEGIN");
+          try {
+            const result = await operation(sql);
+            db.exec("COMMIT");
+            return result;
+          } catch (error) {
+            db.exec("ROLLBACK");
+            throw error;
+          }
+        };
+      }
+      throw new Error(`Unexpected SQL client property: ${String(property)}`);
+    },
+    apply(_target, _receiver, rawArguments: unknown[]) {
+      const [segments, ...parameters] = rawArguments;
+      if (!Array.isArray(segments) || !segments.every((part) => typeof part === "string")) {
+        throw new Error("Expected a parameterized SQL query");
+      }
+      const statement = segments.join("?").replace(/\s+for update\s*$/iu, "");
+      const bindings: SQLInputValue[] = parameters.map((value: unknown) => {
+        if (value instanceof Date) return value.toISOString();
+        if (
+          typeof value === "string" ||
+          typeof value === "number" ||
+          typeof value === "bigint" ||
+          value === null
+        )
+          return value;
+        throw new Error("Unexpected SQL parameter");
+      });
+      const query = db.prepare(statement);
+      if (!statement.trimStart().toLowerCase().startsWith("select")) {
+        query.run(...bindings);
+        return Promise.resolve([]);
+      }
+      return Promise.resolve(
+        query.all(...bindings).map((row) => ({
+          ...row,
+          ...("email_verified" in row ? { email_verified: row.email_verified === 1 } : {}),
+          ...("active" in row ? { active: row.active === 1 } : {}),
+        })),
+      );
+    },
+  });
+  return { db, provision: createInvitedUserProvisioner(sql), transactions: () => transactionCount };
+};
 
 const now = Date.parse("2026-08-27T12:00:00.000Z");
 
@@ -185,26 +258,84 @@ describe("Preview activation prerequisite contract", () => {
     expect(cli).not.toContain("sql.unsafe(input.password)");
   });
 
-  it("provisions the exact migrated membership shape in one transaction", async () => {
-    const [cli, migration] = await Promise.all([
-      readFile("lib/db/preview-activation-cli.mts", "utf-8"),
-      readFile("drizzle/0002_hosted_workspace_membership.sql", "utf-8"),
-    ]);
-    const provisionStart = cli.indexOf("async provisionInvitedUser(input)");
-    const configureStart = cli.indexOf("async configureRuntimeRole(input)");
-    const provisionEnd = configureStart > provisionStart ? configureStart : cli.length;
-    expect(provisionStart).toBeGreaterThanOrEqual(0);
-    expect(provisionEnd).toBeGreaterThan(provisionStart);
-    const provision = cli.slice(provisionStart, provisionEnd);
-    expect(provision).toContain("return sql.begin(async (transaction) => {");
-    expect(provision).toContain(
-      "insert into hosted_workspace_membership (issuer, audience, workspace_id, owner_user_id, active, updated_at)",
-    );
-    expect(provision).toContain("'local:oauth:github'");
-    expect(provision).toContain("'github'");
-    expect(provision).not.toContain("hashPassword");
-    expect(provision).not.toMatch(/hosted_workspace_membership[^;]*created_at/u);
-    expect(migration).toContain('"updated_at" timestamptz NOT NULL');
-    expect(migration).not.toContain('"created_at"');
+  it("provisions and reuses the tenant-bound GitHub membership atomically", async () => {
+    const fixture = await activationDatabase();
+    const input = { ...invite, email: "user@one.example" };
+    try {
+      await expect(fixture.provision(input)).resolves.toEqual({
+        accountRowsAffected: 1,
+        membershipRowsAffected: 1,
+        userRowsAffected: 1,
+      });
+      expect(fixture.transactions()).toBe(1);
+      expect(
+        fixture.db.prepare('select id, email, name, email_verified from "user"').get(),
+      ).toMatchObject({
+        id: input.userId,
+        email: input.email,
+        name: input.githubLogin,
+        email_verified: 1,
+      });
+      expect(
+        fixture.db
+          .prepare("select issuer, account_id, provider_id, user_id, password from account")
+          .get(),
+      ).toMatchObject({
+        issuer: "local:oauth:github",
+        account_id: input.githubAccountId,
+        provider_id: "github",
+        user_id: input.userId,
+        password: null,
+      });
+      expect(
+        fixture.db
+          .prepare(
+            "select issuer, audience, workspace_id, owner_user_id, active, updated_at from hosted_workspace_membership",
+          )
+          .get(),
+      ).toMatchObject({
+        issuer: input.issuer,
+        audience: input.resource,
+        workspace_id: input.workspaceId,
+        owner_user_id: input.userId,
+        active: 1,
+        updated_at: input.requestedAt,
+      });
+      await expect(fixture.provision(input)).resolves.toEqual({
+        accountRowsAffected: 0,
+        membershipRowsAffected: 0,
+        userRowsAffected: 0,
+      });
+      expect(fixture.transactions()).toBe(2);
+    } finally {
+      fixture.db.close();
+    }
+  });
+
+  it("rolls back identity writes when the existing tenant membership is inactive", async () => {
+    const fixture = await activationDatabase();
+    const input = { ...invite, email: "user@one.example" };
+    try {
+      fixture.db
+        .prepare(
+          "insert into hosted_workspace_membership (issuer, audience, workspace_id, owner_user_id, active, updated_at) values (?, ?, ?, ?, false, ?)",
+        )
+        .run(input.issuer, input.resource, input.workspaceId, input.userId, input.requestedAt);
+      await expect(fixture.provision(input)).rejects.toThrow(
+        "Invited user membership conflicts with an existing row.",
+      );
+      expect(fixture.transactions()).toBe(1);
+      expect(fixture.db.prepare('select count(*) as count from "user"').get()).toMatchObject({
+        count: 0,
+      });
+      expect(fixture.db.prepare("select count(*) as count from account").get()).toMatchObject({
+        count: 0,
+      });
+      expect(
+        fixture.db.prepare("select active from hosted_workspace_membership").get(),
+      ).toMatchObject({ active: 0 });
+    } finally {
+      fixture.db.close();
+    }
   });
 });
