@@ -145,7 +145,7 @@ export const reconstructNativeApprovalResponse = (input: {
       const resolution = item.resolutions.filter((entry) => entry.requestId === request.requestId);
       const matched = capture.receipts.filter((entry) => entry.requestId === request.requestId);
       const saved = receipts.filter((entry) => entry.requestId === request.requestId);
-      const terminal = matched[0];
+      const [terminal] = matched;
       if (terminal === undefined || resolution[0] === undefined) {
         return undefined;
       }

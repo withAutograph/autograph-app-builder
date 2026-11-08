@@ -4458,7 +4458,7 @@ export function createHostedEveSessionService(input: {
           if (matches.length !== 1) {
             return false;
           }
-          const receipt = matches[0];
+          const [receipt] = matches;
           const sameApproval =
             receipt !== undefined &&
             // Native target response recovery requires proof of the complete original batch.

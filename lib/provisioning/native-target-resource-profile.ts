@@ -43,7 +43,7 @@ export const resolveNativeTargetResourceProfile = (input: {
     if (selected.length !== 1) {
       throw unavailable();
     }
-    const profile = selected[0];
+    const [profile] = selected;
     if (
       profile === undefined ||
       profile.appId !== input.appId ||

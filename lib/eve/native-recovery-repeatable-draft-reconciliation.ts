@@ -139,7 +139,7 @@ const uniqueHistoryApproval = (parts: Part[], callId: string): boolean => {
   ) {
     return false;
   }
-  const approvalId = requests[0].approvalId;
+  const [{ approvalId }] = requests;
   const responses = parts.filter(
     (value) => value.type === "tool-approval-response" && value.approvalId === approvalId,
   );
@@ -172,7 +172,7 @@ const nativeHumanApproval = (events: Event[], call: Part, expectedPrincipalId: s
   if (requests.length !== 1 || requests[0].request === undefined) {
     return false;
   }
-  const { request, index } = requests[0];
+  const [{ request, index }] = requests;
   const requestIdMatches = events.flatMap((value) => {
     if (value.type !== INPUT_REQUESTED_EVENT) {
       return [];

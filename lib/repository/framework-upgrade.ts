@@ -103,7 +103,7 @@ export const resolveLatestFrameworkVersions = async (
     !supports(reactDom, "react", react.version)
   ) {
     const [reacts, doms] = await Promise.all([candidates("react"), candidates("react-dom")]);
-    const pair = reacts.flatMap((candidate) => {
+    const [pair] = reacts.flatMap((candidate) => {
       const dom = doms.find((value) => value.version === candidate.version);
       if (dom === undefined || !supports(next, "react", candidate.version)) {
         return [];
@@ -112,7 +112,7 @@ export const resolveLatestFrameworkVersions = async (
         return [];
       }
       return [{ react: candidate, reactDom: dom }];
-    })[0];
+    });
     if (pair === undefined) {
       throw new Error(`Next.js ${next.version} has no compatible stable React/React DOM pair`);
     }
@@ -130,7 +130,7 @@ export const resolveLatestFrameworkVersions = async (
       candidates(reactTypesPackageName),
       candidates("@types/react-dom"),
     ]);
-    const pair = domTypes.flatMap((dom) => {
+    const [pair] = domTypes.flatMap((dom) => {
       if (!sameMajor(dom.version)) {
         return [];
       }
@@ -138,7 +138,7 @@ export const resolveLatestFrameworkVersions = async (
         (value) => sameMajor(value.version) && supports(dom, reactTypesPackageName, value.version),
       );
       return types === undefined ? [] : [{ typesReact: types, typesReactDom: dom }];
-    })[0];
+    });
     if (pair === undefined) {
       throw new Error(`React ${react.version} has no compatible stable type packages`);
     }

@@ -1605,7 +1605,7 @@ describe("participant plan resolution", () => {
         .mockResolvedValueOnce()
         .mockRejectedValueOnce(new HostedOperatorError("authorization_required"));
       await expect(guard()).rejects.toMatchObject({ code: "authorization_required" });
-      const organization = f.state.organizations[0];
+      const [organization] = f.state.organizations;
       if (organization === undefined) {
         throw new Error("Fixture participant organization missing");
       }
@@ -4890,7 +4890,7 @@ it("resolves the completed additive participant successor into its newly approve
     accountApprovalId: "new-account-approval",
     accountApprovedByCallId: "new-account-call",
   });
-  const qaActor = qa.state.actors[0];
+  const [qaActor] = qa.state.actors;
   if (qaActor?.session === undefined) {
     throw new Error("missing QA session");
   }

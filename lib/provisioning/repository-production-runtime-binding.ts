@@ -95,7 +95,7 @@ export const createRepositoryProductionRuntimeBinding = (input: {
     if (matches.length > 1) {
       throw new Error("repository_production_runtime_binding_conflict");
     }
-    const row = matches[0];
+    const [row] = matches;
     const checkpoints = context.row.record.workerCheckpoints.flatMap((value) => {
       const parsed = checkpointSchema.safeParse(value);
       if (!parsed.success) {

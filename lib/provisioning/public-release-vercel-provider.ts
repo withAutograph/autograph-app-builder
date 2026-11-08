@@ -259,7 +259,7 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
       // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing provider state is a distinct reconciliation observation.
       return undefined;
     }
-    const row = matches[0];
+    const [row] = matches;
     const entry = context.plan.environment.find((item) => item.key === key);
     const owned =
       row.comment === marker(context.operationRef) ||
@@ -647,7 +647,7 @@ export const createPublicReleaseVercelBindingSnapshot =
       if (rows.length !== 1) {
         throw fail();
       }
-      const row = rows[0];
+      const [row] = rows;
       const markerMatch = /^autograph:public-app-release:(?<operationRef>[0-9a-f-]{36})$/u.exec(
         row.comment ?? "",
       );

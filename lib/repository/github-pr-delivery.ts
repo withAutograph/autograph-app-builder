@@ -270,7 +270,7 @@ const checkReadyRun = async (
     : [];
   // GitHub lists newest runs first. An unresolved association for the newest
   // plausible run is pending instead of qualifying an older successful run.
-  const run = candidates[0];
+  const [run] = candidates;
   if (run === undefined || !runMatchesPull(run, pull, windows)) {
     return { checks: "pending", readyAt };
   }

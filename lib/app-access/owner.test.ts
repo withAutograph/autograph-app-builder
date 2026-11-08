@@ -243,7 +243,7 @@ describe("recovered web app access owner", () => {
     );
     expect(response.status).toBe(200);
     expect(f.execute).toHaveBeenCalledTimes(1);
-    const call = f.execute.mock.calls[0];
+    const [call] = f.execute.mock.calls;
     expect(call?.[0]).toMatchObject({
       sessionId: f.selected.original.sessionId,
       ownerContext: { adapterSessionId: f.selected.child.adapterSessionId },
