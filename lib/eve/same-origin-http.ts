@@ -466,7 +466,7 @@ export async function* streamSameOriginEveEvents(input: {
   }
   if (startIndex > tail + 1) {
     // oxlint-disable-next-line promise/prefer-await-to-then -- Cancel best effort without waiting for a provider handshake.
-    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+    // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then -- Keep cancellation nonblocking before the existing cursor failure or early return.
     void response.body.cancel().catch(() => null);
     throw new Error("Canonical Eve durable tail precedes the saved native cursor.");
   }
@@ -479,7 +479,7 @@ export async function* streamSameOriginEveEvents(input: {
     }
     // Provider cancellation is best effort; a stalled cancel must not hold the response.
     // oxlint-disable-next-line promise/prefer-await-to-then -- Cleanup must not delay the reader.
-    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+    // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then -- Keep cancellation nonblocking before the existing cursor failure or early return.
     void response.body.cancel().catch(() => null);
     return;
   }
@@ -552,7 +552,7 @@ export async function* streamSameOriginEveEvents(input: {
     // The complete durable tail is already installed (or this read failed).
     // Do not let a provider stream's cancellation handshake hold the MCP reply.
     // oxlint-disable-next-line promise/prefer-await-to-then -- This cleanup must not delay the MCP response.
-    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+    // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then -- Keep stream cancellation nonblocking while the original read error propagates.
     void reader.cancel().catch(() => null);
     try {
       reader.releaseLock();

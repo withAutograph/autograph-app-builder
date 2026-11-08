@@ -87,7 +87,7 @@ export async function readPreparedHandoffContext(sessionAuth: unknown) {
   // oxlint-disable-next-line promise/prefer-await-to-callbacks
   // Preserve the shared lazy promise while clearing it after a failed creation.
   // oxlint-disable-next-line promise/prefer-await-to-then
-  // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+  // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then -- Preserve the shared initialization promise and clear it on rejection.
   deploymentReader ??= createDeploymentPreparedHandoffReader().catch((error: unknown) => {
     deploymentReader = undefined;
     throw error;

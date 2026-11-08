@@ -7,6 +7,7 @@ const runs = vi.hoisted(() => ({
   provisioning: vi.fn(),
 }));
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Control the production flag module at the Storybook framework seam.
 vi.mock("../lib/feature-flags.ts", () => ({
   builderComingSoonFlag: { run: runs.comingSoon },
   builderConnectionsFlag: { run: runs.connections },

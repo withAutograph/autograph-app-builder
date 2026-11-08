@@ -281,8 +281,7 @@ export const withLifecycleLock = async function withLifecycleLock<T>(
     const port = lifecycleLockPort(stateRoot, attempt);
     const listening = once(server, "listening");
     server.listen({ exclusive: true, host: "127.0.0.1", port });
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
+    // oxlint-disable-next-line eslint/no-await-in-loop, github/no-then -- Settle each exclusive lifecycle lock attempt before selecting the next port.
     const acquired = await listening.then(
       () => true,
       (error: unknown) => {

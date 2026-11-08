@@ -8,6 +8,7 @@ import type { getProviderData as getProviderDataType } from "@flags-sdk/vercel";
 
 const getProviderData = vi.hoisted(() => vi.fn());
 
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the real SDK exports and control only provider discovery at the framework route seam.
 vi.mock("@flags-sdk/vercel", async (importOriginal) => ({
   ...(await importOriginal<{ getProviderData: typeof getProviderDataType }>()),
   getProviderData,

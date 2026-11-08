@@ -29,5 +29,14 @@ export default defineConfig({
     // Temporary migration items: re-enable after the existing findings are fixed.
     "eslint/sort-keys": "off",
   },
+  overrides: [
+    {
+      // Eve persists tool identifiers from these existing kebab-case and snake_case filenames.
+      files: ["agent/tools/*.ts"],
+      rules: {
+        "unicorn/filename-case": ["error", { cases: { kebabCase: true, snakeCase: true } }],
+      },
+    },
+  ],
   settings: jsPluginSettings,
 });

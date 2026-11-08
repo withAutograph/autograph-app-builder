@@ -148,11 +148,11 @@ export function createBuilderDraftOutbox<T>(
   function serial<Result>(operation: () => Promise<Result>): Promise<Result> {
     // This queue deliberately composes the next operation without awaiting it here.
     // oxlint-disable-next-line promise/prefer-await-to-then
-    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
+    // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then -- Preserve the linked operation promise and the existing serialized outbox queue.
     const result = operations.then(operation);
     // Keep the queue usable after either outcome.
     // oxlint-disable-next-line promise/prefer-await-to-then
-    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
+    // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then -- Preserve queue settlement after either operation outcome without changing the returned promise.
     operations = result.then(
       () => null,
       () => null,

@@ -71,8 +71,7 @@ beforeEach(() => {
 
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled next/cache dependency used by this test.
 vi.mock("next/cache", () => ({ refresh: vi.fn() }));
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled next/headers dependency used by this test.
+// oxlint-disable-next-line anti-slop/no-module-mocking, eslint/require-await -- Keep the controlled Next headers seam Promise-returning as the real API requires.
 vi.mock("next/headers", () => ({ headers: vi.fn(async () => new Headers()) }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/lib/auth/preview-oauth-runtime dependency used by this test.
 vi.mock("@/lib/auth/preview-oauth-runtime", () => ({

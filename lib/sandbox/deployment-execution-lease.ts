@@ -120,7 +120,7 @@ async function stopWithin(
   const stop = Promise.resolve(sandbox.stop());
   // Intentionally observe stop failure without awaiting it before the timeout race.
   // oxlint-disable-next-line promise/prefer-await-to-then
-  // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+  // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then -- Observe stop rejection without waiting before the existing timeout race.
   stop.catch(() => null);
   const timeout = delay(timeoutMs, "timeout" as const, {
     ref: false,

@@ -13,11 +13,9 @@ vi.mock("next/server", () => ({ connection: dependencies.connection }));
 vi.mock("next/headers", () => ({ headers: dependencies.headers }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled next/navigation dependency used by this test.
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
-// oxlint-disable-next-line sonarjs/function-name -- This mock or harness is named as the React component it represents.
-// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/components/auth/sign-up dependency used by this test.
+// oxlint-disable-next-line anti-slop/no-module-mocking, sonarjs/function-name -- Keep the controlled framework seam and its real React component export name.
 vi.mock("@/components/auth/sign-up", () => ({ SignUp: () => null }));
-// oxlint-disable-next-line sonarjs/function-name -- This mock or harness is named as the React component it represents.
-// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/components/auth/auth-continuity dependency used by this test.
+// oxlint-disable-next-line anti-slop/no-module-mocking, sonarjs/function-name -- Keep the controlled framework seam and its real React component export name.
 vi.mock("@/components/auth/auth-continuity", () => ({ AuthContinuity: () => null }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled @/lib/auth/preview-oauth-deployment dependency used by this test.
 vi.mock("@/lib/auth/preview-oauth-deployment", () => ({

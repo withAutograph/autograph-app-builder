@@ -415,8 +415,7 @@ export const evaluateCandidateRuntime = async (input: {
             },
           }),
         )
-        // oxlint-disable-next-line promise/prefer-await-to-then -- Drain concurrently with readiness; shutdown may close the stream.
-        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+        // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then -- Drain concurrently with readiness; shutdown may close the diagnostic stream.
         .catch(() => {
           // Shutdown may close the diagnostic stream.
         });
