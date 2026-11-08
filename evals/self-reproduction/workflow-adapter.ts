@@ -279,7 +279,7 @@ const referenceAdapter = (
         await page.getByRole("button", { exact: true, name: "Connect emulated GitHub" }).click();
         await expect(page).toHaveURL(/\/local-connections\/github\?.*phase=authorize/u);
         const state = new URL(page.url()).searchParams.get("state");
-        if (!state) {
+        if (state === null || state === "") {
           throw new Error("Emulated GitHub authorization did not retain callback state.");
         }
         const callback = new URL("/github/installations/callback", referenceUrl);

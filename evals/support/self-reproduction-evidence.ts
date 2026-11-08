@@ -27,7 +27,7 @@ export function sanitizeEvidence(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(sanitizeEvidence);
   }
-  if (value && typeof value === "object") {
+  if (typeof value === "object" && value !== null) {
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
         key,
@@ -138,7 +138,7 @@ function changeSetStatusOutput(
   }
   if (["change-set-status", "change_set_status"].includes(event.data.result.toolName as string)) {
     const { output } = event.data.result;
-    return output && typeof output === "object" && !Array.isArray(output)
+    return typeof output === "object" && output !== null && !Array.isArray(output)
       ? (output as Record<string, unknown>)
       : undefined;
   }
@@ -174,7 +174,7 @@ export function candidateExportFromEvidence(
     const validated: CandidateExportFile[] = [];
     const paths = new Set<string>();
     for (const file of files) {
-      if (!file || typeof file !== "object" || Array.isArray(file)) {
+      if (typeof file !== "object" || file === null || Array.isArray(file)) {
         return undefined;
       }
       const { path, content } = file as { path?: unknown; content?: unknown };
@@ -194,7 +194,8 @@ export function candidateExportFromEvidence(
     const appRoots = new Set(
       validated.flatMap((file) => {
         const match = /^(?<appRoot>apps\/[^/]+)\/next\.config\.(?:[cm]?[jt]s)$/u.exec(file.path);
-        return match?.groups?.appRoot ? [match.groups.appRoot] : [];
+        const appRoot = match?.groups?.appRoot;
+        return appRoot !== undefined && appRoot !== "" ? [appRoot] : [];
       }),
     );
     if (appRoots.size === 1) {

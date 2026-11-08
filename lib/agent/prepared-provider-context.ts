@@ -500,14 +500,14 @@ export function createPreparedAppContextReader(input: {
     ]);
     const returnTo = preparedHandoffReturnPath(sessionAuth);
     const reconnectUrl = (provider: "github" | "vercel") =>
-      returnTo
-        ? new URL(
+      returnTo === undefined
+        ? undefined
+        : new URL(
             `/${provider}/installations?${new URLSearchParams({ returnTo })}`,
             // readHandoff has already verified this originating session.
             z.object({ initiator: z.object({ issuer: z.string().url() }) }).parse(sessionAuth)
               .initiator.issuer,
-          ).toString()
-        : undefined;
+          ).toString();
     // Explicit projection: never spread auth, credentials, raw provider payloads,
     // or the provisioning journal into durable model-visible output.
     return {

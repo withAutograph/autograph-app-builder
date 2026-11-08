@@ -145,13 +145,14 @@ export function createBuilderHandoffRouteHandler(input: {
         );
       }
       const body = builderHandoffCreateRequestSchema.parse(await readBoundedJson(request));
-      const provision = body.provisioningRequestId
-        ? await input.journal.read({
-            authority,
-            requestId: body.provisioningRequestId,
-          })
-        : undefined;
-      if (body.provisioningRequestId && !provision) {
+      const provision =
+        body.provisioningRequestId === undefined
+          ? undefined
+          : await input.journal.read({
+              authority,
+              requestId: body.provisioningRequestId,
+            });
+      if (body.provisioningRequestId !== undefined && !provision) {
         return Response.json({ error: "handoff_unavailable" }, { headers: noStore, status: 404 });
       }
       const github = provision?.record.response.github;
