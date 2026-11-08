@@ -338,9 +338,10 @@ const normalizedPermissions = (value: unknown): PermissionSnapshot => {
   const pullRequests = z.enum(["none", "read", "write"]).parse(value.pull_requests ?? "none");
   const administration = value.administration ?? "none";
   const variables = z.enum(["none", "read"]).parse(value.actions_variables ?? "none");
+  if (metadata !== "read" || (contents !== "read" && contents !== "write")) {
+    throw new Error(invalidResponseMessage);
+  }
   if (
-    metadata !== "read" ||
-    (contents !== "read" && contents !== "write") ||
     (workflows !== "none" && workflows !== "write") ||
     (administration !== "none" && administration !== "write")
   ) {
@@ -421,9 +422,11 @@ export const createGitHubAppHttpProvider = (input: {
     const accountType = stringProperty(account, "type");
     if (
       decimalProperty(data, "id") !== config.installationId ||
-      (selection !== "all" && selection !== "selected") ||
-      (accountType !== "Organization" && accountType !== "User")
+      (selection !== "all" && selection !== "selected")
     ) {
+      throw new Error(invalidResponseMessage);
+    }
+    if (accountType !== "Organization" && accountType !== "User") {
       throw new Error(invalidResponseMessage);
     }
     return {
@@ -478,9 +481,11 @@ export const createGitHubAppHttpProvider = (input: {
     if (
       !record(permissions) ||
       permissions.contents !== "read" ||
-      (permissions.metadata !== undefined && permissions.metadata !== "read") ||
-      Object.keys(permissions).some((key) => key !== "contents" && key !== "metadata")
+      (permissions.metadata !== undefined && permissions.metadata !== "read")
     ) {
+      throw new Error(invalidResponseMessage);
+    }
+    if (Object.keys(permissions).some((key) => key !== "contents" && key !== "metadata")) {
       throw new Error(invalidResponseMessage);
     }
     return value;
@@ -879,19 +884,32 @@ export const createGitHubAppHttpProvider = (input: {
   const reconciliationMatchesDraft = (
     proposal: ExistingDraftReconciliationProposal,
     draft: ExistingDraftObservation,
-  ): boolean =>
-    proposal.repositoryId === draft.repositoryId &&
-    proposal.owner === draft.owner &&
-    proposal.name === draft.name &&
-    proposal.pullRequestNumber === draft.number &&
-    proposal.pullRequestId === draft.pullRequestId &&
-    draft.headRepositoryId === proposal.repositoryId &&
-    draft.baseRepositoryId === proposal.repositoryId &&
-    draft.draft &&
-    draft.state === "open" &&
-    draft.headBranch === proposal.branchName &&
-    draft.baseBranch === proposal.baseBranch &&
-    draft.verifiedBuilderOrigin?.marker === proposal.originMarker;
+  ): boolean => {
+    if (
+      proposal.repositoryId !== draft.repositoryId ||
+      proposal.owner !== draft.owner ||
+      proposal.name !== draft.name ||
+      proposal.pullRequestNumber !== draft.number
+    ) {
+      return false;
+    }
+    if (
+      proposal.pullRequestId !== draft.pullRequestId ||
+      draft.headRepositoryId !== proposal.repositoryId ||
+      draft.baseRepositoryId !== proposal.repositoryId ||
+      !draft.draft
+    ) {
+      return false;
+    }
+    if (
+      draft.state !== "open" ||
+      draft.headBranch !== proposal.branchName ||
+      draft.baseBranch !== proposal.baseBranch
+    ) {
+      return false;
+    }
+    return draft.verifiedBuilderOrigin?.marker === proposal.originMarker;
+  };
 
   const exactReconciliationHead = async (
     proposal: ExistingDraftReconciliationProposal,
@@ -927,7 +945,11 @@ export const createGitHubAppHttpProvider = (input: {
       recovery === undefined ||
       draft.verifiedBuilderOrigin === undefined ||
       !draft.draft ||
-      draft.state !== "open" ||
+      draft.state !== "open"
+    ) {
+      return false;
+    }
+    if (
       draft.headRepositoryId !== draft.repositoryId ||
       draft.baseRepositoryId !== draft.repositoryId
     ) {

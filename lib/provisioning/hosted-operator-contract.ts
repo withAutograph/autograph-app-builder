@@ -1411,20 +1411,26 @@ const retainedConsumedGatewayDeliveryOrigin = (
   if (
     link?.consumedAt === undefined ||
     link.proofRef === undefined ||
-    link.proofSha256 === undefined ||
-    operator.plan.gatewayDelivery === undefined ||
-    operator.plan.publicGateway === undefined
+    link.proofSha256 === undefined
   ) {
     return undefined;
   }
-  return operator.gatewayDeliveryCandidates?.find(
-    (candidate) =>
-      candidate.readyState === "READY" &&
-      candidate.origin === link.endpointOrigin &&
-      candidate.projectId === operator.plan.publicGateway?.projectId &&
+  if (operator.plan.gatewayDelivery === undefined || operator.plan.publicGateway === undefined) {
+    return undefined;
+  }
+  return operator.gatewayDeliveryCandidates?.find((candidate) => {
+    if (
+      candidate.readyState !== "READY" ||
+      candidate.origin !== link.endpointOrigin ||
+      candidate.projectId !== operator.plan.publicGateway?.projectId
+    ) {
+      return false;
+    }
+    return (
       candidate.branch === operator.plan.publicGateway?.branch &&
-      candidate.repoId === operator.plan.gatewayDelivery?.repoId,
-  )?.origin;
+      candidate.repoId === operator.plan.gatewayDelivery?.repoId
+    );
+  })?.origin;
 };
 /** Exact identity scope shared by validation and successor metadata composition. */
 export const matchesHostedOperatorIdentityLinkScope = (

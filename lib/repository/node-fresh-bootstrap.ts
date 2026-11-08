@@ -1675,9 +1675,9 @@ const createStage = async (
     throw error;
   }
   const stageState = await lstat(proposal.stagingPath);
+  const invalidStageDirectory = !stageState.isDirectory() || stageState.isSymbolicLink();
   if (
-    !stageState.isDirectory() ||
-    stageState.isSymbolicLink() ||
+    invalidStageDirectory ||
     stageState.uid !== process.geteuid?.() ||
     String(stageState.dev) !== capability.allowedRoot.device ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -1694,9 +1694,9 @@ const createStage = async (
   );
   try {
     const markerState = await handle.stat();
+    const invalidMarkerOwner = !markerState.isFile() || markerState.uid !== process.geteuid?.();
     if (
-      !markerState.isFile() ||
-      markerState.uid !== process.geteuid?.() ||
+      invalidMarkerOwner ||
       markerState.dev !== stageState.dev ||
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (markerState.mode & 0o777) !== 0o600 ||
@@ -1725,10 +1725,12 @@ const materializeFile = async (
   const stage = await open(proposal.stagingPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
     const opened = await stage.stat();
-    if (
+    const invalidOpenedStage =
       !opened.isDirectory() ||
       String(opened.dev) !== stageIdentity.device ||
-      String(opened.ino) !== stageIdentity.inode ||
+      String(opened.ino) !== stageIdentity.inode;
+    if (
+      invalidOpenedStage ||
       String(opened.uid) !== stageIdentity.uid ||
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (opened.mode & 0o777).toString(8) !== stageIdentity.mode
@@ -2230,10 +2232,12 @@ const atomicPublish = async (
       proposal.destinationPrestate.kind === emptyDirectory
         ? proposal.destinationPrestate.destination
         : undefined;
-    if (
+    const invalidParentIdentity =
       String(parentState.dev) !== proposal.destinationPrestate.parent.device ||
       String(parentState.ino) !== proposal.destinationPrestate.parent.inode ||
-      String(parentState.uid) !== proposal.destinationPrestate.parent.uid ||
+      String(parentState.uid) !== proposal.destinationPrestate.parent.uid;
+    if (
+      invalidParentIdentity ||
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (parentState.mode & 0o777).toString(8) !== proposal.destinationPrestate.parent.mode ||
       String(parentState.nlink) !== expectedParentNlink

@@ -676,9 +676,10 @@ function reviewForProposal(
   review: DraftUpdateReview,
 ): void {
   assertCanonicalGitHubUpdateReview(review);
+  const reviewIdentityMismatch =
+    proposal.reviewDigest !== review.digest || proposal.changeSetDigest !== review.changeSetDigest;
   if (
-    proposal.reviewDigest !== review.digest ||
-    proposal.changeSetDigest !== review.changeSetDigest ||
+    reviewIdentityMismatch ||
     ("changedContentDigest" in proposal &&
       (proposal.changedContentDigest !== review.changedContentDigest ||
         JSON.stringify(proposal.approvedPaths) !== JSON.stringify(review.approvedPaths)))
@@ -836,11 +837,13 @@ export function assertExactGitHubFreshRepositoryContent(input: {
   content: GitHubFreshRepositoryContent;
 }): void {
   const { content, proposal } = input;
-  if (
+  const invalidContentHeader =
     !exactKeys(content, ["version", "kind", "sourceSha", "sourceTree", "files"]) ||
     content.version !== 1 ||
     content.kind !== "fresh-repository-source-tree" ||
-    content.sourceSha !== proposal.sourceSha ||
+    content.sourceSha !== proposal.sourceSha;
+  if (
+    invalidContentHeader ||
     content.sourceTree !== proposal.sourceTree ||
     !Array.isArray(content.files) ||
     content.files.length === 0
@@ -1838,10 +1841,12 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
     }
     if (value.kind === FRESH_REPOSITORY_KIND) {
       assertExactRepositoryObservation(value.repository);
-      if (
+      const invalidFreshHistory =
         value.installationIdentityDigest !== value.repository.installationIdentityDigest ||
         value.parentCount !== 0 ||
-        value.freshHistory !== true ||
+        value.freshHistory !== true;
+      if (
+        invalidFreshHistory ||
         value.initialCommitSha !== value.repository.headSha ||
         value.initialCommitTree !== value.repository.headTree
       ) {
@@ -2050,9 +2055,10 @@ async function reclaimRejectedDraftPending(
   failed: GitHubMutationFailureReceipt,
   approvedByCallId: string,
 ): Promise<GitHubMutationPendingReceipt> {
+  const nonrecoverableFailure =
+    failed.kind !== DRAFT_PULL_REQUEST_KIND || failed.failureCode !== PROVIDER_REJECTED;
   if (
-    failed.kind !== DRAFT_PULL_REQUEST_KIND ||
-    failed.failureCode !== PROVIDER_REJECTED ||
+    nonrecoverableFailure ||
     (failed.providerCode !== "invalid-publication-material" &&
       failed.providerCode !== REVIEWED_PATH_CHANGED) ||
     approvedByCallId === failed.approvedByCallId

@@ -1373,9 +1373,11 @@ export function createHostedEveSessionService(input: {
     const assertOwner = async () => {
       const latest = toDurableHostedSessionRecord(await requireSession(session.sessionId));
       await assertSendOwner(latest);
-      if (
+      const adapterChanged =
         latest.adapterSessionId !== replayBinding.adapterSessionId ||
-        latest.adapterGeneration !== replayBinding.adapterGeneration ||
+        latest.adapterGeneration !== replayBinding.adapterGeneration;
+      if (
+        adapterChanged ||
         (latest.cancellationRevision ?? 0) !== replayBinding.cancellationRevision ||
         latest.checkpointDigest !== checkpoint.digest
       ) {
@@ -1674,9 +1676,10 @@ export function createHostedEveSessionService(input: {
       });
       for (const raw of page.operations) {
         const operation = hostedOperationRecordSchema.parse(raw);
+        const notUnknownResponse =
+          operation.kind !== "respond" || operation.state !== "submission_unknown";
         if (
-          operation.kind !== "respond" ||
-          operation.state !== "submission_unknown" ||
+          notUnknownResponse ||
           operation.sessionId !== sessionId ||
           operation.internalSessionLimitResponse !== undefined ||
           tenantKeyFor(operation.principal) !== tenantKeyFor(principal)
@@ -3271,10 +3274,12 @@ export function createHostedEveSessionService(input: {
         });
         if (activationFailure !== undefined) {
           const { observation } = spool;
-          if (
+          const incompleteObservation =
             observation.observationComplete !== true ||
             observation.nativeTailIndex === undefined ||
-            observation.nextNativeIndex !== observation.nativeTailIndex + 1 ||
+            observation.nextNativeIndex !== observation.nativeTailIndex + 1;
+          if (
+            incompleteObservation ||
             observation.nativeObservationState?.adapterSessionId !== session.adapterSessionId ||
             observation.activeTurnId !== undefined ||
             !["completed", "failed", "cancelled"].includes(observation.status)
@@ -3388,9 +3393,11 @@ export function createHostedEveSessionService(input: {
         } else {
           orderedEvents = readColdPrefixAndDelta();
         }
-        if (
+        const hasDirectArtifactProjection =
           !spool.observation.artifactProjectionRequiresLegacyReadback ||
-          spool.observation.prototype !== undefined ||
+          spool.observation.prototype !== undefined;
+        if (
+          hasDirectArtifactProjection ||
           spool.observation.prototypeRef !== undefined ||
           observedNativeState !== undefined
         ) {

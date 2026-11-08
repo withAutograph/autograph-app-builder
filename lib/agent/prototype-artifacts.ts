@@ -239,14 +239,19 @@ export function exactPrototypeArtifact(
   },
 ): StoredPrototypeArtifact {
   parsePrototypeArtifactPath(input.path);
-  const artifact = artifacts.find(
-    (candidate) =>
-      candidate.path === input.path &&
-      candidate.digest === input.digest &&
-      candidate.transfer === undefined &&
+  const artifact = artifacts.find((candidate) => {
+    if (
+      candidate.path !== input.path ||
+      candidate.digest !== input.digest ||
+      candidate.transfer !== undefined
+    ) {
+      return false;
+    }
+    return (
       (input.revision === undefined || candidate.revision === input.revision) &&
-      candidate.sessionId === input.sessionId,
-  );
+      candidate.sessionId === input.sessionId
+    );
+  });
   if (artifact === undefined) {
     throw new Error(
       "The prototype artifact digest or revision is stale or unavailable in this session.",
@@ -569,7 +574,11 @@ export function completeBuildReadyPrototypeAppSpec(input: {
   if (
     appSpec === undefined ||
     !byPath.has(`${prefix}index.html`) ||
-    !byPath.has(`${prefix}decisions.md`) ||
+    !byPath.has(`${prefix}decisions.md`)
+  ) {
+    return undefined;
+  }
+  if (
     appSpec.mediaType !== MARKDOWN_MEDIA_TYPE ||
     isPrototypeArtifactV2(appSpec) ||
     !validateBuildReadyAppSpec(appSpec.content).valid

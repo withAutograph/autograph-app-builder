@@ -1042,7 +1042,11 @@ export const createInstalledPrototypeProjector = (
     if (
       output.data.appId !== appId ||
       output.data.path !== input.path ||
-      output.data.mediaType !== input.mediaType ||
+      output.data.mediaType !== input.mediaType
+    ) {
+      return;
+    }
+    if (
       output.data.digest !== digest ||
       output.data.revision !== revision ||
       output.data.size !== size ||
