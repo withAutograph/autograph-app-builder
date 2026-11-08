@@ -89,7 +89,7 @@ export const exerciseCandidateBrowserWorkflows = async (
       requirementId,
       status: "blocked",
     };
-    let knownShape = false;
+    let hasSupportedFixture = false;
     let runtimeReady = false;
     const runDocumentation = async () => {
       let docs = button(/^docs$|documentation/iu);
@@ -99,14 +99,14 @@ export const exerciseCandidateBrowserWorkflows = async (
       if (!(await exists(docs))) {
         return check(
           "docs-readable",
-          knownShape ? false : null,
+          hasSupportedFixture ? false : null,
           "No documentation fixture is bound for this layout.",
         );
       }
       const before = await text();
       const initialURL = page.url();
       const originalEditor = page.getByRole("textbox", { name: /app name/iu }).first();
-      const originalValue = knownShape ? await originalEditor.inputValue() : undefined;
+      const originalValue = hasSupportedFixture ? await originalEditor.inputValue() : undefined;
       await docs.click();
       const navigated = page.url() !== initialURL;
       const content = page.locator("main, article").first();
@@ -124,7 +124,7 @@ export const exerciseCandidateBrowserWorkflows = async (
         await page.goBack();
       }
       let returnNavigationPassed: boolean | null;
-      if (knownShape) {
+      if (hasSupportedFixture) {
         returnNavigationPassed =
           (await exists(originalEditor)) && (await originalEditor.inputValue()) === originalValue;
       } else if (navigated) {
@@ -344,11 +344,11 @@ export const exerciseCandidateBrowserWorkflows = async (
     try {
       const response = await page.goto(baseURL, { waitUntil: "networkidle" });
       runtimeReady = Boolean(response?.ok());
-      knownShape =
+      hasSupportedFixture =
         runtimeReady &&
         (await exists(button(/continue to review/iu))) &&
         (await exists(page.getByRole("textbox", { name: /app name/iu }).first()));
-      if (runtimeReady && !knownShape && requirementId !== "documentation") {
+      if (runtimeReady && !hasSupportedFixture && requirementId !== "documentation") {
         outcome = {
           assertions: [],
           reason: "This candidate layout has no supported evaluator fixture binding.",
@@ -386,12 +386,12 @@ export const exerciseCandidateBrowserWorkflows = async (
         reason: `Browser fixture could not complete: ${error instanceof Error ? error.message : String(error)}`,
         requirementId,
         status:
-          assertions.some((item) => item.passed === false) || (runtimeReady && knownShape)
+          assertions.some((item) => item.passed === false) || (runtimeReady && hasSupportedFixture)
             ? "failed"
             : "blocked",
       };
     } finally {
-      if (knownShape) {
+      if (hasSupportedFixture) {
         outcome.evidence = {
           buttons: await page
             .getByRole("button")

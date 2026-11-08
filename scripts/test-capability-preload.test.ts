@@ -136,7 +136,8 @@ describe("test capability preload", () => {
       typeof handle === "object" && handle !== null && handle.constructor.name === "MessagePort";
     const beforePorts = activeHandles().filter(isMessagePort).length;
     const timeoutWorker = new Worker(timeoutWorkerFixture, { execArgv: [] });
-    const [timeoutExit] = (await once(timeoutWorker, "exit")) as [number];
+    const timeoutExitArguments: unknown[] = await once(timeoutWorker, "exit");
+    const [timeoutExit] = timeoutExitArguments;
     await delay(25);
     const afterPorts = activeHandles().filter(isMessagePort).length;
     expect(timeoutExit).not.toBe(0);
@@ -226,7 +227,8 @@ describe("test capability preload", () => {
       child.stdout?.setEncoding("utf-8").on("data", (chunk) => (stdout += chunk));
       child.stderr?.setEncoding("utf-8").on("data", (chunk) => (stderr += chunk));
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const [status] = (await once(child, "exit")) as [number | null];
+      const exitArguments: unknown[] = await once(child, "exit");
+      const [status] = exitArguments;
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await authorizationClosed;
       expect(status, stderr).toBe(0);

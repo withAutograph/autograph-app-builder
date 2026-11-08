@@ -2,6 +2,7 @@ import { completionGuidance } from "./completion-guidance";
 import type * as ImplementationModule from "./apply-implementation-files";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import type { ApprovalPolicy } from "eve/tools/approval";
 import applyAppCreation from "../../agent/tools/apply_app_creation";
 
 const mocks = vi.hoisted(() => {
@@ -41,13 +42,17 @@ vi.mock("../repository/target-apply", () => ({
   sandboxApplyCommandExecutor: vi.fn(),
 }));
 vi.mock("../testing/test-capability", () => ({ hasTestCapability: () => false }));
-const approval = async (context: Parameters<typeof applyAppCreation.execute>[1]) => {
+type AuthoredApprovalPolicy = Extract<
+  NonNullable<typeof applyAppCreation.approval>,
+  ApprovalPolicy<never>
+>;
+const approval = async (context: Parameters<AuthoredApprovalPolicy>[0]) => {
   const policy = applyAppCreation.approval;
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Narrow Eve's declared function-or-configuration approval API, not external data.
   if (typeof policy !== "function") {
     throw new TypeError("Expected the authored approval policy");
   }
-  return await policy(context as never);
+  return await policy(context);
 };
 const state = (proposalDigest: string, phase = "planned") => ({
   appSpec: { content: "## Acceptance walkthrough\nSave draft.", digest: "spec" },

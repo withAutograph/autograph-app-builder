@@ -281,7 +281,7 @@ function liveTemplateCacheFixture() {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sandboxFixture(inputManifest: unknown = manifest) {
   const run = vi
-    .fn()
+    .fn<SandboxSession["run"]>()
     .mockResolvedValueOnce({
       exitCode: 0,
       stderr: "",
@@ -994,7 +994,7 @@ describe("offline dependency cache", () => {
       workingDirectory: "/workspace",
     });
     const linkCommand = run.mock.calls
-      .map(([request]) => request.command as string)
+      .map(([request]) => request.command)
       .find((command) => command.includes("test -x") && command.includes(".bin/vp"));
     expect(linkCommand).toBeDefined();
     if (linkCommand === undefined) {
@@ -1044,12 +1044,12 @@ describe("offline dependency cache", () => {
     expect(
       run.mock.calls.some(
         ([request]) =>
-          (request.command as string).includes("@autograph/vite-config") &&
-          (request.command as string).includes("await import"),
+          request.command.includes("@autograph/vite-config") &&
+          request.command.includes("await import"),
       ),
     ).toBe(false);
     const resolutionCommand = run.mock.calls
-      .map(([request]) => request.command as string)
+      .map(([request]) => request.command)
       .find((command) => command.includes('const {match}=require("path-to-regexp")'));
     expect(resolutionCommand).toBeDefined();
     if (resolutionCommand === undefined) {
@@ -1059,9 +1059,9 @@ describe("offline dependency cache", () => {
     expect(resolutionCommand).toContain(ARRUSTED_MICROFRONTENDS_VERSION);
     expect(resolutionCommand).toContain(ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION);
     expect(resolutionCommand).toContain('result?.path!=="/vendor"');
-    expect(
-      run.mock.calls.some(([request]) => (request.command as string).includes("cargo metadata")),
-    ).toBe(false);
+    expect(run.mock.calls.some(([request]) => request.command.includes("cargo metadata"))).toBe(
+      false,
+    );
   });
 
   it("does not require Rust for the pinned Vercel Development planning closure", async () => {
@@ -1079,11 +1079,11 @@ describe("offline dependency cache", () => {
       },
     });
 
-    expect(
-      run.mock.calls.some(([request]) => (request.command as string).includes("cargo metadata")),
-    ).toBe(false);
+    expect(run.mock.calls.some(([request]) => request.command.includes("cargo metadata"))).toBe(
+      false,
+    );
     const developmentLinkCommand = run.mock.calls
-      .map(([request]) => request.command as string)
+      .map(([request]) => request.command)
       .find((command) => command.includes("test -x") && command.includes(".bin/vp"));
     expect(developmentLinkCommand).toBeDefined();
     if (developmentLinkCommand === undefined) {
