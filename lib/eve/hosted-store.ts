@@ -426,8 +426,12 @@ export const toDurableHostedSessionRecord = (
 export const hostedSessionSummary = (input: HostedSessionRecord): PublicSessionSummary => {
   const record = toDurableHostedSessionRecord(input);
   const hasCheckpoint = record.checkpoint !== undefined || record.checkpointRef !== undefined;
+  const summary: { appId?: string } = {};
+  if (record.appId !== undefined) {
+    summary.appId = record.appId;
+  }
   return publicSessionSummarySchema.parse({
-    ...(record.appId === undefined ? {} : { appId: record.appId }),
+    ...summary,
     resumability:
       record.version === 2 && !hasCheckpoint && record.resumability !== "terminal"
         ? "restart_required"
@@ -1934,14 +1938,19 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     if (expectedSessionId === undefined || result.sessionId !== expectedSessionId) {
       throw new Error("Hosted operation result session mismatch.");
     }
-    const settled = hostedOperationRecordSchema.parse({
+    const settledBase = {
       ...withoutHostedOperationError(operation),
       result,
       sessionId: result.sessionId,
       state: "succeeded",
-      ...(session === undefined
-        ? {}
-        : { sessionRecordDigest: hostedSessionCreationDigest(session) }),
+    };
+    const sessionBinding: { sessionRecordDigest?: string } = {};
+    if (session !== undefined) {
+      sessionBinding.sessionRecordDigest = hostedSessionCreationDigest(session);
+    }
+    const settled = hostedOperationRecordSchema.parse({
+      ...settledBase,
+      ...sessionBinding,
       updatedAtEpochMs: input.nowEpochMs,
     });
     if (session !== undefined) {
@@ -2302,10 +2311,15 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     if (durable.status === "cancelled" && !provedResume) {
       return structuredClone(durable);
     }
+    const observedBase = { ...durable };
+    if (provedResume) {
+      observedBase.resumedCancellationRevision = durable.cancellationRevision ?? 0;
+    }
+    if (input.appId !== undefined) {
+      observedBase.appId = input.appId;
+    }
     const observed = durableHostedSessionRecordSchema.parse({
-      ...durable,
-      ...(provedResume ? { resumedCancellationRevision: durable.cancellationRevision ?? 0 } : {}),
-      ...(input.appId === undefined ? {} : { appId: input.appId }),
+      ...observedBase,
       checkpoint: input.checkpoint,
       checkpointDigest: hostedSessionCheckpointDigest(input.checkpoint),
       checkpointProgressDigest: hostedSessionCheckpointProgressDigest(input.checkpoint),
@@ -2347,11 +2361,16 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     ) {
       throw new Error("Hosted session recovery raced another continuation.");
     }
-    const replaced = durableHostedSessionRecordSchema.parse({
+    const replacedBase = {
       ...durable,
       adapterGeneration: durable.adapterGeneration + 1,
       adapterSessionId: input.adapterSessionId,
-      ...(input.appId === undefined ? {} : { appId: input.appId }),
+    };
+    if (input.appId !== undefined) {
+      replacedBase.appId = input.appId;
+    }
+    const replaced = durableHostedSessionRecordSchema.parse({
+      ...replacedBase,
       checkpoint: input.checkpoint,
       checkpointDigest: hostedSessionCheckpointDigest(input.checkpoint),
       checkpointProgressDigest: hostedSessionCheckpointProgressDigest(input.checkpoint),

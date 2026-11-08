@@ -226,16 +226,23 @@ export default defineTool({
         );
       });
     }
-    return {
+    const receipt: ReturnType<typeof prototypeArtifactReceipt> & {
+      complete: boolean;
+      reused: boolean;
+      nextChunkIndex?: number;
+      invalidated?: boolean;
+    } = {
       ...prototypeArtifactReceipt(recorded.artifact),
       complete,
       reused: recorded.reused,
-      ...("nextChunkIndex" in recorded ? { nextChunkIndex: recorded.nextChunkIndex } : {}),
-      ...(recorded.reused
-        ? {}
-        : { invalidated: !preservesAcceptedWorkflow(current) && current.phase !== "prepared" }),
-      ...planning,
     };
+    if ("nextChunkIndex" in recorded) {
+      receipt.nextChunkIndex = recorded.nextChunkIndex;
+    }
+    if (!recorded.reused) {
+      receipt.invalidated = !preservesAcceptedWorkflow(current) && current.phase !== "prepared";
+    }
+    return { ...receipt, ...planning };
   },
   inputSchema: z
     .object({
