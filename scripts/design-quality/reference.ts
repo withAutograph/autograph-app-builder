@@ -301,7 +301,7 @@ export const readReference = async (arrustedRoot: string): Promise<Reference> =>
     }
   }
   for (const entry of entryPoints) {
-    if (modules[entry.module]) {
+    if (modules[entry.module] !== undefined) {
       continue;
     }
     const program = ts.createProgram([entry.path], {

@@ -30,7 +30,7 @@ import type { BuilderDestinationEpoch } from "../../../../lib/provisioning/build
 
 // An owned loopback cluster only. Never consumes DATABASE_URL or provider credentials.
 const repositoryRoot = path.resolve(import.meta.dirname, "../../../..");
-const postgresBin = process.argv[2];
+const [, , postgresBin] = process.argv;
 assert.ok(
   postgresBin && path.isAbsolute(postgresBin),
   "Supply an absolute installed PostgreSQL bin directory",

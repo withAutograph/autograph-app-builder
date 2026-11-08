@@ -236,15 +236,15 @@ const ownedPublishedHead = async (input: {
   const { draft, prior, appliedReconciliation, readPublishedSource } = input;
   if (appliedReconciliation !== undefined) {
     return {
+      canonicalPublishedSourceMatched: false,
       headSha: draft.headSha,
       source: "retained-reconciliation",
-      canonicalPublishedSourceMatched: false,
     };
   }
   const fallback: ReconciliationBaseline = {
+    canonicalPublishedSourceMatched: false,
     headSha: prior?.branchSha,
     source: prior === undefined ? "none" : "original-publication",
-    canonicalPublishedSourceMatched: false,
   };
   if (
     prior === undefined ||
@@ -263,7 +263,7 @@ const ownedPublishedHead = async (input: {
       source.data.gitTree === draft.headTree,
     ].every(Boolean);
   return matched
-    ? { headSha: draft.headSha, source: "published-source", canonicalPublishedSourceMatched: true }
+    ? { canonicalPublishedSourceMatched: true, headSha: draft.headSha, source: "published-source" }
     : fallback;
 };
 

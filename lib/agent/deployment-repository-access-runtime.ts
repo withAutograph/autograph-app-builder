@@ -653,11 +653,15 @@ const continuationOptions = (): Pick<
     Parameters<typeof createRepositoryAccessContinuationService>[0],
     "callbackOrigin" | "protectionBypassSecret"
   > = {};
-  if (process.env.VERCEL_ENV === "production" && process.env.VERCEL_PROJECT_PRODUCTION_URL) {
-    options.callbackOrigin = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  if (process.env.VERCEL_ENV === "production") {
+    const productionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+    if (productionUrl !== undefined && productionUrl !== "") {
+      options.callbackOrigin = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+    }
   }
-  if (process.env.VERCEL_AUTOMATION_BYPASS_SECRET) {
-    options.protectionBypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET.trim();
+  const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  if (bypassSecret !== undefined && bypassSecret !== "") {
+    options.protectionBypassSecret = bypassSecret.trim();
   }
   return options;
 };
@@ -732,9 +736,9 @@ export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
     installations,
     origin: input.origin,
   };
-  if (process.env.VERCEL_AUTOMATION_BYPASS_SECRET) {
-    runtimeConfiguration.protectionBypassSecret =
-      process.env.VERCEL_AUTOMATION_BYPASS_SECRET.trim();
+  const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  if (bypassSecret !== undefined && bypassSecret !== "") {
+    runtimeConfiguration.protectionBypassSecret = bypassSecret.trim();
   }
   return createRepositoryAccessRuntime({
     ...runtimeConfiguration,

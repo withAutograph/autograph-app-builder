@@ -111,15 +111,15 @@ const reconnect = (): PreparedVercelAccess => ({
 
 type VercelProjectAccessStage = "credential-read" | "provider-fetch" | "provider-json";
 const vercelProjectAccessReasons = {
+  authorizationRequired: AUTHORIZATION_REQUIRED,
   credentialUnavailable: "credential-unavailable",
   installationMismatch: "installation-mismatch",
-  scopeMismatch: "scope-mismatch",
-  rateLimited: "rate-limited",
-  projectUnavailable: "project-unavailable",
-  authorizationRequired: AUTHORIZATION_REQUIRED,
-  providerUnavailable: PROVIDER_UNAVAILABLE,
   projectResponseMismatch: "project-response-mismatch",
+  projectUnavailable: "project-unavailable",
+  providerUnavailable: PROVIDER_UNAVAILABLE,
+  rateLimited: "rate-limited",
   readFailed: "read-failed",
+  scopeMismatch: "scope-mismatch",
 } as const;
 interface VercelProjectAccessFailure {
   stage: VercelProjectAccessStage;

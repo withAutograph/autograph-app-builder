@@ -67,7 +67,9 @@ export function renderReport(report: {
       o.source
         ? ` · <a href="#source-${index}">${escapeHtml(o.source.path)}:${o.source.line}</a>`
         : "",
-      o.capture ? ` · <a href="#${escapeHtml(o.capture)}">Screenshot region</a>` : "",
+      (o.capture?.length ?? 0) > 0
+        ? ` · <a href="#${escapeHtml(o.capture)}">Screenshot region</a>`
+        : "",
       "</small>",
       o.source
         ? [

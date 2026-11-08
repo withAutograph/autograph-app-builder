@@ -328,8 +328,11 @@ export async function measurePage(page: Page) {
       return r.width > 0 && r.height > 0 && s.visibility !== "hidden" && s.display !== "none";
     };
     // oxlint-disable-next-line unicorn/consistent-function-scoping
-    const label = (el: Element) =>
-      (el.getAttribute("aria-label") || el.textContent || el.tagName).trim().slice(0, 160);
+    const label = (el: Element) => {
+      const ariaLabel = el.getAttribute("aria-label");
+      const text = ariaLabel === null || ariaLabel === "" ? el.textContent : ariaLabel;
+      return (text === null || text === "" ? el.tagName : text).trim().slice(0, 160);
+    };
     const findings: {
       kind: string;
       description: string;
@@ -466,11 +469,16 @@ export async function measurePage(page: Page) {
           })),
         })),
       },
-      controls: controls.map((el) => ({
-        label: label(el),
-        region: rect(el),
-        role: el.getAttribute("role") || el.tagName.toLowerCase(),
-      })),
+      controls: controls.map((el) => {
+        const controlLabel = label(el);
+        const region = rect(el);
+        const role = el.getAttribute("role");
+        return {
+          label: controlLabel,
+          region,
+          role: role === null || role === "" ? el.tagName.toLowerCase() : role,
+        };
+      }),
       documentHeight: document.documentElement.scrollHeight,
       documentWidth: document.documentElement.scrollWidth,
       findings,
