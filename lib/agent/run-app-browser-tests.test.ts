@@ -155,7 +155,6 @@ describe("private app browser tests", () => {
       .mockResolvedValue({ exitCode: 0, stderr: "", stdout: "selected passed" });
     const runtime: PreparedRuntimeExecution = {
       environmentPath: "/private/environment.json",
-      stateDirectory: "/private",
       installationProof: {
         actors: 1,
         appId: "spend-review",
@@ -170,8 +169,9 @@ describe("private app browser tests", () => {
       },
       prepareAuthenticatedOrigin: vi.fn(),
       runTask,
+      stateDirectory: "/private",
     };
-    const selection = { testName: "@acceptance", workers: 1, retries: 0, maxFailures: 1 };
+    const selection = { maxFailures: 1, retries: 0, testName: "@acceptance", workers: 1 };
     const result = await runAppBrowserTests({
       appId: "spend-review",
       root: "/workspace/published",
@@ -185,7 +185,7 @@ describe("private app browser tests", () => {
     );
   });
   it("passes a literal focused selection to the private browser task", async () => {
-    const run = vi.fn(() => Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }));
+    const run = vi.fn(() => Promise.resolve({ exitCode: 0, stderr: "", stdout: "" }));
     const result = await runAppBrowserTests({
       appId: "spend-review",
       root: "/workspace/repository",
@@ -473,7 +473,6 @@ describe("private app browser tests", () => {
     const checkpoint = vi.fn<(commandId: string) => Promise<void>>();
     const runtime: PreparedRuntimeExecution = {
       environmentPath: "/private-state/environment.json",
-      stateDirectory: "/private-state",
       installationProof: {
         actors: 1,
         appId: "reports",
@@ -488,6 +487,7 @@ describe("private app browser tests", () => {
       },
       prepareAuthenticatedOrigin: vi.fn(),
       runTask,
+      stateDirectory: "/private-state",
     };
     const result = await runResolvedAppBrowserTests({
       appId: "reports",
@@ -534,7 +534,6 @@ it.each(["/actual-catalog-route", null, undefined])(
       browserTestBaseUrl: "https://public-owned.example",
       browserTestEntryPath,
       environmentPath: "/private/environment.json",
-      stateDirectory: "/private",
       installationProof: {
         actors: 1,
         appId: "spend-review",
@@ -549,6 +548,7 @@ it.each(["/actual-catalog-route", null, undefined])(
       },
       prepareAuthenticatedOrigin: vi.fn(),
       runTask,
+      stateDirectory: "/private",
     };
     const result = await runResolvedAppBrowserTests({
       appId: "spend-review",

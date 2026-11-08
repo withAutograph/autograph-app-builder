@@ -222,9 +222,9 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
     },
     receipts: originalPlan.effects.map((effect) => ({
       effectId: effect.id,
+      fenceGeneration: 1,
       observedAt: "2026-10-19T12:00:00Z",
       resourceVersion: "observed",
-      fenceGeneration: 1,
     })),
   };
   if (observedEndpoint) {
@@ -242,8 +242,8 @@ const preparedOwnerFixture = (observedEndpoint: boolean) => {
     ];
   }
   let row: HostedRuntimeJournalRow = {
-    revision: 1,
     record: hostedRuntimeJournalRecordSchema.parse({ ...recordPrefix, operator }),
+    revision: 1,
   };
   const original = structuredClone(row.record);
   const deps: ProtectedHostedOperatorDependencies = {

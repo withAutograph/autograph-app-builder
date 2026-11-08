@@ -21,15 +21,6 @@ import { plan as base } from "./public-release-test-fixture";
 const fixture = () => {
   const sourcePlan = publicReleasePlanSchema.parse({
     ...base,
-    purpose: "application",
-    publicOrigin: capPlan.publicOrigin,
-    runtime: {
-      ...base.runtime,
-      releaseId: capPlan.release.id,
-      operationRef: capPlan.runtime.operationRef,
-      planDigest: capPlan.runtime.planDigest,
-    },
-    integrationCapability: attachment,
     environment: [
       ...base.environment,
       {
@@ -41,6 +32,15 @@ const fixture = () => {
         sha256: attachment.capability.privateConfiguration.sha256,
       },
     ],
+    integrationCapability: attachment,
+    publicOrigin: capPlan.publicOrigin,
+    purpose: "application",
+    runtime: {
+      ...base.runtime,
+      operationRef: capPlan.runtime.operationRef,
+      planDigest: capPlan.runtime.planDigest,
+      releaseId: capPlan.release.id,
+    },
   });
   const sourceRef = publicReleaseOperationRef(sourcePlan);
   const publicReceipt = {
@@ -66,7 +66,6 @@ const fixture = () => {
   ];
   const source = {
     operationRef: sourceRef,
-    revision: 1,
     record: publicReleaseRecordSchema.parse({
       kind: "public-app-release-v1",
       plan: sourcePlan,
@@ -85,26 +84,19 @@ const fixture = () => {
         status: "ready",
       },
     }),
+    revision: 1,
   };
   const resource = capPlan.control.database;
   const cap = {
     operationRef: attachment.operationRef,
-    revision: 1,
     record: appIntegrationCapabilityRecordSchema.parse({
-      kind: "app-integrations-capability-v1",
-      plan: capPlan,
-      planDigest: attachment.planDigest,
       approvalReceipts: [capReceipt],
-      prepared: attachment.capability,
       effects: {
-        "prepare-control-database": {
+        "bind-service-memberships": {
           receipt: {
-            effect: "prepare-control-database",
-            resourceVersion: "control-v1",
-            resourceId: resource.resourceId,
-            database: resource.database,
-            runtimeRole: resource.runtimeRole,
-            migratorRole: resource.migratorRole,
+            effect: "bind-service-memberships",
+            memberships: attachment.capability.serviceMemberships,
+            resourceVersion: "members-v1",
           },
           state: "applied",
         },
@@ -116,28 +108,36 @@ const fixture = () => {
           },
           state: "applied",
         },
-        "bind-service-memberships": {
+        "prepare-control-database": {
           receipt: {
-            effect: "bind-service-memberships",
-            resourceVersion: "members-v1",
-            memberships: attachment.capability.serviceMemberships,
+            database: resource.database,
+            effect: "prepare-control-database",
+            migratorRole: resource.migratorRole,
+            resourceId: resource.resourceId,
+            resourceVersion: "control-v1",
+            runtimeRole: resource.runtimeRole,
           },
           state: "applied",
         },
         "register-central-app": {
           receipt: {
-            effect: "register-central-app",
-            resourceVersion: "registry-v1",
             appId: capPlan.selection.appId,
-            resourceProfileId: capPlan.control.resourceProfileId,
-            registrationRef: attachment.operationRef,
-            registrationDigest: "3".repeat(64),
+            effect: "register-central-app",
             principalGeneration: attachment.capability.control.principalGeneration,
+            registrationDigest: "3".repeat(64),
+            registrationRef: attachment.operationRef,
+            resourceProfileId: capPlan.control.resourceProfileId,
+            resourceVersion: "registry-v1",
           },
           state: "applied",
         },
       },
+      kind: "app-integrations-capability-v1",
+      plan: capPlan,
+      planDigest: attachment.planDigest,
+      prepared: attachment.capability,
     }),
+    revision: 1,
   };
   const publicStore = {
     read: vi.fn(async () => structuredClone(source)),
@@ -161,27 +161,27 @@ const fixture = () => {
     sessionId: capPlan.selection.sessionId,
   });
   const input: RetainedIntegrationReadScope = {
-    owner: { ...sourceOwner, sessionId: "revision-session", adapterSessionId: "revision-native" },
+    owner: { ...sourceOwner, adapterSessionId: "revision-native", sessionId: "revision-session" },
     authority: {
       verifyWorkload: vi.fn<() => Promise<void>>().mockResolvedValue(),
       assertCanonicalAppOwner: vi.fn<() => Promise<void>>().mockResolvedValue(),
     },
     owned: {
-      purpose: "auth-bootstrap",
-      selection: { appId: capPlan.selection.appId },
       destination: capPlan.project,
       operator: {
         plan: {
           appDatabase: capPlan.runtime.appDatabase,
           neon: {
-            projectId: capPlan.runtime.neon.projectId,
             branchId: capPlan.runtime.neon.branchId,
-            endpoint: capPlan.runtime.appDatabase.hostname,
-            source: "synthetic-only",
             connectionRef: "normal-source-connection",
+            endpoint: capPlan.runtime.appDatabase.hostname,
+            projectId: capPlan.runtime.neon.projectId,
+            source: "synthetic-only",
           },
         },
       },
+      purpose: "auth-bootstrap",
+      selection: { appId: capPlan.selection.appId },
     },
     publicOrigin: capPlan.publicOrigin,
     assertCurrent: vi.fn<() => Promise<void>>().mockResolvedValue(),
