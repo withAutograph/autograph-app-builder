@@ -10,7 +10,7 @@ import { AuthPrompts, useAuth, useFetchOptions, useSignUpEmail } from "@better-a
 import { useIsMutating } from "@tanstack/react-query";
 import { Eye, EyeOff } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
-import type { SyntheticEvent } from "react";
+import type { Dispatch, SetStateAction, SyntheticEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,6 +49,297 @@ export interface SignUpProps {
    */
   onSignUpSuccess?: () => void;
 }
+
+interface SignUpFieldErrors {
+  name?: string;
+  email?: string;
+  password?: string;
+  confirmPassword?: string;
+}
+
+interface SignUpFormProps {
+  additionalFields: ReturnType<typeof useAuth>["additionalFields"];
+  emailAndPassword: NonNullable<ReturnType<typeof useAuth>["emailAndPassword"]>;
+  fieldErrors: SignUpFieldErrors;
+  isConfirmPasswordVisible: boolean;
+  isPasswordVisible: boolean;
+  isPending: boolean;
+  localization: ReturnType<typeof useAuth>["localization"];
+  password: string;
+  confirmPassword: string;
+  setConfirmPassword: Dispatch<SetStateAction<string>>;
+  setFieldErrors: Dispatch<SetStateAction<SignUpFieldErrors>>;
+  setIsConfirmPasswordVisible: Dispatch<SetStateAction<boolean>>;
+  setIsPasswordVisible: Dispatch<SetStateAction<boolean>>;
+  setPassword: Dispatch<SetStateAction<string>>;
+  signUpEmailPending: boolean;
+  submitWithFeedback: (event: SyntheticEvent<HTMLFormElement>) => Promise<void>;
+}
+
+const SignUpForm = ({
+  additionalFields,
+  emailAndPassword,
+  fieldErrors,
+  isConfirmPasswordVisible,
+  isPasswordVisible,
+  isPending,
+  localization,
+  password,
+  confirmPassword,
+  setConfirmPassword,
+  setFieldErrors,
+  setIsConfirmPasswordVisible,
+  setIsPasswordVisible,
+  setPassword,
+  signUpEmailPending,
+  submitWithFeedback,
+}: SignUpFormProps) => (
+  <form
+    onSubmit={(event) => {
+      void submitWithFeedback(event);
+    }}
+  >
+    <FieldGroup>
+      {emailAndPassword.name !== false && (
+        <Field data-invalid={(fieldErrors.name ?? "") !== ""}>
+          <FieldLabel htmlFor="name">{localization.auth.name}</FieldLabel>
+
+          <Input
+            id="name"
+            name="name"
+            type="text"
+            autoComplete="name"
+            placeholder={localization.auth.namePlaceholder}
+            required
+            disabled={isPending}
+            onChange={() => {
+              setFieldErrors((prev) => ({
+                ...prev,
+                name: undefined,
+              }));
+            }}
+            onInvalid={(e) => {
+              e.preventDefault();
+
+              setFieldErrors((prev) => ({
+                ...prev,
+                name: localization.auth.fieldRequired,
+              }));
+            }}
+            aria-invalid={(fieldErrors.name ?? "") !== ""}
+          />
+
+          <FieldError>{fieldErrors.name}</FieldError>
+        </Field>
+      )}
+
+      <Field data-invalid={(fieldErrors.email ?? "") !== ""}>
+        <FieldLabel htmlFor="email">{localization.auth.email}</FieldLabel>
+
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          placeholder={localization.auth.emailPlaceholder}
+          required
+          disabled={isPending}
+          onChange={() => {
+            setFieldErrors((prev) => ({
+              ...prev,
+              email: undefined,
+            }));
+          }}
+          onInvalid={(e) => {
+            e.preventDefault();
+            const el = e.target as HTMLInputElement;
+            const msg = el.validity.valueMissing
+              ? localization.auth.fieldRequired
+              : localization.auth.invalidEmail;
+
+            setFieldErrors((prev) => ({
+              ...prev,
+              email: msg,
+            }));
+          }}
+          aria-invalid={(fieldErrors.email ?? "") !== ""}
+        />
+
+        <FieldError>{fieldErrors.email}</FieldError>
+      </Field>
+
+      {additionalFields?.map(
+        (field) =>
+          field.signUp === "above" && (
+            <AdditionalField
+              key={field.name}
+              name={field.name}
+              field={field}
+              isPending={isPending}
+              optionalLabel={localization.auth.optional}
+            />
+          ),
+      )}
+
+      <Field data-invalid={(fieldErrors.password ?? "") !== ""}>
+        <FieldLabel htmlFor="password">{localization.auth.password}</FieldLabel>
+
+        <InputGroup>
+          <InputGroupInput
+            id="password"
+            name="password"
+            type={isPasswordVisible ? "text" : "password"}
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setFieldErrors((prev) => ({
+                ...prev,
+                password: undefined,
+              }));
+            }}
+            placeholder={localization.auth.passwordPlaceholder}
+            required
+            minLength={emailAndPassword?.minPasswordLength}
+            maxLength={emailAndPassword?.maxPasswordLength}
+            disabled={isPending}
+            onInvalid={(e) => {
+              e.preventDefault();
+              const el = e.target as HTMLInputElement;
+              const min = emailAndPassword?.minPasswordLength;
+              const max = emailAndPassword?.maxPasswordLength;
+              let msg = localization.auth.tooLong.replace("{{max}}", String(max));
+              if (el.validity.valueMissing) {
+                msg = localization.auth.fieldRequired;
+              } else if (el.validity.tooShort) {
+                msg = localization.auth.tooShort.replace("{{min}}", String(min));
+              }
+
+              setFieldErrors((prev) => ({
+                ...prev,
+                password: msg,
+              }));
+            }}
+            aria-invalid={(fieldErrors.password ?? "") !== ""}
+          />
+
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              size="icon-xs"
+              aria-label={
+                isPasswordVisible ? localization.auth.hidePassword : localization.auth.showPassword
+              }
+              title={
+                isPasswordVisible ? localization.auth.hidePassword : localization.auth.showPassword
+              }
+              onClick={() => {
+                setIsPasswordVisible((visible) => !visible);
+              }}
+            >
+              {isPasswordVisible ? <EyeOff /> : <Eye />}
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+
+        <FieldError>{fieldErrors.password}</FieldError>
+
+        <PasswordStrengthMeter password={password} />
+      </Field>
+
+      {emailAndPassword?.confirmPassword === true && (
+        <Field data-invalid={(fieldErrors.confirmPassword ?? "") !== ""}>
+          <FieldLabel htmlFor="confirmPassword">{localization.auth.confirmPassword}</FieldLabel>
+
+          <InputGroup>
+            <InputGroupInput
+              id="confirmPassword"
+              name="confirmPassword"
+              type={isConfirmPasswordVisible ? "text" : "password"}
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => {
+                setConfirmPassword(e.target.value);
+
+                setFieldErrors((prev) => ({
+                  ...prev,
+                  confirmPassword: undefined,
+                }));
+              }}
+              placeholder={localization.auth.confirmPasswordPlaceholder}
+              required
+              minLength={emailAndPassword?.minPasswordLength}
+              maxLength={emailAndPassword?.maxPasswordLength}
+              disabled={isPending}
+              onInvalid={(e) => {
+                e.preventDefault();
+                const el = e.target as HTMLInputElement;
+                const min = emailAndPassword?.minPasswordLength;
+                const max = emailAndPassword?.maxPasswordLength;
+                let msg = localization.auth.tooLong.replace("{{max}}", String(max));
+                if (el.validity.valueMissing) {
+                  msg = localization.auth.fieldRequired;
+                } else if (el.validity.tooShort) {
+                  msg = localization.auth.tooShort.replace("{{min}}", String(min));
+                }
+
+                setFieldErrors((prev) => ({
+                  ...prev,
+                  confirmPassword: msg,
+                }));
+              }}
+              aria-invalid={(fieldErrors.confirmPassword ?? "") !== ""}
+            />
+
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                size="icon-xs"
+                aria-label={
+                  isConfirmPasswordVisible
+                    ? localization.auth.hidePassword
+                    : localization.auth.showPassword
+                }
+                title={
+                  isConfirmPasswordVisible
+                    ? localization.auth.hidePassword
+                    : localization.auth.showPassword
+                }
+                onClick={() => {
+                  setIsConfirmPasswordVisible((visible) => !visible);
+                }}
+              >
+                {isConfirmPasswordVisible ? <EyeOff /> : <Eye />}
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
+
+          <FieldError>{fieldErrors.confirmPassword}</FieldError>
+        </Field>
+      )}
+
+      {additionalFields?.map(
+        (field) =>
+          field.signUp &&
+          field.signUp !== "above" && (
+            <AdditionalField
+              key={field.name}
+              name={field.name}
+              field={field}
+              isPending={isPending}
+              optionalLabel={localization.auth.optional}
+            />
+          ),
+      )}
+
+      <div className="flex flex-col gap-3">
+        <Button type="submit" disabled={isPending}>
+          {signUpEmailPending && <Spinner />}
+
+          {localization.auth.signUp}
+        </Button>
+      </div>
+    </FieldGroup>
+  </form>
+);
 
 /**
  * Renders a sign-up form with name, email, and password fields, optional social provider buttons, and submission handling.
@@ -91,12 +382,7 @@ export function SignUp({
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [fieldErrors, setFieldErrors] = useState<{
-    name?: string;
-    email?: string;
-    password?: string;
-    confirmPassword?: string;
-  }>({});
+  const [fieldErrors, setFieldErrors] = useState<SignUpFieldErrors>({});
   const currentLocation = useSyncExternalStore(
     () => () => null,
     () => window.location.href,
@@ -237,257 +523,24 @@ export function SignUp({
             )}
 
             {emailAndPassword?.enabled && (
-              <form
-                onSubmit={(event) => {
-                  void submitWithFeedback(event);
-                }}
-              >
-                <FieldGroup>
-                  {emailAndPassword.name !== false && (
-                    <Field data-invalid={(fieldErrors.name ?? "") !== ""}>
-                      <FieldLabel htmlFor="name">{localization.auth.name}</FieldLabel>
-
-                      <Input
-                        id="name"
-                        name="name"
-                        type="text"
-                        autoComplete="name"
-                        placeholder={localization.auth.namePlaceholder}
-                        required
-                        disabled={isPending}
-                        onChange={() => {
-                          setFieldErrors((prev) => ({
-                            ...prev,
-                            name: undefined,
-                          }));
-                        }}
-                        onInvalid={(e) => {
-                          e.preventDefault();
-
-                          setFieldErrors((prev) => ({
-                            ...prev,
-                            name: localization.auth.fieldRequired,
-                          }));
-                        }}
-                        aria-invalid={(fieldErrors.name ?? "") !== ""}
-                      />
-
-                      <FieldError>{fieldErrors.name}</FieldError>
-                    </Field>
-                  )}
-
-                  <Field data-invalid={(fieldErrors.email ?? "") !== ""}>
-                    <FieldLabel htmlFor="email">{localization.auth.email}</FieldLabel>
-
-                    <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      autoComplete="email"
-                      placeholder={localization.auth.emailPlaceholder}
-                      required
-                      disabled={isPending}
-                      onChange={() => {
-                        setFieldErrors((prev) => ({
-                          ...prev,
-                          email: undefined,
-                        }));
-                      }}
-                      onInvalid={(e) => {
-                        e.preventDefault();
-                        const el = e.target as HTMLInputElement;
-                        const msg = el.validity.valueMissing
-                          ? localization.auth.fieldRequired
-                          : localization.auth.invalidEmail;
-
-                        setFieldErrors((prev) => ({
-                          ...prev,
-                          email: msg,
-                        }));
-                      }}
-                      aria-invalid={(fieldErrors.email ?? "") !== ""}
-                    />
-
-                    <FieldError>{fieldErrors.email}</FieldError>
-                  </Field>
-
-                  {additionalFields?.map(
-                    (field) =>
-                      field.signUp === "above" && (
-                        <AdditionalField
-                          key={field.name}
-                          name={field.name}
-                          field={field}
-                          isPending={isPending}
-                          optionalLabel={localization.auth.optional}
-                        />
-                      ),
-                  )}
-
-                  <Field data-invalid={(fieldErrors.password ?? "") !== ""}>
-                    <FieldLabel htmlFor="password">{localization.auth.password}</FieldLabel>
-
-                    <InputGroup>
-                      <InputGroupInput
-                        id="password"
-                        name="password"
-                        type={isPasswordVisible ? "text" : "password"}
-                        autoComplete="new-password"
-                        value={password}
-                        onChange={(e) => {
-                          setPassword(e.target.value);
-                          setFieldErrors((prev) => ({
-                            ...prev,
-                            password: undefined,
-                          }));
-                        }}
-                        placeholder={localization.auth.passwordPlaceholder}
-                        required
-                        minLength={emailAndPassword?.minPasswordLength}
-                        maxLength={emailAndPassword?.maxPasswordLength}
-                        disabled={isPending}
-                        onInvalid={(e) => {
-                          e.preventDefault();
-                          const el = e.target as HTMLInputElement;
-                          const min = emailAndPassword?.minPasswordLength;
-                          const max = emailAndPassword?.maxPasswordLength;
-                          let msg = localization.auth.tooLong.replace("{{max}}", String(max));
-                          if (el.validity.valueMissing) {
-                            msg = localization.auth.fieldRequired;
-                          } else if (el.validity.tooShort) {
-                            msg = localization.auth.tooShort.replace("{{min}}", String(min));
-                          }
-
-                          setFieldErrors((prev) => ({
-                            ...prev,
-                            password: msg,
-                          }));
-                        }}
-                        aria-invalid={(fieldErrors.password ?? "") !== ""}
-                      />
-
-                      <InputGroupAddon align="inline-end">
-                        <InputGroupButton
-                          size="icon-xs"
-                          aria-label={
-                            isPasswordVisible
-                              ? localization.auth.hidePassword
-                              : localization.auth.showPassword
-                          }
-                          title={
-                            isPasswordVisible
-                              ? localization.auth.hidePassword
-                              : localization.auth.showPassword
-                          }
-                          onClick={() => {
-                            setIsPasswordVisible((visible) => !visible);
-                          }}
-                        >
-                          {isPasswordVisible ? <EyeOff /> : <Eye />}
-                        </InputGroupButton>
-                      </InputGroupAddon>
-                    </InputGroup>
-
-                    <FieldError>{fieldErrors.password}</FieldError>
-
-                    <PasswordStrengthMeter password={password} />
-                  </Field>
-
-                  {emailAndPassword?.confirmPassword === true && (
-                    <Field data-invalid={(fieldErrors.confirmPassword ?? "") !== ""}>
-                      <FieldLabel htmlFor="confirmPassword">
-                        {localization.auth.confirmPassword}
-                      </FieldLabel>
-
-                      <InputGroup>
-                        <InputGroupInput
-                          id="confirmPassword"
-                          name="confirmPassword"
-                          type={isConfirmPasswordVisible ? "text" : "password"}
-                          autoComplete="new-password"
-                          value={confirmPassword}
-                          onChange={(e) => {
-                            setConfirmPassword(e.target.value);
-
-                            setFieldErrors((prev) => ({
-                              ...prev,
-                              confirmPassword: undefined,
-                            }));
-                          }}
-                          placeholder={localization.auth.confirmPasswordPlaceholder}
-                          required
-                          minLength={emailAndPassword?.minPasswordLength}
-                          maxLength={emailAndPassword?.maxPasswordLength}
-                          disabled={isPending}
-                          onInvalid={(e) => {
-                            e.preventDefault();
-                            const el = e.target as HTMLInputElement;
-                            const min = emailAndPassword?.minPasswordLength;
-                            const max = emailAndPassword?.maxPasswordLength;
-                            let msg = localization.auth.tooLong.replace("{{max}}", String(max));
-                            if (el.validity.valueMissing) {
-                              msg = localization.auth.fieldRequired;
-                            } else if (el.validity.tooShort) {
-                              msg = localization.auth.tooShort.replace("{{min}}", String(min));
-                            }
-
-                            setFieldErrors((prev) => ({
-                              ...prev,
-                              confirmPassword: msg,
-                            }));
-                          }}
-                          aria-invalid={(fieldErrors.confirmPassword ?? "") !== ""}
-                        />
-
-                        <InputGroupAddon align="inline-end">
-                          <InputGroupButton
-                            size="icon-xs"
-                            aria-label={
-                              isConfirmPasswordVisible
-                                ? localization.auth.hidePassword
-                                : localization.auth.showPassword
-                            }
-                            title={
-                              isConfirmPasswordVisible
-                                ? localization.auth.hidePassword
-                                : localization.auth.showPassword
-                            }
-                            onClick={() => {
-                              setIsConfirmPasswordVisible((visible) => !visible);
-                            }}
-                          >
-                            {isConfirmPasswordVisible ? <EyeOff /> : <Eye />}
-                          </InputGroupButton>
-                        </InputGroupAddon>
-                      </InputGroup>
-
-                      <FieldError>{fieldErrors.confirmPassword}</FieldError>
-                    </Field>
-                  )}
-
-                  {additionalFields?.map(
-                    (field) =>
-                      field.signUp &&
-                      field.signUp !== "above" && (
-                        <AdditionalField
-                          key={field.name}
-                          name={field.name}
-                          field={field}
-                          isPending={isPending}
-                          optionalLabel={localization.auth.optional}
-                        />
-                      ),
-                  )}
-
-                  <div className="flex flex-col gap-3">
-                    <Button type="submit" disabled={isPending}>
-                      {signUpEmailPending && <Spinner />}
-
-                      {localization.auth.signUp}
-                    </Button>
-                  </div>
-                </FieldGroup>
-              </form>
+              <SignUpForm
+                additionalFields={additionalFields}
+                emailAndPassword={emailAndPassword}
+                fieldErrors={fieldErrors}
+                isConfirmPasswordVisible={isConfirmPasswordVisible}
+                isPasswordVisible={isPasswordVisible}
+                isPending={isPending}
+                localization={localization}
+                password={password}
+                confirmPassword={confirmPassword}
+                setConfirmPassword={setConfirmPassword}
+                setFieldErrors={setFieldErrors}
+                setIsConfirmPasswordVisible={setIsConfirmPasswordVisible}
+                setIsPasswordVisible={setIsPasswordVisible}
+                setPassword={setPassword}
+                signUpEmailPending={signUpEmailPending}
+                submitWithFeedback={submitWithFeedback}
+              />
             )}
 
             {socialPosition === "bottom" && (

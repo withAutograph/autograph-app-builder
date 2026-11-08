@@ -557,10 +557,6 @@ export default defineConfig({
       rules: { "react-doctor/no-pass-data-to-parent": "off" },
     },
     {
-      files: [handoffControlsPath, sharedLintFile14],
-      rules: { "react-doctor/no-giant-component": "off" },
-    },
-    {
       files: [
         "app/(product)/auth/setting-up/page.tsx",
         "app/ui/builder-continuation.tsx",
