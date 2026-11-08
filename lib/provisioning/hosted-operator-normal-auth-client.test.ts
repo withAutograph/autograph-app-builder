@@ -414,7 +414,7 @@ describe("normal Auth client", () => {
       .mockResolvedValueOnce(Response.json({ private: "x".repeat(128 * 1024) }))
       .mockResolvedValueOnce(redirected)
       .mockResolvedValueOnce(
-        Response.json({ ...session(), user: { id: "other-actor", email: "member@example.com" } }),
+        Response.json({ ...session(), user: { email: "member@example.com", id: "other-actor" } }),
       );
     const client = createHostedOperatorNormalAuthClient({ fetch: mocked, origin });
     await expect(client.getSession()).rejects.toMatchObject({ code: "invalid_response" });
@@ -475,8 +475,8 @@ describe("normal Auth rate limit recovery", () => {
     "retries %s only after the actual delay with fresh approval and the same body/jar",
     async (method) => {
       const retry = rejection({
-        "x-retry-after": "2",
         "set-cookie": "challenge=private-rate-cookie; Path=/; Secure; HttpOnly",
+        "x-retry-after": "2",
       });
       const f = fixture([retry, successfulAccount()]);
       const client = createHostedOperatorNormalAuthClient(f.options);

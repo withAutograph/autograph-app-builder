@@ -880,10 +880,10 @@ describe("paged hosted session observation", () => {
   );
 
   it.each([
-    { unchanged: false, failure: "none" },
-    { unchanged: true, failure: "none" },
-    { unchanged: true, failure: "post" },
-    { unchanged: true, failure: "accepted-readback" },
+    { failure: "none", unchanged: false },
+    { failure: "none", unchanged: true },
+    { failure: "post", unchanged: true },
+    { failure: "accepted-readback", unchanged: true },
   ])("passes the owner-checked native response preflight (%j)", async ({ unchanged, failure }) => {
     const question = {
       allowFreeform: true,
@@ -1537,15 +1537,15 @@ describe("paged hosted session observation", () => {
         kind === "send"
           ? f.service.send({
               clientRequestId: requestId,
-              sessionId: f.sessionId,
               message: "Continue",
+              sessionId: f.sessionId,
             })
           : f.service.respond({
               clientRequestId: requestId,
-              sessionId: f.sessionId,
               responses: [
                 { requestId: question.requestId, response: { kind: "answer", value: "Preview" } },
               ],
+              sessionId: f.sessionId,
             });
       const result = await submit();
       expect(result.events.map((event) => event.index)).toEqual(
@@ -1555,9 +1555,9 @@ describe("paged hosted session observation", () => {
       expect(await submit()).toEqual(result);
       expect(kind === "send" ? sendAccepted : respondAccepted).toHaveBeenCalledOnce();
       const remainder = await f.service.get({
-        sessionId: f.sessionId,
         cursor: result.cursor,
         limit: 100,
+        sessionId: f.sessionId,
       });
       expect(remainder.events.map((event) => event.index)).toEqual(
         Array.from({ length: Math.max(0, delta - 100) }, (_, index) => baseline + 100 + index),

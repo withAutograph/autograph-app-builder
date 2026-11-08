@@ -18,18 +18,8 @@ import {
 } from "./hosted-operator-membership-inspection-provenance";
 
 const originalPlan = hostedOperatorPlanSchema.parse({
-  version: 1,
-  action: "prepare",
-  stage: "app",
-  selection: {
-    appId: "fixture-app",
-    branch: "preview",
-    environment: "preview",
-    projectId: "prj_app",
-    sessionId: "owner-session",
-  },
-  contextId: "owned-context",
   access: [{ actorId: "owner", organizationId: "org_fixture", roles: ["owner"] }],
+  action: "prepare",
   appDatabase: {
     database: "app",
     migratorRole: "app_owner",
@@ -41,13 +31,6 @@ const originalPlan = hostedOperatorPlanSchema.parse({
     migratorRole: "auth_owner",
     resourceId: "auth-resource",
     runtimeRole: "auth_runtime",
-  },
-  neon: {
-    branchId: "br_fixture",
-    connectionRef: "owned-connection",
-    endpoint: "ep-fixture.neon.tech",
-    projectId: "neon-fixture",
-    source: "synthetic-only",
   },
   authMembership: {
     kind: "create-owned-organization",
@@ -72,22 +55,8 @@ const originalPlan = hostedOperatorPlanSchema.parse({
       },
     },
   },
+  contextId: "owned-context",
   cost: { class: "shared-recovery-group", description: "Synthetic fixture", owner: "Fixture" },
-  effects: [
-    { description: "Observe resources", id: "resources", kind: "resources" },
-    { description: "Install app", id: "install", kind: "install" },
-    { description: "Create owned organization", id: "membership", kind: "auth-membership" },
-    { description: "Grant access", id: "access", kind: "access" },
-    { description: "Bind app", id: "bindings", kind: "bindings" },
-  ],
-  installer: { reference: "fixture-installer", sha256: "d".repeat(64) },
-  release: { artifactRef: "fixture-artifact", id: "fixture-release", sha256: "e".repeat(64) },
-  retention: { expiresAt: "2030-01-01T00:00:00.000Z", policy: "Retain owned fixture" },
-  publicGateway: {
-    branch: "preview",
-    origin: "https://apps.example.test",
-    projectId: "prj_gateway",
-  },
   deploymentBoundary: {
     app: { branch: "preview", environment: "preview", projectId: "prj_app" },
     authority: {
@@ -105,6 +74,37 @@ const originalPlan = hostedOperatorPlanSchema.parse({
       publicOrigin: "https://apps.example.test",
     },
   },
+  effects: [
+    { description: "Observe resources", id: "resources", kind: "resources" },
+    { description: "Install app", id: "install", kind: "install" },
+    { description: "Create owned organization", id: "membership", kind: "auth-membership" },
+    { description: "Grant access", id: "access", kind: "access" },
+    { description: "Bind app", id: "bindings", kind: "bindings" },
+  ],
+  installer: { reference: "fixture-installer", sha256: "d".repeat(64) },
+  neon: {
+    branchId: "br_fixture",
+    connectionRef: "owned-connection",
+    endpoint: "ep-fixture.neon.tech",
+    projectId: "neon-fixture",
+    source: "synthetic-only",
+  },
+  publicGateway: {
+    branch: "preview",
+    origin: "https://apps.example.test",
+    projectId: "prj_gateway",
+  },
+  release: { artifactRef: "fixture-artifact", id: "fixture-release", sha256: "e".repeat(64) },
+  retention: { expiresAt: "2030-01-01T00:00:00.000Z", policy: "Retain owned fixture" },
+  selection: {
+    appId: "fixture-app",
+    branch: "preview",
+    environment: "preview",
+    projectId: "prj_app",
+    sessionId: "owner-session",
+  },
+  stage: "app",
+  version: 1,
 });
 const currentPlan = hostedOperatorPlanSchema.parse({
   ...originalPlan,
@@ -132,8 +132,8 @@ const makeOperator = (plan: HostedOperatorPlan): HostedOperatorRecordBase => {
     version: 1,
   });
   return {
-    mode: "protected-operator-v1",
     approvalId: "original-approval",
+    mode: "protected-operator-v1",
     operationRef: "11111111-1111-4111-8111-111111111111",
     plan,
     planDigest,
@@ -207,13 +207,13 @@ const participantPlan = (plan: HostedOperatorPlan) => {
       ownerActorKey: "owner",
     })),
     memberships: organizations.map(({ organizationId }) => ({
-      organizationId,
       actorKey: "owner",
+      organizationId,
       role: "owner",
     })),
     appAccess: organizations.map(({ organizationId }) => ({
-      organizationId,
       actorKey: "owner",
+      organizationId,
       roles: ["owner"],
     })),
   });
@@ -221,10 +221,10 @@ const participantPlan = (plan: HostedOperatorPlan) => {
     ...plan,
     normalActorProgram: program,
     normalActorPreparation: {
-      accountOperationRef: "33333333-3333-4333-8333-333333333333",
-      accountPlanDigest: "a".repeat(64),
       accountApprovalId: "account-approval",
       accountApprovedByCallId: "account-call",
+      accountOperationRef: "33333333-3333-4333-8333-333333333333",
+      accountPlanDigest: "a".repeat(64),
       programDigest: normalActorProgramDigest(program),
     },
     authMembership: { kind: "create-owned-organizations", organizations },
@@ -282,9 +282,9 @@ describe("retained membership inspection provenance", () => {
           assetSha256: "7".repeat(64),
           catalogFingerprint: "8".repeat(64),
           database: completedPlan.authDatabase.database,
+          observedAt: "2028-01-01T00:01:00.000Z",
           runtimeRole: completedPlan.authDatabase.runtimeRole,
           targetDigest: completedPlan.authSchema?.targetDigest,
-          observedAt: "2028-01-01T00:01:00.000Z",
         },
         receipts: completedPlan.effects.map((effect) => ({
           effectId: effect.id,
