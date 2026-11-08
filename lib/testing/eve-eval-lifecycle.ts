@@ -205,6 +205,7 @@ export async function reconcileDeadEveEvalPrewarmLocks(
           movedOwner.source !== owner.source ||
           !sameFile(movedOwner.info, owner.info)
         ) {
+          // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
           await rename(quarantine, lock).catch(() => null);
           throw new Error("lock owner changed while it was quarantined");
         }

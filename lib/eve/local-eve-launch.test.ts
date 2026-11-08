@@ -109,6 +109,7 @@ describe("closed local Eve launch", () => {
     expect(forwarded).toEqual(["SIGTERM"]);
 
     let settled = false;
+    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
     void stopped.then(() => {
       settled = true;
     });

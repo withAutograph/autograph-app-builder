@@ -125,9 +125,11 @@ export type CanonicalTemplateSnapshot = Omit<SupportedTemplateSnapshot, "sourceS
 const isGitObjectId = (value: unknown): value is string =>
   typeof value === "string" && (/^[0-9a-f]{40}$/u.test(value) || /^[0-9a-f]{64}$/u.test(value));
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const hasExactKeys = (value: Record<string, unknown>, expected: readonly string[]): boolean =>
   Object.keys(value).toSorted().join("\0") === [...expected].toSorted().join("\0");
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 

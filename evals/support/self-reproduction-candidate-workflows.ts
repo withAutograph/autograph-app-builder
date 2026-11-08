@@ -81,6 +81,7 @@ export const exerciseCandidateBrowserWorkflows = async (
     const check = (id: string, passed: boolean | null, detail: string) =>
       assertions.push({ detail, id, passed });
     const button = (name: RegExp) => page.getByRole("button", { name }).first();
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     const exists = (locator: CandidateLocator) => locator.isVisible().catch(() => false);
     const text = () => page.locator("body").textContent();
     let outcome: CandidateWorkflowOutcome = {
@@ -154,7 +155,9 @@ export const exerciseCandidateBrowserWorkflows = async (
       const saved = page.getByText(/draft saved|changes saved/iu).first();
       const acknowledged = await saved
         .waitFor({ state: "visible", timeout: 5000 })
+        // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
         .then(() => true)
+        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
         .catch(() => false);
       await page.waitForLoadState("networkidle");
       await page.reload({ waitUntil: "networkidle" });
@@ -402,10 +405,12 @@ export const exerciseCandidateBrowserWorkflows = async (
           buttons: await page
             .getByRole("button")
             .allTextContents()
+            // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
             .catch(() => []),
           headings: await page
             .getByRole("heading")
             .allTextContents()
+            // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
             .catch(() => []),
           mutationPaths: writes,
         };

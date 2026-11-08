@@ -49,6 +49,7 @@ export const sanitizePreviewEvidence = (value: string) =>
       }
     });
 
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve arbitrary observation values during redaction.
 const sanitizeValue = (value: unknown): unknown => {
   if (typeof value === "string") {
     return sanitizePreviewEvidence(value);
@@ -64,6 +65,7 @@ const sanitizeValue = (value: unknown): unknown => {
   return value;
 };
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 

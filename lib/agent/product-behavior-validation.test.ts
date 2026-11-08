@@ -32,6 +32,7 @@ interface CapturedValidationLog {
 }
 
 const mocks = vi.hoisted(() => {
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   const current: Record<string, unknown> = {};
   return {
     attempt: vi.fn(),

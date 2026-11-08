@@ -401,7 +401,7 @@ export const createFreshBootstrapProposal = (input: {
 };
 
 const canonicalProposal = (proposal: FreshBootstrapProposal) => {
-  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the existing broader shape used by this operation.
+  // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/no-unsafe-dictionary-type -- Keep the existing broader shape used by this operation.; Preserve the existing open-ended value contract.
   const unsigned = { ...proposal } as Record<string, unknown>;
   delete unsigned.digest;
   return unsigned;
@@ -418,6 +418,7 @@ const hasExactKeys = <Value extends object>(
 const pathIdentityKeys = ["path", "device", "inode", "uid", "mode", "nlink"] as const;
 const executableIdentityKeys = [...pathIdentityKeys, "sha256"] as const;
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const isRecord = <Value>(value: Value): value is Value & Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 

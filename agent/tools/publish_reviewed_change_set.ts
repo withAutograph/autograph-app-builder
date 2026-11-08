@@ -264,6 +264,7 @@ export default defineTool({
           ? Promise.resolve(null)
           : ctx
               .getSandbox()
+              // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
               .then((sandbox) => sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` })),
       review,
       sourceReceipt,

@@ -106,9 +106,11 @@ export const exerciseCandidateNavigation = async (
     const docsURL = page.url();
     await capture("documentation");
     await page.goBack({ waitUntil: "domcontentloaded" });
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await name.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {
       // A missing editor after browser Back is an observed continuity failure.
     });
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     const restored = page.url() === initialURL && (await name.isVisible().catch(() => false));
     const valuesRestored =
       restored &&
@@ -118,9 +120,11 @@ export const exerciseCandidateNavigation = async (
       restored && (await docs.evaluate((node) => node === document.activeElement));
     await capture("back");
     await page.goForward({ waitUntil: "domcontentloaded" });
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await back.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {
       // Missing documentation after Forward is an observed continuity failure.
     });
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     const forwarded = page.url() === docsURL && (await back.isVisible().catch(() => false));
     await capture("forward");
     observation.assertions = [

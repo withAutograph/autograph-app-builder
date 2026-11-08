@@ -416,6 +416,7 @@ describe("safe interrupted startup diagnostics", () => {
       fetch: fetcher,
       probeTimeoutMs: 100,
       signal: AbortSignal.timeout(100),
+      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     }).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(Error);
     if (!(failure instanceof Error)) {
@@ -453,6 +454,7 @@ describe("preview command termination", () => {
       wait: vi.fn(() => exited.promise),
     };
     let settled = false;
+    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
     const cleanup = stopWorkingPreviewCommand(command).then(() => {
       settled = true;
     });

@@ -311,6 +311,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
       enabled: false,
     });
 
+    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
     await expect(resolver.resolve(null).then((runtime) => runtime.status())).resolves.toMatchObject(
       {
         adapterConfigured: false,
@@ -375,6 +376,7 @@ describe("hosted tenant GitHub publication runtime resolver", () => {
       providerFactory,
     });
 
+    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
     await expect(resolver.resolve(auth).then((runtime) => runtime.status())).resolves.toMatchObject(
       { enabled: true },
     );

@@ -313,6 +313,7 @@ async function runEveCycle(input: {
     })();
     // This derived promise is an input to the shared race below.
     // oxlint-disable-next-line promise/prefer-await-to-then
+    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
     const eveExited = developmentChildExit(eve).then((code) => ({
       code,
       kind: "eve-exit" as const,
@@ -324,6 +325,7 @@ async function runEveCycle(input: {
           endpoint: packageResult.receipt.endpoint,
           fetcher: input.web?.fetcher,
           signal: watchers.signal,
+          // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
         }).then(() => ({ code: 0, kind: "ready" as const })),
         eveExited,
         input.nextExited,
@@ -446,12 +448,14 @@ try {
   );
   // This derived promise is an input to the shared race below.
   // oxlint-disable-next-line promise/prefer-await-to-then
+  // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
   const nextProcessExited = developmentChildExit(next).then((code) => ({
     code,
     kind: "next-exit" as const,
   }));
   // Both owned services participate in the same supervisor exit race.
   // oxlint-disable-next-line promise/prefer-await-to-then -- Preserve a live process exit handle.
+  // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
   const webExited = web?.exited.then((code) => ({ code, kind: "web-exit" as const }));
   const nextExited =
     webExited === undefined ? nextProcessExited : Promise.race([nextProcessExited, webExited]);

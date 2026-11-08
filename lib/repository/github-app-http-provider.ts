@@ -158,6 +158,7 @@ export interface GitHubAppHttpProvider
   inspectExistingDraft: (
     input: ExistingDraftInspectionRequest,
   ) => Promise<ExistingDraftObservation>;
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep provider data untrusted until its consumer validates it.
   inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown>;
   inspectHistoricalAppSource: (input: {
     repositoryId: string;
@@ -183,9 +184,11 @@ interface PermissionSnapshot {
 
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep provider data untrusted until its consumer validates it.
 const property = (value: unknown, key: string): unknown => {
   if (!record(value) || !(key in value)) {
     throw new TypeError(invalidResponseMessage);

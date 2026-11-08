@@ -4,6 +4,7 @@ import { HandoffContent } from "../(product)/handoff/[id]/handoff-content";
 import type { getBuilderHandoffPageData } from "../../lib/handoff/deployment";
 
 const server = vi.hoisted(() => ({
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- The mocked page loader preserves its untrusted result boundary.
   load: vi.fn<(input: Parameters<typeof getBuilderHandoffPageData>[0]) => Promise<unknown>>(),
   redirect: vi.fn((url: string) => {
     throw new Error(`redirect:${url}`);

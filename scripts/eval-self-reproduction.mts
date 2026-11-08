@@ -127,9 +127,11 @@ const output = resolve(
       `${now.replaceAll(/[.:]/gu, "-")}-${randomUUID().slice(0, 8)}`,
     ),
 );
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const records: Record<string, unknown>[] = [];
 const started = Date.now();
 const captures: { label: string; files: string[]; status: string }[] = [];
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 let generation: Record<string, unknown> & { status: string } = { status: "pending" };
 interface PreservedInputFile {
   path: string;
@@ -152,6 +154,7 @@ interface NativeFailure {
 }
 let input: InputEvidence = { status: "pending" };
 let revisions: SourceRevisions = {};
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 let settings: Record<string, unknown> = {};
 let candidateFiles: Awaited<ReturnType<typeof readSource>> | undefined;
 let referenceFiles: Awaited<ReturnType<typeof readSource>> | undefined;
@@ -170,6 +173,7 @@ let candidateRuntime: CandidateRuntimeReceipt | { status: "not-run" | "failed"; 
   reason: "Candidate runtime evaluation was not requested.",
   status: "not-run",
 };
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 let candidate: Record<string, unknown> & { status: string; reason?: string } = {
   reason: "No candidate export has been supplied.",
   status: "unavailable",
@@ -468,6 +472,7 @@ const revision = (directory: string | undefined) => {
 const requirementRow = (requirement: Assessment["rows"][number]) =>
   `<tr><td>${escapeHtml(requirement.status)}</td><th>${escapeHtml(requirement.side)}</th><td>${escapeHtml(requirement.requirementId)}</td><td>${escapeHtml(requirement.reason)}</td><td>${escapeHtml(requirement.artifacts.join(" "))}</td></tr>`;
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 type ReportGap = Record<string, unknown>;
 
 const gapRow = (gap: ReportGap) =>
@@ -486,6 +491,7 @@ const captureFileLinks = (item: { label: string; files: string[] }) =>
 
 const reportHtml = (report: {
   createdAt: string;
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   generation: Record<string, unknown>;
   requirements: Assessment["rows"];
   gaps: ReportGap[];
@@ -665,6 +671,7 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
   }
   const result = await resultPromise.promise;
   // --verbose adds checkpoint lines before the final native JSON document.
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   let native: Record<string, unknown> | undefined;
   for (const match of rawOutput.matchAll(/(?:^|\n)(?=\{)/gu)) {
     try {
@@ -754,7 +761,9 @@ const capture = async (label: string, url: string | undefined, sourceRoot: strin
     );
     return {
       files: await readdir(destination)
+        // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
         .then((files) => files.map((file) => `captures/${label}/${file}`))
+        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
         .catch(() => []),
       label,
       status:
@@ -1158,7 +1167,9 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
           join(candidateRoot, "self-reproduction.workflow-results.json"),
           "utf-8",
         )
+          // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
           .then((value) => JSON.parse(value) as WorkflowEvidence)
+          // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
           .catch((): undefined => {
             // Candidate-authored workflow evidence is optional.
           });

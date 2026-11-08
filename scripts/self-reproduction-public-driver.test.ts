@@ -896,6 +896,7 @@ describe("public self-reproduction preview reporting", () => {
       const raw: unknown[] = readFileSync(privatePath, "utf-8")
         .trim()
         .split("\n")
+        // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep parsed transcript JSON unknown before test inspection.
         .map((line): unknown => JSON.parse(line));
       expect(raw).toEqual([
         { page: 1, receipt },

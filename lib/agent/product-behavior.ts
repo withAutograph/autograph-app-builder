@@ -7,6 +7,7 @@ export interface ProductReadbackScenario {
   readPath: string;
   /** The verifier adds its unpredictable marker to this top-level JSON field. */
   markerField: string;
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   body: Record<string, unknown>;
   readPointer: string;
 }

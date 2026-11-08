@@ -256,6 +256,7 @@ describe("self-reproduction evidence persistence", () => {
       readFileSync(transcriptPath, "utf-8")
         .trim()
         .split("\n")
+        // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep parsed evidence JSON unknown before test inspection.
         .map((line): unknown => JSON.parse(line)),
     ).toEqual(outcomes);
     expect(readFileSync(logPath, "utf-8")).toContain("Native eval started");

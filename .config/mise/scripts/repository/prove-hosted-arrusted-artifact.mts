@@ -150,6 +150,7 @@ try {
           },
         },
       ),
+      // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
     ) as Record<string, unknown>;
   const identity = run(["app-identity.ts", "--app", "builder-proof"]);
   if (

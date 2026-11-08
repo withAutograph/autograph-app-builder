@@ -789,6 +789,7 @@ const createInitialJournal = async (
     await link(candidate, path);
     await syncDirectory(nodePath.dirname(path));
   } finally {
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await unlink(candidate).catch(() => {
       // Cleanup errors are intentionally ignored.
     });

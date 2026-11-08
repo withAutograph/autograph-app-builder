@@ -216,6 +216,7 @@ export async function inspectTargetExecutionReadiness(input: {
           environment,
           input.state.workspace,
           shouldPreferLiveTemplateDependencies(input.state.sourceReceipt.version, environment),
+          // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
         ).catch(() => globalThis.undefined)
       : undefined;
   const resolvedInput: Parameters<typeof resolveTargetExecutionEnvironment>[0] = {

@@ -63,6 +63,7 @@ function reportPasskeyFailures(page: Page) {
     if (response.ok() || !new URL(response.url()).pathname.startsWith("/api/auth/passkey/")) {
       return;
     }
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     const body = await response.text().catch(() => {});
     if (body === undefined) {
       return;

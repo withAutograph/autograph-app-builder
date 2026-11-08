@@ -44,7 +44,7 @@ function inspectAmbientPreload(environment: NodeJS.ProcessEnv) {
 
 describe("test capability preload", () => {
   it("uses the actual trusted wrapper lineage for this Vitest worker", async () => {
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The process registry is stored under a shared symbol outside the Node process type.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/no-unknown-returns -- The capability registry accessor may return arbitrary stored data. The process registry is stored under a shared symbol outside the Node process type.
     const accessor = (process as unknown as Record<symbol, (() => unknown) | undefined>)[
       Symbol.for("withAutograph.autograph-app-builder.test-capability-registry.v2")
     ];

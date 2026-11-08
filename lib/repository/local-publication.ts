@@ -380,6 +380,7 @@ export const proposalFromJournal = (
   version: receipt.version,
 });
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 type ReceiptDigestInput = { digest?: string } | { digest?: string; [key: string]: unknown };
 
 export const receiptDigest = (receipt: ReceiptDigestInput): string => {

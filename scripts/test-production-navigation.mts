@@ -148,6 +148,7 @@ try {
   const copies = await Promise.allSettled(
     files.map(async (file) => {
       // Git also lists submodule directory entries; they are not app sources.
+      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       const info = await lstat(path.join(source, file)).catch((error: unknown) => {
         if (
           typeof error === "object" &&
@@ -182,6 +183,7 @@ try {
   await Promise.all(
     packageDirectories.map(async (directory) => {
       const dependencyView = path.join(source, directory, "node_modules");
+      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       const installed = await lstat(dependencyView).catch((error: unknown) => {
         if (
           typeof error === "object" &&

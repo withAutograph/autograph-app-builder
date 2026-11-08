@@ -805,6 +805,7 @@ const acquirePublicationLock = async (identity: string): Promise<PublicationLock
   };
   // This derived promise intentionally races the terminal lease signal.
   // oxlint-disable-next-line promise/prefer-await-to-then
+  // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
   const lost = terminalPromise.then(() => {
     throw lockLostError();
   });
@@ -882,6 +883,7 @@ const createInitialJournal = async (
     await link(candidate, path);
     await syncDirectory(dirname(path), true);
   } finally {
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await unlink(candidate).catch(() => null);
     await syncDirectory(dirname(path), true);
   }
@@ -1412,6 +1414,7 @@ const materializeAtomically = async (
     await rename(temporary, target);
     await syncDirectory(dirname(target));
   } finally {
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await unlink(temporary).catch(() => null);
   }
 };
@@ -1698,6 +1701,7 @@ export const writeVerifiedOverlayStream = async (input: {
       throw new Error(`The immutable apply overlay is stale for ${input.path}.`);
     }
   } finally {
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await reader.cancel().catch(() => null);
     reader.releaseLock();
   }
@@ -1737,6 +1741,7 @@ const writePostimageStream = async (input: {
     await rename(temporary, target);
     await syncDirectory(dirname(target));
   } finally {
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await unlink(temporary).catch(() => null);
   }
 };

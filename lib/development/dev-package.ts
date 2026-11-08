@@ -110,10 +110,12 @@ export const createDevelopmentPackage = async (input: {
     await cp(path.join(repositoryRoot, PLUGIN_ICON_PATH), path.join(pluginRoot, PLUGIN_ICON_PATH));
     const sourceManifest = JSON.parse(
       await readFile(path.join(repositoryRoot, PLUGIN_MANIFEST_PATH), "utf-8"),
+      // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
     ) as Record<string, unknown>;
     const sourceInterface =
       typeof sourceManifest.interface === "object" && sourceManifest.interface !== null
-        ? (sourceManifest.interface as Record<string, unknown>)
+        ? // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+          (sourceManifest.interface as Record<string, unknown>)
         : {};
     const manifest = {
       ...sourceManifest,

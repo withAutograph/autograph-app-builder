@@ -517,6 +517,7 @@ describe("native externally managed policy recovery integration", () => {
         bindings: async () => ({}),
       };
       const handler = createProtectedHostedOperatorHandler(deps);
+      // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
       const request = (body: Record<string, unknown>) =>
         new Request("https://operator.example.test/v1/runtime", {
           method: "POST",
@@ -830,6 +831,7 @@ describe("native externally managed policy recovery integration", () => {
       let approved = false;
       let guardReadUnavailable = false;
       let failNextGuardRead = outcome === "transient-hook";
+      // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
       const calls: { method: string; path: string; body?: Record<string, unknown> }[] = [];
       // oxlint-disable-next-line eslint/require-await -- Preserve async fixture timing and rejection behavior.
       const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -1118,6 +1120,7 @@ describe("native externally managed policy recovery integration", () => {
         bindings: async () => ({}),
       };
       const handler = createProtectedHostedOperatorHandler(deps);
+      // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
       const request = (body: Record<string, unknown>) =>
         new Request("https://operator.example.test/v1/runtime", {
           method: "POST",

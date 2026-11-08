@@ -168,6 +168,7 @@ async function removePublicationTree(root: string) {
       await chmod(path, 0o600);
     }
   }
+  // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
   await makeWritable(root).catch((error: unknown) => {
     if (
       typeof error !== "object" ||

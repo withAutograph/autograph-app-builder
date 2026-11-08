@@ -309,6 +309,7 @@ export async function settleFiniteMotion(page: Page) {
       const iterations = timing?.iterations ?? 1;
       return Number.isFinite(iterations) && Number.isFinite(timing?.duration);
     });
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await Promise.all(finite.map((motion) => motion.finished.catch(() => null)));
   });
 }
@@ -537,7 +538,9 @@ export async function measureStyles(
       const header = headers.get(styleSheetId);
       const css = await session
         .send("CSS.getStyleSheetText", { styleSheetId })
+        // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
         .then((result: { text: string }) => result.text)
+        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
         .catch(() => "");
       const declared = /\/[*]#\s*sourceMappingURL=(?<url>[^\s*]+)\s*[*]\//u.exec(css)?.[1];
       // CDP may report optional URLs as empty strings. In that case the
@@ -655,6 +658,7 @@ export async function measureStyles(
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const { model } = await session
         .send("DOM.getBoxModel", { nodeId })
+        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
         .catch(() => ({ model: null }));
       if (!model || model.width <= 0 || model.height <= 0) {
         continue;

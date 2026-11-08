@@ -108,6 +108,7 @@ function runtime(
 function mcpRequest(
   headers: Record<string, string> = {},
   method = "tools/list",
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   params: Record<string, unknown> = {},
 ): Request {
   return new Request(auth.resourceUrl, {
@@ -126,7 +127,7 @@ function mcpRequest(
   });
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// eslint-disable-next-line eslint/func-style, anti-slop/no-unsafe-dictionary-type -- Preserve function declaration hoisting and initialization timing.; Preserve the existing open-ended value contract.
 function mcpToolRequest(name: string, args: Record<string, unknown>): Request {
   return new Request(auth.resourceUrl, {
     body: JSON.stringify({

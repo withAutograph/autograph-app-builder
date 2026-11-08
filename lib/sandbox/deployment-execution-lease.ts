@@ -104,7 +104,7 @@ function errorWithCleanupEvidence(error: unknown, evidence: SandboxCleanupEviden
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sandboxCleanupEvidence(error: unknown) {
   return error instanceof Error
-    ? // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Cleanup evidence is attached to errors under a private symbol.
+    ? // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/no-unsafe-dictionary-type -- Cleanup evidence is attached to errors under a private symbol.; Preserve the existing open-ended value contract.
       ((error as unknown as Record<PropertyKey, unknown>)[cleanupEvidenceKey] as
         | SandboxCleanupEvidence
         | undefined)
@@ -120,6 +120,7 @@ async function stopWithin(
   const stop = Promise.resolve(sandbox.stop());
   // Intentionally observe stop failure without awaiting it before the timeout race.
   // oxlint-disable-next-line promise/prefer-await-to-then
+  // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
   stop.catch(() => null);
   const timeout = delay(timeoutMs, "timeout" as const, {
     ref: false,
@@ -127,6 +128,7 @@ async function stopWithin(
   });
   try {
     const result = await Promise.race([
+      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       stop.then(() => "stopped" as const).catch(() => "failed" as const),
       timeout,
     ]);

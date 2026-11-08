@@ -362,6 +362,7 @@ export function useBuilderController({
             headers: { "Content-Type": "application/json" },
             keepalive: true,
             method: "POST",
+            // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
           }).then(async (response) => {
             if (!response.ok) {
               throw new Error("builder-draft-save-failed");
@@ -670,6 +671,7 @@ export function useBuilderController({
     // oxlint-disable promise/prefer-await-to-then
     // oxlint-disable-next-line promise/prefer-await-to-then
     void restorePending()
+      // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
       .then((entry) => {
         if (disposed || !entry) {
           return;

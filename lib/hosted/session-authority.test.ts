@@ -6,6 +6,7 @@ import {
   sourceHandoffIdForSessionAuth,
 } from "./session-authority";
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const auth = (overrides: Record<string, unknown> = {}) => ({
   attributes: {
     "mcp:audience": "https://builder.example.test/mcp",

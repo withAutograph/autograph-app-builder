@@ -31,6 +31,7 @@ it("waits for a real request before starting shared auth initialization", async 
   const page = SignUpPage({ searchParams: Promise.resolve({}) });
   const boundary = page.props.children[1] as ReactElement<{ children: ReactElement }>;
   const child = boundary.props.children;
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- The test invokes the rendered boundary with untrusted props.
   const check = child.type as (props: unknown) => Promise<unknown>;
   const pending = check(child.props);
   await Promise.resolve();

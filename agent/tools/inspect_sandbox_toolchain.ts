@@ -81,7 +81,8 @@ export default defineTool({
     });
     const cache =
       backend.blockers.length === 0
-        ? await inspectDependencyCache(sandbox).catch(() => globalThis.undefined)
+        ? // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+          await inspectDependencyCache(sandbox).catch(() => globalThis.undefined)
         : undefined;
     const execution =
       cache === undefined

@@ -460,6 +460,7 @@ const bytesDigest = (value: Uint8Array) => createHash("sha256").update(value).di
 
 // Boundary equality should ignore object property insertion order. Digest
 // construction remains schema-ordered through the existing digest().
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -635,7 +636,7 @@ function releaseGateAbsent(repository: GitHubRepositoryObservation): boolean {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assertCanonicalReview(review: ReviewedChangeSetReceipt): void {
-  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the existing broader shape used by this operation.
+  // oxlint-disable-next-line anti-slop/no-known-value-widening, anti-slop/no-unsafe-dictionary-type -- Keep the existing broader shape used by this operation.; Preserve the existing open-ended value contract.
   const changeSet = { ...review } as Record<string, unknown>;
   delete changeSet.changeSetDigest;
   delete changeSet.reviewedByCallId;

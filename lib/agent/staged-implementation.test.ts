@@ -4,10 +4,12 @@ import { stageImplementationFiles } from "./staged-implementation";
 
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled eve/context dependency used by this test.
 vi.mock("eve/context", () => ({
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- The state fixture retains arbitrary callback values.
   defineState: (_name: string, initial: () => unknown) => {
     let state = initial();
     return {
       get: () => state,
+      // oxlint-disable-next-line anti-slop/no-unknown-returns -- The state fixture retains arbitrary callback values.
       update: (change: (current: unknown) => unknown) => {
         state = change(state);
       },

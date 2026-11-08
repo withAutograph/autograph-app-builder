@@ -72,6 +72,7 @@ Return the requested structured object only.`;
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function judgeDesign(
   input: { brief: string; evidence: unknown; images: ImageEvidence[] },
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep model output unknown until the judge parses it.
   hooks?: { getToken: () => Promise<string>; generate: () => Promise<unknown> },
 ) {
   const base = {

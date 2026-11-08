@@ -201,7 +201,7 @@ interface MutationReadbackFields {
   deliveryId?: string;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// eslint-disable-next-line eslint/func-style, anti-slop/no-unknown-returns -- Keep decoded response JSON unknown until its consumer parses it. Preserve function declaration hoisting and initialization timing.
 async function readJson(response: Response): Promise<unknown> {
   const contentType = response.headers.get(CONTENT_TYPE_HEADER)?.split(";", 1)[0];
   if (contentType !== "application/json") {
@@ -242,6 +242,7 @@ async function postMutation(input: {
   fetchImplementation: typeof fetch;
   path: string;
   principal: HostedPrincipal;
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   body: Record<string, unknown>;
   sourceHandoffId?: string;
   startDiagnostic?: {
@@ -465,6 +466,7 @@ export async function* streamSameOriginEveEvents(input: {
   }
   if (startIndex > tail + 1) {
     // oxlint-disable-next-line promise/prefer-await-to-then -- Cancel best effort without waiting for a provider handshake.
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     void response.body.cancel().catch(() => null);
     throw new Error("Canonical Eve durable tail precedes the saved native cursor.");
   }
@@ -477,6 +479,7 @@ export async function* streamSameOriginEveEvents(input: {
     }
     // Provider cancellation is best effort; a stalled cancel must not hold the response.
     // oxlint-disable-next-line promise/prefer-await-to-then -- Cleanup must not delay the reader.
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     void response.body.cancel().catch(() => null);
     return;
   }
@@ -549,6 +552,7 @@ export async function* streamSameOriginEveEvents(input: {
     // The complete durable tail is already installed (or this read failed).
     // Do not let a provider stream's cancellation handshake hold the MCP reply.
     // oxlint-disable-next-line promise/prefer-await-to-then -- This cleanup must not delay the MCP response.
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     void reader.cancel().catch(() => null);
     try {
       reader.releaseLock();

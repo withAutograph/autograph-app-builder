@@ -18,6 +18,7 @@ const run = async (script: string, args: string[], expected = 0) => {
     stdio: expected === 0 ? "inherit" : "ignore",
   });
   const [code] = await Promise.race([
+    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
     once(child, "error").then(([error]) => {
       throw error;
     }),
@@ -179,6 +180,7 @@ try {
 
   const mutateReceipt = async (
     name: string,
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
     mutation: (receipt: Record<string, unknown>) => void,
   ) => {
     const root = join(temp, `tampered-${name}`);

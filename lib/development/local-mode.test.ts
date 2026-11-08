@@ -34,13 +34,16 @@ afterEach(async () => {
   // Keep filesystem fixtures scoped to this local-mode test.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
   const makeWritable = async (path: string) => {
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await chmod(path, 0o700).catch(() => {});
     await runSequentially(
+      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       await readdir(path, { withFileTypes: true }).catch(() => []),
       async (entry) => {
         if (entry.isDirectory()) {
           await makeWritable(join(path, entry.name));
         } else if (!entry.isSymbolicLink()) {
+          // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
           await chmod(join(path, entry.name), 0o600).catch(() => {});
         }
       },

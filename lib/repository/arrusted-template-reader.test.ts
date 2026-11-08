@@ -25,6 +25,7 @@ function readerFetch(input?: {
   permissions?: Record<string, string>;
   repositorySelection?: "all" | "selected";
   tokenRepositoryIds?: number[];
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   repository?: Record<string, unknown>;
   totalCount?: number;
   status?: number;

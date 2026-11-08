@@ -79,6 +79,7 @@ const run = async (
     child.stdin.end();
   }
   const closed = once(child, "close");
+  // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
   const [code] = await closed.catch((error: unknown) => {
     spawnError = error instanceof Error ? error : new Error(String(error));
     return [null];

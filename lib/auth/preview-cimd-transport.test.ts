@@ -34,6 +34,7 @@ function runLookup(options: LookupOptions) {
       lookup.dispatchEvent(new Event("result"));
     },
   );
+  // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
   return result.then(() => {
     if (lookupError) {
       throw lookupError;

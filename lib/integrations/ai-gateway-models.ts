@@ -15,6 +15,7 @@ const gatewayModelSchema = z
     type: z.string().max(64),
     // Zod's schema fallback API is not a Promise method.
     // oxlint-disable-next-line promise/prefer-await-to-then
+    // oxlint-disable-next-line github/no-then -- Keep the schema fallback for an invalid value.
     zdr: z.enum(["all", "some", "none"]).catch("none"),
   })
   .loose();

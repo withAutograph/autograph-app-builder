@@ -349,9 +349,11 @@ export const inspectSupportedTemplateDependencyClosure =
     };
   };
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const configurationRecord = function configurationRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
+    ? // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+      (value as Record<string, unknown>)
     : {};
 };
 
@@ -367,6 +369,7 @@ echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
 const repositoryReleasePolicyPath = ".github/workflows/cd.yml" as const;
 
 const supportsReleaseGate = function supportsReleaseGate(workflowSource: string): boolean {
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   let workflow: Record<string, unknown>;
   try {
     workflow = configurationRecord(parseYaml(workflowSource));
@@ -516,6 +519,7 @@ export const assertRepositoryReleasePolicyAtGitSnapshot =
 const declaredNextRuntime = function declaredNextRuntime(
   packageSource: string,
 ): "nextjs" | "unsupported" {
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   let packageManifest: Record<string, unknown>;
   try {
     packageManifest = configurationRecord(JSON.parse(packageSource) as unknown);
@@ -832,10 +836,12 @@ const sandboxSourceArchivePath = ".app-builder/source-tree.tar.gz";
 
 const fixtureSandboxEnabled = () => hasTestCapability("simulated-target");
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const isPreparedRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const exactKeys = function exactKeys(
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   value: Record<string, unknown>,
   expected: readonly string[],
 ): boolean {

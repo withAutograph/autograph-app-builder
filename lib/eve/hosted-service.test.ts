@@ -730,6 +730,7 @@ describe("public start request recovery", () => {
 });
 
 const reservationStore = function reservationStore(
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- The reservation fixture accepts the callback's arbitrary result.
   makeReservation: (candidate: HostedOperationRecord) => unknown,
 ): HostedEveStore {
   return {

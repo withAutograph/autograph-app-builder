@@ -14,6 +14,7 @@ const resource = "https://builder.example.test/mcp";
 // this boundary; real OAuth behavior is covered by preview-oauth-real.test.ts.
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function storage() {
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   const rows = new Map<unknown, Record<string, unknown>[]>([
     [oauthClient, []],
     [oauthClientResource, []],
@@ -43,6 +44,7 @@ function storage() {
   });
   const database = {
     insert: vi.fn((table: unknown) => ({
+      // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
       values: (row: Record<string, unknown>) => ({
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         onConflictDoNothing: async () => {
@@ -54,6 +56,7 @@ function storage() {
       }),
     })),
     select: vi.fn(() => ({ from: selectFrom })),
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- The transaction fixture preserves the callback's arbitrary result.
     transaction: async (operation: (tx: unknown) => Promise<unknown>) => {
       const before = structuredClone([...rows.values()]);
       try {

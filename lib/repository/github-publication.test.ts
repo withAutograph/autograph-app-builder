@@ -1284,6 +1284,7 @@ describe("closed GitHub publication contract", () => {
         proposal,
         review: review(),
         store,
+        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       }).catch((error: unknown) => error);
       expect(failure).toBeInstanceOf(Error);
       if (!(failure instanceof Error)) {

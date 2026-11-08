@@ -153,6 +153,7 @@ export const runTrustedBrowserWorkflows = async <TPage>(input: {
           );
         } finally {
           for (const context of contexts) {
+            // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
             await context.close().catch(() => {
               // Cleanup does not change the recorded product outcome.
             });

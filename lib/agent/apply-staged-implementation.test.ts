@@ -6,6 +6,7 @@ import type { ApprovalPolicy } from "eve/tools/approval";
 import applyAppCreation from "../../agent/tools/apply_app_creation";
 
 const mocks = vi.hoisted(() => {
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   const current: Record<string, unknown> = {};
   return {
     current,
@@ -18,10 +19,12 @@ vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled eve/context dependency used by this test.
 vi.mock("eve/context", () => ({
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- The state fixture retains arbitrary callback values.
   defineState: (_name: string, initial: () => unknown) => {
     let state = initial();
     return {
       get: () => state,
+      // oxlint-disable-next-line anti-slop/no-unknown-returns -- The state fixture retains arbitrary callback values.
       update: (change: (current: unknown) => unknown) => {
         state = change(state);
       },

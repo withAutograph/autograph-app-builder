@@ -36,9 +36,12 @@ interface ReferenceCapturePage {
 
 interface ReferenceCaptureHarness<TPage> {
   appOrigin: string;
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep the capture fixture compatible with arbitrary page results.
   currentSession: (page: TPage) => Promise<unknown>;
   databaseUrl: string;
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep the capture fixture compatible with arbitrary page results.
   finishOAuth: (page: TPage, provider: "GitHub") => Promise<unknown>;
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep the capture fixture compatible with arbitrary page results.
   waitForBuilderReady: (page: TPage) => Promise<unknown>;
 }
 

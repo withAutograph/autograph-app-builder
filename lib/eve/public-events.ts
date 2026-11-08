@@ -159,6 +159,7 @@ const recordStringField = (value: unknown, key: string): string | undefined => {
   if (typeof value !== "object" || value === null || !(key in value)) {
     return undefined;
   }
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   const field = (value as Record<string, unknown>)[key];
   return typeof field === "string" ? field : undefined;
 };

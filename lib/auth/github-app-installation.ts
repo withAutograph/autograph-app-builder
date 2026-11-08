@@ -246,9 +246,11 @@ const membershipStateConsumption = "membership-state-consumption";
 const invalidResponse = "invalid-response";
 const invalidToken = "invalid-token";
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const isNonArrayObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- Property values from external data remain untrusted.
 const property = (value: unknown, key: string): unknown => {
   if (!isNonArrayObject(value) || !(key in value)) {
     throw new Error(invalidResponse);
@@ -570,6 +572,7 @@ const oauthErrorCategoryFromException = (error: unknown) => {
   }
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- Property values from external data remain untrusted.
 const propertyOrUndefined = (value: unknown, key: string): unknown => {
   if (!isNonArrayObject(value)) {
     return undefined;

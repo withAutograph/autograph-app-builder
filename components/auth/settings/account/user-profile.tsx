@@ -48,6 +48,7 @@ export function UserProfile({ className }: UserProfileProps) {
     const formData = new FormData(e.currentTarget);
     const name = formData.get("name") as string;
 
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
     const additionalFieldValues: Record<string, unknown> = {};
 
     for (const field of additionalFields ?? []) {
@@ -154,6 +155,7 @@ export function UserProfile({ className }: UserProfileProps) {
                 );
               }
 
+              // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
               const value = (session.user as Record<string, unknown>)[field.name];
 
               // Re-mount when the session value loads so the field's

@@ -74,6 +74,7 @@ export const authorizationUrl = (
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export const createRealOAuthHarness = async (
   activeWorkspaces: string[] = ["workspace_1"],
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   clientMetadata: Record<string, unknown> = DEFAULT_CLIENT_METADATA,
   rateLimit: BetterAuthOptions["rateLimit"] = DEFAULT_RATE_LIMIT,
 ) => {
@@ -123,6 +124,7 @@ export const createRealOAuthHarness = async (
       secret: "test-secret-that-is-long-enough-for-better-auth",
     },
     { port: 3000 },
+    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
   ).then((instance) => ({
     ...instance,
     fetchClientMetadata,

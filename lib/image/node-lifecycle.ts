@@ -282,6 +282,7 @@ export const withLifecycleLock = async function withLifecycleLock<T>(
     const listening = once(server, "listening");
     server.listen({ exclusive: true, host: "127.0.0.1", port });
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
     const acquired = await listening.then(
       () => true,
       (error: unknown) => {
@@ -1037,6 +1038,7 @@ export const ghcrCredentialEnvironment = function ghcrCredentialEnvironment(
 export const hasExactKeys = function hasExactKeys<Value extends object, Key extends string>(
   value: Value,
   expected: readonly Key[],
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 ): value is Value & Record<Key, unknown> {
   const actual = Object.keys(value).toSorted();
   const wanted = [...expected].toSorted();
@@ -1202,7 +1204,9 @@ const verifyGhcrLoginWithOwnedProcessGroup = async function verifyGhcrLoginWithO
     terminate();
   }, 50_000);
   try {
+    // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
     const status = await once(child, "close").then(
+      // oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve the child-process close value at this boundary.
       ([code]): unknown => code ?? -1,
       () => -1,
     );

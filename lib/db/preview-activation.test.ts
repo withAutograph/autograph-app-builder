@@ -34,6 +34,7 @@ const activationDatabase = async () => {
   const sql = new Proxy(client, {
     get(_target, property) {
       if (property === "begin") {
+        // oxlint-disable-next-line anti-slop/no-unknown-returns -- The transaction fixture preserves arbitrary callback results.
         return async (operation: (transaction: Sql) => Promise<unknown>) => {
           transactionCount += 1;
           db.exec("BEGIN");

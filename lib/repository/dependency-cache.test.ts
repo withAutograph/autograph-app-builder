@@ -566,6 +566,7 @@ describe("offline dependency cache", () => {
         ]),
       ).rejects.toThrow();
     } finally {
+      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       await executeFile("/bin/chmod", ["-R", "u+w", root]).catch(() => {});
       await rm(root, { force: true, recursive: true });
     }

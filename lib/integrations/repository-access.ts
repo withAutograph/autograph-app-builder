@@ -143,7 +143,9 @@ export interface GitHubRepositoryAccessProvider {
   inspectInstallation: (input: {
     operation: "resolve-existing-source";
     requestedPermissions: z.infer<typeof readPermissionsSchema>;
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep external provider responses untrusted at this boundary.
   }) => Promise<unknown>;
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep external provider responses untrusted at this boundary.
   inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown>;
   inspectTargetAccess?: GitHubTargetAccessProvider["inspectTargetAccess"];
 }

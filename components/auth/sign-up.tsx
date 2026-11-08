@@ -447,6 +447,7 @@ export function SignUp({
       return;
     }
 
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
     const additionalFieldValues: Record<string, unknown> = {};
 
     for (const field of additionalFields ?? []) {

@@ -333,6 +333,7 @@ describe("target validation", () => {
           path: "apps/example/test/review.test.ts",
         }),
       );
+      // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep parsed log JSON unknown before test inspection.
       const events = info.mock.calls.map(([entry]): unknown => JSON.parse(z.string().parse(entry)));
       expect(events).toEqual([
         expect.objectContaining({

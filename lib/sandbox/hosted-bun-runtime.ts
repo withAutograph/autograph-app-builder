@@ -76,6 +76,7 @@ export function createHostedRuntimeInstaller() {
     // oxlint-disable promise/prefer-await-to-then
     // oxlint-disable-next-line promise/prefer-await-to-then
     const install: Promise<void> = Promise.resolve(sandbox.run(hostedBunRuntimeInstallRequest))
+      // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
       .then(async (result) => {
         if (result.exitCode !== 0) {
           throw new Error(
@@ -92,6 +93,7 @@ export function createHostedRuntimeInstaller() {
       // Preserve the shared lazy promise while clearing it after a failed install.
       // oxlint-disable-next-line promise/prefer-await-to-callbacks
       // oxlint-disable-next-line promise/prefer-await-to-then
+      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       .catch((error: unknown) => {
         if (installs.get(sandbox.id) === install) {
           installs.delete(sandbox.id);

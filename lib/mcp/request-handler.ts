@@ -96,6 +96,7 @@ export interface HostedBuilderHandoffRuntime {
     handoffId: string;
     requestDigest: string;
     sessionId: string;
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep the injected session result untrusted at this boundary.
   }) => Promise<unknown>;
   recheckRepositoryAccess: (input: {
     principal: HostedPrincipal;

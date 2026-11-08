@@ -1521,7 +1521,9 @@ wait
       { stdio: ["ignore", "pipe", "inherit"] },
     );
     const output = await Promise.race([
+      // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
       once(child.stdout, "data").then(([chunk]) => z.instanceof(Buffer).parse(chunk).toString()),
+      // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
       delay(3000).then(() => {
         throw new Error("Timed out waiting for lifecycle crash fixture.");
       }),

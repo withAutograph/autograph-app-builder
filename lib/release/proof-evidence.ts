@@ -17,6 +17,7 @@ export function parseReviewedProof<const Evaluation extends ReleaseEvaluation>(
   const terminal = [...output.matchAll(/\{[^\n]+\}/gu)]
     .map(([value]) => {
       try {
+        // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
         return JSON.parse(value) as Record<string, unknown>;
       } catch {
         return null;

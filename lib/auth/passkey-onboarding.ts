@@ -402,6 +402,7 @@ export function createPasskeyOnboardingPlugin(input: {
             session: {
               create: {
                 async before(
+                  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
                   session: Record<string, unknown> & { userId: string },
                   ctx: { path?: string; context: { adapter: unknown } } | null,
                 ) {

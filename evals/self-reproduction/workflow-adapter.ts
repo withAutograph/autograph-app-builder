@@ -89,6 +89,7 @@ const firstVisible = async (locators: Locator[]) => {
       await locator
         .first()
         .isVisible()
+        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
         .catch(() => false)
     ) {
       return locator.first();
@@ -117,6 +118,7 @@ const semanticCandidateAdapter = (
       await docs.click();
       const content = page.locator("main, article").first();
       const readable =
+        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
         (await content.isVisible().catch(() => false)) &&
         ((await content.textContent()) ?? "").trim().length > 0 &&
         (await page.locator("body").textContent()) !== initialContent;

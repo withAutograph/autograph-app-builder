@@ -189,6 +189,7 @@ export const startSelfReproductionReferenceRuntime = async (input: {
       }
     }
     if (server) {
+      // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
       await run(["run", "auth-e2e:reset"], "reference-cleanup").catch(() => {
         // Cleanup is best effort after stopping the isolated server.
       });

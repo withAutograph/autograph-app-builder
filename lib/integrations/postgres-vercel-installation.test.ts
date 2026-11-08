@@ -39,6 +39,7 @@ function databaseFixture(rows: unknown[]) {
     set: vi.fn(),
     update: vi.fn(),
     values: vi.fn(),
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- The database fixture accepts the observed query result shape.
     where: vi.fn<(condition: SQL) => unknown>(),
   };
   for (const key of [

@@ -348,6 +348,7 @@ interface ImageInspect {
   Architecture?: unknown;
   Os?: unknown;
   RepoTags?: unknown;
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   Config?: { Labels?: Record<string, unknown> };
   RootFS?: { Layers?: unknown };
   Descriptor?: {
@@ -361,6 +362,7 @@ interface ImageInspect {
 const hasExactKeys = <Value extends object, Key extends string>(
   value: Value,
   expected: readonly Key[],
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 ): value is Value & Record<Key, unknown> => {
   const actual = Object.keys(value).toSorted();
   const wanted = [...expected].toSorted();
@@ -479,6 +481,7 @@ interface RemoteManifest {
 interface RemoteImage {
   architecture?: unknown;
   os?: unknown;
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   config?: { Labels?: Record<string, unknown> };
   rootfs?: { diff_ids?: unknown };
 }

@@ -111,6 +111,7 @@ if (finding.status === "ready") {
         });
         await page
           .waitForLoadState("networkidle", { timeout: Math.min(timeoutMs, 10_000) })
+          // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
           .catch(() => {
             // A quiet network is advisory; the rendered page remains observable.
           });
@@ -148,14 +149,17 @@ if (finding.status === "ready") {
             .getByLabel(/your app brief|description/iu)
             .or(page.getByPlaceholder(/your app brief|description/iu))
             .first();
+          // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
           if (await field.isVisible().catch(() => false)) {
             await field.fill(syntheticBrief);
             const actualValue = await field.inputValue();
             const continuation = page.getByRole("button", { name: /continue/iu }).first();
             const valueMatched = actualValue === syntheticBrief;
+            // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
             const continuationVisible = await continuation.isVisible().catch(() => false);
             const enabled = continuationVisible
-              ? await continuation.isEnabled().catch(() => false)
+              ? // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+                await continuation.isEnabled().catch(() => false)
               : false;
             brief = continuationVisible
               ? {
@@ -225,6 +229,7 @@ if (finding.status === "ready") {
           )}\n`,
           { mode: 0o600 },
         );
+        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
         await context.close().catch(() => {
           // Observation receipts survive cleanup failures.
         });
@@ -273,6 +278,7 @@ if (finding.status === "ready") {
     console.error(`Preview observation blocked; report: ${path.join(output, reportIndexFilename)}`);
     process.exitCode = 75;
   } finally {
+    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
     await browser?.close().catch(() => {
       // Report writing is already complete.
     });

@@ -24,11 +24,13 @@ interface VercelOidcClaims {
 
 const OWNER_BOUND_INPUT_ERROR = "Installed Eve input was not owner-bound.";
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const closedObject = (value: unknown, name: string): Record<string, unknown> => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${name} was not an object.`);
   }
   // SAFETY: The checks above exclude null, arrays, and non-object values; property values remain unknown.
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
   return value as Record<string, unknown>;
 };
 
@@ -184,6 +186,7 @@ export const resolveInstalledEveCli = (repositoryRootInput: string): string => {
   return cli;
 };
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const requiredString = (value: Record<string, unknown>, key: string): string => {
   const candidate = value[key];
   if (typeof candidate !== "string" || candidate.length === 0) {
@@ -192,6 +195,7 @@ const requiredString = (value: Record<string, unknown>, key: string): string => 
   return candidate;
 };
 
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 const requiredInteger = (value: Record<string, unknown>, key: string): number => {
   const candidate = value[key];
   if (!Number.isSafeInteger(candidate)) {
