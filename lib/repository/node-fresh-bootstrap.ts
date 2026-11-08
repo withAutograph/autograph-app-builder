@@ -1004,7 +1004,9 @@ const quiesceAbandonedLease = async (
   holder.stderr.setEncoding("utf-8");
   holder.stderr.on("data", (chunk: string) => (stderr += chunk));
   const { promise: exited, resolve: resolveExit } = Promise.withResolvers<undefined>();
-  holder.once("exit", () => resolveExit(undefined as undefined));
+  holder.once("exit", () => {
+    resolveExit(undefined as undefined);
+  });
   const { promise: ready, reject, resolve } = Promise.withResolvers<undefined>();
   const timeout = setTimeout(() => {
     holder.kill("SIGKILL");
@@ -1757,7 +1759,9 @@ const materializeFile = async (
         const completion = new Promise<{ status: number | null; signal: NodeJS.Signals | null }>(
           (resolve, reject) => {
             child.once("error", reject);
-            child.once("close", (status, signal) => resolve({ signal, status }));
+            child.once("close", (status, signal) => {
+              resolve({ signal, status });
+            });
           },
         );
         // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then -- Observe early spawn failures while piping input.
