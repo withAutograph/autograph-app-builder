@@ -350,7 +350,14 @@ export default defineTool({
         digest: state.reviewReceipt.digest,
       };
     }
-    return { ...result, ...summaries, ...githubDraftPublication, ...publication, ...branchPublication, ...freshBootstrap };
+    return {
+      ...result,
+      ...summaries,
+      ...githubDraftPublication,
+      ...publication,
+      ...branchPublication,
+      ...freshBootstrap,
+    };
   },
   inputSchema: z.object({}),
 });
