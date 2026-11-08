@@ -156,10 +156,13 @@ export const inspectNativeTargetVercelAuthorization = async (input: {
         (value.disabledReason !== null && value.disabledReason !== undefined),
     };
   } catch {
-    return {
+    const observation: NativeTargetVercelAuthorizationObservation = {
       status: "unavailable",
       failure: input.signal.aborted ? "cancelled" : "request_failed",
-      ...(statusCode === undefined ? {} : { statusCode }),
     };
+    if (statusCode !== undefined) {
+      observation.statusCode = statusCode;
+    }
+    return observation;
   }
 };

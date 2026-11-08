@@ -41,7 +41,7 @@ function requiredEnvironmentValue(environment: NodeJS.ProcessEnv, name: "HOME" |
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function commandEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  return {
+  const commandEnv: NodeJS.ProcessEnv = {
     CI: environment.CI ?? "",
     HOME: requiredEnvironmentValue(environment, "HOME"),
     LANG: environment.LANG ?? "C",
@@ -50,11 +50,12 @@ function commandEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     PATH: requiredEnvironmentValue(environment, "PATH"),
     TMPDIR: environment.TMPDIR ?? "/tmp",
     TZ: environment.TZ ?? "",
-    // Vercel CLI resolves its existing login/configuration under its XDG data directory.
-    ...(environment.XDG_DATA_HOME === undefined
-      ? {}
-      : { XDG_DATA_HOME: environment.XDG_DATA_HOME }),
   };
+  // Vercel CLI resolves its existing login/configuration under its XDG data directory.
+  if (environment.XDG_DATA_HOME !== undefined) {
+    commandEnv.XDG_DATA_HOME = environment.XDG_DATA_HOME;
+  }
+  return commandEnv;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

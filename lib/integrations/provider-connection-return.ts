@@ -26,10 +26,13 @@ export function parseProviderConnectionReturn(input: {
 }): ProviderConnectionReturn {
   const returnTo = first(input.returnTo);
   const resumeKey = first(input.resumeKey);
-  return {
+  const result: ProviderConnectionReturn = {
     returnTo: providerConnectionReturnToSchema.parse(returnTo ?? "/"),
-    ...(resumeKey === undefined ? {} : { resumeKey: resumeKeySchema.parse(resumeKey) }),
   };
+  if (resumeKey !== undefined) {
+    result.resumeKey = resumeKeySchema.parse(resumeKey);
+  }
+  return result;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

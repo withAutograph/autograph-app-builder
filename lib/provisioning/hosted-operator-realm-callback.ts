@@ -316,8 +316,10 @@ const reportPrivateStageFailure = (
   const failure: PrivateStageFailure = {
     stage,
     errorClass: "unknown",
-    ...(stage === "proof_verification" && jwks !== undefined ? { jwks } : {}),
   };
+  if (stage === "proof_verification" && jwks !== undefined) {
+    failure.jwks = jwks;
+  }
   try {
     // Read only an own data descriptor; a hostile code getter is never invoked.
     const code: unknown = Object.getOwnPropertyDescriptor(error, "code")?.value;

@@ -130,16 +130,21 @@ export const initialBuilderProvisionJournalRecord = (
   now: Date,
 ): BuilderProvisionJournalRecord => {
   const request = builderProvisionRequestSchema.parse(requestInput);
-  return builderProvisionJournalRecordSchema.parse({
-    operations: {
-      github: { absentCandidates: [], attempted: false, candidates: [] },
-      vercel: { absentCandidates: [], attempted: false, candidates: [] },
-    },
+  const parse = builderProvisionJournalRecordSchema.parse.bind(builderProvisionJournalRecordSchema);
+  const operations = {
+    github: { absentCandidates: [], attempted: false, candidates: [] },
+    vercel: { absentCandidates: [], attempted: false, candidates: [] },
+  };
+  const requestHead: Pick<BuilderProvisionRequest, "appName" | "deploymentAccess"> = {
+    appName: request.appName,
+  };
+  if (request.deploymentAccess !== undefined) {
+    requestHead.deploymentAccess = request.deploymentAccess;
+  }
+  return parse({
+    operations,
     request: {
-      appName: request.appName,
-      ...(request.deploymentAccess === undefined
-        ? {}
-        : { deploymentAccess: request.deploymentAccess }),
+      ...requestHead,
       providers: request.providers,
       repository: request.repository,
       requestId: request.requestId,

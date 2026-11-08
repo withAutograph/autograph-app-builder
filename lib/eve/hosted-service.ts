@@ -4924,43 +4924,51 @@ export function createHostedEveSessionService(input: {
                   spool.observation.prototypeRef !== undefined
                 ) {
                   const timestamp = now();
-                  const metadata: HostedPagedCheckpointMetadata = {
-                    capturedAtEpochMs: timestamp,
-                    ...(spool.observation.pendingRequests.length === 0
-                      ? {}
-                      : { inputRequests: spool.observation.pendingRequests }),
-                    ...(spool.observation.prototype === undefined
-                      ? {}
-                      : { prototype: spool.observation.prototype }),
-                    ...(spool.observation.prototypeRef === undefined
-                      ? {}
-                      : { prototypeRef: spool.observation.prototypeRef }),
-                    status: spool.observation.status,
-                    ...(spool.observation.uiPreview === undefined
-                      ? {}
-                      : { uiPreview: spool.observation.uiPreview }),
-                    version: 1,
-                    ...(spool.observation.workingPreview === undefined
-                      ? {}
-                      : { workingPreview: spool.observation.workingPreview }),
-                  };
-                  const summary = eveSessionResultSchema.parse({
-                    cursor: 0,
-                    events: [],
-                    ...(metadata.inputRequests === undefined
-                      ? {}
-                      : { inputRequests: metadata.inputRequests }),
-                    ...(metadata.prototype === undefined ? {} : { prototype: metadata.prototype }),
-                    ...(metadata.prototypeRef === undefined
-                      ? {}
-                      : { prototypeRef: metadata.prototypeRef }),
+                  const metadataDetails: Pick<HostedPagedCheckpointMetadata, "capturedAtEpochMs"> &
+                    Partial<HostedPagedCheckpointMetadata> = { capturedAtEpochMs: timestamp };
+                  if (spool.observation.pendingRequests.length !== 0) {
+                    metadataDetails.inputRequests = spool.observation.pendingRequests;
+                  }
+                  if (spool.observation.prototype !== undefined) {
+                    metadataDetails.prototype = spool.observation.prototype;
+                  }
+                  if (spool.observation.prototypeRef !== undefined) {
+                    metadataDetails.prototypeRef = spool.observation.prototypeRef;
+                  }
+                  const metadataStatus = { ...metadataDetails, status: spool.observation.status };
+                  if (spool.observation.uiPreview !== undefined) {
+                    metadataStatus.uiPreview = spool.observation.uiPreview;
+                  }
+                  const metadata: HostedPagedCheckpointMetadata = { ...metadataStatus, version: 1 };
+                  if (spool.observation.workingPreview !== undefined) {
+                    metadata.workingPreview = spool.observation.workingPreview;
+                  }
+                  const summaryDetails: Pick<
+                    z.input<typeof eveSessionResultSchema>,
+                    "cursor" | "events"
+                  > &
+                    Partial<z.input<typeof eveSessionResultSchema>> = { cursor: 0, events: [] };
+                  if (metadata.inputRequests !== undefined) {
+                    summaryDetails.inputRequests = metadata.inputRequests;
+                  }
+                  if (metadata.prototype !== undefined) {
+                    summaryDetails.prototype = metadata.prototype;
+                  }
+                  if (metadata.prototypeRef !== undefined) {
+                    summaryDetails.prototypeRef = metadata.prototypeRef;
+                  }
+                  const summaryStatus = {
+                    ...summaryDetails,
                     sessionId: existing.sessionId,
                     status: metadata.status,
-                    ...(metadata.uiPreview === undefined ? {} : { uiPreview: metadata.uiPreview }),
-                    ...(metadata.workingPreview === undefined
-                      ? {}
-                      : { workingPreview: metadata.workingPreview }),
-                  });
+                  };
+                  if (metadata.uiPreview !== undefined) {
+                    summaryStatus.uiPreview = metadata.uiPreview;
+                  }
+                  if (metadata.workingPreview !== undefined) {
+                    summaryStatus.workingPreview = metadata.workingPreview;
+                  }
+                  const summary = eveSessionResultSchema.parse(summaryStatus);
                   const replaced = await input.store.replaceSessionAdapterPaged({
                     adapterSessionId: response.adapterSessionId,
                     ...(summary.uiPreview?.appId === undefined
