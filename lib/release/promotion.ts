@@ -166,7 +166,13 @@ export async function exactCleanGitSource(rootInput: string, label: string) {
     root !== rootInput ||
     requested !== rootInput ||
     !info.isDirectory() ||
-    info.isSymbolicLink() ||
+    info.isSymbolicLink()
+  ) {
+    throw new Error(
+      `${label} root must be canonical, current-user-owned, and not writable by another account.`,
+    );
+  }
+  if (
     info.uid !== process.getuid?.() ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & 0o022) !== 0
@@ -235,21 +241,32 @@ export async function inspectOciCandidateArchive(path: string) {
       digest: string;
       mediaType: string;
       platform: { os: string; architecture: string };
-    } =>
-      typeof entry === "object" &&
-      entry !== null &&
-      "digest" in entry &&
-      typeof entry.digest === "string" &&
-      /^sha256:[0-9a-f]{64}$/u.test(entry.digest) &&
-      "mediaType" in entry &&
-      entry.mediaType === "application/vnd.oci.image.manifest.v1+json" &&
-      "platform" in entry &&
-      typeof entry.platform === "object" &&
-      entry.platform !== null &&
-      "os" in entry.platform &&
-      entry.platform.os === "linux" &&
-      "architecture" in entry.platform &&
-      entry.platform.architecture === "arm64",
+    } => {
+      if (typeof entry !== "object" || entry === null || !("digest" in entry)) {
+        return false;
+      }
+      if (
+        typeof entry.digest !== "string" ||
+        !/^sha256:[0-9a-f]{64}$/u.test(entry.digest) ||
+        !("mediaType" in entry) ||
+        entry.mediaType !== "application/vnd.oci.image.manifest.v1+json"
+      ) {
+        return false;
+      }
+      if (
+        !("platform" in entry) ||
+        typeof entry.platform !== "object" ||
+        entry.platform === null ||
+        !("os" in entry.platform)
+      ) {
+        return false;
+      }
+      return (
+        entry.platform.os === "linux" &&
+        "architecture" in entry.platform &&
+        entry.platform.architecture === "arm64"
+      );
+    },
   );
   if (candidates.length !== 1) {
     throw new Error("Release OCI archive must contain one linux/arm64 image.");
@@ -273,10 +290,11 @@ export async function inspectOciCandidateArchive(path: string) {
   if (
     manifest.schemaVersion !== 2 ||
     typeof manifest.config?.digest !== "string" ||
-    !/^sha256:[0-9a-f]{64}$/u.test(manifest.config.digest) ||
-    !Array.isArray(manifest.layers) ||
-    manifest.layers.length === 0
+    !/^sha256:[0-9a-f]{64}$/u.test(manifest.config.digest)
   ) {
+    throw new Error("Release OCI platform manifest was incomplete.");
+  }
+  if (!Array.isArray(manifest.layers) || manifest.layers.length === 0) {
     throw new Error("Release OCI platform manifest was incomplete.");
   }
   return {
@@ -380,9 +398,16 @@ export async function verifyPromotionCandidate(input: {
     root !== nodePath.resolve(input.candidateRoot) ||
     !rootInfo.isDirectory() ||
     rootInfo.isSymbolicLink() ||
-    rootInfo.uid !== process.getuid?.() ||
+    rootInfo.uid !== process.getuid?.()
+  ) {
+    throw new Error(
+      "Release candidate root must be canonical, current-user-owned, and not writable by another account.",
+    );
+  }
+  if (
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (rootInfo.mode & 0o022) !== 0
+    (rootInfo.mode & 0o022) !==
+    0
   ) {
     throw new Error(
       "Release candidate root must be canonical, current-user-owned, and not writable by another account.",
@@ -411,9 +436,11 @@ export async function verifyPromotionCandidate(input: {
     packageReceipt.version !== receipt.package.version ||
     packageReceipt.source.sha !== receipt.builder.commit ||
     packageReceipt.source.tree !== receipt.builder.tree ||
-    packageReceipt.endpoint !== receipt.endpoint ||
-    JSON.stringify(packageReceipt.tools) !== JSON.stringify(receipt.tools)
+    packageReceipt.endpoint !== receipt.endpoint
   ) {
+    throw new Error("Portable package binding did not match promotion.");
+  }
+  if (JSON.stringify(packageReceipt.tools) !== JSON.stringify(receipt.tools)) {
     throw new Error("Portable package binding did not match promotion.");
   }
   await Promise.all([

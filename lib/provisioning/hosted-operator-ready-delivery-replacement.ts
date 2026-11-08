@@ -85,13 +85,20 @@ const sameOwnership = (prior: HostedOperatorPlan, next: HostedOperatorPlan) => {
   ].every(Boolean);
 };
 
-const matchesRequest = (record: HostedRuntimeJournalRecord, plan: HostedOperatorPlan) =>
-  record.request.environment === "preview" &&
-  record.request.sessionId === plan.selection.sessionId &&
-  record.request.appId === plan.selection.appId &&
-  record.request.projectId === plan.selection.projectId &&
-  record.request.scopeType === "team" &&
-  record.request.scopeId === plan.deploymentBoundary?.teamId;
+const matchesRequest = (record: HostedRuntimeJournalRecord, plan: HostedOperatorPlan) => {
+  if (
+    record.request.environment !== "preview" ||
+    record.request.sessionId !== plan.selection.sessionId ||
+    record.request.appId !== plan.selection.appId
+  ) {
+    return false;
+  }
+  return (
+    record.request.projectId === plan.selection.projectId &&
+    record.request.scopeType === "team" &&
+    record.request.scopeId === plan.deploymentBoundary?.teamId
+  );
+};
 
 const ownedReadyCandidate = (
   candidates: readonly OperatorDeploymentCandidate[] | undefined,

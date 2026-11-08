@@ -253,7 +253,11 @@ export function assertCurrentTargetApplyReceipt(input: {
   if (
     input.version !== 2 ||
     input.appSpecPath === undefined ||
-    !safeSourcePath(input.appSpecPath) ||
+    !safeSourcePath(input.appSpecPath)
+  ) {
+    throw new Error("A canonical V2 target apply receipt is required.");
+  }
+  if (
     !digestSchema.safeParse(input.appSpecDigest).success ||
     !digestSchema.safeParse(input.preparedTreeDigest).success
   ) {
@@ -526,20 +530,18 @@ export async function inspectFixtureApplyOverlay(
   if (sourceManifest === null) {
     throw new Error("The prepared workspace manifest is missing.");
   }
+  const invalidManifest = "The prepared workspace manifest is invalid.";
   const parsed = JSON.parse(sourceManifest) as unknown;
   if (!Array.isArray(parsed)) {
-    throw new TypeError("The prepared workspace manifest is invalid.");
+    throw new TypeError(invalidManifest);
   }
   const manifestEntries: unknown[] = parsed;
   const sourceFiles = manifestEntries.map((candidate) => {
-    if (
-      typeof candidate !== "object" ||
-      candidate === null ||
-      !("path" in candidate) ||
-      typeof candidate.path !== "string" ||
-      !safeSourcePath(candidate.path)
-    ) {
-      throw new Error("The prepared workspace manifest is invalid.");
+    if (typeof candidate !== "object" || candidate === null || !("path" in candidate)) {
+      throw new Error(invalidManifest);
+    }
+    if (typeof candidate.path !== "string" || !safeSourcePath(candidate.path)) {
+      throw new Error(invalidManifest);
     }
     return {
       mode: "mode" in candidate && candidate.mode === "100755" ? "755" : "644",
@@ -640,9 +642,17 @@ function parseTargetReceipt(
   if (
     receipt.appId !== proposal.contract.appId ||
     receipt.workspacePath !== proposal.plan.source.workspacePath ||
-    receipt.topology.path !== proposal.plan.topology.configPath ||
-    (proposal.plan.topology.currentDigest !== undefined &&
-      receipt.topology.oldDigest !== proposal.plan.topology.currentDigest) ||
+    receipt.topology.path !== proposal.plan.topology.configPath
+  ) {
+    return undefined;
+  }
+  if (
+    proposal.plan.topology.currentDigest !== undefined &&
+    receipt.topology.oldDigest !== proposal.plan.topology.currentDigest
+  ) {
+    return undefined;
+  }
+  if (
     (proposal.plan.topology.proposedDigest !== undefined &&
       receipt.topology.newDigest !== proposal.plan.topology.proposedDigest) ||
     receipt.mutations[0] !== proposal.plan.source.workspacePath
@@ -687,13 +697,17 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
         const current = await sandbox.readBinaryFile({
           path: `${relativeRoot}/${change.path}`,
         });
-        if (
-          ((change.before === undefined
+        const mismatchedBefore =
+          change.before === undefined
             ? current !== null
-            : current === null || sha256(current) !== change.before.digest) &&
-            (change.after === undefined
-              ? current !== null
-              : current === null || sha256(current) !== change.after.digest)) ||
+            : current === null || sha256(current) !== change.before.digest;
+        const mismatchedPreimage =
+          mismatchedBefore &&
+          (change.after === undefined
+            ? current !== null
+            : current === null || sha256(current) !== change.after.digest);
+        if (
+          mismatchedPreimage ||
           (change.after !== undefined && change.after.digest !== sha256(change.after.content))
         ) {
           return {

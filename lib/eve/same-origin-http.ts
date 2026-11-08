@@ -655,21 +655,37 @@ const createArtifactReadbackClassifier = (sessionId: string, seed?: ArtifactRead
       if (result.toolName === "get_prototype_artifact") {
         const read = v2ReadRequestSchema.safeParse(request.input);
         const output = v2ReadResultSchema.safeParse(result.output);
+        if (!read.success || !output.success || reference === undefined) {
+          legacy = true;
+          return;
+        }
         if (
-          !read.success ||
-          !output.success ||
-          reference === undefined ||
           read.data.path !== reference.path ||
           read.data.digest !== reference.digest ||
           read.data.revision !== reference.revision ||
-          read.data.offsetBytes !== output.data.byteOffset ||
+          read.data.offsetBytes !== output.data.byteOffset
+        ) {
+          legacy = true;
+          return;
+        }
+        if (
           output.data.path !== reference.path ||
           output.data.digest !== reference.digest ||
           output.data.revision !== reference.revision ||
-          output.data.totalBytes !== reference.contentBytes ||
+          output.data.totalBytes !== reference.contentBytes
+        ) {
+          legacy = true;
+          return;
+        }
+        if (
           output.data.nextOffsetBytes <= output.data.byteOffset ||
           output.data.nextOffsetBytes > reference.contentBytes ||
-          output.data.complete !== (output.data.nextOffsetBytes === reference.contentBytes) ||
+          output.data.complete !== (output.data.nextOffsetBytes === reference.contentBytes)
+        ) {
+          legacy = true;
+          return;
+        }
+        if (
           createHash("sha256").update(output.data.content).digest("hex") !==
             output.data.chunkDigest ||
           Buffer.byteLength(output.data.content, "utf-8") !==
@@ -1832,9 +1848,13 @@ export function createSameOriginEveTransport(input: {
       const cancelled = cancelResponseSchema.parse(await readJson(response));
       if (
         (response.status === 202 && cancelled.status !== "accepted") ||
-        (response.status === 200 && cancelled.status !== "no_active_turn") ||
-        (cancelled.status === "accepted" &&
-          cancelled.sessionId !== (request.logicalSessionId ?? request.adapterSessionId))
+        (response.status === 200 && cancelled.status !== "no_active_turn")
+      ) {
+        throw new SubmissionOutcomeUnknownError();
+      }
+      if (
+        cancelled.status === "accepted" &&
+        cancelled.sessionId !== (request.logicalSessionId ?? request.adapterSessionId)
       ) {
         throw new SubmissionOutcomeUnknownError();
       }

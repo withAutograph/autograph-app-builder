@@ -18,9 +18,10 @@ const ONE = 1;
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const repositoryRootStat = statSync(repositoryRoot, { bigint: true });
+const invalidRootPath =
+  !path.isAbsolute(repositoryRoot) || realpathSync(repositoryRoot) !== repositoryRoot;
 if (
-  !path.isAbsolute(repositoryRoot) ||
-  realpathSync(repositoryRoot) !== repositoryRoot ||
+  invalidRootPath ||
   !repositoryRootStat.isDirectory() ||
   repositoryRootStat.uid !== BigInt(process.getuid?.() ?? -1) ||
   // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -71,10 +72,10 @@ function childEnvironment() {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function gateAEvalWorkflowBodyTimeout(profile: unknown): string | undefined {
+  if (typeof profile !== "object" || profile === null || !Object.isFrozen(profile)) {
+    return undefined;
+  }
   if (
-    typeof profile !== "object" ||
-    profile === null ||
-    !Object.isFrozen(profile) ||
     Object.keys(profile).toSorted().join(",") !== "image,profile,sourceRoot,version" ||
     (profile as { version?: unknown }).version !== 1
   ) {
@@ -164,9 +165,9 @@ function exactParentArguments(): readonly string[] {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function verifyTrustedLauncher(profile: "eve" | "vitest") {
   const launcherStat = statSync(launcher, { bigint: true });
+  const invalidLauncherFile = realpathSync(launcher) !== launcher || !launcherStat.isFile();
   if (
-    realpathSync(launcher) !== launcher ||
-    !launcherStat.isFile() ||
+    invalidLauncherFile ||
     launcherStat.uid !== BigInt(process.getuid?.() ?? -1) ||
     launcherStat.nlink !== BigInt(ONE) ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -278,9 +279,11 @@ export async function runWithTestCapability(options: {
         nonce?: unknown;
         context?: unknown;
       };
+      const hasValidEnvelope =
+        Object.keys(request).toSorted().join(",") === "context,nonce,version" &&
+        request.version === 2;
       if (
-        Object.keys(request).toSorted().join(",") !== "context,nonce,version" ||
-        request.version !== 2 ||
+        !hasValidEnvelope ||
         typeof request.nonce !== "string" ||
         !/^[0-9a-f]{64}$/u.test(request.nonce) ||
         typeof request.context !== "string"
