@@ -19,7 +19,7 @@ export const createPrivateRepositoryProductionApprovalCapture = (input: {
   state?: PrivateOperatorApprovalCapture;
 }) => {
   const expected = repositoryProductionApprovalInputSchema.parse(input.plan);
-  const capture = createPrivateOperatorApprovalCapture({
+  const captureInput: Parameters<typeof createPrivateOperatorApprovalCapture>[0] = {
     request: {
       action: "repository-production",
       planRef: expected.operationRef,
@@ -28,8 +28,11 @@ export const createPrivateRepositoryProductionApprovalCapture = (input: {
     },
     ownerUserId: expected.scope.authority.ownerUserId,
     callId: input.callId,
-    ...(input.state === undefined ? {} : { state: input.state }),
-  });
+  };
+  if (input.state !== undefined) {
+    captureInput.state = input.state;
+  }
+  const capture = createPrivateOperatorApprovalCapture(captureInput);
   return {
     observe(event: MessageStreamEvent) {
       if (event.type === "input.requested") {

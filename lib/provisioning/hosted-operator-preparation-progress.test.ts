@@ -121,10 +121,13 @@ describe("recorded preparation progress", () => {
     "records account completion %s and canonical program association",
     (completed) => {
       const record = fixture();
-      record.accountPreparation = {
+      const accountPreparation: NonNullable<typeof record.accountPreparation> = {
         programDigest: normalActorProgramDigest(program),
-        ...(completed ? { accountsCompletedAt: new Date(now).toISOString() } : {}),
       };
+      if (completed) {
+        accountPreparation.accountsCompletedAt = new Date(now).toISOString();
+      }
+      record.accountPreparation = accountPreparation;
       expect(readOperatorPreparationProgress(record, now)).toMatchObject({
         accountProgramMatchesPlan: true,
         accountsCompleted: completed,

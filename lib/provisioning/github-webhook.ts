@@ -49,7 +49,8 @@ export function createGitHubProvisioningWebhookHandler(input: {
     }
     const declaredLength = request.headers.get("content-length");
     if (
-      declaredLength &&
+      declaredLength !== null &&
+      declaredLength !== "" &&
       (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > 1024 * 1024)
     ) {
       return new Response(null, { status: 413 });

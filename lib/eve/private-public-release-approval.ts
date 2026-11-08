@@ -27,7 +27,7 @@ export const createPrivatePublicReleaseApprovalCapture = (input: {
     planDigest: publicReleasePlanDigest(input.plan),
     operationRef: publicReleaseOperationRef(input.plan),
   });
-  const capture = createPrivateOperatorApprovalCapture({
+  const captureInput: Parameters<typeof createPrivateOperatorApprovalCapture>[0] = {
     request: {
       action: "public-release",
       planRef: expected.operationRef,
@@ -36,8 +36,11 @@ export const createPrivatePublicReleaseApprovalCapture = (input: {
     },
     ownerUserId: input.plan.authority.ownerUserId,
     callId: input.callId,
-    ...(input.state === undefined ? {} : { state: input.state }),
-  });
+  };
+  if (input.state !== undefined) {
+    captureInput.state = input.state;
+  }
+  const capture = createPrivateOperatorApprovalCapture(captureInput);
   return {
     observe(event: MessageStreamEvent) {
       if (event.type === "input.requested") {

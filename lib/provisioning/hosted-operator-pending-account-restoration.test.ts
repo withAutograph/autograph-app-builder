@@ -636,7 +636,7 @@ it.each(["claimed", "unknown", "accepted"] as const)(
   "refuses a current-adapter %s continuation without replay or loss",
   async (status) => {
     const f = setup();
-    f.row.record.realmContinuation = {
+    const continuation: NonNullable<typeof f.row.record.realmContinuation> = {
       dispatchId: "d".repeat(64),
       operationRef,
       approvedPlanDigest: required(f.row.record.operator).planDigest,
@@ -644,8 +644,12 @@ it.each(["claimed", "unknown", "accepted"] as const)(
       status,
       claimedAt: observedAt,
       adapterSessionId: required(context.ownerContext).adapterSessionId,
-      ...(status === "accepted" ? { acceptedAt: observedAt, receiverClaimedAt: observedAt } : {}),
     };
+    if (status === "accepted") {
+      continuation.acceptedAt = observedAt;
+      continuation.receiverClaimedAt = observedAt;
+    }
+    f.row.record.realmContinuation = continuation;
     const before = structuredClone(f.row.record);
     await expect(f.run()).rejects.toMatchObject({ code: "operation_in_progress" });
     expect(f.row.record).toEqual(before);
@@ -889,7 +893,7 @@ it.each(["current-account", "old-adapter", "observed", "unrelated"] as const)(
         ownerSessionId: context.target.sessionId,
       };
     }
-    f.row.record.realmIdentityWait = {
+    const identityWait: NonNullable<typeof f.row.record.realmIdentityWait> = {
       adapterSessionId:
         classification === "old-adapter"
           ? "private-old-adapter"
@@ -900,8 +904,12 @@ it.each(["current-account", "old-adapter", "observed", "unrelated"] as const)(
       nonceSha256: "c".repeat(64),
       operationRef: accountOperationRef,
       registeredAt: observedAt,
-      ...(classification === "observed" ? { observedAt, eventId: "f".repeat(64) } : {}),
     };
+    if (classification === "observed") {
+      identityWait.observedAt = observedAt;
+      identityWait.eventId = "f".repeat(64);
+    }
+    f.row.record.realmIdentityWait = identityWait;
     const logs = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       await restorePendingAccountPreparation(f.ports, context, f.input, operator.plan, () => now);
@@ -921,7 +929,7 @@ it.each(["old-accepted", "current-accepted", "current-pending", "old-unknown"] a
   async (classification) => {
     const f = setup();
     const accepted = classification.endsWith("accepted");
-    f.row.record.realmContinuation = {
+    const continuation: NonNullable<typeof f.row.record.realmContinuation> = {
       dispatchId: "d".repeat(64),
       operationRef,
       approvedPlanDigest: required(f.row.record.operator).planDigest,
@@ -931,8 +939,12 @@ it.each(["old-accepted", "current-accepted", "current-pending", "old-unknown"] a
       adapterSessionId: classification.startsWith("old")
         ? "private-displaced-adapter"
         : required(context.ownerContext).adapterSessionId,
-      ...(accepted ? { acceptedAt: observedAt, receiverClaimedAt: observedAt } : {}),
     };
+    if (accepted) {
+      continuation.acceptedAt = observedAt;
+      continuation.receiverClaimedAt = observedAt;
+    }
+    f.row.record.realmContinuation = continuation;
     const logs = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       await restorePendingAccountPreparation(

@@ -90,7 +90,7 @@ export function createBuilderProvisioningRouteHandler(input: {
         return Response.json({ error: "feature_disabled" }, { headers: noStore, status: 503 });
       }
       const length = request.headers.get("content-length");
-      if (length && (!/^\d+$/u.test(length) || Number(length) > 16_384)) {
+      if (length !== null && length !== "" && (!/^\d+$/u.test(length) || Number(length) > 16_384)) {
         return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });
       }
       const body = builderProvisionRequestSchema.parse(await request.json());
