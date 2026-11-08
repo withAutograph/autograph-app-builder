@@ -522,11 +522,17 @@ const operatorExecutionFailure = operatorPlanningFailure
       failure.workerFailure === "readback_unknown" && failure.mode === "inspect"
         ? projectResourceReadbackDiagnostic(resourceReadback)
         : undefined;
-    return {
-      ...failure,
-      ...(projected === undefined ? {} : { authStartup: projected }),
-      ...(readback === undefined ? {} : { resourceReadback: readback }),
-    };
+    const result: typeof failure & {
+      authStartup?: AuthStartupDiagnostic;
+      resourceReadback?: ResourceReadbackDiagnostic;
+    } = { ...failure };
+    if (projected !== undefined) {
+      result.authStartup = projected;
+    }
+    if (readback !== undefined) {
+      result.resourceReadback = readback;
+    }
+    return result;
   });
 export type OperatorExecutionFailure = z.infer<typeof operatorExecutionFailure>;
 

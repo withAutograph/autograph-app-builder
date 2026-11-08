@@ -51,7 +51,7 @@ export const createAppAccessOwnerResolver =
     if (current.appId !== session.appId || current.sourceHandoffId !== session.sourceHandoffId) {
       throw new AppAccessError("app_access_denied");
     }
-    const principal = session.principal;
+    const { principal } = session;
     const forwarded = {
       attributes: {
         "mcp:audience": principal.audience,

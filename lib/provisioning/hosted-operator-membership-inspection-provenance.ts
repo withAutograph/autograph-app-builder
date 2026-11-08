@@ -187,7 +187,7 @@ const retainedOperations = (operator: OperatorHistory): RetainedOperation[] => [
 export const retainedHostedOperatorOperations = (
   record: HostedRuntimeJournalRecord,
 ): RetainedOperation[] => {
-  const operator = record.operator;
+  const { operator } = record;
   return operator === undefined
     ? []
     : [

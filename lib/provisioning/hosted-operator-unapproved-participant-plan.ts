@@ -29,9 +29,9 @@ export const createUnapprovedParticipantPlan = (
   void normalActorPreparation;
   void normalActorPredecessor;
   void normalActorCapturePredecessor;
-  const gatewayBindings = candidate.priorOperator.plan.gatewayBindings;
+  const { gatewayBindings } = candidate.priorOperator.plan;
   const trustedSources = gatewayBindings?.trustedSources;
-  const auth = candidate.bootstrap.auth;
+  const { auth } = candidate.bootstrap;
   return hostedOperatorPlanSchema.parse({
     ...base,
     ...(gatewayBindings === undefined

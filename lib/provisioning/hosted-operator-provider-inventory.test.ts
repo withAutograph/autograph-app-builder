@@ -296,13 +296,16 @@ describe("private read-only operator provider inventory", () => {
         ...f.deployment,
         id: configuration.operator.deploymentId,
       });
-      const inventory = await readHostedOperatorProviderInventory({
+      const inventoryInput: Parameters<typeof readHostedOperatorProviderInventory>[0] = {
         ...f.input,
-        ...(mode === "capture" ? { phase: "bootstrap-planning" as const } : {}),
-        ...(mode === "opt-in-without-planning"
-          ? { resolveOperatorByConfiguredOrigin: true as const }
-          : {}),
-      });
+      };
+      if (mode === "capture") {
+        inventoryInput.phase = "bootstrap-planning";
+      }
+      if (mode === "opt-in-without-planning") {
+        inventoryInput.resolveOperatorByConfiguredOrigin = true;
+      }
+      const inventory = await readHostedOperatorProviderInventory(inventoryInput);
       expect(inventory.operator.deploymentId).toBe(configuration.operator.deploymentId);
       expect(
         f.fetcher.mock.calls.some(
