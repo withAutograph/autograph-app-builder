@@ -291,7 +291,7 @@ function observation(
   if (source) {
     result.source = source;
   }
-  if (classification) {
+  if (classification !== undefined && classification !== null && classification !== "") {
     result.classification = classification;
   }
   return result;
@@ -404,7 +404,9 @@ export function analyzeSource({
         const selector =
           declaration.parent?.type === "rule" ? declaration.parent.selector : undefined;
         const selectorUsed =
-          !selector || [...referencedClasses].some((name) => selector.includes(`.${name}`));
+          selector === undefined ||
+          selector === "" ||
+          [...referencedClasses].some((name) => selector.includes(`.${name}`));
         const source = declaration.source?.start
           ? {
               column: declaration.source.start.column,

@@ -757,7 +757,8 @@ export async function measureStyles(
             )
           : [];
         const unsupportedGap = gapShorthands.some(
-          (declaration) => Boolean(declaration.value.trim()) && !singleGapValue(declaration.value),
+          (declaration) =>
+            Boolean(declaration.value.trim()) && singleGapValue(declaration.value) === undefined,
         );
         const gapFallback =
           needsGapFallback && !unsupportedGap
@@ -951,7 +952,7 @@ export async function measureStyles(
           ? generatedRule.source
           : (mappedShared?.source ??
             mapped ??
-            (path
+            (path !== undefined && path !== ""
               ? {
                   column: (rule?.style?.range?.startColumn ?? 0) + 1,
                   line: (rule?.style?.range?.startLine ?? 0) + 1,

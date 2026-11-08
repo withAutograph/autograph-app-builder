@@ -84,7 +84,7 @@ export async function isCursorClientReady(database: Reader, resource: string): P
     .where(and(eq(oauthResource.identifier, resource), eq(oauthResource.disabled, false)))
     .limit(1);
   return Boolean(
-    target && previewOAuthScopes.every((scope) => target.allowedScopes?.includes(scope)),
+    target && previewOAuthScopes.every((scope) => target.allowedScopes?.includes(scope) ?? false),
   );
 }
 
@@ -101,7 +101,7 @@ export async function setupCursorClient(database: Database, resource: string) {
     if (
       !target ||
       target.disabled ||
-      !previewOAuthScopes.every((scope) => target.allowedScopes?.includes(scope))
+      !previewOAuthScopes.every((scope) => target.allowedScopes?.includes(scope) ?? false)
     ) {
       throw new Error("Initialize the OAuth resource before registering Cursor.");
     }

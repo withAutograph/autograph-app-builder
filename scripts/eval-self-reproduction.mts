@@ -617,7 +617,7 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
       stdout.end();
       stderr.end();
       const result: Awaited<typeof resultPromise.promise> = { exitCode, signal };
-      if (spawnError) {
+      if (spawnError !== undefined && spawnError !== null && spawnError !== "") {
         result.error = spawnError;
       }
       resultPromise.resolve(result);
@@ -662,7 +662,7 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
   }
   const completed = { ...completion, ...result };
   const interruption: GeneratorInterruption = {};
-  if (interrupted) {
+  if (interrupted !== undefined && interrupted !== null && interrupted !== "") {
     interruption.interrupted = interrupted;
     interruption.status = "failed";
   }
@@ -1087,7 +1087,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       values["candidate-root"] === undefined || values["candidate-root"] === ""
         ? undefined
         : resolve(values["candidate-root"]);
-    if (candidateRoot) {
+    if (candidateRoot !== undefined && candidateRoot !== null && candidateRoot !== "") {
       try {
         candidateFiles = await readCandidateSource(candidateRoot);
         if (!candidateFiles.length) {
@@ -1184,9 +1184,10 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       const credentials = loadProjectOidc();
       const { evaluateCandidateRuntime } =
         await import("../evals/support/self-reproduction-runtime");
-      const workspaceArchive = arrustedRoot
-        ? await trackedWorkspaceArchive(arrustedRoot)
-        : undefined;
+      const workspaceArchive =
+        arrustedRoot !== undefined && arrustedRoot !== null && arrustedRoot !== ""
+          ? await trackedWorkspaceArchive(arrustedRoot)
+          : undefined;
       candidateRuntime =
         candidateFiles && workspaceArchive
           ? await evaluateCandidateRuntime({
@@ -1352,7 +1353,11 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     }
     await saveReport();
     await runConfiguredPairedCaptures();
-    if (referenceDatabaseUrl) {
+    if (
+      referenceDatabaseUrl !== undefined &&
+      referenceDatabaseUrl !== null &&
+      referenceDatabaseUrl !== ""
+    ) {
       const { runReferenceLifecycle } =
         await import("../evals/support/self-reproduction-reference-lifecycle");
       await runReferenceLifecycle({
