@@ -132,7 +132,8 @@ export function createBuilderHandoffRouteHandler(input: {
       }
       const contentLength = request.headers.get("content-length");
       if (
-        contentLength &&
+        contentLength !== null &&
+        contentLength !== "" &&
         (!/^\d+$/u.test(contentLength) || Number(contentLength) > maximumRequestBytes)
       ) {
         return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });
@@ -256,7 +257,8 @@ export function createBuilderHandoffRenewRouteHandler(input: {
       }
       const contentLength = request.headers.get("content-length");
       if (
-        contentLength &&
+        contentLength !== null &&
+        contentLength !== "" &&
         (!/^\d+$/u.test(contentLength) || Number(contentLength) > maximumRequestBytes)
       ) {
         throw new BuilderHandoffRequestError();
@@ -369,12 +371,14 @@ export async function getBuilderHandoffPageData(
     authority,
     handoffId: input.handoffId,
   });
-  const currentProvisioning = record.intent.provisioningRequestId
-    ? await createPostgresBuilderProvisionJournalStore(context.database).read({
-        authority,
-        requestId: record.intent.provisioningRequestId,
-      })
-    : undefined;
+  const { provisioningRequestId } = record.intent;
+  const currentProvisioning =
+    provisioningRequestId !== undefined && provisioningRequestId !== ""
+      ? await createPostgresBuilderProvisionJournalStore(context.database).read({
+          authority,
+          requestId: provisioningRequestId,
+        })
+      : undefined;
   const { isCursorClientReady } = dependencies
     ? await dependencies.loadCursorClient()
     : await import("../auth/cursor-client");

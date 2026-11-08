@@ -346,11 +346,11 @@ export class HostedMcpProofClient {
     }
     const text = await response.text();
     this.responseBodies.push(text);
-    return {
-      headers: response.headers,
-      status: response.status,
-      ...(text === "" ? {} : { payload: jsonRpcPayload(text) }),
-    };
+    const result: ProofHttpResult = { headers: response.headers, status: response.status };
+    if (text !== "") {
+      result.payload = jsonRpcPayload(text);
+    }
+    return result;
   }
 
   async initialize() {

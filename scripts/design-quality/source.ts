@@ -280,16 +280,21 @@ function observation(
   source?: Observation["source"],
   classification?: string,
 ): Observation {
-  return {
+  const result: Observation = {
     dimension,
     evidence: "static",
     id,
     provenance: "generated",
     summary,
     verdict,
-    ...(source ? { source } : {}),
-    ...(classification ? { classification } : {}),
   };
+  if (source) {
+    result.source = source;
+  }
+  if (classification) {
+    result.classification = classification;
+  }
+  return result;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

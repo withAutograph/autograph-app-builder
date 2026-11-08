@@ -223,12 +223,18 @@ const propsForExport = (
     const propertyType = checker.getTypeOfSymbolAtLocation(property, declaration);
     const values = literalValues(propertyType);
     const primitive = values ? undefined : primitiveKinds(propertyType);
-    props[property.getName()] = {
+    const name = property.getName();
+    const prop: PublicProp = {
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       required: !(property.flags & ts.SymbolFlags.Optional),
-      ...(values ? { values } : {}),
-      ...(primitive ? { primitiveKinds: primitive } : {}),
     };
+    if (values !== undefined) {
+      prop.values = values;
+    }
+    if (primitive !== undefined) {
+      prop.primitiveKinds = primitive;
+    }
+    props[name] = prop;
   }
   return Object.keys(props).length ? { props } : {};
 };
