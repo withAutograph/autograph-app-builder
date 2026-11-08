@@ -57,6 +57,7 @@ it.each(["history", "local-state", "inert", "unknown", "unavailable"])(
         mode === "history" && view === "docs" ? "https://candidate/docs" : "https://candidate/",
     } satisfies CandidateNavigationPage;
     const capture = vi.fn(async () => {});
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const createPortable = compileFunction(
       `return (${exerciseCandidateNavigation.toString()})`,
     ) as () => typeof exerciseCandidateNavigation;

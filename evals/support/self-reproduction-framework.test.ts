@@ -13,6 +13,7 @@ const browser = () => {
   return {
     close,
     page,
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     value: {
       // oxlint-disable-next-line typescript/promise-function-async -- Preserve the returned promise and synchronous throw behavior.
       newContext: () => Promise.resolve({ close, newPage: () => Promise.resolve(page) }),

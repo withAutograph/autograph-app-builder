@@ -126,6 +126,7 @@ export function SignIn({
     e.preventDefault();
 
     const formData = new FormData(e.currentTarget);
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const email = formData.get("email") as string;
     const rememberMe = formData.get("rememberMe") === "on";
 
@@ -198,6 +199,7 @@ export function SignIn({
                       }}
                       onInvalid={(e) => {
                         e.preventDefault();
+                        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
                         const el = e.target as HTMLInputElement;
                         const msg = el.validity.valueMissing
                           ? localization.auth.fieldRequired
@@ -239,6 +241,7 @@ export function SignIn({
                         disabled={isPending}
                         onInvalid={(e) => {
                           e.preventDefault();
+                          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
                           const el = e.target as HTMLInputElement;
                           const min = emailAndPassword?.minPasswordLength;
                           const max = emailAndPassword?.maxPasswordLength;

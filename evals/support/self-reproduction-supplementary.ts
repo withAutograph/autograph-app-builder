@@ -130,6 +130,7 @@ export const writeSupplementaryAssessment = async (input: {
   const evidence = parityEvidenceSchema.parse(
     JSON.parse(await readFile(nodePath.join(parityRoot, PARITY_EVIDENCE_FILE), "utf-8")),
   );
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const review = JSON.parse(
     await readFile(nodePath.join(reviewRoot, "observations.json"), "utf-8"),
   ) as {
@@ -140,6 +141,7 @@ export const writeSupplementaryAssessment = async (input: {
     throw new Error("Expected evaluator-owned source review schema.");
   }
   try {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const workflowReview = JSON.parse(
       await readFile(nodePath.join(reviewRoot, "workflow-observations.json"), "utf-8"),
     ) as typeof review;
@@ -155,6 +157,7 @@ export const writeSupplementaryAssessment = async (input: {
     }
     await copy(reviewRoot, "workflow-observations.json", SOURCE_REVIEW);
   } catch (error) {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       throw error;
     }
@@ -202,6 +205,7 @@ export const writeSupplementaryAssessment = async (input: {
       evidence[side].observations.map((item) => rebase(item, parityRoot, "original")),
     );
     for (const raw of review.observations?.[side] ?? []) {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const item = raw as Observation;
       const normalized = observationSchema.parse({
         ...item,

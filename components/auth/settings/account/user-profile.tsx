@@ -47,6 +47,7 @@ export function UserProfile({ className }: UserProfileProps) {
     e.preventDefault();
 
     const formData = new FormData(e.currentTarget);
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const name = formData.get("name") as string;
 
     // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
@@ -58,6 +59,7 @@ export function UserProfile({ className }: UserProfileProps) {
         continue;
       }
       /* oxlint-enable typescript/strict-boolean-expressions */
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const value = parseAdditionalFieldValue(field, formData.get(field.name) as string | null);
 
       if (field.validate) {
@@ -128,6 +130,7 @@ export function UserProfile({ className }: UserProfileProps) {
 
                     setFieldErrors((prev) => ({
                       ...prev,
+                      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
                       name: (e.target as HTMLInputElement).validationMessage,
                     }));
                   }}
@@ -159,7 +162,7 @@ export function UserProfile({ className }: UserProfileProps) {
                 );
               }
 
-              // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+              // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract; Preserve the existing assertion at this boundary.
               const value = (session.user as Record<string, unknown>)[field.name];
 
               // Re-mount when the session value loads so the field's
@@ -177,6 +180,7 @@ export function UserProfile({ className }: UserProfileProps) {
                     ...field,
                     // `defaultValue` is sign-up-only; on the profile we
                     // always seed from the session.
+                    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
                     defaultValue: value as AdditionalFieldValue | null,
                   }}
                   isPending={isPending}

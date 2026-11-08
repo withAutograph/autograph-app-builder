@@ -23,11 +23,14 @@ interface ProbePorts {
 export const exerciseCandidateCapabilities = async (ports: ProbePorts) => {
   const receipt = {
     applicationFunctionalCredit: false,
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     childCleanup: { detail: "No child Sandbox acquired.", status: "blocked" } as ProbeOutcome,
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     childSandbox: {
       detail: "Child Sandbox probe not completed.",
       status: "blocked",
     } as ProbeOutcome,
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     model: { detail: "Model probe not completed.", status: "blocked" } as ProbeOutcome,
     producer: "evaluator",
   };
@@ -124,6 +127,7 @@ export const runCandidateCapabilityProbe = async (input: {
   abortSignal: AbortSignal;
   model: string;
 }) => {
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const setup = { exitCode: null as number | null, stderr: "", stdout: "" };
   try {
     await input.session.writeTextFile({

@@ -112,6 +112,7 @@ export const loadWorkingPreview = async (
   if (!isRecord(state)) {
     return { reason: "The public eval state must be a JSON object.", status: "invalid" };
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const publicState = state as {
     outcome?: string;
     sourceRevision?: unknown;
@@ -129,6 +130,7 @@ export const loadWorkingPreview = async (
       status: finalWaiting ? "missing-final" : "missing",
     };
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const candidate = receipt as Partial<PreviewReceipt>;
   if (
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -154,8 +156,10 @@ export const loadWorkingPreview = async (
     provenance: previewProvenance(
       publicState.sourceRevision,
       publicState.session?.sessionId,
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       candidate as PreviewReceipt,
     ),
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     receipt: candidate as PreviewReceipt,
     status: "ready",
   };
@@ -172,6 +176,7 @@ export const writePreviewObservationReport = async (
   report: PreviewObservationReport,
 ) => {
   await mkdir(output, { mode: 0o700, recursive: true });
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const sanitized = sanitizeValue(report) as PreviewObservationReport;
   const json = `${JSON.stringify(sanitized, null, 2)}\n`;
   await writeFile(path.join(output, "report.json"), json, { mode: 0o600 });

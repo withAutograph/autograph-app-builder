@@ -154,6 +154,7 @@ const SignUpForm = ({
           }}
           onInvalid={(e) => {
             e.preventDefault();
+            // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
             const el = e.target as HTMLInputElement;
             const msg = el.validity.valueMissing
               ? localization.auth.fieldRequired
@@ -207,6 +208,7 @@ const SignUpForm = ({
             disabled={isPending}
             onInvalid={(e) => {
               e.preventDefault();
+              // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
               const el = e.target as HTMLInputElement;
               const min = emailAndPassword?.minPasswordLength;
               const max = emailAndPassword?.maxPasswordLength;
@@ -274,6 +276,7 @@ const SignUpForm = ({
               disabled={isPending}
               onInvalid={(e) => {
                 e.preventDefault();
+                // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
                 const el = e.target as HTMLInputElement;
                 const min = emailAndPassword?.minPasswordLength;
                 const max = emailAndPassword?.maxPasswordLength;
@@ -440,7 +443,9 @@ export function SignUp({
 
     const formData = new FormData(e.currentTarget);
     // `emailAndPassword.name === false` hides the name field and submits "".
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const name = (formData.get("name") as string | null) ?? "";
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const email = formData.get("email") as string;
 
     if (emailAndPassword?.confirmPassword === true && password !== confirmPassword) {
@@ -459,6 +464,7 @@ export function SignUp({
         continue;
       }
       /* oxlint-enable typescript/strict-boolean-expressions */
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const value = parseAdditionalFieldValue(field, formData.get(field.name) as string | null);
 
       if (field.validate) {

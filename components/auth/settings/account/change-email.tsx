@@ -48,6 +48,7 @@ export function ChangeEmail({ className }: ChangeEmailProps) {
     const formData = new FormData(e.currentTarget);
     changeEmail({
       callbackURL: getViewURL(baseURL, basePaths.settings, viewPaths.settings.account),
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       newEmail: formData.get("email") as string,
     });
   }
@@ -84,6 +85,7 @@ export function ChangeEmail({ className }: ChangeEmailProps) {
                     e.preventDefault();
                     setFieldErrors((prev) => ({
                       ...prev,
+                      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
                       email: (e.target as HTMLInputElement).validationMessage,
                     }));
                   }}

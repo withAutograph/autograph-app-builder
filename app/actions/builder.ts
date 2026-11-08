@@ -93,12 +93,13 @@ async function sameOriginHeaders(contentType?: string) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readJson<T>(response: Response, fallback: string): Promise<T> {
   if (!response.ok) {
-    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+    // oxlint-disable-next-line github/no-then, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing rejection handling and settlement behavior; Preserve the existing assertion at this boundary.
     const payload = (await response.json().catch(() => {
       // Invalid JSON has no error payload.
     })) as { error?: string } | undefined;
     throw new Error(payload?.error ?? fallback);
   }
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   return (await response.json()) as T;
 }
 

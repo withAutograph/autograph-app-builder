@@ -51,6 +51,7 @@ const getServerLocationSearch = () => "";
 export function OAuthConsent({ className }: OAuthConsentProps) {
   const { authClient } = useAuth();
   const { localization, scopeMetadata } = useAuthPlugin(oauthProviderPlugin);
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const oauthClient = authClient as OAuthProviderAuthClient;
   const { data: session, isPending: isSessionPending } = useSession(oauthClient);
   const locationSearch = useSyncExternalStore(

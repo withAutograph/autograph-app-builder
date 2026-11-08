@@ -281,6 +281,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (inspection.isError) {
       return "I couldn't use this project because it is not currently eligible for app creation.";
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const source = inspection.output as { digest?: string } | undefined;
     const preparation = toolResults.find(({ name }) => name === "prepare_workspace");
     if (preparation === undefined) {
@@ -302,6 +303,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const artifacts = toolResults.filter(({ name }) => name === "record_prototype_artifact");
     const recordedPaths = new Set(
       artifacts.flatMap((artifact) => {
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
         const path = (artifact.output as { path?: string } | undefined)?.path;
         return artifact.isError || path === undefined ? [] : [path];
       }),
@@ -338,6 +340,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     }
     const appSpecArtifacts = artifacts.filter(
       (artifact) =>
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
         (artifact.output as { path?: string } | undefined)?.path === vendorOnboardingAppSpecPath,
     );
     const acceptanceResults = toolResults.filter(({ name }) => name === "accept_app_spec");
@@ -348,7 +351,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         return;
       }
       try {
-        // oxlint-disable-next-line typescript/consistent-return -- Preserve optional acceptance output parsing.
+        // oxlint-disable-next-line typescript/consistent-return, anti-slop/require-safety-comment-for-type-assertion -- Preserve optional acceptance output parsing; Preserve the existing assertion at this boundary.
         return JSON.parse(latestAcceptance.output.replace(/^Error:\s*/u, "")) as {
           code?: string;
           issues?: { code?: string }[];
@@ -380,9 +383,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         ],
       };
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const currentAppSpec = appSpecArtifacts.at(-1)?.output as
       | { digest?: string; revision?: string }
       | undefined;
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const workspace = preparation.output as
       | {
           sourceSha?: string;
@@ -418,6 +423,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (latestAcceptance?.isError === true) {
       return "One product decision is still too unclear to produce a reliable implementation plan.";
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const accepted = latestAcceptance?.output as { digest?: string } | undefined;
     if (accepted?.digest === undefined) {
       return "The product direction is not complete enough to plan reliably yet.";
@@ -531,6 +537,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (result.isError) {
       return "The typed GitHub publication status could not be verified.";
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const status = result.output as
       | {
           enabled?: boolean;
@@ -575,6 +582,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (latest.isError) {
       return "The existing Vendor application could not be inspected safely.";
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const result = latest.output as
       | {
           availablePaths?: readonly string[];
@@ -605,6 +613,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (statusResult?.name !== "workspace_status") {
       return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     return (statusResult.output as { phase?: string } | undefined)?.phase === "planned"
       ? "The lost-response retry reused the exact durable target-planning receipt without rerunning either target command."
       : "A completed target plan is required before retry.";
@@ -617,6 +626,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const statusResult = [...toolResults]
       .toReversed()
       .find(({ name }) => name === "workspace_status");
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const observedPhase = (statusResult?.output as { phase?: string } | undefined)?.phase;
     if (
       statusResult === undefined ||
@@ -626,6 +636,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     ) {
       return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const status = statusResult.output as
       | { appSpec?: { digest?: string }; phase?: string }
       | undefined;
@@ -659,6 +670,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (preparation.isError) {
       return "Dependency setup failed; inspect its actual error.";
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const output = preparation.output as { reused?: boolean } | undefined;
     return output?.reused === true
       ? "The lost-response retry reused the exact durable dependency-preparation receipt."
@@ -670,11 +682,13 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       .find(({ name }) => name === "workspace_status");
     if (
       statusResult === undefined ||
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       ((statusResult.output as { phase?: string } | undefined)?.phase !== "dependencies_prepared" &&
         toolResults.at(-1)?.name !== "workspace_status")
     ) {
       return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const status = statusResult.output as
       | { appSpec?: { appId?: string; digest?: string }; phase?: string }
       | undefined;
@@ -716,6 +730,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     ) {
       return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const status = latestStatus.output as
       | {
           phase?: string;
@@ -756,6 +771,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       }
       return "I couldn't safely prepare the app. The current plan remains available to review.";
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const output = result?.output as { reused?: boolean } | undefined;
     return output?.reused === true
       ? "The prepared app is unchanged and ready for quality checks."
@@ -771,6 +787,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const latest = results.at(-1);
     const matching = results.filter(
       (result) =>
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
         !result.isError && (result.output as { digest?: string } | undefined)?.digest === digest,
     );
     const requiredMatches = message.includes("retry recording") ? 2 : 1;
@@ -782,6 +799,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return "Prototype artifact recording was canceled; durable state was not changed.";
     }
     if (matching.length >= requiredMatches) {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const output = matching.at(-1)?.output as
         | { invalidated?: boolean; reused?: boolean }
         | undefined;
@@ -832,6 +850,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     ) {
       return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const status = latestStatus.output as
       | {
           phase?: string;
@@ -879,6 +898,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       }
       return "I couldn't safely finish the app checks. The current preview still needs review.";
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const output = result?.output as { reused?: boolean } | undefined;
     return output?.reused === true
       ? "The app remains unchanged and its quality checks are still passing."
@@ -903,6 +923,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       requiredAccepts = 3;
     }
     const status = [...reviewResults].toReversed().find(({ name }) => name === "workspace_status");
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const latestStatus = status?.output as
       | { phase?: string; validation?: { digest?: string } }
       | undefined;
@@ -930,6 +951,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       if (proposal.isError) {
         return "I couldn't prepare the completed app changes for review.";
       }
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const output = proposal.output as
         | {
             digest?: string;
@@ -955,6 +977,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         ? "The app changed before review could finish, so I stopped safely."
         : "I couldn't safely prepare the completed app changes for review.";
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const output = result?.output as { reused?: boolean } | undefined;
     return output?.reused === true
       ? "The same completed app changes remain ready for review. If you want to continue, I can prepare a draft pull request for the repository."
@@ -970,6 +993,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (destinationPath === undefined) {
       return "The fresh repository destination is missing.";
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const review = [...toolResults]
       .toReversed()
       .find(({ name, isError }) => name === "accept_change_set" && !isError)?.output as
@@ -1011,7 +1035,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     }
     const publications = toolResults.filter(({ name }) => name === "publish_fresh_repository");
     if (publications.length === 0) {
-      // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+      // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract; Preserve the existing assertion at this boundary.
       const publication = { ...(status.output as Record<string, unknown>) };
       delete publication.workflowPhase;
       delete publication.retryAllowed;
@@ -1051,6 +1075,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (status === undefined) {
       return { toolCalls: [{ input: {}, name: "artifact_workflow_status" }] };
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const workflow = status.output as
       | {
           phase?: string;
@@ -1101,6 +1126,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (status === undefined) {
       return { toolCalls: [{ input: {}, name: "artifact_workflow_status" }] };
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const reviewDigest = (status.output as { review?: { digest?: string } } | undefined)?.review
       ?.digest;
     if (reviewDigest === undefined) {
@@ -1143,7 +1169,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         ? staleBranchWorktreeMessage
         : "Branch-worktree publication preconditions were rejected without mutating the source checkout.";
     }
-    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract; Preserve the existing assertion at this boundary.
     const output = latestStatus.output as Record<string, unknown>;
     const proposal = { ...output };
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -1237,6 +1263,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         ? staleBranchWorktreeMessage
         : "Branch-worktree publication was canceled or rejected; the reviewed receipt was preserved.";
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const result = latestMutation?.output as { status?: string } | undefined;
     return result?.status === "failed"
       ? "Branch-worktree publication recorded a recovery-required partial-failure receipt and was not retried."
@@ -1251,6 +1278,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const retry = message.includes("retry");
     const afterCancellation = message.includes("after cancellation");
     const status = [...toolResults].toReversed().find(({ name }) => name === "workspace_status");
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const workflow = status?.output as { phase?: string; review?: { digest?: string } } | undefined;
     const latestPublicationIndex = toolResults.findLastIndex(
       ({ name }) => name === "publish_reviewed_change_set",
@@ -1269,6 +1297,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     }
     const source = [...toolResults].toReversed().find(({ name }) => name === "inspect_source");
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const destinationPath = (source?.output as { sourcePath?: string } | undefined)?.sourcePath;
     if (destinationPath === undefined || workflow.review?.digest === undefined) {
       return "An exact reviewed receipt and explicitly inspected local checkout are required before local publication.";
@@ -1345,6 +1374,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       }
       return "Local publication could not be prepared; inspect the tool's actual error before retrying.";
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const publicationState = proposal.output as {
       status?: string;
       retryAllowed?: boolean;
@@ -1353,6 +1383,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       workflowPhase?: string;
     };
     const durableStatus = publicationState.status;
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const latestPublicationOutput = publicationResults.at(-1)?.output as
       | { reused?: boolean; terminalizedFailure?: boolean }
       | undefined;
@@ -1388,7 +1419,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     }
     /* oxlint-enable typescript/strict-boolean-expressions */
     const publicationProposal = {
-      // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+      // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract; Preserve the existing assertion at this boundary.
       ...(proposal.output as Record<string, unknown>),
     };
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -1451,6 +1482,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         ? "Stale local publication was rejected without changing the destination checkout."
         : "Local publication was canceled or rejected; the reviewed receipt was preserved.";
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const output = result?.output as
       | { reused?: boolean; terminalizedFailure?: boolean }
       | undefined;
@@ -1470,6 +1502,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (recorded === undefined && !stale) {
       return "Record a prototype artifact before reading it.";
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const artifact = recorded?.output as { path?: string; digest?: string } | undefined;
     const read = [...toolResults]
       .toReversed()
@@ -1478,6 +1511,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       if (read.isError) {
         return "The prototype artifact digest was rejected as stale.";
       }
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const output = read.output as
         | { path?: string; digest?: string; content?: string }
         | undefined;
@@ -1502,6 +1536,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   }
   if (message.includes("assess workspace readiness before planning")) {
     const status = [...toolResults].toReversed().find(({ name }) => name === "workspace_status");
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     if (status === undefined || (status.output as { phase?: string }).phase === "empty") {
       return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     }
@@ -1520,6 +1555,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (statusResult === undefined) {
       return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const status = statusResult.output as
       | { phase?: string; proposal?: { digest?: string } }
       | undefined;
@@ -1556,6 +1592,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (readinessResult.isError) {
       return "The target command readiness receipt rejected the stale proposal.";
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const readiness = readinessResult.output as { targetCommandReady?: boolean } | undefined;
     return readiness?.targetCommandReady === true
       ? "The exact proposal is ready for a future typed target command."
@@ -1577,6 +1614,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (status === undefined) {
       return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const workflow = status.output as
       | {
           phase?: string;
@@ -1631,6 +1669,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (statusResult === undefined) {
       return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const status = statusResult.output as
       | {
           workspace?: {
@@ -1661,6 +1700,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           ],
         };
       }
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const artifact = artifactResult.output as { digest?: string; revision?: string } | undefined;
       const missingSourceIdentity =
         workspace?.sourceSha === undefined ||
@@ -1677,6 +1717,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       let existingAppChanges: { content: string; path: string }[] | undefined;
       if (appId === "vendor" && (lastUserMessage?.startsWith(vendorTaxIterationRequest) ?? false)) {
         const inspections = toolResults.filter(({ name }) => name === "inspect_existing_app");
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
         const latestInspection = inspections.at(-1)?.output as
           | {
               availablePaths?: readonly string[];
@@ -1771,6 +1812,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         ],
       };
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const inspected = inspectionResult.output as
       | {
           digest?: string;
@@ -1823,6 +1865,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (statusResult.isError) {
       return "The workspace status could not be verified.";
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const status = statusResult.output as { phase?: string } | undefined;
     if (preparationResult.isError) {
       return status?.phase === "empty"

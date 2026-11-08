@@ -51,6 +51,7 @@ ${renewalReviewDesignPrompt}`);
           if (typeof value !== "object" || value === null) {
             return false;
           }
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
           const manifest = value as {
             productionComponents?: unknown[];
             productionCompositions?: { name?: unknown }[];

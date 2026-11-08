@@ -71,6 +71,7 @@ export interface PairedCaptureRun {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function unavailableCaptureObservations(reason: string): PairedCaptureRun["observations"] {
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   return Object.fromEntries(
     sides.map((side) => [
       side,
@@ -115,6 +116,7 @@ export async function writePairedCaptureManifest(
   const rows = desktopViewports.flatMap((viewport) =>
     captureStates.map((state): PairedCaptureManifestRow => {
       const requirementId = `capture/${viewport.name}/${state}`;
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const pair = Object.fromEntries(
         sides.map((side) => captureForSide(side, requirementId, viewport, state)),
       ) as Pick<PairedCaptureManifestRow, "reference" | "candidate">;

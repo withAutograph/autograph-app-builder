@@ -204,6 +204,7 @@ export function createBuilderDraftOutbox<T>(
           async (database) => {
             const transaction = database.transaction(storeName, "readwrite");
             const store = transaction.objectStore(storeName);
+            // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
             const entry = (await requestResult(store.get(options.key))) as
               | BuilderDraftOutboxEntry<T>
               | undefined;
@@ -215,6 +216,7 @@ export function createBuilderDraftOutbox<T>(
             return cleared;
           },
           () => {
+            // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
             const entry = memoryFallback.get(options.key) as BuilderDraftOutboxEntry<T> | undefined;
             if (entry?.mutationId !== acknowledgement.mutationId) {
               return false;
@@ -232,6 +234,7 @@ export function createBuilderDraftOutbox<T>(
           async (database) => {
             const transaction = database.transaction(storeName, "readwrite");
             const store = transaction.objectStore(storeName);
+            // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
             const entry = (await requestResult(store.get(options.key))) as
               | BuilderDraftOutboxEntry<T>
               | undefined;
@@ -243,6 +246,7 @@ export function createBuilderDraftOutbox<T>(
             return cleared;
           },
           () => {
+            // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
             const entry = memoryFallback.get(options.key) as BuilderDraftOutboxEntry<T> | undefined;
             if (entry?.mutationId !== mutationId) {
               return false;
@@ -262,8 +266,10 @@ export function createBuilderDraftOutbox<T>(
             // oxlint-disable-next-line typescript/no-unsafe-assignment -- Preserve the existing dynamic value boundary.
             const result = await requestResult(transaction.objectStore(storeName).get(options.key));
             await transactionResult(transaction);
+            // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
             return result as BuilderDraftOutboxEntry<T> | undefined;
           },
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
           () => memoryFallback.get(options.key) as BuilderDraftOutboxEntry<T> | undefined,
         ),
       ),

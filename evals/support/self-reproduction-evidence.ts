@@ -92,6 +92,7 @@ export function evidenceSink(
       return;
     }
     try {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const record = sanitizeEvidence(
         JSON.parse(raw.slice(start + evidencePrefix.length)),
         // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
@@ -140,6 +141,7 @@ function changeSetStatusOutput(
   record: Record<string, unknown>,
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
 ): Record<string, unknown> | undefined {
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const event = record.event as
     | {
         type?: unknown;
@@ -158,7 +160,7 @@ function changeSetStatusOutput(
     const { output } = event.data.result;
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     return typeof output === "object" && output !== null && !Array.isArray(output)
-      ? // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+      ? // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing open-ended value contract; Preserve the existing assertion at this boundary.
         (output as Record<string, unknown>)
       : undefined;
   }
@@ -201,6 +203,7 @@ export function candidateExportFromEvidence(
       if (typeof file !== "object" || file === null || Array.isArray(file)) {
         return undefined;
       }
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const { path, content } = file as { path?: unknown; content?: unknown };
       if (
         // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.

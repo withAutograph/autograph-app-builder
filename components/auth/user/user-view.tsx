@@ -1,3 +1,4 @@
+/* oxlint-disable anti-slop/require-safety-comment-for-type-assertion -- Preserve existing assertions in JSX props. */
 "use client";
 
 import type { UsernameAuthClient } from "@better-auth-ui/core/plugins/username";

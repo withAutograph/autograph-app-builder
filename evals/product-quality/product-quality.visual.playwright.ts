@@ -22,11 +22,13 @@ async function loadPrototype(page: Page) {
   await page.addScriptTag({ content: axe.source });
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
   const accessibility = await page.evaluate(async () => {
-    const runner = (
-      globalThis as typeof globalThis & {
-        axe: { run: () => Promise<{ violations: unknown[] }> };
-      }
-    ).axe;
+    const runner =
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+      (
+        globalThis as typeof globalThis & {
+          axe: { run: () => Promise<{ violations: unknown[] }> };
+        }
+      ).axe;
     return await runner.run();
   });
   expect(accessibility.violations).toEqual([]);
@@ -43,6 +45,7 @@ test.beforeAll(async () => {
     resolve();
   });
   await promise;
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const address = prototypeServer.address() as AddressInfo;
   prototypeUrl = `http://127.0.0.1:${address.port}/prototype/vendor-onboarding`;
 });

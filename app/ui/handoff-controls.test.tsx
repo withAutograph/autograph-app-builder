@@ -34,6 +34,7 @@ const initial: HandoffControlData = {
   status: "prepared",
   version: 1,
 };
+// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 let root: Root | undefined;
@@ -314,7 +315,9 @@ describe("durable handoff controls", () => {
     await render(data);
     await click("Renew handoff");
     expect(renewal.action).toHaveBeenCalledTimes(2);
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const first = renewal.action.mock.calls[0]?.[1] as { creationRequestId?: string };
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const retry = renewal.action.mock.calls[1]?.[1] as { creationRequestId?: string };
     expect(first).toMatchObject({ handoffId: id });
     expect(first.creationRequestId).toBe(retry.creationRequestId);

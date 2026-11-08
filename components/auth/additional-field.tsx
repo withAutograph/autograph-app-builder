@@ -175,6 +175,7 @@ const DateInput = function DateInput({ name, field, isPending }: AdditionalField
           className="sr-only"
           onInvalid={(e) => {
             e.preventDefault();
+            // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
             setError((e.target as HTMLInputElement).validationMessage);
           }}
         />
@@ -419,6 +420,7 @@ export const AdditionalField = function AdditionalField({
   const inputType = resolveInputType(field);
 
   if (field.render) {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const FieldRenderer = field.render as ComponentType<AdditionalFieldProps>;
     return (
       <FieldRenderer

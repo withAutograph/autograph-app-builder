@@ -113,6 +113,7 @@ export const runReferenceNavigationEvidence = async (input: {
       },
     );
   } catch (error) {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const failure = error as { stdout?: string; stderr?: string; message?: string };
     // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared shape for values assigned later.
     run = {

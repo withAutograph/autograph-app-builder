@@ -90,6 +90,7 @@ const draftFetch = vi.hoisted(() =>
     if (typeof init?.body !== "string") {
       throw new TypeError("Expected a JSON draft request body.");
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const input = JSON.parse(init.body) as {
       draftId: string;
       expectedRevision: number;
@@ -240,6 +241,7 @@ function AppBuilder(
   );
 }
 
+// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
@@ -993,6 +995,7 @@ describe("Vercel-faithful App Builder flow", () => {
     );
     const brief = requireElement(view.querySelector<HTMLTextAreaElement>("#app-brief"));
     await fill(brief, "This local edit will be replaced.");
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     builderActions.loadActiveBuilderDraft.mockResolvedValueOnce({
       draftId: "d1210e56-ded0-436d-a6b8-ae96ddec17e0",
       record: {

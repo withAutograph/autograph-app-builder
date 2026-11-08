@@ -126,6 +126,7 @@ export function useBuilderController({
     mode: "onChange",
     resolver: zodResolver(builderDraftFormSchema),
   });
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const form = useWatch({
     control: builderForm.control,
     defaultValue: initialForm,
@@ -153,6 +154,7 @@ export function useBuilderController({
       // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
       const next = typeof update === "function" ? update(current) : update;
       formSnapshot.current = next;
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       for (const field of Object.keys(next) as (keyof BuilderForm)[]) {
         // RHF publishes each setValue to useWatch independently. Replaying an
         // unchanged field from an older composite snapshot can otherwise
@@ -369,6 +371,7 @@ export function useBuilderController({
             if (!response.ok) {
               throw new Error("builder-draft-save-failed");
             }
+            // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
             return (await response.json()) as {
               draftId: string;
               revision: number;

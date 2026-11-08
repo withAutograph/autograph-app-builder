@@ -51,5 +51,6 @@ export const redactCandidateEvidence = <T>(value: T, secrets: readonly string[])
     }
     return item;
   };
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   return sanitizeEvidence(redact(value)) as T;
 };

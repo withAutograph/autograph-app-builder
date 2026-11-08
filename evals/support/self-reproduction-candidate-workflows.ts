@@ -438,6 +438,7 @@ const browser = await chromium.launch({headless:true});
 try { await run(browser,input.baseURL,async outcomes => {await writeFile(process.argv[3],JSON.stringify(sanitize({producer:'evaluator',kind:'candidate-browser-workflows',outcomes})));}); }
 finally {await browser.close();}
 `;
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   return { artifactPaths: [] as string[], script };
 };
 

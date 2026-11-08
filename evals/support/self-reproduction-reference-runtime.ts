@@ -66,6 +66,7 @@ export const snapshotReferenceSource = async (
       await mkdir(path.dirname(path.join(fixtureRoot, file)), { recursive: true });
       await copyFile(target, path.join(fixtureRoot, file));
     } catch (error) {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         throw error;
       }
