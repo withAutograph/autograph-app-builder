@@ -118,10 +118,10 @@ describe("acceptance workspace recovery", () => {
               return roots.length === 1 && command.includes(" fetch ")
                 ? {
                     exitCode: 128,
-                    stdout: "",
                     stderr: "remote: Repository not found.\nprivate provider detail",
+                    stdout: "",
                   }
-                : { exitCode: 0, stdout: "", stderr: "" };
+                : { exitCode: 0, stderr: "", stdout: "" };
             },
           },
           repositoryUrl: "https://github.com/owner/existing.git",
@@ -150,8 +150,8 @@ describe("acceptance workspace recovery", () => {
             sandbox: {
               run: async () => ({
                 exitCode: 128,
-                stdout: "",
                 stderr: "fatal: unknown revision; private transport detail",
+                stdout: "",
               }),
             },
             repositoryUrl: "https://github.com/owner/existing.git",
@@ -191,7 +191,7 @@ describe("acceptance workspace recovery", () => {
             exitCode: 0,
           };
         } catch {
-          return { stdout: "", stderr: "command failed", exitCode: 1 };
+          return { exitCode: 1, stderr: "command failed", stdout: "" };
         }
       },
     };
@@ -267,7 +267,7 @@ describe("acceptance workspace recovery", () => {
                   const result = await run("/bin/sh", ["-c", command], { cwd: workingDirectory });
                   return { ...result, exitCode: 0 };
                 } catch {
-                  return { stdout: "", stderr: "Git command failed", exitCode: 1 };
+                  return { exitCode: 1, stderr: "Git command failed", stdout: "" };
                 }
               },
             },
