@@ -295,12 +295,11 @@ test("web login and both emulated connections survive Cursor consent, token refr
     await expect.poll(() => Boolean(callback), { timeout: 30_000 }).toBe(true);
     const received = callback as URL | undefined;
     const code = received?.searchParams.get("code");
+    const missingCode = code === null || code === undefined || code === "";
     if (
       !received ||
       received.searchParams.get("state") !== state ||
-      code === null ||
-      code === undefined ||
-      code === "" ||
+      missingCode ||
       received.searchParams.has("error")
     ) {
       throw new Error(

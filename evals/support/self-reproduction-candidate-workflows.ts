@@ -1,6 +1,7 @@
 /* oxlint-disable eslint/no-await-in-loop, eslint/no-negated-condition, unicorn/no-negated-condition, unicorn/consistent-function-scoping, promise/prefer-await-to-then, unicorn/prefer-ternary -- isolated browser workflows run sequentially; all helpers remain inside the portable evaluator function. */
 import { runtimeReceiptSchema } from "./self-reproduction-parity-evidence";
 import { sanitizeEvidence } from "./self-reproduction-evidence";
+import type { Status } from "./self-reproduction-parity";
 import type { Locator, Page, Request } from "playwright";
 
 type CandidateLocator = Pick<
@@ -45,7 +46,7 @@ interface CandidateBrowser {
 
 export interface CandidateWorkflowOutcome {
   requirementId: string;
-  status: "passed" | "failed" | "blocked" | "unassessed";
+  status: Status;
   reason: string;
   assertions: { id: string; passed: boolean | null; detail: string }[];
   evidence?: { buttons: string[]; headings: string[]; mutationPaths: string[] };
