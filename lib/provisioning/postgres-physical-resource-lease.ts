@@ -1,4 +1,5 @@
 /* oxlint-disable eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Locks acquire in deterministic order. */
+/* oxlint-disable eslint/max-classes-per-file -- Contention and lost custody are distinct typed transport outcomes. */
 import type postgres from "postgres";
 import { z } from "zod";
 
@@ -12,9 +13,18 @@ export interface PhysicalResourceFence {
 export interface PhysicalResourceLeaseInput {
   /** Trusted physical identities; callers must not split a slot by owner or operation. */
   lockKeys: readonly string[];
+  /** Automatic continuation observes contention instead of queuing another mutation. */
+  tryAcquire?: boolean;
   /** Reserve and claim an initially absent operation only while holding its physical slot. */
   initializeUnderLock?: () => Promise<void>;
   readCurrentFence: () => Promise<PhysicalResourceFence>;
+}
+
+export class PhysicalResourceLeaseBusyError extends Error {
+  constructor() {
+    super("Protected resource lease is already held.");
+    this.name = "PhysicalResourceLeaseBusyError";
+  }
 }
 
 interface AdvisoryLockParts {
@@ -150,7 +160,16 @@ export const createPostgresPhysicalResourceLease =
             : await leaseInput.readCurrentFence();
           const lockParts: AdvisoryLockParts[] = [];
           for (const key of [...new Set(leaseInput.lockKeys)].toSorted()) {
-            await connection`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
+            if (leaseInput.tryAcquire) {
+              const [rawAcquired] = await connection`
+                select pg_try_advisory_xact_lock(hashtextextended(${key}, 0)) as held
+              `;
+              if (!heldLockSchema.parse(rawAcquired).held) {
+                throw new PhysicalResourceLeaseBusyError();
+              }
+            } else {
+              await connection`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
+            }
             const [rawParts] = await connection`
               select
                 ((hashtextextended(${key}, 0) >> 32) & 4294967295)::text as class_id,

@@ -72,6 +72,10 @@ const harness = (
   let failAfterLink = false;
   let authorized = true;
   let unknownRead = false;
+  let completionBusy = false;
+  let completionHeld = false;
+  let invitationReads = 0;
+  let completionFenceChecks = 0;
   let clock = new Date("2026-11-06T10:00:00.000Z");
   const assertAuthorized = async () => {
     if (!authorized) {
@@ -96,6 +100,22 @@ const harness = (
     };
   };
   const bridge = createRepositoryProductionCreator({
+    withCompletionLease: async <T>(
+      _row: RepositoryProductionRow,
+      run: (assertCurrent: () => Promise<void>) => Promise<T>,
+    ) => {
+      if (completionBusy) throw new Error("completion busy");
+      completionHeld = true;
+      try {
+        return await run(async () => {
+          if (!completionHeld) throw new Error("completion lease lost");
+          completionFenceChecks += 1;
+          await assertAuthorized();
+        });
+      } finally {
+        completionHeld = false;
+      }
+    },
     assertAuthorized,
     builderOrigin: "https://builder.example",
     findInvitation: async (id) => (id === row.operationRef ? row : undefined),
@@ -163,6 +183,7 @@ const harness = (
     now: () => clock,
     readCurrent: async () => row,
     readInvitation: async (saved) => {
+      invitationReads += 1;
       if (unknownRead) throw new Error("unavailable Auth read");
       return saved.operationRef === row.operationRef
         ? invitation
@@ -172,7 +193,8 @@ const harness = (
     },
     readOwner: async () => ({ email: options.ownerEmail ?? "Creator@Example.com" }),
     realmDigest: () => options.realmDigest ?? "e".repeat(64),
-    resume: async (_row, sessionId) => {
+    resume: async (_row, sessionId, assertCurrent) => {
+      await assertCurrent();
       resumes.push(sessionId);
       return { state: "ready" };
     },
@@ -182,6 +204,11 @@ const harness = (
     context,
     requests,
     resumes,
+    invitationReads: () => invitationReads,
+    completionFenceChecks: () => completionFenceChecks,
+    setCompletionBusy: () => {
+      completionBusy = true;
+    },
     row: () => row,
     compareAndSet: async (before: RepositoryProductionRow, record: RepositoryProductionRecord) => {
       if (before.revision !== row.revision) return undefined;
@@ -689,6 +716,34 @@ describe("Production creator continuation", () => {
       scopeDigest: "b".repeat(64),
     });
     expect(await h.bridge.complete(h.row().operationRef)).toBe("ready");
+    expect(h.resumes).toEqual(["original-session"]);
+  });
+
+  it("coalesces an automatic completion before starting another Auth read or setup resume", async () => {
+    const h = harness();
+    await h.bridge.prepare(h.context());
+    h.patchInvitation({
+      status: "verified",
+      verifiedActorId: "actor-1",
+      verifiedSessionId: "real-auth-session",
+    });
+    const reads = h.invitationReads();
+    h.setCompletionBusy();
+    await expect(h.bridge.complete(h.row().operationRef)).rejects.toThrow("completion busy");
+    expect(h.invitationReads()).toBe(reads);
+    expect(h.resumes).toEqual([]);
+  });
+
+  it("retains the physical completion fence through verified identity and the original resume", async () => {
+    const h = harness();
+    await h.bridge.prepare(h.context());
+    h.patchInvitation({
+      status: "verified",
+      verifiedActorId: "actor-1",
+      verifiedSessionId: "real-auth-session",
+    });
+    expect(await h.bridge.complete(h.row().operationRef)).toBe("ready");
+    expect(h.completionFenceChecks()).toBeGreaterThanOrEqual(3);
     expect(h.resumes).toEqual(["original-session"]);
   });
 

@@ -118,6 +118,7 @@ export const createRepositoryProductionLease = (input: {
   store: RepositoryProductionStore;
   intent: RepositoryProductionIntent;
   assertAuthorized: RepositoryProductionSetupPorts["assertAuthorized"];
+  tryAcquire?: boolean;
 }): RepositoryProductionSetupPorts["withLease"] => {
   const physical = createPostgresPhysicalResourceLease({
     openLockClient: (onclose) =>
@@ -133,6 +134,7 @@ export const createRepositoryProductionLease = (input: {
     await physical(
       {
         lockKeys: [`repository-production:${scope.repositoryId}:${scope.appId}`],
+        tryAcquire: input.tryAcquire,
         initializeUnderLock: async () => {
           await input.assertAuthorized(scope, input.intent);
           const row =

@@ -73,6 +73,7 @@ import {
   createPostgresRepositoryProductionStore,
   createRepositoryProductionLease,
 } from "./repository-production-store";
+import { PhysicalResourceLeaseBusyError } from "./postgres-physical-resource-lease";
 import { createRepositoryProductionWorkers } from "./repository-production-workers";
 import { createRepositoryProductionSetup } from "./repository-production-setup";
 import type {
@@ -141,7 +142,27 @@ export const createRepositoryProductionIntentBoundSetup = (
       await forIntent(intent).prepare(scope, intent),
     status: async (scope: RepositoryProductionScope, intent: RepositoryProductionIntent) =>
       await forIntent(intent).status(scope, intent),
+    resume: async (scope: RepositoryProductionScope, intent: RepositoryProductionIntent) => {
+      const setup = forIntent(intent);
+      const status = await setup.status(scope, intent);
+      return status.state === "ready" ? status : await setup.prepare(scope, intent);
+    },
   };
+};
+
+export const completeRepositoryProductionInvitation = async (input: {
+  creator: () => Promise<"not-owned" | "ready" | "pending">;
+  invitee: () => Promise<void>;
+}): Promise<RepositoryProductionCompletion> => {
+  try {
+    const result = await input.creator();
+    if (result !== "not-owned") return result;
+    await input.invitee();
+    return "ready";
+  } catch (error) {
+    if (error instanceof PhysicalResourceLeaseBusyError) return "pending";
+    throw error;
+  }
 };
 export const createRepositoryProductionNativeHandler =
   (
@@ -330,6 +351,7 @@ export const createRepositoryProductionNativeHandler =
         scope: RepositoryProductionScope,
         run: (assertCurrent: () => Promise<void>) => Promise<T>,
         requestedIntent?: RepositoryProductionIntent,
+        tryAcquire = false,
       ) => {
         const known = await current(scope);
         const saved = await store.read(scope);
@@ -338,6 +360,7 @@ export const createRepositoryProductionNativeHandler =
           databaseUrl: environment.PROTECTED_RESOURCE_LOCK_DATABASE_URL ?? settings.databaseUrl,
           intent: requestedIntent ?? saved?.record.intent ?? known.intent,
           store,
+          tryAcquire,
         })(scope, run);
       };
       const realm = (scope: RepositoryProductionScope) => {
@@ -613,7 +636,9 @@ export const createRepositoryProductionNativeHandler =
           authRequest(readContext(row), { action: "read", invitationId: id }, true),
         invokeAuth: (context, operation) => authRequest(context, operation, false),
         assertAuthorized: (row) => assertAuthorized(row.record.scope, row.record.intent),
-        resume: async (row, originalSessionId) => {
+        withCompletionLease: async (row, run) =>
+          await withLease(row.record.scope, run, row.record.intent, true),
+        resume: async (row, originalSessionId, assertCurrent) => {
           const originalOwner = row.record.creatorOwnerContext ?? row.record.ownerContext;
           if (originalOwner?.sessionId !== originalSessionId) {
             throw new Error("repository_production_owner_changed");
@@ -623,18 +648,25 @@ export const createRepositoryProductionNativeHandler =
             ownerContext: originalOwner,
             sessionId: originalSessionId,
           });
-          return await setup(row.record.scope).prepare(row.record.scope, row.record.intent);
+          await assertCurrent();
+          return await setup(row.record.scope, assertCurrent).resume(
+            row.record.scope,
+            row.record.intent,
+          );
         },
       });
       const managementFor = (
         held?: () => Promise<void>,
         command?: AppAccessCommand,
         roleUpdate = false,
+        automaticCompletion = false,
       ) =>
         createRepositoryProductionManagement({
           builderOrigin,
           journal: accessJournal,
-          withLease: held ? async (_scope, run) => await run(held) : withLease,
+          withLease: held
+            ? async (_scope, run) => await run(held)
+            : async (scope, run) => await withLease(scope, run, undefined, automaticCompletion),
           readSetup: store.read,
           workers,
           realm,
@@ -933,14 +965,13 @@ export const createRepositoryProductionNativeHandler =
             return await managementFor(undefined, command).execute(owner, command);
           },
           completeInvitation: async (id) => {
-            const complete = async (): Promise<RepositoryProductionCompletion> => {
-              const result = await creator.complete(id);
-              if (result !== "not-owned") {
-                return result;
-              }
-              await management.completeInvitation(id);
-              return "ready";
-            };
+            const complete = async () =>
+              await completeRepositoryProductionInvitation({
+                creator: async () => await creator.complete(id),
+                invitee: async () => {
+                  await managementFor(undefined, undefined, false, true).completeInvitation(id);
+                },
+              });
             if (!waitUntil) {
               return await complete();
             }
