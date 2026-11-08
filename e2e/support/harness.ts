@@ -308,7 +308,7 @@ export async function installBrowserBoundaries(
         },
       },
     });
-    window.open = ((url?: string | URL) => {
+    window.open = (url?: string | URL) => {
       if (boundaryMode === "blocked") throw new Error("Protocol blocked");
       const value = String(url ?? "");
       if (value !== "about:blank") state.opened.push(value);
@@ -326,7 +326,7 @@ export async function installBrowserBoundaries(
         },
         opener: null,
       } as unknown as Window;
-    }) as typeof window.open;
+    };
   }, mode);
 }
 
