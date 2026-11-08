@@ -799,6 +799,16 @@ for (const fault of [
   });
 }
 
+const join = (parts) => {
+  const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    bytes.set(part, offset);
+    offset += part.length;
+  }
+  return bytes;
+};
+
 const reconnectingSnapshot = async (mode) => {
   const native = Array.from({ length: 5 }, (_, index) => ({
     type: "text.delta",
@@ -809,15 +819,6 @@ const reconnectingSnapshot = async (mode) => {
     native.map((event) => new TextEncoder().encode(`${JSON.stringify(event)}\n`)),
     key,
   );
-  const join = (parts) => {
-    const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
-    let offset = 0;
-    for (const part of parts) {
-      bytes.set(part, offset);
-      offset += part.length;
-    }
-    return bytes;
-  };
   let partial = new Uint8Array();
   if (mode === "partial-header") {
     partial = chunks[2].data.subarray(0, 2);

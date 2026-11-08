@@ -18,6 +18,7 @@ import { HostedOperatorError } from "./hosted-operator-contract";
 import type { readStandardBuilderDestination } from "./hosted-operator-owner";
 
 const id = z.string().min(1);
+const fail = () => new HostedOperatorError("builder_destination_configuration_required");
 const origin = z.url().refine((text) => {
   const url = new URL(text);
   return (
@@ -71,7 +72,6 @@ interface StandardRuntimeInput {
   verifiedPublicOrigin?: string;
 }
 const deriveDevelopmentRuntime = (input: StandardRuntimeInput) => {
-  const fail = () => new HostedOperatorError("builder_destination_configuration_required");
   const policy = input.base.standardDevelopmentRuntime;
   if (policy === undefined) {
     throw fail();
@@ -140,7 +140,6 @@ const deriveDevelopmentRuntime = (input: StandardRuntimeInput) => {
 export const assembleStandardBuilderRuntimeConfiguration = (
   input: StandardRuntimeInput,
 ): HostedOperatorSourceConfiguration => {
-  const fail = () => new HostedOperatorError("builder_destination_configuration_required");
   const explicit = selectStandardBuilderRuntimeProfile(input);
   const derived = explicit === undefined ? deriveDevelopmentRuntime(input) : undefined;
   const profile = explicit ?? derived?.profile;

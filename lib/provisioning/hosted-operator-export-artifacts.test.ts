@@ -92,6 +92,9 @@ const dataset = (contents: Uint8Array[], worker: TenantExportWorkerInput = wire.
   };
   return { manifest, manifestBytes, source, readMember };
 };
+const artifactStorageKey = (owned: OperatorArtifactContext, ref: string, index: number) =>
+  JSON.stringify([owned, ref, index]);
+
 const fixture = () => {
   const rows = new Map<string, string>();
   let revoked = false;
@@ -103,12 +106,10 @@ const fixture = () => {
       throw new Error("revoked");
     }
   });
-  const key = (owned: OperatorArtifactContext, ref: string, index: number) =>
-    JSON.stringify([owned, ref, index]);
   const store: OperatorArtifactStore = {
     async put(owned, chunk) {
       await current();
-      const id = key(owned, chunk.artifactRef, chunk.chunkIndex);
+      const id = artifactStorageKey(owned, chunk.artifactRef, chunk.chunkIndex);
       const old = rows.get(id);
       if (old !== undefined && old !== chunk.content) {
         throw new Error("Immutable content differs");
@@ -124,7 +125,7 @@ const fixture = () => {
       if (unavailable) {
         throw new Error("Read outcome unknown");
       }
-      return rows.get(key(owned, ref, index));
+      return rows.get(artifactStorageKey(owned, ref, index));
     },
   };
   return {

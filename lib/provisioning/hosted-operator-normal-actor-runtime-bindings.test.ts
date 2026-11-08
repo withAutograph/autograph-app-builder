@@ -719,18 +719,19 @@ describe("fresh authenticated normal actor runtime bindings", () => {
   });
 });
 
+const observe = () => {
+  const report = diagnostics.reportOperatorRuntimeIdentityFailure;
+  const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+  vi.spyOn(diagnostics, "reportOperatorRuntimeIdentityFailure").mockImplementation(
+    (sessionId, failure) => {
+      report(sessionId, failure, sink);
+    },
+  );
+  return sink;
+};
+
 describe("closed runtime identity refusal diagnostics", () => {
   afterEach(() => vi.restoreAllMocks());
-  const observe = () => {
-    const report = diagnostics.reportOperatorRuntimeIdentityFailure;
-    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
-    vi.spyOn(diagnostics, "reportOperatorRuntimeIdentityFailure").mockImplementation(
-      (sessionId, failure) => {
-        report(sessionId, failure, sink);
-      },
-    );
-    return sink;
-  };
   it.each([
     ["revoked", "get_session", "unavailable"],
     ["wrong-actor", "identity", "actor_mismatch"],

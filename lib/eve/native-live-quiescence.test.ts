@@ -1637,14 +1637,15 @@ it("does not accept a caller-supplied parked owner without its exact native read
   expect(f.start).not.toHaveBeenCalled();
 });
 
+const idleSession = (): HarnessSession => ({
+  sessionId: "logical",
+  continuationToken: "continuation",
+  history: [{ role: "assistant", content: "The prior response belongs to an earlier prompt." }],
+  agent: { dynamicModel: true, system: "", tools: [] },
+  compaction: { recentWindowSize: 1, threshold: 1000 },
+});
+
 describe("idle source execution transfer", () => {
-  const idleSession = (): HarnessSession => ({
-    sessionId: "logical",
-    continuationToken: "continuation",
-    history: [{ role: "assistant", content: "The prior response belongs to an earlier prompt." }],
-    agent: { dynamicModel: true, system: "", tools: [] },
-    compaction: { recentWindowSize: 1, threshold: 1000 },
-  });
   const idleState = () => durable.createDurableSessionState({ session: idleSession() });
 
   it("transfers a proven idle lineage without replaying a response or starting a model turn", async () => {

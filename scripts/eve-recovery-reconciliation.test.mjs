@@ -805,6 +805,11 @@ test("historical failed step covered by a later committed turn does not block kn
   assert.equal(result.provenance.coveredNativeEventIds.includes(eventId(2)), true);
 });
 
+const approvals = (history) =>
+  history
+    .flatMap(({ content }) => (Array.isArray(content) ? content : []))
+    .filter((part) => part.type === "tool-approval-response");
+
 test("provider-cancelled physical handoff reconciles latest native typed state without replay or effect execution", async () => {
   const f = await fixture({ handoff: true, runStatus: "cancelled", snapshot: true });
   const payload = readTerminalRecoveryCandidate(f.collected.candidate);
@@ -832,10 +837,6 @@ test("provider-cancelled physical handoff reconciles latest native typed state w
   for (const key of ["fixture.program", "fixture.authority", "eve.runtime.hitl.approvedTools"]) {
     assert.deepEqual(recovered.state[key], f.latest.state[key]);
   }
-  const approvals = (history) =>
-    history
-      .flatMap(({ content }) => (Array.isArray(content) ? content : []))
-      .filter((part) => part.type === "tool-approval-response");
   assert.deepEqual(approvals(recovered.history), approvals(f.source.history));
   assert.equal(
     approvals(recovered.history).some(

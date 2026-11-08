@@ -16,9 +16,9 @@ const authority = {
   workspaceId: "workspace-one",
 };
 const hash = (v: string | Uint8Array) => createHash("sha256").update(v).digest("hex");
+const key = (k: SourceArtifactChunkKey) => JSON.stringify(k);
 const fixture = () => {
   const rows = new Map<string, string>();
-  const key = (k: SourceArtifactChunkKey) => JSON.stringify(k);
   const store = createImmutableSourceArtifactStore({
     get: (k) => Promise.resolve(rows.get(key(k))),
     put: (k, v) => {

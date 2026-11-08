@@ -72,6 +72,9 @@ const assessment = (value = prepared()): ProductSourceAssessment => ({
     freshUsage: { inputTokens: 10, outputTokens: 3, totalTokens: 13 },
   },
 });
+const key = (current: OperatorArtifactContext, ref: string, index: number) =>
+  JSON.stringify([current.authority, current.target, ref, index]);
+
 const fixture = () => {
   let owned = true;
   const rows = new Map<string, string>();
@@ -82,8 +85,6 @@ const fixture = () => {
       throw new Error("owner revoked");
     }
   });
-  const key = (current: OperatorArtifactContext, ref: string, index: number) =>
-    JSON.stringify([current.authority, current.target, ref, index]);
   const store: OperatorArtifactStore = {
     async put(current, chunk) {
       await Promise.resolve();

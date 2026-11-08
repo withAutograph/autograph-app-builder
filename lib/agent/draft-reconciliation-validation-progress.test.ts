@@ -125,11 +125,12 @@ const candidateInstallCalls = () =>
     .map(([input]: unknown[]) => input as Parameters<SandboxSession["run"]>[0])
     .filter((input) => input.command === installCommand);
 
+const keyFor = (key: ValidationLogKey) =>
+  JSON.stringify([key.sessionId, key.attemptDigest, key.command, key.channel, key.logId]);
+
 const candidateLogStore = () => {
   const manifests = new Map<string, ValidationLogReference>();
   const chunks = new Map<string, { content: string; digest: string }>();
-  const keyFor = (key: ValidationLogKey) =>
-    JSON.stringify([key.sessionId, key.attemptDigest, key.command, key.channel, key.logId]);
   const store: ValidationLogStore = {
     async getChunk(key, index) {
       return await Promise.resolve(chunks.get(`${keyFor(key)}:${index}`));

@@ -2755,33 +2755,35 @@ describe("activation transport diagnostics", () => {
   );
 });
 
-describe("retained confirmation presentation recovery", () => {
-  const observerConfig = { ...config, timeoutMs: 10_000 };
-  const requestEvent = (requestId: string, digest = "a".repeat(64)) => ({
-    type: "input.requested",
-    data: {
-      sequence: 0,
-      stepIndex: 0,
-      turnId: "confirmation-turn",
-      requests: [
-        {
-          requestId,
-          kind: "tool-approval",
-          action: {
-            kind: "tool-call",
-            callId: `call-${requestId}`,
-            toolName: "run-app-continuity-tests",
-            input: {
-              action: "continuity",
-              planRef: "_protected-operator/continuity-plans/00000000-0000-4000-8000-000000000001",
-              planDigest: digest,
-              idempotencyKey: "retained-exercise",
-            },
+const requestEvent = (requestId: string, digest = "a".repeat(64)) => ({
+  type: "input.requested",
+  data: {
+    sequence: 0,
+    stepIndex: 0,
+    turnId: "confirmation-turn",
+    requests: [
+      {
+        requestId,
+        kind: "tool-approval",
+        action: {
+          kind: "tool-call",
+          callId: `call-${requestId}`,
+          toolName: "run-app-continuity-tests",
+          input: {
+            action: "continuity",
+            planRef: "_protected-operator/continuity-plans/00000000-0000-4000-8000-000000000001",
+            planDigest: digest,
+            idempotencyKey: "retained-exercise",
           },
         },
-      ],
-    },
-  });
+      },
+    ],
+  },
+});
+
+describe("retained confirmation presentation recovery", () => {
+  const observerConfig = { ...config, timeoutMs: 10_000 };
+
   const seedFailure = async (events: unknown[]) => {
     const observed = await observeSameOriginEveStream({
       config: observerConfig,

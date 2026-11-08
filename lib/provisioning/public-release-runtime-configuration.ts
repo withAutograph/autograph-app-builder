@@ -57,6 +57,7 @@ const recordSchema = z.strictObject({
 });
 const authResourceSchema = publicRealmResourceSchema.omit({ version: true });
 const unavailable = () => new Error("public_release_runtime_configuration_unavailable");
+const normalized = (hostname: string) => hostname.replace(/-pooler(?=\.)/u, "");
 const identity = (scope: PublicReleaseRuntimeConfigurationScope) => {
   const hash = createHash("sha256")
     .update(
@@ -94,7 +95,6 @@ export const createFreshPublicAuthValues = (input: {
   const production = /^(?<hostname>[a-z0-9.-]+\.neon\.tech)\/[^/]+$/u.exec(
     input.productionDatabaseIdentity,
   );
-  const normalized = (hostname: string) => hostname.replace(/-pooler(?=\.)/u, "");
   if (
     // oxlint-disable-next-line sonarjs/expression-complexity -- Dedicated restricted runtime and a different normalized production endpoint are mandatory together.
     resource.hostname !== runtime.hostname ||

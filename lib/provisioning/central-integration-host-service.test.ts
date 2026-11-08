@@ -98,6 +98,11 @@ const receiptFor = (context: CentralHostEffectContext): CentralEffectReceipt => 
     }
   }
 };
+const approval = (callId: string) => ({
+  approvedByCallId: callId,
+  approvedAt: "2026-11-03T00:00:00Z",
+});
+
 const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) => {
   let row: CentralHostRow | undefined;
   let authorized = true;
@@ -115,10 +120,6 @@ const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) 
     callId: "current-call",
     signal: new AbortController().signal,
   };
-  const approval = (callId: string) => ({
-    approvedByCallId: callId,
-    approvedAt: "2026-11-03T00:00:00Z",
-  });
   const store: CentralHostServicePorts["store"] = {
     read: async (authority, operationRef) =>
       row !== undefined &&

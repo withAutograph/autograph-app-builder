@@ -50,8 +50,9 @@ const ctx = (turnId = "correction", sequence = 2): HookContext =>
   ({
     session: { id: "owned", turn: { id: turnId, sequence } },
   }) as HookContext;
+const hash = (letter: string) => letter.repeat(64);
+
 const seed = () => {
-  const hash = (letter: string) => letter.repeat(64);
   const changes = [
     {
       path: "apps/example/app/page.tsx",

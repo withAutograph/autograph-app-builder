@@ -21,6 +21,8 @@ const { sessionCommandHookToken, sessionInboxHookToken } = await import(
   `${sdk}execution/session-inbox/address.js`
 );
 
+const noEffect = () => Promise.resolve();
+
 let sequence = 0;
 const fixture = () => {
   sequence += 1;
@@ -68,9 +70,9 @@ const fixture = () => {
     },
   };
   let proof = { kind: "immutable-loser", winnerOwnerRunId };
-  let onProof = () => Promise.resolve();
-  let onCancel = () => Promise.resolve();
-  let onDispose = (_request) => Promise.resolve();
+  let onProof = noEffect;
+  let onCancel = noEffect;
+  let onDispose = noEffect;
   const input = {
     auth,
     descriptor,

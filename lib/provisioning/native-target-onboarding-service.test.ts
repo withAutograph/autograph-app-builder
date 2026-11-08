@@ -763,27 +763,28 @@ describe("exact native preparation invocation approval", () => {
   );
 });
 
+const rescope = (prior: typeof plan, profile: string) =>
+  nativeTargetOnboardingPlanSchema.parse({
+    ...prior,
+    resourceProfileId: profile,
+    resourceProfileAuthorityDigest: (profile === "scope-b" ? "e" : "f").repeat(64),
+    resourceSelectionRevision: (prior.resourceSelectionRevision ?? 0) + 1,
+    appDatabase: { ...prior.appDatabase, resourceId: `${profile}-resource` },
+    nativeNeon: {
+      ...prior.nativeNeon,
+      scope: {
+        ...prior.nativeNeon.scope,
+        branchId: `${profile}-branch`,
+        endpointId: `${profile}-endpoint`,
+        hostname: `${profile}.neon.tech`,
+      },
+    },
+  });
+
 describe("retired attempt preparation with immutable initial approval", () => {
   it.each(["approved", "pending", "cancelled"] as const)(
     "consumes fresh %s history from the exact revision-seven shape",
     async (outcome) => {
-      const rescope = (prior: typeof plan, profile: string) =>
-        nativeTargetOnboardingPlanSchema.parse({
-          ...prior,
-          resourceProfileId: profile,
-          resourceProfileAuthorityDigest: (profile === "scope-b" ? "e" : "f").repeat(64),
-          resourceSelectionRevision: (prior.resourceSelectionRevision ?? 0) + 1,
-          appDatabase: { ...prior.appDatabase, resourceId: `${profile}-resource` },
-          nativeNeon: {
-            ...prior.nativeNeon,
-            scope: {
-              ...prior.nativeNeon.scope,
-              branchId: `${profile}-branch`,
-              endpointId: `${profile}-endpoint`,
-              hostname: `${profile}.neon.tech`,
-            },
-          },
-        });
       const first = plan;
       const second = rescope(first, "scope-b");
       const selected = rescope(second, "scope-c");

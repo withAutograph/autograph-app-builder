@@ -51,6 +51,12 @@ const auth = {
   issuer: "builder",
 };
 
+const metadata = (value) => {
+  const data = { ...value.eventData };
+  delete data.payload;
+  return { ...value, eventData: data };
+};
+
 const fixture = async function fixture(change = () => {}) {
   const originalState = {
     "builder.workflow": {
@@ -172,11 +178,6 @@ const fixture = async function fixture(change = () => {}) {
       }
     }),
   );
-  const metadata = (value) => {
-    const data = { ...value.eventData };
-    delete data.payload;
-    return { ...value, eventData: data };
-  };
   const world = {
     runs: { get: async () => run },
     events: {

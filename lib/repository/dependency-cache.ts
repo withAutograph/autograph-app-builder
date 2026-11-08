@@ -791,6 +791,8 @@ for (const root of attached) {
 }
 `;
 
+const quoteDependencyViewArgument = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
+
 /** Reuse installed checkout dependencies without resolving workspace packages to old source. */
 export const attachCheckoutDependencyView = async (input: {
   sandbox: Pick<SandboxSession, "run">;
@@ -798,11 +800,10 @@ export const attachCheckoutDependencyView = async (input: {
   candidateRoot: string;
   workspaceRoot: string;
 }): Promise<void> => {
-  const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
   const viewKey = sha256(input.candidateRoot);
   const viewRoot = `${input.workspaceRoot}/.app-builder/dependency-views/checkout/${viewKey}`;
   const result = await input.sandbox.run({
-    command: `node -e ${quote(checkoutDependencyViewScript)} ${[input.checkoutRoot, input.candidateRoot, viewRoot, input.workspaceRoot].map(quote).join(" ")}`,
+    command: `node -e ${quoteDependencyViewArgument(checkoutDependencyViewScript)} ${[input.checkoutRoot, input.candidateRoot, viewRoot, input.workspaceRoot].map(quoteDependencyViewArgument).join(" ")}`,
     workingDirectory: input.workspaceRoot,
   });
   if (result.exitCode !== 0) {
@@ -853,10 +854,9 @@ export const detachCheckoutDependencyView = async (input: {
   workspaceRoot: string;
   signal?: AbortSignal;
 }): Promise<void> => {
-  const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
   const viewRoot = `${input.workspaceRoot}/.app-builder/dependency-views/checkout/${sha256(input.candidateRoot)}`;
   const result = await input.sandbox.run({
-    command: `node -e ${quote(detachCheckoutDependencyViewScript)} ${[input.checkoutRoot, input.candidateRoot, viewRoot, input.workspaceRoot].map(quote).join(" ")}`,
+    command: `node -e ${quoteDependencyViewArgument(detachCheckoutDependencyViewScript)} ${[input.checkoutRoot, input.candidateRoot, viewRoot, input.workspaceRoot].map(quoteDependencyViewArgument).join(" ")}`,
     workingDirectory: input.workspaceRoot,
     abortSignal: input.signal,
   });

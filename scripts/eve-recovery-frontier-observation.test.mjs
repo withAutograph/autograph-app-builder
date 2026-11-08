@@ -42,6 +42,7 @@ const request = {
 };
 const response = { requestId: request.requestId, optionId: "approve" };
 const coordinates = { sequence: 7, stepIndex: 2, turnId: "private-turn" };
+const state = (session) => ({ snapshot: { session } });
 const setup = () => {
   let before = appendPendingInputBatch({
     session: { sessionId: "logical", history: [], state: {} },
@@ -94,7 +95,6 @@ const setup = () => {
       { role: "user", kind: "context.instruction", content: secret },
     ],
   };
-  const state = (session) => ({ snapshot: { session } });
   const candidates = [
     {
       kind: "terminal-finalizer-input",

@@ -40,6 +40,10 @@ const metadataSchema = z.object({
   peerDependencies: z.record(z.string(), z.string()).optional(),
 });
 
+const supports = (metadata: z.infer<typeof metadataSchema>, name: string, version: string) =>
+  metadata.peerDependencies?.[name] === undefined ||
+  satisfies(version, metadata.peerDependencies[name]);
+
 /** Resolve once during planning. Apply and resume use only the stored concrete versions. */
 export type FrameworkRegistryFetch = (
   url: string,
@@ -67,9 +71,6 @@ export const resolveLatestFrameworkVersions = async (
     read(reactTypesPackageName),
     read("@types/react-dom"),
   ]);
-  const supports = (metadata: z.infer<typeof metadataSchema>, name: string, version: string) =>
-    metadata.peerDependencies?.[name] === undefined ||
-    satisfies(version, metadata.peerDependencies[name]);
   const candidates = async (name: string) => {
     const response = await fetchMetadata(`https://registry.npmjs.org/${encodeURIComponent(name)}`, {
       headers: { accept: "application/vnd.npm.install-v1+json" },
