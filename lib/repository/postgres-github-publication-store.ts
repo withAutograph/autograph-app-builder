@@ -26,6 +26,11 @@ export interface GitHubPublicationProposalStore {
   save: (proposal: GitHubPublicationProposal) => Promise<GitHubPublicationProposal>;
 }
 
+export interface GitHubPublicationStores {
+  proposals: GitHubPublicationProposalStore;
+  receipts: GitHubPublicationReceiptStore;
+}
+
 const proposalRowSchema = z.strictObject({
   createdAt: z.date(),
   idempotencyKey: z.string(),
@@ -186,10 +191,7 @@ export function createPostgresGitHubPublicationStores(
   database: Database,
   authorityInput: HostedGitHubTenantAuthority,
   now: () => Date = () => new Date(),
-): {
-  proposals: GitHubPublicationProposalStore;
-  receipts: GitHubPublicationReceiptStore;
-} {
+): GitHubPublicationStores {
   const authority = hostedTenantAuthoritySchema.parse(authorityInput);
   const tenantPredicate = and(
     eq(hostedGitHubPublicationProposals.issuer, authority.issuer),

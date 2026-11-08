@@ -2897,7 +2897,7 @@ export const composeHostedOperatorDependencies = (
     if (!knownPrepared) {
       throw new HostedOperatorError(OPERATION_IN_PROGRESS);
     }
-    const organizationId = selectedApplication(configuration, input).organizationId;
+    const { organizationId } = selectedApplication(configuration, input);
     const capturedOwner = hasCapturedSelectedOwnerIdentity(
       current.record,
       operator,

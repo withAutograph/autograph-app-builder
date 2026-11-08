@@ -95,21 +95,27 @@ const rpc = (id: unknown, result: unknown, status = 200) =>
     { headers: { "content-type": "application/json" }, status },
   );
 
+interface FixtureSession {
+  cursor: number;
+  events: unknown[];
+  inputRequests?: unknown[];
+  sessionId: string;
+  status: "working" | "input_required" | "waiting" | "completed" | "cancelled";
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function session(
   sessionId: string,
-  status: "working" | "input_required" | "waiting" | "completed" | "cancelled",
+  status: FixtureSession["status"],
   cursor: number,
   events: unknown[] = [],
   inputRequests?: unknown[],
 ) {
-  return {
-    cursor,
-    events,
-    sessionId,
-    status,
-    ...(inputRequests === undefined ? {} : { inputRequests }),
-  };
+  const result: FixtureSession = { cursor, events, sessionId, status };
+  if (inputRequests !== undefined) {
+    result.inputRequests = inputRequests;
+  }
+  return result;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

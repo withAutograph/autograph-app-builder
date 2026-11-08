@@ -154,7 +154,7 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
       let progress: boolean | undefined;
       let stage = recoveryStage;
       if (error instanceof HostedOperatorError) {
-        code = error.code;
+        ({ code } = error);
         stage = error.recoveryStage ?? stage;
         progress = error.recoveryProgressAdvanced;
       } else if (error instanceof HostedSessionReadTimeoutError) {
