@@ -46,6 +46,10 @@ function claims(input: Partial<VerifiedHostedClaims> = {}): VerifiedHostedClaims
   };
 }
 
+const unexpectedCall = () => {
+  throw new Error("Session operations must not run while listing tools.");
+};
+
 const transport: HostedEveTransport = {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async cancel() {
@@ -468,7 +472,15 @@ describe("branded public tool mapping", () => {
   });
 
   it("keeps ordinary tools free of unconditional MCP App resources", async () => {
-    const handler = createAutographMcpHandler({} as EveSessionService);
+    const service: EveSessionService = {
+      cancel: unexpectedCall,
+      get: unexpectedCall,
+      list: unexpectedCall,
+      respond: unexpectedCall,
+      send: unexpectedCall,
+      start: unexpectedCall,
+    };
+    const handler = createAutographMcpHandler(service);
     const response = await handler(mcpRequest());
     const result = await mcpResult<{
       tools?: {

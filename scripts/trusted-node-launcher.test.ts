@@ -14,6 +14,7 @@ import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 const repositoryRoot = pathModule.resolve(import.meta.dirname, "..");
 const launcher = pathModule.resolve(repositoryRoot, ".config/mise/scripts/trusted-node-launcher");
@@ -179,10 +180,9 @@ describe("trusted Node launcher", () => {
       },
     );
     expect(installed.status, `${installed.stdout}\n${installed.stderr}`).toBe(0);
-    const observation = JSON.parse(readFileSync(receipt, "utf-8")) as {
-      executable: string;
-      path: string;
-    };
+    const observation = z
+      .object({ executable: z.string(), path: z.string() })
+      .parse(JSON.parse(readFileSync(receipt, "utf-8")));
     expect(observation.executable).toBe(pinnedNode);
     expect(observation.path).not.toContain(hostile);
     expect(observation.path.endsWith(`${pathModule.dirname(pinnedNode)}:/usr/bin:/bin`)).toBe(true);

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -203,14 +204,18 @@ describe("provider-created sandbox GitHub source", () => {
         ["-e", sandboxGitHubSourceManifestProgram(root, appBuilder)],
         { encoding: "utf-8" },
       );
-      const result = JSON.parse(output) as {
-        sourceSha: string;
-        sourceTree: string;
-        workspaceDigest: string;
-      };
-      const files = JSON.parse(
+      const result = z
+        .looseObject({ sourceSha: z.string(), sourceTree: z.string(), workspaceDigest: z.string() })
+        .parse(JSON.parse(output));
+      const fileSchema = z.array(z.looseObject({ path: z.string(), sha256: z.string() }));
+      const isSourceFiles = (value: unknown): value is z.infer<typeof fileSchema> =>
+        fileSchema.safeParse(value).success;
+      const files: unknown = JSON.parse(
         readFileSync(path.join(appBuilder, "source-files.json"), "utf-8"),
-      ) as { path: string; sha256: string }[];
+      );
+      if (!isSourceFiles(files)) {
+        throw new Error("Expected a valid source file manifest.");
+      }
       const liveReadme = files.find(({ path: filePath }) => filePath === "README.md");
       expect(result).toMatchObject({ sourceSha, sourceTree });
       expect(files.map(({ path: filePath }) => filePath)).not.toContain(taskPath);

@@ -433,7 +433,10 @@ describe("prototype artifact receipts", () => {
         sessionId,
       });
     } catch (error) {
-      diagnostic = JSON.parse((error as Error).message);
+      if (!(error instanceof Error)) {
+        throw error;
+      }
+      diagnostic = JSON.parse(error.message);
     }
     expect(diagnostic).toMatchObject({
       code: "app_spec_invalid",
