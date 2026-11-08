@@ -616,13 +616,13 @@ describe("target validation", () => {
     } as AppBuilderWorkflowState;
     expect(
       decideApprovedBuildContinuation({
-        state,
         adapterSessionId: "owned-session",
-        turnId: "actual-validation",
-        turnSequence: 1,
+        approvalMatches: () => true,
         blocked: false,
         pendingInput: false,
-        approvalMatches: () => true,
+        state,
+        turnId: "actual-validation",
+        turnSequence: 1,
       }),
     ).toMatchObject({
       decision: "blocked",
@@ -834,7 +834,6 @@ describe("target validation", () => {
         appId: "example",
         apply,
         attempt: createTargetValidationAttempt(apply, "checker-panic"),
-        sandbox,
         dependencyLayout: { kind: "fixture", roots: [], version: 1, workspaceLinks: [] },
         executor: async ({ onChunk }) => {
           if (delivery === "streamed") {
@@ -843,6 +842,7 @@ describe("target validation", () => {
           }
           return { exitCode: 134, stderr: delivery === "returned" ? panic : "", stdout: "" };
         },
+        sandbox,
       });
       expect(result).toMatchObject({
         ok: false,
@@ -865,9 +865,9 @@ describe("target validation", () => {
       appId: "example",
       apply,
       attempt: createTargetValidationAttempt(apply, "unknown-134"),
-      sandbox,
       dependencyLayout: { kind: "fixture", roots: [], version: 1, workspaceLinks: [] },
       executor: () => Promise.resolve({ exitCode: 134, stderr: "no diagnostic", stdout: "" }),
+      sandbox,
     });
     expect(result).toMatchObject({
       ok: false,
@@ -1151,8 +1151,8 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
           appId: "example",
           command: validationCommand,
           environment: {
-            APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
             APP_RUNTIME_STATE_DIR: "/untrusted-state-directory",
+            APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
             OPTIONAL_INPUT: undefined,
           },
           onChunk: streaming
