@@ -9,7 +9,7 @@ import {
   unavailableCaptureObservations,
   writePairedCaptureManifest,
 } from "./self-reproduction-captures";
-import type { CaptureAdapter } from "./self-reproduction-captures";
+import type { CaptureAdapter, CapturePage } from "./self-reproduction-captures";
 import { requirements } from "./self-reproduction-parity";
 
 describe("paired capture orchestration", () => {
@@ -25,7 +25,7 @@ describe("paired capture orchestration", () => {
           }),
       }),
     );
-    const adapter: CaptureAdapter = {
+    const adapter: CaptureAdapter<CapturePage> = {
       exercise: async (_page, state, capture) => {
         await capture();
         const requirement = requirements.find((row) => row.id === `capture/desktop/${state}`);
@@ -44,7 +44,7 @@ describe("paired capture orchestration", () => {
     try {
       const result = await captureParity({
         adapters: { candidate: adapter, reference: adapter },
-        browser: { newContext } as unknown as Browser,
+        browser: { newContext },
         outputRoot: root,
       });
       expect(result.reference).toHaveLength(15);
@@ -72,7 +72,7 @@ describe("paired capture orchestration", () => {
     const newContext = vi.fn();
     const result = await captureParity({
       adapters: {},
-      browser: { newContext } as unknown as Browser,
+      browser: { newContext },
       outputRoot: "/unused",
     });
     expect(
@@ -89,7 +89,7 @@ describe("paired capture orchestration", () => {
     try {
       const browser = {
         newContext: () => Promise.reject(new Error("Browser disconnected")),
-      } as unknown as Browser;
+      };
       const result = await captureParity({
         adapters: { candidate: adapter },
         browser,
