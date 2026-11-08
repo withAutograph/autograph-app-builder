@@ -181,11 +181,11 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
         intentId: randomUUID(),
         approvalRef: "controlled-owner-approval",
         owner: {
-          issuer: "https://builder.example/api/auth",
           audience: "https://builder.example/mcp",
-          workspaceId: "workspace",
+          issuer: "https://builder.example/api/auth",
           ownerUserId: "owner",
           sessionId: "saved-session",
+          workspaceId: "workspace",
         },
         appId: "orchard",
         runtimeAttemptId: randomUUID(),
@@ -320,10 +320,10 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
       expect(accepted.status).toBe(200);
       const first = observationSchema.parse(JSON.parse(accepted.body.toString()));
       expect(first).toMatchObject({
+        body: body.toString("base64"),
         generation: 1,
         method: "POST",
         target: "/orchard/action?view=one",
-        body: body.toString("base64"),
       });
       expect(first.verified).toEqual({
         actorId: "fixture-actor",
@@ -469,11 +469,11 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
           intentId: randomUUID(),
           approvalRef: "controlled-owner-approval",
           owner: {
-            issuer: "https://builder.example/api/auth",
             audience: "https://builder.example/mcp",
-            workspaceId: "workspace",
+            issuer: "https://builder.example/api/auth",
             ownerUserId: "owner",
             sessionId: "saved-session",
+            workspaceId: "workspace",
           },
           appId: "orchard",
           runtimeAttemptId: randomUUID(),

@@ -312,7 +312,7 @@ describe("normal actor preparation", () => {
       ...program,
       organizations: [
         ...program.organizations,
-        { organizationId: "org-two", ownerActorKey: "owner", name: "Two", slug: "two" },
+        { name: "Two", organizationId: "org-two", ownerActorKey: "owner", slug: "two" },
       ],
       memberships: [
         ...program.memberships,
@@ -483,7 +483,7 @@ describe("normal actor preparation", () => {
       actors: program.actors.map((actor) => ({ ...actor, account: "capture-existing" })),
       organizations: [
         ...program.organizations,
-        { organizationId: "org-two", ownerActorKey: "owner", name: "Two", slug: "two" },
+        { name: "Two", organizationId: "org-two", ownerActorKey: "owner", slug: "two" },
       ],
       memberships: [
         ...program.memberships,

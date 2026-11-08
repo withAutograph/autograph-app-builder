@@ -57,20 +57,20 @@ const fixture = () => {
     access: [],
     cost: { class: "shared-recovery-group", description: "fixture", owner: "fixture" },
     effects: [
-      { id: "resources", kind: "resources", description: "Resources" },
-      { id: "install", kind: "install", description: "Install" },
-      { id: "access", kind: "access", description: "Access" },
-      { id: "bindings", kind: "bindings", description: "Bind" },
+      { description: "Resources", id: "resources", kind: "resources" },
+      { description: "Install", id: "install", kind: "install" },
+      { description: "Access", id: "access", kind: "access" },
+      { description: "Bind", id: "bindings", kind: "bindings" },
     ],
     installer: { reference: "installer", sha256: "a".repeat(64) },
     neon: {
-      projectId: "neon",
       branchId: "branch",
-      endpoint: "ep-fixture.neon.tech",
       connectionRef: "connection",
+      endpoint: "ep-fixture.neon.tech",
+      projectId: "neon",
       source: "synthetic-only",
     },
-    release: { id: "release", artifactRef: "artifact", sha256: "b".repeat(64) },
+    release: { artifactRef: "artifact", id: "release", sha256: "b".repeat(64) },
     retention: { expiresAt: "2027-01-01T00:00:00Z", policy: "retain" },
   });
   const approved = {
@@ -103,33 +103,33 @@ const fixture = () => {
     principal,
   });
   const receipt = privateHostedApprovalReceiptSchema.parse({
-    format: "autograph-hosted-approval-v1",
     callId: "human-call",
-    requestId: "human-request",
+    format: "autograph-hosted-approval-v1",
     outcome: "approved",
+    requestId: "human-request",
     responderPrincipalId: principal.ownerUserId,
     sequence: 1,
-    toolName: "prepare-app-hosted-runtime",
     toolInput: approved,
+    toolName: "prepare-app-hosted-runtime",
     turnId: "turn",
   });
   const session = durableHostedSessionRecordSchema.parse({
-    version: 2,
-    sessionId: selection.sessionId,
-    adapterSessionId: "adapter",
     adapterGeneration: 1,
-    originAdapterSessionId: "adapter",
+    adapterSessionId: "adapter",
     cancellationRevision: 3,
-    resumedCancellationRevision: 3,
-    principal,
     createdAtEpochMs: 1,
     lastProgressAtEpochMs: 1,
-    updatedAtEpochMs: 1,
+    originAdapterSessionId: "adapter",
+    principal,
+    privateApprovalReceipts: [receipt],
     resumability: "live",
+    resumedCancellationRevision: 3,
+    sessionId: selection.sessionId,
     stage: "planning",
     status: "working",
     title: "Reports",
-    privateApprovalReceipts: [receipt],
+    updatedAtEpochMs: 1,
+    version: 2,
   });
   const abort = new AbortController();
   const context: WorkflowToolContext = {
@@ -298,7 +298,6 @@ describe("automatic observation of one approved execution", () => {
           operationRef: f.approved.operationRef,
           planDigest: f.approved.planDigest,
           nextAction: {
-            tool: "plan-app-hosted-runtime",
             approval: "normal-plan-approval",
             input: {
               appId: f.approved.appId,
@@ -307,6 +306,7 @@ describe("automatic observation of one approved execution", () => {
               environment: f.approved.environment,
               operation: "prepare",
             },
+            tool: "plan-app-hosted-runtime",
           },
         },
       },
@@ -492,8 +492,8 @@ describe("automatic observation of one approved execution", () => {
       prepareObserved: () => Promise.reject(new Error("No terminal evidence")),
     });
     expect(await read(f.approved, f.context, f.snapshot, 1000)).toEqual({
-      status: "waiting",
       checkAfter: new Date(2000).toISOString(),
+      status: "waiting",
     });
     expect(reads).toBe(1);
     expect(f.calls).toEqual([]);
