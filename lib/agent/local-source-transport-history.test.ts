@@ -491,11 +491,10 @@ test("failed tool results, observed metadata and foreign/incomplete history cann
         {
           environment,
           readAuthority: () => Promise.resolve({ kind: "local", ownerUid: 1, stateRoot }),
-          snapshot: () =>
-            Promise.resolve({
-              events: [],
-              session: { sessionId: "saved-session", streamIndex: 2 },
-            }),
+          snapshot: async () => ({
+            events: [],
+            session: { sessionId: "saved-session", streamIndex: 2 },
+          }),
         },
       ),
     ).rejects.toThrow("incomplete");
@@ -534,11 +533,10 @@ test("failed tool results, observed metadata and foreign/incomplete history cann
             reads += 1;
             return Promise.resolve({ kind: "local", ownerUid: reads, stateRoot });
           },
-          snapshot: () =>
-            Promise.resolve({
-              events: [],
-              session: { sessionId: "saved-session", streamIndex: 0 },
-            }),
+          snapshot: async () => ({
+            events: [],
+            session: { sessionId: "saved-session", streamIndex: 0 },
+          }),
         },
       ),
     ).rejects.toThrow("owner changed");

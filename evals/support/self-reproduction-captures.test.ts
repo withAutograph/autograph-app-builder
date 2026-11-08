@@ -15,7 +15,7 @@ import { requirements } from "./self-reproduction-parity";
 describe("paired capture orchestration", () => {
   it("captures all desktop states separately, records inert controls, and closes contexts", async () => {
     const root = await mkdtemp(nodePath.join(tmpdir(), "parity-capture-test-"));
-    const close = vi.fn(() => Promise.resolve());
+    const close = vi.fn(async () => {});
     const newContext = vi.fn(() =>
       Promise.resolve({
         close,
@@ -106,8 +106,8 @@ describe("paired capture orchestration", () => {
   });
   it("owns one browser and writes a side-by-side advisory manifest", async () => {
     const root = await mkdtemp(nodePath.join(tmpdir(), "parity-capture-manifest-"));
-    const closeBrowser = vi.fn(() => Promise.resolve());
-    const closeContext = vi.fn(() => Promise.resolve());
+    const closeBrowser = vi.fn(async () => {});
+    const closeContext = vi.fn(async () => {});
     const newContext = vi.fn(() =>
       Promise.resolve({
         close: closeContext,
