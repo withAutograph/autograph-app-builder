@@ -77,10 +77,7 @@ export function parseLifecycleArguments(
 }
 
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
-export async function runImageLifecycleTask(
-  action: ImageLifecycleAction,
-  args: readonly string[],
-): Promise<unknown> {
+export async function runImageLifecycleTask(action: ImageLifecycleAction, args: readonly string[]) {
   const { approval, image, username } = parseLifecycleArguments(action, args);
   if (action === "verify-sources") return verifyImageSources(approval);
   if (action === "build") return buildImage(approval);

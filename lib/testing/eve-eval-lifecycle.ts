@@ -13,8 +13,8 @@ type EvalChild = Pick<ChildProcess, "pid" | "kill"> & Pick<EventEmitter, "once" 
 type EvalSignal = "SIGINT" | "SIGTERM";
 
 type SignalTarget = Readonly<{
-  on: (signal: EvalSignal, listener: () => void) => unknown;
-  off: (signal: EvalSignal, listener: () => void) => unknown;
+  on: (signal: EvalSignal, listener: () => void) => void;
+  off: (signal: EvalSignal, listener: () => void) => void;
 }>;
 
 export type EveEvalPrewarmLockReceipt = Readonly<{

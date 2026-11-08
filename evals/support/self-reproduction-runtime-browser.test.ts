@@ -49,7 +49,7 @@ describe("sandbox diagnostic browser captures", () => {
       join: (...parts: string[]) => string,
       browser: typeof chromium,
       process: { argv: string[] },
-    ) => Promise<unknown>;
+    ) => Promise<void>;
     await execute(
       async () => JSON.stringify({ baseURL: "http://127.0.0.1:3000/app" }),
       async (_path: string, content: string) => writes.push(content),

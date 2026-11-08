@@ -29,25 +29,19 @@ export type LocalEveInvocation = Readonly<{
 type ForwardedSignal = "SIGINT" | "SIGTERM";
 
 type SignalTarget = Readonly<{
-  once: (signal: ForwardedSignal, listener: () => void) => unknown;
-  off: (signal: ForwardedSignal, listener: () => void) => unknown;
+  once: (signal: ForwardedSignal, listener: () => void) => void;
+  off: (signal: ForwardedSignal, listener: () => void) => void;
 }>;
 
 interface EveChildProcess {
   kill: ChildProcess["kill"];
   once: {
-    (
-      event: "exit",
-      listener: (code: number | null, signal: NodeJS.Signals | null) => void,
-    ): unknown;
-    (event: "error", listener: (error: Error) => void): unknown;
+    (event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): void;
+    (event: "error", listener: (error: Error) => void): void;
   };
   removeListener: {
-    (
-      event: "exit",
-      listener: (code: number | null, signal: NodeJS.Signals | null) => void,
-    ): unknown;
-    (event: "error", listener: (error: Error) => void): unknown;
+    (event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): void;
+    (event: "error", listener: (error: Error) => void): void;
   };
 }
 

@@ -58,10 +58,10 @@ export async function POST(request: Request, context: { params: Promise<{ provid
     return completeAuthorization(
       context,
       Object.fromEntries(
-        authorizationFields.map((name) => [
-          name,
-          typeof form.get(name) === "string" ? String(form.get(name)) : undefined,
-        ]),
+        authorizationFields.map((name) => {
+          const value = form.get(name);
+          return [name, typeof value === "string" ? value : undefined];
+        }),
       ),
     );
   } catch {

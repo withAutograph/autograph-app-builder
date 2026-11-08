@@ -4,7 +4,7 @@ import { expect } from "playwright/test";
 import postgres from "postgres";
 import { selfReproductionDraft } from "./self-reproduction-draft-fixture";
 
-const sessionUserId = (session: unknown): unknown => {
+const sessionUserId = (session: unknown): string | undefined => {
   if (session === null || typeof session !== "object" || !("user" in session)) {
     return undefined;
   }
@@ -12,7 +12,8 @@ const sessionUserId = (session: unknown): unknown => {
   if (user === null || typeof user !== "object" || !("id" in user)) {
     return undefined;
   }
-  return user.id;
+  const { id } = user;
+  return typeof id === "string" ? id : undefined;
 };
 
 export interface ReferenceCaptureFixtureReceipt {
