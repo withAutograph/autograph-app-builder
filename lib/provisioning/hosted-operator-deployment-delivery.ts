@@ -354,7 +354,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       throw error;
     }
     if (stage === undefined) {
-      return { response, rejectedAssignment: false };
+      return { rejectedAssignment: false, response };
     }
     const rejectedAssignment =
       stage === "assignment" && [400, 401, 403, 404, 409, 429].includes(response.status);
@@ -367,7 +367,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       category = "rejected";
     }
     observeAlias({ stage, method, httpStatus: response.status, category });
-    return { response, rejectedAssignment };
+    return { rejectedAssignment, response };
   };
   const io = (
     input: HostedOperatorDeploymentContext,

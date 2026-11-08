@@ -101,14 +101,19 @@ const bindingSchema = z.strictObject({
   proof: hostedRuntimeProofSchema,
 });
 const operatorSuccessSchemas = {
-  plan: operatorPublicResultSchema,
-  status: operatorPublicResultSchema,
-  execute: operatorPublicResultSchema,
-  bindings: bindingSchema,
   "auth-identity-input": operatorAuthIdentityInputSchema,
+  bindings: bindingSchema,
+  execute: operatorPublicResultSchema,
   "neon-authorization": neonAuthorizationResultSchema,
+  plan: operatorPublicResultSchema,
   "resolve-preview-target": operatorSelectionSchema,
+  status: operatorPublicResultSchema,
 } satisfies Record<OperatorRequest["action"], z.ZodType>;
+interface OperatorRequestHeaders extends Record<string, string> {
+  authorization: string;
+  "content-type": string;
+  "x-vercel-trusted-oidc-idp-token": string;
+}
 const operatorResponseDiagnostic = (
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Each action's closed success schema is applied before diagnostics are projected.
   value: unknown,
@@ -201,20 +206,20 @@ export const createHostedOperatorClient = (input: {
       operatorAction: body.action,
     });
     const token = await input.token();
+    const serializedBody = JSON.stringify(body);
+    const headers: OperatorRequestHeaders = {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+      "x-vercel-trusted-oidc-idp-token": token,
+    };
+    if (body.action === "status" || body.action === "execute") {
+      headers[OPERATOR_EXECUTION_OBSERVATION_HEADER] = OPERATOR_EXECUTION_OBSERVATION_PREFERENCE;
+      headers[OPERATOR_PREPARATION_PROGRESS_HEADER] = OPERATOR_PREPARATION_PROGRESS_PREFERENCE;
+    }
     const options: RequestInit & { dispatcher: Agent } = {
-      body: JSON.stringify(body),
+      body: serializedBody,
       dispatcher: operatorDispatcher,
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-        "x-vercel-trusted-oidc-idp-token": token,
-        ...(body.action === "status" || body.action === "execute"
-          ? {
-              [OPERATOR_EXECUTION_OBSERVATION_HEADER]: OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
-              [OPERATOR_PREPARATION_PROGRESS_HEADER]: OPERATOR_PREPARATION_PROGRESS_PREFERENCE,
-            }
-          : {}),
-      },
+      headers,
       method: "POST",
       redirect: "error",
       signal,

@@ -131,11 +131,11 @@ const readRestorationCoordination = (
   return {
     accountLink,
     accountWait,
-    historicalWait,
-    historicalAcceptedContinuation,
     completedCurrentContinuation,
-    currentExecutionAcknowledged,
     continuationAcceptanceReceiptPresent,
+    currentExecutionAcknowledged,
+    historicalAcceptedContinuation,
+    historicalWait,
     settledLink,
     settledWait,
   };
@@ -459,7 +459,8 @@ export const restorePendingAccountPreparation = async (
       row.record;
     const journalSchema = hostedRuntimeJournalRecordSchema;
     const parseJournal = journalSchema.parse.bind(journalSchema);
-    const restoredPrefix: typeof idleRecord & Pick<HostedRuntimeJournalRecord, "realmIdentityWait"> = {
+    const restoredPrefix: typeof idleRecord &
+      Pick<HostedRuntimeJournalRecord, "realmIdentityWait"> = {
       ...idleRecord,
     };
     if (accountWait) {

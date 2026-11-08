@@ -120,20 +120,35 @@ export const deriveRepositoryProductionResource = (
     migratorRole: `${stem}_m`,
   };
 };
-export const initialRepositoryProductionRecord = (
+type InitialRepositoryProductionFields = Pick<
+  z.input<typeof repositoryProductionRecordSchema>,
+  "version" | "kind" | "scope" | "intent" | "resource"
+>;
+
+const initialRepositoryProductionRecordInput = (
   scope: RepositoryProductionScope,
   intent: RepositoryProductionIntent,
-): RepositoryProductionRecord =>
-  repositoryProductionRecordSchema.parse({
+) => {
+  const fields: InitialRepositoryProductionFields = {
     version: 1,
     kind: REPOSITORY_PRODUCTION_SETUP_KIND,
     scope,
     intent,
-    ...(intent.storage.kind === "none"
-      ? {}
-      : { resource: deriveRepositoryProductionResource(scope) }),
+  };
+  if (intent.storage.kind !== "none") {
+    fields.resource = deriveRepositoryProductionResource(scope);
+  }
+  return {
+    ...fields,
     effects: Object.fromEntries(
       repositoryProductionEffectSchema.options.map((effect) => [effect, { state: "idle" }]),
     ),
     workerCheckpoints: [],
-  });
+  };
+};
+
+export const initialRepositoryProductionRecord = (
+  scope: RepositoryProductionScope,
+  intent: RepositoryProductionIntent,
+): RepositoryProductionRecord =>
+  repositoryProductionRecordSchema.parse(initialRepositoryProductionRecordInput(scope, intent));

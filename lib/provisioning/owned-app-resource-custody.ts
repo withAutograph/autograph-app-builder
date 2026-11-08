@@ -77,7 +77,7 @@ export const createOwnedAppResourceCustody = (deps: {
     };
     const digest = hash(JSON.stringify([OWNED_APP_RESOURCE_SOURCE_KIND, scope]));
     const requestId = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-5${digest.slice(13, 16)}-a${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
-    return { scope, digest, requestId };
+    return { digest, requestId, scope };
   };
   const readCustody = async (context: HostedOperatorContext, plan: HostedOperatorPlan) => {
     await deps.assertCurrentOwner(context);
