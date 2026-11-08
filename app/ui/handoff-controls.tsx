@@ -65,6 +65,85 @@ const renderCursorSetupLink = (destination: string, url?: string) => {
   return <p>Cursor connection setup is not available yet.</p>;
 };
 
+type HandoffAccess = "ready" | "sign-in" | "unavailable";
+
+const subscribeToHandoffStatus = (
+  handoffId: string,
+  onStatus: (status: HandoffControlData) => void,
+  onAccess: (access: HandoffAccess) => void,
+  onNotice: (notice: string) => void,
+) => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let controller: AbortController | undefined;
+  let disposed = false;
+  const stop = () => {
+    clearTimeout(timer);
+    controller?.abort();
+  };
+  const refresh = async () => {
+    if (disposed || document.visibilityState !== "visible") {
+      return;
+    }
+    const request = new AbortController();
+    controller = request;
+    let complete = false;
+    try {
+      const response = await fetch(`/api/builder/handoffs/${encodeURIComponent(handoffId)}`, {
+        cache: "no-store",
+        signal: request.signal,
+      });
+      if (request.signal.aborted || disposed) {
+        return;
+      }
+      if (response.status === 401 || response.status === 403 || response.status === 404) {
+        complete = true;
+        onAccess(response.status === 401 ? "sign-in" : "unavailable");
+        return;
+      }
+      if (!response.ok) {
+        throw new Error("handoff-status-unavailable");
+      }
+      const next = readStatus(await response.json(), handoffId);
+      if (request.signal.aborted || disposed) {
+        return;
+      }
+      complete = next.status === "continued";
+      onStatus(next);
+    } catch {
+      if (!request.signal.aborted && !disposed) {
+        onNotice(
+          "Status is temporarily unavailable. Your prepared app is saved; we’ll retry while this page is open.",
+        );
+      }
+    } finally {
+      if (
+        !disposed &&
+        !request.signal.aborted &&
+        !complete &&
+        document.visibilityState === "visible"
+      ) {
+        timer = setTimeout(() => {
+          void refresh();
+        }, 5000);
+      }
+    }
+  };
+  const visibilityChanged = () => {
+    stop();
+    if (document.visibilityState === "visible") {
+      void refresh();
+    }
+  };
+  document.addEventListener("visibilitychange", visibilityChanged);
+  void refresh();
+  return () => {
+    disposed = true;
+    clearTimeout(timer);
+    controller?.abort();
+    document.removeEventListener("visibilitychange", visibilityChanged);
+  };
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting.
 export function HandoffControls({ initial }: { initial: HandoffControlData }) {
   // The instant server shell is visible before browser event handlers exist.
@@ -114,79 +193,15 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     if (access !== "ready" || renewalPending || data.status === "continued") {
       return;
     }
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let controller: AbortController | undefined;
-    let disposed = false;
-    const stop = () => {
-      clearTimeout(timer);
-      controller?.abort();
-    };
-    const refresh = async () => {
-      if (disposed || document.visibilityState !== "visible") {
-        return;
-      }
-      const request = new AbortController();
-      controller = request;
-      let complete = false;
-      try {
-        const response = await fetch(
-          `/api/builder/handoffs/${encodeURIComponent(data.handoffId)}`,
-          {
-            cache: "no-store",
-            signal: request.signal,
-          },
-        );
-        if (request.signal.aborted || disposed) {
-          return;
-        }
-        if (response.status === 401 || response.status === 403 || response.status === 404) {
-          complete = true;
-          setAccess(response.status === 401 ? "sign-in" : "unavailable");
-          return;
-        }
-        if (!response.ok) {
-          throw new Error("handoff-status-unavailable");
-        }
-        const next = readStatus(await response.json(), data.handoffId);
-        if (request.signal.aborted || disposed) {
-          return;
-        }
-        complete = next.status === "continued";
+    return subscribeToHandoffStatus(
+      data.handoffId,
+      (next) => {
         setData(next);
         setNotice("");
-      } catch {
-        if (!request.signal.aborted && !disposed) {
-          setNotice(
-            "Status is temporarily unavailable. Your prepared app is saved; we’ll retry while this page is open.",
-          );
-        }
-      } finally {
-        if (
-          !disposed &&
-          !request.signal.aborted &&
-          !complete &&
-          document.visibilityState === "visible"
-        ) {
-          timer = setTimeout(() => {
-            void refresh();
-          }, 5000);
-        }
-      }
-    };
-    const visibilityChanged = () => {
-      stop();
-      if (document.visibilityState === "visible") {
-        void refresh();
-      }
-    };
-    document.addEventListener("visibilitychange", visibilityChanged);
-    void refresh();
-    return () => {
-      disposed = true;
-      clearTimeout(timer);
-      controller?.abort();
-      document.removeEventListener("visibilitychange", visibilityChanged);
-    };
+      },
+      setAccess,
+      setNotice,
+    );
   }, [access, data.handoffId, data.status, renewalPending]);
 
   useEffect(() => {

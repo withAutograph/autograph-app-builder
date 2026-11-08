@@ -150,7 +150,12 @@ export function SearchCombobox({
       >
         <ChevronDown size={16} aria-hidden="true" />
       </button>
-      <div className={styles.comboMenu} role="dialog" aria-label="Available options" hidden={!open}>
+      <dialog
+        className={styles.comboMenu}
+        aria-label="Available options"
+        open={open}
+        style={{ color: "inherit", margin: 0, maxHeight: "none", maxWidth: "none" }}
+      >
         <div id={`${id}-listbox`} role="listbox">
           {shown.map((option, index) => (
             <button
@@ -200,7 +205,7 @@ export function SearchCombobox({
             <span className={styles.comboOptionLabel}>{menuFooter.label}</span>
           </button>
         ) : null}
-      </div>
+      </dialog>
     </div>
   );
 }

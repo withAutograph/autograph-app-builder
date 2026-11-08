@@ -561,10 +561,6 @@ export default defineConfig({
       rules: { "react-doctor/no-giant-component": "off" },
     },
     {
-      files: [handoffControlsPath],
-      rules: { "react-doctor/effect-needs-cleanup": "off" },
-    },
-    {
       files: [
         "app/(product)/auth/setting-up/page.tsx",
         "app/ui/builder-continuation.tsx",
@@ -573,7 +569,7 @@ export default defineConfig({
       rules: { "react-doctor/nextjs-no-client-side-redirect": "off" },
     },
     {
-      files: [sharedLintFile5, "app/ui/search-combobox.tsx"],
+      files: [sharedLintFile5],
       rules: { "react-doctor/prefer-html-dialog": "off" },
     },
     {
