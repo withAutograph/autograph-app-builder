@@ -348,33 +348,33 @@ const prepared = async (f: ReturnType<typeof fixture>) => {
 const participantServiceFixture = () => {
   const f = fixture();
   const program = normalActorProgramSchema.parse({
-    version: 1,
-    appId: selection.appId,
-    origin: plan.publicGateway?.origin,
     actors: [
       {
-        actorKey: "owner",
-        name: "Owner",
-        email: "owner@example.test",
         account: "capture-existing",
+        actorKey: "owner",
+        email: "owner@example.test",
+        name: "Owner",
       },
     ],
-    organizations: [],
-    memberships: [],
     appAccess: [],
+    appId: selection.appId,
+    memberships: [],
+    organizations: [],
+    origin: plan.publicGateway?.origin,
+    version: 1,
   });
   const accountPlan = hostedOperatorPlanSchema.parse({
     ...plan,
-    stage: "auth-participants",
-    normalActorProgram: program,
     access: [],
     effects: [
       {
+        description: "Normal participant accounts only",
         id: "normal-accounts",
         kind: "normal-accounts",
-        description: "Normal participant accounts only",
       },
     ],
+    normalActorProgram: program,
+    stage: "auth-participants",
   });
   f.deps.plan = vi.fn(async () => accountPlan);
   f.deps.ensureNormalActorCapture = vi.fn(async () => "ready" as const);
@@ -699,17 +699,17 @@ const captureSuccessorFixture = () => {
     }),
   };
   const qa = Array.from({ length: 7 }, (_, index) => ({
+    account: "create-email-password",
     actorKey: `qa-${index + 1}`,
     email: `qa${index + 1}@example.test`,
     name: `QA ${index + 1}`,
-    account: "create-email-password",
   }));
   const nextProgram = normalActorProgramSchema.parse({
     ...original.program,
     actors: [...original.program.actors, ...qa],
     organizations: [
-      { organizationId: "qa-one", name: "QA One", slug: "qa-one", ownerActorKey: "qa-1" },
-      { organizationId: "qa-two", name: "QA Two", slug: "qa-two", ownerActorKey: "qa-4" },
+      { name: "QA One", organizationId: "qa-one", ownerActorKey: "qa-1", slug: "qa-one" },
+      { name: "QA Two", organizationId: "qa-two", ownerActorKey: "qa-4", slug: "qa-two" },
     ],
     memberships: qa.map((actor, index) => ({
       actorKey: actor.actorKey,

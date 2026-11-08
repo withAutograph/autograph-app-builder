@@ -32,21 +32,21 @@ const originalPlan = hostedOperatorPlanSchema.parse({
   access: [{ actorId: "owner", organizationId: "org_fixture", roles: ["owner"] }],
   appDatabase: {
     database: "app",
-    resourceId: "app-resource",
     migratorRole: "app_owner",
+    resourceId: "app-resource",
     runtimeRole: "app_runtime",
   },
   authDatabase: {
     database: "shared_auth",
-    resourceId: "auth-resource",
     migratorRole: "auth_owner",
+    resourceId: "auth-resource",
     runtimeRole: "auth_runtime",
   },
   neon: {
-    projectId: "neon-fixture",
     branchId: "br_fixture",
-    endpoint: "ep-fixture.neon.tech",
     connectionRef: "owned-connection",
+    endpoint: "ep-fixture.neon.tech",
+    projectId: "neon-fixture",
     source: "synthetic-only",
   },
   authMembership: {
@@ -65,28 +65,28 @@ const originalPlan = hostedOperatorPlanSchema.parse({
       jwksUrl: "https://gateway.example.test/_platform/jwks.json",
       transportSource: {
         audience: "https://operator.example.test",
+        environment: "preview",
         issuer: "https://oidc.vercel.com",
         ownerId: "team_fixture",
         projectId: "prj_operator",
-        environment: "preview",
       },
     },
   },
   cost: { class: "shared-recovery-group", description: "Synthetic fixture", owner: "Fixture" },
   effects: [
-    { id: "resources", kind: "resources", description: "Observe resources" },
-    { id: "install", kind: "install", description: "Install app" },
-    { id: "membership", kind: "auth-membership", description: "Create owned organization" },
-    { id: "access", kind: "access", description: "Grant access" },
-    { id: "bindings", kind: "bindings", description: "Bind app" },
+    { description: "Observe resources", id: "resources", kind: "resources" },
+    { description: "Install app", id: "install", kind: "install" },
+    { description: "Create owned organization", id: "membership", kind: "auth-membership" },
+    { description: "Grant access", id: "access", kind: "access" },
+    { description: "Bind app", id: "bindings", kind: "bindings" },
   ],
   installer: { reference: "fixture-installer", sha256: "d".repeat(64) },
-  release: { id: "fixture-release", artifactRef: "fixture-artifact", sha256: "e".repeat(64) },
+  release: { artifactRef: "fixture-artifact", id: "fixture-release", sha256: "e".repeat(64) },
   retention: { expiresAt: "2030-01-01T00:00:00.000Z", policy: "Retain owned fixture" },
   publicGateway: {
     branch: "preview",
-    projectId: "prj_gateway",
     origin: "https://apps.example.test",
+    projectId: "prj_gateway",
   },
   deploymentBoundary: {
     authority: {
@@ -100,9 +100,9 @@ const originalPlan = hostedOperatorPlanSchema.parse({
     gateway: { branch: "preview", environment: "preview", projectId: "prj_gateway" },
     operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
     verification: {
-      publicOrigin: "https://apps.example.test",
       gatewayOrigin: "https://gateway.example.test",
       jwksUrl: "https://gateway.example.test/_platform/jwks.json",
+      publicOrigin: "https://apps.example.test",
     },
   },
 });
@@ -194,10 +194,10 @@ const participantPlan = (plan: HostedOperatorPlan) => {
     origin: plan.publicGateway?.origin,
     actors: [
       {
+        account: "capture-existing",
         actorKey: "owner",
         email: "owner@example.test",
         name: "Owner",
-        account: "capture-existing",
       },
     ],
     organizations: organizations.map((organization) => ({
@@ -321,9 +321,9 @@ describe("retained membership inspection provenance", () => {
     ).toMatchObject({
       approvedByCallId: "completed-participant-call",
       operator: {
+        approvalId: "completed-participant-approval",
         mode: "protected-operator-v1",
         operationRef,
-        approvalId: "completed-participant-approval",
         plan: completedPlan,
       },
     });
@@ -554,14 +554,14 @@ describe("retained membership inspection provenance", () => {
       appDatabase: { ...currentPlan.appDatabase, database: "revised_app" },
       installer: { reference: "revised-layout-installer", sha256: "1".repeat(64) },
       delivery: {
-        projectId: "prj_app",
         branch: "preview",
-        repoId: "revised-repo",
         gitSha: "2".repeat(40),
+        projectId: "prj_app",
+        repoId: "revised-repo",
       },
       effects: [
         ...currentPlan.effects,
-        { id: "delivery", kind: "delivery", description: "Deliver revised app" },
+        { description: "Deliver revised app", id: "delivery", kind: "delivery" },
       ],
       deploymentBoundary: {
         ...currentPlan.deploymentBoundary,

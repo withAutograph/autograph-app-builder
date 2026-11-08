@@ -176,7 +176,7 @@ it("keeps original requirements, chronological product changes and complete dura
     text: "Use durable drafts",
   });
   const first = await evidence.readRequirements({ id: "app-spec" });
-  const second = await evidence.readRequirements({ id: "app-spec", cursor: first.nextCursor });
+  const second = await evidence.readRequirements({ cursor: first.nextCursor, id: "app-spec" });
   expect(first.text + second.text).toBe(fullSpec);
   expect(
     await evidence.verifyRequirementQuote({ documentId: "app-spec", quote: fullSpec.slice(-100) }),
@@ -196,9 +196,9 @@ it("reads exact ranged evidence from relevant unchanged imports and rejects inve
     "secrets.json": '{"credential":"must-not-read"}',
   });
   const source = await evidence.readSource({
+    endLine: 2,
     path: "packages/shared/save.ts",
     startLine: 2,
-    endLine: 2,
   });
   expect(source.content).toBe("  return database.insert(record);");
   expect(source.startLine).toBe(2);
@@ -235,7 +235,7 @@ it("verifies complete file bytes before returning a requested range", async () =
     { digestOverride: exactDigest("observed bytes") },
   );
   await expect(
-    evidence.readSource({ path: "apps/example/page.ts", startLine: 1, endLine: 1 }),
+    evidence.readSource({ endLine: 1, path: "apps/example/page.ts", startLine: 1 }),
   ).rejects.toThrow("changed since");
 });
 const completedApplication = () => ({
@@ -259,7 +259,7 @@ it("authorizes application journal reuse before returning completed evidence wit
     reviewInput,
     normalizedChanges: [],
     evidence: sourceEvidence({}),
-    journal: { assertCurrentOwner: async () => {}, read, put },
+    journal: { assertCurrentOwner: async () => {}, put, read },
     currentDigest: async () => reviewInput.sourceDigest,
   };
   const result = await reviewApplicationWithJournal(input, assess);
@@ -295,15 +295,15 @@ it("strips fresh invocation from durable completion", async () => {
       reviewInput,
       normalizedChanges: [],
       evidence: sourceEvidence({}),
-      journal: { assertCurrentOwner: async () => {}, read, put },
+      journal: { assertCurrentOwner: async () => {}, put, read },
       currentDigest: async () => reviewInput.sourceDigest,
     },
     assess,
   );
   expect(assess).toHaveBeenCalledOnce();
   expect(put).toHaveBeenCalledWith(expect.any(String), {
-    kind: "application-completed",
     assessment: completedApplication(),
+    kind: "application-completed",
   });
   expect(result.invocation?.freshUsage.totalTokens).toBe(12);
 });
@@ -316,7 +316,7 @@ it("keeps repeated evidence authorization separate from the one completed-assess
       reviewInput,
       normalizedChanges: [],
       evidence: sourceEvidence({}),
-      journal: { assertCurrentOwner, read, put },
+      journal: { assertCurrentOwner, put, read },
       currentDigest: async () => reviewInput.sourceDigest,
     },
     async (_input, _evidence, options) => {
@@ -430,7 +430,7 @@ it("distinguishes correctable evidence selection from actual observed source fai
   await expect(evidence.readRequirements({ id: "unknown-document" })).rejects.toBeInstanceOf(
     ApplicationReviewSelectionError,
   );
-  await expect(evidence.readRequirements({ id: "original", cursor: 1000 })).rejects.toBeInstanceOf(
+  await expect(evidence.readRequirements({ cursor: 1000, id: "original" })).rejects.toBeInstanceOf(
     ApplicationReviewSelectionError,
   );
   const observedSource = await evidence.readSource({ path: "apps/example/page.ts" });
@@ -469,7 +469,7 @@ it("rechecks fresh ownership without rereading completed evidence and blocks com
         reviewInput,
         normalizedChanges: [],
         evidence: sourceEvidence({}),
-        journal: { assertCurrentOwner, read, put },
+        journal: { assertCurrentOwner, put, read },
         currentDigest: async () => reviewInput.sourceDigest,
       },
       assess,
@@ -547,7 +547,7 @@ it("rejects an incompatible canonical first writer returned by journal put", asy
           reviewInput,
           normalizedChanges: [],
           evidence: sourceEvidence({}),
-          journal: { assertCurrentOwner: async () => {}, read, put },
+          journal: { assertCurrentOwner: async () => {}, put, read },
           currentDigest: async () => reviewInput.sourceDigest,
         },
         async () => valid,
