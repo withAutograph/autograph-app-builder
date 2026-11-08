@@ -18,6 +18,13 @@ const draftAutosavePath = "app/ui/use-builder-draft-autosave.ts";
 const productionSetupTestPath = "lib/provisioning/repository-production-setup.test.ts";
 const eveEvalPreloadPath = "scripts/eve-eval-fetch-preload.mjs";
 
+const referenceLifecyclePath = "evals/support/self-reproduction-reference-lifecycle.ts";
+const nodeFreshBootstrapPath = "lib/repository/node-fresh-bootstrap.ts";
+const nodeLocalPublicationPath = "lib/repository/node-local-publication.ts";
+const postgresExecutionLeasePath = "lib/sandbox/postgres-execution-lease-store.ts";
+
+const additionalAuthFieldPath = "components/auth/additional-field.tsx";
+
 export default defineConfig({
   extends: [core, next, jsPlugins, nextJsPlugins, antiSlop],
   ignorePatterns: core.ignorePatterns,
@@ -26,6 +33,91 @@ export default defineConfig({
     typeAware: true,
   },
   overrides: [
+    {
+      // Preserve existing falsy-value fallback behavior.
+      files: [
+        "app/ui/use-builder-draft-autosave.ts",
+        additionalAuthFieldPath,
+        "components/auth/error-toaster.tsx",
+        "components/auth/oauth-provider/oauth-consent.tsx",
+        "components/auth/passkey/delete-passkey-dialog.tsx",
+        "components/auth/passkey/passkey.tsx",
+        "components/auth/settings/account/change-avatar.tsx",
+        "components/auth/user/user-avatar.tsx",
+        "components/auth/user/user-view.tsx",
+        "lib/integrations/store-in-view-model.ts",
+        "lib/mcp/session-app/view.tsx",
+        "scripts/design-quality/browser.ts",
+      ],
+      rules: { "typescript/prefer-nullish-coalescing": "off" },
+    },
+    {
+      // Preserve existing sequential operation ordering.
+      files: [
+        "components/auth/settings/account/user-profile.tsx",
+        "components/auth/sign-up.tsx",
+        "evals/support/self-reproduction-runtime-comparison.ts",
+        "evals/support/self-reproduction-supplementary.ts",
+        "lib/agent/deployment-repository-access-runtime.ts",
+        "lib/development/application-root.ts",
+        "lib/development/runtime-watch.ts",
+        "lib/integrations/repository-access.ts",
+        "lib/plugin/agent-plugin-package.ts",
+        "lib/provisioning/hosted-operator-ready-replacement-native.ts",
+        "lib/release/promotion.ts",
+        "lib/repository/github-publication.ts",
+        "lib/repository/node-branch-worktree-publication.ts",
+        nodeFreshBootstrapPath,
+        nodeLocalPublicationPath,
+        "lib/repository/sandbox-filesystem.ts",
+        "lib/repository/supported-template.ts",
+        "lib/repository/target-apply.ts",
+        "lib/repository/target-planning.ts",
+        postgresExecutionLeasePath,
+      ],
+      rules: { "react-doctor/async-await-in-loop": "off" },
+    },
+    {
+      // Preserve existing sequential operation ordering.
+      files: [
+        "evals/self-reproduction/default-capture-adapter.ts",
+        "evals/support/self-reproduction-candidate-workflows.ts",
+        referenceLifecyclePath,
+        "evals/support/self-reproduction-reference-runtime.ts",
+        "lib/agent/github-pr-delivery-step.ts",
+        "lib/agent/github-publication-runtime.ts",
+        "lib/db/better-auth-membership-readiness-cli.mts",
+        "lib/db/hosted-storage-readiness-cli.mts",
+        "lib/db/postgres-hosted-admin.ts",
+        "lib/db/preview-activation-cli.mts",
+        "lib/db/preview-activation-invited-user.ts",
+        "lib/development/local-mode.ts",
+        "lib/image/ghcr-bound-helper.ts",
+        "lib/plugin/agent-plugin-package.ts",
+        "lib/repository/github-app-http-provider.ts",
+        "lib/repository/node-branch-worktree-publication.ts",
+        nodeFreshBootstrapPath,
+        nodeLocalPublicationPath,
+        "lib/repository/supported-template.ts",
+        postgresExecutionLeasePath,
+      ],
+      rules: { "react-doctor/server-sequential-independent-await": "off" },
+    },
+    {
+      // Preserve documented test and tool invocation paths.
+      files: [
+        ".storybook/visual/app-builder.visual.spec.ts",
+        "playwright.design-quality.config.ts",
+        "playwright.product-quality.config.ts",
+        "playwright.production-navigation.config.ts",
+        "playwright.storybook.config.ts",
+        "vitest.shims.d.ts",
+        "evals/g2-model.vitest.config.mts",
+        "evals/g2-provider-brief-first-attempt.model.test.ts",
+        "evals/product-quality/product-quality.visual.playwright.ts",
+      ],
+      rules: { "github/filenames-match-regex": "off" },
+    },
     {
       // Preserve existing callback return contracts pending review.
       files: [
@@ -91,15 +183,15 @@ export default defineConfig({
       rules: { "react-doctor/prefer-html-dialog": "off" },
     },
     {
-      files: ["lib/repository/node-local-publication.ts"],
+      files: [nodeLocalPublicationPath],
       rules: { "react-doctor/js-index-maps": "off" },
     },
     {
       files: [
-        "evals/support/self-reproduction-reference-lifecycle.ts",
+        referenceLifecyclePath,
         "evals/support/self-reproduction-reference-runtime.ts",
         "lib/agent/github-pr-delivery-step.ts",
-        "lib/repository/node-fresh-bootstrap.ts",
+        nodeFreshBootstrapPath,
       ],
       rules: { "react-doctor/async-parallel": "off" },
     },
@@ -115,7 +207,7 @@ export default defineConfig({
         "lib/repository/dependency-cache.test.ts",
         "lib/repository/fresh-bootstrap.ts",
         "lib/repository/github-publication.test.ts",
-        "lib/repository/node-fresh-bootstrap.ts",
+        nodeFreshBootstrapPath,
       ],
       rules: { "sonarjs/hashing": "off" },
     },
@@ -148,7 +240,7 @@ export default defineConfig({
       rules: { "react-doctor/js-cache-property-access": "off" },
     },
     {
-      files: ["components/auth/additional-field.tsx"],
+      files: [additionalAuthFieldPath],
       rules: { "react-doctor/js-hoist-intl": "off" },
     },
     {
@@ -218,7 +310,7 @@ export default defineConfig({
     {
       // Preserve existing callback and abort behavior pending contract review.
       files: [
-        "components/auth/additional-field.tsx",
+        additionalAuthFieldPath,
         "lib/agent/product-behavior.test.ts",
         "scripts/self-reproduction-live.mts",
       ],
@@ -350,7 +442,7 @@ export default defineConfig({
         "lib/repository/source-receipt.ts",
         "lib/sandbox/deployment-execution-lease.ts",
         "lib/sandbox/hosted-bun-runtime.test.ts",
-        "lib/sandbox/postgres-execution-lease-store.ts",
+        postgresExecutionLeasePath,
         "lib/sandbox/working-preview-lifecycle.test.ts",
         "lib/sandbox/working-preview-runtime.test.ts",
         "lib/testing/test-capability.ts",
@@ -398,7 +490,7 @@ export default defineConfig({
         "e2e/auth/client-oauth-handoff.spec.ts",
         "e2e/builder/builder-draft-store.spec.ts",
         "e2e/builder/builder-handoff.spec.ts",
-        "evals/support/self-reproduction-reference-lifecycle.ts",
+        referenceLifecyclePath,
         "lib/auth/cursor-client-setup.mts",
         "lib/auth/preview-oauth-deployment.ts",
         previewActivationCli,
@@ -434,10 +526,7 @@ export default defineConfig({
     "anti-slop/no-unknown-returns": "off",
     "anti-slop/no-unsafe-dictionary-type": "off",
     "anti-slop/require-safety-comment-for-type-assertion": "off",
-    "github/filenames-match-regex": "off",
     "github/no-then": "off",
-    "react-doctor/async-await-in-loop": "off",
-    "react-doctor/server-sequential-independent-await": "off",
     "sonarjs/cognitive-complexity": "off",
     "sonarjs/expression-complexity": "off",
     "sonarjs/function-name": "off",
@@ -452,7 +541,6 @@ export default defineConfig({
     "typescript/no-unsafe-assignment": "off",
     "typescript/no-unsafe-member-access": "off",
     "typescript/no-unsafe-type-assertion": "off",
-    "typescript/prefer-nullish-coalescing": "off",
     "typescript/strict-boolean-expressions": "off",
     "typescript/strict-void-return": "off",
     "eslint/complexity": "off",
