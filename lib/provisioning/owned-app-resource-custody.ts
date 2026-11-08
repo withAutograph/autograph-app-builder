@@ -284,7 +284,7 @@ export const createOwnedAppResourceCustody = (deps: {
     plan: HostedOperatorPlan,
     record: HostedRuntimeJournalRecord,
   ) => {
-    const operator = record.operator;
+    const { operator } = record;
     if (
       operator === undefined ||
       operator.planDigest !== operatorPlanDigest(plan) ||

@@ -276,10 +276,10 @@ process.stdout.write("preloaded\\n");
 // asynchronous test scopes.
 // oxlint-disable promise/prefer-await-to-callbacks
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function withFakeGhEnvironment(
+function withFakeGhEnvironment<T>(
   fixture: ReturnType<typeof installFakeGhBoundary>,
-  callback: () => void,
-) {
+  callback: () => T,
+): T {
   const values = {
     APP_BUILDER_GH_CONFIG_DIR: fixture.config,
     APP_BUILDER_IMAGE_BUILDX_BIN: realpathSync(nodePath.join(fixture.bin, "docker-buildx")),
@@ -304,10 +304,10 @@ function withFakeGhEnvironment(
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function withFakeGhEnvironmentAsync(
+async function withFakeGhEnvironmentAsync<T>(
   fixture: ReturnType<typeof installFakeGhBoundary>,
-  callback: () => Promise<void>,
-): Promise<void> {
+  callback: () => Promise<T>,
+): Promise<T> {
   const values = {
     APP_BUILDER_GH_CONFIG_DIR: fixture.config,
     APP_BUILDER_IMAGE_BUILDX_BIN: realpathSync(nodePath.join(fixture.bin, "docker-buildx")),

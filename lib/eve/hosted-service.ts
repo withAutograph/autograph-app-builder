@@ -2605,8 +2605,8 @@ export function createHostedEveSessionService(input: {
       let settled: HostedOperationRecord;
       settlementPhase = "settlement";
       if (dispatchedPagedSession === undefined) {
-        const store = input.store;
-        const settleSucceeded = store.settleSucceeded;
+        const { store } = input;
+        const { settleSucceeded } = store;
         const settlement: Parameters<HostedEveStore["settleSucceeded"]>[0] = {
           nowEpochMs: now(),
           operationId,
@@ -2832,8 +2832,8 @@ export function createHostedEveSessionService(input: {
       }
     }
     const checkpoint = checkpointForSnapshot(sessionId, snapshot, capturedAtEpochMs);
-    const store = input.store;
-    const observeSession = store.observeSession;
+    const { store } = input;
+    const { observeSession } = store;
     let observation: ReturnType<NonNullable<HostedEveStore["observeSession"]>> | undefined;
     if (observeSession != null) {
       const observationDetails: Pick<
@@ -4217,8 +4217,8 @@ export function createHostedEveSessionService(input: {
                 })
               : result;
           }
-          const transport = input.transport;
-          const cancelAccepted = transport.cancelAccepted;
+          const { transport } = input;
+          const { cancelAccepted } = transport;
           let cancellation: Promise<void> | undefined;
           if (cancelAccepted != null) {
             const cancelIdentity: Pick<
@@ -4244,8 +4244,8 @@ export function createHostedEveSessionService(input: {
           await cancellation;
           return readAcceptedMutation(sessionId, session.checkpointDigest, 0);
         }
-        const transport = input.transport;
-        const cancel = transport.cancel;
+        const { transport } = input;
+        const { cancel } = transport;
         const cancelIdentity: Pick<
           Parameters<HostedEveTransport["cancel"]>[0],
           "adapterSessionId"
@@ -4827,8 +4827,8 @@ export function createHostedEveSessionService(input: {
                 }
                 await (input.assertNativeRecoveryOwner ?? assertHostedBuildDecisionOwner)(current);
               }
-              const transport = input.transport;
-              const start = transport.start;
+              const { transport } = input;
+              const { start } = transport;
               const startInput: Parameters<HostedEveTransport["start"]>[0] = {
                 operationId,
                 principal,
@@ -5007,8 +5007,8 @@ export function createHostedEveSessionService(input: {
         }
         return mutate({
           async dispatch(operationId) {
-            const transport = input.transport;
-            const start = transport.start;
+            const { transport } = input;
+            const { start } = transport;
             const startInput: Parameters<HostedEveTransport["start"]>[0] = {
               operationId,
               principal,
@@ -5221,8 +5221,8 @@ export function createHostedEveSessionService(input: {
       const { prompt } = request;
       return mutate({
         async dispatch(operationId) {
-          const transport = input.transport;
-          const start = transport.start;
+          const { transport } = input;
+          const { start } = transport;
           const startInput: Parameters<HostedEveTransport["start"]>[0] = {
             operationId,
             principal,

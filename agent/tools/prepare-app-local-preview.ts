@@ -202,7 +202,7 @@ export default defineTool({
       resolveRoot: async ({ appId, root }) =>
         await resolveAcceptanceRuntimeRoot({ appId, fallbackRoot: root, sandbox, state, ctx }),
     });
-    const root = selected.root;
+    const { root } = selected;
     return await prepareAppLocalPreview({
       appId: selected.appId,
       execution: {

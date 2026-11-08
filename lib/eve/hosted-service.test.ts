@@ -533,7 +533,9 @@ describe("prepared handoff session continuity", () => {
     let accept = false;
     const adapter = transport({
       start: vi.fn<HostedEveTransport["start"]>(async () => {
-        await vi.waitFor(() => expect(accept).toBe(true));
+        await vi.waitFor(() => {
+          expect(accept).toBe(true);
+        });
         return { adapterSessionId: "eve_prepared", snapshot };
       }),
     });
@@ -545,7 +547,9 @@ describe("prepared handoff session continuity", () => {
       sourceHandoffId,
     };
     const first = createService().start(request);
-    await vi.waitFor(() => expect(adapter.start).toHaveBeenCalledOnce());
+    await vi.waitFor(() => {
+      expect(adapter.start).toHaveBeenCalledOnce();
+    });
     await expect(createService().start(request)).rejects.toBeInstanceOf(
       HostedSubmissionUnknownError,
     );
@@ -1821,7 +1825,9 @@ describe("hosted Eve service core", () => {
     const adapter = transport({
       send: vi.fn<HostedEveTransport["send"]>(async (input) => {
         await input.onAccepted?.("fixture-delivery");
-        await vi.waitFor(() => expect(completeSend).toBe(true));
+        await vi.waitFor(() => {
+          expect(completeSend).toBe(true);
+        });
         return deliveredSnapshot();
       }),
     });
@@ -1831,7 +1837,9 @@ describe("hosted Eve service core", () => {
       message: "First",
       sessionId: first.result.sessionId,
     });
-    await vi.waitFor(() => expect(adapter.send).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => {
+      expect(adapter.send).toHaveBeenCalledTimes(1);
+    });
     await expect(
       first.service.send({
         clientRequestId: "send_competing",
@@ -1857,7 +1865,9 @@ describe("hosted Eve service core", () => {
           snapshot: terminalSnapshot,
         })
         .mockImplementationOnce(async () => {
-          await vi.waitFor(() => expect(completeResume).toBe(true));
+          await vi.waitFor(() => {
+            expect(completeResume).toBe(true);
+          });
           return { adapterSessionId: "eve_child", snapshot };
         }),
     });
@@ -1866,7 +1876,9 @@ describe("hosted Eve service core", () => {
       clientRequestId: "resume_active",
       resumeSessionId: first.result.sessionId,
     });
-    await vi.waitFor(() => expect(adapter.start).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => {
+      expect(adapter.start).toHaveBeenCalledTimes(2);
+    });
     await expect(
       first.service.start({
         clientRequestId: "resume_competing",
@@ -2165,7 +2177,9 @@ describe("hosted Eve service core", () => {
     const firstRejected = expect(service.start(request)).rejects.toBeInstanceOf(
       HostedSubmissionUnknownError,
     );
-    await vi.waitFor(() => expect(start).toHaveBeenCalledOnce());
+    await vi.waitFor(() => {
+      expect(start).toHaveBeenCalledOnce();
+    });
     await expect(service.start(request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     currentTime += 300_001;
     const recovered = await service.start(request);

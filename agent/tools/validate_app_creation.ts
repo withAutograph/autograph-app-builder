@@ -569,7 +569,7 @@ export const createAppValidationTool = (
         }),
         ctx.abortSignal,
       );
-      const runtime = preparedBackend.runtime;
+      const { runtime } = preparedBackend;
       // A rejected protected reference never falls back to repository-local browser execution.
       const backendValidation =
         preparedBackend.failure ??

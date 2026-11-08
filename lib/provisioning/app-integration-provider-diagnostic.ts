@@ -56,7 +56,7 @@ const httpCode = (status: number): IntegrationProviderDiagnostic["code"] => {
   }
 };
 export const integrationProviderHttpError = (response: Response) => {
-  const status = response.status;
+  const { status } = response;
   const requestRef = integrationProviderDiagnosticSchema.shape.requestRef.safeParse(
     response.headers.get("x-request-id") ?? response.headers.get("x-amzn-requestid") ?? undefined,
   );

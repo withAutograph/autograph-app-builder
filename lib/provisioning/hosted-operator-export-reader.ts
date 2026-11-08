@@ -47,7 +47,7 @@ const privateHeaders = {
 const unavailable = () =>
   new Response("Export is unavailable.", { status: 404, headers: privateHeaders });
 const workerFor = (record: TenantExportJournalRecord): TenantExportWorkerInput => {
-  const completion = record.completion;
+  const { completion } = record;
   if (!completion) {
     throw operatorArtifactUnavailable();
   }

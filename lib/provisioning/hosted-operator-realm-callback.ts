@@ -739,8 +739,8 @@ export const createRealmIdentityCallbackDeploymentHandler =
                 environment,
               });
               resources = await openHostedOperatorConfigurationResources(canonical, environment);
-              configuration = resources.configuration;
-              controlPlane = resources.controlPlane;
+              ({ configuration } = resources);
+              ({ controlPlane } = resources);
             } finally {
               await privateResources.close();
             }

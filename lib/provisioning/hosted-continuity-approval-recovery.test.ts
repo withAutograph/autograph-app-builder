@@ -317,7 +317,7 @@ it.each(["cancelled", "foreign", "different-request", "changed-digest", "conflic
   "never dispatches from %s native evidence",
   async (failure) => {
     const c = await composed();
-    const settlement = c.events[1];
+    const [, settlement] = c.events;
     if (settlement?.type !== "approval.settled") {
       throw new Error("Missing controlled native settlement");
     }
@@ -339,11 +339,11 @@ it.each(["cancelled", "foreign", "different-request", "changed-digest", "conflic
       c.setPageSize(c.events.length);
     }
     if (failure === "changed-digest") {
-      const requested = c.events[0];
+      const [requested] = c.events;
       if (requested?.type !== "input.requested") {
         throw new Error("Missing controlled request");
       }
-      const first = requested.data.requests[0];
+      const [first] = requested.data.requests;
       if (first?.kind !== "tool-approval") {
         throw new Error("Missing controlled tool approval");
       }

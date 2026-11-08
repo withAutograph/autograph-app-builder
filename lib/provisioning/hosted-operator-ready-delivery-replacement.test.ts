@@ -38,6 +38,13 @@ import { publicApprovalDescription } from "../agent/approval-receipt";
 const readOperatorResponse = async (response: Response) =>
   operatorPublicResultSchema.parse(await response.json());
 
+const requireFixtureValue = <T>(value: T | null | undefined, description: string): T => {
+  if (value === null || value === undefined) {
+    throw new Error(`Missing fixture ${description}`);
+  }
+  return value;
+};
+
 const externalPolicy: ExternallyManagedTrustedSources = {
   mode: "externally-managed-trusted-sources",
   teamId: "team-notes",
@@ -253,7 +260,10 @@ const recoveryFixture = () => {
       gatewayAliasAttempted: true,
     },
   ];
-  const firstPlan = createRetentionRenewalPlan(base.record, now - 24 * 60 * 60 * 1000)!;
+  const firstPlan = requireFixtureValue(
+    createRetentionRenewalPlan(base.record, now - 24 * 60 * 60 * 1000),
+    "first renewal plan",
+  );
   expect(firstPlan).toBeDefined();
   const first = {
     mode: original.mode,
@@ -279,7 +289,10 @@ const recoveryFixture = () => {
       ],
     },
   };
-  const secondPlan = createRetentionRenewalPlan(firstRecord, now)!;
+  const secondPlan = requireFixtureValue(
+    createRetentionRenewalPlan(firstRecord, now),
+    "second renewal plan",
+  );
   expect(secondPlan).toBeDefined();
   const current: HostedRuntimeJournalRecord & {
     operator: NonNullable<HostedRuntimeJournalRecord["operator"]>;
@@ -302,7 +315,10 @@ const recoveryFixture = () => {
   return {
     current,
     original: structuredClone(original),
-    proposed: createNativePreviewRecoveryPlan(current, externalPolicy, now, "ready-gateway")!,
+    proposed: requireFixtureValue(
+      createNativePreviewRecoveryPlan(current, externalPolicy, now, "ready-gateway"),
+      "preview recovery plan",
+    ),
   };
 };
 
@@ -1257,14 +1273,21 @@ describe("explicit READY delivery replacement", () => {
 
   it("accepts changed source, branch, release, product roles and descriptions within the same ownership", () => {
     const { record, candidate } = fixture();
-    candidate.delivery!.gitSha = "5".repeat(40);
-    candidate.delivery!.branch = "feature/revised-notes";
-    candidate.deploymentBoundary!.app.branch = candidate.delivery!.branch;
-    candidate.selection.branch = candidate.delivery!.branch;
-    candidate.gatewayDelivery!.gitSha = "6".repeat(40);
-    candidate.gatewayDelivery!.branch = "gateway/revised-notes";
-    candidate.deploymentBoundary!.gateway.branch = candidate.gatewayDelivery!.branch;
-    candidate.publicGateway!.branch = candidate.gatewayDelivery!.branch;
+    const delivery = requireFixtureValue(candidate.delivery, "app delivery");
+    const deploymentBoundary = requireFixtureValue(
+      candidate.deploymentBoundary,
+      "deployment boundary",
+    );
+    const gatewayDelivery = requireFixtureValue(candidate.gatewayDelivery, "gateway delivery");
+    const publicGateway = requireFixtureValue(candidate.publicGateway, "public gateway");
+    delivery.gitSha = "5".repeat(40);
+    delivery.branch = "feature/revised-notes";
+    deploymentBoundary.app.branch = delivery.branch;
+    candidate.selection.branch = delivery.branch;
+    gatewayDelivery.gitSha = "6".repeat(40);
+    gatewayDelivery.branch = "gateway/revised-notes";
+    deploymentBoundary.gateway.branch = gatewayDelivery.branch;
+    publicGateway.branch = gatewayDelivery.branch;
     candidate.contextId = "accepted-revised-spec";
     candidate.release = { artifactRef: "new-artifact", id: "release-2", sha256: "7".repeat(64) };
     candidate.access[0].roles = ["editor", "reviewer"];
@@ -1279,10 +1302,14 @@ describe("explicit READY delivery replacement", () => {
   it("returns independent clones without changing READY state, pending attempts, receipts or history", () => {
     const { record, intent } = fixture();
     const before = structuredClone(record);
-    const resolved = resolveReadyDeliveryReplacementPredecessor(record, intent)!;
+    const resolved = requireFixtureValue(
+      resolveReadyDeliveryReplacementPredecessor(record, intent),
+      "ready delivery predecessor",
+    );
     expect(resolved.snapshot).toEqual(before);
     expect(resolved.originatingOperator.pendingEffectAttempt).toEqual({ id: attemptId });
-    resolved.snapshot.privateState!.encryptedToken = "changed-clone";
+    requireFixtureValue(resolved.snapshot.privateState, "snapshot private state").encryptedToken =
+      "changed-clone";
     resolved.originatingOperator.receipts.length = 0;
     resolved.appCandidate.readyState = "ERROR";
     expect(record).toEqual(before);
@@ -1294,7 +1321,7 @@ describe("explicit READY delivery replacement", () => {
     original.plan.retention.expiresAt = "2026-10-18T12:00:00.000Z";
     original.planDigest = operatorPlanDigest(original.plan);
     intent.predecessor.planDigest = original.planDigest;
-    const renewal = createRetentionRenewalPlan(record, now)!;
+    const renewal = requireFixtureValue(createRetentionRenewalPlan(record, now), "renewal plan");
     expect(renewal).toBeDefined();
     record.operator = {
       mode: original.mode,
@@ -1309,7 +1336,10 @@ describe("explicit READY delivery replacement", () => {
     };
     record.approvedByCallId = "approval-call-renewed";
     const before = structuredClone(record);
-    const resolved = resolveReadyDeliveryReplacementPredecessor(record, intent)!;
+    const resolved = requireFixtureValue(
+      resolveReadyDeliveryReplacementPredecessor(record, intent),
+      "renewal predecessor",
+    );
     expect(resolved?.originatingOperator.pendingEffectAttempt).toEqual({ id: attemptId });
     expect(resolved?.snapshot.operator?.pendingEffectId).toBeUndefined();
     expect(resolved?.snapshot.operator?.deliveredDeploymentId).toBeUndefined();

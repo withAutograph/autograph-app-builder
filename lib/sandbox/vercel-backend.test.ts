@@ -307,7 +307,9 @@ describe("Builder Vercel provider", () => {
       ready = true;
       return result;
     })();
-    await vi.waitFor(() => expect(native.writeFiles).toHaveBeenCalled());
+    await vi.waitFor(() => {
+      expect(native.writeFiles).toHaveBeenCalled();
+    });
     expect(ready).toBe(false);
     upload.resolve(null);
     const started = await pending;
@@ -391,7 +393,9 @@ describe("Builder Vercel provider", () => {
       ready = true;
       return result;
     })();
-    await vi.waitFor(() => expect(native.writeFiles).toHaveBeenCalled());
+    await vi.waitFor(() => {
+      expect(native.writeFiles).toHaveBeenCalled();
+    });
     expect(ready).toBe(false);
     upload.resolve(null);
     const started = await pending;

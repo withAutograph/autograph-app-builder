@@ -186,7 +186,7 @@ const inspectPlanningGateway = (
   desired: HostedOperatorPlan,
   record: HostedRuntimeJournalRecord,
 ): ParticipantGateway | undefined => {
-  const operator = record.operator;
+  const { operator } = record;
   if (
     operator === undefined ||
     desired.gatewayDelivery === undefined ||
