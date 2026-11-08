@@ -471,6 +471,7 @@ export const createRepositoryProductionNativeHandler =
               signal: effectSignal,
             })(),
           runtimeBinding: createRepositoryProductionRuntimeBinding({
+            installationId: configuration.vercelCredential.installationId,
             runtimeEndpoint: { hostname: profile.neon.endpoint, port: 5432 },
             readCredential,
             signal: effectSignal,
