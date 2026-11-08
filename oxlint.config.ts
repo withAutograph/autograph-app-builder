@@ -626,10 +626,6 @@ export default defineConfig({
       rules: { "typescript/no-unsafe-call": "off" },
     },
     {
-      files: [sharedLintFile7],
-      rules: { "github/no-blur": "off" },
-    },
-    {
       files: [githubProviderPath],
       rules: { "react-doctor/js-cache-property-access": "off" },
     },

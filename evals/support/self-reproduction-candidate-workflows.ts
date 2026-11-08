@@ -6,7 +6,6 @@ import type { Locator, Page, Request } from "playwright";
 type CandidateLocator = Pick<
   Locator,
   | "allTextContents"
-  | "blur"
   | "click"
   | "count"
   | "fill"
@@ -150,7 +149,7 @@ export const exerciseCandidateBrowserWorkflows = async (
       }
       await name.fill("Evaluator persistence sentinel");
       await brief.fill("Create one independent issue tracker with durable server persistence.");
-      await brief.blur();
+      await name.click();
       const saved = page.getByText(/draft saved|changes saved/iu).first();
       const acknowledged = await saved
         .waitFor({ state: "visible", timeout: 5000 })
@@ -341,7 +340,7 @@ export const exerciseCandidateBrowserWorkflows = async (
         await runProviderReturn();
         return null;
       },
-    };
+    } satisfies Record<string, () => Promise<null>>;
     const runWorkflow = workflows[requirementId] ?? runCreation;
     try {
       const response = await page.goto(baseURL, { waitUntil: "networkidle" });
@@ -365,7 +364,8 @@ export const exerciseCandidateBrowserWorkflows = async (
           status: "blocked",
         };
       } else {
-        await runWorkflow();
+        const workflowResult = await runWorkflow();
+        void workflowResult;
         let status: CandidateWorkflowOutcome["status"];
         if (assertions.some((item) => item.passed === false)) {
           status = "failed";
