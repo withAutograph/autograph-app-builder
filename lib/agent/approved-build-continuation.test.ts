@@ -109,9 +109,9 @@ describe("approved apply and review continuation", () => {
     contextStorage.run(new ContextContainer(), () => {
       approveBuild();
       const applyFailure = {
-        reason: "command-failed" as const,
-        command: { name: "create-app", exitCode: 1 },
+        command: { exitCode: 1, name: "create-app" },
         commandFailureKind: "dependency" as const,
+        reason: "command-failed" as const,
       };
       // SAFETY: The classifier reads only the retained scope and command outcome.
       const rejected = { ...failed, phase: "apply_failed", applyFailure } as unknown as Extract<
@@ -252,7 +252,7 @@ describe("approved stopped build continuation", () => {
           validationFailure: {
             ...failed.validationFailure,
             reason: "tooling-prerequisite",
-            commandFailure: { name: "check-build", exitCode: 134, failureClass },
+            commandFailure: { exitCode: 134, failureClass, name: "check-build" },
           },
         } as AppBuilderWorkflowState;
         expect(decide(state)).toMatchObject({
@@ -293,7 +293,6 @@ it("projects only the independently acquired existing repository into private de
     sessionId: scope.sessionId,
     confirmedByCallId: "actual-repository-acquisition",
     access: {
-      status: "ready",
       accessDigest: "3".repeat(64),
       repository: {
         archived: false,
@@ -307,6 +306,7 @@ it("projects only the independently acquired existing repository into private de
         visibility: "private",
       },
       scope: { accountLogin: "owned", accountType: "Organization", installationId: "10" },
+      status: "ready",
     },
   });
   const state = {

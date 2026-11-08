@@ -18,44 +18,21 @@ const principal = {
   audience: "builder",
   issuer: "https://identity.example.test",
   ownerUserId: "owner",
-  workspaceId: "workspace",
   scopes: Object.values(hostedEveOperationScopes),
+  workspaceId: "workspace",
 };
 const sessionId = "session_fixture";
 const plan = nativeTargetOnboardingPlanSchema.parse({
-  version: 1,
-  appId: "requests-app",
-  origin: {
-    adapterGeneration: 1,
-    adapterSessionId: "adapter_1",
-    appSpecDigest: "a".repeat(64),
-    publicSessionId: sessionId,
-    release: {
-      artifactRef: "artifact",
-      id: "release",
-      manifestSha256: "b".repeat(64),
-      schemaSha256: "c".repeat(64),
-    },
-  },
-  project: {
-    installationId: "installation",
-    name: "requests-app",
-    projectSettings: {
-      framework: "nextjs",
-      rootDirectory: "apps/requests",
-      sourceFilesOutsideRootDirectory: true,
-    },
-    protection: nativeTargetRequiredProjectProtection,
-    teamId: "team",
-  },
-  branch: "preview",
   appDatabase: {
     database: "requests_data",
     migratorRole: "requests_owner",
     resourceId: "resource",
     runtimeRole: "requests_runtime",
   },
-  productRoles: [],
+  appId: "requests-app",
+  branch: "preview",
+  conflictPolicy: "stop-on-conflict",
+  cost: { description: "Preview usage", ownership: "current-owner" },
   nativeNeon: {
     approvalReference: "scope",
     nativeStore: { configurationId: "config", resourceId: "store", sourceProjectId: "source" },
@@ -68,6 +45,32 @@ const plan = nativeTargetOnboardingPlanSchema.parse({
       projectId: "project",
     },
   },
+  origin: {
+    adapterGeneration: 1,
+    adapterSessionId: "adapter_1",
+    appSpecDigest: "a".repeat(64),
+    publicSessionId: sessionId,
+    release: {
+      artifactRef: "artifact",
+      id: "release",
+      manifestSha256: "b".repeat(64),
+      schemaSha256: "c".repeat(64),
+    },
+  },
+  productRoles: [],
+  project: {
+    installationId: "installation",
+    name: "requests-app",
+    projectSettings: {
+      framework: "nextjs",
+      rootDirectory: "apps/requests",
+      sourceFilesOutsideRootDirectory: true,
+    },
+    protection: nativeTargetRequiredProjectProtection,
+    teamId: "team",
+  },
+  retention: { policy: "Until approved cleanup" },
+  version: 1,
   worker: {
     executablePath: "/trusted/worker",
     id: "worker",
@@ -75,37 +78,34 @@ const plan = nativeTargetOnboardingPlanSchema.parse({
     sha256: "d".repeat(64),
     subcommand: "protected-generated-app-install",
   },
-  cost: { description: "Preview usage", ownership: "current-owner" },
-  retention: { policy: "Until approved cleanup" },
-  conflictPolicy: "stop-on-conflict",
 });
 const receipt = {
   callId: "call",
-  requestId: "request",
   format: "autograph-hosted-approval-v1" as const,
   outcome: "approved" as const,
+  requestId: "request",
   responderPrincipalId: principal.ownerUserId,
   sequence: 1,
-  turnId: "",
-  toolName: "prepare-app-native-target" as const,
   toolInput: {
     appId: plan.appId,
     operationRef: "a3f06690-718f-41c7-a67f-c6c1c0ecdbf3",
     plan,
     planDigest: nativeTargetOnboardingPlanDigest(plan),
   },
+  toolName: "prepare-app-native-target" as const,
+  turnId: "",
 };
 const oldDigest = `sha256:${"a".repeat(64)}`;
-const oldRef = { id: "123e4567-e89b-42d3-a456-426614174001", digest: oldDigest, eventCount: 0 };
+const oldRef = { digest: oldDigest, eventCount: 0, id: "123e4567-e89b-42d3-a456-426614174001" };
 const session = {
   ...toDurableHostedSessionRecord({
-    version: 1,
+    adapterSessionId: "adapter_1",
+    createdAtEpochMs: 1000,
     principal,
     sessionId,
-    adapterSessionId: "adapter_1",
     status: "waiting",
-    createdAtEpochMs: 1000,
     updatedAtEpochMs: 1000,
+    version: 1,
   }),
   checkpointDigest: oldDigest,
   checkpointProgressDigest: oldDigest,
@@ -132,20 +132,20 @@ const row = {
   parentSessionId: null,
 };
 const replayBinding = {
-  adapterSessionId: "adapter_1",
   adapterGeneration: 1,
+  adapterSessionId: "adapter_1",
   cancellationRevision: 0,
 };
 const metadata = {
   capturedAtEpochMs: 2000,
-  status: "waiting" as const,
-  version: 1 as const,
   privateApprovalCaptureState: {
     pendingRequests: [],
     receipts: [receipt],
     sessionId,
     version: 1 as const,
   },
+  status: "waiting" as const,
+  version: 1 as const,
 };
 
 const fixture = () => {
@@ -203,7 +203,7 @@ const fixture = () => {
   });
   const spy = vi
     .spyOn(historyModule, "createPostgresHostedCheckpointHistory")
-    .mockReturnValue({ ...history, stage, discardStage, publishInTransaction: publish });
+    .mockReturnValue({ ...history, discardStage, publishInTransaction: publish, stage });
   const store = createPostgresHostedEveStore(db);
   const observe = store.observeSessionPaged;
   if (observe === undefined) {

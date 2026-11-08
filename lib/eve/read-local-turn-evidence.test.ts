@@ -62,24 +62,24 @@ const fixture = async (port = 2100) => {
   });
   const events: MessageStreamEvent[] = [
     {
+      data: { sequence: 1, turnId: "turn_1" },
+      meta: { at: "2026-11-04T00:03:22.960Z", id: "event_started" },
       type: "turn.started",
-      data: { turnId: "turn_1", sequence: 1 },
-      meta: { id: "event_started", at: "2026-11-04T00:03:22.960Z" },
     },
     {
-      type: "message.received",
-      data: { turnId: "turn_1", sequence: 1, message: "private body", parts: [] },
+      data: { message: "private body", parts: [], sequence: 1, turnId: "turn_1" },
       meta: {
-        id: "event_message",
         at: "2026-11-04T00:03:22.986Z",
         deliveryIds: ["delivery_owned"],
+        id: "event_message",
       },
+      type: "message.received",
     },
   ];
   const snapshot = vi
     .spyOn(ClientSession.prototype, "snapshot")
     .mockImplementation(async function snapshot(this: ClientSession) {
-      return { session: { sessionId: this.state.sessionId, streamIndex: events.length }, events };
+      return { events, session: { sessionId: this.state.sessionId, streamIndex: events.length } };
     });
   const client = new Client({ host: `http://127.0.0.1:${port}` });
   const send = vi.spyOn(ClientSession.prototype, "send");
@@ -93,8 +93,8 @@ describe("local execution evidence read path", () => {
     const output = await readLocalTurnExecutionEvidence(
       {
         cycleRoot: f.cycleRoot,
-        sessionId: "wrun_owned",
         selector: { deliveryId: "delivery_owned" },
+        sessionId: "wrun_owned",
       },
       { client: f.client },
     );
@@ -115,8 +115,8 @@ describe("local execution evidence read path", () => {
     f.snapshot.mockImplementation(async function snapshot(this: ClientSession) {
       await writeFile(f.cycleFile, "b".repeat(64));
       return {
-        session: { sessionId: this.state.sessionId, streamIndex: f.events.length },
         events: f.events,
+        session: { sessionId: this.state.sessionId, streamIndex: f.events.length },
       };
     });
     await expect(
@@ -146,8 +146,8 @@ describe("local execution evidence read path", () => {
   it("retains incomplete-history failures without falling back to a different session", async () => {
     const f = await fixture();
     f.snapshot.mockResolvedValue({
-      session: { sessionId: "wrun_foreign", streamIndex: f.events.length + 1 },
       events: f.events,
+      session: { sessionId: "wrun_foreign", streamIndex: f.events.length + 1 },
     });
     await expect(
       readLocalTurnExecutionEvidence(
@@ -185,8 +185,8 @@ it("composes the real local SDK history reader with exact denied authority catch
     const controller = new AbortController();
     // SAFETY: The reader consumes only trusted framework session ID and cancellation; session auth is never synthesized or used to dispatch a control.
     await reconcilePrivateApplyDecisions({
-      session: { id: "wrun_owned" },
       abortSignal: controller.signal,
+      session: { id: "wrun_owned" },
     } as Parameters<typeof reconcilePrivateApplyDecisions>[0]);
     expect(readPrivateApplyAuthority().pending.map((row) => row.callId)).toEqual([
       "unresolved-call",
