@@ -90,7 +90,7 @@ describe("destination adapters", () => {
       const prompt = buildAppHandoffPrompt(id, destination);
       const url = new URL(buildAppHandoffUrl(destination, id));
       expect(url.searchParams.get(destination === "codex" ? "prompt" : "text")).toBe(prompt);
-      const match = prompt.match(/autograph_start with (?<payload>\{[^\n]+\})\./u);
+      const match = /autograph_start with (?<payload>\{[^\n]+\})\./u.exec(prompt);
       const serializedPayload = match?.groups?.payload;
       expect(serializedPayload).toBeDefined();
       if (!serializedPayload) {

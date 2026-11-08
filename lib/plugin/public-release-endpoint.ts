@@ -8,7 +8,7 @@ const isLoopbackOrUnspecifiedIpv4 = (host: string) => {
 };
 
 const mappedIpv4 = (host: string) => {
-  const match = host.match(/^::ffff:(?<high>[0-9a-f]{1,4}):(?<low>[0-9a-f]{1,4})$/u);
+  const match = /^::ffff:(?<high>[0-9a-f]{1,4}):(?<low>[0-9a-f]{1,4})$/u.exec(host);
   if (!match) {
     return;
   }
