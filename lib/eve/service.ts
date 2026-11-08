@@ -994,7 +994,9 @@ export function createLocalEveSessionService(
       }
       const approved = await continueApprovedLocalBuild({
         active: status === "working",
-        dispatch: async (message) => await dispatchLocalBuildMessage(sessionId, message),
+        dispatch: async (message) => {
+          await dispatchLocalBuildMessage(sessionId, message);
+        },
         pendingInput: outstandingInstalledEveRequests(snapshot.events).length > 0,
         sessionId,
       });
@@ -1006,7 +1008,9 @@ export function createLocalEveSessionService(
         sessionId,
         active: status !== "waiting",
         pendingInput: outstandingInstalledEveRequests(snapshot.events).length > 0,
-        dispatch: async (message) => await dispatchLocalBuildMessage(sessionId, message),
+        dispatch: async (message) => {
+          await dispatchLocalBuildMessage(sessionId, message);
+        },
         assertCurrent: async (decision) => {
           const fresh = await readLocalSnapshot(sessionId);
           const unavailable =

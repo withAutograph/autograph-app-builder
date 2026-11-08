@@ -538,7 +538,7 @@ describe("image lifecycle", () => {
           expect(binding.provider.configDigest).toHaveLength(64);
           expect(binding.consumers.dockerSha256).toHaveLength(64);
           expect(binding.consumers.buildxSha256).toHaveLength(64);
-          expect(() =>
+          expect(() => {
             assertNoSecretMaterial({
               authenticationBoundary: binding,
               authenticationBoundaryDigest: "e".repeat(64),
@@ -552,8 +552,8 @@ describe("image lifecycle", () => {
               schema: "ghcr-login-v3",
               status: "credential-matched",
               username: "withAutograph",
-            }),
-          ).not.toThrow();
+            });
+          }).not.toThrow();
           const provenanceDigest = "c".repeat(64);
           const approved = Buffer.from("github_pat_exact_private_package_token");
           const stateDigest = seedFakeGhState(fixture);
@@ -720,7 +720,9 @@ describe("image lifecycle", () => {
     expect(() => parseGhAuthStatus(JSON.stringify(extraRecord), "withAutograph")).toThrow(
       "did not match",
     );
-    expect(() => assertGhcrUsername("owner/token")).toThrow("malformed");
+    expect(() => {
+      assertGhcrUsername("owner/token");
+    }).toThrow("malformed");
   });
 
   it("rejects plaintext GitHub credentials from the bound keyring configuration", () => {
@@ -748,10 +750,10 @@ describe("image lifecycle", () => {
     });
     const provenanceDigest = "a".repeat(64);
     const identityDigest = ghcrIdentityDigest("withAutograph", provenanceDigest, token);
-    expect(() =>
-      assertBoundGhcrPayload(credential, "withAutograph", provenanceDigest, identityDigest),
-    ).not.toThrow();
-    expect(() =>
+    expect(() => {
+      assertBoundGhcrPayload(credential, "withAutograph", provenanceDigest, identityDigest);
+    }).not.toThrow();
+    expect(() => {
       assertBoundGhcrPayload(
         credential,
         "withAutograph",
@@ -761,19 +763,19 @@ describe("image lifecycle", () => {
           provenanceDigest,
           Buffer.from("github_pat_different_private_token"),
         ),
-      ),
-    ).toThrow("drifted after approval");
-    expect(() =>
-      assertBoundGhcrPayload(credential, "another-user", provenanceDigest, identityDigest),
-    ).toThrow("identity did not match");
-    expect(() =>
+      );
+    }).toThrow("drifted after approval");
+    expect(() => {
+      assertBoundGhcrPayload(credential, "another-user", provenanceDigest, identityDigest);
+    }).toThrow("identity did not match");
+    expect(() => {
       assertBoundGhcrPayload(
         JSON.stringify({ ...JSON.parse(credential), Extra: true }),
         "withAutograph",
         provenanceDigest,
         identityDigest,
-      ),
-    ).toThrow("identity did not match");
+      );
+    }).toThrow("identity did not match");
   });
 
   it("rejects credential input beyond the closed bound", () => {
@@ -1236,14 +1238,18 @@ wait
       expect(() => imageToolInvocation("msb", ["--version"])).toThrow("must be resolved");
     });
     rmSync(fixtureRoot, { force: true, recursive: true });
-    expect(() =>
-      assertExactImageToolVersion("docker-buildx", "github.com/docker/buildx v0.33.0 f7897e"),
-    ).not.toThrow();
-    expect(() => assertExactImageToolVersion("docker", "Docker version 29.3.0, build old")).toThrow(
-      "does not match",
-    );
-    expect(() => assertExactImageToolVersion("msb", "Microsandbox CLI v0.5.10")).not.toThrow();
-    expect(() => assertExactImageToolVersion("pnpm", "11.7.0")).not.toThrow();
+    expect(() => {
+      assertExactImageToolVersion("docker-buildx", "github.com/docker/buildx v0.33.0 f7897e");
+    }).not.toThrow();
+    expect(() => {
+      assertExactImageToolVersion("docker", "Docker version 29.3.0, build old");
+    }).toThrow("does not match");
+    expect(() => {
+      assertExactImageToolVersion("msb", "Microsandbox CLI v0.5.10");
+    }).not.toThrow();
+    expect(() => {
+      assertExactImageToolVersion("pnpm", "11.7.0");
+    }).not.toThrow();
   });
 
   it("refuses approval, status, standalone-checkout, and symlink drift", () => {
@@ -1307,14 +1313,18 @@ wait
         targetFiles,
       }),
     ).toThrow("ignored-file inventory");
-    expect(() => assertStandaloneGitMetadata(false, "Builder")).toThrow("standalone checkout");
-    expect(() => assertCanonicalRoot("/tmp/link", "/private/tmp/real", "Source")).toThrow(
-      "no-link path",
-    );
-    expect(() => assertProofRuntimeIgnoredInventory("!! node_modules/")).not.toThrow();
-    expect(() => assertProofRuntimeIgnoredInventory("!! .env\n!! node_modules/")).toThrow(
-      "only the exact Builder node_modules",
-    );
+    expect(() => {
+      assertStandaloneGitMetadata(false, "Builder");
+    }).toThrow("standalone checkout");
+    expect(() => {
+      assertCanonicalRoot("/tmp/link", "/private/tmp/real", "Source");
+    }).toThrow("no-link path");
+    expect(() => {
+      assertProofRuntimeIgnoredInventory("!! node_modules/");
+    }).not.toThrow();
+    expect(() => {
+      assertProofRuntimeIgnoredInventory("!! .env\n!! node_modules/");
+    }).toThrow("only the exact Builder node_modules");
   });
 
   it("binds proof-runtime file bytes and refuses escaping symlinks", () => {
@@ -1493,7 +1503,9 @@ wait
     child.kill("SIGKILL");
     await once(child, "exit");
     expect(readFileSync(interruptedPath)).toHaveLength(0);
-    await withLifecycleLock(root, () => reconcileLifecycleTemps(root));
+    await withLifecycleLock(root, () => {
+      reconcileLifecycleTemps(root);
+    });
     expect(() => readFileSync(interruptedPath)).toThrow();
     rmSync(root, { force: true, recursive: true });
   });
@@ -1503,7 +1515,9 @@ wait
     const outside = nodePath.join(root, "outside");
     writeFileSync(outside, "keep");
     symlinkSync(outside, nodePath.join(root, `source-receipt.json.tmp-1-${randomUUID()}`));
-    expect(() => reconcileLifecycleTemps(root)).toThrow("Unsafe interrupted receipt artifact");
+    expect(() => {
+      reconcileLifecycleTemps(root);
+    }).toThrow("Unsafe interrupted receipt artifact");
     expect(readFileSync(outside, "utf-8")).toBe("keep");
     rmSync(root, { force: true, recursive: true });
   });
@@ -1524,7 +1538,9 @@ wait
           linkSync(outside, nodePath.join(runtime, "current"));
         }
       }
-      expect(() => reconcileLifecycleTemps(root)).toThrow("Unsafe interrupted Buildx state");
+      expect(() => {
+        reconcileLifecycleTemps(root);
+      }).toThrow("Unsafe interrupted Buildx state");
       expect(readFileSync(outside, "utf-8")).toBe("keep");
       rmSync(root, { force: true, recursive: true });
     }
@@ -1733,9 +1749,9 @@ wait
 
   it("rejects mutable preload references and secret-like receipt material", () => {
     expect(() => exactDigestReference(provenance().image.tag)).toThrow("exact digest");
-    expect(() => assertNoSecretMaterial({ authorization: "redacted" })).toThrow(
-      "forbidden secret field",
-    );
+    expect(() => {
+      assertNoSecretMaterial({ authorization: "redacted" });
+    }).toThrow("forbidden secret field");
     expect(JSON.stringify(provenance())).not.toMatch(
       /(?<key>authorization|credential|password|secret|token)/iu,
     );
