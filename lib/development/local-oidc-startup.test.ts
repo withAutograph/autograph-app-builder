@@ -80,7 +80,9 @@ describe("local Development OIDC startup", () => {
     expect(
       ensureLocalDevelopmentOidc({
         ...baseInput(repositoryRoot),
-        runCommand: (invocation) => invocations.push(invocation),
+        runCommand: (invocation) => {
+          invocations.push(invocation);
+        },
       }),
     ).toEqual({ refreshed: false });
     expect(invocations).toEqual([]);

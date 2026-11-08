@@ -40,6 +40,15 @@ const sharedLintFile11 = "lib/repository/github-publication.ts";
 const sharedLintFile12 = "scripts/design-quality/browser.ts";
 const sharedLintFile13 = "scripts/eval-self-reproduction.mts";
 
+const sharedLintFile14 = "components/auth/sign-up.tsx";
+const sharedLintFile15 = "lib/agent/product-behavior.test.ts";
+const sharedLintFile16 = "lib/development/local-mode.ts";
+const sharedLintFile17 = "lib/development/runtime-watch.ts";
+const sharedLintFile18 = "lib/image/ghcr-bound-helper.ts";
+const sharedLintFile19 = "lib/image/lifecycle.test.ts";
+const sharedLintFile20 = "lib/repository/dependency-cache.test.ts";
+const sharedLintFile21 = "lib/repository/node-branch-worktree-publication.ts";
+
 export default defineConfig({
   extends: [core, next, jsPlugins, nextJsPlugins, antiSlop],
   ignorePatterns: core.ignorePatterns,
@@ -48,6 +57,86 @@ export default defineConfig({
     typeAware: true,
   },
   overrides: [
+    {
+      // Existing type contracts awaiting focused review.
+      files: [
+        "agent/hooks/release-sandbox-compute.ts",
+        "agent/tools/artifact_workflow_status.ts",
+        "agent/tools/workspace_status.ts",
+        "app/(docs)/docs/docs-registry.ts",
+        "app/ui/handoff-provisioning-progress.test.tsx",
+        "components/auth/user/user-button.tsx",
+        "evals/support/product-quality.ts",
+        "evals/support/self-reproduction-candidate-workflows.ts",
+        "evals/support/self-reproduction-parity-evidence.test.ts",
+        "evals/support/self-reproduction-preview-observation.ts",
+        "evals/support/self-reproduction-public.ts",
+        "lib/agent/component-composition-policy.ts",
+        sharedLintFile15,
+        "lib/agent/target-dependency-preparation.ts",
+        "lib/agent/target-execution.ts",
+        "lib/agent/workflow-state.ts",
+        "lib/auth/auth-plugin.ts",
+        "lib/auth/github-app-installation.ts",
+        "lib/db/postgres-hosted-admin.ts",
+        "lib/eve/hosted-auth.ts",
+        sharedLintFile8,
+        sharedLintFile19,
+        "lib/mcp/request-handler.ts",
+        "lib/repository/branch-worktree-publication.ts",
+        sharedLintFile20,
+        "lib/repository/fresh-bootstrap.ts",
+        "lib/repository/local-publication.ts",
+        sharedLintFile21,
+        nodeLocalPublicationPath,
+        "lib/repository/target-apply.ts",
+        "scripts/design-quality/source.ts",
+        "scripts/hosted-portable-proof.test.ts",
+        "scripts/self-reproduction-public-driver.test.ts",
+      ],
+      rules: { "sonarjs/max-union-size": "off" },
+    },
+    {
+      // Existing type contracts awaiting focused review.
+      files: [
+        "app/ui/builder-connections.tsx",
+        "app/ui/connections-section.stories.tsx",
+        "app/ui/use-builder-draft-autosave.test.tsx",
+        additionalAuthFieldPath,
+        "components/auth/auth-continuity.tsx",
+        "components/auth/settings/account/change-avatar.tsx",
+        "components/auth/sign-in.tsx",
+        sharedLintFile14,
+        "components/create-app/choice-card.stories.tsx",
+        "evals/product-quality/product-quality.visual.playwright.ts",
+        "evals/support/self-reproduction-reference-navigation.ts",
+        "evals/support/self-reproduction-reference-runtime.ts",
+        "evals/support/self-reproduction-template-source.ts",
+        sharedLintFile15,
+        "lib/development/dev-package.ts",
+        sharedLintFile16,
+        "lib/development/process-supervisor.ts",
+        sharedLintFile17,
+        "lib/eve/local-eve-launch.ts",
+        sharedLintFile8,
+        sharedLintFile18,
+        "lib/image/node-lifecycle.ts",
+        "lib/mcp/session-app/index.tsx",
+        "lib/plugin/installing-docs.test.ts",
+        "lib/provisioning/starter-source.ts",
+        sharedLintFile20,
+        "lib/repository/node-fresh-bootstrap.ts",
+        "lib/sandbox/working-preview-ownership.test.ts",
+        "scripts/design-quality/browser-node.test.ts",
+        "scripts/design-quality/browser.ts",
+        "scripts/release-prove.mts",
+        "scripts/release-publish.mts",
+        "scripts/run-with-test-capability.mts",
+        "scripts/self-reproduction-live.mts",
+        "scripts/test-production-navigation.mts",
+      ],
+      rules: { "typescript/strict-void-return": "off" },
+    },
     {
       // Existing findings awaiting a focused migration.
       files: [
@@ -59,7 +148,7 @@ export default defineConfig({
         "lib/development/local-mode.test.ts",
         "lib/eve/local-eve-launch.test.ts",
         "lib/eve/local-vercel-oidc.test.ts",
-        "lib/image/lifecycle.test.ts",
+        sharedLintFile19,
         "lib/release/promotion.test.ts",
         "lib/repository/supported-template-development.test.ts",
         "scripts/design-quality/archive-path.test.ts",
@@ -81,7 +170,7 @@ export default defineConfig({
         "components/auth/settings/account/user-profile.tsx",
         "lib/agent/deployment-repository-access-runtime.test.ts",
         "lib/agent/prepared-provider-context.test.ts",
-        "lib/agent/product-behavior.test.ts",
+        sharedLintFile15,
         "lib/auth/github-app-installation.test.ts",
         "lib/auth/preview-oauth-deployment.ts",
         "lib/auth/preview-oauth-runtime.test.ts",
@@ -118,9 +207,9 @@ export default defineConfig({
         "lib/agent/prototype-artifacts.ts",
         "lib/auth/preview-cimd-transport.test.ts",
         "lib/development/dev-package.ts",
-        "lib/development/local-mode.ts",
+        sharedLintFile16,
         "lib/development/process-supervisor.ts",
-        "lib/development/runtime-watch.ts",
+        sharedLintFile17,
         "lib/eve/hosted-service.ts",
         "lib/eve/local-eve-launch.test.ts",
         sharedLintFile8,
@@ -176,7 +265,7 @@ export default defineConfig({
       // Existing calls awaiting a focused contract review.
       files: [
         handoffControlsPath,
-        "components/auth/additional-field.tsx",
+        additionalAuthFieldPath,
         sharedLintFile6,
         "evals/cancel-dependency-preparation.eval.ts",
         "evals/self-reproduction/workflow-adapter.ts",
@@ -210,8 +299,8 @@ export default defineConfig({
         "evals/support/self-reproduction-reference-runtime.test.ts",
         sharedLintFile1,
         "evals/support/supported-repository.ts",
-        "lib/image/lifecycle.test.ts",
-        "lib/repository/node-local-publication.ts",
+        sharedLintFile19,
+        nodeLocalPublicationPath,
         "lib/repository/supported-template-development.test.ts",
         sharedLintFile2,
         "scripts/eval-design.mts",
@@ -244,18 +333,18 @@ export default defineConfig({
       // Preserve existing sequential operation ordering.
       files: [
         "components/auth/settings/account/user-profile.tsx",
-        "components/auth/sign-up.tsx",
+        sharedLintFile14,
         "evals/support/self-reproduction-runtime-comparison.ts",
         "evals/support/self-reproduction-supplementary.ts",
         "lib/agent/deployment-repository-access-runtime.ts",
         "lib/development/application-root.ts",
-        "lib/development/runtime-watch.ts",
+        sharedLintFile17,
         "lib/integrations/repository-access.ts",
         "lib/plugin/agent-plugin-package.ts",
         "lib/provisioning/hosted-operator-ready-replacement-native.ts",
         "lib/release/promotion.ts",
         sharedLintFile11,
-        "lib/repository/node-branch-worktree-publication.ts",
+        sharedLintFile21,
         nodeFreshBootstrapPath,
         nodeLocalPublicationPath,
         "lib/repository/sandbox-filesystem.ts",
@@ -280,11 +369,11 @@ export default defineConfig({
         "lib/db/postgres-hosted-admin.ts",
         "lib/db/preview-activation-cli.mts",
         "lib/db/preview-activation-invited-user.ts",
-        "lib/development/local-mode.ts",
-        "lib/image/ghcr-bound-helper.ts",
+        sharedLintFile16,
+        sharedLintFile18,
         "lib/plugin/agent-plugin-package.ts",
         "lib/repository/github-app-http-provider.ts",
-        "lib/repository/node-branch-worktree-publication.ts",
+        sharedLintFile21,
         nodeFreshBootstrapPath,
         nodeLocalPublicationPath,
         sharedLintFile2,
@@ -352,7 +441,7 @@ export default defineConfig({
       rules: { "react-doctor/no-pass-data-to-parent": "off" },
     },
     {
-      files: [handoffControlsPath, "components/auth/sign-up.tsx"],
+      files: [handoffControlsPath, sharedLintFile14],
       rules: { "react-doctor/no-giant-component": "off" },
     },
     {
@@ -393,7 +482,7 @@ export default defineConfig({
       files: [
         sharedLintFile9,
         githubProviderPath,
-        "lib/repository/dependency-cache.test.ts",
+        sharedLintFile20,
         sharedLintFile10,
         "lib/repository/github-publication.test.ts",
         nodeFreshBootstrapPath,
@@ -462,7 +551,7 @@ export default defineConfig({
       files: [
         "lib/auth/preview-auth-ui.test.ts",
         "lib/auth/preview-cimd-transport.ts",
-        "lib/image/ghcr-bound-helper.ts",
+        sharedLintFile18,
         productionCreatorTestPath,
       ],
       rules: { "typescript/unbound-method": "off" },
@@ -498,7 +587,7 @@ export default defineConfig({
     },
     {
       // Preserve existing callback and abort behavior pending contract review.
-      files: [additionalAuthFieldPath, "lib/agent/product-behavior.test.ts", sharedLintFile3],
+      files: [additionalAuthFieldPath, sharedLintFile15, sharedLintFile3],
       rules: { "typescript/no-misused-promises": "off" },
     },
     {
@@ -713,7 +802,6 @@ export default defineConfig({
     "github/no-then": "off",
     "sonarjs/cognitive-complexity": "off",
     "sonarjs/expression-complexity": "off",
-    "sonarjs/max-union-size": "off",
     "sonarjs/no-undefined-assignment": "off",
     "sonarjs/too-many-break-or-continue-in-loop": "off",
     "typescript/consistent-return": "off",
@@ -721,7 +809,6 @@ export default defineConfig({
     "typescript/no-unsafe-member-access": "off",
     "typescript/no-unsafe-type-assertion": "off",
     "typescript/strict-boolean-expressions": "off",
-    "typescript/strict-void-return": "off",
     "eslint/complexity": "off",
     // Temporary migration items: re-enable after the existing findings are fixed.
     "eslint/sort-keys": "off",
