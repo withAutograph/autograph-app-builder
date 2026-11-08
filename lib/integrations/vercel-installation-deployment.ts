@@ -122,14 +122,13 @@ export function createVercelInstallationDeploymentHandler(
       return redirect("failed", reason, returnState);
     };
 
-    if (
-      (kind === "start" &&
-        (request.method !== "POST" ||
-          request.headers.get("origin") !== origin ||
-          request.headers.get("content-type")?.split(";", 1)[0] !==
-            "application/x-www-form-urlencoded")) ||
-      (kind === "callback" && request.method !== "GET")
-    ) {
+    const invalidStartRequest =
+      kind === "start" &&
+      (request.method !== "POST" ||
+        request.headers.get("origin") !== origin ||
+        request.headers.get("content-type")?.split(";", 1)[0] !==
+          "application/x-www-form-urlencoded");
+    if (invalidStartRequest || (kind === "callback" && request.method !== "GET")) {
       return fail("request-invalid");
     }
 

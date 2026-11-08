@@ -242,13 +242,8 @@ async function tarFiles(tar: AsyncIterable<Uint8Array>) {
       8,
     );
     const [type] = header.slice(156);
-    if (
-      !safeSourcePath(path) ||
-      !Number.isSafeInteger(size) ||
-      size < 0 ||
-      ![0, 48].includes(type) ||
-      files.has(path)
-    ) {
+    const invalidPathOrSize = !safeSourcePath(path) || !Number.isSafeInteger(size) || size < 0;
+    if (invalidPathOrSize || ![0, 48].includes(type) || files.has(path)) {
       throw new Error(STARTER_ARCHIVE_INVALID);
     }
     if (!Number.isSafeInteger(size)) throw new Error(STARTER_ARCHIVE_INVALID);

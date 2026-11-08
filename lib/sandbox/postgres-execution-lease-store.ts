@@ -13,6 +13,7 @@ import { sandboxExecutionPolicyDigest } from "./execution-policy";
 
 type Database = HostedDatabase;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+const staleLeaseMessage = "The sandbox execution lease is stale or unavailable.";
 
 export const sandboxLeaseAdvisoryKey = (principal: HostedPrincipal, adapterSessionId: string) =>
   JSON.stringify([
@@ -182,15 +183,15 @@ export const createPostgresSandboxExecutionLeaseStore = (
     return database.transaction(async (transaction) => {
       const nowEpochMs = await postgresNowEpochMs(transaction);
       const lease = await exactLease(transaction, input.principal, input.adapterSessionId);
+      if (lease === null || lease.state !== "active" || lease.expiresAtEpochMs <= nowEpochMs) {
+        throw new Error(staleLeaseMessage);
+      }
       if (
-        lease === null ||
-        lease.state !== "active" ||
-        lease.expiresAtEpochMs <= nowEpochMs ||
         lease.epoch !== input.epoch ||
         lease.providerSandboxId !== input.providerSandboxId ||
         lease.policyDigest !== input.policyDigest
       ) {
-        throw new Error("The sandbox execution lease is stale or unavailable.");
+        throw new Error(staleLeaseMessage);
       }
       return lease;
     });
@@ -249,7 +250,7 @@ export const createPostgresSandboxExecutionLeaseStore = (
         current.epoch !== input.epoch ||
         current.expiresAtEpochMs <= nowEpochMs
       ) {
-        throw new Error("The sandbox execution lease is stale or unavailable.");
+        throw new Error(staleLeaseMessage);
       }
       const lease = sandboxExecutionLeaseSchema.parse({
         ...current,

@@ -211,13 +211,11 @@ export const createAppValidationTool = (
           ctx,
         );
       }
-      if (
-        current.phase !== "applied" &&
-        current.phase !== "validation_pending" &&
-        current.phase !== "validation_failed" &&
-        current.phase !== "validated" &&
-        current.phase !== "reviewed"
-      ) {
+      const hasStartedValidation =
+        current.phase === "applied" ||
+        current.phase === "validation_pending" ||
+        current.phase === "validation_failed";
+      if (!hasStartedValidation && current.phase !== "validated" && current.phase !== "reviewed") {
         throw new Error("Apply the requested changes before running the repository checks.");
       }
       if (input.repairOnly === true) {

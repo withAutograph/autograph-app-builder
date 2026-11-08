@@ -69,6 +69,9 @@ const shellQuote = function shellQuote(value: string) {
   return `'${value.replaceAll("'", "'\"'\"'")}'`;
 };
 
+const hasValidRepositoryComponents = (match: RegExpExecArray): boolean =>
+  REPOSITORY.test(match[1] ?? "") && REPOSITORY.test(match[2] ?? "");
+
 const parseRemote = function parseRemote(input: string) {
   let remote: URL;
   try {
@@ -90,8 +93,7 @@ const parseRemote = function parseRemote(input: string) {
     invalidOrigin ||
     remote.hash !== "" ||
     match === null ||
-    !REPOSITORY.test(match[1] ?? "") ||
-    !REPOSITORY.test(match[2] ?? "")
+    !hasValidRepositoryComponents(match)
   ) {
     throw new Error(
       "The GitHub source remote is invalid. Select a GitHub repository with an HTTPS clone URL, then retry.",

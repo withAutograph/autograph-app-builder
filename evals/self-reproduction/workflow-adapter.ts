@@ -244,10 +244,10 @@ const referenceAdapter = (
           const strangerId = strangerSession?.user?.id;
           const response = await stranger.request.get(statusPath);
           const body = await response.json();
+          const isDistinctUser =
+            ownerCanRead && typeof strangerId === "string" && strangerId !== ownerId;
           otherUserDenied =
-            ownerCanRead &&
-            typeof strangerId === "string" &&
-            strangerId !== ownerId &&
+            isDistinctUser &&
             response.status() === 404 &&
             body.error === "handoff_unavailable" &&
             Object.keys(body).length === 1;
