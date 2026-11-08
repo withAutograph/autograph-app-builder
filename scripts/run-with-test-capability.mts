@@ -10,6 +10,8 @@ import {
   waitForEveEvalChild,
 } from "../lib/testing/eve-eval-lifecycle";
 
+const testExecutablePath = "/usr/bin:/bin";
+
 const MODE_MASK = 18;
 const ZERO = 0;
 const ONE = 1;
@@ -58,7 +60,7 @@ const allowedEnvironment = [
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function childEnvironment(): NodeJS.ProcessEnv {
   const environment: Record<string, string | undefined> = {
-    PATH: "/usr/bin:/bin",
+    PATH: testExecutablePath,
   };
   for (const name of allowedEnvironment) {
     const value = process.env[name];
@@ -136,7 +138,7 @@ function exactParentArguments(): readonly string[] {
     const observed = JSON.parse(
       execFileSync("/usr/bin/python3", ["-I", "-c", python, String(pid)], {
         encoding: "utf-8",
-        env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
+        env: { LC_ALL: "C", NODE_ENV: "test", PATH: testExecutablePath },
       }),
     ) as unknown;
     if (!Array.isArray(observed) || observed.some((entry) => typeof entry !== "string")) {
@@ -144,7 +146,7 @@ function exactParentArguments(): readonly string[] {
     }
     const cwd = execFileSync("/usr/sbin/lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"], {
       encoding: "utf-8",
-      env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
+      env: { LC_ALL: "C", NODE_ENV: "test", PATH: testExecutablePath },
       stdio: ["ignore", "pipe", "ignore"],
     })
       .split("\n")

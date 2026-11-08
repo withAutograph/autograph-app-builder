@@ -1,3 +1,5 @@
+const unmappedValue = "Not mapped";
+
 export type SpendTarget =
   | "vendor_name"
   | "amount"
@@ -118,12 +120,12 @@ export function deriveSpendPreview(fixture: SpendFixture, mapping: SpendMapping)
               currency: String(currency),
               style: "currency",
             }).format(amount)
-          : "Not mapped",
-      date: date === undefined ? "Not mapped" : String(date),
+          : unmappedValue,
+      date: date === undefined ? unmappedValue : String(date),
       id: row.id,
       result: complete && !row.issue ? "Ready" : "Needs review",
       sourceRef: sourceRef === undefined ? "Not imported" : String(sourceRef),
-      vendor: vendor === undefined ? "Not mapped" : String(vendor),
+      vendor: vendor === undefined ? unmappedValue : String(vendor),
     } satisfies SpendPreviewRow;
   });
   const ready = complete

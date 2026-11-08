@@ -25,6 +25,8 @@ const argument = (name: string) => {
   return value;
 };
 
+const pluginManifestName = "plugin.json";
+
 const repositoryRoot = path.resolve(".");
 const git = (...args: string[]) =>
   execFileSync("/usr/bin/git", args, {
@@ -72,7 +74,7 @@ await mkdir(output, { mode: 0o700 });
 const core = path.join(output, "app-builder");
 await mkdir(core, { mode: 0o755 });
 await Promise.all(
-  ["plugin.json", "mcp.json", "LICENSE", "skills"].map(async (sourcePath) => {
+  [pluginManifestName, "mcp.json", "LICENSE", "skills"].map(async (sourcePath) => {
     const sourceFile = path.resolve(repositoryRoot, sourcePath);
     const sourceFileStatus = await lstat(sourceFile);
     if (sourceFileStatus.isSymbolicLink()) {
@@ -149,7 +151,7 @@ async function collectFiles(root: string, directory: string): Promise<Map<string
 }
 const files = await collectFiles(output, core);
 const archive = deterministicGzip(deterministicTar(files));
-const portable = JSON.parse(await readFile(path.join(core, "plugin.json"), "utf-8"));
+const portable = JSON.parse(await readFile(path.join(core, pluginManifestName), "utf-8"));
 const archiveName = `${portable.name}-${portable.version}.tar.gz`;
 await writeFile(path.join(output, archiveName), archive);
 
@@ -193,7 +195,7 @@ const codexMarketplaceAssetPaths = await Promise.all(
   }),
 );
 await writeFile(
-  path.join(marketplacePluginRoot, ".codex-plugin", "plugin.json"),
+  path.join(marketplacePluginRoot, ".codex-plugin", pluginManifestName),
   `${JSON.stringify(codexManifest, null, 2)}\n`,
 );
 await writeFile(
