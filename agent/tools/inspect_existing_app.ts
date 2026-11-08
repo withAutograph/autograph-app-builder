@@ -19,6 +19,8 @@ import {
   serializedPayloadBytes,
 } from "@/lib/eve/payload-envelope";
 
+const CURRENT_PROPOSAL_SOURCE = "current-proposal";
+
 // The source checkout is writable. An initial clone manifest cannot describe
 // files added or removed during an existing-app session.
 type AppSourceFileRunner = Pick<SandboxSession, "run">;
@@ -349,7 +351,7 @@ export default defineDynamic({
           },
           ctx,
         ) {
-          if (source === "current-proposal") {
+          if (source === CURRENT_PROPOSAL_SOURCE) {
             return inspectCurrentProposalSource(
               {
                 appId,
@@ -422,7 +424,7 @@ export default defineDynamic({
         inputSchema: z
           .strictObject({
             appId: z.string().min(1),
-            source: z.enum(["applied", "current-proposal"]).optional(),
+            source: z.enum(["applied", CURRENT_PROPOSAL_SOURCE]).optional(),
             expectedProposalDigest: z
               .string()
               .regex(/^[0-9a-f]{64}$/u)
@@ -437,7 +439,10 @@ export default defineDynamic({
             paths: z.array(z.string().min(1)).default([]),
           })
           .superRefine((input, context) => {
-            if (input.source !== "current-proposal" && input.expectedProposalDigest !== undefined) {
+            if (
+              input.source !== CURRENT_PROPOSAL_SOURCE &&
+              input.expectedProposalDigest !== undefined
+            ) {
               context.addIssue({
                 code: "custom",
                 message: "Only a current-proposal read accepts expectedProposalDigest.",

@@ -23,6 +23,8 @@ import {
 import { exactLocalPublicationProposal } from "./local_publication_status";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
+const SIMULATED_PUBLICATION_CAPABILITY = "simulated-publication";
+
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const file = z.strictObject({
   digest,
@@ -219,7 +221,7 @@ export default defineTool({
       },
     });
     if (
-      hasTestCapability("simulated-publication") &&
+      hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
       workflow.appSpec.appId === "publication-pre-journal-interruption"
     ) {
       throw new Error(
@@ -231,7 +233,7 @@ export default defineTool({
       proposal,
       publishedByCallId: ctx.callId,
       readOverlayFile: (path) =>
-        hasTestCapability("simulated-publication") &&
+        hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
         workflow.appSpec.appId === "publication-precondition-failure"
           ? Promise.resolve(null)
           : ctx
@@ -239,7 +241,7 @@ export default defineTool({
               .then((sandbox) => sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` })),
       review: workflow.reviewReceipt,
       sourceReceipt: workflow.sourceReceipt,
-      ...(hasTestCapability("simulated-publication") &&
+      ...(hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
       workflow.appSpec.appId === "publication-interruption"
         ? {
             hooks: {
@@ -250,7 +252,7 @@ export default defineTool({
             },
           }
         : {}),
-      ...(hasTestCapability("simulated-publication") &&
+      ...(hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
       workflow.appSpec.appId === "publication-failure-recovery"
         ? {
             hooks: {
@@ -286,7 +288,7 @@ export default defineTool({
       );
     }
     if (
-      hasTestCapability("simulated-publication") &&
+      hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
       (workflow.appSpec.appId === "publication-success-recovery" ||
         workflow.appSpec.appId === "publication-failure-recovery")
     ) {

@@ -33,11 +33,13 @@ import {
 } from "@/lib/agent/apply-implementation-files";
 import { invalidateProductBehaviorEvidence } from "@/lib/agent/product-behavior-state";
 
+const APPROVAL_NOT_APPLICABLE = "not-applicable";
+
 export default defineTool({
   approval(ctx) {
     if (internalCorrectionRequiresSuccessor(ctx)) {
       discardPendingPrivateApplyApproval(ctx.callId);
-      return "not-applicable";
+      return APPROVAL_NOT_APPLICABLE;
     }
     const current = appBuilderWorkflowState.get();
     if (
@@ -47,11 +49,11 @@ export default defineTool({
     ) {
       discardPendingPrivateApplyApproval(ctx.callId);
       // Only the read-only prerequisite report can execute in this phase.
-      return "not-applicable";
+      return APPROVAL_NOT_APPLICABLE;
     }
     if (ctx.toolInput?.privateCompute !== current.proposal.target.privateCompute?.id) {
       discardPendingPrivateApplyApproval(ctx.callId);
-      return "not-applicable";
+      return APPROVAL_NOT_APPLICABLE;
     }
     return requestPrivateApplyApproval(
       {

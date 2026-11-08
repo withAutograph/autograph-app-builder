@@ -12,6 +12,8 @@ import { branchWorktreePublicationProposalSchema } from "@/lib/agent/branch-work
 import { exactBranchWorktreePublicationProposal } from "./branch_worktree_publication_status";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
+const SIMULATED_PUBLICATION_CAPABILITY = "simulated-publication";
+
 export default defineTool({
   approval: always(),
   description:
@@ -56,13 +58,13 @@ export default defineTool({
           pendingWorkflow = appBuilderWorkflowState.get();
         },
         beforePendingJournal:
-          hasTestCapability("simulated-publication") &&
+          hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
           workflow.appSpec.appId === "branch-publication-pre-journal-interruption"
             ? () => {
                 throw new Error("Fixture interruption before durable branch publication intent.");
               }
             : undefined,
-        ...(hasTestCapability("simulated-publication") &&
+        ...(hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
         workflow.appSpec.appId === "branch-publication-lost-response"
           ? {
               beforeTerminalJournal: () => {
@@ -71,7 +73,7 @@ export default defineTool({
               preserveNonterminalJournal: true,
             }
           : {}),
-        ...(hasTestCapability("simulated-publication") &&
+        ...(hasTestCapability(SIMULATED_PUBLICATION_CAPABILITY) &&
         workflow.appSpec.appId === "branch-publication-partial-failure"
           ? {
               afterPathMutation: (_path: string, index: number) => {

@@ -24,6 +24,8 @@ import {
   readDraftReconciliationDiff,
 } from "@/lib/repository/sandbox-draft-reconciliation";
 
+const PUBLICATION_RECOVERY_KIND = "publication-recovery";
+
 type RepairInspectionInput =
   | { kind: "changes"; against: "base" | "head"; cursor?: number }
   | { kind: "diff"; against: "base" | "head"; cursor?: number; path?: string };
@@ -108,7 +110,7 @@ export default defineTool({
     const workflow = appBuilderWorkflowState.get();
     const state =
       resolveDraftReviewedWorkflow(workflow, draftReconciliationState.get()) ?? workflow;
-    if (input.kind === "publication-recovery") {
+    if (input.kind === PUBLICATION_RECOVERY_KIND) {
       const currentAppSpec = "appSpec" in state ? state.appSpec : undefined;
       const completions = [
         ...draftReconciliationCompletions.get(),
@@ -225,7 +227,7 @@ export default defineTool({
     };
   },
   inputSchema: z.discriminatedUnion("kind", [
-    z.strictObject({ kind: z.literal("publication-recovery") }),
+    z.strictObject({ kind: z.literal(PUBLICATION_RECOVERY_KIND) }),
     z.strictObject({ kind: z.literal("conflict"), path: z.string().min(1) }),
     z.strictObject({
       against: z.enum(["base", "head"]),
