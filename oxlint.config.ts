@@ -86,7 +86,6 @@ export default defineConfig({
         "lib/eve/private-repository-production-approval.ts",
         sharedLintFile27,
         "lib/integrations/repository-access.ts",
-        "lib/provisioning/github-provider.ts",
         "lib/provisioning/hosted-operator-export-customer.ts",
         "lib/provisioning/hosted-operator-membership-inspection.ts",
         "lib/provisioning/hosted-operator-native-preview-recovery.ts",

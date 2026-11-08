@@ -632,23 +632,21 @@ export async function provisionGitHubRepository(input: {
     try {
       let uncertainWrite = false;
       for (const candidate of input.persistedCandidates) {
-        if (!input.persistedAbsentCandidates.includes(candidate)) {
-          continue;
-        }
-        uncertainWrite = true;
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Inspect all prior candidates before permitting a new write.
-        const observed = await repository(candidate);
-        if (observed.status === 404) {
-          continue;
-        }
-        if (stringProperty(observed.body, "description") !== marker(input.requestId)) {
-          return { code: "reconciliation_uncertain", retryable: false, status: "failed" };
-        }
-        try {
-          // oxlint-disable-next-line eslint/no-await-in-loop -- Exact readback proves which previous write completed.
-          return await readBack(candidate);
-        } catch {
-          return { code: "reconciliation_uncertain", retryable: false, status: "failed" };
+        if (input.persistedAbsentCandidates.includes(candidate)) {
+          uncertainWrite = true;
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Inspect all prior candidates before permitting a new write.
+          const observed = await repository(candidate);
+          if (observed.status !== 404) {
+            if (stringProperty(observed.body, "description") !== marker(input.requestId)) {
+              return { code: "reconciliation_uncertain", retryable: false, status: "failed" };
+            }
+            try {
+              // oxlint-disable-next-line eslint/no-await-in-loop -- Exact readback proves which previous write completed.
+              return await readBack(candidate);
+            } catch {
+              return { code: "reconciliation_uncertain", retryable: false, status: "failed" };
+            }
+          }
         }
       }
       if (uncertainWrite) {
