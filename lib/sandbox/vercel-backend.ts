@@ -126,7 +126,7 @@ const ambiguousCreateFailure = (error: unknown): boolean => {
     if (!(error instanceof APIError)) {
       return retryableProviderFailure(error);
     }
-    const status = error.response.status;
+    const { status } = error.response;
     // Vercel reports an existing named sandbox as HTTP 400 as well as 409.
     if (
       (status === 400 &&

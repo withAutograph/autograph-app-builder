@@ -535,7 +535,7 @@ describe("isolated draft reconciliation", () => {
         expect(page.nextCursor).toBe(cursor + Buffer.byteLength(page.content));
         expect(page.nextCursor).toBeGreaterThan(cursor);
       }
-      nextCursor = page.nextCursor;
+      ({ nextCursor } = page);
     } while (nextCursor !== null);
     expect(pages.join("")).toBe(content);
     expect(largestOutput).toBeLessThanOrEqual(6 * 32_768 + 512);
@@ -2119,7 +2119,7 @@ cp.spawn = (command, args, options) => {
             "tracked link",
           );
           rmSync(selected.link);
-          target = selected.target;
+          ({ target } = selected);
         }
         symlinkSync(target, selected.link);
       }

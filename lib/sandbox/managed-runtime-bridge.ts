@@ -184,7 +184,7 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
     }
   };
   const authorize = async (request: IncomingMessage, body?: Uint8Array) => {
-    const authorization = request.headers.authorization;
+    const { authorization } = request.headers;
     const bearer =
       authorization !== undefined && authorization.startsWith("Bearer ")
         ? authorization.slice(7)
@@ -207,7 +207,7 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
     void (async () => {
       try {
         // Reject unauthenticated ingress before buffering any entity bytes.
-        const authorization = request.headers.authorization;
+        const { authorization } = request.headers;
         if (
           !verifyManagedCapability(
             authorization !== undefined && authorization.startsWith("Bearer ")

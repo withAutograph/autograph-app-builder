@@ -99,7 +99,7 @@ it("does not stage source after cancellation or owner rejection", async () => {
   const run = vi.fn<SandboxSession["run"]>();
   const sandbox = { run, writeTextFile: vi.fn<SandboxSession["writeTextFile"]>() };
   const f = fixture();
-  const receipt = f.receipt;
+  const { receipt } = f;
   const validated = validateApplicationSourceArtifact({
     manifest: {
       version: 1,

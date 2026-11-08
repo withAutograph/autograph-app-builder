@@ -184,7 +184,7 @@ export const createManagedOwnedChildLauncher = (input: {
         }),
         stopTimeoutMs,
       );
-      const pid = child.pid;
+      const { pid } = child;
       if (pid === undefined || failure) {
         throw unavailable();
       }
