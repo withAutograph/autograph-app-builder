@@ -7,7 +7,7 @@ const GITHUB_REPOSITORY_URL_PREFIX = "https://github.com/";
 const decimal = z.string().regex(/^[1-9][0-9]*$/u);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/u);
-const instant = z.string().datetime({ offset: true });
+const instant = z.iso.datetime({ offset: true });
 
 export const builderProvisionRequestSchema = z
   .strictObject({
@@ -27,7 +27,7 @@ export const builderProvisionRequestSchema = z
         .regex(/^[A-Za-z0-9._-]+$/u),
       private: z.boolean(),
     }),
-    requestId: z.string().uuid(),
+    requestId: z.uuid(),
     version: z.literal(1),
   })
   .superRefine((value, context) => {
@@ -118,7 +118,7 @@ const githubClonedStarterSchema = githubStarterBaseSchema
     readinessDigest: sha256,
     receiptVersion: z.literal(4),
     ref: z.literal("refs/heads/main"),
-    repository: z.string().url().startsWith(GITHUB_REPOSITORY_URL_PREFIX),
+    repository: z.url().startsWith(GITHUB_REPOSITORY_URL_PREFIX),
     sourceReceiptDigest: sha256,
   })
   .strict();
@@ -130,7 +130,7 @@ const githubLegacyStarterSchema = githubStarterBaseSchema
     manifestSha256: sha256.optional(),
     method: z.literal("starter-archive-v3").optional(),
     ref: z.literal("refs/heads/main").optional(),
-    repository: z.string().url().startsWith(GITHUB_REPOSITORY_URL_PREFIX).optional(),
+    repository: z.url().startsWith(GITHUB_REPOSITORY_URL_PREFIX).optional(),
   })
   .strict();
 
@@ -150,12 +150,12 @@ export const githubProvisionSuccessSchema = z.strictObject({
   }),
   starter: z.union([githubClonedStarterSchema, githubLegacyStarterSchema]),
   status: z.literal("succeeded"),
-  url: z.string().url().startsWith(GITHUB_REPOSITORY_URL_PREFIX),
+  url: z.url().startsWith(GITHUB_REPOSITORY_URL_PREFIX),
   visibility: z.enum(["public", "private"]),
 });
 
 export const vercelProvisionSuccessSchema = z.strictObject({
-  dashboardUrl: z.string().url().startsWith("https://vercel.com/"),
+  dashboardUrl: z.url().startsWith("https://vercel.com/"),
   // Keep historical Next.js app-root receipts readable; new projects use Services.
   framework: z.enum(["services", "nextjs"]),
   installationId: z.string().min(1),
@@ -203,7 +203,7 @@ export const builderProvisionResponseSchema = z.strictObject({
     .optional(),
   github: githubProvisionResultSchema,
   requestDigest: sha256,
-  requestId: z.string().uuid(),
+  requestId: z.uuid(),
   status: z.enum(["pending", "settled"]),
   updatedAt: instant,
   vercel: vercelProvisionResultSchema,

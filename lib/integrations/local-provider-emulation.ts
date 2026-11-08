@@ -159,7 +159,7 @@ export function readLocalProviderEmulation(
   }
   const parsed = z
     .strictObject({
-      canonicalOrigin: z.string().url(),
+      canonicalOrigin: z.url(),
       githubClientId: z.string().min(1).max(255),
       githubClientSecret: z.string().min(20).max(512),
       githubOrigin: localOrigin,

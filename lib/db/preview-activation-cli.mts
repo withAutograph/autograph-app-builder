@@ -206,19 +206,20 @@ function createStore(sql: Sql): PreviewActivationStore {
         { count: number }[]
       >`select count(*)::integer as count from jwks`;
       const database = drizzle(sql, { schema: databaseSchema });
+      const taskScopedOAuthPlaceholder = "task-scoped-oauth-initialization";
       const auth = createPreviewOAuthServer({
         config: {
           databaseUrl: "postgresql://task-scoped.invalid/database",
           environment: "preview",
-          githubClientId: "task-scoped-oauth-initialization",
-          githubClientSecret: "task-scoped-oauth-initialization",
+          githubClientId: taskScopedOAuthPlaceholder,
+          githubClientSecret: taskScopedOAuthPlaceholder,
           hostedAdapter: "1",
           issuer: input.issuer,
           passkeyOnboarding: null,
           resource: input.resource,
           secret: input.authSecret,
-          vercelClientId: "task-scoped-oauth-initialization",
-          vercelClientSecret: "task-scoped-oauth-initialization",
+          vercelClientId: taskScopedOAuthPlaceholder,
+          vercelClientSecret: taskScopedOAuthPlaceholder,
         },
         database: drizzleAdapter(database, {
           provider: "pg",

@@ -30,7 +30,7 @@ const storedRequestSchema = z.strictObject({
       .regex(/^[A-Za-z0-9._-]+$/u),
     private: z.boolean(),
   }),
-  requestId: z.string().uuid(),
+  requestId: z.uuid(),
   version: z.literal(1),
 });
 
@@ -42,9 +42,9 @@ const operationStateSchema = z.strictObject({
   failureDetail: z.string().max(2048).optional(),
   lastProviderDiagnostic: vercelProvisionDiagnosticSchema.optional(),
 
-  leaseExpiresAt: z.string().datetime({ offset: true }).optional(),
-  leaseId: z.string().uuid().optional(),
-  nextRetryAt: z.string().datetime({ offset: true }).optional(),
+  leaseExpiresAt: z.iso.datetime({ offset: true }).optional(),
+  leaseId: z.uuid().optional(),
+  nextRetryAt: z.iso.datetime({ offset: true }).optional(),
   outcomeKnown: z.boolean().optional(),
 });
 

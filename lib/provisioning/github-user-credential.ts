@@ -24,9 +24,9 @@ export function readGitHubUserCredentialEnvironment(
 export const githubUserTokenSetSchema = z
   .strictObject({
     accessToken: z.string().min(20).max(512),
-    accessTokenExpiresAt: z.string().datetime({ offset: true }).optional(),
+    accessTokenExpiresAt: z.iso.datetime({ offset: true }).optional(),
     refreshToken: z.string().min(20).max(512).optional(),
-    refreshTokenExpiresAt: z.string().datetime({ offset: true }).optional(),
+    refreshTokenExpiresAt: z.iso.datetime({ offset: true }).optional(),
   })
   .superRefine((value, context) => {
     if (

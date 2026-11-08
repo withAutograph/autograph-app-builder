@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const resumeKeySchema = z.string().uuid();
+const resumeKeySchema = z.uuid();
 export const providerConnectionReturnToSchema = z.union([
   z.literal("/"),
   z

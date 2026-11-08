@@ -1561,17 +1561,25 @@ it("keeps a typed framework session limit out of public confirmations", () => {
   );
 });
 
+const receipt = (phase = "draft_update") => ({
+  baseRef: "refs/heads/reviewed-change",
+  baseSha: "a".repeat(40),
+  format: "autograph-eve-approval-receipt-v2",
+  outcome: phase === "publication" ? "create-draft-pr" : "update-draft-pr",
+  phase,
+  repository: "example/reviewed-repository",
+  repositoryId: "1234",
+  subjectDigest: "b".repeat(64),
+});
+
+const result = (events: ReturnType<typeof projectInstalledEveEvents>) => ({
+  sessionId: "original-session",
+  status: "waiting" as const,
+  cursor: events.at(-1)?.index ?? 0,
+  events,
+});
+
 describe("public draft pull request approval scope", () => {
-  const receipt = (phase = "draft_update") => ({
-    baseRef: "refs/heads/reviewed-change",
-    baseSha: "a".repeat(40),
-    format: "autograph-eve-approval-receipt-v2",
-    outcome: phase === "publication" ? "create-draft-pr" : "update-draft-pr",
-    phase,
-    repository: "example/reviewed-repository",
-    repositoryId: "1234",
-    subjectDigest: "b".repeat(64),
-  });
   const requested = (toolName: string, approvalReceipt: unknown) =>
     installedEvent({
       data: {
@@ -1772,12 +1780,6 @@ describe("Production app identity invitation", () => {
         result: { kind: "tool-result", toolName, callId, output: value, isError },
       },
     });
-  const result = (events: ReturnType<typeof projectInstalledEveEvents>) => ({
-    sessionId: "original-session",
-    status: "waiting" as const,
-    cursor: events.at(-1)?.index ?? 0,
-    events,
-  });
   const prepare = (value = output(), callId = "prepare-call") =>
     completed("prepare-app-production", callId, value);
 

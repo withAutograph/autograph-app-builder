@@ -516,8 +516,8 @@ export function createPreparedAppContextReader(input: {
         : new URL(
             `/${provider}/installations?${new URLSearchParams({ returnTo })}`,
             // readHandoff has already verified this originating session.
-            z.object({ initiator: z.object({ issuer: z.string().url() }) }).parse(sessionAuth)
-              .initiator.issuer,
+            z.object({ initiator: z.object({ issuer: z.url() }) }).parse(sessionAuth).initiator
+              .issuer,
           ).toString();
     // Explicit projection: never spread auth, credentials, raw provider payloads,
     // or the provisioning journal into durable model-visible output.

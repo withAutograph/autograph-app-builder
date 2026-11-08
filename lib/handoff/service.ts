@@ -177,7 +177,7 @@ export function createBuilderHandoffService(input: {
       intent: BuilderHandoffIntent;
     }) {
       const authority = hostedTenantAuthoritySchema.parse(value.authority);
-      const creationRequestId = z.string().uuid().parse(value.creationRequestId);
+      const creationRequestId = z.uuid().parse(value.creationRequestId);
       const intent = builderHandoffIntentSchema.parse(value.intent);
       if (intent.sourceCandidate !== undefined) {
         if (input.validateSourceCandidate === undefined) throw new BuilderHandoffUnavailableError();
@@ -231,7 +231,7 @@ export function createBuilderHandoffService(input: {
     read,
 
     async renew(value: { authority: Authority; handoffId: string; creationRequestId: string }) {
-      z.string().uuid().parse(value.creationRequestId);
+      z.uuid().parse(value.creationRequestId);
       const record = await read(value);
       const timestamp = now();
       if (record.sessionId !== undefined || timestamp < record.expiresAt) {

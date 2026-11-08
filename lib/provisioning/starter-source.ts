@@ -28,7 +28,7 @@ export const starterSourceManifestSchema = z.strictObject({
   archive: z.strictObject({
     bytes: z.number().int().positive(),
     sha256: digest,
-    url: z.string().url().startsWith("https://"),
+    url: z.url().startsWith("https://"),
   }),
   files: z
     .array(
@@ -141,7 +141,7 @@ function restrictedGit(args: string[], askpass?: { credentialFile: string; askpa
 const starterConfigSchema = z
   .strictObject({
     manifestSha256: digest,
-    manifestUrl: z.string().url().startsWith("https://"),
+    manifestUrl: z.url().startsWith("https://"),
   })
   .superRefine((value, context) => {
     if (!new URL(value.manifestUrl).pathname.includes(value.manifestSha256)) {
