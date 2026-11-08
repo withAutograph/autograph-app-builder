@@ -349,7 +349,7 @@ const fixture = () => {
     "transition-contract.json": Buffer.from("fixture-contract"),
     "transition-plan.json": Buffer.from("fixture-transitions"),
   };
-  const retained = { preparation, spec, proof };
+  const retained = { preparation, proof, spec };
   const deps: NormalActorOrganizationWorkerDependencies = {
     configuration,
     assertAuthorized: assertCurrent,
@@ -623,7 +623,7 @@ describe("actual selected organization worker adapter", () => {
         change === "actor" &&
         historical.plan.authMembership?.kind === "create-owned-organizations"
       ) {
-        const organization = historical.plan.authMembership.organizations[0];
+        const [organization] = historical.plan.authMembership.organizations;
         if (organization === undefined) {
           throw new Error("fixture_missing_organization");
         }

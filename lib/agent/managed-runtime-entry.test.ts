@@ -378,8 +378,8 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
       );
       expect(wrongTransport.status).toBe(403);
       const client = createManagedRuntimeIpcClient({
-        socketPath: ready.socketPath,
         lifecycleCapability: capabilities.private.lifecycle,
+        socketPath: ready.socketPath,
       });
       const stopped = await client.execute({ operation: "stop-and-wait", commandId: randomUUID() });
       expect(stopped.state).toBe("stopped");

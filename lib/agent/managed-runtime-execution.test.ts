@@ -637,7 +637,24 @@ describe("managed runtime execution through supported SDK ports", () => {
       },
     );
     const operations = createHostedContinuityOperations({
+      assertOwner: async (owner) => {
+        expect(owner).toEqual(context);
+      },
+      assertSetup: async (_context, plan) => {
+        expect(plan).toEqual(retained.plan);
+      },
+      projection: { publish, revoke },
+      readApproval,
+      resolvePlan,
+      runtime: f.runtime,
+      seal: (record, caps) => custody.seal(record, caps),
       store: {
+        compareAndSet: async (input) => {
+          expect(input.expectedRevision).toBe(f.read().revision);
+          f.replace(input.record);
+          records.push(f.read());
+          return f.read();
+        },
         read: async (input) => {
           const row = f.read();
           if (
@@ -651,22 +668,7 @@ describe("managed runtime execution through supported SDK ports", () => {
         reserve: async () => {
           throw new Error("Replacement operation is forbidden");
         },
-        compareAndSet: async (input) => {
-          expect(input.expectedRevision).toBe(f.read().revision);
-          f.replace(input.record);
-          records.push(f.read());
-          return f.read();
-        },
       },
-      assertOwner: async (owner) => {
-        expect(owner).toEqual(context);
-      },
-      assertSetup: async (_context, plan) => {
-        expect(plan).toEqual(retained.plan);
-      },
-      resolvePlan,
-      readApproval,
-      seal: (record, caps) => custody.seal(record, caps),
       unseal: (record) => custody.unseal(record),
       withResourceLease: async (input, run) => {
         await input.initializeUnderLock?.();
@@ -675,8 +677,6 @@ describe("managed runtime execution through supported SDK ports", () => {
           expect(await input.readCurrentFence()).toEqual(fence);
         });
       },
-      runtime: f.runtime,
-      projection: { publish, revoke },
     });
     const request = {
       action: "continuity" as const,

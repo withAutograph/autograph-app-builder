@@ -359,10 +359,10 @@ const fixture = async (publicRelease?: {
       checkpoint: async (state) => {
         await journal.checkpoint(context, state);
       },
-      readCapturedActor: async () => null,
-      readOrganizationSession: async () => null,
       clientFactory: (input) =>
         createHostedOperatorNormalAuthClient({ ...input, fetch: normalFetch }),
+      readCapturedActor: async () => null,
+      readOrganizationSession: async () => null,
     },
   });
   const artifactStore: OperatorArtifactStore = {
@@ -448,8 +448,8 @@ const fixture = async (publicRelease?: {
           return new Response(null, { status: 401 });
         }
         const verifyOptions: JWTVerifyOptions = {
-          issuer: program.origin,
           audience: "https://operator.example.com",
+          issuer: program.origin,
         };
         if (values.has("attestation")) {
           verifyOptions.currentDate = new Date(
@@ -649,9 +649,9 @@ const fixture = async (publicRelease?: {
       }),
     ).toMatchObject({ status: "auth-schema-prepared" });
     endpointOrigin = "https://new-gateway.example.test";
-    const candidate = requiredFixture(
+    const [candidate] = requiredFixture(
       requiredFixture(row.record.operator).gatewayDeliveryCandidates,
-    )[0];
+    );
     bootstrapSnapshot = completedParticipantBootstrapSchema.parse({
       auth: retainedOperatorAuthFromJournal(row.record),
       candidate,

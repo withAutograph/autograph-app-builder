@@ -336,9 +336,9 @@ describe("owned hosted runtime prior approval", () => {
       {
         createResourceMismatch: () => new HostedOperatorError("resource_mismatch"),
         digest: operatorPlanDigest,
-        sameSelection: sameOperatorSelection,
         isOperatorError: (error): error is HostedOperatorError =>
           error instanceof HostedOperatorError,
+        sameSelection: sameOperatorSelection,
       },
     );
     expect(result.result.status).toBe("pending");
@@ -438,9 +438,9 @@ describe("owned hosted runtime prior approval", () => {
     const f = await fixture();
     await f.approve();
     await f.approve({
+      callId: "cancelled-call",
       outcome: "cancelled",
       requestId: "cancelled-request",
-      callId: "cancelled-call",
       sequence: 10,
     });
     f.recover();
@@ -754,7 +754,7 @@ describe("Builder-local approval capture before execution", () => {
       await f.approve();
       throw new Error("private capture response lost");
     });
-    const read = createHostedRuntimeExecutionApprovalReader({ readPrior: f.reader, capture });
+    const read = createHostedRuntimeExecutionApprovalReader({ capture, readPrior: f.reader });
     expect(await read(f.input, f.context, f.operator)).toEqual({
       approvalId: "original-request",
       callId: "original-call",
@@ -789,7 +789,7 @@ describe("Builder-local approval capture before execution", () => {
       await f.approve();
       controller.abort();
     });
-    const read = createHostedRuntimeExecutionApprovalReader({ readPrior: f.reader, capture });
+    const read = createHostedRuntimeExecutionApprovalReader({ capture, readPrior: f.reader });
     await expect(read(f.input, context, f.operator)).rejects.toThrow();
     expect(f.requests).toEqual([]);
   });
@@ -832,9 +832,9 @@ describe("owned approved operation reference", () => {
       {
         createResourceMismatch: () => new HostedOperatorError("resource_mismatch"),
         digest: operatorPlanDigest,
-        sameSelection: sameOperatorSelection,
         isOperatorError: (error): error is HostedOperatorError =>
           error instanceof HostedOperatorError,
+        sameSelection: sameOperatorSelection,
       },
     );
     expect(result.result.status).toBe("pending");
@@ -1052,10 +1052,10 @@ describe("owned approved operation reference", () => {
       .fn<Parameters<typeof createHostedRuntimeExecutionApprovalReader>[0]["readPrior"]>()
       .mockResolvedValue(null);
     const read = createHostedRuntimeExecutionApprovalReader({
-      readPrior,
       capture: async () => {
         await Promise.resolve();
       },
+      readPrior,
     });
     const options = { recoverOriginalPlan: false } as const;
     await read(f.input, f.context, f.operator, options);

@@ -340,9 +340,9 @@ const setup = () => {
   const ports = { store: { read, compareAndSet }, assertAuthorized, readApproval };
   const input = { action: "plan", operation: "prepare", selection: accountPlan.selection } as const;
   return {
-    ports,
-    input,
     accountPlan,
+    input,
+    ports,
     get row() {
       return row;
     },
@@ -522,12 +522,12 @@ it("restores through ordinary planner then satisfies idle account/capture author
   });
   const owner = vi.fn(async () => {});
   const captureAuthority = createNormalActorJournalAuthority({
-    store: f.ports.store,
+    assertApprovedOwner: f.ports.assertAuthorized,
+    assertCanonicalOwner: owner,
     keyring,
     now: () => now,
-    assertCanonicalOwner: owner,
-    assertApprovedOwner: f.ports.assertAuthorized,
     readApproval: f.ports.readApproval,
+    store: f.ports.store,
   });
   await captureAuthority.assertMutationAuthority(context, f.row);
   await captureAuthority.assertAccountApproval(context, required(f.row.record.accountPreparation));
