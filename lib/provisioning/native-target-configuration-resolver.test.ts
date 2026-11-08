@@ -318,8 +318,8 @@ describe("production native target configuration resolver", () => {
       target: { appId: "new-app", sessionId: ownerContext.sessionId },
     });
     expect(fixture.resources.registry.read).toHaveBeenCalledExactlyOnceWith({
-      authority,
       appId: "new-app",
+      authority,
     });
     expect(effective.applications["new-app"].projectId).toBe("project-new-app");
   });
@@ -400,8 +400,8 @@ describe("production native target configuration resolver", () => {
     expect(reader).toHaveBeenCalledOnce();
     expect(fixture.order).toEqual(["workload", "workload", "owner", "registry", "close"]);
     expect(fixture.resources.registry.read).toHaveBeenCalledExactlyOnceWith({
-      authority,
       appId: "new-app",
+      authority,
     });
     expect(effective.applications["new-app"].projectId).toBe("project-new-app");
   });

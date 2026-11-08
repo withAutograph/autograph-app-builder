@@ -1833,20 +1833,20 @@ const narrowedGatewayApprovalFixture = () => {
     resourcesInstaller: plan.installer,
     effects: [
       {
+        description: "Auth resources",
         id: "auth-resources",
         kind: "resources",
-        description: "Auth resources",
         resourceId: plan.authDatabase.resourceId,
       },
       {
+        description: "App resources",
         id: "app-resources",
         kind: "resources",
-        description: "App resources",
         resourceId: plan.appDatabase.resourceId,
       },
-      { id: "auth-schema", kind: "install", description: "Install Auth" },
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind Gateway" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Deliver Gateway" },
+      { description: "Install Auth", id: "auth-schema", kind: "install" },
+      { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Deliver Gateway", id: "gateway-delivery", kind: "gateway-delivery" },
     ],
     deploymentBoundary: {
       authority: ownerContext.authority,
@@ -2037,7 +2037,7 @@ describe("owner project access diagnostics", () => {
       );
       const response = Response.json(
         { privateToken: "never-log-response", uri: "postgres://private-password@private-host/db" },
-        { status, headers: { "private-header": "never-log-header" } },
+        { headers: { "private-header": "never-log-header" }, status },
       );
       const readJson = vi.spyOn(response, "json");
       const readText = vi.spyOn(response, "text");
@@ -2346,9 +2346,9 @@ describe("hosted operator owner authority", () => {
       },
       effects: [
         {
+          description: "Connect approved accounts",
           id: "normal-accounts",
           kind: "normal-accounts",
-          description: "Connect approved accounts",
         },
       ],
     });

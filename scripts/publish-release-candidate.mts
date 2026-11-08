@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { lstat, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 
+const promotionReceiptName = "promotion-receipt.json";
+
 const candidateInput = process.argv[process.argv.indexOf("--candidate-root") + 1];
 if (!candidateInput || !path.isAbsolute(candidateInput)) {
   throw new Error("Usage: --candidate-root /absolute/proven/candidate");
@@ -14,7 +16,7 @@ if (!info.isDirectory() || info.isSymbolicLink() || (info.mode & 0o022) !== 0) {
   throw new Error("Release candidate root was unsafe.");
 }
 const promotion = JSON.parse(
-  await readFile(path.join(candidate, "promotion-receipt.json"), "utf-8"),
+  await readFile(path.join(candidate, promotionReceiptName), "utf-8"),
 ) as {
   format: string;
   digest: string;
@@ -45,7 +47,7 @@ const files = [
   promotion.package.marketplaceArchive,
   promotion.package.checksums,
   promotion.package.receipt,
-  "promotion-receipt.json",
+  promotionReceiptName,
 ];
 for (const file of files) {
   if (path.basename(file) !== file) {
@@ -53,10 +55,10 @@ for (const file of files) {
   }
   // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   const bytes = await readFile(
-    file === "promotion-receipt.json" ? path.join(candidate, file) : path.join(packageRoot, file),
+    file === promotionReceiptName ? path.join(candidate, file) : path.join(packageRoot, file),
   );
   let expected: string | undefined;
-  if (file !== "promotion-receipt.json") {
+  if (file !== promotionReceiptName) {
     if (file === promotion.package.archive) {
       expected = promotion.package.archiveSha256;
     } else if (file === promotion.package.marketplaceArchive) {
@@ -87,7 +89,7 @@ execFileSync(
     "create",
     tag,
     ...files.map((file) =>
-      file === "promotion-receipt.json" ? path.join(candidate, file) : path.join(packageRoot, file),
+      file === promotionReceiptName ? path.join(candidate, file) : path.join(packageRoot, file),
     ),
     "--repo",
     "withAutograph/autograph-app-builder",

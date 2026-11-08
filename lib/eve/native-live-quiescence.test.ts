@@ -560,13 +560,13 @@ describe("live native execution transfer", () => {
 
 describe("native recovery refusal diagnostics", () => {
   it.each([
-    { reason: "handoff-owner-ambiguous", expected: "handoff-owner-ambiguous" },
-    { reason: "source-not-terminal", expected: "source-not-terminal" },
+    { expected: "handoff-owner-ambiguous", reason: "handoff-owner-ambiguous" },
+    { expected: "source-not-terminal", reason: "source-not-terminal" },
     {
-      reason: "paired-native-checkpoint-unavailable",
       expected: "paired-native-checkpoint-unavailable",
+      reason: "paired-native-checkpoint-unavailable",
     },
-    { reason: "private-canary-native-reason-secret", expected: "other" },
+    { expected: "other", reason: "private-canary-native-reason-secret" },
   ])(
     "reports only fixed inspect-source collection labels: $expected",
     async ({ reason, expected }) => {
@@ -620,10 +620,10 @@ describe("native recovery refusal diagnostics", () => {
   );
   it.each([
     {
-      reason: "paired-native-checkpoint-unavailable",
       expected: "paired-native-checkpoint-unavailable",
+      reason: "paired-native-checkpoint-unavailable",
     },
-    { reason: "private-canary-native-reason-secret", expected: "other" },
+    { expected: "other", reason: "private-canary-native-reason-secret" },
   ])("reports only fixed prepare refusal labels: $expected", async ({ reason, expected }) => {
     const f = fixture();
     // @ts-expect-error Deliberately exercise an unknown runtime native reason at the diagnostic boundary.
@@ -688,20 +688,20 @@ it("preserves a native recovery refusal when its advisory sink fails", async () 
 describe("native refusal boundary observation", () => {
   it.each([
     {
-      stage: "handoff_parent",
-      status: "running",
       anchorStatus: "queued",
+      expectedAnchor: "queued",
       expectedStage: "handoff_parent",
       expectedStatus: "running",
-      expectedAnchor: "queued",
+      stage: "handoff_parent",
+      status: "running",
     },
     {
-      stage: "private-canary-boundary",
-      status: "private-canary-status",
       anchorStatus: "private-canary-anchor",
+      expectedAnchor: "other",
       expectedStage: "other",
       expectedStatus: "other",
-      expectedAnchor: "other",
+      stage: "private-canary-boundary",
+      status: "private-canary-status",
     },
   ])(
     "observes canonical anchor even without a candidate and sanitizes $expectedStage",

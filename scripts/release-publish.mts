@@ -24,6 +24,7 @@ import {
 import { HostedMcpProofClient } from "./hosted-portable-proof";
 import { TOOL_NAMES } from "./portable-release";
 
+const promotionReceiptName = "promotion-receipt.json";
 const execFileAsync = promisify(execFile);
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -236,7 +237,7 @@ try {
       nodePath.basename(receipt.package.marketplaceArchive),
       nodePath.basename(receipt.package.checksums),
       nodePath.basename(receipt.package.receipt),
-      "promotion-receipt.json",
+      promotionReceiptName,
     ].toSorted();
     if (
       metadata.tagName !== `v${receipt.package.version}` ||
@@ -257,8 +258,8 @@ try {
       [receipt.package.checksums, receipt.package.checksumsSha256],
       [receipt.package.receipt, receipt.package.receiptSha256],
       [
-        "promotion-receipt.json",
-        sha256(await readFile(nodePath.join(publicationRoot, "promotion-receipt.json"))),
+        promotionReceiptName,
+        sha256(await readFile(nodePath.join(publicationRoot, promotionReceiptName))),
       ],
     ] as const;
     try {
