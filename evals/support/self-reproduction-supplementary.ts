@@ -9,6 +9,11 @@ import {
 } from "./self-reproduction-parity";
 import type { Observation } from "./self-reproduction-parity";
 
+const MISSING_FUNCTIONALITY = "missing-functionality";
+const PARITY_EVIDENCE_FILE = "parity-evidence.json";
+const SOURCE_REVIEW = "source-review";
+const REPORT_FILE = "report.json";
+
 /** Source assertions can supplement behavior, but never erase a failure or supply behavioral method credit. */
 export const mergeSupplementaryObservation = (
   runtime: Observation | undefined,
@@ -33,15 +38,14 @@ export const mergeSupplementaryObservation = (
     );
   }
   const failed =
-    runtime.disposition === "missing-functionality" ||
-    review.disposition === "missing-functionality";
+    runtime.disposition === MISSING_FUNCTIONALITY || review.disposition === MISSING_FUNCTIONALITY;
   const behavioral =
     ["browser", "source-and-browser", "@next/playwright/instant"].includes(runtime.method) &&
     runtime.disposition === "observed";
   return {
     artifacts: [...new Set([...runtime.artifacts, ...review.artifacts])],
     assertions: [...assertions.values()],
-    disposition: failed ? "missing-functionality" : runtime.disposition,
+    disposition: failed ? MISSING_FUNCTIONALITY : runtime.disposition,
     method:
       behavioral && runtime.method !== "@next/playwright/instant"
         ? "source-and-browser"
@@ -118,7 +122,7 @@ export const writeSupplementaryAssessment = async (input: {
     return target;
   };
   const evidence = parityEvidenceSchema.parse(
-    JSON.parse(await readFile(nodePath.join(parityRoot, "parity-evidence.json"), "utf-8")),
+    JSON.parse(await readFile(nodePath.join(parityRoot, PARITY_EVIDENCE_FILE), "utf-8")),
   );
   const review = JSON.parse(
     await readFile(nodePath.join(reviewRoot, "observations.json"), "utf-8"),
@@ -143,21 +147,21 @@ export const writeSupplementaryAssessment = async (input: {
         ...(workflowReview.observations?.[side] ?? []),
       ];
     }
-    await copy(reviewRoot, "workflow-observations.json", "source-review");
+    await copy(reviewRoot, "workflow-observations.json", SOURCE_REVIEW);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       throw error;
     }
   }
   // Retain the original metadata and source review unchanged as provenance snapshots.
-  for (const path of ["report.json", "parity-evidence.json", "revisions.json"]) {
+  for (const path of [REPORT_FILE, PARITY_EVIDENCE_FILE, "revisions.json"]) {
     await copy(parityRoot, path, "original");
   }
   for (const path of ["observations.json", "source-evidence.json", "report.md"]) {
-    await copy(reviewRoot, path, "source-review");
+    await copy(reviewRoot, path, SOURCE_REVIEW);
   }
   const originalReport = JSON.parse(
-    await readFile(nodePath.join(parityRoot, "report.json"), "utf-8"),
+    await readFile(nodePath.join(parityRoot, REPORT_FILE), "utf-8"),
   );
   for (const capture of originalReport.captures ?? []) {
     for (const path of capture.files ?? []) {
@@ -192,9 +196,9 @@ export const writeSupplementaryAssessment = async (input: {
           ...assertion,
           artifacts: assertion.artifacts ?? ["source-evidence.json"],
         })),
-        method: "source-review",
+        method: SOURCE_REVIEW,
       });
-      const source = await rebase(normalized, reviewRoot, "source-review");
+      const source = await rebase(normalized, reviewRoot, SOURCE_REVIEW);
       const index = evidence[side].observations.findIndex(
         (entry) => entry.requirementId === source.requirementId,
       );
@@ -257,8 +261,8 @@ export const writeSupplementaryAssessment = async (input: {
     originalRunId: evidence.runId,
     screenshotPairs,
   };
-  await writeFile(nodePath.join(output, "parity-evidence.json"), JSON.stringify(evidence, null, 2));
-  await writeFile(nodePath.join(output, "report.json"), JSON.stringify(report, null, 2));
+  await writeFile(nodePath.join(output, PARITY_EVIDENCE_FILE), JSON.stringify(evidence, null, 2));
+  await writeFile(nodePath.join(output, REPORT_FILE), JSON.stringify(report, null, 2));
   const rows = assessment.rows.map(
     (row) =>
       `| ${row.side} | ${row.requirementId} | ${row.status} | ${row.reason.replaceAll("|", "\\|").replaceAll("\n", " ")} |`,

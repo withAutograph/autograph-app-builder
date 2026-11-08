@@ -1,5 +1,9 @@
 import type { Observation } from "./self-reproduction-parity";
 
+const INFRASTRUCTURE_UNAVAILABLE = "infrastructure-unavailable";
+const MISSING_FUNCTIONALITY = "missing-functionality";
+const CANDIDATE_NAVIGATION_REPORT = "candidate-navigation.json";
+
 export interface CandidateNavigationControl {
   evaluate: (callback: (node: SVGElement | HTMLElement) => boolean) => Promise<boolean>;
   fill: (value: string) => Promise<void>;
@@ -48,7 +52,7 @@ export const exerciseCandidateNavigation = async (
   } catch {
     return {
       ...observation,
-      disposition: "infrastructure-unavailable",
+      disposition: INFRASTRUCTURE_UNAVAILABLE,
       reason: "Candidate runtime could not be opened.",
     };
   }
@@ -80,7 +84,7 @@ export const exerciseCandidateNavigation = async (
     } catch {
       const inert =
         page.url() === initialURL && (await page.locator("body").textContent()) === initialContent;
-      observation.disposition = inert ? "missing-functionality" : "not-run";
+      observation.disposition = inert ? MISSING_FUNCTIONALITY : "not-run";
       observation.reason = inert
         ? "The known Docs control accepted keyboard activation but left URL and visible content unchanged. Browser history continuity cannot proceed."
         : "Docs changed the application, but its destination does not match the supported history fixture.";
@@ -133,7 +137,7 @@ export const exerciseCandidateNavigation = async (
       },
     ];
     observation.disposition = observation.assertions.some((assertion) => !assertion.passed)
-      ? "missing-functionality"
+      ? MISSING_FUNCTIONALITY
       : "observed";
     observation.reason =
       "Executed real browser Back/Forward with edited draft inputs and focus readback; shared-layout state has no bound contract and remains unassessed. No instant-navigation or authentication credit is implied.";
@@ -142,11 +146,11 @@ export const exerciseCandidateNavigation = async (
     return {
       ...observation,
       disposition:
-        observation.disposition === "missing-functionality"
-          ? "missing-functionality"
-          : "infrastructure-unavailable",
+        observation.disposition === MISSING_FUNCTIONALITY
+          ? MISSING_FUNCTIONALITY
+          : INFRASTRUCTURE_UNAVAILABLE,
       reason:
-        observation.disposition === "missing-functionality"
+        observation.disposition === MISSING_FUNCTIONALITY
           ? observation.reason
           : "The browser history probe could not complete after fixture binding; retained diagnostics do not establish a product outcome.",
     };
@@ -185,22 +189,22 @@ export const candidateNavigationReceipt = (output: { observation?: Observation }
       ? {
           ...observation,
           artifacts: [
-            "candidate-navigation.json",
+            CANDIDATE_NAVIGATION_REPORT,
             ...observation.artifacts.map((path) => `candidate-navigation/${path}`),
           ],
           assertions: observation.assertions.map((assertion) => ({
             ...assertion,
             artifacts: [
-              "candidate-navigation.json",
+              CANDIDATE_NAVIGATION_REPORT,
               ...observation.artifacts.map((path) => `candidate-navigation/${path}`),
               ...assertion.artifacts.map((path) => `candidate-navigation/${path}`),
             ],
           })),
         }
       : {
-          artifacts: ["candidate-navigation.json"],
+          artifacts: [CANDIDATE_NAVIGATION_REPORT],
           assertions: [],
-          disposition: "infrastructure-unavailable" as const,
+          disposition: INFRASTRUCTURE_UNAVAILABLE,
           method: "none" as const,
           reason:
             "Candidate runtime was available, but the separate navigation probe failed to retain an evaluator observation.",

@@ -16,6 +16,11 @@ import { planningOverlayRoot } from "./dependency-cache";
 import type { ExecutionDependencyLayout } from "./dependency-cache";
 import type { TargetProposal, TargetIterationChange } from "./target-planning";
 
+const microfrontendsConfigPath = "microfrontends.json";
+const providerProvisioningAuthority = "provider-provisioning";
+const productionReadinessAuthority = "production-readiness";
+const repositoryWorkspacePath = "/workspace/repository";
+
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
 const repositoryPath = z
   .string()
@@ -27,17 +32,17 @@ const repositoryPath = z
 
 export const targetApplyCommandReceiptSchema = z.strictObject({
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-  mutations: z.tuple([repositoryPath, z.literal("microfrontends.json")]),
+  mutations: z.tuple([repositoryPath, z.literal(microfrontendsConfigPath)]),
   omittedAuthorities: z.tuple([
-    z.literal("provider-provisioning"),
+    z.literal(providerProvisioningAuthority),
     z.literal("deployment"),
-    z.literal("production-readiness"),
+    z.literal(productionReadinessAuthority),
   ]),
   recovered: z.boolean(),
   topology: z.strictObject({
     newDigest: digestSchema,
     oldDigest: digestSchema,
-    path: z.literal("microfrontends.json"),
+    path: z.literal(microfrontendsConfigPath),
   }),
   version: z.literal(1),
   workspacePath: repositoryPath,
@@ -353,7 +358,7 @@ export async function materializeFreshApplyOverlay(input: {
     return {
       acceptedAppSpec,
       appSpecPath,
-      applyRoot: "/workspace/repository",
+      applyRoot: repositoryWorkspacePath,
     };
   } catch (error) {
     await input.sandbox.removePath({
@@ -794,8 +799,12 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
         "0".repeat(64);
       const receipt: TargetApplyCommandReceipt = {
         appId: proposal.contract.appId,
-        mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
-        omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
+        mutations: [proposal.plan.source.workspacePath, microfrontendsConfigPath],
+        omittedAuthorities: [
+          providerProvisioningAuthority,
+          "deployment",
+          productionReadinessAuthority,
+        ],
         recovered: false,
         topology: {
           newDigest:
@@ -803,7 +812,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
             proposal.plan.topology.proposedDigest ??
             oldDigest,
           oldDigest,
-          path: "microfrontends.json",
+          path: microfrontendsConfigPath,
         },
         version: 1,
         workspacePath: proposal.plan.source.workspacePath,
@@ -858,13 +867,17 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
       const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
       const receipt: TargetApplyCommandReceipt = {
         appId,
-        mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
-        omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
+        mutations: [proposal.plan.source.workspacePath, microfrontendsConfigPath],
+        omittedAuthorities: [
+          providerProvisioningAuthority,
+          "deployment",
+          productionReadinessAuthority,
+        ],
         recovered: false,
         topology: {
           newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
           oldDigest,
-          path: "microfrontends.json",
+          path: microfrontendsConfigPath,
         },
         version: 1,
         workspacePath: proposal.plan.source.workspacePath,
@@ -903,13 +916,17 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
     const newDigest = proposal.plan.topology.proposedDigest ?? "1".repeat(64);
     const receipt: TargetApplyCommandReceipt = {
       appId,
-      mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
-      omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
+      mutations: [proposal.plan.source.workspacePath, microfrontendsConfigPath],
+      omittedAuthorities: [
+        providerProvisioningAuthority,
+        "deployment",
+        productionReadinessAuthority,
+      ],
       recovered: false,
       topology: {
         newDigest,
         oldDigest,
-        path: "microfrontends.json",
+        path: microfrontendsConfigPath,
       },
       version: 1,
       workspacePath: proposal.plan.source.workspacePath,
@@ -959,7 +976,7 @@ export async function executeProposalBoundApply(input: {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const linked = await input.sandbox.run({
           command: `ln -s ${root.cachePath} ${root.path}`,
-          workingDirectory: "/workspace/repository",
+          workingDirectory: repositoryWorkspacePath,
         });
         if (linked.exitCode !== 0) {
           throw new Error("dependency cache miss");
@@ -975,7 +992,7 @@ export async function executeProposalBoundApply(input: {
   let before: OverlaySnapshot;
   try {
     planning = await snapshotter(input.sandbox, overlay.applyRoot);
-    prepared = await snapshotter(input.sandbox, "/workspace/repository");
+    prepared = await snapshotter(input.sandbox, repositoryWorkspacePath);
     before = await snapshotter(input.sandbox, overlay.applyRoot);
     if ("operation" in input.proposal) {
       before = iterationBaselineSnapshot(before, input.proposal.iteration.changes);

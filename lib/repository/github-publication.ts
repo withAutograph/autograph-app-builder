@@ -1917,7 +1917,7 @@ function freshSuccess(input: {
     initialCommitSha: input.readBack.initialCommit.sha,
     initialCommitTree: input.readBack.initialCommit.tree,
     installationIdentityDigest: input.proposal.installationIdentityDigest,
-    kind: "fresh-repository" as const,
+    kind: FRESH_REPOSITORY_KIND,
     parentCount: 0 as const,
     proposalDigest: input.proposal.digest,
     providerReadBackDigest: input.readBack.digest,
@@ -1955,7 +1955,7 @@ function draftSuccess(input: {
     draft: true as const,
     idempotencyKey: input.proposal.idempotencyKey,
     installationIdentityDigest: input.proposal.installationIdentityDigest,
-    kind: "draft-pull-request" as const,
+    kind: DRAFT_PULL_REQUEST_KIND,
     normalizedChangedPaths: input.readBack.branch.normalizedChangedPaths,
     proposalDigest: input.proposal.digest,
     providerReadBackDigest: input.readBack.digest,
@@ -2039,7 +2039,7 @@ async function reclaimRejectedDraftPending(
   const pending = receipt({
     approvedByCallId,
     idempotencyKey: failed.idempotencyKey,
-    kind: "draft-pull-request" as const,
+    kind: DRAFT_PULL_REQUEST_KIND,
     proposalDigest: failed.proposalDigest,
     status: "pending" as const,
     version: GITHUB_PUBLICATION_VERSION,
@@ -2095,7 +2095,7 @@ export async function createApprovedFreshRepository(input: {
     (await claimPending({
       approvedByCallId: input.approvedByCallId,
       idempotencyKey: input.proposal.idempotencyKey,
-      kind: "fresh-repository",
+      kind: FRESH_REPOSITORY_KIND,
       proposalDigest: input.proposal.digest,
       store: input.store,
     }));
@@ -2230,7 +2230,7 @@ export async function publishApprovedDraftPullRequest(input: {
         (await claimPending({
           approvedByCallId: input.approvedByCallId,
           idempotencyKey: input.proposal.idempotencyKey,
-          kind: "draft-pull-request",
+          kind: DRAFT_PULL_REQUEST_KIND,
           proposalDigest: input.proposal.digest,
           store: input.store,
         })));

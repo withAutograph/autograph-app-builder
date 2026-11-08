@@ -5,6 +5,13 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { test } from "vitest";
 
+const toolResultKind = "tool-result";
+const originalDeferredCallId = "original-deferred";
+const originalRequestId = "original-request";
+const turnStepName = "step//eve//turnStep";
+const uncommittedActionResultReason = "uncommitted-action-result";
+const unconsumedNativeInboxReason = "unconsumed-native-inbox-input";
+
 const originalTurnId = "turn-original";
 const childDeploymentId = "child-deployment";
 const originalNativeCallId = "original-native";
@@ -45,8 +52,8 @@ const eventId = (slot) => `evnt_${String(slot).padStart(26, "0")}`;
 const batchEvent = { sequence: 1, stepIndex: 1, turnId: originalTurnId };
 const emission = { sessionStarted: true, sequence: 1, stepIndex: 2, turnId: originalTurnId };
 const actualRuntimeResult = {
-  kind: "tool-result",
-  callId: "original-deferred",
+  kind: toolResultKind,
+  callId: originalDeferredCallId,
   toolName: "deferred",
   output: { value: "actual-native-outcome" },
 };
@@ -360,13 +367,13 @@ const fixture = async (options = {}) => {
         content: [
           {
             type: "tool-approval-response",
-            approvalId: "original-request",
+            approvalId: originalRequestId,
             approved: options.denied !== true,
           },
           ...(options.denied === true
             ? [
                 {
-                  type: "tool-result",
+                  type: toolResultKind,
                   toolCallId: originalNativeCallId,
                   toolName: "native",
                   output: { type: "execution-denied", reason: "original denial" },
@@ -384,7 +391,7 @@ const fixture = async (options = {}) => {
     tasks: [
       {
         kind: "workflow-task",
-        callId: "original-deferred",
+        callId: originalDeferredCallId,
         toolName: "deferred",
         input: {},
         workflowId: "workflow:deferred",
@@ -400,10 +407,15 @@ const fixture = async (options = {}) => {
             toolName: "native",
             input: { value: "exact-original-input" },
           },
-          { type: "tool-call", toolCallId: "original-deferred", toolName: "deferred", input: {} },
+          {
+            type: "tool-call",
+            toolCallId: originalDeferredCallId,
+            toolName: "deferred",
+            input: {},
+          },
           {
             type: "tool-approval-request",
-            approvalId: "original-request",
+            approvalId: originalRequestId,
             toolCallId: originalNativeCallId,
           },
         ],
@@ -459,7 +471,7 @@ const fixture = async (options = {}) => {
       {
         runId: ownerRunId,
         stepId: "prior",
-        stepName: "step//eve//turnStep",
+        stepName: turnStepName,
         status: completedStatus,
         input: await args(sourcePair),
         output: await output({ action: "park", ...sourcePair }),
@@ -470,7 +482,7 @@ const fixture = async (options = {}) => {
       {
         runId: ownerRunId,
         stepId: "terminal",
-        stepName: "step//eve//turnStep",
+        stepName: turnStepName,
         status: options.failedTurn === true ? "failed" : completedStatus,
         input: await args({ ...sourcePair, input: incoming }),
         ...(options.failedTurn === true
@@ -493,7 +505,7 @@ const fixture = async (options = {}) => {
     steps.set("historical", {
       runId: ownerRunId,
       stepId: "historical",
-      stepName: "step//eve//turnStep",
+      stepName: turnStepName,
       status: "failed",
       input: await args(sourcePair),
       error: { name: "older failure" },
@@ -503,7 +515,7 @@ const fixture = async (options = {}) => {
     steps.set("unreadable", {
       runId: ownerRunId,
       stepId: "unreadable",
-      stepName: "step//eve//turnStep",
+      stepName: turnStepName,
       status: completedStatus,
       output: new Uint8Array([99, 1, 2, 3]),
     });
@@ -549,7 +561,7 @@ const fixture = async (options = {}) => {
             data: {
               ...emission,
               result: {
-                kind: "tool-result",
+                kind: toolResultKind,
                 callId: originalNativeCallId,
                 toolName: "native",
                 output: "may-have-written",
@@ -696,7 +708,7 @@ const resumeSynthetic = async (ready, denied) => {
       for (const name of ["native", "deferred"]) {
         assert.equal(
           content.filter(
-            (part) => part.type === "tool-result" && part.toolCallId === `original-${name}`,
+            (part) => part.type === toolResultKind && part.toolCallId === `original-${name}`,
           ).length,
           1,
         );
@@ -767,14 +779,14 @@ test("denial is retained and never executes the denied native call", async () =>
 });
 
 for (const { options, reason } of [
-  { options: { uncommittedWrite: true }, reason: "uncommitted-action-result" },
+  { options: { uncommittedWrite: true }, reason: uncommittedActionResultReason },
   { options: { uncommittedDispatch: true }, reason: "uncommitted-action-dispatch" },
   { options: { failedTurn: true }, reason: "failed-turn-effects-unreconciled" },
   { options: { delivery: true }, reason: "delivery-consumption-unreconciled" },
   { options: { missingResult: true }, reason: "coordination-results-incomplete" },
   { options: { cancelled: true }, reason: "cancelled-turn-replay" },
   { options: { unreadableLater: true }, reason: "unreadable-native-effect-frontier" },
-  { options: { inboxAfterSource: true }, reason: "unconsumed-native-inbox-input" },
+  { options: { inboxAfterSource: true }, reason: unconsumedNativeInboxReason },
 ]) {
   test(`uncertain ${reason} never becomes replay permission`, async () => {
     const f = await fixture(options);
@@ -825,7 +837,7 @@ test("provider-cancelled physical handoff reconciles latest native typed state w
   assert.deepEqual(approvals(recovered.history), approvals(f.source.history));
   assert.equal(
     approvals(recovered.history).some(
-      (approval) => approval.approvalId === "original-request" && approval.approved === true,
+      (approval) => approval.approvalId === originalRequestId && approval.approved === true,
     ),
     true,
   );
@@ -861,7 +873,7 @@ for (const options of [
 for (const { options, reason } of [
   { options: { cancelled: true }, reason: "cancelled-turn-replay" },
   { options: { uncommittedDispatch: true }, reason: "uncommitted-action-dispatch" },
-  { options: { uncommittedWrite: true }, reason: "uncommitted-action-result" },
+  { options: { uncommittedWrite: true }, reason: uncommittedActionResultReason },
 ]) {
   test(`provider cancellation grants no replay authority for ${reason}`, async () => {
     const f = await fixture({ handoff: true, runStatus: "cancelled", ...options });
@@ -908,7 +920,7 @@ for (const kind of ["reset", "session-timeout", "unknown"]) {
   test(`unsupported historical inbox ${kind} remains uncertain`, async () => {
     const f = await fixture({ runStatus: "cancelled", inboxSuffix: [{ kind }] });
     const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
-    assert.deepEqual(result, { kind: "uncertain", reason: "unconsumed-native-inbox-input" });
+    assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
   });
 }
 for (const mutation of [
@@ -942,7 +954,7 @@ for (const mutation of [
       payload.carriedInbox.splice(0, 1);
     }
     const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
-    assert.deepEqual(result, { kind: "uncertain", reason: "unconsumed-native-inbox-input" });
+    assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
   });
 }
 test("retained inbox commands never waive unknown native effects", async () => {
@@ -955,7 +967,7 @@ test("retained inbox commands never waive unknown native effects", async () => {
   assert.deepEqual(result, {
     callId: originalNativeCallId,
     kind: "uncertain",
-    reason: "uncommitted-action-result",
+    reason: uncommittedActionResultReason,
   });
 });
 
@@ -970,7 +982,7 @@ test("a later authored step leaves historical command admission uncertain", asyn
     eventData: { stepName: "turnStep" },
   });
   const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
-  assert.deepEqual(result, { kind: "uncertain", reason: "unconsumed-native-inbox-input" });
+  assert.deepEqual(result, { kind: "uncertain", reason: unconsumedNativeInboxReason });
 });
 
 for (const item of [

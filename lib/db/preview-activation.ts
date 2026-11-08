@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 
 import { z } from "zod";
 
+const invitedUserAction = "invited-user.provision";
+const runtimeRoleAction = "runtime-role.configure";
+const oauthInitializeAction = "oauth.initialize";
+
 const sha256Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const instantSchema = z.string().datetime({ offset: true });
 const httpsUrlSchema = z.string().url().startsWith("https://");
@@ -22,7 +26,7 @@ const common = {
 
 const invitedUserSchema = z.strictObject({
   ...common,
-  action: z.literal("invited-user.provision"),
+  action: z.literal(invitedUserAction),
   email: z
     .string()
     .email()
@@ -37,14 +41,14 @@ const invitedUserSchema = z.strictObject({
 
 const runtimeRoleSchema = z.strictObject({
   ...common,
-  action: z.literal("runtime-role.configure"),
+  action: z.literal(runtimeRoleAction),
   password: passwordSchema,
   roleName: roleSchema,
 });
 
 const oauthInitializeSchema = z.strictObject({
   ...common,
-  action: z.literal("oauth.initialize"),
+  action: z.literal(oauthInitializeAction),
   authSecret: z
     .string()
     .min(32)
@@ -57,7 +61,7 @@ const oauthInitializeSchema = z.strictObject({
 export const previewActivationPlanRequestSchema = z
   .discriminatedUnion("action", [invitedUserSchema, runtimeRoleSchema, oauthInitializeSchema])
   .superRefine((request, context) => {
-    if (request.action === "runtime-role.configure") {
+    if (request.action === runtimeRoleAction) {
       return;
     }
     const issuer = new URL(request.issuer);
@@ -106,7 +110,7 @@ const effectsSchema = z.strictObject({
 });
 
 export const previewActivationReceiptSchema = z.strictObject({
-  action: z.enum(["invited-user.provision", "runtime-role.configure", "oauth.initialize"]),
+  action: z.enum([invitedUserAction, runtimeRoleAction, oauthInitializeAction]),
   appliedAt: instantSchema,
   authorityDigest: sha256Schema,
   database: z.strictObject({
@@ -177,9 +181,9 @@ const digest = (value: string): `sha256:${string}` =>
 
 const canonicalRequest = (request: PreviewActivationPlanRequest) => {
   let secret: Record<string, `sha256:${string}`> = {};
-  if (request.action === "oauth.initialize") {
+  if (request.action === oauthInitializeAction) {
     secret = { authSecret: digest(request.authSecret) };
-  } else if (request.action === "runtime-role.configure") {
+  } else if (request.action === runtimeRoleAction) {
     secret = { password: digest(request.password) };
   }
   return JSON.stringify({
@@ -192,9 +196,9 @@ export const planPreviewActivation = (input: unknown) => {
   const request = previewActivationPlanRequestSchema.parse(input);
   const canonical = canonicalRequest(request);
   let authority: Record<string, string>;
-  if (request.action === "runtime-role.configure") {
+  if (request.action === runtimeRoleAction) {
     authority = { roleName: request.roleName };
-  } else if (request.action === "oauth.initialize") {
+  } else if (request.action === oauthInitializeAction) {
     authority = { issuer: request.issuer, resource: request.resource };
   } else {
     authority = {
@@ -274,12 +278,12 @@ export const executePreviewActivation = async (input: {
     throw new Error("Preview activation request is stale.");
   }
   let effects = { ...emptyEffects };
-  if (request.action === "invited-user.provision") {
+  if (request.action === invitedUserAction) {
     effects = {
       ...effects,
       ...(await input.store.provisionInvitedUser(request)),
     };
-  } else if (request.action === "runtime-role.configure") {
+  } else if (request.action === runtimeRoleAction) {
     effects = {
       ...effects,
       ...(await input.store.configureRuntimeRole(request)),
@@ -289,7 +293,7 @@ export const executePreviewActivation = async (input: {
   }
   const changed =
     effects.userRowsAffected + effects.accountRowsAffected + effects.membershipRowsAffected > 0 ||
-    request.action === "runtime-role.configure" ||
+    request.action === runtimeRoleAction ||
     effects.runtimeRoleCreated ||
     effects.resourceRowsAfter > effects.resourceRowsBefore ||
     effects.jwksRowsAfter > effects.jwksRowsBefore;

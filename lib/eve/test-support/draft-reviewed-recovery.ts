@@ -58,6 +58,9 @@ const serialization = await load("compiled/@workflow/core/serialization.js");
 export const workflowKey = "autograph-app-builder.workflow.v17";
 export const logical = "physical-ancestor";
 export const owner = "physical-source";
+const ORCHARD_PACKAGE_NAME = "@fixture/orchard";
+const ORCHARD_WORKSPACE_PATH = "apps/orchard";
+const TOPOLOGY_CONFIG_PATH = "microfrontends.json";
 const d = "a".repeat(64);
 const sha = "b".repeat(40);
 export const fixture = () => {
@@ -79,11 +82,11 @@ export const fixture = () => {
     appSpecSourcePath: appSpecPath,
     baseRoutes: ["/orchard"],
     cueSourcePath: appSpecPath,
-    packageName: "@fixture/orchard",
+    packageName: ORCHARD_PACKAGE_NAME,
     projectName: "orchard",
     schemaCuePath: "apps/orchard/schema/index.cue",
     title: "Orchard",
-    workspacePath: "apps/orchard",
+    workspacePath: ORCHARD_WORKSPACE_PATH,
   });
   const target = targetCreationProposalSchema.parse({
     blockers: [],
@@ -92,14 +95,14 @@ export const fixture = () => {
     plan: {
       product: { appSpec: { path: appSpecPath, sha256: d } },
       source: {
-        packageName: "@fixture/orchard",
+        packageName: ORCHARD_PACKAGE_NAME,
         runtime: "nextjs",
         schema: { kind: "none" },
-        workspacePath: "apps/orchard",
+        workspacePath: ORCHARD_WORKSPACE_PATH,
       },
       topology: {
-        configPath: "microfrontends.json",
-        packageName: "@fixture/orchard",
+        configPath: TOPOLOGY_CONFIG_PATH,
+        packageName: ORCHARD_PACKAGE_NAME,
         projectName: "orchard",
         routes: ["/orchard"],
       },
@@ -120,12 +123,12 @@ export const fixture = () => {
     proposalDigest: d,
     targetReceipt: {
       appId: "orchard",
-      mutations: ["apps/orchard", "microfrontends.json"],
+      mutations: [ORCHARD_WORKSPACE_PATH, TOPOLOGY_CONFIG_PATH],
       omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
       recovered: false,
-      topology: { path: "microfrontends.json", oldDigest: d, newDigest: d },
+      topology: { path: TOPOLOGY_CONFIG_PATH, oldDigest: d, newDigest: d },
       version: 1,
-      workspacePath: "apps/orchard",
+      workspacePath: ORCHARD_WORKSPACE_PATH,
     },
     planningTreeDigest: d,
     preparedTreeDigest: d,
@@ -629,7 +632,7 @@ export const nativeFixture = async (
     options.priorOwnerReview === true && index < priorEntries.length;
   const steps = await Promise.all(
     entries.map(async (entry, index) => ({
-      runId: priorEntry(index) ? "physical-ancestor" : owner,
+      runId: priorEntry(index) ? logical : owner,
       stepId: entry.origin.stepId,
       stepName:
         options.live === true ? "step//eve//turnStep" : "step//eve//terminateChildSessionsStep",
@@ -644,7 +647,7 @@ export const nativeFixture = async (
                 sessionState: createDurableSessionState({ session }),
                 serializedContext: entry.serializedContext,
               },
-              priorEntry(index) ? "physical-ancestor" : owner,
+              priorEntry(index) ? logical : owner,
             ),
           }
         : {
@@ -658,7 +661,7 @@ export const nativeFixture = async (
                 ],
                 closureVars: [],
               },
-              priorEntry(index) ? "physical-ancestor" : owner,
+              priorEntry(index) ? logical : owner,
             ),
           }),
     })),
@@ -678,7 +681,7 @@ export const nativeFixture = async (
     const ordered = pagination?.sortOrder === "desc" ? values.toReversed() : values;
     const offset = pagination?.cursor === undefined ? 0 : Number(pagination.cursor);
     const limit =
-      options.paginateAncestor === true && runId === "physical-ancestor"
+      options.paginateAncestor === true && runId === logical
         ? 1
         : (pagination?.limit ?? ordered.length);
     const data = ordered.slice(offset, offset + limit);

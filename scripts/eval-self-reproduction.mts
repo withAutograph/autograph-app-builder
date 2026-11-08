@@ -69,6 +69,14 @@ import {
 } from "../evals/support/self-reproduction-captures";
 import type { CaptureAdapter, PairedCaptureRun } from "../evals/support/self-reproduction-captures";
 
+const anonymousEntryWorkflowId = "anonymous-entry";
+const trustedWorkflowReceiptsFile = "trusted-workflow-receipts.json";
+const settingsFile = "settings.json";
+const generationTranscriptFile = "generation-transcript.jsonl";
+const nativeResultFile = "native-result.json";
+const candidateRuntimeFile = "candidate-runtime.json";
+const candidateInteractionsFile = "candidate-interactions.json";
+
 const { basename, isAbsolute, join, relative, resolve } = nodePath;
 
 const root = resolve(import.meta.dirname, "..");
@@ -237,7 +245,7 @@ const runConfiguredWorkflowAdapters = async (candidateRoot: string | undefined) 
   if (adapterSides.length === 0) {
     trustedWorkflowReceipts = (["reference", "candidate"] as const).flatMap((side) =>
       workflowMatrix
-        .filter((workflow) => workflow.id !== "anonymous-entry")
+        .filter((workflow) => workflow.id !== anonymousEntryWorkflowId)
         .map((workflow) => ({
           observation: {
             artifacts: [],
@@ -253,7 +261,7 @@ const runConfiguredWorkflowAdapters = async (candidateRoot: string | undefined) 
         })),
     );
     // oxlint-disable-next-line eslint/no-use-before-define -- artifact writer is initialized before runtime execution
-    await jsonFile("trusted-workflow-receipts.json", trustedWorkflowReceipts);
+    await jsonFile(trustedWorkflowReceiptsFile, trustedWorkflowReceipts);
     return;
   }
   const { chromium } = await import("playwright");
@@ -297,7 +305,7 @@ const runConfiguredWorkflowAdapters = async (candidateRoot: string | undefined) 
   } finally {
     await browser.close();
     // oxlint-disable-next-line eslint/no-use-before-define -- artifact writer is initialized before runtime execution
-    await jsonFile("trusted-workflow-receipts.json", trustedWorkflowReceipts);
+    await jsonFile(trustedWorkflowReceiptsFile, trustedWorkflowReceipts);
   }
 };
 
@@ -497,15 +505,15 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
     strict: true,
     timeoutMs: deadline,
   };
-  await jsonFile("settings.json", settings);
+  await jsonFile(settingsFile, settings);
   const stdout = evidenceSink(
     join(output, "eval-output.log"),
-    join(output, "generation-transcript.jsonl"),
+    join(output, generationTranscriptFile),
     records,
   );
   const stderr = evidenceSink(
     join(output, "eval.log"),
-    join(output, "generation-transcript.jsonl"),
+    join(output, generationTranscriptFile),
     records,
   );
   let rawOutput = "";
@@ -593,7 +601,7 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
     }
   }
   await jsonFile(
-    "native-result.json",
+    nativeResultFile,
     native ?? {
       reason:
         "Native runner did not emit complete result JSON; retained incremental transcript and diagnostics.",
@@ -620,7 +628,7 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
     ...result,
     ...(interrupted ? { interrupted, status: "failed" } : {}),
     elapsedMs: Date.now() - childStarted,
-    nativeResult: "native-result.json",
+    nativeResult: nativeResultFile,
     ...nativeFailure,
   };
 };
@@ -692,9 +700,9 @@ const runtimeObservations = (existingRequirementIds: ReadonlySet<string>): Obser
   // Readiness and a guessed /docs route are diagnostics, not workflow evidence.
   // Only the evaluator adapter that activates the actual controls can assess docs.
   return workflowMatrix
-    .filter((row) => row.id !== "anonymous-entry" && !existingRequirementIds.has(row.id))
+    .filter((row) => row.id !== anonymousEntryWorkflowId && !existingRequirementIds.has(row.id))
     .map((row): Observation => ({
-      artifacts: ["candidate-runtime.json"],
+      artifacts: [candidateRuntimeFile],
       assertions: [],
       disposition: "not-run",
       method: "none",
@@ -819,7 +827,7 @@ const saveReport = async () => {
       .filter((record) => record.kind === "turn-completed")
       .flatMap((record) => (Array.isArray(record.toolCalls) ? record.toolCalls : [])),
     transcript: {
-      path: "generation-transcript.jsonl",
+      path: generationTranscriptFile,
       records: records.length,
       status: records.length ? "available" : "unavailable",
     },
@@ -839,7 +847,7 @@ const saveReport = async () => {
       sourceScans: diagnosticRequirements,
     },
     gaps: parityAssessment.rows
-      .filter((row) => row.status !== "passed" && row.requirementId !== "anonymous-entry")
+      .filter((row) => row.status !== "passed" && row.requirementId !== anonymousEntryWorkflowId)
       .map((row) => ({
         confirmed: row.status === "failed",
         evidence: row.artifacts,
@@ -931,14 +939,14 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     throw new Error("Evidence directory must be outside the App Builder source tree.");
   }
   console.log(`Self-reproduction evidence: ${output}`);
-  await writeFile(join(output, "generation-transcript.jsonl"), "", { mode: 0o600 });
-  await jsonFile("native-result.json", {
+  await writeFile(join(output, generationTranscriptFile), "", { mode: 0o600 });
+  await jsonFile(nativeResultFile, {
     reason: "Native eval has not completed.",
     status: "unavailable",
   });
-  await jsonFile("candidate-runtime.json", candidateRuntime);
-  await jsonFile("trusted-workflow-receipts.json", trustedWorkflowReceipts);
-  await jsonFile("settings.json", {
+  await jsonFile(candidateRuntimeFile, candidateRuntime);
+  await jsonFile(trustedWorkflowReceiptsFile, trustedWorkflowReceipts);
+  await jsonFile(settingsFile, {
     reason: "Settings have not been read.",
     status: "unavailable",
   });
@@ -1012,7 +1020,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
             source: "settings-source/",
             status: "preserved",
           };
-    await jsonFile("settings.json", settings);
+    await jsonFile(settingsFile, settings);
     generation =
       values["report-only"] === true
         ? { reason: "Report-only mode selected.", status: "not-run" }
@@ -1182,7 +1190,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
                   session,
                 });
                 const { artifacts: interactionArtifacts, ...interactionReceipt } = interactions;
-                await jsonFile("candidate-interactions.json", {
+                await jsonFile(candidateInteractionsFile, {
                   ...interactionReceipt,
                   artifacts: interactionArtifacts.map(
                     ({ path }) => `candidate-interactions/${path}`,
@@ -1200,13 +1208,13 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
                   sandboxCaptureObservations = captured.observations.map((observation) => ({
                     ...observation,
                     artifacts: [
-                      "candidate-interactions.json",
+                      candidateInteractionsFile,
                       ...observation.artifacts.map((path) => `candidate-interactions/${path}`),
                     ],
                     assertions: observation.assertions.map((assertion) => ({
                       ...assertion,
                       artifacts: [
-                        "candidate-interactions.json",
+                        candidateInteractionsFile,
                         ...observation.artifacts.map((path) => `candidate-interactions/${path}`),
                       ],
                     })),
@@ -1228,7 +1236,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
                   : "The Arrusted workspace source was unavailable, so workspace dependencies could not be resolved.",
               status: "failed",
             };
-      await jsonFile("candidate-runtime.json", candidateRuntime);
+      await jsonFile(candidateRuntimeFile, candidateRuntime);
     }
     captures.push(
       ...(await Promise.all([
@@ -1244,7 +1252,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
           sanitizeEvidence(error instanceof Error ? error.message : String(error)),
         )}`,
       );
-      await jsonFile("trusted-workflow-receipts.json", trustedWorkflowReceipts);
+      await jsonFile(trustedWorkflowReceiptsFile, trustedWorkflowReceipts);
     }
     if (values["reference-navigation-evidence"]) {
       const directory = resolve(values["reference-navigation-evidence"]);
