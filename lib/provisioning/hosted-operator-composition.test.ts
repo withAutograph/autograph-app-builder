@@ -1912,7 +1912,7 @@ describe("retained APP Gateway source planning continuation", () => {
     async (approved) => {
       const f = await setup();
       const original = structuredClone(f.row.record.operator!);
-      const approvedByCallId = f.row.record.approvedByCallId;
+      const { approvedByCallId } = f.row.record;
       delete original.pendingEffectId;
       delete original.pendingEffectAttempt;
       const proposal = hostedOperatorPlanSchema.parse({
@@ -2450,7 +2450,7 @@ describe("existing populated Auth workflow planning", () => {
       version: 1,
       workflowPhase: "applied",
     };
-    const record = f.row.record;
+    const { record } = f.row;
     const operator = record.operator!;
     f.configuration.applications.actual!.repoId = "actual-repository-id";
     f.configuration.applications.actual!.gitSha = "c".repeat(40);

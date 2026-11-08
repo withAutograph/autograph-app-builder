@@ -226,7 +226,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
     return await pending;
   };
   const assertLocator = async (context: HostedOperatorContext, record: ContinuityRecord) => {
-    const locator = record.locator;
+    const { locator } = record;
     if (
       locator === undefined ||
       locator.attemptId !== record.attemptId ||
@@ -329,7 +329,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
       const { appPort, bridgePort } = record.plan.runtime;
       await assertCurrent();
       const provider = await providerFor(context, record.plan);
-      let locator = record.locator;
+      let { locator } = record;
       let retainedCurrent = record.current;
       if (locator === undefined) {
         if (record.attemptId === undefined || record.approval === undefined) {
@@ -528,7 +528,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
         socketPath: ready.socketPath,
         publicProfile: profile,
       });
-      const runTask = prepared.runTask;
+      const { runTask } = prepared;
       const managed = {
         ...prepared,
         runTask: async (input: Parameters<typeof runTask>[0]) =>

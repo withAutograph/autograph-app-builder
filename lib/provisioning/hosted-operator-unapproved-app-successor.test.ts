@@ -127,7 +127,7 @@ describe("unapproved app successor eligibility", () => {
         retainedParticipantGateway: record.retainedParticipantGateway,
       },
     ];
-    const auth = before.bootstrap.auth;
+    const { auth } = before.bootstrap;
     const next = hostedOperatorPlanSchema.parse({
       ...before.account.accountPlan,
       normalActorProgram: added,
@@ -191,8 +191,8 @@ describe("unapproved app successor eligibility", () => {
         retainedParticipantGateway: record.retainedParticipantGateway,
       },
     ];
-    const auth = found.bootstrap.auth;
-    const gateway = found.bootstrap.gateway;
+    const { auth } = found.bootstrap;
+    const { gateway } = found.bootstrap;
     const next = hostedOperatorPlanSchema.parse({
       ...found.account.accountPlan,
       normalActorProgram: added,

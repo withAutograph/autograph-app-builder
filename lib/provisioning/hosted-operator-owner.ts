@@ -180,7 +180,7 @@ const readCurrentOwnedSession = async (
     if (!linked || binding === undefined) {
       throw unavailable();
     }
-    logicalSessionId = binding.logicalSessionId;
+    ({ logicalSessionId } = binding);
   }
   const current = await readCurrentBuildSession.call(deps.eve, {
     principal,
@@ -671,8 +671,8 @@ export const readCanonicalAppOwnerSession = async (
 };
 
 const standardRepository = (receipt: BuilderProvisionResponse) => {
-  const github = receipt.github;
-  const vercel = receipt.vercel;
+  const { github } = receipt;
+  const { vercel } = receipt;
   return github.status === "succeeded" &&
     vercel.status === "succeeded" &&
     github.fullName === vercel.linkedGitHubRepository

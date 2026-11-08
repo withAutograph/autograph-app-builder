@@ -253,8 +253,8 @@ export const isRetentionRenewalSuccessor = (
   if (record === undefined || operator === undefined || !isExactRenewalPlan(operator.plan, plan)) {
     return false;
   }
-  let pendingEffectId = operator.pendingEffectId;
-  let pendingEffectAttempt = operator.pendingEffectAttempt;
+  let { pendingEffectId } = operator;
+  let { pendingEffectAttempt } = operator;
   if (pendingEffectId === undefined) {
     const firstUnreceipted = operator.plan.effects.find(
       (effect) => !operator.receipts.some((receipt) => receipt.effectId === effect.id),
@@ -262,8 +262,8 @@ export const isRetentionRenewalSuccessor = (
     if (firstUnreceipted !== undefined) {
       const inherited = retentionRenewalBindingProvenance(record, firstUnreceipted.id);
       if (inherited !== undefined) {
-        pendingEffectId = inherited.effectId;
-        pendingEffectAttempt = inherited.pendingEffectAttempt;
+        ({ effectId: pendingEffectId } = inherited);
+        ({ pendingEffectAttempt } = inherited);
       }
     }
   }

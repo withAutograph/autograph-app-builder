@@ -393,7 +393,7 @@ const fixture = (captureExisting = false, selectedProgram = program) => {
     expect(preparation.accountOperationRef).toBe(accountOperationRef);
     expect(row.record.accountPreparation?.sealedState).toEqual(preparation.sealedState);
   };
-  const leaseId = row.record.leaseId;
+  const { leaseId } = row.record;
   if (leaseId === undefined) {
     throw new Error("fixture_missing_lease");
   }
@@ -456,7 +456,7 @@ describe("normal actor operations", () => {
     let now = Date.now();
     const approvals = new Map<string, { id: string; digest: string }>();
     const currentOperator = () => {
-      const operator = f.row.record.operator;
+      const { operator } = f.row.record;
       if (operator === undefined) {
         throw new Error("missing fixture operator");
       }
@@ -940,7 +940,7 @@ describe("normal actor operations", () => {
       if (outcome === "expired") {
         f.journalPorts.now = () => Date.parse(session.expiresAt) + 1;
       }
-      const leaseId = f.row.record.leaseId;
+      const { leaseId } = f.row.record;
       if (leaseId === undefined || f.row.record.operator === undefined) {
         throw new Error("fixture_missing_lease");
       }

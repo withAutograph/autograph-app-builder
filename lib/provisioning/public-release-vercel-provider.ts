@@ -186,7 +186,7 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
           .object({ error: z.object({ code: vercelProvisionDiagnosticSchema.shape.code }) })
           .safeParse(errorBody);
         if (parsed.success) {
-          code = parsed.data.error.code;
+          ({ code } = parsed.data.error);
         }
       } catch {
         invocation.signal.throwIfAborted();
@@ -656,13 +656,13 @@ export const createPublicReleaseVercelBindingSnapshot =
       ) {
         throw fail();
       }
-      const value = z
+      const { value } = z
         .object({ value: z.string() })
         .parse(
           await read(
             `/v1/projects/${encodeURIComponent(scope.projectId)}/env/${encodeURIComponent(row.id)}`,
           ),
-        ).value;
+        );
       snapshots.push({
         key,
         id: row.id,

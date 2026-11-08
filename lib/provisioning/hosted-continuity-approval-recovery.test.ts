@@ -167,7 +167,7 @@ const composed = async () => {
       token: async () => "controlled-workload",
       fetch: async (url, init) => {
         const request = new Request(url instanceof Request ? url.url : url, init);
-        const action = continuityTransportRequestSchema.parse(await request.clone().json()).action;
+        const { action } = continuityTransportRequestSchema.parse(await request.clone().json());
         const result = await handler(request);
         if (action === "continuity" && loseExecuteResponse) {
           loseExecuteResponse = false;
@@ -260,7 +260,7 @@ it("distinguishes a retained approval still awaiting settlement from a fresh req
 
 it("reconciles the exact receipt when another approval reader wins the journal write", async () => {
   const c = await composed();
-  const compareAndSet = c.f.deps.store.compareAndSet;
+  const { compareAndSet } = c.f.deps.store;
   let raced = false;
   c.f.deps.store.compareAndSet = async (input): ReturnType<typeof compareAndSet> => {
     if (!raced && input.record.approval !== undefined) {

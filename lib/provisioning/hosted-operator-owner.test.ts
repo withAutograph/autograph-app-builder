@@ -1041,7 +1041,7 @@ const retainedReadyApprovalFixture = () => {
   ) {
     throw new Error("Expected an approved original and its saved renewal.");
   }
-  const operationRef = original.operationRef;
+  const { operationRef } = original;
   original.deliveryCandidates = [
     {
       branch: original.plan.delivery.branch,
@@ -1941,7 +1941,7 @@ const retainedAppGatewaySourceApprovalFixture = async () => {
   const f = retainedProjectSettingsApprovalFixture();
   const context = { authority: ownerContext.authority, ownerContext, target: f.target };
   const gatewayPlan = narrowedGatewayApprovalFixture().prepareReceipt.toolInput.plan;
-  const gatewayDelivery = gatewayPlan.gatewayDelivery;
+  const { gatewayDelivery } = gatewayPlan;
   if (gatewayDelivery === undefined) {
     throw new Error("Missing native Gateway source fixture");
   }
@@ -3144,7 +3144,7 @@ describe("Realm delegation at operator effect boundaries", () => {
 
   it("rejects an old sealed notification while its identity link is absent and after a fresh nonce replaces it", async () => {
     const f = setup();
-    const operator = f.record.operator;
+    const { operator } = f.record;
     if (operator?.identityLink === undefined) {
       throw new Error("Fixture identity link missing");
     }
@@ -3787,7 +3787,7 @@ describe("attached direct-session standard destination", () => {
     "refuses a mismatched recovered %s receipt",
     async (field) => {
       const x = await fixture(true);
-      const github = x.row.record.response.github;
+      const { github } = x.row.record.response;
       if (github.status !== "succeeded") {
         throw new Error("missing github");
       }
