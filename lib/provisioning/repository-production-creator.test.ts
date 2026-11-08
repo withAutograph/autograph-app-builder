@@ -367,7 +367,7 @@ describe("Production creator continuation", () => {
       reservePrivateState: async () => {
         throw new Error("must retain credentials");
       },
-      prepareCreatorIdentity: h.bridge.prepare,
+      prepareCreatorIdentity: (context) => h.bridge.prepare(context),
       readCreatorIdentity: async (row) => {
         const proof = await h.bridge.readCreator(row);
         return "state" in proof ? proof : { state: "verified", actorId: proof.actorId };

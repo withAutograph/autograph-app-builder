@@ -547,11 +547,6 @@ export default defineConfig({
       rules: { "sonarjs/pseudo-random": "off" },
     },
     {
-      // Retain existing receiver and callback behavior pending review.
-      files: ["lib/auth/preview-auth-ui.test.ts", productionCreatorTestPath],
-      rules: { "typescript/unbound-method": "off" },
-    },
-    {
       // Preserve existing runtime contracts pending focused migration.
       files: ["scripts/design-quality/archive-entry.ts"],
       rules: { "typescript/no-unsafe-return": "off" },

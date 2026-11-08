@@ -161,10 +161,10 @@ describe("Preview Better Auth UI", () => {
       method: "POST",
     };
     const clientPlugin = oauthProviderClient();
-    const onRequest = clientPlugin.fetchPlugins?.[0]?.hooks?.onRequest;
+    const hooks = clientPlugin.fetchPlugins?.[0]?.hooks;
 
-    expect(onRequest).toBeTypeOf("function");
-    await onRequest?.(request as never);
+    expect(typeof hooks?.onRequest).toBe("function");
+    await hooks?.onRequest?.(request as never);
 
     const body = z.object({ oauth_query: z.string() }).parse(JSON.parse(request.body));
     expect(new URLSearchParams(body.oauth_query).getAll("ba_param")).toEqual([
