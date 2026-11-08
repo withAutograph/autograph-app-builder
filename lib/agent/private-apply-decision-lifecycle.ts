@@ -37,22 +37,21 @@ export const observePrivateApplyDecisionEvent = (
       }
       const { callId } = request.action;
       if (
-        !authority.pending.some(
+        authority.pending.some(
           (entry) => entry.callId === callId && entry.scope.sessionId === sessionId,
         )
       ) {
-        continue;
-      }
-      const prior = rows.find((row) => row.callId === callId);
-      if (prior === undefined) {
-        rows.push({
-          sessionId,
-          callId,
-          requestId: request.requestId,
-          requestEventId: event.meta.id,
-        });
-      } else if (prior.requestId !== request.requestId || prior.sessionId !== sessionId) {
-        rows = rows.map((row) => (row === prior ? { ...row, conflict: true } : row));
+        const prior = rows.find((row) => row.callId === callId);
+        if (prior === undefined) {
+          rows.push({
+            sessionId,
+            callId,
+            requestId: request.requestId,
+            requestEventId: event.meta.id,
+          });
+        } else if (prior.requestId !== request.requestId || prior.sessionId !== sessionId) {
+          rows = rows.map((row) => (row === prior ? { ...row, conflict: true } : row));
+        }
       }
     }
   }

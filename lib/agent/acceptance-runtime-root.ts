@@ -90,23 +90,22 @@ export const attachAvailableAcceptanceDependencies = async (input: {
       workingDirectory: input.workspaceRoot,
       abortSignal: input.signal,
     });
-    if (existing.exitCode === 1) {
-      continue;
+    if (existing.exitCode !== 1) {
+      if (existing.exitCode !== 0) {
+        throw new Error(
+          "Builder could not inspect the retained dependency source. The recovered checkout is preserved; inspect sandbox file access before retrying.",
+        );
+      }
+      // The maintained attachment implementation enforces owned paths and rebases workspace links.
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Attach the first existing source only.
+      await attachCheckoutDependencyView({
+        sandbox: input.sandbox,
+        checkoutRoot: root,
+        candidateRoot: input.recoveredRoot,
+        workspaceRoot: input.workspaceRoot,
+      });
+      return;
     }
-    if (existing.exitCode !== 0) {
-      throw new Error(
-        "Builder could not inspect the retained dependency source. The recovered checkout is preserved; inspect sandbox file access before retrying.",
-      );
-    }
-    // The maintained attachment implementation enforces owned paths and rebases workspace links.
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Attach the first existing source only.
-    await attachCheckoutDependencyView({
-      sandbox: input.sandbox,
-      checkoutRoot: root,
-      candidateRoot: input.recoveredRoot,
-      workspaceRoot: input.workspaceRoot,
-    });
-    return;
   }
   // Let the repository-owned describe command reveal any actual missing dependency.
 };

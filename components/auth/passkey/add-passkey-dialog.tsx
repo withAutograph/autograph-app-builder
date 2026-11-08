@@ -49,7 +49,9 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
   const submitRequest = (request: AddPasskeyParams<PasskeyAuthClient>) => {
     pendingRequest.current = request;
     addPasskey.mutate(request, {
-      onSuccess: () => handleOpenChange(false),
+      onSuccess: () => {
+        handleOpenChange(false);
+      },
     });
   };
 

@@ -35,23 +35,21 @@ export const readContinuityApprovalWithRecovery = async (
     } catch (error) {
       signal.throwIfAborted();
       if (error instanceof HostedSessionReadTimeoutError) {
-        if (error.progressPersisted) {
-          continue;
+        if (!error.progressPersisted) {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Defer this failed sequential read through the workflow retry boundary.
+          return await deferApprovalRead("approval_history_incomplete", "native_history");
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Defer this failed sequential read through the workflow retry boundary.
-        return await deferApprovalRead("approval_history_incomplete", "native_history");
-      }
-      if (
+      } else if (
         error instanceof HostedOperatorError &&
         ["operator_unavailable", "operation_in_progress"].includes(error.code)
       ) {
-        if (error.recoveryProgressAdvanced === true) {
-          continue;
+        if (error.recoveryProgressAdvanced !== true) {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Defer this failed sequential read through the workflow retry boundary.
+          return await deferApprovalRead(error.code, error.recoveryStage);
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Defer this failed sequential read through the workflow retry boundary.
-        return await deferApprovalRead(error.code, error.recoveryStage);
+      } else {
+        throw error;
       }
-      throw error;
     }
   }
 };

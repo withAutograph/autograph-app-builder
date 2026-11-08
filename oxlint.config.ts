@@ -78,9 +78,6 @@ export default defineConfig({
       // Preserve existing control flow pending focused review.
       files: [
         ".config/mise/scripts/repository/build-hosted-arrusted-artifact.mts",
-        "lib/agent/acceptance-runtime-root.ts",
-        "lib/agent/continuity-approval-recovery.ts",
-        "lib/agent/private-apply-decision-lifecycle.ts",
         "lib/agent/proposed-source-inspection.ts",
         "lib/development/local-mode.ts",
         sharedLintFile26,
@@ -495,12 +492,10 @@ export default defineConfig({
         "app/ui/builder-destination.tsx",
         "app/ui/builder-model-controls.tsx",
         "app/ui/builder-provider-controls.tsx",
-        "components/auth/passkey/add-passkey-dialog.tsx",
         "components/auth/passkey/delete-passkey-dialog.tsx",
         "components/auth/passkey/rename-passkey-dialog.tsx",
         "components/auth/provider-button.tsx",
         "components/auth/settings/security/fresh-session-prompt.tsx",
-        "components/auth/sign-out.tsx",
         "components/create-app/provider-choice-section.tsx",
         "lib/mcp/session-app/approval-request.tsx",
         "lib/mcp/session-app/view.tsx",
