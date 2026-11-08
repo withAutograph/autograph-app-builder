@@ -31,8 +31,8 @@ import { createVerifiedActorReadback } from "./hosted-operator-verified-actor-re
 
 const accountOperationRef = "11111111-1111-4111-8111-111111111111";
 const authority = {
-  issuer: "https://builder.example.test/api/auth",
   audience: "https://builder.example.test/mcp",
+  issuer: "https://builder.example.test/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
@@ -40,17 +40,14 @@ const target = {
   appId: "normal-app",
   branch: "preview",
   environment: "preview" as const,
-  projectId: "prj_app",
-  sessionId: "owner-session",
   installationId: "installation",
+  projectId: "prj_app",
   scopeId: "team",
   scopeType: "team" as const,
+  sessionId: "owner-session",
 };
 const context = { authority, target };
 const program = normalActorProgramSchema.parse({
-  version: 1,
-  appId: target.appId,
-  origin: "https://apps.example.com",
   actors: [
     {
       account: "create-email-password",
@@ -72,10 +69,11 @@ const program = normalActorProgramSchema.parse({
       name: "Unassigned",
     },
   ],
-  organizations: [
-    { name: "One", organizationId: "org-one", ownerActorKey: "owner", slug: "one" },
-    { name: "Two", organizationId: "org-two", ownerActorKey: "owner", slug: "two" },
+  appAccess: [
+    { actorKey: "owner", organizationId: "org-one", roles: ["owner"] },
+    { actorKey: "peer", organizationId: "org-two", roles: ["member"] },
   ],
+  appId: target.appId,
   memberships: [
     { actorKey: "owner", organizationId: "org-one", role: "owner" },
     { actorKey: "peer", organizationId: "org-one", role: "member" },
@@ -83,24 +81,16 @@ const program = normalActorProgramSchema.parse({
     { actorKey: "peer", organizationId: "org-two", role: "member" },
     { actorKey: "no-access", organizationId: "org-one", role: "member" },
   ],
-  appAccess: [
-    { actorKey: "owner", organizationId: "org-one", roles: ["owner"] },
-    { actorKey: "peer", organizationId: "org-two", roles: ["member"] },
+  organizations: [
+    { name: "One", organizationId: "org-one", ownerActorKey: "owner", slug: "one" },
+    { name: "Two", organizationId: "org-two", ownerActorKey: "owner", slug: "two" },
   ],
+  origin: "https://apps.example.com",
+  version: 1,
 });
 const plan = hostedOperatorPlanSchema.parse({
-  version: 1,
-  stage: "auth-participants",
-  action: "prepare",
   access: [],
-  normalActorProgram: program,
-  selection: {
-    appId: target.appId,
-    branch: target.branch,
-    environment: target.environment,
-    projectId: target.projectId,
-    sessionId: target.sessionId,
-  },
+  action: "prepare",
   appDatabase: {
     database: "normal",
     migratorRole: "normal_owner",
@@ -115,24 +105,6 @@ const plan = hostedOperatorPlanSchema.parse({
   },
   contextId: "accepted-spec",
   cost: { class: "shared-recovery-group", description: "Approved normal accounts", owner: "owner" },
-  effects: [
-    {
-      description: "Capture approved actual accounts",
-      id: "normal-accounts",
-      kind: "normal-accounts",
-    },
-  ],
-  installer: { reference: "owned-worker", sha256: "a".repeat(64) },
-  neon: {
-    branchId: "br_fixture",
-    connectionRef: "owned-connection",
-    endpoint: "ep-owned.neon.tech",
-    projectId: "neon-owned",
-    source: "synthetic-only",
-  },
-  release: { artifactRef: "owned-release", id: "release", sha256: "b".repeat(64) },
-  retention: { expiresAt: "2030-01-01T00:00:00.000Z", policy: "Retain Auth" },
-  publicGateway: { branch: target.branch, origin: program.origin, projectId: "prj_gateway" },
   deploymentBoundary: {
     authority,
     teamId: "team",
@@ -155,6 +127,34 @@ const plan = hostedOperatorPlanSchema.parse({
       publicOrigin: program.origin,
     },
   },
+  effects: [
+    {
+      description: "Capture approved actual accounts",
+      id: "normal-accounts",
+      kind: "normal-accounts",
+    },
+  ],
+  installer: { reference: "owned-worker", sha256: "a".repeat(64) },
+  neon: {
+    branchId: "br_fixture",
+    connectionRef: "owned-connection",
+    endpoint: "ep-owned.neon.tech",
+    projectId: "neon-owned",
+    source: "synthetic-only",
+  },
+  normalActorProgram: program,
+  publicGateway: { branch: target.branch, origin: program.origin, projectId: "prj_gateway" },
+  release: { artifactRef: "owned-release", id: "release", sha256: "b".repeat(64) },
+  retention: { expiresAt: "2030-01-01T00:00:00.000Z", policy: "Retain Auth" },
+  selection: {
+    appId: target.appId,
+    branch: target.branch,
+    environment: target.environment,
+    projectId: target.projectId,
+    sessionId: target.sessionId,
+  },
+  stage: "auth-participants",
+  version: 1,
 });
 const faults = [
   "revoked",
@@ -215,11 +215,11 @@ const fixture = async (
       status: "pending",
       step: "reserved",
       operator: {
+        approvalId: "first-account-approval",
         mode: "protected-operator-v1",
         operationRef: accountOperationRef,
         plan,
         planDigest: operatorPlanDigest(plan),
-        approvalId: "first-account-approval",
         receipts: [],
       },
     }),
@@ -347,8 +347,8 @@ const fixture = async (
     },
     identityProof: { reference: `private-${entry.organizationId}-proof`, sha256: "f".repeat(64) },
     identityVerification: {
-      issuer: program.origin,
       audience: "https://operator.example.com",
+      issuer: program.origin,
       jwksUrl: "https://gateway.example.test/_platform/jwks.json",
       transportSource: {
         audience: "https://operator.example.com",
@@ -386,11 +386,11 @@ const fixture = async (
       ...row.record,
       approvedByCallId: "current-call",
       operator: {
+        approvalId: "current-approval",
         mode: "protected-operator-v1",
         operationRef: "22222222-2222-4222-8222-222222222222",
         plan: fullPlan,
         planDigest: operatorPlanDigest(fullPlan),
-        approvalId: "current-approval",
         receipts: [],
       },
     }),
@@ -462,7 +462,6 @@ const fixture = async (
       throw new Error("fixture_missing_membership");
     }
     return Response.json({
-      total: 1,
       members: [
         {
           id: `member-${saved.actorKey}-${saved.organizationId}`,
@@ -472,6 +471,7 @@ const fixture = async (
           user: { id: saved.session.actorId, email: actor.email },
         },
       ],
+      total: 1,
     });
   };
   const runtimeDeps: Parameters<typeof createNormalActorRuntimeBindings>[0] = {
