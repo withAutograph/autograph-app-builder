@@ -202,7 +202,7 @@ describe("framework upgrade planning and apply", () => {
               backend: { kind: "static" },
               validation: {
                 check: { task: "check" },
-                test: { task: "test", shards: 1 },
+                test: { shards: 1, task: "test" },
                 browser: null,
               },
             })
@@ -236,7 +236,7 @@ describe("framework upgrade planning and apply", () => {
     const ordinary = await executeTargetIdentityAndPlanning({
       ...input,
       existingAppChanges: [
-        { path: "apps/example/app/page.tsx", content: "Existing product feature edit" },
+        { content: "Existing product feature edit", path: "apps/example/app/page.tsx" },
       ],
     });
     expect(ordinary.proposal.frameworkUpgrade).toBeUndefined();
@@ -257,7 +257,7 @@ describe("framework upgrade planning and apply", () => {
               backend: { kind: "static" },
               validation: {
                 check: { task: "check" },
-                test: { task: "test", shards: 1 },
+                test: { shards: 1, task: "test" },
                 browser: null,
               },
             })
@@ -336,7 +336,7 @@ describe("framework upgrade planning and apply", () => {
     const sandbox = sandboxFixture({
       readBinaryFile: async ({ path }: { path: string }) =>
         path.endsWith("package.json") ? Buffer.from("old package") : null,
-      run: async () => ({ exitCode: 0, stdout: "644", stderr: "" }),
+      run: async () => ({ exitCode: 0, stderr: "", stdout: "644" }),
     });
     const planned = await planFrameworkUpgrade(sandbox, versions);
     const changed = {
@@ -361,7 +361,7 @@ describe("framework upgrade planning and apply", () => {
       setNetworkPolicy: async () => {},
       run: async ({ command }: { command: string }) => {
         calls.push(command);
-        return { exitCode: 0, stdout: "{}", stderr: "" };
+        return { exitCode: 0, stderr: "", stdout: "{}" };
       },
       writeTextFile: vi.fn<SandboxSession["writeTextFile"]>(),
       readBinaryFile: vi.fn<SandboxSession["readBinaryFile"]>(),
@@ -385,9 +385,9 @@ describe("framework upgrade planning and apply", () => {
       run: async ({ command }: { command: string }) => {
         calls.push(command);
         if (command.includes("repository:upgrade-framework") && fail) {
-          return { exitCode: 1, stdout: "", stderr: "network timeout" };
+          return { exitCode: 1, stderr: "network timeout", stdout: "" };
         }
-        return { exitCode: 0, stdout: "{}", stderr: "" };
+        return { exitCode: 0, stderr: "", stdout: "{}" };
       },
       setNetworkPolicy: async () => {},
     });
@@ -416,7 +416,7 @@ describe("framework upgrade planning and apply", () => {
     const sandbox = sandboxFixture({
       run: async ({ command }: { command: string }) => {
         calls.push(command);
-        return { exitCode: 0, stdout: "{}", stderr: "" };
+        return { exitCode: 0, stderr: "", stdout: "{}" };
       },
       setNetworkPolicy: async () => {},
     });

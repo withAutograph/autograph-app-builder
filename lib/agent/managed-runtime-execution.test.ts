@@ -43,10 +43,10 @@ vi.mock("ai", () => {
 });
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 const context: HostedOperatorContext = {
   authority,
@@ -54,11 +54,11 @@ const context: HostedOperatorContext = {
     appId: "orchard",
     branch: "preview",
     environment: "preview",
-    projectId: "app-project",
-    sessionId: "saved-session",
     installationId: "installation",
+    projectId: "app-project",
     scopeId: "team",
     scopeType: "team",
+    sessionId: "saved-session",
   },
 };
 const preparedPlan = hostedOperatorPlanSchema.parse({
@@ -137,17 +137,17 @@ const selection = {
   },
   preparedPlan,
   runtime: {
-    sandboxId: "owned-sandbox",
-    root: "/controlled/source",
-    projectId: "builder-project",
-    ownerId: "team",
     appPort: 3000,
     bridgePort: 3100,
+    ownerId: "team",
+    projectId: "builder-project",
+    root: "/controlled/source",
+    sandboxId: "owned-sandbox",
   },
   gateway: {
-    projectId: "gateway-project",
-    ownerId: "team",
     environment: "preview" as const,
+    ownerId: "team",
+    projectId: "gateway-project",
     publicOrigin: "https://gateway.example",
   },
   actors: [{ actorId: "actor-one", organizationId: "organization-one" }],
@@ -368,11 +368,11 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
       "fixture.storage.json": JSON.stringify({
         cookies: [
           {
-            name: "session",
             domain: "gateway.example",
-            value: "controlled-private-session",
+            name: "session",
             path: "/",
             secure: true,
+            value: "controlled-private-session",
           },
         ],
         origins: [],
@@ -399,7 +399,7 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
     configuration: {
       projectId: "operator-project",
       teamId: "operator-team",
-      source: { type: "snapshot", snapshotId: "controlled-worker-source" },
+      source: { snapshotId: "controlled-worker-source", type: "snapshot" },
       accessWorker: installer,
       authWorker: installer,
       resourcesWorker: installer,
@@ -1151,10 +1151,10 @@ it("runs only the frozen focused continuity selection and resumes without anothe
   await f.start();
   const selected = f.read();
   selected.plan.runtime.browserSelection = {
+    maxFailures: 1,
+    retries: 0,
     testName: "@acceptance",
     workers: 1,
-    retries: 0,
-    maxFailures: 1,
   };
   selected.planDigest = continuityPlanDigest(selected.plan);
   f.replace(selected);
