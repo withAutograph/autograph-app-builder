@@ -355,9 +355,10 @@ describe("shared working preview startup", () => {
   it("stops polling immediately when cancelled instead of resuming the stopped sandbox", async () => {
     const { command, options, provider } = setup();
     const controller = new AbortController();
+    const abortReason = new Error("Preview cancelled");
     const fetcher = vi.fn<typeof fetch>(() => {
-      controller.abort();
-      return Promise.reject(controller.signal.reason);
+      controller.abort(abortReason);
+      return Promise.reject(abortReason);
     });
     await expect(
       startWorkingPreview({ ...options, fetch: fetcher, signal: controller.signal }),

@@ -49,23 +49,17 @@ const fail = (field) => {
 const isRecord = (value) => typeof value === "object" && value !== null;
 
 /** @param {unknown} value @param {string[]} keys @returns {value is UnknownRecord} */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function exactKeys(value, keys) {
-  return (
-    isRecord(value) && Object.keys(value).toSorted().join(",") === [...keys].toSorted().join(",")
-  );
-}
+const exactKeys = (value, keys) =>
+  isRecord(value) && Object.keys(value).toSorted().join(",") === [...keys].toSorted().join(",");
 
 /** @param {string} root @param {string} candidate */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function within(root, candidate) {
+const within = (root, candidate) => {
   const path = relative(root, candidate);
   return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
-}
+};
 
 /** @param {unknown} path @param {string} repositoryRoot @returns {RootIdentity} */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function observeRoot(path, repositoryRoot) {
+const observeRoot = (path, repositoryRoot) => {
   if (typeof path !== "string" || !isAbsolute(path)) {
     fail("root");
   }
@@ -99,11 +93,10 @@ function observeRoot(path, repositoryRoot) {
   } catch {
     return fail("root");
   }
-}
+};
 
 /** @param {unknown} path @param {string} repositoryRoot @returns {RootIdentity | null} */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function observeReadOnlyRoot(path, repositoryRoot) {
+const observeReadOnlyRoot = (path, repositoryRoot) => {
   if (path === null) {
     return null;
   }
@@ -140,11 +133,10 @@ function observeReadOnlyRoot(path, repositoryRoot) {
   } catch {
     return fail(sourceRootField);
   }
-}
+};
 
 /** @param {unknown} value @param {string} repositoryRoot */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function validateReadOnlyRootIdentity(value, repositoryRoot) {
+const validateReadOnlyRootIdentity = (value, repositoryRoot) => {
   if (value === null) {
     return null;
   }
@@ -158,11 +150,10 @@ function validateReadOnlyRootIdentity(value, repositoryRoot) {
     }
   }
   return observed;
-}
+};
 
 /** @param {unknown} value @param {string} repositoryRoot */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function validateRootIdentity(value, repositoryRoot) {
+const validateRootIdentity = (value, repositoryRoot) => {
   if (!exactKeys(value, ["path", "device", "inode", "uid", "mode", "nlink"])) {
     fail("root identity");
   }
@@ -173,11 +164,10 @@ function validateRootIdentity(value, repositoryRoot) {
     }
   }
   return observed;
-}
+};
 
 /** @param {unknown} input @param {string} repositoryRoot @returns {GateAEvalProfile} */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function createGateAEvalProfile(input, repositoryRoot) {
+export const createGateAEvalProfile = (input, repositoryRoot) => {
   if (!isAbsolute(repositoryRoot) || realpathSync(repositoryRoot) !== repositoryRoot) {
     fail("repository root");
   }
@@ -230,11 +220,10 @@ export function createGateAEvalProfile(input, repositoryRoot) {
     });
   }
   return fail("profile");
-}
+};
 
 /** @param {unknown} value @param {string} repositoryRoot @returns {GateAEvalProfile} */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function validateGateAEvalProfile(value, repositoryRoot) {
+export const validateGateAEvalProfile = (value, repositoryRoot) => {
   if (typeof value !== "object" || value === null || value.version !== 1) {
     fail("profile envelope");
   }
@@ -282,11 +271,10 @@ export function validateGateAEvalProfile(value, repositoryRoot) {
     });
   }
   return fail("profile envelope");
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 /** @param {Record<string, string | undefined>} environment @param {unknown} value @param {string} repositoryRoot */
-export function installGateAEvalProfile(environment, value, repositoryRoot) {
+export const installGateAEvalProfile = (environment, value, repositoryRoot) => {
   const profile = validateGateAEvalProfile(value, repositoryRoot);
   for (const field of gateAEnvironmentFields) {
     Reflect.deleteProperty(environment, field);
@@ -321,4 +309,4 @@ export function installGateAEvalProfile(environment, value, repositoryRoot) {
     }
   }
   return profile;
-}
+};

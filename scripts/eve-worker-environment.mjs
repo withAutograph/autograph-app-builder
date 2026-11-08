@@ -20,8 +20,7 @@ const fail = (field) => {
 };
 
 /** @param {string} hostname - Hostname to check for a loopback address. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function validLoopbackHostname(hostname) {
+const validLoopbackHostname = (hostname) => {
   const normalized = hostname.startsWith("[") ? hostname.slice(1, -1) : hostname;
   if (normalized === "::1") {
     return true;
@@ -30,11 +29,10 @@ function validLoopbackHostname(hostname) {
     return false;
   }
   return normalized.split(".")[0] === "127";
-}
+};
 
 /** @param {unknown} value - Candidate local workflow URL. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function validateBaseUrl(value) {
+const validateBaseUrl = (value) => {
   if (typeof value !== "string") {
     fail("base URL");
   }
@@ -76,11 +74,10 @@ function validateBaseUrl(value) {
     fail("port");
   }
   return { baseUrl: url.origin, port: String(port) };
-}
+};
 
 /** @param {unknown} value @param {string} field @param {boolean} [optional] */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function validateUuid(value, field, optional = false) {
+const validateUuid = (value, field, optional = false) => {
   if (
     !(value === undefined && optional) &&
     (typeof value !== "string" || !uuidPattern.test(value))
@@ -88,11 +85,10 @@ function validateUuid(value, field, optional = false) {
     fail(field);
   }
   return value;
-}
+};
 
 /** @param {unknown} value - Candidate transport secret. */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function validateTransportSecret(value) {
+const validateTransportSecret = (value) => {
   if (
     typeof value !== "string" ||
     !transportSecretPattern.test(value) ||
@@ -102,21 +98,19 @@ function validateTransportSecret(value) {
     fail("transport secret");
   }
   return value;
-}
+};
 
 /** @param {unknown} value @param {string} field */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function validateWorkflowTimeout(value, field) {
+const validateWorkflowTimeout = (value, field) => {
   // Eve 0.68 explicitly sets zero for its default unbounded local delivery.
   if (value !== undefined && value !== "0" && value !== "360000") {
     fail(field);
   }
   return value;
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 /** @param {UnknownRecord | null | undefined} source @param {string} expectedAppRoot */
-export function captureEveWorkerEnvelope(source, expectedAppRoot) {
+export const captureEveWorkerEnvelope = (source, expectedAppRoot) => {
   if (source === undefined || source === null) {
     fail("explicit environment");
   }
@@ -151,11 +145,10 @@ export function captureEveWorkerEnvelope(source, expectedAppRoot) {
     transportSecret: validateTransportSecret(source.EVE_DEV_WORKFLOW_TRANSPORT_SECRET),
     version: 1,
   });
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 /** @param {Record<string, string | undefined>} environment @param {unknown} value @param {string} expectedAppRoot */
-export function installEveWorkerEnvelope(environment, value, expectedAppRoot) {
+export const installEveWorkerEnvelope = (environment, value, expectedAppRoot) => {
   if (!isRecord(value)) {
     fail("envelope");
   }
@@ -216,4 +209,4 @@ export function installEveWorkerEnvelope(environment, value, expectedAppRoot) {
   } else {
     environment.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS = captured.headersTimeout;
   }
-}
+};

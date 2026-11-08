@@ -646,11 +646,6 @@ export default defineConfig({
       rules: { "sonarjs/pseudo-random": "off" },
     },
     {
-      // Preserve hoisting of exported environment setup functions.
-      files: ["scripts/eve-worker-environment.mjs", "scripts/gate-a-eval-profile.mjs"],
-      rules: { "eslint/func-style": "off" },
-    },
-    {
       // Retain existing receiver and callback behavior pending review.
       files: [
         "lib/auth/preview-auth-ui.test.ts",
@@ -879,7 +874,6 @@ export default defineConfig({
         "sonarjs/code-eval": "off",
         "sonarjs/no-hardcoded-ip": "off",
         "typescript/no-implied-eval": "off",
-        "typescript/prefer-promise-reject-errors": "off",
       },
     },
   ],
