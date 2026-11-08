@@ -34,6 +34,14 @@ import type {
 export const GITHUB_PUBLICATION_VERSION = 2 as const;
 export const REPOSITORY_RELEASE_GATE = "REPOSITORY_RELEASE_ENABLED" as const;
 
+const RESOLVE_EXISTING_SOURCE = "resolve-existing-source";
+const CREATE_FRESH_REPOSITORY = "create-fresh-repository";
+const PUBLISH_DRAFT_PULL_REQUEST = "publish-draft-pull-request";
+const FRESH_REPOSITORY_KIND = "fresh-repository";
+const DRAFT_PULL_REQUEST_KIND = "draft-pull-request";
+const PROVIDER_REJECTED = "provider-rejected";
+const REVIEWED_PATH_CHANGED = "reviewed-path-changed";
+
 type Digest = string;
 type ObjectId = string;
 export type GitHubRepositorySelection = "all" | "selected";
@@ -529,8 +537,10 @@ function isDecimal(value: unknown): value is string {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function safeName(value: unknown): value is string {
+  if (typeof value !== "string") {
+    return false;
+  }
   return (
-    typeof value === "string" &&
     /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?$/u.test(value) &&
     value !== "." &&
     value !== ".." &&
@@ -540,22 +550,23 @@ function safeName(value: unknown): value is string {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function safeBranch(value: unknown): value is string {
+  if (typeof value !== "string") {
+    return false;
+  }
+  if (value.length === 0 || value.length > 200 || value.startsWith("/")) {
+    return false;
+  }
+  if (value.endsWith("/") || value.endsWith(".") || value.endsWith(".lock")) {
+    return false;
+  }
+  if (value.includes("..") || value.includes("@{") || /[~^:?*[\\\s]/u.test(value)) {
+    return false;
+  }
   return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 200 &&
-    !value.startsWith("/") &&
-    !value.endsWith("/") &&
-    !value.endsWith(".") &&
-    !value.endsWith(".lock") &&
-    !value.includes("..") &&
-    !value.includes("@{") &&
-    !/[~^:?*[\\\s]/u.test(value) &&
     ![...value].some((character) => {
       const code = character.codePointAt(0) ?? 0;
       return code < 32 || code === 127;
-    }) &&
-    value.split("/").every((part) => part.length > 0 && !part.startsWith("."))
+    }) && value.split("/").every((part) => part.length > 0 && !part.startsWith("."))
   );
 }
 
@@ -637,10 +648,12 @@ function assertCanonicalReview(review: ReviewedChangeSetReceipt): void {
       );
     },
   );
-  if (
+  const invalidChangeSet =
     !isDigest(review.changeSetDigest) ||
     !verifiedChangeSet ||
-    canonicalJson(review.changes) !== canonicalJson(sortedChanges) ||
+    canonicalJson(review.changes) !== canonicalJson(sortedChanges);
+  if (
+    invalidChangeSet ||
     JSON.stringify(canonicalPaths(review.approvedPaths)) !== JSON.stringify(review.approvedPaths) ||
     JSON.stringify(review.approvedPaths) !== JSON.stringify(review.changes.map(({ path }) => path))
   ) {
@@ -663,9 +676,10 @@ function reviewForProposal(
   review: DraftUpdateReview,
 ): void {
   assertCanonicalGitHubUpdateReview(review);
+  const reviewIdentityMismatch =
+    proposal.reviewDigest !== review.digest || proposal.changeSetDigest !== review.changeSetDigest;
   if (
-    proposal.reviewDigest !== review.digest ||
-    proposal.changeSetDigest !== review.changeSetDigest ||
+    reviewIdentityMismatch ||
     ("changedContentDigest" in proposal &&
       (proposal.changedContentDigest !== review.changedContentDigest ||
         JSON.stringify(proposal.approvedPaths) !== JSON.stringify(review.approvedPaths)))
@@ -722,11 +736,10 @@ function exactContentFileState(value: unknown, includeBytes: boolean): boolean {
   if (!record(value) || !exactKeys(value, keys)) {
     return false;
   }
-  return (
-    (value.mode === "644" || value.mode === "755") &&
-    isDigest(value.digest) &&
-    (!includeBytes || value.bytes instanceof Uint8Array)
-  );
+  if (value.mode !== "644" && value.mode !== "755") {
+    return false;
+  }
+  return isDigest(value.digest) && (!includeBytes || value.bytes instanceof Uint8Array);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -824,11 +837,13 @@ export function assertExactGitHubFreshRepositoryContent(input: {
   content: GitHubFreshRepositoryContent;
 }): void {
   const { content, proposal } = input;
-  if (
+  const invalidContentHeader =
     !exactKeys(content, ["version", "kind", "sourceSha", "sourceTree", "files"]) ||
     content.version !== 1 ||
     content.kind !== "fresh-repository-source-tree" ||
-    content.sourceSha !== proposal.sourceSha ||
+    content.sourceSha !== proposal.sourceSha;
+  if (
+    invalidContentHeader ||
     content.sourceTree !== proposal.sourceTree ||
     !Array.isArray(content.files) ||
     content.files.length === 0
@@ -836,20 +851,30 @@ export function assertExactGitHubFreshRepositoryContent(input: {
     throw new Error("The fresh repository content schema is invalid.");
   }
   const algorithm = proposal.sourceTree.length === 64 ? "sha256" : "sha1";
-  const paths = content.files.map((file) => file.path);
+  const paths = content.files.map((file: GitHubFreshRepositoryContentFile) => file.path);
+  const invalidFile = (file: GitHubFreshRepositoryContentFile): boolean => {
+    if (
+      !exactKeys(file, ["path", "mode", "objectId", "digest", "bytes"]) ||
+      !safeSourcePath(file.path) ||
+      (file.mode !== "100644" && file.mode !== "100755")
+    ) {
+      return true;
+    }
+    if (
+      !isObjectId(file.objectId) ||
+      !isDigest(file.digest) ||
+      !(file.bytes instanceof Uint8Array)
+    ) {
+      return true;
+    }
+    return (
+      bytesDigest(file.bytes) !== file.digest ||
+      gitObjectDigest("blob", file.bytes, algorithm).toString("hex") !== file.objectId
+    );
+  };
   if (
     new Set(paths).size !== paths.length ||
-    content.files.some(
-      (file) =>
-        !exactKeys(file, ["path", "mode", "objectId", "digest", "bytes"]) ||
-        !safeSourcePath(file.path) ||
-        (file.mode !== "100644" && file.mode !== "100755") ||
-        !isObjectId(file.objectId) ||
-        !isDigest(file.digest) ||
-        !(file.bytes instanceof Uint8Array) ||
-        bytesDigest(file.bytes) !== file.digest ||
-        gitObjectDigest("blob", file.bytes, algorithm).toString("hex") !== file.objectId,
-    ) ||
+    content.files.some(invalidFile) ||
     freshContentTree(content.files, algorithm) !== proposal.sourceTree
   ) {
     throw new Error("The fresh repository content does not match the immutable source tree.");
@@ -899,7 +924,8 @@ export function assertExactGitHubDraftPullRequestContent(input: {
       `The publication content field ${mismatchedField} does not match the sealed reviewed proposal. ${refreshInstructions}`,
     );
   }
-  const mismatchedBytes = content.changes.find(
+  const changes: readonly GitHubPublicationContentChange[] = content.changes;
+  const mismatchedBytes = changes.find(
     (change) =>
       change.kind !== "deleted" && bytesDigest(change.after.bytes) !== change.after.digest,
   );
@@ -1050,10 +1076,12 @@ function assertReviewedBinding(
 ): void {
   parseSourceReceiptEvidence(source);
   assertCanonicalReview(review);
-  if (
+  const sourceMismatch =
     source.releaseEnabled !== false ||
     source.digest !== review.sourceReceiptDigest ||
-    source.sourceSha !== review.sourceSha ||
+    source.sourceSha !== review.sourceSha;
+  if (
+    sourceMismatch ||
     source.sourceTree !== review.sourceTree ||
     source.contractDigest !== review.repositoryContractDigest ||
     source.eligibilityDigest !== review.eligibilityDigest
@@ -1074,6 +1102,8 @@ const installationKeys = [
   "permissions",
   "digest",
 ] as const;
+const invalidInstallationIdentityMessage = "The GitHub installation identity is invalid.";
+
 const permissionKeys = [
   "metadata",
   "contents",
@@ -1088,21 +1118,32 @@ export function createGitHubInstallationIdentity(
   input: Omit<GitHubInstallationIdentity, "version" | "permissions" | "digest">,
 ): GitHubInstallationIdentity {
   if (
-    (input.operation !== "resolve-existing-source" &&
-      input.operation !== "create-fresh-repository" &&
-      input.operation !== "publish-draft-pull-request") ||
-    !isDecimal(input.installationId) ||
-    !isDecimal(input.accountId) ||
+    input.operation !== RESOLVE_EXISTING_SOURCE &&
+    input.operation !== CREATE_FRESH_REPOSITORY &&
+    input.operation !== PUBLISH_DRAFT_PULL_REQUEST
+  ) {
+    throw new Error(invalidInstallationIdentityMessage);
+  }
+  if (!isDecimal(input.installationId) || !isDecimal(input.accountId)) {
+    throw new Error(invalidInstallationIdentityMessage);
+  }
+  if (
     !safeName(input.accountLogin) ||
-    (input.accountType !== "Organization" && input.accountType !== "User") ||
-    (input.repositorySelection !== "all" && input.repositorySelection !== "selected") ||
+    (input.accountType !== "Organization" && input.accountType !== "User")
+  ) {
+    throw new Error(invalidInstallationIdentityMessage);
+  }
+  if (input.repositorySelection !== "all" && input.repositorySelection !== "selected") {
+    throw new Error(invalidInstallationIdentityMessage);
+  }
+  if (
     !Array.isArray(input.selectedRepositoryIds) ||
     new Set(input.selectedRepositoryIds).size !== input.selectedRepositoryIds.length ||
     input.selectedRepositoryIds.some((id) => !isDecimal(id))
   ) {
-    throw new Error("The GitHub installation identity is invalid.");
+    throw new Error(invalidInstallationIdentityMessage);
   }
-  const unsigned = {
+  const identityFields = {
     accountId: input.accountId,
     accountLogin: input.accountLogin,
     accountType: input.accountType,
@@ -1110,7 +1151,11 @@ export function createGitHubInstallationIdentity(
     operation: input.operation,
     permissions: githubPermissionsFor(input.operation),
     repositorySelection: input.repositorySelection,
-    selectedRepositoryIds: [...input.selectedRepositoryIds].toSorted(),
+  };
+  const selectedRepositoryIds: readonly string[] = input.selectedRepositoryIds;
+  const unsigned = {
+    ...identityFields,
+    selectedRepositoryIds: [...selectedRepositoryIds].toSorted(),
     version: GITHUB_PUBLICATION_VERSION,
   };
   return { ...unsigned, digest: digest(unsigned) };
@@ -1153,19 +1198,19 @@ export const repositoryKeys = [
 export function createRepositoryObservation(
   input: Omit<GitHubRepositoryObservation, "version" | "digest">,
 ): GitHubRepositoryObservation {
-  if (
-    !isDecimal(input.repositoryId) ||
-    !safeName(input.owner) ||
-    !safeName(input.name) ||
+  const invalidRepositoryIdentity =
+    !isDecimal(input.repositoryId) || !safeName(input.owner) || !safeName(input.name);
+  const invalidRepositoryRevision = () =>
     input.visibility !== "private" ||
     !safeBranch(input.defaultBranch) ||
     !isObjectId(input.headSha) ||
-    !isObjectId(input.headTree) ||
+    !isObjectId(input.headTree);
+  const invalidInstallationOrGate = () =>
     !isDigest(input.installationIdentityDigest) ||
     !exactKeys(input.releaseGate, ["name", "configured"]) ||
     input.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
-    typeof input.releaseGate.configured !== "boolean"
-  ) {
+    typeof input.releaseGate.configured !== "boolean";
+  if (invalidRepositoryIdentity || invalidRepositoryRevision() || invalidInstallationOrGate()) {
     throw new Error("The repository observation is invalid.");
   }
   const unsigned = { version: GITHUB_PUBLICATION_VERSION, ...input };
@@ -1206,19 +1251,20 @@ export async function resolveImmutableExistingSource(input: {
   expectedTree: ObjectId;
   resolvedByCallId: string;
 }): Promise<ImmutableGitHubSourceReceipt> {
+  const invalidRepository =
+    !isDecimal(input.expectedInstallationId) || !isDecimal(input.repositoryId);
   if (
-    !isDecimal(input.expectedInstallationId) ||
-    !isDecimal(input.repositoryId) ||
+    invalidRepository ||
     !safeHeadRef(input.ref) ||
     !isObjectId(input.expectedSha) ||
     !isObjectId(input.expectedTree)
   ) {
     throw new Error("The immutable source request is invalid.");
   }
-  const installation = await input.adapter.inspectInstallation("resolve-existing-source");
+  const installation = await input.adapter.inspectInstallation(RESOLVE_EXISTING_SOURCE);
   assertExactInstallationIdentity(installation);
   if (
-    installation.operation !== "resolve-existing-source" ||
+    installation.operation !== RESOLVE_EXISTING_SOURCE ||
     installation.installationId !== input.expectedInstallationId ||
     !installation.selectedRepositoryIds.includes(input.repositoryId)
   ) {
@@ -1262,9 +1308,10 @@ export async function resolveImmutableExistingSourceWithTargetProof(input: {
   expectedTree: ObjectId;
   resolvedByCallId: string;
 }): Promise<ImmutableGitHubSourceReceipt> {
+  const invalidRepository =
+    !isDecimal(input.expectedInstallationId) || !isDecimal(input.repositoryId);
   if (
-    !isDecimal(input.expectedInstallationId) ||
-    !isDecimal(input.repositoryId) ||
+    invalidRepository ||
     !safeHeadRef(input.ref) ||
     !isObjectId(input.expectedSha) ||
     !isObjectId(input.expectedTree)
@@ -1276,7 +1323,7 @@ export async function resolveImmutableExistingSourceWithTargetProof(input: {
     input.authority,
   );
   if (
-    proof.operation !== "resolve-existing-source" ||
+    proof.operation !== RESOLVE_EXISTING_SOURCE ||
     proof.installationId !== input.expectedInstallationId ||
     proof.repositoryId !== input.repositoryId
   ) {
@@ -1328,17 +1375,20 @@ export function assertExactImmutableGitHubSourceReceipt(
   }
   assertExactRepositoryObservation(sourceReceipt.repository);
   exactDigest(sourceReceipt, "Immutable GitHub source receipt");
-  if (
+  const invalidSourceRevision =
     sourceReceipt.version !== GITHUB_PUBLICATION_VERSION ||
     !safeHeadRef(sourceReceipt.resolvedRef) ||
     !isObjectId(sourceReceipt.resolvedSha) ||
-    !isObjectId(sourceReceipt.resolvedTree) ||
+    !isObjectId(sourceReceipt.resolvedTree);
+  const invalidSourceAuthority = () =>
     !isDigest(sourceReceipt.installationIdentityDigest) ||
-    sourceReceipt.resolvedByCallId.trim().length === 0 ||
+    sourceReceipt.resolvedByCallId.trim().length === 0;
+  const repositoryMismatch = () =>
     sourceReceipt.repository.headSha !== sourceReceipt.resolvedSha ||
     sourceReceipt.repository.headTree !== sourceReceipt.resolvedTree ||
-    sourceReceipt.repository.installationIdentityDigest !== sourceReceipt.installationIdentityDigest
-  ) {
+    sourceReceipt.repository.installationIdentityDigest !==
+      sourceReceipt.installationIdentityDigest;
+  if (invalidSourceRevision || invalidSourceAuthority() || repositoryMismatch()) {
     throw new Error("The immutable GitHub source receipt is malformed.");
   }
 }
@@ -1375,7 +1425,7 @@ export function createFreshRepositoryProposal(input: {
   assertExactInstallationIdentity(input.installation);
   assertReviewedBinding(input.source, input.review);
   if (
-    input.installation.operation !== "create-fresh-repository" ||
+    input.installation.operation !== CREATE_FRESH_REPOSITORY ||
     input.source.sourceKind !== "fresh-template" ||
     input.destinationOwner !== input.installation.accountLogin ||
     !safeName(input.destinationName)
@@ -1427,25 +1477,30 @@ export function assertExactFreshRepositoryProposal(proposal: FreshRepositoryProp
     reviewDigest: proposal.reviewDigest,
     sourceReceiptDigest: proposal.sourceReceiptDigest,
   });
-  if (
+  const invalidDestination =
     proposal.version !== GITHUB_PUBLICATION_VERSION ||
     !safeName(proposal.destinationOwner) ||
     !safeName(proposal.destinationName) ||
-    proposal.visibility !== "private" ||
+    proposal.visibility !== "private";
+  const invalidSource = () =>
     proposal.defaultBranch !== "main" ||
     !isObjectId(proposal.sourceSha) ||
     !isObjectId(proposal.sourceTree) ||
-    !isDigest(proposal.sourceReceiptDigest) ||
+    !isDigest(proposal.sourceReceiptDigest);
+  const invalidEvidence = () =>
     !isDigest(proposal.contractDigest) ||
     !isDigest(proposal.eligibilityDigest) ||
     !isDigest(proposal.reviewDigest) ||
-    !isDigest(proposal.changeSetDigest) ||
-    proposal.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
-    proposal.releaseGate.configured !== false ||
+    !isDigest(proposal.changeSetDigest);
+  const invalidOutcome = () =>
     proposal.initialCommitMessage !== "Initialize repository from supported template" ||
     proposal.intendedOutcome !== "create-private-fresh-history-repository" ||
-    proposal.idempotencyKey !== expectedKey
-  ) {
+    proposal.idempotencyKey !== expectedKey;
+  const invalidRelease = () =>
+    proposal.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
+    proposal.releaseGate.configured !== false ||
+    invalidOutcome();
+  if (invalidDestination || invalidSource() || invalidEvidence() || invalidRelease()) {
     throw new Error("The fresh repository proposal is malformed.");
   }
 }
@@ -1500,7 +1555,7 @@ export function createDraftPullRequestProposal(input: {
   assertCanonicalReview(input.review);
   const approvedPaths = canonicalPaths(input.review.approvedPaths);
   if (
-    input.installation.operation !== "publish-draft-pull-request" ||
+    input.installation.operation !== PUBLISH_DRAFT_PULL_REQUEST ||
     !input.installation.selectedRepositoryIds.includes(input.repository.repositoryId) ||
     input.repository.installationIdentityDigest !== input.installation.digest ||
     !safeTitle(input.title)
@@ -1551,31 +1606,49 @@ export function assertExactDraftPullRequestProposal(proposal: DraftPullRequestPr
     repositoryObservationDigest: proposal.repositoryObservationDigest,
     reviewDigest: proposal.reviewDigest,
   });
+  const invalidDraftProposalMessage = "The draft pull-request proposal is malformed.";
   if (
     proposal.version !== GITHUB_PUBLICATION_VERSION ||
     !isDecimal(proposal.repositoryId) ||
     !safeName(proposal.owner) ||
-    !safeName(proposal.name) ||
+    !safeName(proposal.name)
+  ) {
+    throw new Error(invalidDraftProposalMessage);
+  }
+  if (
     proposal.visibility !== "private" ||
     !safeBranch(proposal.baseBranch) ||
     !isObjectId(proposal.baseSha) ||
-    !isObjectId(proposal.baseTree) ||
+    !isObjectId(proposal.baseTree)
+  ) {
+    throw new Error(invalidDraftProposalMessage);
+  }
+  if (
     !isDigest(proposal.repositoryObservationDigest) ||
     proposal.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
     typeof proposal.releaseGate.configured !== "boolean" ||
-    !isDigest(proposal.reviewDigest) ||
+    !isDigest(proposal.reviewDigest)
+  ) {
+    throw new Error(invalidDraftProposalMessage);
+  }
+  if (
     !isDigest(proposal.changeSetDigest) ||
     !isDigest(proposal.changedContentDigest) ||
     JSON.stringify(canonicalPaths(proposal.approvedPaths)) !==
-      JSON.stringify(proposal.approvedPaths) ||
-    !safeBranch(proposal.branchName) ||
-    proposal.draft !== true ||
+      JSON.stringify(proposal.approvedPaths)
+  ) {
+    throw new Error(invalidDraftProposalMessage);
+  }
+  if (!safeBranch(proposal.branchName) || proposal.draft !== true) {
+    throw new Error(invalidDraftProposalMessage);
+  }
+  if (
     !safeTitle(proposal.title) ||
     proposal.idempotencyKey !== idempotencyKey ||
     proposal.branchName !== `app-builder/review-${idempotencyKey.slice(0, 20)}` ||
     proposal.intendedOutcome !== "publish-reviewed-change-set-as-draft-pull-request"
   ) {
-    throw new Error("The draft pull-request proposal is malformed.");
+    throw new Error(invalidDraftProposalMessage);
   }
 }
 
@@ -1594,19 +1667,21 @@ function assertFreshReadBack(
   }
   exactDigest(readBack, "Fresh repository provider read-back");
   assertExactRepositoryObservation(readBack.repository);
-  if (
+  const invalidIdentity =
     readBack.version !== GITHUB_PUBLICATION_VERSION ||
     readBack.idempotencyKey !== proposal.idempotencyKey ||
     readBack.repository.installationIdentityDigest !== proposal.installationIdentityDigest ||
-    readBack.repository.owner !== proposal.destinationOwner ||
+    readBack.repository.owner !== proposal.destinationOwner;
+  const invalidDestination = () =>
     readBack.repository.name !== proposal.destinationName ||
     readBack.repository.visibility !== "private" ||
     readBack.repository.defaultBranch !== proposal.defaultBranch ||
-    readBack.repository.headSha !== readBack.initialCommit.sha ||
+    readBack.repository.headSha !== readBack.initialCommit.sha;
+  const invalidHistory = () =>
     readBack.repository.headTree !== readBack.initialCommit.tree ||
     readBack.initialCommit.tree !== proposal.sourceTree ||
-    !releaseGateAbsent(readBack.repository)
-  ) {
+    !releaseGateAbsent(readBack.repository);
+  if (invalidIdentity || invalidDestination() || invalidHistory()) {
     throw new Error("Fresh repository provider read-back does not match the proposal.");
   }
 }
@@ -1632,23 +1707,31 @@ function assertDraftReadBack(
   }
   exactDigest(readBack, "Draft publication provider read-back");
   assertExactRepositoryObservation(readBack.repository);
+  const invalidDraftRepositoryMessage =
+    "Draft publication repository identity or release-gate state changed. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again.";
   if (
     readBack.version !== GITHUB_PUBLICATION_VERSION ||
     readBack.idempotencyKey !== proposal.idempotencyKey ||
     readBack.repository.repositoryId !== proposal.repositoryId ||
-    readBack.repository.owner !== proposal.owner ||
+    readBack.repository.owner !== proposal.owner
+  ) {
+    throw new Error(invalidDraftRepositoryMessage);
+  }
+  if (
     readBack.repository.name !== proposal.name ||
     readBack.repository.visibility !== proposal.visibility ||
     readBack.repository.defaultBranch !== proposal.baseBranch ||
-    readBack.repository.installationIdentityDigest !== proposal.installationIdentityDigest ||
+    readBack.repository.installationIdentityDigest !== proposal.installationIdentityDigest
+  ) {
+    throw new Error(invalidDraftRepositoryMessage);
+  }
+  if (
     readBack.repository.releaseGate.name !== proposal.releaseGate.name ||
     readBack.repository.releaseGate.configured !== proposal.releaseGate.configured ||
     JSON.stringify(canonicalPathsOrEmpty(readBack.changedPathsSinceBase)) !==
       JSON.stringify(readBack.changedPathsSinceBase)
   ) {
-    throw new Error(
-      "Draft publication repository identity or release-gate state changed. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again.",
-    );
+    throw new Error(invalidDraftRepositoryMessage);
   }
   const conflictingPath = canonicalPathsOrEmpty(readBack.changedPathsSinceBase).find((path) =>
     proposal.approvedPaths.some((approved) => pathsOverlap(path, approved)),
@@ -1741,7 +1824,7 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
     extra = [];
   } else if (value.status === "failed") {
     extra = ["failureCode", "providerCode", "recoveryRequired"];
-  } else if (value.kind === "fresh-repository") {
+  } else if (value.kind === FRESH_REPOSITORY_KIND) {
     extra = [
       "installationIdentityDigest",
       "repository",
@@ -1781,15 +1864,19 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
     value.version !== GITHUB_PUBLICATION_VERSION ||
     !isDigest(value.proposalDigest) ||
     !isDigest(value.idempotencyKey) ||
-    typeof value.approvedByCallId !== "string" ||
+    typeof value.approvedByCallId !== "string"
+  ) {
+    throw new Error("GitHub mutation receipt bindings are invalid.");
+  }
+  if (
     value.approvedByCallId.length === 0 ||
-    (value.kind !== "fresh-repository" && value.kind !== "draft-pull-request")
+    (value.kind !== FRESH_REPOSITORY_KIND && value.kind !== DRAFT_PULL_REQUEST_KIND)
   ) {
     throw new Error("GitHub mutation receipt bindings are invalid.");
   }
   if (value.status === "failed") {
     if (
-      (value.failureCode !== "provider-rejected" && value.failureCode !== "postcondition-failed") ||
+      (value.failureCode !== PROVIDER_REJECTED && value.failureCode !== "postcondition-failed") ||
       !/^[a-z][a-z0-9-]{0,63}$/u.test(value.providerCode) ||
       value.recoveryRequired !== true
     ) {
@@ -1799,18 +1886,20 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
     if (
       !isDigest(value.providerReadBackDigest) ||
       !isDigest(value.installationIdentityDigest) ||
-      (value.kind === "fresh-repository"
+      (value.kind === FRESH_REPOSITORY_KIND
         ? value.releaseGateAbsent !== true
         : value.releaseGateUnchanged !== true)
     ) {
       throw new Error("GitHub success receipt read-back binding is invalid.");
     }
-    if (value.kind === "fresh-repository") {
+    if (value.kind === FRESH_REPOSITORY_KIND) {
       assertExactRepositoryObservation(value.repository);
-      if (
+      const invalidFreshHistory =
         value.installationIdentityDigest !== value.repository.installationIdentityDigest ||
         value.parentCount !== 0 ||
-        value.freshHistory !== true ||
+        value.freshHistory !== true;
+      if (
+        invalidFreshHistory ||
         value.initialCommitSha !== value.repository.headSha ||
         value.initialCommitTree !== value.repository.headTree
       ) {
@@ -1909,7 +1998,7 @@ function freshSuccess(input: {
     initialCommitSha: input.readBack.initialCommit.sha,
     initialCommitTree: input.readBack.initialCommit.tree,
     installationIdentityDigest: input.proposal.installationIdentityDigest,
-    kind: "fresh-repository" as const,
+    kind: FRESH_REPOSITORY_KIND,
     parentCount: 0 as const,
     proposalDigest: input.proposal.digest,
     providerReadBackDigest: input.readBack.digest,
@@ -1947,7 +2036,7 @@ function draftSuccess(input: {
     draft: true as const,
     idempotencyKey: input.proposal.idempotencyKey,
     installationIdentityDigest: input.proposal.installationIdentityDigest,
-    kind: "draft-pull-request" as const,
+    kind: DRAFT_PULL_REQUEST_KIND,
     normalizedChangedPaths: input.readBack.branch.normalizedChangedPaths,
     proposalDigest: input.proposal.digest,
     providerReadBackDigest: input.readBack.digest,
@@ -1972,7 +2061,7 @@ export async function reconcilePendingDraftPullRequest(input: {
   assertExactDraftPullRequestProposal(input.proposal);
   assertCanonicalGitHubMutationReceipt(input.pending);
   if (
-    input.pending.kind !== "draft-pull-request" ||
+    input.pending.kind !== DRAFT_PULL_REQUEST_KIND ||
     input.pending.proposalDigest !== input.proposal.digest ||
     input.pending.idempotencyKey !== input.proposal.idempotencyKey
   ) {
@@ -1999,7 +2088,7 @@ function rejectionReceipt(
   pending: GitHubMutationPendingReceipt,
   code: string,
 ): GitHubMutationFailureReceipt {
-  const safeCode = /^[a-z][a-z0-9-]{0,63}$/u.test(code) ? code : "provider-rejected";
+  const safeCode = /^[a-z][a-z0-9-]{0,63}$/u.test(code) ? code : PROVIDER_REJECTED;
   return receipt({
     approvedByCallId: pending.approvedByCallId,
     failureCode: "provider-rejected" as const,
@@ -2019,11 +2108,12 @@ async function reclaimRejectedDraftPending(
   failed: GitHubMutationFailureReceipt,
   approvedByCallId: string,
 ): Promise<GitHubMutationPendingReceipt> {
+  const nonrecoverableFailure =
+    failed.kind !== DRAFT_PULL_REQUEST_KIND || failed.failureCode !== PROVIDER_REJECTED;
   if (
-    failed.kind !== "draft-pull-request" ||
-    failed.failureCode !== "provider-rejected" ||
+    nonrecoverableFailure ||
     (failed.providerCode !== "invalid-publication-material" &&
-      failed.providerCode !== "reviewed-path-changed") ||
+      failed.providerCode !== REVIEWED_PATH_CHANGED) ||
     approvedByCallId === failed.approvedByCallId
   ) {
     throw new Error("The rejected draft publication requires a new approved recovery call.");
@@ -2031,7 +2121,7 @@ async function reclaimRejectedDraftPending(
   const pending = receipt({
     approvedByCallId,
     idempotencyKey: failed.idempotencyKey,
-    kind: "draft-pull-request" as const,
+    kind: DRAFT_PULL_REQUEST_KIND,
     proposalDigest: failed.proposalDigest,
     status: "pending" as const,
     version: GITHUB_PUBLICATION_VERSION,
@@ -2055,7 +2145,7 @@ const publicationRejectionMessage = (
     }
     return `GitHub could not complete ${acknowledgement.operation} for ${acknowledgement.path} (${acknowledgement.bytes} bytes)${providerStatus}. Check the repository's current GitHub limits and retry after correcting the file or provider issue; then validate and approve the updated publication.`;
   }
-  if (acknowledgement.code === "reviewed-path-changed" && "path" in acknowledgement) {
+  if (acknowledgement.code === REVIEWED_PATH_CHANGED && "path" in acknowledgement) {
     return `Reviewed content changed at ${acknowledgement.path}. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again.`;
   }
   return `GitHub rejected draft pull-request publication with ${acknowledgement.code}; sanitized receipt recorded.`;
@@ -2072,9 +2162,9 @@ export async function createApprovedFreshRepository(input: {
 }): Promise<FreshRepositorySuccessReceipt> {
   assertExactFreshRepositoryProposal(input.proposal);
   reviewForProposal(input.proposal, input.review);
-  const prior = await readJournal(input.store, input.proposal, "fresh-repository");
+  const prior = await readJournal(input.store, input.proposal, FRESH_REPOSITORY_KIND);
   if (prior?.status === "succeeded") {
-    if (prior.kind !== "fresh-repository") {
+    if (prior.kind !== FRESH_REPOSITORY_KIND) {
       throw new Error("Unreachable receipt kind.");
     }
     return prior;
@@ -2087,7 +2177,7 @@ export async function createApprovedFreshRepository(input: {
     (await claimPending({
       approvedByCallId: input.approvedByCallId,
       idempotencyKey: input.proposal.idempotencyKey,
-      kind: "fresh-repository",
+      kind: FRESH_REPOSITORY_KIND,
       proposalDigest: input.proposal.digest,
       store: input.store,
     }));
@@ -2110,14 +2200,14 @@ export async function createApprovedFreshRepository(input: {
     await storeTerminal(input.store, pending, success);
     return success;
   }
-  const installation = await input.adapter.inspectInstallation("create-fresh-repository");
+  const installation = await input.adapter.inspectInstallation(CREATE_FRESH_REPOSITORY);
   assertExactInstallationIdentity(installation);
   const destination = await input.adapter.inspectDestination({
     name: input.proposal.destinationName,
     owner: input.proposal.destinationOwner,
   });
   if (
-    installation.operation !== "create-fresh-repository" ||
+    installation.operation !== CREATE_FRESH_REPOSITORY ||
     installation.digest !== input.proposal.installationIdentityDigest ||
     destination !== "absent"
   ) {
@@ -2137,7 +2227,7 @@ export async function createApprovedFreshRepository(input: {
     throw new GitHubOutcomeUnknownError();
   }
   if (acknowledgement.status === "rejected") {
-    const failure = rejectionReceipt("fresh-repository", pending, acknowledgement.code);
+    const failure = rejectionReceipt(FRESH_REPOSITORY_KIND, pending, acknowledgement.code);
     await storeTerminal(input.store, pending, failure);
     throw new Error("GitHub rejected repository creation; sanitized receipt recorded.");
   }
@@ -2179,18 +2269,18 @@ export async function publishApprovedDraftPullRequest(input: {
 }): Promise<DraftPullRequestSuccessReceipt> {
   assertExactDraftPullRequestProposal(input.proposal);
   reviewForProposal(input.proposal, input.review);
-  const prior = await readJournal(input.store, input.proposal, "draft-pull-request");
+  const prior = await readJournal(input.store, input.proposal, DRAFT_PULL_REQUEST_KIND);
   if (prior?.status === "succeeded") {
-    if (prior.kind !== "draft-pull-request") {
+    if (prior.kind !== DRAFT_PULL_REQUEST_KIND) {
       throw new Error("Unreachable receipt kind.");
     }
     return prior;
   }
   if (
     prior?.status === "failed" &&
-    (prior.failureCode !== "provider-rejected" ||
+    (prior.failureCode !== PROVIDER_REJECTED ||
       (prior.providerCode !== "invalid-publication-material" &&
-        prior.providerCode !== "reviewed-path-changed"))
+        prior.providerCode !== REVIEWED_PATH_CHANGED))
   ) {
     throw new Error(
       `The failed GitHub mutation (${prior.providerCode}) requires explicit recovery. Inspect its provider result before another publication attempt.`,
@@ -2222,7 +2312,7 @@ export async function publishApprovedDraftPullRequest(input: {
         (await claimPending({
           approvedByCallId: input.approvedByCallId,
           idempotencyKey: input.proposal.idempotencyKey,
-          kind: "draft-pull-request",
+          kind: DRAFT_PULL_REQUEST_KIND,
           proposalDigest: input.proposal.digest,
           store: input.store,
         })));
@@ -2250,10 +2340,10 @@ export async function publishApprovedDraftPullRequest(input: {
   if (observed.branch.status === "present") {
     throw new Error("A branch collision exists without the approved draft pull request.");
   }
-  const installation = await input.adapter.inspectInstallation("publish-draft-pull-request");
+  const installation = await input.adapter.inspectInstallation(PUBLISH_DRAFT_PULL_REQUEST);
   assertExactInstallationIdentity(installation);
   if (
-    installation.operation !== "publish-draft-pull-request" ||
+    installation.operation !== PUBLISH_DRAFT_PULL_REQUEST ||
     installation.digest !== input.proposal.installationIdentityDigest ||
     !installation.selectedRepositoryIds.includes(input.proposal.repositoryId)
   ) {
@@ -2271,7 +2361,7 @@ export async function publishApprovedDraftPullRequest(input: {
     throw new GitHubOutcomeUnknownError();
   }
   if (acknowledgement.status === "rejected") {
-    const failure = rejectionReceipt("draft-pull-request", pending, acknowledgement.code);
+    const failure = rejectionReceipt(DRAFT_PULL_REQUEST_KIND, pending, acknowledgement.code);
     await storeTerminal(input.store, pending, failure);
     throw new Error(publicationRejectionMessage(acknowledgement));
   }

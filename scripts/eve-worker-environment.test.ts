@@ -101,7 +101,7 @@ describe("closed Eve worker environment", () => {
       trustedSource({ EVE_DEVELOPMENT_SANDBOX_RUN_ID: undefined }),
       appRoot,
     );
-    const environment: Record<string, string | undefined> = {
+    const environment = {
       EVE_DEVELOPMENT_SANDBOX_RUN_ID: "hostile",
     };
     installEveWorkerEnvelope(environment, envelope, appRoot);
@@ -116,7 +116,7 @@ describe("closed Eve worker environment", () => {
       }),
       appRoot,
     );
-    const environment: Record<string, string | undefined> = {
+    const environment = {
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "hostile",
       WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "hostile",
     };

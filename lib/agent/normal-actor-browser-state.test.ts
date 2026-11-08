@@ -70,9 +70,9 @@ describe("private normal actor browser state", () => {
     const captured = capturedActors();
     const prepared = normalActorBrowserFiles(captured, "/private-state", captured.origin);
     expect(prepared.files).toContainEqual({
-      path: "/private-state/normal-actors/member.storage.json",
-      mode: 0o600,
       content: captured.files["member.storage.json"],
+      mode: 0o600,
+      path: "/private-state/normal-actors/member.storage.json",
     });
     const manifest = manifestSchema.parse(
       JSON.parse(

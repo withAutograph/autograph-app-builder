@@ -33,15 +33,13 @@ const fixture = () => {
   const selection = {
     appId: "reports",
     branch: "review",
+    environment: "preview" as const,
     projectId: "project-reports",
     sessionId: "session-reports",
-    environment: "preview" as const,
   };
   const plan = hostedOperatorPlanSchema.parse({
-    version: 1,
+    access: [],
     action: "prepare",
-    selection,
-    contextId: "context",
     appDatabase: {
       database: "reports",
       migratorRole: "reports_owner",
@@ -54,24 +52,26 @@ const fixture = () => {
       resourceId: "identity",
       runtimeRole: "identity_reader",
     },
-    access: [],
+    contextId: "context",
     cost: { class: "shared-recovery-group", description: "fixture", owner: "fixture" },
     effects: [
-      { id: "resources", kind: "resources", description: "Resources" },
-      { id: "install", kind: "install", description: "Install" },
-      { id: "access", kind: "access", description: "Access" },
-      { id: "bindings", kind: "bindings", description: "Bind" },
+      { description: "Resources", id: "resources", kind: "resources" },
+      { description: "Install", id: "install", kind: "install" },
+      { description: "Access", id: "access", kind: "access" },
+      { description: "Bind", id: "bindings", kind: "bindings" },
     ],
     installer: { reference: "installer", sha256: "a".repeat(64) },
     neon: {
-      projectId: "neon",
       branchId: "branch",
-      endpoint: "ep-fixture.neon.tech",
       connectionRef: "connection",
+      endpoint: "ep-fixture.neon.tech",
+      projectId: "neon",
       source: "synthetic-only",
     },
-    release: { id: "release", artifactRef: "artifact", sha256: "b".repeat(64) },
+    release: { artifactRef: "artifact", id: "release", sha256: "b".repeat(64) },
     retention: { expiresAt: "2027-01-01T00:00:00Z", policy: "retain" },
+    selection,
+    version: 1,
   });
   const approved = {
     appId: selection.appId,
@@ -103,33 +103,33 @@ const fixture = () => {
     principal,
   });
   const receipt = privateHostedApprovalReceiptSchema.parse({
-    format: "autograph-hosted-approval-v1",
     callId: "human-call",
-    requestId: "human-request",
+    format: "autograph-hosted-approval-v1",
     outcome: "approved",
+    requestId: "human-request",
     responderPrincipalId: principal.ownerUserId,
     sequence: 1,
-    toolName: "prepare-app-hosted-runtime",
     toolInput: approved,
+    toolName: "prepare-app-hosted-runtime",
     turnId: "turn",
   });
   const session = durableHostedSessionRecordSchema.parse({
-    version: 2,
-    sessionId: selection.sessionId,
-    adapterSessionId: "adapter",
     adapterGeneration: 1,
-    originAdapterSessionId: "adapter",
+    adapterSessionId: "adapter",
     cancellationRevision: 3,
-    resumedCancellationRevision: 3,
-    principal,
     createdAtEpochMs: 1,
     lastProgressAtEpochMs: 1,
-    updatedAtEpochMs: 1,
+    originAdapterSessionId: "adapter",
+    principal,
+    privateApprovalReceipts: [receipt],
     resumability: "live",
+    resumedCancellationRevision: 3,
+    sessionId: selection.sessionId,
     stage: "planning",
     status: "working",
     title: "Reports",
-    privateApprovalReceipts: [receipt],
+    updatedAtEpochMs: 1,
+    version: 2,
   });
   const abort = new AbortController();
   const context: WorkflowToolContext = {
@@ -172,7 +172,7 @@ const fixture = () => {
     endpoint: "https://operator.example",
     ownerContext,
     sessionId: selection.sessionId,
-    token: () => Promise.resolve("synthetic-private"),
+    token: vi.fn<() => Promise<string>>().mockResolvedValue("synthetic-private"),
     fetch: (_url, init) => {
       const body = operatorRequestSchema.parse(JSON.parse(z.string().parse(init?.body)));
       calls.push(body.action);
@@ -187,8 +187,8 @@ const fixture = () => {
     digest: operatorPlanDigest,
     isOperatorError: (error: unknown): error is HostedOperatorError =>
       error instanceof HostedOperatorError,
-    sameSelection: sameOperatorSelection,
     isTransportUnknown: isHostedOperatorTransportUnknown,
+    sameSelection: sameOperatorSelection,
   };
   const retain = vi.fn<(selection: PreparedRuntimeSelection) => void>();
   const prepare = vi.fn(
@@ -196,8 +196,6 @@ const fixture = () => {
       await prepareHostedRuntimeWithOperator(approved, context, operator, retain, contract),
   );
   const read = createHostedRuntimeExecutionObserver({
-    now: () => 1000,
-    isTransportUnknown: isHostedOperatorTransportUnknown,
     assertAuthority: async (_input, ctx, expected) => {
       await assertHostedRuntimeExecutionObservationAuthority({
         approved,
@@ -207,13 +205,15 @@ const fixture = () => {
         store,
       });
     },
+    isTransportUnknown: isHostedOperatorTransportUnknown,
+    now: () => 1000,
+    prepareObserved: async (_input, ctx, result) =>
+      await prepareHostedRuntimeWithOperator(approved, ctx, operator, retain, contract, result),
     readStatus: async () =>
       await operator.request(
         { action: "status", operationRef: approved.operationRef, selection },
         abort.signal,
       ),
-    prepareObserved: async (_input, ctx, result) =>
-      await prepareHostedRuntimeWithOperator(approved, ctx, operator, retain, contract, result),
   });
   return {
     approved,
@@ -242,7 +242,6 @@ describe("automatic observation of one approved execution", () => {
     const readReceivers: boolean[] = [];
     const sleepReceivers: boolean[] = [];
     const ports: HostedRuntimeExecutionWaitPorts = {
-      snapshot: f.snapshot,
       read: function read(this: undefined, input, ctx, snapshot, delayMs) {
         readReceivers.push(this === undefined);
         expect(snapshot).toBe(f.snapshot);
@@ -257,6 +256,7 @@ describe("automatic observation of one approved execution", () => {
         });
         return Promise.resolve();
       },
+      snapshot: f.snapshot,
     };
     const prepared = await f.prepare();
     const generator = continueHostedRuntimeExecutionObservation(
@@ -282,11 +282,11 @@ describe("automatic observation of one approved execution", () => {
       status: "pending",
       execution: { state: "settled", outcome: { status: "planned" } },
     });
-    const sleepUntil = vi.fn<(deadline: Date) => Promise<void>>(() => Promise.resolve());
+    const sleepUntil = vi.fn<(deadline: Date) => Promise<void>>().mockResolvedValue();
     const generator = continueHostedRuntimeExecutionObservation(f.approved, f.context, prepared, {
-      snapshot: f.snapshot,
       read: f.read,
       sleepUntil,
+      snapshot: f.snapshot,
     });
     expect(await generator.next()).toMatchObject({ done: false, value: { status: "pending" } });
     expect(await generator.next()).toMatchObject({
@@ -294,20 +294,20 @@ describe("automatic observation of one approved execution", () => {
       value: {
         identityInput: null,
         result: {
-          status: "planned",
-          operationRef: f.approved.operationRef,
-          planDigest: f.approved.planDigest,
           nextAction: {
-            tool: "plan-app-hosted-runtime",
             approval: "normal-plan-approval",
             input: {
               appId: f.approved.appId,
               branch: f.approved.branch,
-              projectId: f.approved.projectId,
               environment: f.approved.environment,
               operation: "prepare",
+              projectId: f.approved.projectId,
             },
+            tool: "plan-app-hosted-runtime",
           },
+          operationRef: f.approved.operationRef,
+          planDigest: f.approved.planDigest,
+          status: "planned",
         },
       },
     });
@@ -326,22 +326,29 @@ describe("automatic observation of one approved execution", () => {
         },
         register: () => Promise.reject(new Error("No identity")),
         acknowledge: () => Promise.reject(new Error("No identity")),
-        sleepUntil: () => Promise.resolve(),
+        sleepUntil: async () => {},
         execution: {
           snapshot: f.snapshot,
           read: f.read,
           sleepUntil: () => {
             sleeps += 1;
             const status = outcome === "prepared" ? "prepared" : "blocked";
-            f.setObserved({
-              ...f.observed,
-              status,
-              ...(outcome === "prepared" ? {} : { code: outcome }),
-              execution: {
-                state: "settled",
-                outcome: { status, ...(outcome === "prepared" ? {} : { code: outcome }) },
-              },
-            });
+            const settledObservation = (): OperatorPublicResult => {
+              const observed: OperatorPublicResult = { ...f.observed, status };
+              if (outcome !== "prepared") {
+                observed.code = outcome;
+              }
+              const settled: Extract<
+                NonNullable<OperatorPublicResult["execution"]>,
+                { state: "settled" }
+              >["outcome"] = { status };
+              if (outcome !== "prepared") {
+                settled.code = outcome;
+              }
+              observed.execution = { state: "settled", outcome: settled };
+              return observed;
+            };
+            f.setObserved(settledObservation());
             return Promise.resolve();
           },
         },
@@ -401,8 +408,6 @@ describe("automatic observation of one approved execution", () => {
     const f = fixture();
     const publish = vi.fn<() => void>();
     const read = createHostedRuntimeExecutionObserver({
-      now: () => 1000,
-      isTransportUnknown: isHostedOperatorTransportUnknown,
       assertAuthority: async (_input, ctx, expected) => {
         await assertHostedRuntimeExecutionObservationAuthority({
           approved: f.approved,
@@ -412,12 +417,9 @@ describe("automatic observation of one approved execution", () => {
           store: f.store,
         });
       },
-      readStatus: () =>
-        Promise.resolve({
-          ...f.observed,
-          status: "prepared",
-          execution: { state: "settled", outcome: { status: "prepared" } },
-        }),
+      commitObserved: publish,
+      isTransportUnknown: isHostedOperatorTransportUnknown,
+      now: () => 1000,
       prepareObserved: () => {
         f.session.cancellationRevision = 4;
         return Promise.resolve({
@@ -425,7 +427,12 @@ describe("automatic observation of one approved execution", () => {
           result: { ...f.observed, status: "prepared" },
         });
       },
-      commitObserved: publish,
+      readStatus: () =>
+        Promise.resolve({
+          ...f.observed,
+          status: "prepared",
+          execution: { state: "settled", outcome: { status: "prepared" } },
+        }),
     });
     await expect(read(f.approved, f.context, f.snapshot, 1000)).rejects.toMatchObject({
       code: "authorization_required",
@@ -462,8 +469,8 @@ describe("automatic observation of one approved execution", () => {
         ...f.observed,
         status: "prepared",
         execution: {
+          outcome: { code: "reconciliation_required", status: "blocked" },
           state: "settled",
-          outcome: { status: "blocked", code: "reconciliation_required" },
         },
       }),
     ).toThrow();
@@ -472,8 +479,6 @@ describe("automatic observation of one approved execution", () => {
     const f = fixture();
     let reads = 0;
     const read = createHostedRuntimeExecutionObserver({
-      now: () => 1000,
-      isTransportUnknown: isHostedOperatorTransportUnknown,
       assertAuthority: async (_input, ctx, snapshot) => {
         await assertHostedRuntimeExecutionObservationAuthority({
           approved: f.approved,
@@ -483,17 +488,19 @@ describe("automatic observation of one approved execution", () => {
           store: f.store,
         });
       },
+      isTransportUnknown: isHostedOperatorTransportUnknown,
+      now: () => 1000,
+      prepareObserved: () => Promise.reject(new Error("No terminal evidence")),
       readStatus: () => {
         reads += 1;
         return Promise.reject(
           new HostedOperatorTransportUnknown(new TypeError("lost STATUS transport")),
         );
       },
-      prepareObserved: () => Promise.reject(new Error("No terminal evidence")),
     });
     expect(await read(f.approved, f.context, f.snapshot, 1000)).toEqual({
-      status: "waiting",
       checkAfter: new Date(2000).toISOString(),
+      status: "waiting",
     });
     expect(reads).toBe(1);
     expect(f.calls).toEqual([]);

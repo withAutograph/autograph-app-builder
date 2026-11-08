@@ -43,7 +43,11 @@ export function originalCssSource(
     map.version !== 3 ||
     generatedLine < 0 ||
     generatedColumn < 0 ||
-    !Array.isArray(map.sources) ||
+    !Array.isArray(map.sources)
+  ) {
+    return;
+  }
+  if (
     !map.sources.every((source) => typeof source === "string") ||
     (map.sourceRoot !== undefined && typeof map.sourceRoot !== "string")
   ) {

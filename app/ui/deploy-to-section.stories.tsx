@@ -8,9 +8,9 @@ const meta = {
   args: {
     available: true,
     connected: true,
-    onConnect: fn(),
-    onProviderChange: fn(),
-    onTeamChange: fn(),
+    onConnect: fn<NonNullable<Parameters<typeof DeployToSection>[0]["onConnect"]>>(),
+    onProviderChange: fn<NonNullable<Parameters<typeof DeployToSection>[0]["onProviderChange"]>>(),
+    onTeamChange: fn<NonNullable<Parameters<typeof DeployToSection>[0]["onTeamChange"]>>(),
     selected: null,
     team: "vercel-autograph",
     teamOptions: storyTeamOptions,

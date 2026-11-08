@@ -96,7 +96,7 @@ it("recovers a missing published runtime and requires successor approval before 
   });
   expect(root).toBe(recovered);
   expect(recover).toHaveBeenCalledOnce();
-  expect(privateWork).toEqual({ root: stale, note: "retain private edits" });
+  expect(privateWork).toEqual({ note: "retain private edits", root: stale });
   expect(await readFile(path.join(stale, "private.txt"), "utf-8")).toBe("retain private edits");
   const browserSelection = { testName: "@acceptance", workers: 1, retries: 0, maxFailures: 1 };
   const successor = await f.operations.plan(

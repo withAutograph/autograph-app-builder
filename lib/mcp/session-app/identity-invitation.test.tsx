@@ -105,12 +105,12 @@ describe("passive sign-in invitation", () => {
   const render = (expiresAt: string) =>
     renderToStaticMarkup(
       createElement(SessionAppView, {
-        result: result([]),
-        identityInvitations: [{ ...invitation, expiresAt }],
         canCallTools: true,
         canOpenLinks: true,
+        identityInvitations: [{ ...invitation, expiresAt }],
         onOpenLink: async () => {},
         onRespond: async () => {},
+        result: result([]),
       }),
     );
   it("renders an ordinary sign-in hyperlink while working without an answer control", () => {

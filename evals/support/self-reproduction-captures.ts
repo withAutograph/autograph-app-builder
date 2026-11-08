@@ -2,16 +2,31 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
-import type { Browser, BrowserContext, Page } from "playwright";
+import type { Browser, Page } from "playwright";
 import { captureStates, desktopViewports, sides } from "./self-reproduction-parity";
 import type { Observation } from "./self-reproduction-parity";
 
 export type CaptureState = (typeof captureStates)[number];
-export interface CaptureAdapter {
+export interface CapturePage {
+  screenshot: (options: { fullPage: boolean; path: string }) => Promise<Buffer> | Promise<void>;
+}
+
+interface CaptureContext<TPage extends CapturePage> {
+  close: () => Promise<void>;
+  newPage: () => Promise<TPage>;
+}
+
+interface CaptureBrowser<TPage extends CapturePage> {
+  newContext: (options: {
+    viewport: (typeof desktopViewports)[number];
+  }) => Promise<CaptureContext<TPage>>;
+}
+
+export interface CaptureAdapter<TPage extends CapturePage = Page> {
   // Seed only isolated test-owned records. Missing generated controls must be
   // returned as missing-functionality, never hidden by fixture HTML or mocks.
   prepare: (
-    page: Page,
+    page: TPage,
     state: CaptureState,
   ) => Promise<
     | { ready: true }
@@ -25,7 +40,7 @@ export interface CaptureAdapter {
   // Retain the transient state using capture() before releasing its latch or
   // clicking recovery. Only assertion observations belong in the return value.
   exercise: (
-    page: Page,
+    page: TPage,
     state: CaptureState,
     capture: () => Promise<void>,
   ) => Promise<
@@ -87,16 +102,16 @@ export async function writePairedCaptureManifest(
             (item) => item.requirementId === requirementId,
           );
           const prefix = `parity/captures/${viewport.name}/${state}/${side}`;
-          return [
-            side,
-            {
-              disposition: observation?.disposition ?? "not-run",
-              ...(observation?.artifacts.includes(`${prefix}.png`) ? { png: `${prefix}.png` } : {}),
-              ...(observation?.artifacts.includes(`${prefix}.json`)
-                ? { receipt: `${prefix}.json` }
-                : {}),
-            },
-          ];
+          const capture: PairedCaptureManifestRow["reference"] = {
+            disposition: observation?.disposition ?? "not-run",
+          };
+          if (observation?.artifacts.includes(`${prefix}.png`) === true) {
+            capture.png = `${prefix}.png`;
+          }
+          if (observation?.artifacts.includes(`${prefix}.json`) === true) {
+            capture.receipt = `${prefix}.json`;
+          }
+          return [side, capture];
         }),
       ) as Pick<PairedCaptureManifestRow, "reference" | "candidate">;
       return { requirementId, state, viewport, ...pair };
@@ -115,10 +130,10 @@ export async function writePairedCaptureManifest(
 
 /** Uses an already available browser; never starts a server or provider job. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function captureParity(input: {
-  browser: Browser;
+export async function captureParity<TPage extends CapturePage>(input: {
+  browser: CaptureBrowser<TPage>;
   outputRoot: string;
-  adapters: Partial<Record<(typeof sides)[number], CaptureAdapter>>;
+  adapters: Partial<Record<(typeof sides)[number], CaptureAdapter<TPage>>>;
 }): Promise<Record<(typeof sides)[number], Observation[]>> {
   const output: Record<(typeof sides)[number], Observation[]> = { candidate: [], reference: [] };
   for (const viewport of desktopViewports) {
@@ -139,7 +154,7 @@ export async function captureParity(input: {
         }
         // New cookies/storage for every case and side. Durable fixtures live in
         // each app's own store; adapters authenticate via that app's test harness.
-        let context: BrowserContext | undefined;
+        let context: CaptureContext<TPage> | undefined;
         let interactionStarted = false;
         const prefix = `parity/captures/${viewport.name}/${state}/${side}`;
         const png = `${prefix}.png`;

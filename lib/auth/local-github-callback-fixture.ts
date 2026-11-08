@@ -26,7 +26,7 @@ export type LocalGitHubCallbackFixture = keyof typeof fixtures;
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function cookieValue(request: Request, name: string) {
   const cookie = request.headers.get("cookie");
-  if (!cookie) {
+  if (cookie === null || cookie === "") {
     return;
   }
 
@@ -53,7 +53,7 @@ export function applyLocalGitHubCallbackFixture(request: Request, environment: N
   }
 
   const fixture = cookieValue(request, localGitHubCallbackFixtureCookie);
-  if (!fixture || !(fixture in fixtures)) {
+  if (fixture === undefined || fixture === "" || !(fixture in fixtures)) {
     return { applied: false, request };
   }
 

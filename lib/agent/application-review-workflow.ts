@@ -181,6 +181,6 @@ export const continueApplicationReviewWorkflow = async (
       // oxlint-disable-next-line eslint/no-await-in-loop -- Save only the terminal result after the preceding round completes.
       return await steps.save(reference, result.assessment, ctx);
     }
-    continuation = result.continuation;
+    ({ continuation } = result);
   }
 };

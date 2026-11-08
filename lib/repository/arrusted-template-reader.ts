@@ -37,9 +37,10 @@ function privateTemplateRepository(value: unknown) {
   if (!record(value)) {
     return false;
   }
+  if (typeof value.id !== "number" || !Number.isSafeInteger(value.id)) {
+    return false;
+  }
   return (
-    typeof value.id === "number" &&
-    Number.isSafeInteger(value.id) &&
     value.id === ARRUSTED_TEMPLATE_REPOSITORY_ID &&
     value.full_name === ARRUSTED_TEMPLATE_FULL_NAME &&
     value.private === true
@@ -147,9 +148,17 @@ export function createArrustedTemplateReader(input: {
         !record(authentication) ||
         authentication.type !== "token" ||
         parsedToken === undefined ||
-        !parsedToken.success ||
-        (authentication.repositorySelection !== "all" &&
-          authentication.repositorySelection !== "selected") ||
+        !parsedToken.success
+      ) {
+        unavailable("token_shape");
+      }
+      if (
+        authentication.repositorySelection !== "all" &&
+        authentication.repositorySelection !== "selected"
+      ) {
+        unavailable("token_shape");
+      }
+      if (
         !exactTemplateRepositoryIds(authentication.repositoryIds) ||
         !readOnlyReaderPermissions(authentication.permissions)
       ) {
@@ -174,9 +183,11 @@ export function createArrustedTemplateReader(input: {
         !record(data) ||
         data.total_count !== 1 ||
         !Array.isArray(data.repositories) ||
-        data.repositories.length !== 1 ||
-        !privateTemplateRepository(data.repositories[0])
+        data.repositories.length !== 1
       ) {
+        unavailable("repository_shape");
+      }
+      if (!privateTemplateRepository(data.repositories[0])) {
         unavailable("repository_shape");
       }
       return { token };

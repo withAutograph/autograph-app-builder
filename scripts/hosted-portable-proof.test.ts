@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import {
   hostedProofScenarioSchema,
@@ -95,21 +96,27 @@ const rpc = (id: unknown, result: unknown, status = 200) =>
     { headers: { "content-type": "application/json" }, status },
   );
 
+interface FixtureSession {
+  cursor: number;
+  events: unknown[];
+  inputRequests?: unknown[];
+  sessionId: string;
+  status: "working" | "input_required" | "waiting" | "completed" | "cancelled";
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function session(
   sessionId: string,
-  status: "working" | "input_required" | "waiting" | "completed" | "cancelled",
+  status: FixtureSession["status"],
   cursor: number,
   events: unknown[] = [],
   inputRequests?: unknown[],
 ) {
-  return {
-    cursor,
-    events,
-    sessionId,
-    status,
-    ...(inputRequests === undefined ? {} : { inputRequests }),
-  };
+  const result: FixtureSession = { cursor, events, sessionId, status };
+  if (inputRequests !== undefined) {
+    result.inputRequests = inputRequests;
+  }
+  return result;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -161,7 +168,9 @@ function hostedFixture(
       });
     }
     const secondary = authorization === `Bearer ${secondaryToken}`;
-    const body = JSON.parse(String(init?.body));
+    const body = z
+      .object({ id: z.unknown().optional(), method: z.string(), params: z.unknown().optional() })
+      .parse(JSON.parse(String(init?.body)));
     if (body.method === "initialize") {
       return rpc(body.id, {
         capabilities: {},
@@ -178,8 +187,9 @@ function hostedFixture(
     if (body.method !== "tools/call") {
       return new Response("", { status: 400 });
     }
-    const name = body.params.name as string;
-    const args = body.params.arguments as Record<string, unknown>;
+    const { name, arguments: args } = z
+      .object({ arguments: z.record(z.string(), z.unknown()), name: z.string() })
+      .parse(body.params);
     const tool = (structuredContent: unknown, isError = false) =>
       rpc(body.id, { isError, structuredContent });
     const denialFailure = (direction: "primary-reads-secondary" | "secondary-reads-primary") => {
@@ -204,7 +214,7 @@ function hostedFixture(
       let sessionId = "primary-session";
       if (secondary) {
         sessionId = "secondary-session";
-      } else if (options.discardedStartRetryDrift && primaryStartCount === 1) {
+      } else if (options.discardedStartRetryDrift === true && primaryStartCount === 1) {
         sessionId = "discarded-session-a";
       }
       return tool(session(sessionId, "working", 0));
@@ -214,14 +224,11 @@ function hostedFixture(
         return tool(session("primary-session", "working", 0), true);
       }
       for (const response of args.responses) {
-        if (
-          response === null ||
-          typeof response !== "object" ||
-          typeof (response as { requestId?: unknown }).requestId !== "string"
-        ) {
+        const parsedResponse = z.object({ requestId: z.string() }).safeParse(response);
+        if (!parsedResponse.success) {
           return tool(session("primary-session", "working", 0), true);
         }
-        approved.add((response as { requestId: string }).requestId);
+        approved.add(parsedResponse.data.requestId);
       }
       return tool(session("primary-session", "working", 0));
     }
@@ -272,7 +279,7 @@ function hostedFixture(
         const requests = pendingPhases.map((phase) => {
           const expected = receipt(phase);
           const described =
-            options.approvalDigestDrift && phase === "appspec"
+            options.approvalDigestDrift === true && phase === "appspec"
               ? { ...expected, subjectDigest: "d".repeat(64) }
               : expected;
           return {
@@ -307,7 +314,8 @@ function hostedFixture(
       const draft = {
         baseRef: target.baseRef,
         baseSha: target.baseSha,
-        changeSetDigest: options.draftDigestDrift ? "e".repeat(64) : target.changeSetDigest,
+        changeSetDigest:
+          options.draftDigestDrift === true ? "e".repeat(64) : target.changeSetDigest,
         draft: true,
         format: "autograph-draft-pr-publication-receipt-v1",
         headRef: target.headRef,
@@ -361,7 +369,7 @@ describe("hosted portable fresh-client proof", () => {
   });
 
   it("proves exact approvals, metadata, identities, publication, and five tools", async () => {
-    const result = await runHostedProof(proofInput(hostedFixture() as typeof fetch));
+    const result = await runHostedProof(proofInput(hostedFixture()));
     expect(result.discoveredTools).toEqual(TOOL_NAMES);
     expect(result).toMatchObject({
       cancellationProved: true,
@@ -386,24 +394,34 @@ describe("hosted portable fresh-client proof", () => {
 
   it("rejects retries that differ from the discarded start result", async () => {
     await expect(
-      runHostedProof(proofInput(hostedFixture({ discardedStartRetryDrift: true }) as typeof fetch)),
+      runHostedProof(proofInput(hostedFixture({ discardedStartRetryDrift: true }))),
     ).rejects.toThrow("Lost-response retry did not match the discarded hosted session result");
   });
 
   it("rejects a bearer or adapter session disclosure in public responses", async () => {
-    const leaking = hostedFixture() as typeof fetch;
+    const leaking = hostedFixture();
     const fetcher: typeof fetch = async (url, init) => {
       const response = await leaking(url, init);
-      const body = JSON.parse(String(init?.body ?? "{}")) as {
-        method?: string;
-        params?: { name?: string };
-      };
+      const body = z
+        .looseObject({
+          method: z.string().optional(),
+          params: z.looseObject({ name: z.string().optional() }).optional(),
+        })
+        .parse(JSON.parse(String(init?.body ?? "{}")));
       if (body.method !== "tools/call" || body.params?.name !== "autograph_get") {
         return response;
       }
-      const payload = JSON.parse(await response.text()) as {
-        result?: { structuredContent?: { events?: unknown[] } };
-      };
+      const payload = z
+        .looseObject({
+          result: z
+            .looseObject({
+              structuredContent: z
+                .looseObject({ events: z.array(z.unknown()).optional() })
+                .optional(),
+            })
+            .optional(),
+        })
+        .parse(JSON.parse(await response.text()));
       payload.result?.structuredContent?.events?.push({
         index: 99,
         text: `private ${primaryToken} wrun_PRIVATE`,
@@ -419,11 +437,11 @@ describe("hosted portable fresh-client proof", () => {
 
   it("rejects approval digest drift and missing approval authority", async () => {
     await expect(
-      runHostedProof(proofInput(hostedFixture({ approvalDigestDrift: true }) as typeof fetch)),
+      runHostedProof(proofInput(hostedFixture({ approvalDigestDrift: true }))),
     ).rejects.toThrow("exact digest-bound receipt");
     await expect(
       runHostedProof({
-        ...proofInput(hostedFixture() as typeof fetch),
+        ...proofInput(hostedFixture()),
         permitApprovals: false,
       }),
     ).rejects.toThrow("explicit --permit-approvals gate");
@@ -431,10 +449,10 @@ describe("hosted portable fresh-client proof", () => {
 
   it("rejects nonterminal iteration and invalid draft evidence", async () => {
     await expect(
-      runHostedProof(proofInput(hostedFixture({ iterationStatus: "waiting" }) as typeof fetch)),
+      runHostedProof(proofInput(hostedFixture({ iterationStatus: "waiting" }))),
     ).rejects.toThrow("successful completed state");
     await expect(
-      runHostedProof(proofInput(hostedFixture({ draftDigestDrift: true }) as typeof fetch)),
+      runHostedProof(proofInput(hostedFixture({ draftDigestDrift: true }))),
     ).rejects.toThrow("approved target and change set");
     expect(() => verifiedDraftPrEvidence("https://github.com/x/y/pull/1", scenario)).toThrow(
       "Exactly one structural draft-PR receipt",
@@ -447,7 +465,7 @@ describe("hosted portable fresh-client proof", () => {
         proofInput(
           hostedFixture({
             metadataResource: "https://wrong.autograph.dev/mcp",
-          }) as typeof fetch,
+          }),
         ),
       ),
     ).rejects.toThrow("metadata binding drifted");
@@ -479,7 +497,7 @@ describe("hosted portable fresh-client proof", () => {
 
   it("requires mutual server-backed workspace denial", async () => {
     await expect(
-      runHostedProof(proofInput(hostedFixture({ mutualDenial: false }) as typeof fetch)),
+      runHostedProof(proofInput(hostedFixture({ mutualDenial: false }))),
     ).rejects.toThrow("not mutually isolated");
   });
 
@@ -498,7 +516,7 @@ describe("hosted portable fresh-client proof", () => {
           proofInput(
             hostedFixture({
               denialFailure: { direction, kind },
-            }) as typeof fetch,
+            }),
           ),
         ),
       ).rejects.toThrow(expectedFailure);

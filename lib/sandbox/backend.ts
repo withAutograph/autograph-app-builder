@@ -1,6 +1,9 @@
 import { readHostedDeploymentEnvironment } from "../hosted/deployment-environment";
 import type { HostedDeploymentEnvironment } from "../hosted/deployment-environment";
 
+const VERCEL_PREVIEW = "vercel-preview";
+const VERCEL_PRODUCTION = "vercel-production";
+
 export type SandboxBackendKind =
   | "fixture-just-bash"
   | "local-just-bash"
@@ -44,7 +47,7 @@ export const sandboxBackendPlan = (input: {
     }
     return {
       blockers: [],
-      kind: deploymentEnvironment === "preview" ? "vercel-preview" : "vercel-production",
+      kind: deploymentEnvironment === "preview" ? VERCEL_PREVIEW : VERCEL_PRODUCTION,
     };
   }
   const developmentBinding = [
@@ -78,7 +81,7 @@ export const sandboxBackendPlan = (input: {
 export const isVercelSandboxBackend = (
   kind: SandboxBackendKind,
 ): kind is "vercel-development" | "vercel-preview" | "vercel-production" =>
-  kind === "vercel-development" || kind === "vercel-preview" || kind === "vercel-production";
+  kind === "vercel-development" || kind === VERCEL_PREVIEW || kind === VERCEL_PRODUCTION;
 
 export const selectSandboxDefinition = <Hosted, Local, NonExecuting>(
   kind: SandboxBackendKind,
@@ -103,4 +106,4 @@ export const selectSandboxDefinition = <Hosted, Local, NonExecuting>(
 export const isHostedVercelSandboxBackend = (
   kind: SandboxBackendKind,
 ): kind is "vercel-preview" | "vercel-production" =>
-  kind === "vercel-preview" || kind === "vercel-production";
+  kind === VERCEL_PREVIEW || kind === VERCEL_PRODUCTION;

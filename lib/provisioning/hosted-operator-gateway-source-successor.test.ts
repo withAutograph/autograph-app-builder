@@ -522,7 +522,7 @@ describe("Gateway source repair", () => {
       gatewayDelivery: { ...bootstrapPlan.gatewayDelivery, gitSha: "2".repeat(40) },
     });
     f.deps.plan = async () => repaired;
-    return { f, original, previous, repaired, execute };
+    return { execute, f, original, previous, repaired };
   };
 
   it("retains completed setup and original authority, then executes only delivery after normal approval", async () => {
@@ -535,22 +535,21 @@ describe("Gateway source repair", () => {
     expect(successor.planDigest).toBe(operatorPlanDigest(repaired));
     expect(f.row?.record).toMatchObject({
       approvedByCallId: "operator:unapproved-plan",
-      privateState: previous.record.privateState,
       operator: {
-        receipts: previous.record.operator?.receipts,
-        gatewayEnvironment: previous.record.operator?.gatewayEnvironment,
         gatewayDeliveryCandidates: [
           { deploymentId: "failed-native-gateway", operationRef: original.operationRef },
         ],
+        gatewayEnvironment: previous.record.operator?.gatewayEnvironment,
+        receipts: previous.record.operator?.receipts,
         retainedGatewayDeliveries: [
           {
             approvedByCallId: original.callId,
             operator: {
+              approvalId: "durable-human-decision",
               operationRef: original.operationRef,
+              pendingEffectId: "gateway-delivery",
               plan: previous.record.operator?.plan,
               planDigest: original.planDigest,
-              approvalId: "durable-human-decision",
-              pendingEffectId: "gateway-delivery",
             },
           },
         ],
@@ -672,7 +671,7 @@ describe("Gateway source repair", () => {
       f.row = row;
       expect(
         await f.client.request({ action: "plan", operation: "prepare", selection }),
-      ).toMatchObject({ status: "blocked", code: "operation_in_progress" });
+      ).toMatchObject({ code: "operation_in_progress", status: "blocked" });
       expect(f.row?.record.operator?.operationRef).toBe(original.operationRef);
       expect(f.row?.record.operator?.planDigest).toBe(original.planDigest);
     },
@@ -687,41 +686,41 @@ describe("shared host protection plan successor", () => {
     const originalPlan = hostedOperatorPlanSchema.parse({
       ...base,
       access: [],
-      stage: "auth-bootstrap",
       effects: [
         {
+          description: "Prepare Auth",
           id: "auth-resources",
           kind: "resources",
-          description: "Prepare Auth",
           resourceId: plan.authDatabase.resourceId,
         },
         {
+          description: "Prepare app",
           id: "app-resources",
           kind: "resources",
-          description: "Prepare app",
           resourceId: plan.appDatabase.resourceId,
         },
-        { id: "auth-schema", kind: "install", description: "Install Auth" },
+        { description: "Install Auth", id: "auth-schema", kind: "install" },
         {
+          description: "Bind Gateway and approved protection",
           id: "gateway-bindings",
           kind: "gateway-bindings",
-          description: "Bind Gateway and approved protection",
         },
-        { id: "gateway-delivery", kind: "gateway-delivery", description: "Deliver Gateway" },
+        { description: "Deliver Gateway", id: "gateway-delivery", kind: "gateway-delivery" },
       ],
       gatewayBindings: {
         ...base.gatewayBindings,
         trustedSources: {
-          builderProduction: { projectId: "builder", from: "production", to: "preview" },
-          operatorPreview: { projectId: "operator", from: "preview", to: "preview" },
+          builderProduction: { from: "production", projectId: "builder", to: "preview" },
+          operatorPreview: { from: "preview", projectId: "operator", to: "preview" },
         },
       },
       gatewayDelivery: {
         branch: selection.branch,
+        gitSha: "1".repeat(40),
         projectId: "prj_gateway",
         repoId: "gateway-repo",
-        gitSha: "1".repeat(40),
       },
+      stage: "auth-bootstrap",
     });
     f.deps.plan = async () => originalPlan;
     const original = await prepared(f);
@@ -743,15 +742,15 @@ describe("shared host protection plan successor", () => {
     }
     const successorPlan = hostedOperatorPlanSchema.parse({
       ...originalPlan,
-      gatewayBindings: { ...originalPlan.gatewayBindings, trustedSources: undefined },
       effects: originalPlan.effects.map((effect) =>
         effect.kind === "gateway-bindings"
           ? { ...effect, description: "Bind shared Gateway environment" }
           : effect,
       ),
+      gatewayBindings: { ...originalPlan.gatewayBindings, trustedSources: undefined },
     });
     f.deps.plan = async () => successorPlan;
-    return { f, original, originalPlan, previous, successorPlan, execute };
+    return { execute, f, original, originalPlan, previous, successorPlan };
   };
 
   it("derives only the frozen bootstrap narrowing before fresh app planning", async () => {
@@ -772,8 +771,8 @@ describe("shared host protection plan successor", () => {
       createSharedHostProtectionSuccessorPlan(
         {
           ...previous.record,
-          leaseId: "active",
           leaseExpiresAt: new Date(now + 1000).toISOString(),
+          leaseId: "active",
         },
         now,
       ),
@@ -815,9 +814,9 @@ describe("shared host protection plan successor", () => {
           assetSha256: "1".repeat(64),
           catalogFingerprint: "2".repeat(64),
           database: original.plan.authDatabase.database,
+          observedAt: new Date().toISOString(),
           runtimeRole: original.plan.authDatabase.runtimeRole,
           targetDigest: "b".repeat(64),
-          observedAt: new Date().toISOString(),
         },
         identityLink: link,
         plan: candidate,
@@ -834,20 +833,20 @@ describe("shared host protection plan successor", () => {
     f.row = { ...previous, record: hostedRuntimeJournalRecordSchema.parse(record) };
     const statusRequest = {
       action: "status" as const,
-      selection,
       operationRef: original.operationRef,
+      selection,
     };
     expect(await f.client.request(statusRequest)).toMatchObject({ status: "auth-schema-prepared" });
     f.row = {
       ...previous,
       record: {
         ...record,
-        leaseId: original.operationRef,
         leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+        leaseId: original.operationRef,
         operator: {
           ...record.operator,
-          pendingEffectId: undefined,
           pendingEffectAttempt: undefined,
+          pendingEffectId: undefined,
           receipts: candidate.effects.map((effect) => ({
             effectId: effect.id,
             observedAt: new Date().toISOString(),
@@ -890,15 +889,15 @@ describe("shared host protection plan successor", () => {
     expect(successor.planDigest).not.toBe(original.planDigest);
     expect(f.row?.record).toMatchObject({
       approvedByCallId: "operator:unapproved-plan",
-      privateState: previous.record.privateState,
       operator: {
-        receipts: previous.record.operator?.receipts,
-        pendingEffectId: "gateway-bindings",
         pendingEffectAttempt: previous.record.operator?.pendingEffectAttempt,
+        pendingEffectId: "gateway-bindings",
+        receipts: previous.record.operator?.receipts,
         retainedGatewayDeliveries: [
           { approvedByCallId: original.callId, operator: previous.record.operator },
         ],
       },
+      privateState: previous.record.privateState,
     });
     expect(f.row?.record.operator?.approvalId).toBeUndefined();
     await expect(f.client.request(successor)).resolves.toMatchObject({
@@ -914,18 +913,18 @@ describe("shared host protection plan successor", () => {
     );
     expect(f.row?.record.operator?.pendingEffectId).toBe("gateway-bindings");
     expect(reconcile).toHaveBeenCalledWith(
-      expect.objectContaining({ plan: successorPlan, operationRef: original.operationRef }),
+      expect.objectContaining({ operationRef: original.operationRef, plan: successorPlan }),
     );
     f.known();
     reconcile.mockImplementation(async (input) =>
       input.effect.kind === "gateway-bindings"
         ? {
-            status: "applied",
             receipt: {
               effectId: input.effect.id,
               observedAt: new Date().toISOString(),
               resourceVersion: "fresh-owned-environment",
             },
+            status: "applied",
           }
         : await originalReconcile(input),
     );
@@ -935,11 +934,11 @@ describe("shared host protection plan successor", () => {
       if (input.effect.kind === "gateway-delivery") {
         expect(input.gatewayDeliveryProvenance).toEqual([
           {
+            approvalId: previous.record.operator?.approvalId,
+            approvedByCallId: previous.record.approvedByCallId,
             operationRef: original.operationRef,
             plan: previous.record.operator?.plan,
             planDigest: original.planDigest,
-            approvalId: previous.record.operator?.approvalId,
-            approvedByCallId: previous.record.approvedByCallId,
           },
         ]);
       }
@@ -968,12 +967,12 @@ describe("shared host protection plan successor", () => {
     const uncertain = {
       branch: selection.branch,
       deploymentId: "uncertain",
+      gatewayAliasAttempted: true,
       operationRef: original.operationRef,
       origin: "https://uncertain-gateway.example",
       projectId: "prj_gateway",
-      repoId: "gateway-repo",
       readyState: "READY",
-      gatewayAliasAttempted: true,
+      repoId: "gateway-repo",
     };
     prior.gatewayDeliveryCandidates = [uncertain];
     f.row = previous;
@@ -997,11 +996,11 @@ describe("shared host protection plan successor", () => {
     const provenance = sharedHostProtectionDeliveryProvenance(approvedRecord);
     expect(provenance).toEqual([
       {
+        approvalId: prior.approvalId,
+        approvedByCallId: previous.record.approvedByCallId,
         operationRef: prior.operationRef,
         plan: prior.plan,
         planDigest: prior.planDigest,
-        approvalId: prior.approvalId,
-        approvedByCallId: previous.record.approvedByCallId,
       },
     ]);
     const [originalProvenance] = provenance;
@@ -1080,8 +1079,8 @@ describe("shared host protection plan successor", () => {
       expect(
         await f.client.request({ action: "plan", operation: "prepare", selection }),
       ).toMatchObject({
-        status: "blocked",
         code: change === "approval" ? "authorization_required" : "operation_in_progress",
+        status: "blocked",
       });
       expect(f.row?.record.operator?.planDigest).toBe(original.planDigest);
     },
@@ -1103,7 +1102,7 @@ describe("pending app installer repair", () => {
       effects: plan.effects.flatMap((effect) =>
         effect.id === appInstallId
           ? [
-              { id: "auth-schema", kind: "install", description: "Prepare shared Auth schema" },
+              { description: "Prepare shared Auth schema", id: "auth-schema", kind: "install" },
               effect,
             ]
           : [effect],
@@ -1145,7 +1144,7 @@ describe("pending app installer repair", () => {
       installer: { ...originalPlan.installer, sha256: "2".repeat(64) },
     });
     f.deps.plan = async () => repaired;
-    return { f, original, previous, repaired, execute };
+    return { execute, f, original, previous, repaired };
   };
 
   it("retains uncertain history and resources but requires the repaired plan's own approval", async () => {
@@ -1208,7 +1207,6 @@ describe("pending native app project settings repair", () => {
     const f = fixture();
     const originalPlan = hostedOperatorPlanSchema.parse({
       ...plan,
-      stage: "app",
       delivery: {
         branch: selection.branch,
         gitSha: "1".repeat(40),
@@ -1217,8 +1215,9 @@ describe("pending native app project settings repair", () => {
       },
       effects: [
         ...plan.effects,
-        { id: "delivery", kind: "delivery", description: "Deploy accepted app source" },
+        { description: "Deploy accepted app source", id: "delivery", kind: "delivery" },
       ],
+      stage: "app",
     });
     f.deps.plan = async () => originalPlan;
     const original = await prepared(f);
@@ -1256,7 +1255,7 @@ describe("pending native app project settings repair", () => {
       createProjectSettingsSuccessorPlan(previous.record, undefined, Date.now()),
     ).toBeUndefined();
     f.deps.plan = async () => repaired;
-    return { f, original, previous, repaired, execute };
+    return { execute, f, original, previous, repaired };
   };
 
   it("returns the same saved unapproved profile proposal without fresh composition or effects", async () => {
@@ -1264,7 +1263,7 @@ describe("pending native app project settings repair", () => {
     f.deps.readAppProjectSettings = async () => repaired.delivery?.projectSettings;
     const request = { action: "plan" as const, operation: "prepare" as const, selection };
     const proposed = await f.client.request(request);
-    expect(proposed).toMatchObject({ status: "planned", operationRef: original.operationRef });
+    expect(proposed).toMatchObject({ operationRef: original.operationRef, status: "planned" });
     const before = structuredClone(f.row);
     const compose = vi.fn<ProtectedHostedOperatorDependencies["plan"]>(async () => {
       throw new HostedOperatorError("operation_in_progress");
@@ -1345,19 +1344,18 @@ describe("pending native app project settings repair", () => {
     expect(successor.planDigest).toBe(operatorPlanDigest(repaired));
     expect(f.row?.record).toMatchObject({
       approvedByCallId: "operator:unapproved-plan",
-      privateState: previous.record.privateState,
       operator: {
-        operationRef: original.operationRef,
         fenceGeneration: previous.record.operator?.fenceGeneration,
-        receipts: previous.record.operator?.receipts,
+        operationRef: original.operationRef,
         pendingEffectId: "bind",
         plan: { retention: previous.record.operator?.plan.retention },
+        receipts: previous.record.operator?.receipts,
         retainedProjectSettingsOperations: [
           {
             approvedByCallId: original.callId,
             operator: {
-              planDigest: original.planDigest,
               pendingEffectAttempt: previous.record.operator?.pendingEffectAttempt,
+              planDigest: original.planDigest,
             },
           },
         ],
@@ -1385,7 +1383,6 @@ describe("pending native app project settings repair", () => {
     } as const;
     const originalPlan = hostedOperatorPlanSchema.parse({
       ...plan,
-      stage: "app",
       delivery: {
         branch: selection.branch,
         gitSha: "1".repeat(40),
@@ -1395,8 +1392,9 @@ describe("pending native app project settings repair", () => {
       },
       effects: [
         ...plan.effects,
-        { id: "delivery", kind: "delivery", description: "Deploy accepted app source" },
+        { description: "Deploy accepted app source", id: "delivery", kind: "delivery" },
       ],
+      stage: "app",
     });
     f.deps.plan = async () => originalPlan;
     const original = await prepared(f);
@@ -1566,31 +1564,31 @@ describe("pending native app project settings repair", () => {
     expect(successor.operationRef).toBe(original.operationRef);
     expect(successor.planDigest).toBe(operatorPlanDigest(repaired));
     expect(active).toMatchObject({
-      operationRef: original.operationRef,
+      deliveryCandidates: [],
       fenceGeneration: previous.record.operator.fenceGeneration,
+      managedEnvironment: ownedRows,
+      operationRef: original.operationRef,
       pendingEffectId: "delivery",
       receipts: previous.record.operator.receipts,
-      managedEnvironment: ownedRows,
-      deliveryCandidates: [],
     });
     expect(active?.retainedProjectSettingsOperations).toHaveLength(2);
     expect(active?.retainedProjectSettingsOperations?.[0]).toMatchObject({
       approvedByCallId: "approval-899",
       operator: {
-        planDigest: operatorPlanDigest(original899Plan),
         deliveryCandidates: [{ deploymentId: "dpl_blocked_899", readyState: "BLOCKED" }],
+        planDigest: operatorPlanDigest(original899Plan),
       },
     });
     expect(active?.retainedProjectSettingsOperations?.[1]).toMatchObject({
       approvedByCallId: original.callId,
       operator: {
-        planDigest: original.planDigest,
-        pendingEffectId: "delivery",
-        pendingEffectAttempt: previous.record.operator.pendingEffectAttempt,
         deliveryCandidates: [
           { deploymentId: "dpl_failed_fs2", readyState: "ERROR" },
           { deploymentId: "dpl_failed_retry", readyState: "ERROR" },
         ],
+        pendingEffectAttempt: previous.record.operator.pendingEffectAttempt,
+        pendingEffectId: "delivery",
+        planDigest: original.planDigest,
       },
     });
     expect(f.row?.record.privateState).toEqual(previous.record.privateState);
@@ -1598,9 +1596,9 @@ describe("pending native app project settings repair", () => {
       active === undefined ? undefined : projectSettingsDeliveryProvenance(active, repaired),
     ).toMatchObject({
       approvedByCallId: original.callId,
+      operationRef: original.operationRef,
       plan: originalPlan,
       planDigest: original.planDigest,
-      operationRef: original.operationRef,
     });
 
     f.deps.executeEffect = execute;
@@ -1696,11 +1694,11 @@ describe("APP Gateway source continuation", () => {
       ...plan.effects.filter((effect) => ["resources", "install"].includes(effect.kind)),
       {
         description: "Prepare approved organization",
-        kind: "auth-membership",
         id: "auth-membership:synthetic-org",
+        kind: "auth-membership",
       },
       ...plan.effects.filter((effect) => !["resources", "install"].includes(effect.kind)),
-      { description: "Deliver Gateway", kind: "gateway-delivery", id: "gateway-delivery" },
+      { description: "Deliver Gateway", id: "gateway-delivery", kind: "gateway-delivery" },
     ],
   });
   const desired = {
@@ -1725,7 +1723,7 @@ describe("APP Gateway source continuation", () => {
         effectId: "auth-owned-organization",
         fenceGeneration: input.fenceGeneration,
         operationId: input.operationRef,
-        receipt: { state: "applied", readbackSha256: "e".repeat(64) },
+        receipt: { readbackSha256: "e".repeat(64), state: "applied" },
         resourceId: originalPlan.authDatabase.resourceId,
         sequence: 1,
         tenantId: "synthetic-org",
@@ -1733,8 +1731,8 @@ describe("APP Gateway source continuation", () => {
       throw new HostedOperatorError("reconciliation_required");
     };
     expect(await f.client.request(original)).toMatchObject({
-      status: "blocked",
       code: "reconciliation_required",
+      status: "blocked",
     });
     const previous = structuredClone(f.row);
     if (previous?.record.operator === undefined) {
@@ -1743,7 +1741,7 @@ describe("APP Gateway source continuation", () => {
     f.deps.readGatewayDeliverySource = async () => desired;
     f.deps.plan = async () =>
       readAppGatewaySourceContinuationPlan(f.row?.record, desired, Date.now()) ?? originalPlan;
-    return { f, original, previous, execute };
+    return { execute, f, original, previous };
   };
 
   // oxlint-disable-next-line eslint/complexity -- This sequential recovery journey checks the original and successor authority at each durable boundary.
@@ -1772,12 +1770,12 @@ describe("APP Gateway source continuation", () => {
       expect(input.workerCheckpoints).toEqual(pending.workerCheckpoints);
       expect(f.row?.record.operator?.pendingEffectAttempt).toEqual(pending.pendingEffectAttempt);
       return {
-        status: "applied",
         receipt: {
           effectId: input.effect.id,
           observedAt: new Date().toISOString(),
           resourceVersion: "owned-organization-observed",
         },
+        status: "applied",
       };
     };
     f.deps.executeEffect = vi.fn<ProtectedHostedOperatorDependencies["executeEffect"]>(
@@ -1785,18 +1783,18 @@ describe("APP Gateway source continuation", () => {
     );
     const lostResponse = createHostedOperatorClient({
       endpoint: "https://operator.example",
-      ownerContext,
-      token: async () => "fixture-service-identity",
       fetch: async (url, init) => {
         const result = await f.handler(new Request(url instanceof Request ? url.url : url, init));
         expect(operatorPublicResultSchema.parse(await result.json())).toMatchObject({
-          status: "planned",
           operationRef: original.operationRef,
-          planDigest: original.planDigest,
           plan: originalPlan,
+          planDigest: original.planDigest,
+          status: "planned",
         });
         throw new Error("Controlled response loss after original execution settled");
       },
+      ownerContext,
+      token: async () => "fixture-service-identity",
     });
     await expect(lostResponse.request(original)).rejects.toMatchObject({
       name: "HostedOperatorTransportUnknown",
@@ -1810,9 +1808,9 @@ describe("APP Gateway source continuation", () => {
     expect(settled?.record.operator?.workerCheckpoints).toEqual(pending.workerCheckpoints);
     expect(settled?.record.leaseId).toBeUndefined();
     expect(settled?.record.executionObservation).toMatchObject({
-      state: "settled",
       outcome: { status: "planned" },
       planDigest: original.planDigest,
+      state: "settled",
     });
     const status = await f.client.request({
       action: "status",
@@ -1820,12 +1818,12 @@ describe("APP Gateway source continuation", () => {
       selection,
     });
     expect(status).toMatchObject({
-      status: "pending",
+      execution: { outcome: { status: "planned" }, state: "settled" },
       operationRef: original.operationRef,
       planDigest: original.planDigest,
-      execution: { state: "settled", outcome: { status: "planned" } },
+      status: "pending",
     });
-    const readApproval = f.deps.readApproval;
+    const { readApproval } = f.deps;
     f.deps.readApproval = async (input) =>
       input.planDigest === original.planDigest ? await readApproval(input) : null;
     const successor = { ...(await prepared(f)), callId: "successor-human-call" };
@@ -1872,8 +1870,8 @@ describe("APP Gateway source continuation", () => {
     });
     expect(revisionAdvanced).toBe(true);
     expect(await f.client.request(successor)).toMatchObject({
-      status: "blocked",
       code: "authorization_required",
+      status: "blocked",
     });
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
     f.deps.readApproval = readApproval;
@@ -1945,8 +1943,8 @@ describe("APP Gateway source continuation", () => {
       createAppGatewaySourceSuccessorPlan(
         {
           ...clear,
-          leaseId: "owned-active",
           leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+          leaseId: "owned-active",
         },
         desired,
         Date.now(),
@@ -1959,12 +1957,12 @@ describe("APP Gateway source continuation", () => {
       {
         branch: selection.branch,
         deploymentId: "unknown-gateway",
+        gatewayAliasAttempted: true,
         operationRef: clear.operator.operationRef,
         origin: "https://pending-gateway.example.test",
         projectId: "prj_gateway",
         readyState: "BUILDING",
         repoId: "gateway-repo",
-        gatewayAliasAttempted: true,
       },
     ];
     expect(createAppGatewaySourceSuccessorPlan(clear, desired, Date.now())).toBeUndefined();

@@ -84,7 +84,8 @@ const fixture = (mutation = false, write = false, capture = false) => {
         return { exitCode: 0, stdout: async () => `${sha}  /worker/integration\n` };
       }
       const spool = options.args[2];
-      frame(`${spool}/requests/1.json`, {
+      const framePath = `${spool}/requests/1.json`;
+      const frameData = {
         kind: mutation ? "authorize_effect" : "check_fence",
         version: 1,
         operation_id: runId,
@@ -97,8 +98,13 @@ const fixture = (mutation = false, write = false, capture = false) => {
         installer_id: worker.id,
         installer_sha256: sha,
         tenant_id: null,
-        ...(mutation ? { effect_id: "install-central-schema", sequence: 1 } : {}),
-      });
+      };
+      const requestFrame: typeof frameData & { effect_id?: string; sequence?: number } = frameData;
+      if (mutation) {
+        requestFrame.effect_id = "install-central-schema";
+        requestFrame.sequence = 1;
+      }
+      frame(framePath, requestFrame);
       frame(`${spool}/requests/1.ready`, { version: 1, run_id: runId, frame_id: 1 });
       if (write) {
         frame(`${spool}/requests/2.json`, {
@@ -168,7 +174,7 @@ const fixture = (mutation = false, write = false, capture = false) => {
     signal: new AbortController().signal,
     assertCurrent: vi.fn(async () => {}),
   };
-  return { input, createSandbox, stop, files };
+  return { createSandbox, files, input, stop };
 };
 const config = {
   image: "pinned-control",
@@ -185,8 +191,8 @@ it("reuses the fenced framed transport for fixed integration readback and privat
     >["createSandbox"],
   });
   expect(result).toMatchObject({
-    status: "applied",
     receipt: { resourceId: context.resource.resource_id },
+    status: "applied",
   });
   expect(f.input.assertCurrent).toHaveBeenCalled();
   expect(f.stop).toHaveBeenCalledOnce();
@@ -232,8 +238,8 @@ it("records the fixed global schema checkpoint before acknowledging its write", 
     {
       ...f.input,
       readOnly: false,
-      worker: { ...worker, subcommand: "central-integration-schema" },
       recordCheckpoint,
+      worker: { ...worker, subcommand: "central-integration-schema" },
     },
     {
       createSandbox: f.createSandbox as NonNullable<

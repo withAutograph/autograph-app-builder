@@ -23,6 +23,8 @@ import type {
   NativeTargetRuntimeResolutionContext,
 } from "./native-target-onboarding-runtime";
 
+const NATIVE_TARGET_TRANSPORT_LOG = "[builder:native-target-transport]";
+
 const unavailable = () => new HostedOperatorError("operator_unavailable");
 const denied = () => new HostedOperatorError("authorization_required");
 const blockedAppMatches = (actual: string, expected: string) =>
@@ -80,7 +82,7 @@ export const createNativeTargetOnboardingClient = (options: {
     } catch {
       signal?.throwIfAborted();
       // Never repeat an uncertain request here. The protected journal owns recovery.
-      console.warn("[builder:native-target-transport]", {
+      console.warn(NATIVE_TARGET_TRANSPORT_LOG, {
         action: body.action,
         failure: "transport",
       });
@@ -88,7 +90,7 @@ export const createNativeTargetOnboardingClient = (options: {
     }
     signal?.throwIfAborted();
     if (response.status === 401 || response.status === 403) {
-      console.warn("[builder:native-target-transport]", {
+      console.warn(NATIVE_TARGET_TRANSPORT_LOG, {
         action: body.action,
         failure: "authorization",
         status: response.status,
@@ -116,7 +118,7 @@ export const createNativeTargetOnboardingClient = (options: {
       throw unavailable();
     }
     if (!response.ok) {
-      console.warn("[builder:native-target-transport]", {
+      console.warn(NATIVE_TARGET_TRANSPORT_LOG, {
         action: body.action,
         failure: "http",
         status: response.status,
@@ -127,7 +129,7 @@ export const createNativeTargetOnboardingClient = (options: {
     try {
       raw = await response.json();
     } catch {
-      console.warn("[builder:native-target-transport]", {
+      console.warn(NATIVE_TARGET_TRANSPORT_LOG, {
         action: body.action,
         failure: "invalid_json",
       });
@@ -140,7 +142,7 @@ export const createNativeTargetOnboardingClient = (options: {
       blockedAppMatches(blocked.data.appId, body.input.appId) &&
       blocked.data.code !== undefined
     ) {
-      console.warn("[builder:native-target-transport]", {
+      console.warn(NATIVE_TARGET_TRANSPORT_LOG, {
         action: body.action,
         failure: blocked.data.code,
       });
@@ -148,7 +150,7 @@ export const createNativeTargetOnboardingClient = (options: {
     }
     const parsed = schema.safeParse(raw);
     if (!parsed.success) {
-      console.warn("[builder:native-target-transport]", {
+      console.warn(NATIVE_TARGET_TRANSPORT_LOG, {
         action: body.action,
         failure: "invalid_response",
       });
@@ -196,15 +198,16 @@ export const createNativeTargetOnboardingClient = (options: {
       if (state.appSpec !== undefined && state.appSpec.appId !== input.appId) {
         throw denied();
       }
+      const request: Extract<NativeTargetTransportRequest, { action: "native-target-plan" }> = {
+        ...common(ctx),
+        action: "native-target-plan",
+        input,
+      };
+      if (state.appSpec !== undefined) {
+        request.selectedApp = { appId: state.appSpec.appId, appSpecDigest: state.appSpec.digest };
+      }
       const output = await send(
-        {
-          ...common(ctx),
-          action: "native-target-plan",
-          input,
-          ...(state.appSpec === undefined
-            ? {}
-            : { selectedApp: { appId: state.appSpec.appId, appSpecDigest: state.appSpec.digest } }),
-        },
+        request,
         nativeTargetTransportResponseSchemas["native-target-plan"],
         ctx.abortSignal,
       );
@@ -254,13 +257,34 @@ export const createNativeTargetOnboardingClient = (options: {
       ) {
         throw denied();
       }
-      const responder = ctx.responder;
+      const { responder } = ctx;
       if (
         responder.principalId !== owner.authority.ownerUserId ||
         responder.principalType !== "user"
       ) {
         throw denied();
       }
+      type CandidateResponder = Pick<
+        typeof responder,
+        "authenticator" | "principalId" | "principalType" | "issuer" | "subject"
+      >;
+      type MutableCandidateResponder = {
+        -readonly [Key in keyof CandidateResponder]: CandidateResponder[Key];
+      };
+      const candidateResponder = (): CandidateResponder => {
+        const result: MutableCandidateResponder = {
+          authenticator: responder.authenticator,
+          principalId: responder.principalId,
+          principalType: responder.principalType,
+        };
+        if (responder.issuer !== undefined) {
+          result.issuer = responder.issuer;
+        }
+        if (responder.subject !== undefined) {
+          result.subject = responder.subject;
+        }
+        return result;
+      };
       await send(
         {
           ownerContext: owner,
@@ -272,13 +296,7 @@ export const createNativeTargetOnboardingClient = (options: {
             requestId: ctx.request.requestId,
             callId: ctx.request.callId,
             toolName: ctx.request.toolName,
-            responder: {
-              authenticator: responder.authenticator,
-              principalId: responder.principalId,
-              principalType: responder.principalType,
-              ...(responder.issuer === undefined ? {} : { issuer: responder.issuer }),
-              ...(responder.subject === undefined ? {} : { subject: responder.subject }),
-            },
+            responder: candidateResponder(),
           },
         },
         nativeTargetTransportResponseSchemas["native-target-approval-candidate"],

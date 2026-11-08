@@ -63,8 +63,13 @@ export const retainProductInputs = (
       request.kind === "tool-approval" &&
       request.action?.kind === "tool-call" &&
       authorizationOnlyTools.has(request.action.toolName);
-    pending.push({
-      ...(authorizationOnly ? { authorizationOnly: true as const } : {}),
+    const append = pending.push.bind(pending);
+    const purpose: Pick<RetainedProductInput, "authorizationOnly"> = {};
+    if (authorizationOnly) {
+      purpose.authorizationOnly = true;
+    }
+    append({
+      ...purpose,
       kind: request.kind,
       options,
       prompt: request.prompt,

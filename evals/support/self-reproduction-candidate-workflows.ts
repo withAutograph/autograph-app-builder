@@ -1,7 +1,48 @@
 /* oxlint-disable eslint/no-await-in-loop, eslint/no-negated-condition, unicorn/no-negated-condition, unicorn/consistent-function-scoping, promise/prefer-await-to-then, unicorn/prefer-ternary -- isolated browser workflows run sequentially; all helpers remain inside the portable evaluator function. */
 import { runtimeReceiptSchema } from "./self-reproduction-parity-evidence";
 import { sanitizeEvidence } from "./self-reproduction-evidence";
-import type { Browser, Page } from "playwright";
+import type { Locator, Page, Request } from "playwright";
+
+type CandidateLocator = Pick<
+  Locator,
+  | "allTextContents"
+  | "blur"
+  | "click"
+  | "count"
+  | "fill"
+  | "getAttribute"
+  | "inputValue"
+  | "isVisible"
+  | "textContent"
+  | "waitFor"
+> & {
+  first: () => CandidateLocator;
+};
+
+interface CandidatePage {
+  getByRole: (
+    role: Parameters<Page["getByRole"]>[0],
+    options?: { name?: RegExp },
+  ) => CandidateLocator;
+  getByText: (text: RegExp) => CandidateLocator;
+  goBack: Page["goBack"];
+  goto: (...args: Parameters<Page["goto"]>) => Promise<{ ok: () => boolean } | null>;
+  locator: (selector: string) => CandidateLocator;
+  on: (event: "request", listener: (request: Pick<Request, "method" | "url">) => void) => void;
+  reload: Page["reload"];
+  request: { get: (url: string) => Promise<{ ok: () => boolean; text: () => Promise<string> }> };
+  setDefaultTimeout: Page["setDefaultTimeout"];
+  url: Page["url"];
+  waitForLoadState: Page["waitForLoadState"];
+  waitForTimeout: Page["waitForTimeout"];
+}
+
+interface CandidateBrowser {
+  newContext: () => Promise<{
+    close: () => Promise<void>;
+    newPage: () => Promise<CandidatePage>;
+  }>;
+}
 
 export interface CandidateWorkflowOutcome {
   requirementId: string;
@@ -13,7 +54,7 @@ export interface CandidateWorkflowOutcome {
 
 /** Evaluator-owned browser checks. Serialized into Sandbox, never supplied to generation. */
 export const exerciseCandidateBrowserWorkflows = async (
-  browser: Browser,
+  browser: CandidateBrowser,
   baseURL: string,
   retain: (outcomes: CandidateWorkflowOutcome[]) => Promise<void>,
 ) => {
@@ -40,7 +81,7 @@ export const exerciseCandidateBrowserWorkflows = async (
     const check = (id: string, passed: boolean | null, detail: string) =>
       assertions.push({ detail, id, passed });
     const button = (name: RegExp) => page.getByRole("button", { name }).first();
-    const exists = (locator: ReturnType<Page["locator"]>) => locator.isVisible().catch(() => false);
+    const exists = (locator: CandidateLocator) => locator.isVisible().catch(() => false);
     const text = () => page.locator("body").textContent();
     let outcome: CandidateWorkflowOutcome = {
       assertions: [],
@@ -48,7 +89,7 @@ export const exerciseCandidateBrowserWorkflows = async (
       requirementId,
       status: "blocked",
     };
-    let knownShape = false;
+    let hasSupportedFixture = false;
     let runtimeReady = false;
     const runDocumentation = async () => {
       let docs = button(/^docs$|documentation/iu);
@@ -58,14 +99,14 @@ export const exerciseCandidateBrowserWorkflows = async (
       if (!(await exists(docs))) {
         return check(
           "docs-readable",
-          knownShape ? false : null,
+          hasSupportedFixture ? false : null,
           "No documentation fixture is bound for this layout.",
         );
       }
       const before = await text();
       const initialURL = page.url();
       const originalEditor = page.getByRole("textbox", { name: /app name/iu }).first();
-      const originalValue = knownShape ? await originalEditor.inputValue() : undefined;
+      const originalValue = hasSupportedFixture ? await originalEditor.inputValue() : undefined;
       await docs.click();
       const navigated = page.url() !== initialURL;
       const content = page.locator("main, article").first();
@@ -83,7 +124,7 @@ export const exerciseCandidateBrowserWorkflows = async (
         await page.goBack();
       }
       let returnNavigationPassed: boolean | null;
-      if (knownShape) {
+      if (hasSupportedFixture) {
         returnNavigationPassed =
           (await exists(originalEditor)) && (await originalEditor.inputValue()) === originalValue;
       } else if (navigated) {
@@ -244,7 +285,9 @@ export const exerciseCandidateBrowserWorkflows = async (
       if (count > 0) {
         const href = await links.first().getAttribute("href");
         if (
-          !href ||
+          href === null ||
+          href === undefined ||
+          href === "" ||
           href.startsWith("#") ||
           !/^https?:/u.test(new URL(href, page.url()).protocol)
         ) {
@@ -303,18 +346,18 @@ export const exerciseCandidateBrowserWorkflows = async (
     try {
       const response = await page.goto(baseURL, { waitUntil: "networkidle" });
       runtimeReady = Boolean(response?.ok());
-      knownShape =
+      hasSupportedFixture =
         runtimeReady &&
         (await exists(button(/continue to review/iu))) &&
         (await exists(page.getByRole("textbox", { name: /app name/iu }).first()));
-      if (runtimeReady && !knownShape && requirementId !== "documentation") {
+      if (runtimeReady && !hasSupportedFixture && requirementId !== "documentation") {
         outcome = {
           assertions: [],
           reason: "This candidate layout has no supported evaluator fixture binding.",
           requirementId,
           status: "unassessed",
         };
-      } else if (!response?.ok()) {
+      } else if (response?.ok() !== true) {
         outcome = {
           assertions: [],
           reason: "Candidate runtime did not answer successfully.",
@@ -345,12 +388,12 @@ export const exerciseCandidateBrowserWorkflows = async (
         reason: `Browser fixture could not complete: ${error instanceof Error ? error.message : String(error)}`,
         requirementId,
         status:
-          assertions.some((item) => item.passed === false) || (runtimeReady && knownShape)
+          assertions.some((item) => item.passed === false) || (runtimeReady && hasSupportedFixture)
             ? "failed"
             : "blocked",
       };
     } finally {
-      if (knownShape) {
+      if (hasSupportedFixture) {
         outcome.evidence = {
           buttons: await page
             .getByRole("button")

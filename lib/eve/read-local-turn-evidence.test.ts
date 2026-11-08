@@ -28,7 +28,7 @@ afterEach(async () => {
   vi.unstubAllEnvs();
   await Promise.all(
     roots.splice(0).map(async (root) => {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }),
   );
 });
@@ -62,30 +62,30 @@ const fixture = async (port = 2100) => {
   });
   const events: MessageStreamEvent[] = [
     {
+      data: { sequence: 1, turnId: "turn_1" },
+      meta: { at: "2026-11-04T00:03:22.960Z", id: "event_started" },
       type: "turn.started",
-      data: { turnId: "turn_1", sequence: 1 },
-      meta: { id: "event_started", at: "2026-11-04T00:03:22.960Z" },
     },
     {
-      type: "message.received",
-      data: { turnId: "turn_1", sequence: 1, message: "private body", parts: [] },
+      data: { message: "private body", parts: [], sequence: 1, turnId: "turn_1" },
       meta: {
-        id: "event_message",
         at: "2026-11-04T00:03:22.986Z",
         deliveryIds: ["delivery_owned"],
+        id: "event_message",
       },
+      type: "message.received",
     },
   ];
   const snapshot = vi
     .spyOn(ClientSession.prototype, "snapshot")
     .mockImplementation(async function snapshot(this: ClientSession) {
-      return { session: { sessionId: this.state.sessionId, streamIndex: events.length }, events };
+      return { events, session: { sessionId: this.state.sessionId, streamIndex: events.length } };
     });
   const client = new Client({ host: `http://127.0.0.1:${port}` });
   const send = vi.spyOn(ClientSession.prototype, "send");
   const cancel = vi.spyOn(ClientSession.prototype, "cancel");
   const clear = vi.spyOn(ClientSession.prototype, "clear");
-  return { root, cycleRoot, cycleFile, serverFile, events, snapshot, client, send, cancel, clear };
+  return { cancel, clear, client, cycleFile, cycleRoot, events, root, send, serverFile, snapshot };
 };
 describe("local execution evidence read path", () => {
   it("observes the exact local accepted turn without submitting any control or changing cursor", async () => {
@@ -93,16 +93,16 @@ describe("local execution evidence read path", () => {
     const output = await readLocalTurnExecutionEvidence(
       {
         cycleRoot: f.cycleRoot,
-        sessionId: "wrun_owned",
         selector: { deliveryId: "delivery_owned" },
+        sessionId: "wrun_owned",
       },
       { client: f.client },
     );
     expect(output).toMatchObject({
-      sessionId: "wrun_owned",
-      ownerLineage: ["wrun_owned"],
       nativeCursor: 2,
-      selectedTurn: { turnId: "turn_1", execution: "unexercised" },
+      ownerLineage: ["wrun_owned"],
+      selectedTurn: { execution: "unexercised", turnId: "turn_1" },
+      sessionId: "wrun_owned",
     });
     expect(f.snapshot).toHaveBeenCalledTimes(1);
     expect(f.send).not.toHaveBeenCalled();
@@ -115,8 +115,8 @@ describe("local execution evidence read path", () => {
     f.snapshot.mockImplementation(async function snapshot(this: ClientSession) {
       await writeFile(f.cycleFile, "b".repeat(64));
       return {
-        session: { sessionId: this.state.sessionId, streamIndex: f.events.length },
         events: f.events,
+        session: { sessionId: this.state.sessionId, streamIndex: f.events.length },
       };
     });
     await expect(
@@ -146,8 +146,8 @@ describe("local execution evidence read path", () => {
   it("retains incomplete-history failures without falling back to a different session", async () => {
     const f = await fixture();
     f.snapshot.mockResolvedValue({
-      session: { sessionId: "wrun_foreign", streamIndex: f.events.length + 1 },
       events: f.events,
+      session: { sessionId: "wrun_foreign", streamIndex: f.events.length + 1 },
     });
     await expect(
       readLocalTurnExecutionEvidence(
@@ -185,15 +185,15 @@ it("composes the real local SDK history reader with exact denied authority catch
     const controller = new AbortController();
     // SAFETY: The reader consumes only trusted framework session ID and cancellation; session auth is never synthesized or used to dispatch a control.
     await reconcilePrivateApplyDecisions({
-      session: { id: "wrun_owned" },
       abortSignal: controller.signal,
+      session: { id: "wrun_owned" },
     } as Parameters<typeof reconcilePrivateApplyDecisions>[0]);
     expect(readPrivateApplyAuthority().pending.map((row) => row.callId)).toEqual([
       "unresolved-call",
     ]);
     expect(readPrivateApplyAuthority().grant).toEqual(approved);
     expect(readPrivateApplyAuthority().terminalDecisions).toMatchObject([
-      { callId: "denied-call", scope: old, requestId: "denied-request", outcome: "denied-not-run" },
+      { callId: "denied-call", outcome: "denied-not-run", requestId: "denied-request", scope: old },
     ]);
   });
   expect(f.snapshot).toHaveBeenCalled();

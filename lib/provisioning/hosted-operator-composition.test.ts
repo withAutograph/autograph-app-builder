@@ -79,7 +79,7 @@ import {
   hostedOperatorPlanSchema,
   operatorPlanDigest,
 } from "./hosted-operator-contract";
-import type { OperatorRequest } from "./hosted-operator-contract";
+import type { OperatorReceipt, OperatorRequest } from "./hosted-operator-contract";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy on the provider adapter boundary while exercising real composition context routing.
 import * as deploymentDelivery from "./hosted-operator-deployment-delivery";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Inspect the environment verification context without a provider request.
@@ -89,6 +89,12 @@ import type { CompiledOperatorReleaseSelection } from "./hosted-operator-artifac
 import { appDescriptionSchema } from "../repository/app-description";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy only on the independent verified identity boundary.
 import * as realmIdentity from "./hosted-operator-auth-identity";
+
+const independentFixtureReceipt = (input: HostedOperatorEffectContext) => ({
+  effectId: input.effect.id,
+  observedAt: new Date().toISOString(),
+  resourceVersion: "independent-fixture-readback",
+});
 
 const request = () =>
   new Request("https://operator.example/v1/runtime", {
@@ -284,15 +290,15 @@ const bootstrapWithGatewayOrigin = (gatewayOrigin: string) =>
         environment: "preview",
       },
       gateway: {
-        projectId: "gateway",
-        deploymentId: "gateway-deployment",
         branch: "gateway",
+        deploymentId: "gateway-deployment",
         environment: "preview",
+        projectId: "gateway",
       },
       operator: {
-        projectId: "operator",
         deploymentId: "operator-deployment",
         environment: "preview",
+        projectId: "operator",
       },
       verification: {
         gatewayOrigin,
@@ -419,10 +425,10 @@ const publicationFixture = (binding: { repoId?: string; gitSha?: string } = {}) 
     Awaited<ReturnType<typeof createHostedOperatorControlPlane>>["readCurrentPlanningOwner"]
   >(() => Promise.resolve({ session: structuredClone(planningSession), target: context.target }));
   const controlPlane = {
+    assertPlanningAuthorized: unexpectedPort,
     readCapturedRealmIdentity,
     readCapturedRealmIdentityProof,
     readCurrentPlanningOwner,
-    assertPlanningAuthorized: unexpectedPort,
   };
   const verifiedIdentity = vi.spyOn(realmIdentity, "readVerifiedRealmAccess").mockResolvedValue({
     claims: realmIdentity.realmLinkClaimsSchema.parse({
@@ -460,9 +466,9 @@ const publicationFixture = (binding: { repoId?: string; gitSha?: string } = {}) 
   return {
     configuration,
     controlPlane,
+    planningSession,
     readCapturedRealmIdentity,
     readCapturedRealmIdentityProof,
-    planningSession,
     unexpectedPort,
     verifiedIdentity,
   };
@@ -541,7 +547,7 @@ describe("final verifier entry diagnostics", () => {
       const assertAuthorized = vi.fn(() =>
         stage === "final_owner_authorization" ? Promise.reject(error) : Promise.resolve(),
       );
-      const read = vi.fn(() => Promise.reject(error));
+      const read = vi.fn<() => Promise<never>>().mockRejectedValue(error);
       const controlPlane = { ...f.controlPlane, assertAuthorized, store: { read } };
       const dependencies = composeHostedOperatorDependencies(
         f.configuration,
@@ -553,7 +559,7 @@ describe("final verifier entry diagnostics", () => {
       await expect(dependencies.verify({ ...context, plan: bootstrapPlan() })).rejects.toBe(error);
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
-        expect.objectContaining({ executionFailure: { stage, errorClass: "type_error" } }),
+        expect.objectContaining({ executionFailure: { errorClass: "type_error", stage } }),
       ]);
       expect(JSON.stringify(log.mock.calls)).not.toContain(error.message);
       expect(read.mock.calls.length).toBe(stage === "final_owner_authorization" ? 0 : 1);
@@ -563,7 +569,7 @@ describe("final verifier entry diagnostics", () => {
 
 describe("app publication binding at plan renewal", () => {
   it("plans the actual described root for an older selected source with no target profile", async () => {
-    const f = publicationFixture({ repoId: "initial-repository", gitSha: "c".repeat(40) });
+    const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "initial-repository" });
     const legacyDescription = appDescriptionSchema.parse({
       ...currentSourceDescription,
       deployment: undefined,
@@ -586,7 +592,7 @@ describe("app publication binding at plan renewal", () => {
     expect(f.configuration.applications.actual?.projectSettings).toBeUndefined();
   });
   it("freezes the selected source profile into a new app plan without changing configured settings", async () => {
-    const f = publicationFixture({ repoId: "initial-repository", gitSha: "c".repeat(40) });
+    const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "initial-repository" });
     const application = f.configuration.applications.actual;
     if (application === undefined) {
       throw new Error("Fixture app is missing");
@@ -649,7 +655,7 @@ describe("app publication binding at plan renewal", () => {
   );
 
   it("renews the app plan with the exact actual repository, commit, branch, and project", async () => {
-    const binding = { repoId: "actual-repository-id", gitSha: "c".repeat(40) };
+    const binding = { gitSha: "c".repeat(40), repoId: "actual-repository-id" };
     const f = publicationFixture(binding);
     const plan = await resolveFullPlan(
       bootstrapWithGatewayOrigin("https://gateway.example"),
@@ -687,7 +693,7 @@ describe("app publication binding at plan renewal", () => {
   });
 
   it("uses current captured release roles for a new grant and creates no grant for an empty role list", async () => {
-    const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+    const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "actual-repository-id" });
     const base = bootstrapWithGatewayOrigin("https://gateway.example");
     const withRoles = await resolveFullPlan(
       base,
@@ -723,7 +729,7 @@ describe("app publication binding at plan renewal", () => {
   });
 
   it("adds the app Preview grant without dropping existing Gateway trust sources", async () => {
-    const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+    const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "actual-repository-id" });
     const base = bootstrapWithGatewayOrigin("https://gateway.example");
     const plan = await resolveFullPlan(
       hostedOperatorPlanSchema.parse({
@@ -764,7 +770,7 @@ describe("app publication binding at plan renewal", () => {
   });
 
   it("validates a trusted source against the exact Gateway workload, team and app Preview while accepting legacy plans", async () => {
-    const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+    const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "actual-repository-id" });
     const plan = await resolveFullPlan(
       bootstrapWithGatewayOrigin("https://gateway.example"),
       context,
@@ -848,7 +854,7 @@ describe("app publication binding at plan renewal", () => {
   });
 
   it("binds owner signup eligibility and roles to its approved Auth organization", async () => {
-    const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+    const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "actual-repository-id" });
     const base = bootstrapWithGatewayOrigin("https://current-gateway.example");
     const result = await resolveFullPlan(
       base,
@@ -890,7 +896,7 @@ describe("app publication binding at plan renewal", () => {
   it.each(["branch", "projectId", "scopeId"] as const)(
     "retains the actual %s ownership check with a complete publication binding",
     async (field) => {
-      const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+      const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "actual-repository-id" });
       const changed = { ...context, target: { ...context.target, [field]: "different" } };
       await expect(
         resolveFullPlan(bootstrapPlan(), changed, f.configuration, f.controlPlane),
@@ -931,7 +937,7 @@ describe("configured owner-authorized Preview target metadata", () => {
       consentOwner,
       controlPlane,
     );
-    return { ...f, order, consentOwner, controlPlane, resolve };
+    return { ...f, consentOwner, controlPlane, order, resolve };
   };
   const identity = { appId: context.target.appId, sessionId: context.target.sessionId };
 
@@ -999,30 +1005,30 @@ describe("configured owner-authorized Preview target metadata", () => {
 });
 
 const participantResolutionFixture = (captureOnly = false) => {
-  const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+  const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "actual-repository-id" });
   const declaredProgram = normalActorProgramSchema.parse({
     version: 1,
     appId: context.target.appId,
     origin: f.configuration.gateway.publicOrigin,
     actors: [
       {
-        actorKey: "owner",
-        name: "Owner",
-        email: "owner@example.test",
         account: "create-email-password",
+        actorKey: "owner",
+        email: "owner@example.test",
+        name: "Owner",
       },
     ],
     organizations: [
-      { organizationId: "first-org", ownerActorKey: "owner", name: "First", slug: "first" },
-      { organizationId: "second-org", ownerActorKey: "owner", name: "Second", slug: "second" },
+      { name: "First", organizationId: "first-org", ownerActorKey: "owner", slug: "first" },
+      { name: "Second", organizationId: "second-org", ownerActorKey: "owner", slug: "second" },
     ],
     memberships: [
-      { organizationId: "first-org", actorKey: "owner", role: "owner" },
-      { organizationId: "second-org", actorKey: "owner", role: "owner" },
+      { actorKey: "owner", organizationId: "first-org", role: "owner" },
+      { actorKey: "owner", organizationId: "second-org", role: "owner" },
     ],
     appAccess: [
-      { organizationId: "first-org", actorKey: "owner", roles: ["member"] },
-      { organizationId: "second-org", actorKey: "owner", roles: ["member"] },
+      { actorKey: "owner", organizationId: "first-org", roles: ["member"] },
+      { actorKey: "owner", organizationId: "second-org", roles: ["member"] },
     ],
   });
   const program = captureOnly
@@ -1054,15 +1060,15 @@ const participantResolutionFixture = (captureOnly = false) => {
         environment: "preview",
       },
       gateway: {
-        projectId: "gateway",
-        deploymentId: "gateway-deployment",
         branch: "gateway-actual",
+        deploymentId: "gateway-deployment",
         environment: "preview",
+        projectId: "gateway",
       },
       operator: {
-        projectId: "operator",
         deploymentId: "operator-deployment",
         environment: "preview",
+        projectId: "operator",
       },
       verification: {
         gatewayOrigin: "https://gateway.example",
@@ -1074,7 +1080,7 @@ const participantResolutionFixture = (captureOnly = false) => {
   const accountPlan = hostedOperatorPlanSchema.parse({
     ...base,
     stage: "auth-participants",
-    effects: [{ id: "normal-accounts", kind: "normal-accounts", description: "Accounts only" }],
+    effects: [{ description: "Accounts only", id: "normal-accounts", kind: "normal-accounts" }],
   });
   const operation = "00000000-0000-4000-8000-000000000011";
   const state = initialNormalActorState(program, operation);
@@ -1151,7 +1157,7 @@ const participantResolutionFixture = (captureOnly = false) => {
     >(async () => await Promise.resolve({ preparation, state })),
     readNormalActorOrganizationProofs: vi.fn(async () => await Promise.resolve(organizations)),
   };
-  return { ...f, ports, base, program, accountPlan, state, preparation, organizations };
+  return { ...f, accountPlan, base, organizations, ports, preparation, program, state };
 };
 
 const unusedCompositionControlPlane = (): Parameters<
@@ -1161,9 +1167,9 @@ const unusedCompositionControlPlane = (): Parameters<
     throw new Error("Unexpected control-plane operation in signup guard fixture");
   };
   const store = {
-    reserve: unexpectedPort,
-    read: unexpectedPort,
     compareAndSet: unexpectedPort,
+    read: unexpectedPort,
+    reserve: unexpectedPort,
     reserveFenceGeneration: unexpectedPort,
   };
   return {
@@ -1288,8 +1294,8 @@ describe("empty approved access effects", () => {
       await Promise.resolve();
     });
     vi.spyOn(membershipLauncher, "createHostedOperatorSandboxLauncher").mockReturnValue({
-      inspect,
       execute,
+      inspect,
     });
     const assertCurrent = vi.fn<HostedOperatorEffectContext["assertCurrent"]>(async () => {
       await Promise.resolve();
@@ -1303,8 +1309,8 @@ describe("empty approved access effects", () => {
     const readResourceBindings = vi.fn(
       async () =>
         await Promise.resolve({
-          authDatabase: { migrationUrl: "private-auth", runtimeUrl: "private-auth-runtime" },
           appDatabase: { migrationUrl: "private-app", runtimeUrl: "private-app-runtime" },
+          authDatabase: { migrationUrl: "private-auth", runtimeUrl: "private-auth-runtime" },
         }),
     );
     const readGeneratedRelease = vi.fn(
@@ -1364,12 +1370,12 @@ describe("empty approved access effects", () => {
     const observed = await f.dependencies.reconcile(f.input);
     const executed = await f.dependencies.executeEffect(f.input);
     expect(observed).toMatchObject({
-      status: "applied",
       receipt: {
         effectId: f.input.effect.id,
         fenceGeneration: 7,
         resourceVersion: executed.resourceVersion,
       },
+      status: "applied",
     });
     expect(executed.resourceVersion).toBe(
       createHash("sha256")
@@ -1395,8 +1401,8 @@ describe("empty approved access effects", () => {
           "changed-effect",
         ] as const
       ).map((failure) => ({
-        mode,
         failure,
+        mode,
       })),
     ),
   )("rejects $failure before $mode can settle empty grants", async ({ mode, failure }) => {
@@ -1519,10 +1525,10 @@ describe("participant plan resolution", () => {
       if (effect === undefined) {
         throw new Error("Fixture signup policy effect missing");
       }
-      const full = vi.fn<HostedOperatorEffectContext["assertCurrent"]>(() => Promise.resolve());
-      const observation = vi.fn<
-        NonNullable<HostedOperatorEffectContext["assertCurrentObservation"]>
-      >(() => Promise.resolve());
+      const full = vi.fn<HostedOperatorEffectContext["assertCurrent"]>().mockResolvedValue();
+      const observation = vi
+        .fn<NonNullable<HostedOperatorEffectContext["assertCurrentObservation"]>>()
+        .mockResolvedValue();
       const input: HostedOperatorWorkerEffectContext = {
         ...context,
         plan,
@@ -1533,7 +1539,7 @@ describe("participant plan resolution", () => {
         workerCheckpoints: [],
         assertCurrent: full,
         assertCurrentObservation: observation,
-        checkpoint: vi.fn<HostedOperatorWorkerEffectContext["checkpoint"]>(() => Promise.resolve()),
+        checkpoint: vi.fn<HostedOperatorWorkerEffectContext["checkpoint"]>().mockResolvedValue(),
         bindWorkerContext: vi
           .fn<HostedOperatorWorkerEffectContext["bindWorkerContext"]>()
           .mockResolvedValue(() => Promise.resolve()),
@@ -1568,7 +1574,9 @@ describe("participant plan resolution", () => {
         assertPlanningAuthorized: f.ports.assertPlanningAuthorized,
         readNormalActorPreparation: f.ports.readNormalActorPreparation,
         readNormalActorOrganizationProofs: f.ports.readNormalActorOrganizationProofs,
-        assertAuthorized: vi.fn(() => Promise.resolve()),
+        assertAuthorized: vi
+          .fn<ProtectedHostedOperatorDependencies["assertAuthorized"]>()
+          .mockResolvedValue(),
         readResourceBindings: vi.fn(() =>
           Promise.resolve({
             authDatabase: { migrationUrl: "private-auth", runtimeUrl: "private-auth-runtime" },
@@ -1594,10 +1602,10 @@ describe("participant plan resolution", () => {
       expect(base).toHaveBeenCalledTimes(2);
       expect(unused).not.toHaveBeenCalled();
       base
-        .mockImplementationOnce(() => Promise.resolve())
+        .mockResolvedValueOnce()
         .mockRejectedValueOnce(new HostedOperatorError("authorization_required"));
       await expect(guard()).rejects.toMatchObject({ code: "authorization_required" });
-      const organization = f.state.organizations[0];
+      const [organization] = f.state.organizations;
       if (organization === undefined) {
         throw new Error("Fixture participant organization missing");
       }
@@ -1839,7 +1847,7 @@ describe("retained APP Gateway source planning continuation", () => {
     const row = { record, revision: 7 };
     f.configuration.gateway.gitSha = "e".repeat(40);
     const read = vi.fn(async () => row);
-    const assertCanonicalOwner = vi.fn(async () => {});
+    const assertCanonicalOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
     const readApproval = vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(async () => ({
       action: "prepare",
       approved: true,
@@ -1912,7 +1920,7 @@ describe("retained APP Gateway source planning continuation", () => {
     async (approved) => {
       const f = await setup();
       const original = structuredClone(f.row.record.operator!);
-      const approvedByCallId = f.row.record.approvedByCallId;
+      const { approvedByCallId } = f.row.record;
       delete original.pendingEffectId;
       delete original.pendingEffectAttempt;
       const proposal = hostedOperatorPlanSchema.parse({
@@ -2218,38 +2226,38 @@ describe("existing populated Auth workflow planning", () => {
       {} as ReturnType<typeof nativePlanning.createNativePreviewNeonPlanningAuthority>,
     );
     vi.spyOn(neonReader, "createPreviewNeonMcpReader").mockReturnValue({
-      inspectPlanningTarget: vi.fn(async () => {}),
+      inspectPlanningTarget: vi.fn<() => Promise<void>>().mockResolvedValue(),
     } as unknown as ReturnType<typeof neonReader.createPreviewNeonMcpReader>);
     vi.spyOn(providerInventory, "readHostedOperatorProviderInventory").mockResolvedValue({
       app: {
-        deployedEnvironmentKeys: [],
-        projectEnvironmentKeys: [],
         branch: context.target.branch,
-        projectId: context.target.projectId,
+        deployedEnvironmentKeys: [],
         deploymentId: "app-deployment",
         environment: "preview",
+        projectEnvironmentKeys: [],
+        projectId: context.target.projectId,
       },
       gateway: {
-        deployedEnvironmentKeys: [],
-        projectEnvironmentKeys: [],
         branch: "gateway-actual",
-        projectId: "gateway",
+        deployedEnvironmentKeys: [],
         deploymentId: "gateway-deployment",
         environment: "preview",
+        projectEnvironmentKeys: [],
+        projectId: "gateway",
       },
       operator: {
         branch: null,
         deployedEnvironmentKeys: [],
-        projectEnvironmentKeys: [],
-        projectId: "operator",
         deploymentId: "operator-deployment",
         environment: "preview",
+        projectEnvironmentKeys: [],
+        projectId: "operator",
       },
       verification: {
-        publicKeyIds: null,
         gatewayOrigin: "https://gateway.example",
-        publicOrigin: "https://apps.example",
         jwksUrl: "https://gateway.example/_platform/jwks.json",
+        publicKeyIds: null,
+        publicOrigin: "https://apps.example",
       },
       appEnvironment: { deployedKeyInventory: "observed", forbiddenKeys: [] },
       nativeResource: null,
@@ -2260,7 +2268,7 @@ describe("existing populated Auth workflow planning", () => {
     });
     const controlPlane = {
       ...f.controlPlane,
-      assertPlanningAuthorized: vi.fn(async () => {}),
+      assertPlanningAuthorized: vi.fn<() => Promise<void>>().mockResolvedValue(),
       store: {
         read: vi.fn(async (input: HostedOperatorContext) =>
           input.target.appId === "source"
@@ -2274,7 +2282,7 @@ describe("existing populated Auth workflow planning", () => {
       readActiveSharedAuth: vi.fn(async () => undefined),
       readSharedAuthAdoption: vi.fn(async () => adopted),
       readResourceBindings,
-      publishAuthPlan: vi.fn(async () => "new-observed-artifact"),
+      publishAuthPlan: vi.fn<() => Promise<string>>().mockResolvedValue("new-observed-artifact"),
     };
     const dependencies = composeHostedOperatorDependencies(
       f.configuration,
@@ -2312,7 +2320,7 @@ describe("existing populated Auth workflow planning", () => {
       },
     };
     const readSnapshot = vi.fn(async () => snapshot);
-    const assertAuthorized = vi.fn(async () => {});
+    const assertAuthorized = vi.fn<() => Promise<void>>().mockResolvedValue();
     const createReadiness = authReadiness.createHostedOperatorAuthReadiness;
     vi.spyOn(authReadiness, "createHostedOperatorAuthReadiness").mockImplementation((ports) =>
       createReadiness({ ...ports, assertAuthorized, readSnapshot }),
@@ -2450,7 +2458,7 @@ describe("existing populated Auth workflow planning", () => {
       version: 1,
       workflowPhase: "applied",
     };
-    const record = f.row.record;
+    const { record } = f.row;
     const operator = record.operator!;
     f.configuration.applications.actual!.repoId = "actual-repository-id";
     f.configuration.applications.actual!.gitSha = "c".repeat(40);
@@ -2478,14 +2486,17 @@ describe("existing populated Auth workflow planning", () => {
     // The prepared APP plan and provider row describe the same current realm configuration.
     operator.plan.gatewayBindings = configuredBootstrapGatewayBindings(f.configuration);
     operator.planDigest = operatorPlanDigest(operator.plan);
-    operator.receipts = operator.plan.effects.map((effect) => ({
-      effectId: effect.id,
-      observedAt: "2026-10-15T12:00:00Z",
-      resourceVersion: "settled-app-readback",
-      ...(["access", "revoke"].includes(effect.kind)
-        ? { fenceGeneration: operator.fenceGeneration }
-        : {}),
-    }));
+    operator.receipts = operator.plan.effects.map((effect) => {
+      const receipt: OperatorReceipt = {
+        effectId: effect.id,
+        observedAt: "2026-10-15T12:00:00Z",
+        resourceVersion: "settled-app-readback",
+      };
+      if (["access", "revoke"].includes(effect.kind)) {
+        receipt.fenceGeneration = operator.fenceGeneration;
+      }
+      return receipt;
+    });
     operator.gatewayEnvironment![0].valueSha256 = hostedOperatorRealmLinkConfigSha256(
       operator.plan,
     );
@@ -2524,7 +2535,7 @@ describe("existing populated Auth workflow planning", () => {
         };
       },
     );
-    const assertCanonicalOwner = vi.fn(async () => {});
+    const assertCanonicalOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
     f.readResourceBindings.mockImplementation(async (input) => {
       const authorized = requireFinalResourceBindingPhase(
         selectAuthPlanningResourceBindingRow(f.row, input.plan),
@@ -2633,7 +2644,7 @@ describe("existing populated Auth workflow planning", () => {
         reviewDigest: "c".repeat(64),
       },
     };
-    const assertCurrent = vi.fn(async () => {});
+    const assertCurrent = vi.fn<() => Promise<void>>().mockResolvedValue();
     readSelection.mockResolvedValue({
       currentSpec: {
         appId: context.target.appId,
@@ -2951,11 +2962,6 @@ describe("existing populated Auth workflow planning", () => {
     let approved = false;
     let fence = 1;
     const executed: string[] = [];
-    const receipt = (input: HostedOperatorEffectContext) => ({
-      effectId: input.effect.id,
-      observedAt: new Date().toISOString(),
-      resourceVersion: "independent-fixture-readback",
-    });
     const store: ProtectedHostedOperatorDependencies["store"] = {
       read: async () => structuredClone(f.row),
       reserve: async () => structuredClone(f.row),
@@ -3017,7 +3023,7 @@ describe("existing populated Auth workflow planning", () => {
       reconcile: async (input) => {
         await input.assertCurrent();
         return ["resources", "install"].includes(input.effect.kind)
-          ? { status: "applied", receipt: receipt(input) }
+          ? { status: "applied", receipt: independentFixtureReceipt(input) }
           : { status: "absent" };
       },
       executeEffect: async (input) => {
@@ -3039,7 +3045,7 @@ describe("existing populated Auth workflow planning", () => {
             "new-gateway",
           );
         }
-        return receipt(input);
+        return independentFixtureReceipt(input);
       },
       verifyAuthReadiness: async (input) => {
         await input.assertCurrent();
@@ -3069,8 +3075,8 @@ describe("existing populated Auth workflow planning", () => {
       selection: plan.selection,
     });
     expect(proposal).toMatchObject({
+      plan: { contextId: retainedAuth.plan.contextId, stage: "auth-bootstrap" },
       status: "planned",
-      plan: { stage: "auth-bootstrap", contextId: retainedAuth.plan.contextId },
     });
     expect(f.row.record.accountPreparation).toEqual(before.accountPreparation);
     expect(f.row.record.privateState).toEqual(before.privateState);
@@ -3134,8 +3140,8 @@ describe("existing populated Auth workflow planning", () => {
           operatorOrigin: "https://operator.example",
           sourceWorkload: f.configuration.gateway.workload,
           trustedSources: {
-            builderProduction: { projectId: "builder", from: "production", to: "preview" },
-            operatorPreview: { projectId: "operator", from: "preview", to: "preview" },
+            builderProduction: { from: "production", projectId: "builder", to: "preview" },
+            operatorPreview: { from: "preview", projectId: "operator", to: "preview" },
           },
         },
         deploymentBoundary: {
@@ -3160,8 +3166,8 @@ describe("existing populated Auth workflow planning", () => {
           teamId: "team",
           verification: {
             gatewayOrigin: "https://gateway.example",
-            publicOrigin: "https://apps.example",
             jwksUrl: "https://gateway.example/_platform/jwks.json",
+            publicOrigin: "https://apps.example",
           },
         },
         effects: [
@@ -3236,8 +3242,8 @@ describe("existing populated Auth workflow planning", () => {
     expect(plan.gatewayBindings?.trustedSources).toBeUndefined();
     expect(plan.gatewayDelivery?.projectId).toBe("gateway");
     expect(plan.gatewayBindings?.readonlyAttesters).toMatchObject({
-      builderProduction: { projectId: "builder", environment: "production" },
-      operatorPreview: { projectId: "operator", environment: "preview" },
+      builderProduction: { environment: "production", projectId: "builder" },
+      operatorPreview: { environment: "preview", projectId: "operator" },
     });
     expect(plan.gatewayBindings).toMatchObject({
       authBrowserOrigin: f.configuration.gateway.authBrowserOrigin,
@@ -3313,8 +3319,8 @@ describe("existing populated Auth workflow planning", () => {
       workerCheckpoints: [],
     };
     expect(await f.dependencies.reconcile(input)).toEqual({
-      status: "retryable",
       resourceVersion: "d".repeat(64),
+      status: "retryable",
     });
     expect(reconcileMigration).toHaveBeenCalledOnce();
     const observed = f.propose.mock.calls[0]?.[0];
@@ -3355,8 +3361,8 @@ describe("existing populated Auth workflow planning", () => {
       );
       expect(plan.authSchema).toMatchObject({
         artifactRef: "new-observed-artifact",
-        targetDigest: "4".repeat(64),
         planDigest: "3".repeat(64),
+        targetDigest: "4".repeat(64),
       });
       expect(plan.authAdoption).toBeUndefined();
       expect(f.row).toEqual(before);
@@ -3411,21 +3417,21 @@ describe("existing populated Auth workflow planning", () => {
   it.each([
     {
       configuredDeploymentId: "configured-gateway",
-      recordedState: "READY",
       expectedDeploymentId: "configured-gateway",
       expectedOrigin: "https://gateway.example",
-    },
-    {
-      configuredDeploymentId: undefined,
       recordedState: "READY",
-      expectedDeploymentId: undefined,
-      expectedOrigin: "https://gateway.example",
     },
     {
       configuredDeploymentId: undefined,
-      recordedState: "BUILDING",
       expectedDeploymentId: undefined,
       expectedOrigin: "https://gateway.example",
+      recordedState: "READY",
+    },
+    {
+      configuredDeploymentId: undefined,
+      expectedDeploymentId: undefined,
+      expectedOrigin: "https://gateway.example",
+      recordedState: "BUILDING",
     },
   ] as const)(
     "plans against stable configured Gateway origins without overriding them from history: $configuredDeploymentId / $recordedState",
@@ -3703,7 +3709,7 @@ describe("retained approved Auth binding selection", () => {
     const originalPlan = bootstrapWithGatewayOrigin("https://gateway.example");
     const record = existingAuthRecord(originalPlan);
     record.retainedAuth = retainedOperatorAuthFromJournal(record);
-    const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+    const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "actual-repository-id" });
     const appPlan = await resolveFullPlan(originalPlan, context, f.configuration, f.controlPlane);
     record.operator = {
       ...record.operator!,
@@ -3714,7 +3720,7 @@ describe("retained approved Auth binding selection", () => {
       pendingEffectId: appPlan.effects.find((effect) => effect.kind === "delivery")!.id,
       pendingEffectAttempt: { id: "00000000-0000-4000-8000-000000000003" },
     };
-    return { row: { record, revision: 5 }, originalPlan };
+    return { originalPlan, row: { record, revision: 5 } };
   };
 
   it("reads exact completed retained Auth while an unrelated app delivery awaits reconciliation", async () => {
@@ -3842,8 +3848,8 @@ it.each(["reconcile", "execute"] as const)(
     };
     const appCandidates = [appCandidate];
     const gatewayCandidates = [gatewayCandidate];
-    const checkpointApp = vi.fn(async () => {});
-    const checkpointGateway = vi.fn(async () => {});
+    const checkpointApp = vi.fn<() => Promise<void>>().mockResolvedValue();
+    const checkpointGateway = vi.fn<() => Promise<void>>().mockResolvedValue();
     const verifyForDelivery = vi.fn(
       async (
         input: Parameters<
@@ -3890,7 +3896,7 @@ it.each(["reconcile", "execute"] as const)(
           });
           return result;
         };
-        return { ...adapter, reconcile: observe, deliver: observe };
+        return { ...adapter, deliver: observe, reconcile: observe };
       },
     );
     const dependencies = composeHostedOperatorDependencies(f.configuration, {
@@ -3955,16 +3961,16 @@ describe("approved historical organization inspection", () => {
       retention: { expiresAt: "2026-10-01T00:00:00Z", policy: "Original approved retention" },
       effects: [
         ...bootstrapPlan().effects,
-        { id: "app-install", kind: "install", description: "Install app" },
+        { description: "Install app", id: "app-install", kind: "install" },
         {
+          description: "Create owned organization",
           id: "auth-membership",
           kind: "auth-membership",
-          description: "Create owned organization",
         },
-        { id: "access", kind: "access", description: "Grant approved access" },
-        { id: "bindings", kind: "bindings", description: "Bind app" },
-        { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind Gateway" },
-        { id: "gateway-delivery", kind: "gateway-delivery", description: "Deliver Gateway" },
+        { description: "Grant approved access", id: "access", kind: "access" },
+        { description: "Bind app", id: "bindings", kind: "bindings" },
+        { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+        { description: "Deliver Gateway", id: "gateway-delivery", kind: "gateway-delivery" },
       ],
       authMembership: {
         kind: "create-owned-organization",
@@ -3982,10 +3988,10 @@ describe("approved historical organization inspection", () => {
           jwksUrl: "https://gateway.example/_platform/jwks.json",
           transportSource: {
             audience: "https://vercel.com/team",
+            environment: "preview",
             issuer: "https://oidc.vercel.com/team",
             ownerId: "team",
             projectId: "operator",
-            environment: "preview",
           },
         },
       },
@@ -4024,10 +4030,10 @@ describe("approved historical organization inspection", () => {
         readback_sha256: "e".repeat(64),
       };
     });
-    const execute = vi.fn(async () => {});
+    const execute = vi.fn<() => Promise<void>>().mockResolvedValue();
     vi.spyOn(membershipLauncher, "createHostedOperatorSandboxLauncher").mockReturnValue({
-      inspect,
       execute,
+      inspect,
     });
     vi.stubEnv(
       "VERCEL_OIDC_TOKEN",
@@ -4041,7 +4047,7 @@ describe("approved historical organization inspection", () => {
       },
     }));
     const readMembershipInspectionPlan = vi.fn(async () =>
-      historical ? { plan: prior, effect } : undefined,
+      historical ? { effect, plan: prior } : undefined,
     );
     const assertMembershipCapture = vi.fn(async (current: HostedOperatorEffectContext) => {
       await current.assertCurrent();
@@ -4062,23 +4068,23 @@ describe("approved historical organization inspection", () => {
       controlPlane as unknown as Parameters<typeof composeHostedOperatorDependencies>[1],
     );
     return {
-      f,
-      input,
-      prior,
-      inspect,
-      execute,
-      readResourceBindings,
-      readMembershipInspectionPlan,
       assertMembershipCapture,
       dependencies,
+      execute,
+      f,
+      input,
+      inspect,
+      prior,
+      readMembershipInspectionPlan,
+      readResourceBindings,
     };
   };
 
   it("reads current credentials and capture but inspects the original approved full plan with today's fence", async () => {
     const f = setup(true, "applied");
     await expect(f.dependencies.reconcile(f.input)).resolves.toMatchObject({
-      status: "applied",
       receipt: { effectId: f.input.effect.id, resourceVersion: "e".repeat(64) },
+      status: "applied",
     });
     expect(f.readResourceBindings).toHaveBeenCalledWith(f.input);
     expect(f.f.readCapturedRealmIdentityProof).toHaveBeenCalledWith(f.input);
@@ -4086,12 +4092,12 @@ describe("approved historical organization inspection", () => {
     expect(f.assertMembershipCapture).toHaveBeenCalledWith(f.input);
     expect(f.inspect).toHaveBeenCalledWith(
       expect.objectContaining({
-        plan: f.prior,
-        operationRef: f.input.operationRef,
+        directDatabaseUrl: "private-current-auth",
         fenceGeneration: 9,
         leaseId: "current-lease",
+        operationRef: f.input.operationRef,
+        plan: f.prior,
         readbackOnly: true,
-        directDatabaseUrl: "private-current-auth",
       }),
     );
     expect(f.execute).not.toHaveBeenCalled();
@@ -4127,8 +4133,8 @@ describe("retained active schema installation scope", () => {
       stage: undefined,
       effects: [
         ...bootstrapPlan().effects,
-        { id: "app-access", kind: "access", description: "Approved grants" },
-        { id: "app-bindings", kind: "bindings", description: "Approved bindings" },
+        { description: "Approved grants", id: "app-access", kind: "access" },
+        { description: "Approved bindings", id: "app-bindings", kind: "bindings" },
       ],
       access: [{ actorId: "qa-actor", organizationId: "qa-org", roles: ["member"] }],
     });
@@ -4192,11 +4198,11 @@ describe("retained active schema installation scope", () => {
     );
     const readActiveCustomers = vi.fn(async () => await Promise.resolve(["original-org"]));
     const read = createRetainedAppInstallationCustomerReader({
-      readOwner,
-      readApproval,
       readActiveCustomers,
+      readApproval,
+      readOwner,
     });
-    const readScopes = createRetainedAppInstallationScopeReader({ readOwner, readApproval });
+    const readScopes = createRetainedAppInstallationScopeReader({ readApproval, readOwner });
     return {
       desired,
       prior,
@@ -4216,8 +4222,8 @@ describe("retained active schema installation scope", () => {
     f.desired.appInstallation = { customerIds: ["original-org"] };
     await expect(f.readScopes(context, f.desired)).resolves.toEqual([
       {
-        appId: context.target.appId,
         actorId: "original-owner",
+        appId: context.target.appId,
         organizationId: "original-org",
         role: "member",
       },
@@ -4277,12 +4283,17 @@ describe("retained active schema installation scope", () => {
           plan: f.prior,
           planDigest: operatorPlanDigest(f.prior),
           fenceGeneration: 1,
-          receipts: f.prior.effects.map((effect) => ({
-            effectId: effect.id,
-            observedAt: "2026-10-20T12:00:00Z",
-            resourceVersion: "observed-resource",
-            ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
-          })),
+          receipts: f.prior.effects.map((effect) => {
+            const receipt: OperatorReceipt = {
+              effectId: effect.id,
+              observedAt: "2026-10-20T12:00:00Z",
+              resourceVersion: "observed-resource",
+            };
+            if (effect.kind === "access") {
+              receipt.fenceGeneration = 1;
+            }
+            return receipt;
+          }),
         },
       }),
     };
@@ -4538,7 +4549,7 @@ describe("retained active schema installation scope", () => {
     const f = await deploymentFixture();
     await expect(f.read(context, f.desired)).resolves.toEqual(["original-org"]);
     expect(f.readBindings).toHaveBeenCalledWith(
-      expect.objectContaining({ record: f.row.record, plan: f.prior }),
+      expect.objectContaining({ plan: f.prior, record: f.row.record }),
     );
     expect(f.readMetadata).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -4546,8 +4557,8 @@ describe("retained active schema installation scope", () => {
         runtimeUrl: f.bindings.appDatabase.runtimeUrl,
         scopes: [
           {
-            appId: context.target.appId,
             actorId: "original-owner",
+            appId: context.target.appId,
             organizationId: "original-org",
             role: "member",
           },
@@ -4556,7 +4567,7 @@ describe("retained active schema installation scope", () => {
     );
     expect(f.metadataRead).toHaveBeenCalled();
     expect(f.assertAuthorized).toHaveBeenCalledWith(
-      expect.objectContaining({ purpose: "planning", plan: f.prior }),
+      expect.objectContaining({ plan: f.prior, purpose: "planning" }),
     );
   });
 
@@ -4600,8 +4611,8 @@ describe("retained active schema installation scope", () => {
     expect(f.readApproval).toHaveBeenCalledWith(context, f.receipt(8));
     expect(f.readActiveCustomers).toHaveBeenCalledWith(context, f.desired, [
       {
-        appId: context.target.appId,
         actorId: "original-owner",
+        appId: context.target.appId,
         organizationId: "original-org",
         role: "member",
       },
@@ -4633,13 +4644,14 @@ describe("retained active schema installation scope", () => {
       if (kind === "session") {
         f.session.sessionId = "other-session";
       }
-      const plan = hostedOperatorPlanSchema.parse({
-        ...f.prior,
-        ...(kind === "database"
-          ? { appDatabase: { ...f.prior.appDatabase, database: "other_database" } }
-          : {}),
-        ...(kind === "app" ? { selection: { ...f.prior.selection, appId: "other-app" } } : {}),
-      });
+      const planInput = { ...f.prior };
+      if (kind === "database") {
+        planInput.appDatabase = { ...f.prior.appDatabase, database: "other_database" };
+      }
+      if (kind === "app") {
+        planInput.selection = { ...f.prior.selection, appId: "other-app" };
+      }
+      const plan = hostedOperatorPlanSchema.parse(planInput);
       f.session.privateApprovalReceipts = [
         {
           ...original,
@@ -4822,12 +4834,19 @@ it("resolves the completed additive participant successor into its newly approve
       planDigest: operatorPlanDigest(originalApp),
       approvalId: "app-approval",
       fenceGeneration: 1,
-      receipts: originalApp.effects.map((effect) => ({
-        effectId: effect.id,
-        ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
-        observedAt: "2026-10-20T00:00:00.000Z",
-        resourceVersion: "observed",
-      })),
+      receipts: originalApp.effects.map((effect) => {
+        const receipt: Pick<OperatorReceipt, "effectId" | "fenceGeneration"> = {
+          effectId: effect.id,
+        };
+        if (effect.kind === "access") {
+          receipt.fenceGeneration = 1;
+        }
+        return {
+          ...receipt,
+          observedAt: "2026-10-20T00:00:00.000Z",
+          resourceVersion: "observed",
+        };
+      }),
     },
   });
   const qa = participantResolutionFixture();
@@ -4871,7 +4890,7 @@ it("resolves the completed additive participant successor into its newly approve
     accountApprovalId: "new-account-approval",
     accountApprovedByCallId: "new-account-call",
   });
-  const qaActor = qa.state.actors[0];
+  const [qaActor] = qa.state.actors;
   if (qaActor?.session === undefined) {
     throw new Error("missing QA session");
   }
@@ -5041,7 +5060,7 @@ it("uses only the same approved completed additive capture successor for app pla
 });
 
 it("keeps legacy project separation frozen and accepts an explicitly planned single Services destination", async () => {
-  const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+  const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "actual-repository-id" });
   const original = bootstrapWithGatewayOrigin("https://apps.example");
   const boundary = original.deploymentBoundary;
   if (
@@ -5087,7 +5106,7 @@ it("keeps legacy project separation frozen and accepts an explicitly planned sin
 });
 
 it("plans same-project resource preparation without Preview effects or an environment claim", async () => {
-  const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+  const f = publicationFixture({ gitSha: "c".repeat(40), repoId: "actual-repository-id" });
   f.configuration.composition = "single-project-services";
   f.configuration.gateway.projectId = context.target.projectId;
   f.configuration.gateway.workload.projectId = context.target.projectId;
@@ -5129,7 +5148,7 @@ it("plans same-project resource preparation without Preview effects or an enviro
       ...result,
       effects: [
         ...result.effects,
-        { id: "bindings", kind: "bindings", description: "Not approved by a resource plan" },
+        { description: "Not approved by a resource plan", id: "bindings", kind: "bindings" },
       ],
     }),
   ).toThrow();

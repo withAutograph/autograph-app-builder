@@ -6,7 +6,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { SandboxSession } from "eve/sandbox";
+import type { RuntimeSandboxSession, SandboxEnvironment, SandboxSession } from "eve/sandbox";
+import type { ToolContext } from "eve/tools";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
@@ -41,6 +42,30 @@ import { recordApprovedPrivateApply, requestPrivateApplyApproval } from "./priva
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy only on the external artifact storage boundary while retaining the real validation composition.
 import * as artifacts from "./compiled-operator-artifacts";
 import { inspectDraftReconciliation } from "../repository/sandbox-draft-reconciliation";
+
+const unexpectedSandboxOperation = (): never => {
+  throw new Error("Unexpected sandbox operation in test fixture");
+};
+const sandboxDefaults = {
+  delete: unexpectedSandboxOperation,
+  readBinaryFile: unexpectedSandboxOperation,
+  readFile: unexpectedSandboxOperation,
+  readTextFile: unexpectedSandboxOperation,
+  removePath: unexpectedSandboxOperation,
+  resolvePath: unexpectedSandboxOperation,
+  run: unexpectedSandboxOperation,
+  spawn: unexpectedSandboxOperation,
+  stop: unexpectedSandboxOperation,
+  writeBinaryFile: unexpectedSandboxOperation,
+  writeFile: unexpectedSandboxOperation,
+  writeTextFile: unexpectedSandboxOperation,
+} satisfies RuntimeSandboxSession;
+const createSandbox = <T extends Partial<SandboxSession>>(
+  overrides: T,
+): RuntimeSandboxSession & T => ({
+  ...sandboxDefaults,
+  ...overrides,
+});
 
 const roots: string[] = [];
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -120,9 +145,7 @@ const fixture = () => {
   }
   const commands: { root: string; command: string }[] = [];
   let failure: "none" | "startup" | "interrupted" = "none";
-  // SAFETY: This adapter executes maintained Git/path programs unchanged and replaces only provider command execution with owned local processes.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- Only the SandboxSession ports used by these tools are implemented.
-  const sandbox = {
+  const sandbox = createSandbox({
     id: "owned-physical-session",
     async readTextFile(input: { path: string; abortSignal?: AbortSignal }) {
       input.abortSignal?.throwIfAborted();
@@ -130,9 +153,6 @@ const fixture = () => {
         path.isAbsolute(input.path) ? input.path : path.join(root, input.path),
         "utf-8",
       );
-    },
-    async writeTextFile(input: { path: string; content: string }) {
-      writeFileSync(path.join(root, input.path), input.content);
     },
     async run(input: {
       command: string;
@@ -161,7 +181,7 @@ const fixture = () => {
       const technical =
         input.command.includes(check) || input.command.includes(" app:test orchard ");
       if (technical) {
-        commands.push({ root: cwd, command: input.command });
+        commands.push({ command: input.command, root: cwd });
         if (failure === "interrupted") {
           throw new Error("controlled external transport interruption");
         }
@@ -192,7 +212,10 @@ const fixture = () => {
       });
       return { exitCode: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
     },
-  } as unknown as SandboxSession;
+    async writeTextFile(input: { path: string; content: string }) {
+      writeFileSync(path.join(root, input.path), input.content);
+    },
+  });
   // SAFETY: Consumed apply fields are complete; unused preparation contracts are controlled fixture identities.
   const apply = {
     appSpecDigest: hash("orchard-spec"),
@@ -337,13 +360,27 @@ const fixture = () => {
     reviewedLineage: structuredClone(reviewed),
   };
   draftReconciliationState.update(() => candidate);
-  const context = (signal = new AbortController().signal, sessionId = "owner-session") =>
-    ({
-      abortSignal: signal,
-      callId: "candidate-check",
-      getSandbox: async () => sandbox,
-      session: { id: sessionId, auth: {} },
-    }) as Parameters<typeof validateCreation.execute>[1];
+  const context = (
+    signal = new AbortController().signal,
+    sessionId = "owner-session",
+  ): ToolContext => ({
+    abortSignal: signal,
+    callId: "candidate-check",
+    getSandbox: async (environment?: SandboxEnvironment<object | undefined>) => {
+      if (environment !== undefined) {
+        throw new Error("Unexpected sandbox environment in test fixture");
+      }
+      return sandbox;
+    },
+    getToken: unexpectedSandboxOperation,
+    requireAuth: unexpectedSandboxOperation,
+    session: {
+      auth: { current: null, initiator: null },
+      id: sessionId,
+      turn: { id: "fixture-turn", sequence: 0 },
+    },
+    toolName: "validate_app_creation",
+  });
   vi.spyOn(artifacts, "publishCompiledOperatorArtifactsForSession").mockResolvedValue({
     compilation: {
       context: {
@@ -354,13 +391,13 @@ const fixture = () => {
     },
   } as Awaited<ReturnType<typeof artifacts.publishCompiledOperatorArtifactsForSession>>);
   return {
-    root,
-    repository,
-    sandbox,
-    reviewed,
     candidate,
     commands,
     context,
+    repository,
+    reviewed,
+    root,
+    sandbox,
     setFailure: (value: typeof failure) => {
       failure = value;
     },
@@ -436,7 +473,7 @@ describe("same-session draft review lineage with real shared state and draft byt
         f.setFailure(failure);
         const pending = validateCreation.execute({ implementationFiles: [] }, f.context());
         await (failure === "startup"
-          ? expect(pending).resolves.toMatchObject({ status: "needs_repair", exitCode: 134 })
+          ? expect(pending).resolves.toMatchObject({ exitCode: 134, status: "needs_repair" })
           : expect(pending).rejects.toThrow("controlled external transport interruption"));
         expect(appBuilderWorkflowState.get()).toEqual(f.reviewed);
         expect(candidateValidationAttemptHistory.get().some((entry) => entry.exitCode !== 0)).toBe(
@@ -514,10 +551,6 @@ describe("same-session draft review lineage with real shared state and draft byt
         const state = { ...f.reviewed, phase: "validated" as const };
         const variants = {
           app: () => ({ ...state, appSpec: { ...state.appSpec, appId: "foreign" } }),
-          source: () => ({
-            ...state,
-            githubSource: { ...state.githubSource!, digest: hash("foreign-source") },
-          }),
           apply: () => ({
             ...state,
             applyReceipt: { ...state.applyReceipt, digest: hash("different-apply") },
@@ -528,6 +561,10 @@ describe("same-session draft review lineage with real shared state and draft byt
               ...f.reviewed.reviewReceipt,
               digest: hash("different-current-review"),
             },
+          }),
+          source: () => ({
+            ...state,
+            githubSource: { ...state.githubSource!, digest: hash("foreign-source") },
           }),
         };
         const changedState = variants[changed]();

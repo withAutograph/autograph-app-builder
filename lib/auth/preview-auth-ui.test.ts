@@ -1,5 +1,6 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { afterEach, describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import {
   DEFAULT_AUTH_REDIRECT_TO,
@@ -165,7 +166,7 @@ describe("Preview Better Auth UI", () => {
     expect(onRequest).toBeTypeOf("function");
     await onRequest?.(request as never);
 
-    const body = JSON.parse(request.body) as Record<string, string>;
+    const body = z.object({ oauth_query: z.string() }).parse(JSON.parse(request.body));
     expect(new URLSearchParams(body.oauth_query).getAll("ba_param")).toEqual([
       "client_id",
       "scope",

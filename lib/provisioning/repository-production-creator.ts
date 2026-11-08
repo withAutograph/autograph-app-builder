@@ -90,6 +90,26 @@ const operationId = (invitationId: string, step: string) => {
 };
 const rolesEqual = (left: string[], right: string[]) =>
   repositoryProductionDigest(left.toSorted()) === repositoryProductionDigest(right.toSorted());
+const signInUrl = (row: RepositoryProductionRow, frame: CreatorFrame) => {
+  const url = new URL("/api/auth/platform/app-invitation/accept", row.record.scope.publicOrigin);
+  url.searchParams.set("invitationId", frame.invitationId);
+  return url.toString();
+};
+const isVerified = (value: Invitation, frame: CreatorFrame) => {
+  if (
+    (value.status !== "verified" && value.status !== "accepted") ||
+    value.verifiedActorId === null
+  ) {
+    return false;
+  }
+  if (frame.linkedCreator === undefined) {
+    return value.verifiedSessionId !== null;
+  }
+  return (
+    value.linkedFromInvitationId === frame.linkedCreator.sourceInvitationId &&
+    value.verifiedActorId === frame.linkedCreator.actorId
+  );
+};
 
 /** A durable owner-to-Auth link inside the existing app setup journal; no separate provisioning engine. */
 export const createRepositoryProductionCreator = (
@@ -161,26 +181,6 @@ export const createRepositoryProductionCreator = (
     }
     return value;
   };
-  const signInUrl = (row: RepositoryProductionRow, frame: CreatorFrame) => {
-    const url = new URL("/api/auth/platform/app-invitation/accept", row.record.scope.publicOrigin);
-    url.searchParams.set("invitationId", frame.invitationId);
-    return url.toString();
-  };
-  const isVerified = (value: Invitation, frame: CreatorFrame) => {
-    if (
-      (value.status !== "verified" && value.status !== "accepted") ||
-      value.verifiedActorId === null
-    ) {
-      return false;
-    }
-    if (frame.linkedCreator === undefined) {
-      return value.verifiedSessionId !== null;
-    }
-    return (
-      value.linkedFromInvitationId === frame.linkedCreator.sourceInvitationId &&
-      value.verifiedActorId === frame.linkedCreator.actorId
-    );
-  };
   const current = async (context: RepositoryProductionEffectContext) => {
     await context.assertCurrent();
     const row = await deps.readCurrent(context.row.record.scope);
@@ -202,16 +202,15 @@ export const createRepositoryProductionCreator = (
         continue;
       }
       const frame = frameFor(candidate);
-      if (frame?.realmDigest !== realm) {
-        continue;
-      }
-      const invitation = await read(candidate, frame);
-      if (invitation?.status === "accepted" && isVerified(invitation, frame)) {
-        return linkedCreatorSchema.parse({
-          sourceInvitationId: invitation.id,
-          sourceScopeDigest: invitation.scopeDigest,
-          actorId: invitation.verifiedActorId,
-        });
+      if (frame?.realmDigest === realm) {
+        const invitation = await read(candidate, frame);
+        if (invitation?.status === "accepted" && isVerified(invitation, frame)) {
+          return linkedCreatorSchema.parse({
+            sourceInvitationId: invitation.id,
+            sourceScopeDigest: invitation.scopeDigest,
+            actorId: invitation.verifiedActorId,
+          });
+        }
       }
     }
     // oxlint-disable-next-line unicorn/no-useless-undefined -- No verified identity exists for this exact owner and Auth realm.
@@ -318,19 +317,25 @@ export const createRepositoryProductionCreator = (
       if (frame === undefined) {
         const owner = await deps.readOwner(row);
         const linked = await linkedCreator(row);
-        frame = frameSchema.parse({
-          version: 1,
-          kind: CREATOR_LINK_KIND,
-          invitationId: repositoryProductionOperationRef(row.record.scope),
-          scopeDigest: repositoryProductionDigest(row.record.scope),
-          sessionId: row.record.intent.sessionId,
-          email: owner.email.toLowerCase(),
-          roles: [...new Set(row.record.intent.creatorRoles)].toSorted(),
-          returnUrl: returnUrl(row.record.intent.sessionId),
-          expiresAt: expiresAt(),
-          realmDigest: deps.realmDigest(row.record.scope),
-          ...(linked === undefined ? {} : { linkedCreator: linked }),
-        });
+        const createFrameInput = (): z.input<typeof frameSchema> => {
+          const frameInput: z.input<typeof frameSchema> = {
+            version: 1,
+            kind: CREATOR_LINK_KIND,
+            invitationId: repositoryProductionOperationRef(row.record.scope),
+            scopeDigest: repositoryProductionDigest(row.record.scope),
+            sessionId: row.record.intent.sessionId,
+            email: owner.email.toLowerCase(),
+            roles: [...new Set(row.record.intent.creatorRoles)].toSorted(),
+            returnUrl: returnUrl(row.record.intent.sessionId),
+            expiresAt: expiresAt(),
+            realmDigest: deps.realmDigest(row.record.scope),
+          };
+          if (linked !== undefined) {
+            frameInput.linkedCreator = linked;
+          }
+          return frameInput;
+        };
+        frame = frameSchema.parse(createFrameInput());
         await context.assertCurrent();
         await context.checkpoint(frame);
       }

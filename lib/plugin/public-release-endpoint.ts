@@ -32,7 +32,7 @@ export const isReservedPublicReleaseHostname = (hostname: string) => {
       return true;
     }
     const mapped = mappedIpv4(host);
-    if (mapped && isLoopbackOrUnspecifiedIpv4(mapped)) {
+    if (mapped !== undefined && isLoopbackOrUnspecifiedIpv4(mapped)) {
       return true;
     }
   }

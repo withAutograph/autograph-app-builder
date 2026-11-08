@@ -11,10 +11,9 @@ async function privateRoot(root: string) {
   await mkdir(root, { mode: 0o700, recursive: true });
   const canonical = await realpath(root);
   const info = await lstat(canonical);
+  const invalidRootDirectory = canonical !== root || !info.isDirectory() || info.isSymbolicLink();
   if (
-    canonical !== root ||
-    !info.isDirectory() ||
-    info.isSymbolicLink() ||
+    invalidRootDirectory ||
     info.uid !== process.getuid?.() ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & 0o077) !== 0

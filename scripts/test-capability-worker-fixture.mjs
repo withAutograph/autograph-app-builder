@@ -1,8 +1,19 @@
+/// <reference types="node" />
 import { parentPort, workerData } from "node:worker_threads";
 import { once } from "node:events";
 
+/**
+ * @typedef {object} NestedWorkerResult
+ * @property {unknown} capability Capability reported by the nested worker.
+ * @property {string | null} appRoot Worker application root, if set.
+ * @property {string | null} eveDev Eve development setting, if set.
+ * @property {string | null} workflowBodyTimeout Workflow body timeout, if set.
+ * @property {string | null} workflowHeadersTimeout Workflow headers timeout, if set.
+ */
+
 const accessor =
   process[Symbol.for("withAutograph.autograph-app-builder.test-capability-registry.v2")];
+/** @type {unknown} */
 const capability = typeof accessor === "function" ? (accessor() ?? null) : null;
 const gateAFields = [
   "APP_BUILDER_LOCAL_PUBLICATION",
@@ -29,6 +40,7 @@ let nestedWorkflowHeadersTimeout = null;
 if (workerData?.spawnNested === true) {
   const { Worker } = await import("node:worker_threads");
   const nested = new Worker(new URL(import.meta.url));
+  /** @type {[NestedWorkerResult]} */
   const [nestedResult] = await once(nested, "message");
   nestedCapability = nestedResult.capability;
   nestedAppRoot = nestedResult.appRoot;

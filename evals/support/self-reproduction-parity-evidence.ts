@@ -18,13 +18,12 @@ const runtimeRequirementIds = new Set<string>(
 );
 
 export const runtimeReceiptSchema = z
-  .object({
+  .strictObject({
     observation: observationSchema,
     producer: z.literal("evaluator"),
     schemaVersion: z.literal("self-reproduction-runtime-receipt/v1"),
     side,
   })
-  .strict()
   .superRefine((value, ctx) => {
     if (!runtimeRequirementIds.has(value.observation.requirementId)) {
       ctx.addIssue({
@@ -35,7 +34,7 @@ export const runtimeReceiptSchema = z
   });
 
 export const captureReceiptSchema = z
-  .object({
+  .strictObject({
     artifacts: observationSchema.shape.artifacts,
     assertions: observationSchema.shape.assertions,
     disposition: z.enum([
@@ -55,7 +54,6 @@ export const captureReceiptSchema = z
       width: z.number().int().positive(),
     }),
   })
-  .strict()
   .superRefine((value, ctx) => {
     const expected = `capture/${value.viewport.name}/${value.state}`;
     if (value.requirementId !== expected) {

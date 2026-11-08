@@ -8,7 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 const required = (name: string) => {
   const value = process.env[name];
-  if (!value) {
+  if (value === undefined || value === "") {
     throw new Error(`${name} was required for the live self-reproduction run.`);
   }
   return value;
@@ -117,12 +117,10 @@ const waitForEve = (url: string, signal: AbortSignal) =>
 
 const availableDistinctLoopbackPort = async (
   excludedPort: number,
-  configured: string | undefined,
+  configured?: string,
 ): Promise<number> => {
   const port = await availableLoopbackPort(configured);
-  return port === excludedPort
-    ? availableDistinctLoopbackPort(excludedPort, undefined as undefined)
-    : port;
+  return port === excludedPort ? availableDistinctLoopbackPort(excludedPort) : port;
 };
 
 const answerFor = (result: unknown, answers: Record<string, string>) => {
@@ -203,7 +201,9 @@ const main = async () => {
     },
   );
   const developmentExited = once(development, "close");
-  development.once("close", () => controller.abort());
+  development.once("close", () => {
+    controller.abort();
+  });
   development.stdout.on("data", async (chunk: Buffer) => {
     await appendFile(transcriptPath, String(chunk));
   });

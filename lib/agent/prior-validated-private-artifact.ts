@@ -61,7 +61,7 @@ export const priorValidatedPrivateArtifact = async (input: {
   const authority = readPrivateApplyAuthority();
   const history = existingAppRepairHistory.get();
   const matches = history.filter((entry) => entry.proposalDigest === state.proposal.digest);
-  const entry = matches[0];
+  const [entry] = matches;
   const prior = entry?.approvedBase;
   if (
     authority.pending.length !== 0 ||
@@ -122,7 +122,7 @@ export const priorValidatedPrivateArtifact = async (input: {
     const retained = existingAppRepairHistory
       .get()
       .filter((row) => row.proposalDigest === state.proposal.digest);
-    const retainedEntry = retained[0];
+    const [retainedEntry] = retained;
     if (
       !isDeepStrictEqual(selectionBinding(appBuilderWorkflowState.get()), selected) ||
       currentAuthority.pending.length !== 0 ||

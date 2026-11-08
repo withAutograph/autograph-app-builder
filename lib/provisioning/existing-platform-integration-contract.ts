@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 
+const DEDICATED_DEVELOPMENT_ENVIRONMENT = "dedicated-development";
+
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 /** Existing infrastructure selection is not a central-host setup approval. */
 const id = z.string().min(1);
@@ -25,7 +27,7 @@ export const existingPlatformIntegrationReadySchema = z.strictObject({
   referenceId: id,
   composition: z.literal("single-project-services"),
   providerEnvironment: z.literal("development"),
-  dataEnvironment: z.literal("dedicated-development"),
+  dataEnvironment: z.literal(DEDICATED_DEVELOPMENT_ENVIRONMENT),
   repositoryId: id,
   profile: z.strictObject({ id, digest }),
   resourceProfileId: id,
@@ -87,7 +89,7 @@ export const existingPlatformControlResourceProofSchema = z.strictObject({
   migratorRole: role,
   centralRuntimeRole: role,
   schemaSha256: digest,
-  dataEnvironment: z.literal("dedicated-development"),
+  dataEnvironment: z.literal(DEDICATED_DEVELOPMENT_ENVIRONMENT),
 });
 export type ExistingPlatformControlResourceProof = z.infer<
   typeof existingPlatformControlResourceProofSchema
@@ -122,7 +124,7 @@ export const existingPlatformIntegrationPlanReferenceSchema = z.strictObject({
   providerDeploymentId: z.string().min(1),
   hostingEnvironment: z.enum(["preview", "production"]),
   providerEnvironment: z.literal("development"),
-  dataEnvironment: z.literal("dedicated-development"),
+  dataEnvironment: z.literal(DEDICATED_DEVELOPMENT_ENVIRONMENT),
   trustedSourcesGrantSha256: digest,
 });
 export const existingPlatformIntegrationPlanReference = (ready: ExistingPlatformIntegrationReady) =>

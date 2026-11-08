@@ -10,15 +10,18 @@ import {
   waitForEveEvalChild,
 } from "../lib/testing/eve-eval-lifecycle";
 
+const testExecutablePath = "/usr/bin:/bin";
+
 const MODE_MASK = 18;
 const ZERO = 0;
 const ONE = 1;
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const repositoryRootStat = statSync(repositoryRoot, { bigint: true });
+const invalidRootPath =
+  !path.isAbsolute(repositoryRoot) || realpathSync(repositoryRoot) !== repositoryRoot;
 if (
-  !path.isAbsolute(repositoryRoot) ||
-  realpathSync(repositoryRoot) !== repositoryRoot ||
+  invalidRootPath ||
   !repositoryRootStat.isDirectory() ||
   repositoryRootStat.uid !== BigInt(process.getuid?.() ?? -1) ||
   // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -56,25 +59,23 @@ const allowedEnvironment = [
 ] as const;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function childEnvironment(): NodeJS.ProcessEnv {
-  const environment: Record<string, string | undefined> = {
-    PATH: "/usr/bin:/bin",
-  };
+function childEnvironment() {
+  const environment = new Map<string, string>([["PATH", testExecutablePath]]);
   for (const name of allowedEnvironment) {
     const value = process.env[name];
     if (value !== undefined) {
-      environment[name] = value;
+      environment.set(name, value);
     }
   }
-  return environment as NodeJS.ProcessEnv;
+  return Object.fromEntries(environment);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function gateAEvalWorkflowBodyTimeout(profile: unknown): string | undefined {
+  if (typeof profile !== "object" || profile === null || !Object.isFrozen(profile)) {
+    return undefined;
+  }
   if (
-    typeof profile !== "object" ||
-    profile === null ||
-    !Object.isFrozen(profile) ||
     Object.keys(profile).toSorted().join(",") !== "image,profile,sourceRoot,version" ||
     (profile as { version?: unknown }).version !== 1
   ) {
@@ -136,15 +137,18 @@ function exactParentArguments(): readonly string[] {
     const observed = JSON.parse(
       execFileSync("/usr/bin/python3", ["-I", "-c", python, String(pid)], {
         encoding: "utf-8",
-        env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
+        env: { LC_ALL: "C", NODE_ENV: "test", PATH: testExecutablePath },
       }),
     ) as unknown;
-    if (!Array.isArray(observed) || observed.some((entry) => typeof entry !== "string")) {
+    if (
+      !Array.isArray(observed) ||
+      !observed.every((entry): entry is string => typeof entry === "string")
+    ) {
       throw new Error("The structural test launcher argv was invalid.");
     }
     const cwd = execFileSync("/usr/sbin/lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"], {
       encoding: "utf-8",
-      env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
+      env: { LC_ALL: "C", NODE_ENV: "test", PATH: testExecutablePath },
       stdio: ["ignore", "pipe", "ignore"],
     })
       .split("\n")
@@ -153,7 +157,7 @@ function exactParentArguments(): readonly string[] {
     if (cwd === undefined || realpathSync(cwd) !== realpathSync(repositoryRoot)) {
       throw new Error("The structural test launcher cwd was invalid.");
     }
-    return observed as string[];
+    return observed;
   }
   throw new Error("Structural test launcher inspection is unsupported.");
 }
@@ -161,9 +165,9 @@ function exactParentArguments(): readonly string[] {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function verifyTrustedLauncher(profile: "eve" | "vitest") {
   const launcherStat = statSync(launcher, { bigint: true });
+  const invalidLauncherFile = realpathSync(launcher) !== launcher || !launcherStat.isFile();
   if (
-    realpathSync(launcher) !== launcher ||
-    !launcherStat.isFile() ||
+    invalidLauncherFile ||
     launcherStat.uid !== BigInt(process.getuid?.() ?? -1) ||
     launcherStat.nlink !== BigInt(ONE) ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -209,7 +213,11 @@ export async function runWithTestCapability(options: {
   if (
     options.command !== process.execPath ||
     options.args[0] !== expectedEntry ||
-    (options.profile === "vitest" && options.capabilities.length !== 3) ||
+    (options.profile === "vitest" && options.capabilities.length !== 3)
+  ) {
+    throw new Error("The structural test wrapper profile was invalid.");
+  }
+  if (
     (options.profile === "eve" && ![0, 1, 3].includes(options.capabilities.length)) ||
     (options.profile === "eve") !== (options.gateAEvalProfile !== undefined)
   ) {
@@ -229,6 +237,7 @@ export async function runWithTestCapability(options: {
       APP_BUILDER_TEST_MODEL: undefined,
       EVE_DEV_WORKER_APP_ROOT: options.profile === "eve" ? repositoryRoot : undefined,
       HOME: evalRuntime?.home ?? process.env.HOME,
+      NODE_ENV: process.env.NODE_ENV,
       NODE_OPTIONS:
         options.profile === "eve"
           ? `--import=${preload} --import=${evalFetchPreload}`
@@ -274,16 +283,18 @@ export async function runWithTestCapability(options: {
         nonce?: unknown;
         context?: unknown;
       };
+      const hasValidEnvelope =
+        Object.keys(request).toSorted().join(",") === "context,nonce,version" &&
+        request.version === 2;
       if (
-        Object.keys(request).toSorted().join(",") !== "context,nonce,version" ||
-        request.version !== 2 ||
+        !hasValidEnvelope ||
         typeof request.nonce !== "string" ||
         !/^[0-9a-f]{64}$/u.test(request.nonce) ||
         typeof request.context !== "string"
       ) {
         throw new Error("Malformed authorization request.");
       }
-      const proof: Record<string, unknown> = {
+      const proof = {
         authorization: randomBytes(32).toString("hex"),
         capabilities: options.capabilities,
         context: request.context,

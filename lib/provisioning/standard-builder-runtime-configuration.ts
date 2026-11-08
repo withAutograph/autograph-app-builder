@@ -18,6 +18,7 @@ import { HostedOperatorError } from "./hosted-operator-contract";
 import type { readStandardBuilderDestination } from "./hosted-operator-owner";
 
 const id = z.string().min(1);
+const fail = () => new HostedOperatorError("builder_destination_configuration_required");
 const origin = z.url().refine((text) => {
   const url = new URL(text);
   return (
@@ -71,7 +72,6 @@ interface StandardRuntimeInput {
   verifiedPublicOrigin?: string;
 }
 const deriveDevelopmentRuntime = (input: StandardRuntimeInput) => {
-  const fail = () => new HostedOperatorError("builder_destination_configuration_required");
   const policy = input.base.standardDevelopmentRuntime;
   if (policy === undefined) {
     throw fail();
@@ -103,9 +103,9 @@ const deriveDevelopmentRuntime = (input: StandardRuntimeInput) => {
     const stem = `${kind}_${ownerDigest.slice(0, 32)}`;
     return {
       database: stem,
-      runtimeRole: `${stem}_r`,
       migratorRole: `${stem}_m`,
       resourceId: policy.nativeNeon.configuration.nativeStore.resourceId,
+      runtimeRole: `${stem}_r`,
     };
   };
   if (
@@ -134,13 +134,12 @@ const deriveDevelopmentRuntime = (input: StandardRuntimeInput) => {
     gatewayWorkload: workloadFor("preview"),
     gatewayProductionWorkload: workloadFor("production"),
   };
-  return { profile, resources: genericResources, appResource: derivedNames("app") };
+  return { appResource: derivedNames("app"), profile, resources: genericResources };
 };
 
 export const assembleStandardBuilderRuntimeConfiguration = (
   input: StandardRuntimeInput,
 ): HostedOperatorSourceConfiguration => {
-  const fail = () => new HostedOperatorError("builder_destination_configuration_required");
   const explicit = selectStandardBuilderRuntimeProfile(input);
   const derived = explicit === undefined ? deriveDevelopmentRuntime(input) : undefined;
   const profile = explicit ?? derived?.profile;
@@ -162,15 +161,19 @@ export const assembleStandardBuilderRuntimeConfiguration = (
   if (!destinationMatches || captured.description.backend.kind !== "generated-postgres") {
     throw fail();
   }
-  const resources =
-    derived?.resources ??
-    resolveNativeTargetResourceProfile({
-      base: input.base,
-      authority: input.authority,
-      appId: input.appId,
-      resourceProfileId: profile.resourceProfileId,
-      environment: input.environment,
+  let resources = derived?.resources;
+  if (resources === undefined || resources === null) {
+    const { base, authority, appId } = input;
+    const { resourceProfileId } = profile;
+    const { environment } = input;
+    resources = resolveNativeTargetResourceProfile({
+      appId,
+      authority,
+      base,
+      environment,
+      resourceProfileId,
     });
+  }
   if (!isDeepStrictEqual(profile.authOwnership.resource, resources.authDatabase)) {
     throw fail();
   }

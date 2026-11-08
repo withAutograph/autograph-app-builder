@@ -49,11 +49,11 @@ const canonicalReceipt = {
   version: 4,
 } satisfies SourceReceipt;
 
-const legacyReceipt = {
+const legacyReceipt: SourceReceipt & { provenance: undefined } = {
   ...canonicalReceipt,
   provenance: undefined,
   version: 3,
-} as unknown as SourceReceipt;
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sandboxFixture() {
@@ -73,10 +73,25 @@ function sandboxFixture() {
         })
       : null;
   });
+  const unexpectedSandboxOperation = () => {
+    throw new Error("Unexpected sandbox operation");
+  };
+  const sandbox: SandboxSession = {
+    readBinaryFile,
+    readFile,
+    readTextFile: unexpectedSandboxOperation,
+    removePath: unexpectedSandboxOperation,
+    resolvePath: unexpectedSandboxOperation,
+    run: unexpectedSandboxOperation,
+    spawn: unexpectedSandboxOperation,
+    writeBinaryFile: unexpectedSandboxOperation,
+    writeFile: unexpectedSandboxOperation,
+    writeTextFile: unexpectedSandboxOperation,
+  };
   return {
     readBinaryFile,
     readFile,
-    sandbox: { readBinaryFile, readFile } as unknown as SandboxSession,
+    sandbox,
   };
 }
 

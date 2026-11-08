@@ -10,6 +10,8 @@ import type { HostedOperatorContext } from "./hosted-operator-service";
 import { reportOperatorExecutionFailure } from "./hosted-operator-consent-diagnostic";
 import type { OperatorRuntimeReadinessStage } from "./hosted-operator-consent-diagnostic";
 
+const readActorBindingSql = "select public.kernel_read_actor_binding($1::jsonb) as binding";
+
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const reject = () => new Error("hosted_app_runtime_readiness_unconfirmed");
@@ -222,17 +224,14 @@ export const readAppRuntimeSnapshot: ReadAppRuntimeSnapshot = async (runtimeUrl,
       async (tx) => {
         const reader: AppRuntimeSnapshotReader = {
           readActorBinding: async (scope) => {
-            const rows = await tx.unsafe(
-              "select public.kernel_read_actor_binding($1::jsonb) as binding",
-              [
-                tx.json({
-                  actor_id: scope.actorId,
-                  app_id: scope.appId,
-                  customer_id: scope.organizationId,
-                  role: scope.role,
-                }),
-              ],
-            );
+            const rows = await tx.unsafe(readActorBindingSql, [
+              tx.json({
+                actor_id: scope.actorId,
+                app_id: scope.appId,
+                customer_id: scope.organizationId,
+                role: scope.role,
+              }),
+            ]);
             if (rows.length !== 1) {
               throw reject();
             }
@@ -246,17 +245,14 @@ export const readAppRuntimeSnapshot: ReadAppRuntimeSnapshot = async (runtimeUrl,
             return identitySchema.parse(rows[0]);
           },
           readActiveOrganization: async (scope) => {
-            const rows = await tx.unsafe(
-              "select public.kernel_read_actor_binding($1::jsonb) as binding",
-              [
-                tx.json({
-                  actor_id: scope.actorId,
-                  app_id: scope.appId,
-                  customer_id: scope.organizationId,
-                  role: scope.role,
-                }),
-              ],
-            );
+            const rows = await tx.unsafe(readActorBindingSql, [
+              tx.json({
+                actor_id: scope.actorId,
+                app_id: scope.appId,
+                customer_id: scope.organizationId,
+                role: scope.role,
+              }),
+            ]);
             if (rows.length !== 1) {
               throw reject();
             }
@@ -304,17 +300,14 @@ export const readAppRuntimeSnapshot: ReadAppRuntimeSnapshot = async (runtimeUrl,
           },
           readOrganization: async (scope, observeStage) => {
             observeStage?.("actor_binding");
-            const bindings = await tx.unsafe(
-              "select public.kernel_read_actor_binding($1::jsonb) as binding",
-              [
-                tx.json({
-                  actor_id: scope.actorId,
-                  app_id: scope.appId,
-                  customer_id: scope.organizationId,
-                  role: scope.role,
-                }),
-              ],
-            );
+            const bindings = await tx.unsafe(readActorBindingSql, [
+              tx.json({
+                actor_id: scope.actorId,
+                app_id: scope.appId,
+                customer_id: scope.organizationId,
+                role: scope.role,
+              }),
+            ]);
             if (bindings.length !== 1) {
               throw reject();
             }
@@ -481,12 +474,11 @@ export const createHostedOperatorTenantBindingReadback =
     const scopes =
       plan.access.length > 0
         ? plan.access.flatMap((access) =>
-            access.roles.map((role) => ({
-              appId: plan.selection.appId,
-              actorId: access.actorId,
-              organizationId: access.organizationId,
-              role,
-            })),
+            access.roles.map((role) => {
+              const { appId } = plan.selection;
+              const { actorId, organizationId } = access;
+              return { actorId, appId, organizationId, role };
+            }),
           )
         : await readInstallationReadinessScopes(deps, input);
     const allowedCustomers = new Set(plan.appInstallation?.customerIds);
@@ -719,8 +711,8 @@ export const createHostedOperatorAppReadiness =
         error,
         undefined,
         {
-          stage: "final_runtime_readiness",
           runtimeReadinessStage,
+          stage: "final_runtime_readiness",
         },
       );
       throw reject();

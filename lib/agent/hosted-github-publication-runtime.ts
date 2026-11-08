@@ -1,7 +1,6 @@
 import { createPostgresGitHubPrEffectStore } from "../repository/postgres-github-pr-effect-store";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { BuilderHandoffIntent } from "../handoff/contracts";
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { createPostgresWorkspaceMembership } from "../eve/postgres-workspace-membership";
 import {
   exactForwardedSessionAuthority,
@@ -29,7 +28,7 @@ import type { GitHubDraftAdoptionStore } from "../repository/postgres-github-dra
 import { composeGitHubPublicationRuntime } from "./github-publication-runtime";
 import type { GitHubPublicationRuntime } from "./github-publication-runtime";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 
 export type HostedGitHubPublicationProviderFactory = (input: {
   authority: HostedGitHubTenantAuthority;
@@ -193,15 +192,19 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
 
       const stores = dependencies.publicationStores(pool, authority);
       const adapter = await input.providerFactory({ authority, installation });
+      const runtimeInput: Omit<Parameters<typeof composeGitHubPublicationRuntime>[0], "receipts"> =
+        {
+          adapter,
+          adoptions: stores.adoptions ?? createPostgresGitHubDraftAdoptionStore(pool, authority),
+          authority,
+          enabled: true,
+          proposals: stores.proposals,
+        };
+      if (input.prEffectsEnabled === true) {
+        runtimeInput.prEffects = createPostgresGitHubPrEffectStore(pool, authority);
+      }
       return composeGitHubPublicationRuntime({
-        adapter,
-        adoptions: stores.adoptions ?? createPostgresGitHubDraftAdoptionStore(pool, authority),
-        authority,
-        enabled: true,
-        proposals: stores.proposals,
-        ...(input.prEffectsEnabled === true
-          ? { prEffects: createPostgresGitHubPrEffectStore(pool, authority) }
-          : {}),
+        ...runtimeInput,
         receipts: stores.receipts,
       });
     },

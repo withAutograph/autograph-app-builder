@@ -39,12 +39,12 @@ const fixture = () => {
     },
   });
   const context: RepositoryProductionEffectContext = {
-    row: { operationRef: repositoryProductionOperationRef(scope), revision: 1, record },
-    effect: "bind-runtime",
     assertCurrent: async () => {},
     checkpoint: async (value) => {
       record.workerCheckpoints.push(value);
     },
+    effect: "bind-runtime",
+    row: { operationRef: repositoryProductionOperationRef(scope), record, revision: 1 },
   };
   let row: Record<string, string | string[]> | undefined;
   let loseResponse = false;
@@ -69,20 +69,20 @@ const fixture = () => {
   };
   return {
     context,
-    writes: () => writes,
-    row: () => row,
     loseResponse: () => {
       loseResponse = true;
     },
     replaceRow: (value?: Record<string, string | string[]>) => {
       row = value;
     },
+    row: () => row,
     service: createRepositoryProductionRuntimeBinding({
       teamId: "team",
       signal: new AbortController().signal,
       readCredential: async () => "provider-token",
       fetch: fetcher,
     }),
+    writes: () => writes,
   };
 };
 describe("Production runtime credential binding", () => {
@@ -93,9 +93,9 @@ describe("Production runtime credential binding", () => {
     await f.service.apply(f.context, runtimeUrl);
     expect(f.writes()).toBe(1);
     expect(f.row()).toMatchObject({
+      key: "REQUESTS_DATABASE_URL",
       target: ["production"],
       type: "encrypted",
-      key: "REQUESTS_DATABASE_URL",
     });
   });
   it("reconciles a lost creation response from owned provider readback without duplicate writes", async () => {
@@ -111,8 +111,8 @@ describe("Production runtime credential binding", () => {
     f.replaceRow({
       id: "foreign",
       key: "REQUESTS_DATABASE_URL",
-      type: "encrypted",
       target: ["production"],
+      type: "encrypted",
       value: "foreign",
     });
     await expect(f.service.apply(f.context, runtimeUrl)).rejects.toThrow("binding_conflict");

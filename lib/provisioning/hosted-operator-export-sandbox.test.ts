@@ -35,9 +35,7 @@ const runCommand = vi.fn(
     }
     if (input.cmd === "node") {
       const args = input.args ?? [];
-      const script = args[1];
-      const target = args[2];
-      const content = args[3];
+      const [, script, target, content] = args;
       if (script === undefined || target === undefined || content === undefined) {
         throw new Error("Missing fixed metadata arguments");
       }
@@ -89,14 +87,14 @@ const runCommand = vi.fn(
 const sandbox = {
   name: "private-vm",
   runCommand,
-  delete: vi.fn(async () => {}),
-  extendTimeout: vi.fn(async () => {}),
+  delete: vi.fn<() => Promise<void>>().mockResolvedValue(),
+  extendTimeout: vi.fn<() => Promise<void>>().mockResolvedValue(),
   readFileToBuffer: vi.fn(async (input: { path: string }) =>
     input.path.endsWith("manifest.json")
       ? Buffer.from("private manifest")
       : (metadata.get(input.path) ?? null),
   ),
-  readFile: vi.fn(async () => null),
+  readFile: vi.fn<() => Promise<null>>().mockResolvedValue(null),
   getCommand: vi.fn(async () => ({ ...command, exitCode: commandTerminal ? 0 : null })),
 };
 const launcher = () =>
@@ -121,17 +119,17 @@ beforeEach(() => {
 describe("fixed tenant export Sandbox transport", () => {
   it("creates exclusive private metadata and confines the migrator credential to the fixed command environment", async () => {
     const executor = launcher();
-    const assertCurrent = vi.fn(async () => {});
+    const assertCurrent = vi.fn<() => Promise<void>>().mockResolvedValue();
     const locator = await executor.prepare(fixture.worker, assertCurrent);
-    const checkpoint = vi.fn(async () => {});
+    const checkpoint = vi.fn<() => Promise<void>>().mockResolvedValue();
     const credential = "postgres://app-migrator:synthetic-password@private.test/app";
     await executor.run(fixture.worker, locator, credential, assertCurrent, checkpoint);
     expect(sdk.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        ports: [],
-        persistent: false,
-        networkPolicy: "allow-all",
         env: {},
+        networkPolicy: "allow-all",
+        persistent: false,
+        ports: [],
       }),
     );
     const actual = runCommand.mock.calls.at(-1)?.[0];
@@ -160,7 +158,7 @@ describe("fixed tenant export Sandbox transport", () => {
   it("preserves uncertain command dispatch without inventing a command identity or retrying it", async () => {
     const executor = launcher();
     const locator = await executor.prepare(fixture.worker, async () => {});
-    const checkpoint = vi.fn(async () => {});
+    const checkpoint = vi.fn<() => Promise<void>>().mockResolvedValue();
     dispatchUnknown = true;
     await expect(
       executor.run(fixture.worker, locator, "private-credential", async () => {}, checkpoint),

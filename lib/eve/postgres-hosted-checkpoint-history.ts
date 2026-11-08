@@ -3,11 +3,9 @@ import { privateInputStateSchema } from "./session-limit-input";
 import { createHash, randomUUID } from "node:crypto";
 
 import { and, asc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import { z } from "zod";
 
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Drizzle requires the complete schema type.
-import type * as databaseSchema from "../db/schema";
 import {
   agentSessionCheckpointChunks,
   agentSessionCheckpointItems,
@@ -29,7 +27,6 @@ import type { HostedPrincipal } from "./hosted-auth";
 import { nativeObservationStateSchema } from "./native-observation-state";
 import { privateHostedApprovalCaptureStateSchema } from "./private-hosted-approval";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type Bytes = AsyncIterable<Uint8Array>;
 

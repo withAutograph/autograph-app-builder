@@ -21,8 +21,8 @@ vi.mock("./acceptance-runtime-root", () => ({
 }));
 vi.mock("../provisioning/hosted-operator-client", () => ({
   hostedOperatorClientForSession: () => ({
-    resolvePreviewTarget: mocks.select,
     planContinuity: mocks.plan,
+    resolvePreviewTarget: mocks.select,
   }),
 }));
 
@@ -32,7 +32,7 @@ describe("hosted continuity planning", () => {
     const planned = { status: "planned", plan: { intentId: "continuity" } };
     mocks.select.mockResolvedValue(target);
     mocks.plan.mockResolvedValue(planned);
-    const signal = new AbortController().signal;
+    const { signal } = new AbortController();
     const context = {
       abortSignal: signal,
       callId: "continuity-call",
@@ -59,7 +59,7 @@ describe("hosted continuity planning", () => {
     await expect(planAppHostedRuntime.execute(input, context)).resolves.toEqual(planned);
     expect(mocks.plan).toHaveBeenCalledWith(
       target,
-      { sandboxId: "selected-sandbox", root: "/workspace/repository" },
+      { root: "/workspace/repository", sandboxId: "selected-sandbox" },
       "continuity-call",
       signal,
       undefined,

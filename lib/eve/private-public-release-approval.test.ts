@@ -17,12 +17,12 @@ const input = {
   operationRef: publicReleaseOperationRef(plan),
 };
 const owner = operatorOwnerContextSchema.parse({
-  kind: "direct",
+  adapterGeneration: 1,
+  adapterSessionId: "native",
   authority,
+  kind: "direct",
   principal: { ...authority, scopes: ["autograph:send"] },
   sessionId: plan.selection.sessionId,
-  adapterSessionId: "native",
-  adapterGeneration: 1,
 });
 const request = (
   callId = "current-call",
@@ -61,7 +61,7 @@ const settlement = (
 });
 describe("private public-release consent", () => {
   it("requires the exact current call and does not reuse an earlier approval", () => {
-    const capture = createPrivatePublicReleaseApprovalCapture({ plan, callId: "current-call" });
+    const capture = createPrivatePublicReleaseApprovalCapture({ callId: "current-call", plan });
     capture.observe(request("old-call", "old-request"));
     capture.observe(settlement("approved", "old-request"));
     capture.observe(request());
@@ -70,7 +70,7 @@ describe("private public-release consent", () => {
     expect(capture.read()).toEqual({ approvalId: "request", approvedByCallId: "current-call" });
   });
   it("rejects changed runtime hashes, foreign consent and earlier cancellation", () => {
-    const capture = createPrivatePublicReleaseApprovalCapture({ plan, callId: "current-call" });
+    const capture = createPrivatePublicReleaseApprovalCapture({ callId: "current-call", plan });
     const changed = { ...plan, environment: [{ key: "APP_DATABASE_URL", sha256: "f".repeat(64) }] };
     capture.observe(
       request("current-call", "changed", {
@@ -84,7 +84,7 @@ describe("private public-release consent", () => {
     capture.observe(request());
     capture.observe(settlement("approved", "request", "foreign"));
     expect(capture.read()).toBeNull();
-    const cancelled = createPrivatePublicReleaseApprovalCapture({ plan, callId: "current-call" });
+    const cancelled = createPrivatePublicReleaseApprovalCapture({ callId: "current-call", plan });
     cancelled.observe(request("old-call", "old-request"));
     cancelled.observe(settlement("cancelled", "old-request"));
     cancelled.observe(request());
@@ -92,43 +92,43 @@ describe("private public-release consent", () => {
     expect(cancelled.read()).toBeNull();
   });
   it("requires complete authenticated history and rechecks owner after reading", async () => {
-    const assertOwner = vi.fn(() => Promise.resolve());
+    const assertOwner = vi.fn<() => Promise<void>>().mockResolvedValue();
     const readHistory = vi.fn((_start, observe: (event: MessageStreamEvent) => void) => {
       observe(request());
       observe(settlement());
-      return Promise.resolve({ complete: false, nextNativeIndex: 2, nativeTailIndex: 2 });
+      return Promise.resolve({ complete: false, nativeTailIndex: 2, nextNativeIndex: 2 });
     });
     await expect(
       readPrivatePublicReleaseApproval({
-        plan,
+        assertOwner,
         callId: "current-call",
         owner,
+        plan,
         readHistory,
-        assertOwner,
       }),
     ).rejects.toThrow();
     expect(assertOwner).toHaveBeenCalledTimes(1);
     const complete = (_start: number, observe: (event: MessageStreamEvent) => void) => {
       observe(request());
       observe(settlement());
-      return Promise.resolve({ complete: true, nextNativeIndex: 3, nativeTailIndex: 2 });
+      return Promise.resolve({ complete: true, nativeTailIndex: 2, nextNativeIndex: 3 });
     };
     expect(
       await readPrivatePublicReleaseApproval({
-        plan,
+        assertOwner,
         callId: "current-call",
         owner,
+        plan,
         readHistory: complete,
-        assertOwner,
       }),
     ).toEqual({ approvalId: "request", approvedByCallId: "current-call" });
     await expect(
       readPrivatePublicReleaseApproval({
-        plan,
+        assertOwner: () => Promise.reject(new Error("revoked")),
         callId: "current-call",
         owner,
+        plan,
         readHistory: complete,
-        assertOwner: () => Promise.reject(new Error("revoked")),
       }),
     ).rejects.toThrow("revoked");
   });

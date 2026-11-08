@@ -24,33 +24,33 @@ const nativePlan = nativeTargetOnboardingPlanSchema.parse({
   version: 1,
   appId: "requests-app",
   origin: {
-    publicSessionId: "session_fixture",
-    adapterSessionId: "adapter_1",
     adapterGeneration: 1,
+    adapterSessionId: "adapter_1",
     appSpecDigest: "a".repeat(64),
+    publicSessionId: "session_fixture",
     release: {
-      id: "release",
       artifactRef: "artifact",
+      id: "release",
       manifestSha256: "b".repeat(64),
       schemaSha256: "c".repeat(64),
     },
   },
   project: {
-    name: "requests-app",
-    teamId: "team",
     installationId: "installation",
+    name: "requests-app",
     projectSettings: {
       framework: "nextjs",
       rootDirectory: "apps/requests",
       sourceFilesOutsideRootDirectory: true,
     },
     protection: nativeTargetRequiredProjectProtection,
+    teamId: "team",
   },
   branch: "preview",
   appDatabase: {
-    resourceId: "resource",
     database: "requests_data",
     migratorRole: "requests_owner",
+    resourceId: "resource",
     runtimeRole: "requests_runtime",
   },
   productRoles: [],
@@ -58,22 +58,22 @@ const nativePlan = nativeTargetOnboardingPlanSchema.parse({
     approvalReference: "scope",
     nativeStore: { configurationId: "config", resourceId: "store", sourceProjectId: "source" },
     scope: {
-      projectId: "project",
       branchId: "branch",
       endpointId: "endpoint",
       hostname: "ep-fixture.neon.tech",
       maintenanceDatabase: "maintenance",
       maintenanceRole: "installer",
+      projectId: "project",
     },
   },
   worker: {
-    id: "worker",
     executablePath: "/trusted/worker",
-    sha256: "d".repeat(64),
+    id: "worker",
     operationScope: "generated-app-release-install-v1",
+    sha256: "d".repeat(64),
     subcommand: "protected-generated-app-install",
   },
-  cost: { ownership: "current-owner", description: "Preview usage" },
+  cost: { description: "Preview usage", ownership: "current-owner" },
   retention: { policy: "Until approved cleanup" },
   conflictPolicy: "stop-on-conflict",
 });
@@ -86,17 +86,17 @@ const toolInput = {
   planDigest: nativeTargetOnboardingPlanDigest(nativePlan),
 };
 const binding = {
-  issuer: principal.issuer,
+  adapterGeneration: 1,
+  adapterSessionId: "adapter_1",
   audience: principal.audience,
-  workspaceId: principal.workspaceId,
+  issuer: principal.issuer,
   ownerUserId: principal.ownerUserId,
   sessionId,
-  adapterSessionId: "adapter_1",
-  adapterGeneration: 1,
+  workspaceId: principal.workspaceId,
 };
 const publicEvents: PublicEveEvent[] = [
-  { type: "status", index: 0, status: "working" },
-  { type: "status", index: 1, status: "input_required" },
+  { index: 0, status: "working", type: "status" },
+  { index: 1, status: "input_required", type: "status" },
 ];
 const stream = async function* stream(events: PublicEveEvent[]) {
   for (const event of events) {
@@ -111,15 +111,15 @@ const requestEvent = (): MessageStreamEvent => ({
     stepIndex: 0,
     turnId: "turn",
     requests: ["one", "two"].map((requestId) => ({
-      kind: "tool-approval" as const,
-      requestId,
-      prompt: "Approve",
       action: {
-        kind: "tool-call" as const,
-        toolName: "prepare-app-native-target",
         callId: `call-${requestId}`,
         input: toolInput,
+        kind: "tool-call" as const,
+        toolName: "prepare-app-native-target",
       },
+      kind: "tool-approval" as const,
+      prompt: "Approve",
+      requestId,
     })),
   },
 });
@@ -158,16 +158,16 @@ const replayProgress = (capture: ReturnType<typeof createPrivateHostedApprovalCa
   approvalReplayProgressSchema.parse({
     version: 1,
     binding: {
+      adapterGeneration: 1,
+      adapterSessionId: "adapter_1",
+      approvalSessionId: sessionId,
       principal,
       sessionId,
-      approvalSessionId: sessionId,
-      adapterSessionId: "adapter_1",
-      adapterGeneration: 1,
     },
     sourceCheckpoint: {
-      id: "00000000-0000-4000-8000-000000000001",
       digest: `sha256:${"a".repeat(64)}`,
       eventCount: 2,
+      id: "00000000-0000-4000-8000-000000000001",
     },
     events: publicEvents.slice(0, 1),
     nativeObservationState: nativeState,
@@ -180,7 +180,7 @@ const verify = (replayBinding = binding, replayEvents = publicEvents, complete =
     trustedEventCount: 2,
     trustedEvents: stream(publicEvents),
     replayEvents: stream(replayEvents),
-    nativeTail: { complete, nextNativeIndex: 10, nativeTailIndex: 9 },
+    nativeTail: { complete, nativeTailIndex: 9, nextNativeIndex: 10 },
   });
 const response = {
   clientRequestId: "response",
@@ -191,10 +191,10 @@ const response = {
   })),
 };
 const approvals = ["one", "two"].map((requestId) => ({
-  requestId,
   callId: `call-${requestId}`,
-  toolName: "prepare-app-native-target" as const,
+  requestId,
   toolInput,
+  toolName: "prepare-app-native-target" as const,
 }));
 const batch = {
   requests: approvals.map(({ requestId, toolName }) => ({
@@ -208,12 +208,12 @@ const batch = {
   turnId: "turn",
 };
 const proof = {
-  adapterSessionId: "adapter_1",
   adapterGeneration: 1,
+  adapterSessionId: "adapter_1",
   checkpointDigest: `sha256:${"f".repeat(64)}`,
   request: response,
 };
-const marker = { adapterSessionId: "adapter_1", adapterGeneration: 1, approvals, batches: [batch] };
+const marker = { adapterGeneration: 1, adapterSessionId: "adapter_1", approvals, batches: [batch] };
 const resolved = (ids: string[]) => ({
   version: 1 as const,
   pending: [],
@@ -270,7 +270,7 @@ describe("historical native approval reconciliation contracts", () => {
   });
   it("rejects rewritten public prefix before accepting replayed proof", async () => {
     await expect(
-      verify(binding, [publicEvents[0], { type: "status", index: 1, status: "waiting" }]),
+      verify(binding, [publicEvents[0], { index: 1, status: "waiting", type: "status" }]),
     ).rejects.toThrow("prefix mismatch");
   });
 });

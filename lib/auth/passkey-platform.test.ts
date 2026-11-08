@@ -4,8 +4,9 @@ import { preferredPasskeyAuthenticatorAttachment } from "./passkey-platform";
 
 describe("preferredPasskeyAuthenticatorAttachment", () => {
   it("requests a platform authenticator when the browser reports one", async () => {
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const isUserVerifyingPlatformAuthenticatorAvailable = vi.fn(async () => true);
+    const isUserVerifyingPlatformAuthenticatorAvailable = vi
+      .fn<() => Promise<boolean>>()
+      .mockResolvedValue(true);
 
     await expect(
       preferredPasskeyAuthenticatorAttachment({
@@ -18,8 +19,9 @@ describe("preferredPasskeyAuthenticatorAttachment", () => {
   it("keeps the unrestricted fallback when no platform authenticator is available", async () => {
     await expect(
       preferredPasskeyAuthenticatorAttachment({
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        isUserVerifyingPlatformAuthenticatorAvailable: vi.fn(async () => false),
+        isUserVerifyingPlatformAuthenticatorAvailable: vi
+          .fn<() => Promise<boolean>>()
+          .mockResolvedValue(false),
       }),
     ).resolves.toBeUndefined();
   });

@@ -254,8 +254,12 @@ const fixture = (clock?: () => number) => {
       return structuredClone(row);
     },
   };
+  const initial: Pick<ProtectedHostedOperatorDependencies, "now"> = {};
+  if (clock !== undefined) {
+    initial.now = clock;
+  }
   const deps: ProtectedHostedOperatorDependencies = {
-    ...(clock === undefined ? {} : { now: clock }),
+    ...initial,
     async assertAuthorized() {
       if (!member) {
         throw new HostedOperatorError("authorization_required");
@@ -537,7 +541,7 @@ const completedOwnerBootstrap = async (normalActors = false) => {
       operator: { ...current.record.operator, identityLink },
     }),
   };
-  return { f, request, identityLink };
+  return { f, identityLink, request };
 };
 
 describe("legacy owner bootstrap public readiness", () => {
@@ -545,9 +549,9 @@ describe("legacy owner bootstrap public readiness", () => {
     const { f, request } = await completedOwnerBootstrap();
     const result = await f.client.request(request);
     expect(result).toMatchObject({
-      status: "prepared",
       authenticatedBehavior: "unassessed",
       operationRef: request.operationRef,
+      status: "prepared",
     });
     expect(result).not.toHaveProperty("appUrl");
     expect(result).not.toHaveProperty("nativePreview");
@@ -622,14 +626,14 @@ describe("protected hosted operator boundary", () => {
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       const result = await f.client.request({ action: "plan", operation: "prepare", selection });
-      expect(result).toMatchObject({ status: "blocked", code: "operation_in_progress" });
+      expect(result).toMatchObject({ code: "operation_in_progress", status: "blocked" });
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           planningFailure: {
-            stage: "approved_plan_recovery",
-            errorClass: "operator_error",
             code: "operation_in_progress",
+            errorClass: "operator_error",
+            stage: "approved_plan_recovery",
           },
         }),
       ]);
@@ -1198,8 +1202,8 @@ describe("protected hosted operator boundary", () => {
     const result = await f.client.request({
       action: "plan",
       operation: "prepare",
-      selection,
       releaseIntent: "prepared-preview",
+      selection,
     });
     expect(result.status).toBe("planned");
     expect(f.deps.plan).toHaveBeenCalledWith(
@@ -1213,17 +1217,17 @@ describe("protected hosted operator boundary", () => {
     const request = {
       action: "plan" as const,
       operation: "prepare" as const,
-      selection,
       releaseIntent: "prepared-preview" as const,
+      selection,
     };
     const first = await f.client.request(request);
     const before = structuredClone(f.row);
     const second = await f.client.request(request);
     expect(second).toMatchObject({
-      status: "planned",
       operationRef: first.operationRef,
-      planDigest: first.planDigest,
       plan: first.plan,
+      planDigest: first.planDigest,
+      status: "planned",
     });
     expect(f.deps.plan).toHaveBeenCalledTimes(1);
     expect(f.row).toEqual(before);
@@ -1235,7 +1239,7 @@ describe("protected hosted operator boundary", () => {
       planDigest: z.string().parse(second.planDigest),
       selection,
     });
-    expect(execution).toMatchObject({ status: "blocked", code: "authorization_required" });
+    expect(execution).toMatchObject({ code: "authorization_required", status: "blocked" });
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
   });
   it("denies changed product input or revoked owner on pending prepared Preview retry", async () => {
@@ -1244,8 +1248,8 @@ describe("protected hosted operator boundary", () => {
     const request = {
       action: "plan" as const,
       operation: "prepare" as const,
-      selection,
       releaseIntent: "prepared-preview" as const,
+      selection,
     };
     await f.client.request(request);
     const before = structuredClone(f.row);
@@ -1260,12 +1264,12 @@ describe("protected hosted operator boundary", () => {
         appRoles: ["reviewer"],
       },
     });
-    expect(changed).toMatchObject({ status: "blocked", code: "operation_in_progress" });
+    expect(changed).toMatchObject({ code: "operation_in_progress", status: "blocked" });
     expect(f.row).toEqual(before);
     f.revoke();
     expect(await f.client.request(request)).toMatchObject({
-      status: "blocked",
       code: "authorization_required",
+      status: "blocked",
     });
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
   });
@@ -1275,8 +1279,8 @@ describe("protected hosted operator boundary", () => {
     const request = {
       action: "plan" as const,
       operation: "prepare" as const,
-      selection,
       releaseIntent: "prepared-preview" as const,
+      selection,
     };
     const first = await f.client.request(request);
     const authorize = f.deps.assertAuthorized;
@@ -1292,9 +1296,9 @@ describe("protected hosted operator boundary", () => {
       }
     };
     expect(await f.client.request(request)).toMatchObject({
-      status: "planned",
       operationRef: first.operationRef,
       planDigest: first.planDigest,
+      status: "planned",
     });
     f.deps.assertAuthorized = async (input) => {
       await authorize(input);
@@ -1303,8 +1307,8 @@ describe("protected hosted operator boundary", () => {
       }
     };
     expect(await f.client.request(request)).toMatchObject({
-      status: "blocked",
       code: "operation_in_progress",
+      status: "blocked",
     });
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
   });
@@ -1341,16 +1345,16 @@ describe("protected hosted operator boundary", () => {
     f.deps.plan = vi.fn(async () => pending);
     const request = {
       action: "plan" as const,
-      operation: "prepare" as const,
-      selection,
-      releaseIntent: "prepared-preview" as const,
       authSignupPolicy: policy,
+      operation: "prepare" as const,
+      releaseIntent: "prepared-preview" as const,
+      selection,
     };
     const first = await f.client.request(request);
     expect(await f.client.request(request)).toMatchObject({
-      status: "planned",
-      planDigest: first.planDigest,
       operationRef: first.operationRef,
+      planDigest: first.planDigest,
+      status: "planned",
     });
     expect(f.deps.plan).toHaveBeenCalledTimes(1);
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
@@ -1732,7 +1736,7 @@ describe("protected hosted operator boundary", () => {
     f.approve();
     await f.client.request(request);
     const credentials = structuredClone(f.row?.record.privateState);
-    const readApproval = f.deps.readApproval;
+    const { readApproval } = f.deps;
     f.deps.readApproval = async (input) =>
       input.planDigest === request.planDigest ? await readApproval(input) : null;
     f.deps.plan = async () => ({
@@ -1761,7 +1765,7 @@ describe("protected hosted operator boundary", () => {
       planDigest: z.string().parse(next.planDigest),
       selection,
     });
-    expect(unapproved).toMatchObject({ status: "blocked", code: "authorization_required" });
+    expect(unapproved).toMatchObject({ code: "authorization_required", status: "blocked" });
     expect(f.deps.executeEffect).toHaveBeenCalledTimes(4);
     expect(f.row?.record.privateState).toEqual(credentials);
     expect(f.row?.record.operator?.approvalId).toBeUndefined();
@@ -2585,12 +2589,12 @@ describe("closed operator access response diagnostics", () => {
         expect(log.mock.calls).toContainEqual([
           "[builder:hosted-neon-consent]",
           expect.objectContaining({
+            accessClass: status === 200 ? "ok" : "other_failed",
             boundary: "builder",
-            stage: "operator_request",
+            httpStatus: status,
             operatorAction: "plan",
             outcome: status === 200 ? "verified" : "setup_unavailable",
-            accessClass: status === 200 ? "ok" : "other_failed",
-            httpStatus: status,
+            stage: "operator_request",
           }),
         ]);
       } finally {
@@ -2687,7 +2691,7 @@ describe("idle installer source successor planning", () => {
     const now = Date.parse("2026-10-20T12:00:00Z");
     const f = fixture(() => now);
     const requireRow = () => {
-      const row = f.row;
+      const { row } = f;
       if (row === undefined) {
         throw new Error("Missing source successor fixture journal");
       }
@@ -2724,19 +2728,19 @@ describe("idle installer source successor planning", () => {
       normalActorPreparation: preparation,
       effects: [
         {
+          description: "Observe Auth",
           id: "auth-resources",
           kind: "resources",
-          description: "Observe Auth",
         },
         {
+          description: "Observe app",
           id: "app-resources",
           kind: "resources",
-          description: "Observe app",
         },
         {
+          description: "Observe Auth schema",
           id: "auth-schema",
           kind: "install",
-          description: "Observe Auth schema",
         },
         ...plan.effects.slice(1),
       ],
@@ -2773,7 +2777,7 @@ describe("idle installer source successor planning", () => {
     f.approve();
     let originalApproved = true;
     let newApproved = false;
-    const readApproval = f.deps.readApproval;
+    const { readApproval } = f.deps;
     f.deps.readApproval = vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(
       async (input) => {
         if (
@@ -2801,21 +2805,21 @@ describe("idle installer source successor planning", () => {
       };
     });
     expect(await f.client.request(originalRequest)).toMatchObject({
-      status: "blocked",
       code: "resource_mismatch",
+      status: "blocked",
     });
     const failed = structuredClone(requireRow());
     expect(failed.record).toMatchObject({
-      privateState,
       accountPreparation,
       executionObservation: {
-        state: "settled",
-        operationRef: originalRequest.operationRef,
-        planDigest: originalRequest.planDigest,
-        callId: originalRequest.callId,
         approvalId: "durable-human-decision",
-        outcome: { status: "blocked", code: "resource_mismatch" },
+        callId: originalRequest.callId,
+        operationRef: originalRequest.operationRef,
+        outcome: { code: "resource_mismatch", status: "blocked" },
+        planDigest: originalRequest.planDigest,
+        state: "settled",
       },
+      privateState,
     });
     expect(failed.record.leaseId).toBeUndefined();
     expect(failed.record.leaseExpiresAt).toBeUndefined();
@@ -2841,13 +2845,13 @@ describe("idle installer source successor planning", () => {
     originalApproved = false;
     expect(
       await f.client.request({ action: "plan", operation: "prepare", selection }),
-    ).toMatchObject({ status: "blocked", code: "authorization_required" });
+    ).toMatchObject({ code: "authorization_required", status: "blocked" });
     expect(f.row).toEqual(failed);
     originalApproved = true;
     const proposed = await f.client.request({ action: "plan", operation: "prepare", selection });
     expect(proposed).toMatchObject({
-      status: "planned",
       operationRef: originalRequest.operationRef,
+      status: "planned",
     });
     const proposedPlan = hostedOperatorPlanSchema.parse(proposed.plan);
     expect(proposedPlan).toEqual({
@@ -2855,9 +2859,9 @@ describe("idle installer source successor planning", () => {
       installer: { ...oldPlan.installer, sha256: "e".repeat(64) },
     });
     expect(requireRow().record).toMatchObject({
-      privateState,
       accountPreparation,
       approvedByCallId: "operator:unapproved-plan",
+      privateState,
     });
     expect(requireRow().record.operator?.approvalId).toBeUndefined();
     expect(requireRow().record.operator?.fenceGeneration).toBe(
@@ -2878,14 +2882,14 @@ describe("idle installer source successor planning", () => {
     }));
     f.deps.reconcile = reconcile;
     expect(await f.client.request(request)).toMatchObject({
-      status: "blocked",
       code: "authorization_required",
+      status: "blocked",
     });
     expect(reconcile).not.toHaveBeenCalled();
     newApproved = true;
     expect(await f.client.request(request)).toMatchObject({
-      status: "blocked",
       code: "reconciliation_required",
+      status: "blocked",
     });
     expect(reconcile).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -2902,8 +2906,8 @@ describe("idle installer source successor planning", () => {
         : { status: "unknown" as const },
     );
     expect(await f.client.request(request)).toMatchObject({
-      status: "blocked",
       code: "reconciliation_required",
+      status: "blocked",
     });
     expect(f.deps.executeEffect).toHaveBeenCalledTimes(1);
     expect(f.deps.executeEffect).toHaveBeenCalledWith(
@@ -3019,7 +3023,7 @@ describe("approved retention renewal planning", () => {
       });
 
       const first = await f.client.request({ action: "plan", operation: "prepare", selection });
-      expect(first).toMatchObject({ status: "planned", operationRef });
+      expect(first).toMatchObject({ operationRef, status: "planned" });
       const firstPlan = first.plan;
       if (firstPlan === undefined) {
         throw new Error("The retention renewal response must include its frozen plan");
@@ -3056,8 +3060,8 @@ describe("approved retention renewal planning", () => {
           approvalId: "durable-human-decision",
           pendingEffectId,
           pendingEffectAttempt: {
-            id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
             contextDigest: "e".repeat(64),
+            id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
           },
           planDigest: operatorPlanDigest(oldPlan),
           receipts: oldReceipts,
@@ -3070,7 +3074,7 @@ describe("approved retention renewal planning", () => {
       expect(f.deps.plan).not.toHaveBeenCalled();
 
       const privateError = new TypeError("private authorization detail owner-token");
-      const assertAuthorized = f.deps.assertAuthorized;
+      const { assertAuthorized } = f.deps;
       const log = vi.spyOn(console, "info").mockImplementation(() => {});
       try {
         f.deps.assertAuthorized = vi.fn(async () => {
@@ -3078,11 +3082,11 @@ describe("approved retention renewal planning", () => {
         });
         expect(
           await f.client.request({ action: "plan", operation: "prepare", selection }),
-        ).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+        ).toMatchObject({ code: "operator_unavailable", status: "blocked" });
         expect(log.mock.calls).toContainEqual([
           "[builder:hosted-neon-consent]",
           expect.objectContaining({
-            planningFailure: { stage: "saved_plan_reexposure", errorClass: "type_error" },
+            planningFailure: { errorClass: "type_error", stage: "saved_plan_reexposure" },
           }),
         ]);
         expect(JSON.stringify(log.mock.calls)).not.toContain(privateError.message);
@@ -3091,7 +3095,7 @@ describe("approved retention renewal planning", () => {
         f.deps.assertAuthorized = assertAuthorized;
       }
       if (pendingKind !== "gateway-delivery") {
-        const readApproval = f.deps.readApproval;
+        const { readApproval } = f.deps;
         const approvalRead = vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(
           async (input) => (input.callId === "renewed-call" ? null : await readApproval(input)),
         );
@@ -3104,8 +3108,8 @@ describe("approved retention renewal planning", () => {
           selection,
         };
         expect(await f.client.request(execute)).toMatchObject({
-          status: "blocked",
           code: "authorization_required",
+          status: "blocked",
         });
         expect(f.deps.executeEffect).not.toHaveBeenCalled();
         const blockedReconcile = vi.fn<ProtectedHostedOperatorDependencies["reconcile"]>(
@@ -3116,8 +3120,8 @@ describe("approved retention renewal planning", () => {
           input.callId === "original-approved-call" ? null : await readApproval(input),
         );
         expect(await f.client.request(execute)).toMatchObject({
-          status: "blocked",
           code: "authorization_required",
+          status: "blocked",
         });
         expect(blockedReconcile).not.toHaveBeenCalled();
         expect(f.deps.executeEffect).not.toHaveBeenCalled();
@@ -3125,14 +3129,14 @@ describe("approved retention renewal planning", () => {
         const reconcile = vi.fn<ProtectedHostedOperatorDependencies["reconcile"]>(async (input) => {
           if (input.effect.id === pendingEffectId) {
             expect(input.renewalBindingProvenance).toMatchObject({
-              approvedByCallId: "original-approved-call",
               approvalId: "durable-human-decision",
+              approvedByCallId: "original-approved-call",
               effectId: pendingEffectId,
               kind: pendingKind,
               operationRef,
               pendingEffectAttempt: {
-                id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
                 contextDigest: "e".repeat(64),
+                id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
               },
               planDigest: operatorPlanDigest(oldPlan),
             });
@@ -3150,8 +3154,8 @@ describe("approved retention renewal planning", () => {
         });
         f.deps.reconcile = reconcile;
         expect(await f.client.request(execute)).toMatchObject({
-          status: "blocked",
           code: "reconciliation_required",
+          status: "blocked",
         });
         expect(reconcile.mock.calls.some(([input]) => input.effect.id === pendingEffectId)).toBe(
           true,
@@ -3198,8 +3202,8 @@ describe("read-only configured Preview target resolution", () => {
     const result = await createProtectedHostedOperatorHandler(f.deps)(resolveRequest());
     expect(await result.json()).toMatchObject({
       appId: selection.appId,
-      status: "blocked",
       code: "protected_operator_required",
+      status: "blocked",
     });
   });
   it.each(["appId", "sessionId"] as const)(
@@ -3212,8 +3216,8 @@ describe("read-only configured Preview target resolution", () => {
       });
       const result = await createProtectedHostedOperatorHandler(f.deps)(resolveRequest());
       expect(await result.json()).toMatchObject({
-        status: "blocked",
         code: "authorization_required",
+        status: "blocked",
       });
     },
   );
@@ -3232,8 +3236,8 @@ describe("read-only configured Preview target resolution", () => {
     };
     const result = await createProtectedHostedOperatorHandler(f.deps)(resolveRequest());
     expect(await result.json()).toMatchObject({
-      status: "blocked",
       code: "authorization_required",
+      status: "blocked",
     });
     expect(f.row).toBeUndefined();
   });
@@ -3471,15 +3475,15 @@ describe("closed prepare pre-effect diagnostics", () => {
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
       expect(await f.client.request(request)).toMatchObject({
-        status: "blocked",
         code: "operator_unavailable",
+        status: "blocked",
       });
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           boundary: "operator",
+          executionFailure: { errorClass: "type_error", stage },
           stage: "operator_request",
-          executionFailure: { stage, errorClass: "type_error" },
         }),
       ]);
       expect(JSON.stringify(log.mock.calls)).not.toContain("planningFailure");
@@ -3524,9 +3528,9 @@ describe("closed prepare pre-effect diagnostics", () => {
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           executionFailure: {
-            stage: "approval_read",
-            errorClass: "operator_error",
             code: "authorization_required",
+            errorClass: "operator_error",
+            stage: "approval_read",
           },
         }),
       ]);
@@ -3556,7 +3560,7 @@ describe("closed prepare pre-effect diagnostics", () => {
     ).rejects.toBe(privateError);
     expect(sink).toHaveBeenCalledWith(
       expect.objectContaining({
-        executionFailure: { stage: "approval_read", errorClass: "unexpected", sqlState: "42501" },
+        executionFailure: { errorClass: "unexpected", sqlState: "42501", stage: "approval_read" },
       }),
     );
     expect(JSON.stringify(sink.mock.calls)).not.toContain(privateError.message);
@@ -3596,11 +3600,11 @@ describe("canonical runtime proof through the production verifier and handler", 
         },
         effects: [
           ...plan.effects,
-          { id: "delivery", kind: "delivery", description: "Observe app delivery" },
+          { description: "Observe app delivery", id: "delivery", kind: "delivery" },
           {
+            description: "Observe Gateway delivery",
             id: "gateway-delivery",
             kind: "gateway-delivery",
-            description: "Observe Gateway delivery",
           },
         ],
         release: { ...plan.release, sha256: createHash("sha256").update(manifest).digest("hex") },
@@ -3852,11 +3856,11 @@ describe("canonical runtime proof through the production verifier and handler", 
         if (initialScenario !== "ready") {
           const denied = await f.client.request(execute);
           expect(denied).toMatchObject({
-            status: "blocked",
             code:
               initialScenario === "authority_denied"
                 ? "authorization_required"
                 : "operator_unavailable",
+            status: "blocked",
           });
           expect(f.row?.record.proof).toBeUndefined();
           expect(readRuntimeSnapshot).not.toHaveBeenCalled();
@@ -3876,19 +3880,19 @@ describe("canonical runtime proof through the production verifier and handler", 
         expect(richResult).toMatchObject({
           actors: 0,
           authenticatedBehavior: "unassessed",
-          source: "reviewed-plan-app-runtime",
-          resourceId: selectedPlan.appDatabase.resourceId,
           observations: [{ organizationId: "synthetic-org" }],
+          resourceId: selectedPlan.appDatabase.resourceId,
+          source: "reviewed-plan-app-runtime",
         });
         expect(richResult?.observedAt).toEqual(expect.any(String));
         expect(hostedRuntimeProofSchema.safeParse(richResult).success).toBe(false);
         expect(log.mock.calls).not.toContainEqual([
           "[builder:hosted-neon-consent]",
           expect.objectContaining({
-            executionFailure: { stage: "final_proof_parse", errorClass: "validation_error" },
+            executionFailure: { errorClass: "validation_error", stage: "final_proof_parse" },
           }),
         ]);
-        expect(result).toMatchObject({ status: "prepared", authenticatedBehavior: "unassessed" });
+        expect(result).toMatchObject({ authenticatedBehavior: "unassessed", status: "prepared" });
         const persisted = hostedRuntimeProofSchema.parse(f.row?.record.proof);
         expect(persisted).toMatchObject({
           actors: 0,
@@ -3960,7 +3964,7 @@ describe("closed prepare final verification diagnostics", () => {
           )
         ).json(),
       );
-    return { f, execute };
+    return { execute, f };
   };
 
   it("reports the original physical authority error after ten receipts before verifier entry", async () => {
@@ -3984,20 +3988,20 @@ describe("closed prepare final verification diagnostics", () => {
     const verify = vi.spyOn(f.deps, "verify");
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
-      expect(await execute()).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+      expect(await execute()).toMatchObject({ code: "operator_unavailable", status: "blocked" });
       expect(captured).toBe(privateError);
       expect(verify).not.toHaveBeenCalled();
       expect(f.deps.executeEffect).toHaveBeenCalledTimes(10);
       expect(f.row?.record.proof).toBeUndefined();
       expect(f.row?.record.leaseId).toBeUndefined();
       expect(f.row?.record.executionObservation).toMatchObject({
+        outcome: { code: "operator_unavailable", status: "blocked" },
         state: "settled",
-        outcome: { status: "blocked", code: "operator_unavailable" },
       });
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
-          executionFailure: { stage: "final_authority", errorClass: "type_error" },
+          executionFailure: { errorClass: "type_error", stage: "final_authority" },
         }),
       ]);
       expect(JSON.stringify(log.mock.calls)).not.toContain("resource_lease");
@@ -4013,18 +4017,18 @@ describe("closed prepare final verification diagnostics", () => {
     const verify = vi.spyOn(f.deps, "verify").mockRejectedValue(privateError);
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
-      expect(await execute()).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+      expect(await execute()).toMatchObject({ code: "operator_unavailable", status: "blocked" });
       expect(verify).toHaveBeenCalledOnce();
       expect(f.deps.executeEffect).toHaveBeenCalledTimes(10);
       expect(f.row?.record.proof).toBeUndefined();
       expect(f.row?.record.executionObservation).toMatchObject({
+        outcome: { code: "operator_unavailable", status: "blocked" },
         state: "settled",
-        outcome: { status: "blocked", code: "operator_unavailable" },
       });
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
-          executionFailure: { stage: "final_verifier_entry", errorClass: "type_error" },
+          executionFailure: { errorClass: "type_error", stage: "final_verifier_entry" },
         }),
       ]);
       const output = JSON.stringify(log.mock.calls);
@@ -4049,7 +4053,7 @@ describe("closed prepare final verification diagnostics", () => {
             throw privateError;
           }
         });
-      const compareAndSet = f.deps.store.compareAndSet;
+      const { compareAndSet } = f.deps.store;
       f.deps.store.compareAndSet = async (input) => {
         const settlementFailure =
           stage === "execution_settlement" &&
@@ -4067,21 +4071,21 @@ describe("closed prepare final verification diagnostics", () => {
       const log = vi.spyOn(console, "info").mockImplementation(() => {});
       try {
         expect(await execute()).toMatchObject({
-          status: "blocked",
           code: stage === "execution_settlement" ? "operator_unavailable" : "resource_mismatch",
+          status: "blocked",
         });
         expect(verify).not.toHaveBeenCalled();
         expect(f.deps.executeEffect).toHaveBeenCalledTimes(10);
         expect(log.mock.calls).toContainEqual([
           "[builder:hosted-neon-consent]",
           expect.objectContaining({
-            executionFailure: { stage: "final_authority", errorClass: "type_error" },
+            executionFailure: { errorClass: "type_error", stage: "final_authority" },
           }),
         ]);
         expect(log.mock.calls).toContainEqual([
           "[builder:hosted-neon-consent]",
           expect.objectContaining({
-            executionFailure: { stage, errorClass: "operator_error", code: "resource_mismatch" },
+            executionFailure: { code: "resource_mismatch", errorClass: "operator_error", stage },
           }),
         ]);
         expect(JSON.stringify(log.mock.calls)).not.toContain("resource_lease");
@@ -4097,15 +4101,15 @@ describe("closed prepare final verification diagnostics", () => {
     vi.spyOn(f.deps, "verify").mockResolvedValue({ ...proof, releaseId: "different-release" });
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
-      expect(await execute()).toMatchObject({ status: "blocked", code: "resource_mismatch" });
+      expect(await execute()).toMatchObject({ code: "resource_mismatch", status: "blocked" });
       expect(f.row?.record.proof).toBeUndefined();
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           executionFailure: {
-            stage: "final_proof_parse",
-            errorClass: "operator_error",
             code: "resource_mismatch",
+            errorClass: "operator_error",
+            stage: "final_proof_parse",
           },
         }),
       ]);
@@ -4116,7 +4120,7 @@ describe("closed prepare final verification diagnostics", () => {
 
   it("classifies final proof publication failure and retries without duplicate effects", async () => {
     const { f, execute } = await finalFixture();
-    const compareAndSet = f.deps.store.compareAndSet;
+    const { compareAndSet } = f.deps.store;
     const privateError = Object.assign(new Error("private-publication-query private-token"), {
       code: "42501",
     });
@@ -4129,16 +4133,16 @@ describe("closed prepare final verification diagnostics", () => {
     const verify = vi.spyOn(f.deps, "verify");
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
-      expect(await execute()).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+      expect(await execute()).toMatchObject({ code: "operator_unavailable", status: "blocked" });
       expect(f.row?.record.proof).toBeUndefined();
       expect(f.row?.record.leaseId).toBeUndefined();
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           executionFailure: {
-            stage: "final_proof_publication",
             errorClass: "unexpected",
             sqlState: "42501",
+            stage: "final_proof_publication",
           },
         }),
       ]);
@@ -4156,12 +4160,12 @@ describe("closed prepare final verification diagnostics", () => {
     "classifies resource lease cleanup with journal release failure %s",
     async (releaseFails) => {
       const { f, execute } = await finalFixture();
-      const withResourceLease = f.deps.withResourceLease;
+      const { withResourceLease } = f.deps;
       f.deps.withResourceLease = async (input, run) => {
         await withResourceLease(input, run);
         throw new TypeError("private-resource-lease-cleanup");
       };
-      const compareAndSet = f.deps.store.compareAndSet;
+      const { compareAndSet } = f.deps.store;
       f.deps.store.compareAndSet = async (input) => {
         if (
           releaseFails &&
@@ -4175,8 +4179,8 @@ describe("closed prepare final verification diagnostics", () => {
       const log = vi.spyOn(console, "info").mockImplementation(() => {});
       try {
         expect(await execute()).toMatchObject({
-          status: "blocked",
           code: releaseFails ? "resource_mismatch" : "operator_unavailable",
+          status: "blocked",
         });
         expect(f.row?.record.proof).toEqual(proof);
         expect(f.row?.record.leaseId !== undefined).toBe(releaseFails);
@@ -4184,7 +4188,7 @@ describe("closed prepare final verification diagnostics", () => {
         expect(log.mock.calls).toContainEqual([
           "[builder:hosted-neon-consent]",
           expect.objectContaining({
-            executionFailure: { stage: "resource_lease", errorClass: "type_error" },
+            executionFailure: { errorClass: "type_error", stage: "resource_lease" },
           }),
         ]);
         if (releaseFails) {
@@ -4192,9 +4196,9 @@ describe("closed prepare final verification diagnostics", () => {
             "[builder:hosted-neon-consent]",
             expect.objectContaining({
               executionFailure: {
-                stage: "final_lease_release",
-                errorClass: "operator_error",
                 code: "resource_mismatch",
+                errorClass: "operator_error",
+                stage: "final_lease_release",
               },
             }),
           ]);
@@ -4207,7 +4211,7 @@ describe("closed prepare final verification diagnostics", () => {
 
   it("classifies journal lease clearing failure without repeating completed effects", async () => {
     const { f, execute } = await finalFixture();
-    const compareAndSet = f.deps.store.compareAndSet;
+    const { compareAndSet } = f.deps.store;
     f.deps.store.compareAndSet = async (input) => {
       if (f.row?.record.leaseId !== undefined && input.record.leaseId === undefined) {
         throw new TypeError("private-journal-lease-clear");
@@ -4216,14 +4220,14 @@ describe("closed prepare final verification diagnostics", () => {
     };
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
-      expect(await execute()).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+      expect(await execute()).toMatchObject({ code: "operator_unavailable", status: "blocked" });
       expect(f.row?.record.proof).toEqual(proof);
       expect(f.row?.record.leaseId).toBeDefined();
       expect(f.deps.executeEffect).toHaveBeenCalledTimes(10);
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
-          executionFailure: { stage: "final_lease_release", errorClass: "type_error" },
+          executionFailure: { errorClass: "type_error", stage: "final_lease_release" },
         }),
       ]);
       expect(JSON.stringify(log.mock.calls)).not.toContain("resource_lease");
@@ -4318,7 +4322,7 @@ describe("completed owned Gateway binding convergence", () => {
       const request = await prepared(f);
       f.approve();
       expect((await f.client.request(request)).status).toBe("prepared");
-      const row = f.row;
+      const { row } = f;
       if (row?.record.operator === undefined) {
         throw new Error("Missing approved fixture operation");
       }
@@ -4341,7 +4345,7 @@ describe("completed owned Gateway binding convergence", () => {
         }),
       };
       const executeCalls = vi.mocked(f.deps.executeEffect).mock.calls.length;
-      const reconcile = f.deps.reconcile;
+      const { reconcile } = f.deps;
       const deliveryReceipt = {
         effectId: outcome === "nonmatching" ? "unrelated-effect" : "gateway-delivery",
         resourceVersion: "verified-existing-delivery",
@@ -4385,7 +4389,7 @@ describe("completed owned Gateway binding convergence", () => {
         outcome === "retryable" || outcome === "absent" || outcome === "orphan";
       expect(observedDelivery).toBe(!bindingNeedsExecution);
       if (!bindingNeedsExecution) {
-        expect(pendingAtDelivery).toEqual({ id: pendingId, attempt: pending });
+        expect(pendingAtDelivery).toEqual({ attempt: pending, id: pendingId });
       }
       expect(f.deps.executeEffect).toHaveBeenCalledTimes(executeCalls);
       if (outcome === "matching") {
@@ -4451,10 +4455,10 @@ it("completes resource preparation without claiming a bound or deployed app", as
   f.approve();
   expect((await f.client.request(input)).status).toBe("prepared");
   expect(f.row?.record).toMatchObject({
-    status: "prepared",
-    step: "resource-ready",
     environmentBound: false,
     proof,
+    status: "prepared",
+    step: "resource-ready",
   });
   expect(f.deps.bindings).not.toHaveBeenCalled();
   expect(f.row?.record.operator?.receipts.map((receipt) => receipt.effectId)).toEqual(
@@ -4483,10 +4487,10 @@ it("completes resource preparation without claiming a bound or deployed app", as
   f.approve();
   expect((await f.client.request(input)).status).toBe("prepared");
   expect(f.row?.record).toMatchObject({
-    status: "prepared",
-    step: "resource-ready",
     environmentBound: false,
     proof,
+    status: "prepared",
+    step: "resource-ready",
   });
   expect(f.deps.bindings).not.toHaveBeenCalled();
   expect(f.row?.record.operator?.receipts.map((receipt) => receipt.effectId)).toEqual(

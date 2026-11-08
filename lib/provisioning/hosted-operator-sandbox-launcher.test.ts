@@ -347,15 +347,15 @@ const makeFixture = (
     | undefined;
   const startupFact = fixtureStartupFact(options.startupFailure, options.startupAdvisory);
   const sandbox = {
-    delete: vi.fn(async () => undefined),
-    extendTimeout: vi.fn(async () => undefined),
+    delete: vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined),
+    extendTimeout: vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined),
     fs: {
       lstat: vi.fn(async (filePath: string) => ({
         isFile: () => files.has(filePath),
         size: files.get(filePath)?.length ?? 0,
       })),
-      mkdir: vi.fn(async () => undefined),
-      rm: vi.fn(async () => undefined),
+      mkdir: vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined),
+      rm: vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined),
       readFile: vi.fn(async () => currentReceiptBytes),
     },
     readFileToBuffer: vi.fn(
@@ -490,7 +490,7 @@ const makeFixture = (
           });
         }
         workerCommand = {
-          kill: vi.fn(async () => undefined),
+          kill: vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined),
           logs: async function* () {
             for (const notice of notices) {
               if (
@@ -1201,7 +1201,7 @@ describe("hosted protected installer Sandbox launcher", () => {
       generated: true,
       readbackStatus: "applied",
     });
-    const observe = vi.fn(async () => {});
+    const observe = vi.fn<() => Promise<void>>().mockResolvedValue();
     await inspect.launcher.inspect({
       ...inspect.input,
       assertCurrentObservation: observe,
@@ -1210,7 +1210,7 @@ describe("hosted protected installer Sandbox launcher", () => {
     expect(observe).toHaveBeenCalled();
     expect(inspect.assertCurrent).not.toHaveBeenCalled();
     const execute = makeFixture();
-    const executingObservation = vi.fn(async () => {});
+    const executingObservation = vi.fn<() => Promise<void>>().mockResolvedValue();
     await execute.launcher.execute({
       ...execute.input,
       assertCurrentObservation: executingObservation,
@@ -1329,7 +1329,7 @@ describe("resource bootstrap launcher", () => {
         }),
       );
       return {
-        kill: vi.fn(async () => undefined),
+        kill: vi.fn<() => Promise<undefined>>().mockResolvedValue(undefined),
         logs: async function* () {
           yield {
             stream: "stdout",

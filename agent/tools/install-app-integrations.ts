@@ -54,11 +54,16 @@ export const installAppIntegrations = async (input: {
 }) => {
   const command = appIntegrationsInstallCommand(input.appId);
   try {
-    const result = await input.sandbox.run({
+    const { sandbox } = input;
+    const run = sandbox.run.bind(sandbox);
+    const runInput: Parameters<SandboxSession["run"]>[0] = {
       command,
       workingDirectory: input.root,
-      ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
-    });
+    };
+    if (input.signal !== undefined) {
+      runInput.abortSignal = input.signal;
+    }
+    const result = await run(runInput);
     const stderr = safeCommandOutput(result.stderr);
     if (result.exitCode !== 0) {
       return {
@@ -75,7 +80,7 @@ export const installAppIntegrations = async (input: {
       };
     }
     const receipt = integrationInstallReceipt(input.appId).parse(JSON.parse(result.stdout));
-    return {
+    const summary = {
       command,
       exitCode: 0,
       status: receipt.status,
@@ -87,10 +92,12 @@ export const installAppIntegrations = async (input: {
           : "Validate the installed source. Any runtime capability setup and provider effects remain separate approved operations.",
       files: receipt.files.map((file) => safeCommandOutput(file)),
       providers: receipt.providers,
-      ...(receipt.readiness === undefined ? {} : { readiness: receipt.readiness }),
-      providerReadiness: "unverified" as const,
-      stderr,
     };
+    const readiness: Pick<z.infer<ReturnType<typeof integrationInstallReceipt>>, "readiness"> = {};
+    if (receipt.readiness !== undefined) {
+      readiness.readiness = receipt.readiness;
+    }
+    return { ...summary, ...readiness, providerReadiness: "unverified" as const, stderr };
   } catch (error) {
     return {
       command,

@@ -23,7 +23,7 @@ const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(
     roots.splice(0).map(async (root) => {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }),
   );
 });
@@ -168,11 +168,11 @@ it("rejects bad archive bytes and wrong frozen digest without publishing a basel
 
 it("rejects duplicate declarations, traversal and changed executable modes", async () => {
   const f = await fixture();
-  const archive = f.request.archives[0];
+  const [archive] = f.request.archives;
   if (archive === undefined) {
     throw new Error("Missing fixture archive");
   }
-  const file = archive.files[0];
+  const [file] = archive.files;
   if (file === undefined) {
     throw new Error("Missing fixture file");
   }

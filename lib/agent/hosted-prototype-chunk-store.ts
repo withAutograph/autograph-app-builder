@@ -1,12 +1,9 @@
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Drizzle's database type requires the complete schema namespace.
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { getPrototypeChunk, putPrototypeChunk } from "./postgres-prototype-chunks";
 import type { DurablePrototypeChunkStore } from "./prototype-artifacts-v2";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 
 /** Bind every durable writer operation to the exact forwarded Eve tenant and session. */
 export const createHostedPrototypeChunkStore = (input: {

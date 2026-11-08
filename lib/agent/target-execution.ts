@@ -57,8 +57,9 @@ export function plannedProposalForExecution(
 export function assertProposalExecutionBindings(state: ProposalWorkflowState): void {
   assertExactDependencyPreparationReceipt(state.dependencyReceipt);
   const target = targetProposalSchema.safeParse(state.proposal.target);
+  const bindingError = "The planned proposal no longer matches its durable execution bindings.";
   if (!target.success) {
-    throw new Error("The planned proposal no longer matches its durable execution bindings.");
+    throw new Error(bindingError);
   }
   if (target.data.blockers.length !== 0) {
     throw new Error("The planned proposal still contains blockers and cannot be applied.");
@@ -90,11 +91,15 @@ export function assertProposalExecutionBindings(state: ProposalWorkflowState): v
   if (
     JSON.stringify(actual) !== JSON.stringify(expected) ||
     state.proposal.identityDigest !== state.identityReceipt.digest ||
-    target.data.contract.appId !== state.appSpec.appId ||
+    target.data.contract.appId !== state.appSpec.appId
+  ) {
+    throw new Error(bindingError);
+  }
+  if (
     target.data.contract.appSpec.path !== state.appSpec.artifactPath ||
     target.data.contract.appSpec.sha256 !== state.appSpec.digest
   ) {
-    throw new Error("The planned proposal no longer matches its durable execution bindings.");
+    throw new Error(bindingError);
   }
 }
 
@@ -120,7 +125,7 @@ const commands = ["bash", "git", "mise", "bun", "node", "pnpm"] as const;
 export function resolveTargetExecutionEnvironment(input: {
   environment: Readonly<Record<string, string | undefined>>;
   fixture: boolean;
-  cache?: ObservedDependencyCache;
+  cache?: Pick<ObservedDependencyCache, "manifestDigest">;
   checkoutImageDigest?: string;
 }) {
   const localImage = configuredToolchainImage(input.environment);
@@ -129,10 +134,11 @@ export function resolveTargetExecutionEnvironment(input: {
     fixture: input.fixture,
     localImageConfigured: localImage !== undefined,
   });
-  const cacheInspectable =
-    input.checkoutImageDigest === undefined &&
-    backend.blockers.length === 0 &&
-    (input.fixture || localImage !== undefined || isHostedVercelSandboxBackend(backend.kind));
+  let cacheInspectable = input.checkoutImageDigest === undefined && backend.blockers.length === 0;
+  if (cacheInspectable) {
+    cacheInspectable =
+      input.fixture || localImage !== undefined || isHostedVercelSandboxBackend(backend.kind);
+  }
   const execution =
     cacheInspectable && input.cache !== undefined
       ? targetExecutionBinding(input.cache, input.environment)
@@ -154,12 +160,15 @@ export async function inspectTargetExecutionReadiness(input: {
   const environment = input.environment ?? process.env;
   const proposal = plannedProposalForExecution(input.state, input.expectedProposalDigest);
   assertProposalExecutionBindings(input.state);
-  await inspectSourceBoundSandboxWorkspace({
+  const workspaceInput: Parameters<typeof inspectSourceBoundSandboxWorkspace>[0] = {
     expectedWorkspace: input.state.workspace,
     receipt: input.state.sourceReceipt,
     sandbox: input.sandbox,
-    ...(input.state.githubSource === undefined ? {} : { githubSource: input.state.githubSource }),
-  });
+  };
+  if (input.state.githubSource !== undefined) {
+    workspaceInput.githubSource = input.state.githubSource;
+  }
+  await inspectSourceBoundSandboxWorkspace(workspaceInput);
   const fixture = hasTestCapability("simulated-target", environment);
   const checkoutBacked = input.state.dependencyReceipt.dependencyLayout.kind === "checkout";
   const tools = fixture
@@ -189,11 +198,14 @@ export async function inspectTargetExecutionReadiness(input: {
           };
         }),
       );
-  const executionEnvironment = resolveTargetExecutionEnvironment({
+  const executionInput: Parameters<typeof resolveTargetExecutionEnvironment>[0] = {
     environment,
     fixture,
-    ...(checkoutBacked ? { checkoutImageDigest: input.state.dependencyReceipt.imageDigest } : {}),
-  });
+  };
+  if (checkoutBacked) {
+    executionInput.checkoutImageDigest = input.state.dependencyReceipt.imageDigest;
+  }
+  const executionEnvironment = resolveTargetExecutionEnvironment(executionInput);
   const cache =
     !checkoutBacked && executionEnvironment.cacheInspectable
       ? await inspectDependencyCache(
@@ -203,12 +215,15 @@ export async function inspectTargetExecutionReadiness(input: {
           shouldPreferLiveTemplateDependencies(input.state.sourceReceipt.version, environment),
         ).catch(() => globalThis.undefined)
       : undefined;
-  const resolvedExecutionEnvironment = resolveTargetExecutionEnvironment({
+  const resolvedInput: Parameters<typeof resolveTargetExecutionEnvironment>[0] = {
     cache,
     environment,
     fixture,
-    ...(checkoutBacked ? { checkoutImageDigest: input.state.dependencyReceipt.imageDigest } : {}),
-  });
+  };
+  if (checkoutBacked) {
+    resolvedInput.checkoutImageDigest = input.state.dependencyReceipt.imageDigest;
+  }
+  const resolvedExecutionEnvironment = resolveTargetExecutionEnvironment(resolvedInput);
   const image = resolvedExecutionEnvironment.imageDigest;
   const { backend } = resolvedExecutionEnvironment;
   const required = (Object.keys(requiredToolVersions) as (keyof typeof requiredToolVersions)[]).map(

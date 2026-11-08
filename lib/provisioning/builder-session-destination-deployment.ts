@@ -82,7 +82,7 @@ export const openBuilderSessionDestination = async (
   headers: Headers,
   environment: NodeJS.ProcessEnv = process.env,
 ) => {
-  const readOwner = () => ensurePreviewOAuthDeploymentSessionOrganization({ headers, environment });
+  const readOwner = () => ensurePreviewOAuthDeploymentSessionOrganization({ environment, headers });
   const owner = await readOwner();
   if (owner === null || owner === undefined) {
     throw new BuilderSessionDestinationSignInRequiredError();
@@ -168,10 +168,10 @@ export const openBuilderSessionDestination = async (
           database,
           installationId: input.installationId,
         });
+      const { scope, expected } = target;
       return {
-        scope: target.scope,
-        expected: target.expected,
         assertCurrent,
+        expected,
         readOrigins: async () => {
           await assertCurrent();
           const access = await readOwnerVercelProjectAccess({
@@ -192,14 +192,15 @@ export const openBuilderSessionDestination = async (
             throw new Error("This app's current project is unavailable.");
           }
           return await readStandardBuilderPublicOrigins({
-            destination: target.scope,
             assertCurrent,
+            destination: target.scope,
             readCredential: () =>
               readCredential({
                 installationId: target.scope.installationId,
               }),
           });
         },
+        scope,
       };
     },
   });

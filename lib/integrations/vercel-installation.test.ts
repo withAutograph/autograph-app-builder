@@ -1,6 +1,6 @@
 import { createHmac, randomBytes } from "node:crypto";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   createVercelInstallationAuthorization,
@@ -278,7 +278,7 @@ describe("Vercel integration security", () => {
           tokenKeyVersion: "v1",
         },
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        fetch: (async (url) => {
+        fetch: vi.fn<typeof fetch>(async (url) => {
           if (String(url).endsWith("/v2/oauth/access_token")) {
             return Response.json({ access_token: "provider-token-sentinel" });
           }
@@ -288,7 +288,7 @@ describe("Vercel integration security", () => {
             name: "Autograph",
             slug: "autograph",
           });
-        }) as typeof fetch,
+        }),
         installations: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           async bind(input) {

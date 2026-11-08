@@ -265,7 +265,12 @@ export function ConnectionDrawer({
               </div>
               <h4>Connect your {flow.name} account</h4>
               <p>Authorize Autograph to access {flow.name} on your behalf.</p>
-              <button type="button" onClick={() => setShowSuccess(true)}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSuccess(true);
+                }}
+              >
                 Connect {flow.name} <ExternalLink size={14} aria-hidden="true" />
               </button>
             </div>
@@ -285,7 +290,9 @@ export function ConnectionDrawer({
                 </span>
                 <input
                   value={connectionName}
-                  onChange={(event) => setConnectionName(event.target.value)}
+                  onChange={(event) => {
+                    setConnectionName(event.target.value);
+                  }}
                 />
               </label>
               <div className={styles.scopeRow}>
@@ -323,14 +330,18 @@ export function ConnectionDrawer({
                 Display Name
                 <input
                   value={connectionName}
-                  onChange={(event) => setConnectionName(event.target.value)}
+                  onChange={(event) => {
+                    setConnectionName(event.target.value);
+                  }}
                 />
               </label>
               <label>
                 Description
                 <textarea
                   value={description}
-                  onChange={(event) => setDescription(event.target.value)}
+                  onChange={(event) => {
+                    setDescription(event.target.value);
+                  }}
                 />
               </label>
               <label className={styles.defaultConnection}>

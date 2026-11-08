@@ -1,6 +1,5 @@
 import { createSourceCandidateValidator } from "../handoff/source-candidate-validation";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { openHostedPostgresDatabase } from "../db/hosted-postgres";
 import { parseHostedDatabaseUrl } from "../db/postgres-connection-policy";
 import { readHostedForwarderSubject } from "../eve/hosted-forwarder";
@@ -17,7 +16,7 @@ import type { ResumeRealmContinuation } from "./realm-continuation-read";
 
 export { openHostedPostgresDatabase } from "../db/hosted-postgres";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 type ResumeRepositoryAccess = (input: {
   sessionAuth: unknown;
   sessionId: string;
@@ -28,15 +27,25 @@ type RecheckRepositoryAccess = (input: {
   repository: string;
 }) => ReturnType<HostedBuilderHandoffRuntime["recheckRepositoryAccess"]>;
 
+interface ForwardedSessionAttributes {
+  "mcp:audience": HostedPrincipal["audience"];
+  "mcp:scopes": HostedPrincipal["scopes"];
+  "mcp:workspace-id": HostedPrincipal["workspaceId"];
+  "autograph:source-handoff-id"?: string;
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function forwardedSessionAuth(principal: HostedPrincipal, sourceHandoffId?: string) {
+  const attributes: ForwardedSessionAttributes = {
+    "mcp:audience": principal.audience,
+    "mcp:scopes": principal.scopes,
+    "mcp:workspace-id": principal.workspaceId,
+  };
+  if (sourceHandoffId !== undefined) {
+    attributes["autograph:source-handoff-id"] = sourceHandoffId;
+  }
   const context = {
-    attributes: {
-      "mcp:audience": principal.audience,
-      "mcp:scopes": principal.scopes,
-      "mcp:workspace-id": principal.workspaceId,
-      ...(sourceHandoffId === undefined ? {} : { "autograph:source-handoff-id": sourceHandoffId }),
-    },
+    attributes,
     authenticator: "mcp-oauth-jwks" as const,
     issuer: principal.issuer,
     principalId: principal.ownerUserId,
@@ -132,24 +141,28 @@ export function createDeploymentMcpRequestHandler(input: {
                 const resumeRepositoryAccess =
                   input.resumeRepositoryAccess ??
                   repositoryRuntime.resumeAuthorizedRepositoryAccessForSession;
-                await resumeRepositoryAccess({
+                const repositoryAccessInput: Parameters<typeof resumeRepositoryAccess>[0] = {
                   sessionAuth: forwardedSessionAuth(principal, sourceHandoffId),
                   sessionId: adapterSessionId,
-                  ...(input.fetchImplementation === undefined
-                    ? {}
-                    : { fetchImplementation: input.fetchImplementation }),
-                });
+                };
+                if (input.fetchImplementation !== undefined) {
+                  repositoryAccessInput.fetchImplementation = input.fetchImplementation;
+                }
+                await resumeRepositoryAccess(repositoryAccessInput);
               } catch {
                 // A lost callback notification is recoverable. Repository
                 // access remains parked and the ordinary session read still
                 // returns its exact outstanding authorization request.
               }
-              await resumeRealmContinuation({
+              const continuationInput: Parameters<typeof resumeRealmContinuation>[0] = {
                 principal,
                 sessionId,
                 adapterSessionId,
-                ...(sourceHandoffId === undefined ? {} : { sourceHandoffId }),
-              });
+              };
+              if (sourceHandoffId !== undefined) {
+                continuationInput.sourceHandoffId = sourceHandoffId;
+              }
+              await resumeRealmContinuation(continuationInput);
             },
             handoffs: {
               ...handoffService,

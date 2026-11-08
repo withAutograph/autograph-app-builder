@@ -77,14 +77,16 @@ describe("hosted start capacity", () => {
       status: "working",
       store,
     });
-    await expect(startTwice(firstUser)).resolves.toMatchObject({
-      sessionId: expect.any(String),
-    });
-    await expect(
-      service({ ownerUserId: "user_two", status: "working", store }).start({
+    const firstResult = await startTwice(firstUser);
+    expect(firstResult).toHaveProperty("sessionId");
+    expect(firstResult.sessionId).toEqual(expect.any(String));
+    const secondResult = await service({ ownerUserId: "user_two", status: "working", store }).start(
+      {
         clientRequestId: "three",
         prompt: "Build in the same workspace",
-      }),
-    ).resolves.toMatchObject({ sessionId: expect.any(String) });
+      },
+    );
+    expect(secondResult).toHaveProperty("sessionId");
+    expect(secondResult.sessionId).toEqual(expect.any(String));
   });
 });

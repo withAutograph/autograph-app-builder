@@ -3,9 +3,10 @@ import { expect, fn, userEvent, within } from "storybook/test";
 import { choiceRequest, semanticChoiceRequest } from "@/.storybook/create-app/mcp-fixtures";
 import { McpBlockStoryLayout } from "@/.storybook/create-app/layouts";
 import { InputControl } from "./view";
+import type { SessionAnswer } from "./view";
 
 const meta = {
-  args: { onAnswer: fn(), request: choiceRequest },
+  args: { onAnswer: fn<(answer: SessionAnswer) => void>(), request: choiceRequest },
   component: InputControl,
   decorators: [
     (Story) => (

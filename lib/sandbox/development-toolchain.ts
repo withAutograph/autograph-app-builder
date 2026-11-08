@@ -23,6 +23,8 @@ import {
   hostedToolchainArtifacts,
 } from "./hosted-toolchain";
 
+const invalidDependencyKeyMessage = "Development dependency key was invalid.";
+
 const sha256Pattern = /^[0-9a-f]{64}$/u;
 const gitObjectPattern = /^[0-9a-f]{40}$/u;
 const dependencyInputs = [
@@ -151,7 +153,11 @@ function assertInput(input: DevelopmentVercelBootstrapInput) {
     !sha256Pattern.test(input.sourceFingerprint) ||
     !sha256Pattern.test(input.dependencyKey) ||
     !gitObjectPattern.test(input.sourceSha) ||
-    !gitObjectPattern.test(input.sourceTree) ||
+    !gitObjectPattern.test(input.sourceTree)
+  ) {
+    throw new Error("Development Vercel bootstrap identity was invalid.");
+  }
+  if (
     !sha256Pattern.test(input.sourceArchiveSha256) ||
     Object.values(input.lockfiles).some(
       (digest) => digest !== "absent" && !sha256Pattern.test(digest),
@@ -560,7 +566,7 @@ printf '%s\n' 'development_vercel_bootstrap_ready:${input.dependencyKey}'`;
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentVercelDependencyRepairCommand(dependencyKey: string) {
   if (!sha256Pattern.test(dependencyKey)) {
-    throw new Error("Development dependency key was invalid.");
+    throw new Error(invalidDependencyKeyMessage);
   }
   return `set -euo pipefail
 test "$(uname -m)" = x86_64
@@ -636,7 +642,7 @@ printf '%s\n' 'development_vercel_repair_ready:${dependencyKey}'`;
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentVercelProviderTemplateKey(dependencyKey: string) {
   if (!sha256Pattern.test(dependencyKey)) {
-    throw new Error("Development dependency key was invalid.");
+    throw new Error(invalidDependencyKeyMessage);
   }
   return `app-builder-development-${dependencyKey}`;
 }
@@ -646,7 +652,7 @@ export function developmentVercelRevalidationKey(
   input: Pick<DevelopmentVercelBootstrapInput, "dependencyKey">,
 ) {
   if (!sha256Pattern.test(input.dependencyKey)) {
-    throw new Error("Development dependency key was invalid.");
+    throw new Error(invalidDependencyKeyMessage);
   }
   return `autograph-app-builder-vercel-development-v1:${sha256(
     JSON.stringify({

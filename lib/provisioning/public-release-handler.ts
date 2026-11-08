@@ -18,6 +18,8 @@ import type {
   PublicReleaseBindingState,
 } from "./public-release-contract";
 
+const bindProductionRuntimeEffect = "bind-production-runtime";
+
 export interface PublicReleaseInvocation {
   authority: PublicReleaseAuthority;
   sessionId: string;
@@ -127,7 +129,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
     ) {
       throw unavailable();
     }
-    return { row, plan };
+    return { plan, row };
   };
   const observeDelivery = async (
     invocation: PublicReleaseInvocation,
@@ -151,9 +153,13 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
     ) {
       await checkpoint(row, { ...row.record, observation });
     }
+    const status = { status: observation.status };
+    const initial: typeof status & Pick<PublicReleasePlan, "purpose"> = status;
+    if (plan.purpose !== undefined) {
+      initial.purpose = plan.purpose;
+    }
     return {
-      status: observation.status,
-      ...(plan.purpose === undefined ? {} : { purpose: plan.purpose }),
+      ...initial,
       operationRef: row.operationRef,
       observation,
       authenticatedBehavior: "unassessed" as const,
@@ -197,7 +203,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
         if (!row || row.record.planDigest !== planDigest) {
           throw unavailable();
         }
-        let phase: PublicReleaseEffect | "observe-production" = "bind-production-runtime";
+        let phase: PublicReleaseEffect | "observe-production" = bindProductionRuntimeEffect;
         try {
           for (const effect of plan.effects) {
             phase = effect;
@@ -215,7 +221,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
             };
             const binding = async (key: string) => {
               await authorize(invocation, plan, true);
-              if (effect !== "bind-production-runtime") {
+              if (effect !== bindProductionRuntimeEffect) {
                 throw unavailable();
               }
               const current = await refresh();
@@ -250,12 +256,10 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
                   if (state.state !== "idle") {
                     return state;
                   }
-                  const next: PublicReleaseBindingState = {
-                    state: "pending",
-                    ...(expected.priorBinding === undefined
-                      ? {}
-                      : { acceptedEnvId: expected.priorBinding.id }),
-                  };
+                  const next: PublicReleaseBindingState = { state: "pending" };
+                  if (expected.priorBinding !== undefined) {
+                    next.acceptedEnvId = expected.priorBinding.id;
+                  }
                   await saveBinding(key, next);
                   return next;
                 },
@@ -287,7 +291,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
             await authorize(invocation, plan, true);
             if (reconciled === "applied") {
               if (
-                effect === "bind-production-runtime" &&
+                effect === bindProductionRuntimeEffect &&
                 Object.values(row.record.bindings).some((value) => value.state !== "applied")
               ) {
                 throw unavailable();
@@ -311,7 +315,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
             }
             row = await refresh();
             if (
-              effect === "bind-production-runtime" &&
+              effect === bindProductionRuntimeEffect &&
               Object.values(row.record.bindings).some((value) => value.state !== "applied")
             ) {
               throw unavailable();

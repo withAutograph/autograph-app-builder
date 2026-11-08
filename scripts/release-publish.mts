@@ -24,6 +24,7 @@ import {
 import { HostedMcpProofClient } from "./hosted-portable-proof";
 import { TOOL_NAMES } from "./portable-release";
 
+const promotionReceiptName = "promotion-receipt.json";
 const execFileAsync = promisify(execFile);
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -36,9 +37,11 @@ function parseArguments(args: readonly string[]) {
       name === undefined ||
       value === undefined ||
       !name.startsWith("--") ||
-      value.startsWith("--") ||
-      values.has(name)
+      value.startsWith("--")
     ) {
+      throw new Error("Release publication options must be unique pairs.");
+    }
+    if (values.has(name)) {
       throw new Error("Release publication options must be unique pairs.");
     }
     values.set(name, value);
@@ -73,9 +76,14 @@ async function ownerToken(path: string) {
     canonical !== path ||
     !info.isFile() ||
     info.isSymbolicLink() ||
-    info.uid !== process.getuid?.() ||
+    info.uid !== process.getuid?.()
+  ) {
+    throw new Error("Release OAuth token must be a canonical owner-only file.");
+  }
+  if (
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (info.mode & 0o077) !== 0
+    (info.mode & 0o077) !==
+    0
   ) {
     throw new Error("Release OAuth token must be a canonical owner-only file.");
   }
@@ -236,15 +244,19 @@ try {
       nodePath.basename(receipt.package.marketplaceArchive),
       nodePath.basename(receipt.package.checksums),
       nodePath.basename(receipt.package.receipt),
-      "promotion-receipt.json",
+      promotionReceiptName,
     ].toSorted();
     if (
       metadata.tagName !== `v${receipt.package.version}` ||
       metadata.isPrerelease !== true ||
       metadata.targetCommitish !== receipt.builder.commit ||
-      !Array.isArray(metadata.assets) ||
+      !Array.isArray(metadata.assets)
+    ) {
+      throw new Error("Existing GitHub release did not match the promotion.");
+    }
+    if (
       JSON.stringify(metadata.assets.map(({ name }) => name).toSorted()) !==
-        JSON.stringify(expectedAssetNames)
+      JSON.stringify(expectedAssetNames)
     ) {
       throw new Error("Existing GitHub release did not match the promotion.");
     }
@@ -257,8 +269,8 @@ try {
       [receipt.package.checksums, receipt.package.checksumsSha256],
       [receipt.package.receipt, receipt.package.receiptSha256],
       [
-        "promotion-receipt.json",
-        sha256(await readFile(nodePath.join(publicationRoot, "promotion-receipt.json"))),
+        promotionReceiptName,
+        sha256(await readFile(nodePath.join(publicationRoot, promotionReceiptName))),
       ],
     ] as const;
     try {
@@ -379,9 +391,11 @@ try {
     metadata.resource !== receipt.endpoint ||
     !Array.isArray(metadata.authorization_servers) ||
     metadata.authorization_servers.length !== 1 ||
-    typeof metadata.authorization_servers[0] !== "string" ||
-    !metadata.authorization_servers[0].startsWith("https://")
+    typeof metadata.authorization_servers[0] !== "string"
   ) {
+    throw new Error("Deployed OAuth resource metadata did not match release.");
+  }
+  if (!metadata.authorization_servers[0].startsWith("https://")) {
     throw new Error("Deployed OAuth resource metadata did not match release.");
   }
   const hostedClient = new HostedMcpProofClient(receipt.endpoint, oauthToken);

@@ -17,7 +17,7 @@ const read = {
 
 describe("owned read Realm continuation", () => {
   it("passes the actual owner, scopes and both saved session identities unchanged", async () => {
-    const resume = vi.fn<ResumeRealmContinuation>().mockImplementation(() => Promise.resolve());
+    const resume = vi.fn<ResumeRealmContinuation>().mockResolvedValue();
     const environment = { EVE_HOSTED_ADAPTER: "1" };
     await createRealmContinuationRead({ environment, resume })(read);
     expect(resume).toHaveBeenCalledTimes(1);

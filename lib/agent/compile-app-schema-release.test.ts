@@ -341,7 +341,7 @@ it.each([false, true])(
         }),
       },
     });
-    expect(result).toMatchObject({ status: "failed", exitCode: 1 });
+    expect(result).toMatchObject({ exitCode: 1, status: "failed" });
     expect(result.stderr).toContain(detail);
     expect(result.stderr).toContain("    field: expected string");
     expect(validationOutputExcerpt(result.stdout, result.stderr).stderr).toContain(detail);

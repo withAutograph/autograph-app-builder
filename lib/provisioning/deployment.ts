@@ -54,10 +54,7 @@ export function createBuilderProvisioningRouteHandler(input: {
         );
       }
       if (request.method === "GET") {
-        const requestId = z
-          .string()
-          .uuid()
-          .parse(new URL(request.url).searchParams.get("requestId"));
+        const requestId = z.uuid().parse(new URL(request.url).searchParams.get("requestId"));
         if (new URL(request.url).searchParams.get("projection") === "1") {
           const row = await input.dependencies.journal.read({
             authority,
@@ -93,7 +90,7 @@ export function createBuilderProvisioningRouteHandler(input: {
         return Response.json({ error: "feature_disabled" }, { headers: noStore, status: 503 });
       }
       const length = request.headers.get("content-length");
-      if (length && (!/^\d+$/u.test(length) || Number(length) > 16_384)) {
+      if (length !== null && length !== "" && (!/^\d+$/u.test(length) || Number(length) > 16_384)) {
         return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });
       }
       const body = builderProvisionRequestSchema.parse(await request.json());

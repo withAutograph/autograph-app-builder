@@ -21,8 +21,8 @@ import { resumeDevelopmentCycle } from "./resume-cycle";
 import { parseDevelopmentArguments } from "./local-mode";
 
 const installFixtureDependencies = async (repositoryRoot: string, revision: string) => {
-  await mkdir(path.join(repositoryRoot, "node_modules/.pnpm"), { recursive: true, mode: 0o700 });
-  await mkdir(path.join(repositoryRoot, "node_modules/eve"), { recursive: true, mode: 0o700 });
+  await mkdir(path.join(repositoryRoot, "node_modules/.pnpm"), { mode: 0o700, recursive: true });
+  await mkdir(path.join(repositoryRoot, "node_modules/eve"), { mode: 0o700, recursive: true });
   const lock = `lockfileVersion: '9.0'\nrevision: ${revision}\n`;
   await writeFile(path.join(repositoryRoot, "pnpm-lock.yaml"), lock);
   await writeFile(path.join(repositoryRoot, "node_modules/.pnpm/lock.yaml"), lock);
@@ -54,8 +54,8 @@ const fixture = async () => {
   const supervisorRoot = await mkdtemp(path.join(runsRoot, "supervisor-"));
   const cycle = await createDevelopmentCycle({ repositoryRoot, supervisorRoot });
   await mkdir(path.join(cycle.application.root, ".eve/.workflow-data"), {
-    recursive: true,
     mode: 0o700,
+    recursive: true,
   });
   await writeFile(
     path.join(cycle.application.root, ".eve/.workflow-data/session.json"),
@@ -69,7 +69,7 @@ const fixture = async () => {
     path.join(cycle.application.root, ".eve/dev-server-state.v1.json"),
     JSON.stringify({ url: `http://127.0.0.1:${address.port}` }),
   );
-  return { root, repositoryRoot, runsRoot, cycle, server, port: address.port };
+  return { cycle, port: address.port, repositoryRoot, root, runsRoot, server };
 };
 it("resumes one stopped local cycle with current code and unchanged saved state, under the caller’s state-root lock", async () => {
   const f = await fixture();
@@ -80,10 +80,10 @@ it("resumes one stopped local cycle with current code and unchanged saved state,
     await rm(path.join(f.cycle.application.root, ".eve/dev-server-state.v1.json"));
     await writeFile(path.join(f.repositoryRoot, "agent.ts"), "export const revision=2;\n");
     const resumed = await resumeDevelopmentCycle({
-      repositoryRoot: f.repositoryRoot,
-      runsRoot: f.runsRoot,
       cycleRoot: f.cycle.root,
       evePort: f.port,
+      repositoryRoot: f.repositoryRoot,
+      runsRoot: f.runsRoot,
     });
     expect(resumed.application.root).toBe(f.cycle.application.root);
     expect(await readFile(path.join(resumed.application.root, "agent.ts"), "utf-8")).toContain(
@@ -96,7 +96,7 @@ it("resumes one stopped local cycle with current code and unchanged saved state,
       ),
     ).toBe(' {"session":"original","state":"waiting"}\n');
   } finally {
-    await rm(f.root, { recursive: true, force: true });
+    await rm(f.root, { force: true, recursive: true });
   }
 });
 it("refuses a running instance and a different state root without modifying its source or saved sessions", async () => {
@@ -104,20 +104,20 @@ it("refuses a running instance and a different state root without modifying its 
   try {
     await expect(
       resumeDevelopmentCycle({
-        repositoryRoot: f.repositoryRoot,
-        runsRoot: f.runsRoot,
         cycleRoot: f.cycle.root,
         evePort: f.port,
+        repositoryRoot: f.repositoryRoot,
+        runsRoot: f.runsRoot,
       }),
     ).rejects.toThrow("Stop this local Builder instance");
     const foreign = path.join(f.root, "another-runs");
     await mkdir(foreign, { mode: 0o700 });
     await expect(
       resumeDevelopmentCycle({
-        repositoryRoot: f.repositoryRoot,
-        runsRoot: foreign,
         cycleRoot: f.cycle.root,
         evePort: f.port,
+        repositoryRoot: f.repositoryRoot,
+        runsRoot: foreign,
       }),
     ).rejects.toThrow("cannot be resumed safely");
     expect(await readFile(path.join(f.cycle.application.root, "agent.ts"), "utf-8")).toContain(
@@ -127,7 +127,7 @@ it("refuses a running instance and a different state root without modifying its 
     const closed = once(f.server, "close");
     f.server.close();
     await closed;
-    await rm(f.root, { recursive: true, force: true });
+    await rm(f.root, { force: true, recursive: true });
   }
 });
 it("requires explicit local recovery paths instead of selecting another instance automatically", () => {
@@ -170,10 +170,10 @@ it("resumes the same real cycle from a second checkout and loads that checkout's
       });
     expect(load()).toBe("old-runtime");
     const resumed = await resumeDevelopmentCycle({
-      repositoryRoot: second,
-      runsRoot: f.runsRoot,
       cycleRoot: f.cycle.root,
       evePort: f.port,
+      repositoryRoot: second,
+      runsRoot: f.runsRoot,
     });
     expect(load()).toBe("selected-runtime");
     expect(await realpath(path.join(resumed.application.root, "node_modules"))).toBe(
@@ -189,7 +189,7 @@ it("resumes the same real cycle from a second checkout and loads that checkout's
     const after = await stat(stateFile);
     expect(after.ino).toBe(before.ino);
   } finally {
-    await rm(f.root, { recursive: true, force: true });
+    await rm(f.root, { force: true, recursive: true });
   }
 });
 it("reports an actionable stale selected install before replacing source, dependencies or native state", async () => {
@@ -206,10 +206,10 @@ it("reports an actionable stale selected install before replacing source, depend
     const original = await realpath(path.join(f.cycle.application.root, "node_modules"));
     await expect(
       resumeDevelopmentCycle({
-        repositoryRoot: f.repositoryRoot,
-        runsRoot: f.runsRoot,
         cycleRoot: f.cycle.root,
         evePort: f.port,
+        repositoryRoot: f.repositoryRoot,
+        runsRoot: f.runsRoot,
       }),
     ).rejects.toThrow("pnpm install --frozen-lockfile");
     expect(await realpath(path.join(f.cycle.application.root, "node_modules"))).toBe(original);
@@ -220,7 +220,7 @@ it("reports an actionable stale selected install before replacing source, depend
       ),
     ).toContain('"session":"original"');
   } finally {
-    await rm(f.root, { recursive: true, force: true });
+    await rm(f.root, { force: true, recursive: true });
   }
 });
 it("preserves an intentionally selected owner-bound dependency cache while rebinding the cycle", async () => {
@@ -233,15 +233,15 @@ it("preserves an intentionally selected owner-bound dependency cache while rebin
     await rename(path.join(f.repositoryRoot, "node_modules"), cache);
     await symlink(cache, path.join(f.repositoryRoot, "node_modules"));
     const resumed = await resumeDevelopmentCycle({
-      repositoryRoot: f.repositoryRoot,
-      runsRoot: f.runsRoot,
       cycleRoot: f.cycle.root,
       evePort: f.port,
+      repositoryRoot: f.repositoryRoot,
+      runsRoot: f.runsRoot,
     });
     expect(resumed.dependencyBinding.modulesRoot).toBe(cache);
     expect(await realpath(path.join(resumed.application.root, "node_modules"))).toBe(cache);
   } finally {
-    await rm(f.root, { recursive: true, force: true });
+    await rm(f.root, { force: true, recursive: true });
   }
 });
 it("rejects stale per-package Eve resolution outside the selected installed tree before modifying the cycle", async () => {
@@ -255,10 +255,10 @@ it("rejects stale per-package Eve resolution outside the selected installed tree
     await symlink(external, path.join(f.repositoryRoot, "node_modules/eve"));
     await expect(
       resumeDevelopmentCycle({
-        repositoryRoot: f.repositoryRoot,
-        runsRoot: f.runsRoot,
         cycleRoot: f.cycle.root,
         evePort: f.port,
+        repositoryRoot: f.repositoryRoot,
+        runsRoot: f.runsRoot,
       }),
     ).rejects.toThrow("outside its selected dependency tree");
     expect(
@@ -268,7 +268,7 @@ it("rejects stale per-package Eve resolution outside the selected installed tree
       ),
     ).toContain('"session":"original"');
   } finally {
-    await rm(f.root, { recursive: true, force: true });
+    await rm(f.root, { force: true, recursive: true });
   }
 });
 
@@ -288,10 +288,10 @@ it("rejects a non-link retained dependency directory before replacing authored o
     await writeFile(path.join(f.repositoryRoot, "agent.ts"), "export const revision=2;\n");
     await expect(
       resumeDevelopmentCycle({
-        repositoryRoot: f.repositoryRoot,
-        runsRoot: f.runsRoot,
         cycleRoot: f.cycle.root,
         evePort: f.port,
+        repositoryRoot: f.repositoryRoot,
+        runsRoot: f.runsRoot,
       }),
     ).rejects.toThrow("not its owned dependency link");
     expect(await readFile(path.join(f.cycle.application.root, "agent.ts"), "utf-8")).toContain(
@@ -304,6 +304,6 @@ it("rejects a non-link retained dependency directory before replacing authored o
     const after = await stat(stateFile);
     expect(after.ino).toBe(before.ino);
   } finally {
-    await rm(f.root, { recursive: true, force: true });
+    await rm(f.root, { force: true, recursive: true });
   }
 });

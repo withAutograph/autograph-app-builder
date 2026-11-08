@@ -52,7 +52,7 @@ describe("closed Neon consent diagnostics", () => {
         "owner_session_binding",
       ] as const) {
         for (const outcome of ["started", "verified"] as const) {
-          report({ boundary: "builder", phase: "inline", stage, outcome });
+          report({ boundary: "builder", outcome, phase: "inline", stage });
         }
       }
       expect(log).not.toHaveBeenCalled();
@@ -71,19 +71,19 @@ describe("closed Neon consent diagnostics", () => {
         "owner_membership",
         "owner_session_binding",
       ] as const) {
-        report({ boundary: "builder", phase: "inline", stage, outcome: "operator_access_denied" });
+        report({ boundary: "builder", outcome: "operator_access_denied", phase: "inline", stage });
         expect(log.mock.calls.at(-1)?.[1]).toMatchObject({
-          stage,
           outcome: "operator_access_denied",
+          stage,
         });
       }
       report(value);
       expect(log.mock.calls.at(-1)?.[1]).toMatchObject(value);
       report({
         boundary: "operator",
+        outcome: "verified",
         phase: "inline",
         stage: "owner_authority",
-        outcome: "verified",
       });
       expect(log.mock.calls.at(-1)?.[1]).toMatchObject({
         boundary: "operator",
@@ -99,8 +99,8 @@ describe("closed Neon consent diagnostics", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const report = createHostedOperatorConsentDiagnostic(secret, sink);
     for (const outcome of ["started", "verified"] as const) {
-      report({ boundary: "builder", phase: "inline", stage: "owner_membership", outcome });
-      expect(sink.mock.calls.at(-1)?.[0]).toMatchObject({ stage: "owner_membership", outcome });
+      report({ boundary: "builder", outcome, phase: "inline", stage: "owner_membership" });
+      expect(sink.mock.calls.at(-1)?.[0]).toMatchObject({ outcome, stage: "owner_membership" });
     }
     await Promise.resolve();
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
@@ -129,9 +129,9 @@ describe("closed Neon consent diagnostics", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const report = createHostedOperatorConsentDiagnostic(secret, sink);
     const failure = {
-      stage: "update_patch" as const,
-      reason: "provider_rejected" as const,
       httpStatus: 404,
+      reason: "provider_rejected" as const,
+      stage: "update_patch" as const,
     };
     for (const requestTarget of ["environment_row", "project_settings"] as const) {
       report({ ...value, hostedEnvironmentBindingFailure: { ...failure, requestTarget } });
@@ -168,11 +168,11 @@ describe("closed Neon consent diagnostics", () => {
       const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
       const report = createHostedOperatorConsentDiagnostic(secret, sink);
       const failure = {
-        stage: "update_patch" as const,
-        reason: "provider_rejected" as const,
-        requestTarget: "project_settings" as const,
         httpStatus: 404,
         providerCode,
+        reason: "provider_rejected" as const,
+        requestTarget: "project_settings" as const,
+        stage: "update_patch" as const,
       };
       report({ ...value, hostedEnvironmentBindingFailure: failure });
       expect(sink.mock.calls[0]?.[0].hostedEnvironmentBindingFailure).toEqual(failure);
@@ -183,11 +183,11 @@ describe("closed Neon consent diagnostics", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const report = createHostedOperatorConsentDiagnostic(secret, sink);
     const failure = {
-      stage: "update_patch" as const,
+      approvedPairCovered: false,
+      approvedSourcePresent: true,
       reason: "provider_rejected" as const,
       requestTarget: "project_settings" as const,
-      approvedSourcePresent: true,
-      approvedPairCovered: false,
+      stage: "update_patch" as const,
     };
     for (const trustedSourcesVisibility of ["absent", "null", "present"] as const) {
       const observed = { ...failure, trustedSourcesVisibility };
@@ -216,12 +216,12 @@ describe("closed Neon consent diagnostics", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const report = createHostedOperatorConsentDiagnostic(secret, sink);
     const gatewayBindings = {
-      mode: "bind" as const,
-      stage: "write" as const,
-      result: "failed" as const,
-      requestTarget: "project_settings" as const,
-      trustedSourcesVisibility: "absent" as const,
       missingApprovedPairCount: 2,
+      mode: "bind" as const,
+      requestTarget: "project_settings" as const,
+      result: "failed" as const,
+      stage: "write" as const,
+      trustedSourcesVisibility: "absent" as const,
     };
     report({ ...value, gatewayBindings });
     expect(sink.mock.calls[0]?.[0].gatewayBindings).toEqual(gatewayBindings);
@@ -353,12 +353,12 @@ describe("closed Neon consent diagnostics", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const report = createHostedOperatorConsentDiagnostic(secret, sink);
     const inventoryReadFailure = {
-      target: "gateway" as const,
+      errorClass: "operator_error" as const,
+      httpStatus: 404,
       operation: "public_alias" as const,
       phase: "http_response" as const,
-      httpStatus: 404,
-      errorClass: "operator_error" as const,
       publicCode: "operator_unavailable" as const,
+      target: "gateway" as const,
     };
     report({ ...value, inventoryReadFailure });
     expect(sink.mock.calls[0]?.[0].inventoryReadFailure).toEqual(inventoryReadFailure);
@@ -379,9 +379,9 @@ describe("closed Neon consent diagnostics", () => {
   it("ignores hostile inventory descriptors without replacing the caller failure", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const descriptor: Parameters<typeof reportOperatorInventoryReadFailure>[1] = {
-      target: "inventory",
       operation: "project",
       phase: "fetch",
+      target: "inventory",
     };
     const hostileDescriptor = new Proxy(descriptor, {
       ownKeys() {
@@ -490,9 +490,9 @@ describe("private operator planning stage observer", () => {
       ),
     ).rejects.toBe(rejection);
     expect(sink.mock.calls[0]?.[0].planningFailure).toEqual({
-      stage: "journal_read",
       errorClass: "unexpected",
       sqlState,
+      stage: "journal_read",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
@@ -521,8 +521,8 @@ describe("private operator planning stage observer", () => {
           ),
         ).rejects.toBe(rejection);
         expect(sink.mock.calls[0]?.[0].planningFailure).toEqual({
-          stage: "journal_read",
           errorClass: "unexpected",
+          stage: "journal_read",
         });
         expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
       }),
@@ -571,13 +571,13 @@ describe("private operator planning stage observer", () => {
     await expect(observeOperatorPlanStage(secret, planStage, run, sink)).rejects.toBe(rejection);
     expect(run).toHaveBeenCalledOnce();
     expect(sink).toHaveBeenCalledExactlyOnceWith({
-      event: "builder.hosted_neon_consent",
-      sessionIdHash: `sha256:${createHash("sha256").update(secret).digest("hex")}`,
       boundary: "operator",
-      phase: "inline",
-      stage: "operator_request",
+      event: "builder.hosted_neon_consent",
       outcome: "setup_unavailable",
-      planningFailure: { stage: planStage, errorClass: "unexpected" },
+      phase: "inline",
+      planningFailure: { errorClass: "unexpected", stage: planStage },
+      sessionIdHash: `sha256:${createHash("sha256").update(secret).digest("hex")}`,
+      stage: "operator_request",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
@@ -600,9 +600,9 @@ describe("private operator planning stage observer", () => {
           ),
         ).rejects.toBe(rejection);
         expect(sink.mock.calls[0]?.[0].planningFailure).toEqual({
-          stage: "plan_composition",
-          errorClass: "operator_error",
           code,
+          errorClass: "operator_error",
+          stage: "plan_composition",
         });
         expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
       }),
@@ -621,8 +621,8 @@ describe("private operator planning stage observer", () => {
       ),
     ).rejects.toBe(rejection);
     expect(sink.mock.calls[0]?.[0].planningFailure).toEqual({
-      stage: "plan_validation",
       errorClass: "operator_error",
+      stage: "plan_validation",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
@@ -665,8 +665,8 @@ describe("private operator planning stage observer", () => {
     );
     expect(run).toHaveBeenCalledOnce();
     expect(sink.mock.calls[0]?.[0].planningFailure).toEqual({
-      stage: "plan_journal_update",
       errorClass: "validation_error",
+      stage: "plan_journal_update",
       validationInvariants: [label],
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
@@ -797,8 +797,8 @@ describe("private operator planning stage observer", () => {
           ),
         ).rejects.toBe(rejection);
         expect(sink.mock.calls[0]?.[0].planningFailure).toEqual({
-          stage: "plan_validation",
           errorClass,
+          stage: "plan_validation",
         });
         expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
       }),
@@ -890,7 +890,7 @@ describe("private operator planning stage observer", () => {
     ] as const) {
       const metadata: HostedOperatorConsentMetadata = {
         ...value,
-        planningFailure: { stage: "plan_validation", errorClass: "unexpected" },
+        planningFailure: { errorClass: "unexpected", stage: "plan_validation" },
       };
       Object.defineProperty(metadata.planningFailure, field, { enumerable: true, value: invalid });
       report(metadata);
@@ -989,13 +989,13 @@ describe("operator planning mismatch diagnostics", () => {
     );
     expect(sink).toHaveBeenCalledOnce();
     expect(sink.mock.calls[0]?.[0]).toMatchObject({
-      event: "builder.hosted_neon_consent",
-      sessionIdHash: `sha256:${createHash("sha256").update(secret).digest("hex")}`,
       boundary: "operator",
-      phase: "inline",
-      stage: "operator_request",
+      event: "builder.hosted_neon_consent",
       outcome: "setup_unavailable",
+      phase: "inline",
       planningMismatch: { boundary },
+      sessionIdHash: `sha256:${createHash("sha256").update(secret).digest("hex")}`,
+      stage: "operator_request",
     });
     expect(new Set(sink.mock.calls[0]?.[0].planningMismatch?.fields)).toEqual(new Set(fields));
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
@@ -1132,9 +1132,9 @@ it("preserves a plan owner authorization rejection with only the fixed private s
   expect(sink).toHaveBeenCalledWith(
     expect.objectContaining({
       planningFailure: {
-        stage: "plan_owner_authorization",
-        errorClass: "operator_error",
         code: "authorization_required",
+        errorClass: "operator_error",
+        stage: "plan_owner_authorization",
       },
     }),
   );
@@ -1151,14 +1151,14 @@ it("preserves execution failures and redacts arbitrary error properties", async 
         throw error;
       },
       sink,
-      { stage: "readback", mode: "inspect", commandExit: "zero" },
+      { commandExit: "zero", mode: "inspect", stage: "readback" },
     ),
   ).rejects.toBe(error);
   expect(sink.mock.calls[0]?.[0].executionFailure).toMatchObject({
-    stage: "readback",
-    mode: "inspect",
     commandExit: "zero",
     errorClass: "unexpected",
+    mode: "inspect",
+    stage: "readback",
   });
   expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
 });
@@ -1183,16 +1183,24 @@ it.each([
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const priorCode: unknown = Object.getOwnPropertyDescriptor(error, "code")?.value;
     reportOperatorExecutionFailure("private-session", "final_runtime_readiness", error, sink, {
-      stage: "final_runtime_readiness",
       mode: "inspect",
-    });
-    expect(sink.mock.calls[0]?.[0].executionFailure).toEqual({
       stage: "final_runtime_readiness",
-      mode: "inspect",
-      errorClass,
-      ...(code === undefined ? {} : { code }),
-      ...(sqlState === undefined ? {} : { sqlState }),
     });
+    const expectedFailure = (): NonNullable<HostedOperatorConsentMetadata["executionFailure"]> => {
+      const failure: NonNullable<HostedOperatorConsentMetadata["executionFailure"]> = {
+        errorClass,
+        mode: "inspect",
+        stage: "final_runtime_readiness",
+      };
+      if (code !== undefined) {
+        failure.code = code;
+      }
+      if (sqlState !== undefined) {
+        failure.sqlState = sqlState;
+      }
+      return failure;
+    };
+    expect(sink.mock.calls[0]?.[0].executionFailure).toEqual(expectedFailure());
     expect(Object.getOwnPropertyDescriptor(error, "code")?.value).toBe(priorCode);
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
     expect(JSON.stringify(sink.mock.calls)).not.toContain("private-session");
@@ -1221,13 +1229,13 @@ it("retains only a closed runtime readiness stage in execution diagnostics", () 
     new Error(secret),
     validSink,
     {
-      stage: "final_runtime_readiness",
       runtimeReadinessStage: "runtime_credential",
+      stage: "final_runtime_readiness",
     },
   );
   expect(validSink.mock.calls[0]?.[0].executionFailure).toMatchObject({
-    stage: "final_runtime_readiness",
     runtimeReadinessStage: "runtime_credential",
+    stage: "final_runtime_readiness",
   });
   const invalidSink = vi.fn<HostedOperatorConsentDiagnosticSink>();
   for (const field of ["runtimeReadinessStage"]) {
@@ -1269,7 +1277,7 @@ it.each([
       sink,
     ),
   ).rejects.toBe(error);
-  expect(sink.mock.calls[0]?.[0].executionFailure).toEqual({ stage, errorClass: "type_error" });
+  expect(sink.mock.calls[0]?.[0].executionFailure).toEqual({ errorClass: "type_error", stage });
   expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   expect(JSON.stringify(sink.mock.calls)).not.toContain("private-session");
 });
@@ -1319,16 +1327,23 @@ it.each([
   (stage, error, errorClass, code, moduleCode) => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     reportRuntimePreparationFailure("private-session", stage, error, sink);
+    const expectedFailure = (): NonNullable<
+      HostedOperatorConsentMetadata["preparationFailure"]
+    > => {
+      const failure: NonNullable<HostedOperatorConsentMetadata["preparationFailure"]> = {
+        errorClass,
+        stage,
+      };
+      if (code !== undefined) {
+        failure.code = code;
+      }
+      if (moduleCode !== undefined) {
+        failure.moduleCode = moduleCode;
+      }
+      return failure;
+    };
     expect(sink).toHaveBeenCalledWith(
-      expect.objectContaining({
-        boundary: "builder",
-        preparationFailure: {
-          stage,
-          errorClass,
-          ...(code === undefined ? {} : { code }),
-          ...(moduleCode === undefined ? {} : { moduleCode }),
-        },
-      }),
+      expect.objectContaining({ boundary: "builder", preparationFailure: expectedFailure() }),
     );
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
     expect(JSON.stringify(sink.mock.calls)).not.toContain("private-session");
@@ -1351,21 +1366,21 @@ it("keeps preparation failure reporting nonthrowing for hostile errors and throw
   }).not.toThrow();
   expect(sink).toHaveBeenCalledWith(
     expect.objectContaining({
-      preparationFailure: { stage: "client_resolution", errorClass: "unexpected" },
+      preparationFailure: { errorClass: "unexpected", stage: "client_resolution" },
     }),
   );
 });
 
 it.each([
   {
-    metadata: { stage: "schema_replan", domain_code: "migration_contention", private: secret },
-    expected: { stage: "schema_replan", domain_code: "migration_contention" },
+    metadata: { domain_code: "migration_contention", private: secret, stage: "schema_replan" },
+    expected: { domain_code: "migration_contention", stage: "schema_replan" },
   },
   {
-    metadata: { stage: "schema_replan", domain_code: secret },
+    metadata: { domain_code: secret, stage: "schema_replan" },
     expected: { stage: "schema_replan" },
   },
-  { metadata: { stage: secret, domain_code: "migration_contention" }, expected: undefined },
+  { metadata: { domain_code: "migration_contention", stage: secret }, expected: undefined },
   {
     metadata: Object.defineProperty({}, "stage", {
       get() {
@@ -1392,6 +1407,13 @@ it.each([
     const error = new HostedOperatorError("operator_unavailable");
     const projected = projectAuthStartupDiagnostic(advisory);
     expect(projected).toEqual(expected);
+    const execution: NonNullable<Parameters<typeof observeOperatorExecutionStage>[4]> = {
+      stage: "worker_protocol",
+      workerFailure: "startup_rejected",
+    };
+    if (projected !== undefined) {
+      execution.authStartup = projected;
+    }
     await expect(
       observeOperatorExecutionStage(
         secret,
@@ -1400,11 +1422,7 @@ it.each([
           throw error;
         },
         sink,
-        {
-          stage: "worker_protocol",
-          workerFailure: "startup_rejected",
-          ...(projected === undefined ? {} : { authStartup: projected }),
-        },
+        execution,
       ),
     ).rejects.toBe(error);
     expect(sink.mock.calls[0]?.[0].executionFailure?.workerFailure).toBe("startup_rejected");
@@ -1445,13 +1463,13 @@ describe("normal actor proof failure diagnostics", () => {
       sink,
     );
     expect(sink.mock.calls[0]?.[0].normalActorProofFailure).toEqual({
-      stage: "proof_response",
-      httpStatus: 401,
-      cookiePresent: true,
-      contentTypeValid: false,
-      redirected: false,
-      errorClass: "operator_error",
       code: "auth_identity_required",
+      contentTypeValid: false,
+      cookiePresent: true,
+      errorClass: "operator_error",
+      httpStatus: 401,
+      redirected: false,
+      stage: "proof_response",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
@@ -1461,7 +1479,7 @@ describe("normal actor proof failure diagnostics", () => {
       throw new Error(secret);
     });
     const failure = Object.defineProperties(
-      { stage: "proof_response", httpStatus: 600 },
+      { httpStatus: 600, stage: "proof_response" },
       {
         cookiePresent: { get: getter },
         redirected: { value: secret },
@@ -1471,8 +1489,8 @@ describe("normal actor proof failure diagnostics", () => {
     reportOperatorNormalActorProofFailure(secret, failure, new TypeError(secret), sink);
     expect(getter).not.toHaveBeenCalled();
     expect(sink.mock.calls[0]?.[0].normalActorProofFailure).toEqual({
-      stage: "proof_response",
       errorClass: "type_error",
+      stage: "proof_response",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
@@ -1499,8 +1517,8 @@ describe("normal actor proof failure diagnostics", () => {
     expect(sink).not.toHaveBeenCalled();
     reportOperatorNormalActorProofFailure(secret, { stage: "proof_request" }, revoked.proxy, sink);
     expect(sink.mock.calls[0]?.[0].normalActorProofFailure).toEqual({
-      stage: "proof_request",
       errorClass: "unexpected",
+      stage: "proof_request",
     });
     const hostileSink = () => {
       throw new Error(secret);
@@ -1519,9 +1537,9 @@ describe("normal actor proof failure diagnostics", () => {
 describe("closed normal Auth execution diagnostics", () => {
   it("retains actual client metadata and the original rejection without inspecting private error content", async () => {
     const error = new NormalAuthClientError("auth_rejected", {
-      operation: "invite_member",
-      httpStatus: 403,
       authCode: "YOU_ARE_NOT_ALLOWED_TO_INVITE_USERS_TO_THIS_ORGANIZATION",
+      httpStatus: 403,
+      operation: "invite_member",
       retryAfterMs: 1500,
     });
     const getter = vi.fn(() => {
@@ -1542,15 +1560,15 @@ describe("closed normal Auth execution diagnostics", () => {
       ),
     ).rejects.toBe(error);
     expect(sink.mock.calls[0]?.[0].executionFailure).toEqual({
-      stage: "execution_settlement",
       errorClass: "unexpected",
       normalAuth: {
-        code: "auth_rejected",
-        operation: "invite_member",
-        httpStatus: 403,
         authCode: "YOU_ARE_NOT_ALLOWED_TO_INVITE_USERS_TO_THIS_ORGANIZATION",
+        code: "auth_rejected",
+        httpStatus: 403,
+        operation: "invite_member",
         retryAfterMs: 1500,
       },
+      stage: "execution_settlement",
     });
     expect(getter).not.toHaveBeenCalled();
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
@@ -1623,7 +1641,7 @@ describe("closed normal Auth execution diagnostics", () => {
     const inherited = new NormalAuthClientError("auth_rejected");
     Reflect.deleteProperty(inherited, "operation");
     Reflect.deleteProperty(inherited, "httpStatus");
-    const inheritedPrototype = { operation: "list_members", httpStatus: 403 };
+    const inheritedPrototype = { httpStatus: 403, operation: "list_members" };
     Object.setPrototypeOf(inheritedPrototype, NormalAuthClientError.prototype);
     Object.setPrototypeOf(inherited, inheritedPrototype);
     reportOperatorExecutionFailure(secret, "resource_lease", inherited, sink);
@@ -1676,7 +1694,7 @@ describe("closed normal Auth execution diagnostics", () => {
       accessor,
       invalid,
       inherited,
-      { name: "NormalAuthClientError", code: "auth_rejected", operation: "list_members" },
+      { code: "auth_rejected", name: "NormalAuthClientError", operation: "list_members" },
     ]) {
       reportOperatorExecutionFailure(secret, "resource_lease", error, sink);
     }
@@ -1747,9 +1765,9 @@ describe("closed normal actor journal-change execution marker", () => {
       ),
     ).rejects.toBe(error);
     expect(sink.mock.calls[0]?.[0].executionFailure).toEqual({
-      stage: "resource_lease",
       errorClass: "unexpected",
       journalFailure: "normal_actor_journal_changed",
+      stage: "resource_lease",
     });
     expect(getter).not.toHaveBeenCalled();
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
@@ -1819,7 +1837,7 @@ describe("closed normal actor journal-change execution marker", () => {
 describe("continuity planning failure diagnostics", () => {
   it("preserves successful values and invokes the existing call once without logging", async () => {
     const result = { private: secret };
-    const run = vi.fn(() => Promise.resolve(result));
+    const run = vi.fn<() => Promise<typeof result>>().mockResolvedValue(result);
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     await expect(observeContinuityPlanningStage(secret, "sandbox_resume", run, sink)).resolves.toBe(
       result,
@@ -1837,15 +1855,15 @@ describe("continuity planning failure diagnostics", () => {
     "retains the original $errorClass rejection with only closed metadata",
     async ({ error, errorClass }) => {
       const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
-      const run = vi.fn(() => Promise.reject(error));
+      const run = vi.fn<() => Promise<never>>().mockRejectedValue(error);
       await expect(
         observeContinuityPlanningStage(secret, "port_observation", run, sink),
       ).rejects.toBe(error);
       expect(run).toHaveBeenCalledOnce();
       const diagnostic = sink.mock.calls[0]?.[0];
       expect(diagnostic?.continuityPlanningFailure).toEqual({
-        stage: "port_observation",
         errorClass,
+        stage: "port_observation",
       });
       expect(diagnostic?.sessionIdHash).toBe(
         `sha256:${createHash("sha256").update(secret).digest("hex")}`,
@@ -1881,10 +1899,10 @@ describe("continuity planning failure diagnostics", () => {
         ),
       ).rejects.toBe(error);
       expect(sink.mock.calls[0]?.[0].continuityPlanningFailure).toEqual({
-        stage: "sandbox_resume",
         errorClass: "sandbox_api_error",
         httpStatus,
         signalAborted: false,
+        stage: "sandbox_resume",
       });
       expect(getter).not.toHaveBeenCalled();
       expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
@@ -1906,9 +1924,9 @@ describe("continuity planning failure diagnostics", () => {
       ),
     ).rejects.toBe(error);
     expect(sink.mock.calls[0]?.[0].continuityPlanningFailure).toEqual({
-      stage: "sandbox_resume",
       errorClass: "abort_error",
       signalAborted: true,
+      stage: "sandbox_resume",
     });
     const unknown = new Error(secret);
     await expect(
@@ -1921,9 +1939,9 @@ describe("continuity planning failure diagnostics", () => {
       ),
     ).rejects.toBe(unknown);
     expect(sink.mock.calls[1]?.[0].continuityPlanningFailure).toEqual({
-      stage: "sandbox_resume",
       errorClass: "unexpected",
       signalAborted: true,
+      stage: "sandbox_resume",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
@@ -1947,8 +1965,8 @@ describe("continuity planning failure diagnostics", () => {
       controller.signal,
     );
     expect(sink.mock.calls.map(([diagnostic]) => diagnostic.continuityPlanningFailure)).toEqual([
-      { stage: "dispatcher_planning", errorClass: "unexpected" },
-      { stage: "port_observation", errorClass: "unexpected" },
+      { errorClass: "unexpected", stage: "dispatcher_planning" },
+      { errorClass: "unexpected", stage: "port_observation" },
     ]);
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
@@ -1960,8 +1978,8 @@ describe("continuity planning failure diagnostics", () => {
       reportContinuityPlanningFailure(secret, stage, new Error(secret), sink);
       expect(sink.mock.calls[0]?.[0].boundary).toBe("builder");
       expect(sink.mock.calls[0]?.[0].continuityPlanningFailure).toEqual({
-        stage,
         errorClass: "unexpected",
+        stage,
       });
       expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
     },
@@ -1988,8 +2006,8 @@ describe("continuity planning failure diagnostics", () => {
     ).rejects.toBe(error);
     expect(getter).not.toHaveBeenCalled();
     expect(sink.mock.calls[0]?.[0].continuityPlanningFailure).toEqual({
-      stage: "prepared_runtime",
       errorClass: "unexpected",
+      stage: "prepared_runtime",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
@@ -2009,8 +2027,8 @@ describe("continuity planning failure diagnostics", () => {
       ),
     ).rejects.toBe(revoked.proxy);
     expect(sink.mock.calls[0]?.[0].continuityPlanningFailure).toEqual({
-      stage: "dispatcher_planning",
       errorClass: "unexpected",
+      stage: "dispatcher_planning",
     });
     const error = new Error(secret);
     await expect(
@@ -2031,9 +2049,9 @@ describe("continuity planning failure diagnostics", () => {
   it("rejects extra error details at the closed diagnostic sink", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const failure = {
-      stage: "port_observation" as const,
-      errorClass: "unexpected" as const,
       details: secret,
+      errorClass: "unexpected" as const,
+      stage: "port_observation" as const,
     };
     createHostedOperatorConsentDiagnostic(
       secret,
@@ -2056,7 +2074,7 @@ describe("closed export planning diagnostics", () => {
     reportExportPlanningFailure(secret, stage, new Error(secret), sink);
     expect(sink.mock.calls[0]?.[0]).toMatchObject({
       boundary: "builder",
-      exportPlanningFailure: { stage, errorClass: "unexpected" },
+      exportPlanningFailure: { errorClass: "unexpected", stage },
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
@@ -2083,12 +2101,12 @@ describe("closed export planning diagnostics", () => {
     expect(sink).toHaveBeenCalledOnce();
     expect(sink.mock.calls[0]?.[0]).toEqual({
       boundary: "operator",
-      phase: "inline",
-      stage: "operator_request",
-      outcome: "setup_unavailable",
       event: "builder.hosted_neon_consent",
+      exportPlanningFailure: { errorClass, stage: "setup_match_resource" },
+      outcome: "setup_unavailable",
+      phase: "inline",
       sessionIdHash: `sha256:${createHash("sha256").update(secret).digest("hex")}`,
-      exportPlanningFailure: { stage: "setup_match_resource", errorClass },
+      stage: "operator_request",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
@@ -2109,9 +2127,9 @@ describe("closed export planning diagnostics", () => {
   it("rejects extra export failure properties instead of logging them", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const failure = {
-      stage: "release_match" as const,
-      errorClass: "operator_error" as const,
       details: secret,
+      errorClass: "operator_error" as const,
+      stage: "release_match" as const,
     };
     createHostedOperatorConsentDiagnostic(
       secret,
@@ -2139,8 +2157,8 @@ describe("runtime identity failure diagnostics", () => {
       sink,
     );
     expect(sink.mock.calls[0]?.[0].runtimeIdentityFailure).toEqual({
-      stage: "identity",
       reason: "selected_organization_mismatch",
+      stage: "identity",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
@@ -2152,7 +2170,7 @@ describe("runtime identity failure diagnostics", () => {
     reportOperatorRuntimeIdentityFailure(secret, { stage: "identity", reason: secret }, sink);
     reportOperatorRuntimeIdentityFailure(
       secret,
-      Object.create({ stage: "identity", reason: "actor_mismatch" }),
+      Object.create({ reason: "actor_mismatch", stage: "identity" }),
       sink,
     );
     reportOperatorRuntimeIdentityFailure(
@@ -2170,7 +2188,7 @@ describe("runtime identity failure diagnostics", () => {
     expect(() => {
       reportOperatorRuntimeIdentityFailure(
         secret,
-        { stage: "authority", reason: "read_failed" },
+        { reason: "read_failed", stage: "authority" },
         () => {
           throw new Error(secret);
         },

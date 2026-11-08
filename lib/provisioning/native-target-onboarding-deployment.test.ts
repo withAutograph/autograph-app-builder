@@ -10,24 +10,24 @@ import {
 } from "./native-target-onboarding-deployment";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 
 const generic = {
-  id: "generic-generated-installer",
   executablePath: "/trusted/generic-installer",
-  sha256: "a".repeat(64),
+  id: "generic-generated-installer",
   operationScope: "generated-app-release-install-v1" as const,
+  sha256: "a".repeat(64),
   subcommand: "protected-generated-app-install" as const,
 };
 const access = {
-  id: "access-worker",
   executablePath: "/trusted/access-worker",
-  sha256: "b".repeat(64),
+  id: "access-worker",
   operationScope: "generated-app-access-v1" as const,
+  sha256: "b".repeat(64),
   subcommand: "protected-generated-app-access" as const,
 };
 
@@ -44,7 +44,7 @@ describe("native target deployment-owned resource selection", () => {
   });
 
   it("requires an explicit captured generic for fresh apps instead of inferring it from per-app aliases", () => {
-    const workers = { existing: generic, alias: generic };
+    const workers = { alias: generic, existing: generic };
     expect(() => selectNativeTargetInstaller(workers, "fresh-app")).toThrow(
       "generic_installer_configuration_required",
     );
@@ -72,9 +72,9 @@ describe("native target deployment-owned resource selection", () => {
       "requests-app": {
         accessRoles: ["viewer"],
         appDatabase: {
-          resourceId: "existing-resource",
           database: "existing_database",
           migratorRole: "existing_migrator",
+          resourceId: "existing-resource",
           runtimeRole: "existing_runtime",
         },
         branch: "main",
@@ -191,19 +191,19 @@ describe("native target approval history carrier", () => {
   it("uses the verified Builder carrier only after owner and session scope checks", async () => {
     const principal = { ...authority, scopes: ["autograph:session"] };
     const historyOwner = {
-      kind: "direct" as const,
       adapterGeneration: 1,
       adapterSessionId: "wrun_fixture",
       authority,
+      kind: "direct" as const,
       principal,
       sessionId: "public-session",
     };
     const owner = {
-      authority,
       adapterGeneration: 1,
       adapterSessionId: historyOwner.adapterSessionId,
-      publicSessionId: historyOwner.sessionId,
+      authority,
       historyOwner,
+      publicSessionId: historyOwner.sessionId,
     };
     const calls: { resource: string; authorization: string | null }[] = [];
     const controller = new AbortController();
@@ -227,21 +227,21 @@ describe("native target approval history carrier", () => {
     expect(read).toBeDefined();
     await expect(
       read?.({
-        principal,
         adapterSessionId: "wrong",
+        onEvent: () => {},
+        principal,
         sessionId: "public-session",
         startIndex: 0,
-        onEvent: () => {},
       }),
     ).rejects.toThrow();
     expect(calls).toEqual([]);
     await expect(
       read?.({
-        principal,
         adapterSessionId: "wrun_fixture",
+        onEvent: () => {},
+        principal,
         sessionId: "public-session",
         startIndex: 0,
-        onEvent: () => {},
       }),
     ).rejects.toThrow();
     expect(calls).toHaveLength(1);

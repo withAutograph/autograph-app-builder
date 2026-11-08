@@ -57,7 +57,7 @@ const fixture = () => ({
   root: "/workspace/repository",
   sandbox: {
     readBinaryFile: vi.fn<SandboxSession["readBinaryFile"]>().mockResolvedValue(null),
-    writeBinaryFile: vi.fn<SandboxSession["writeBinaryFile"]>(async () => {}),
+    writeBinaryFile: vi.fn<SandboxSession["writeBinaryFile"]>().mockResolvedValue(),
   },
   sessionAuth: { owner: "current-owner" },
 });

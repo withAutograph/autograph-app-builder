@@ -24,7 +24,7 @@ const git = (root: string, args: readonly string[]) =>
   ).trim();
 afterEach(() => {
   for (const root of roots.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { force: true, recursive: true });
   }
 });
 const fixture = (existing?: "main" | "provider-default" | "historical-main") => {
@@ -80,12 +80,12 @@ const fixture = (existing?: "main" | "provider-default" | "historical-main") => 
     const result = spawnSync("/bin/sh", ["-c", mapped], {
       cwd: root,
       encoding: "utf-8",
-      env: { PATH: `${bin}:/usr/bin:/bin`, HOME: "/dev/null", NODE_ENV: "test" },
+      env: { HOME: "/dev/null", NODE_ENV: "test", PATH: `${bin}:/usr/bin:/bin` },
     });
     return {
       exitCode: result.status ?? 1,
-      stdout: result.stdout ?? "",
       stderr: result.stderr ?? "",
+      stdout: result.stdout ?? "",
     };
   });
   const file = (name: string) =>
@@ -97,16 +97,10 @@ const fixture = (existing?: "main" | "provider-default" | "historical-main") => 
     id: string;
     materializeGitSource: typeof materializeGitSource;
   } = {
-    spawn: unsupported,
-    readFile: unsupported,
-    readBinaryFile: unsupported,
-    writeFile: unsupported,
-    writeBinaryFile: unsupported,
-    removePath: unsupported,
-    resolvePath: (value) => value,
     id: "owned-workspace",
-    run,
     materializeGitSource,
+    readBinaryFile: unsupported,
+    readFile: unsupported,
     readTextFile: async ({ path: name }: { path: string }) => {
       try {
         return readFileSync(file(name), "utf-8");
@@ -114,6 +108,12 @@ const fixture = (existing?: "main" | "provider-default" | "historical-main") => 
         return null;
       }
     },
+    removePath: unsupported,
+    resolvePath: (value) => value,
+    run,
+    spawn: unsupported,
+    writeBinaryFile: unsupported,
+    writeFile: unsupported,
     writeTextFile: async ({ path: name, content }: { path: string; content: string }) => {
       const target = file(name);
       mkdirSync(path.dirname(target), { recursive: true });
@@ -123,31 +123,31 @@ const fixture = (existing?: "main" | "provider-default" | "historical-main") => 
   };
   const acquire = () =>
     acquireCanonicalArrustedTemplate({
-      sandbox,
       callId: "fresh-source",
       reader: { acquire: async () => ({ token: "fixture-token-never-retained" }) },
+      sandbox,
     });
   return {
-    root,
-    origin,
+    acquire,
     checkout,
-    oldSha,
+    commands,
     mainSha,
     mainTree,
-    sandbox,
-    acquire,
-    writes,
-    commands,
     materializeGitSource,
+    oldSha,
+    origin,
+    root,
+    sandbox,
+    writes,
   };
 };
 it("selects current main even when the provider default branch differs", async () => {
   const f = fixture();
   const receipt = await f.acquire();
   expect(f.materializeGitSource).toHaveBeenCalledWith({
+    revision: "main",
     token: "fixture-token-never-retained",
     url: remote,
-    revision: "main",
   });
   expect(receipt.sourceSha).toBe(f.mainSha);
   expect(receipt.sourceTree).toBe(f.mainTree);
@@ -179,7 +179,7 @@ it("accepts a genuine preexisting main checkout and leaves its saved receipt fro
   git(f.checkout, ["update-ref", "refs/remotes/origin/main", f.oldSha]);
   const beforeCommands = f.commands.length;
   await expect(
-    inspectCanonicalArrustedSandboxWorkspace({ sandbox: f.sandbox, receipt }),
+    inspectCanonicalArrustedSandboxWorkspace({ receipt, sandbox: f.sandbox }),
   ).resolves.toMatchObject({ sourceSha: f.mainSha, sourceTree: f.mainTree });
   expect(f.commands).toHaveLength(beforeCommands);
   expect(JSON.stringify(receipt)).toBe(frozen);
@@ -191,22 +191,22 @@ it("imports old app-only bytes onto the selected new platform without replacing 
   const appPath = "apps/spend/app.ts";
   const validated = validateApplicationSourceArtifact({
     manifest: {
-      version: 1,
-      kind: "application-source-v1",
       appId: "spend",
       displayName: "Spend",
-      sourceSessionId: "old-local-session",
       files: [
         {
-          path: appPath,
-          mode: "100644",
-          sha256: createHash("sha256").update(appBytes).digest("hex"),
           bytes: appBytes.length,
+          mode: "100644",
+          path: appPath,
+          sha256: createHash("sha256").update(appBytes).digest("hex"),
         },
       ],
+      kind: "application-source-v1",
       omissions: [],
+      sourceSessionId: "old-local-session",
+      version: 1,
     },
-    files: [{ path: appPath, contentBase64: appBytes.toString("base64") }],
+    files: [{ contentBase64: appBytes.toString("base64"), path: appPath }],
   });
   const staging = path.join(f.root, "import");
   mkdirSync(staging);
@@ -226,7 +226,7 @@ it("imports old app-only bytes onto the selected new platform without replacing 
     appRoot: "apps/spend",
     importedByCallId: "fresh-import",
   };
-  const plan = { receipt, files: validated.artifact.manifest.files, staging };
+  const plan = { files: validated.artifact.manifest.files, receipt, staging };
   writeFileSync(path.join(staging, "plan.json"), JSON.stringify(plan));
   writeFileSync(path.join(staging, "0.base64"), appBytes.toString("base64"));
   const script = path.join(staging, "import.cjs");

@@ -63,9 +63,10 @@ export function collectIntrinsicClassSignatures(files: SourceFile[]): IntrinsicC
             candidateAttribute.name.text === "className",
         );
         const value = attribute && staticClassName(attribute);
-        const classes = value
-          ? [...new Set(value.trim().split(/\s+/u).filter(Boolean))].toSorted()
-          : [];
+        const classes =
+          value !== undefined && value !== ""
+            ? [...new Set(value.trim().split(/\s+/u).filter(Boolean))].toSorted()
+            : [];
         if (!classes.length) {
           ts.forEachChild(node, visit);
           return;
@@ -120,7 +121,7 @@ export function collectClassTokenEvidence(files: SourceFile[]): ClassTokenEviden
     const visit = (node: ts.Node) => {
       if (ts.isJsxAttribute(node) && ts.isIdentifier(node.name) && node.name.text === "className") {
         const value = staticClassName(node);
-        if (value) {
+        if (value !== undefined && value !== "") {
           add(source, node, value);
         }
       }
@@ -207,7 +208,12 @@ export function generatedSignatureSelector(
   selector: string | undefined,
 ) {
   const className = exactClassSelector(selector);
-  return Boolean(signature && className && signature.classes.includes(className));
+  return Boolean(
+    signature &&
+    className !== undefined &&
+    className !== "" &&
+    signature.classes.includes(className),
+  );
 }
 
 /** Reads one escaped Tailwind utility token, optionally followed by attribute state. */
@@ -260,7 +266,7 @@ export function escapedTailwindClassToken(selector: string | undefined) {
         index += 1;
         continue;
       }
-      if (quote) {
+      if (quote !== undefined) {
         if (character === quote) {
           quote = undefined;
         }
@@ -279,7 +285,7 @@ export function escapedTailwindClassToken(selector: string | undefined) {
         return;
       }
     }
-    if (!closed || quote) {
+    if (!closed || quote !== undefined) {
       return;
     }
   }
@@ -293,7 +299,7 @@ export function classTokenAttribution(
   selector: string | undefined,
 ): SignatureAttribution {
   const token = escapedTailwindClassToken(selector);
-  if (!token || !shared) {
+  if (token === undefined || token === "" || !shared) {
     return { provenance: "unknown" };
   }
   const generatedMatches = generated.filter((candidate) => candidate.token === token);
@@ -302,7 +308,7 @@ export function classTokenAttribution(
     return { provenance: "unknown" };
   }
   const match = generatedMatches[0] ?? sharedMatches[0];
-  if (!match) {
+  if (match === undefined) {
     return { provenance: "unknown" };
   }
   return {

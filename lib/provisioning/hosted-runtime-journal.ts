@@ -16,6 +16,8 @@ import type { RetainedOperatorAuth } from "./hosted-operator-contract";
 
 import { normalActorAccountPreparationSchema } from "./hosted-operator-normal-actor-journal";
 
+const resourceReadyStep = "resource-ready";
+
 export const hostedRuntimeTargetSchema = z.strictObject({
   appId: builderAppIdSchema,
   branch: z
@@ -155,8 +157,8 @@ const hostedRuntimeJournalRecordBaseSchema = z.strictObject({
     "prepared",
     "verified",
     "bound",
-    "resource-ready",
-    "resource-ready",
+    resourceReadyStep,
+    resourceReadyStep,
     "environment-removed",
     "cleaned",
   ]),
@@ -213,7 +215,7 @@ export const retainedOperatorAuthFromJournal = (
       : [
           record.status === "prepared",
           operator.plan.runtimePreparation === "single-project-resources-v1"
-            ? record.step === "resource-ready" && record.environmentBound === false
+            ? record.step === resourceReadyStep && record.environmentBound === false
             : record.step === "bound" && record.environmentBound === true,
           record.proof?.manifestSha256 === operator.plan.release.sha256,
           record.proof?.releaseId === operator.plan.release.id,

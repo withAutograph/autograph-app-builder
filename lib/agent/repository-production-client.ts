@@ -30,7 +30,7 @@ export const repositoryProductionResponseError = async (
   try {
     const failure = z.object({ code: z.string() }).safeParse(await response.json());
     if (failure.success) {
-      code = failure.data.code;
+      ({ code } = failure.data);
     }
   } catch {
     // A non-JSON transport failure retains the ordinary uncertainty message.

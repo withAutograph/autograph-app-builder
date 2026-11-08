@@ -1,7 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
 import {
@@ -9,9 +8,7 @@ import {
   hostedGitHubInstallations,
   hostedGitHubUserCredentials,
 } from "../db/schema";
-import type * as databaseSchema from "../db/schema";
-
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function verify(input: { body: Uint8Array; signature: string; secret: string }) {
@@ -25,15 +22,15 @@ function verify(input: { body: Uint8Array; signature: string; secret: string }) 
 const installationEvent = z
   .object({
     action: z.enum(["deleted", "suspend", "unsuspend"]),
-    installation: z.object({ id: z.number().int().positive() }).passthrough(),
+    installation: z.object({ id: z.number().int().positive() }).loose(),
   })
-  .passthrough();
+  .loose();
 const authorizationEvent = z
   .object({
     action: z.literal("revoked"),
-    sender: z.object({ id: z.number().int().positive() }).passthrough(),
+    sender: z.object({ id: z.number().int().positive() }).loose(),
   })
-  .passthrough();
+  .loose();
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGitHubProvisioningWebhookHandler(input: {
@@ -49,7 +46,8 @@ export function createGitHubProvisioningWebhookHandler(input: {
     }
     const declaredLength = request.headers.get("content-length");
     if (
-      declaredLength &&
+      declaredLength !== null &&
+      declaredLength !== "" &&
       (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > 1024 * 1024)
     ) {
       return new Response(null, { status: 413 });

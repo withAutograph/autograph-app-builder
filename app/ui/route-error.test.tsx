@@ -12,8 +12,11 @@ import HandoffError from "../(product)/handoff/error";
 import GitHubError from "../(product)/github/error";
 import VercelError from "../(product)/vercel/error";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
-  true;
+declare global {
+  var IS_REACT_ACT_ENVIRONMENT: boolean;
+}
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 describe("native route error recovery", () => {
   it.each([
@@ -26,7 +29,7 @@ describe("native route error recovery", () => {
   ] as const)(
     "recovers %s with Next retry without exposing error details",
     async (Boundary, title) => {
-      const retry = vi.fn();
+      const retry = vi.fn<() => void>();
       const error = Object.assign(new Error("sensitive provider token"), {
         digest: "internal-digest",
       });

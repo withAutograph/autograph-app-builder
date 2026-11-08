@@ -18,6 +18,10 @@ import {
 } from "./hosted-operator-host-protection";
 import { readyDeliveryReplacementIntentSchema } from "./hosted-operator-ready-delivery-replacement-intent";
 
+const SINGLE_PROJECT_SERVICES = "single-project-services";
+const SINGLE_PROJECT_RESOURCES = "single-project-resources-v1";
+const GATEWAY_DELIVERY_EFFECT = "gateway-delivery";
+
 const GATEWAY_BINDINGS_EFFECT = "gateway-bindings";
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -112,7 +116,7 @@ const previewDeploymentSchema = z.strictObject({
 });
 const deploymentBoundarySchema = z.strictObject({
   /** Omitted plans retain their original three-project Preview semantics. */
-  composition: z.literal("single-project-services").optional(),
+  composition: z.literal(SINGLE_PROJECT_SERVICES).optional(),
   app: previewDeploymentSchema,
   authority: hostedTenantAuthoritySchema,
   gateway: previewDeploymentSchema,
@@ -271,10 +275,10 @@ export const hostedOperatorAuthSignupPolicySchema =
 export type HostedOperatorAuthSignupPolicy = z.infer<typeof hostedOperatorAuthSignupPolicySchema>;
 export const hostedOperatorAuthSignupPolicyInputSchema =
   hostedOperatorAuthSignupPolicyFieldsSchema.omit({
-    policyId: true,
-    authResourceId: true,
     appId: true,
+    authResourceId: true,
     origin: true,
+    policyId: true,
   });
 export type HostedOperatorAuthSignupPolicyInput = z.infer<
   typeof hostedOperatorAuthSignupPolicyInputSchema
@@ -315,7 +319,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
   ),
   action: z.enum(["prepare", "cleanup"]),
   releaseIntent: z.literal("prepared-preview").optional(),
-  runtimePreparation: z.literal("single-project-resources-v1").optional(),
+  runtimePreparation: z.literal(SINGLE_PROJECT_RESOURCES).optional(),
   existingResources: ownedAppResourceSourceSchema.optional(),
 
   appDatabase: databaseResource,
@@ -374,7 +378,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
           "resources",
           "install",
           GATEWAY_BINDINGS_EFFECT,
-          "gateway-delivery",
+          GATEWAY_DELIVERY_EFFECT,
           "access",
           "auth-membership",
           "auth-signup-policy",
@@ -710,15 +714,41 @@ const validateAuthSignupPolicy = (
     });
   }
 };
+const runtimePreparationConflictsWithDeployment = (
+  plan: z.infer<typeof hostedOperatorPlanDataSchema>,
+): boolean => {
+  if (
+    plan.deploymentBoundary?.composition !== SINGLE_PROJECT_SERVICES ||
+    plan.action !== "prepare" ||
+    plan.releaseIntent !== undefined
+  ) {
+    return true;
+  }
+  if (
+    plan.delivery !== undefined ||
+    plan.gatewayDelivery !== undefined ||
+    plan.gatewayBindings !== undefined
+  ) {
+    return true;
+  }
+  return (
+    plan.appTrustedSources !== undefined ||
+    plan.effects.some((effect) =>
+      ["bindings", "delivery", GATEWAY_BINDINGS_EFFECT, GATEWAY_DELIVERY_EFFECT].includes(
+        effect.kind,
+      ),
+    )
+  );
+};
 const validateResourcePreparation = (
   plan: z.infer<typeof hostedOperatorPlanDataSchema>,
   ctx: z.RefinementCtx,
 ) => {
   if (plan.existingResources !== undefined) {
-    const target = plan.existingResources.source.target;
+    const { target } = plan.existingResources.source;
     if (
       ![
-        plan.runtimePreparation === "single-project-resources-v1",
+        plan.runtimePreparation === SINGLE_PROJECT_RESOURCES,
         plan.authAdoption === undefined,
         target.appId === plan.selection.appId,
         target.projectId === plan.selection.projectId,
@@ -735,10 +765,10 @@ const validateResourcePreparation = (
   }
 
   if (plan.existingResources !== undefined) {
-    const target = plan.existingResources.source.target;
+    const { target } = plan.existingResources.source;
     if (
       ![
-        plan.runtimePreparation === "single-project-resources-v1",
+        plan.runtimePreparation === SINGLE_PROJECT_RESOURCES,
         plan.authAdoption === undefined,
         target.appId === plan.selection.appId,
         target.projectId === plan.selection.projectId,
@@ -754,19 +784,7 @@ const validateResourcePreparation = (
     }
   }
 
-  if (
-    plan.runtimePreparation !== undefined &&
-    (plan.deploymentBoundary?.composition !== "single-project-services" ||
-      plan.action !== "prepare" ||
-      plan.releaseIntent !== undefined ||
-      plan.delivery !== undefined ||
-      plan.gatewayDelivery !== undefined ||
-      plan.gatewayBindings !== undefined ||
-      plan.appTrustedSources !== undefined ||
-      plan.effects.some((effect) =>
-        ["bindings", "delivery", "gateway-bindings", "gateway-delivery"].includes(effect.kind),
-      ))
-  ) {
+  if (plan.runtimePreparation !== undefined && runtimePreparationConflictsWithDeployment(plan)) {
     ctx.addIssue({
       code: "custom",
       path: ["runtimePreparation"],
@@ -802,7 +820,7 @@ const authorizationPhases = (plan: z.infer<typeof hostedOperatorPlanDataSchema>)
     phases.push(GATEWAY_BINDINGS_EFFECT);
   }
   if (plan.gatewayDelivery !== undefined) {
-    phases.push("gateway-delivery");
+    phases.push(GATEWAY_DELIVERY_EFFECT);
   }
   return phases;
 };
@@ -1030,7 +1048,7 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
     const boundary = plan.deploymentBoundary;
     const jwks = new URL(boundary.verification.jwksUrl);
     const invalidBoundary = [
-      boundary.composition === "single-project-services"
+      boundary.composition === SINGLE_PROJECT_SERVICES
         ? boundary.app.projectId !== boundary.gateway.projectId ||
           boundary.app.projectId === boundary.operator.projectId
         : new Set([boundary.app.projectId, boundary.gateway.projectId, boundary.operator.projectId])
@@ -1063,19 +1081,7 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
   // Each phase has an observed receipt, including a no-op verification for already-existing resources.
   // Authority is opened only after install/grant verification, and closed before retirement.
   validateResourcePreparation(plan, ctx);
-  if (
-    plan.runtimePreparation !== undefined &&
-    (plan.deploymentBoundary?.composition !== "single-project-services" ||
-      plan.action !== "prepare" ||
-      plan.releaseIntent !== undefined ||
-      plan.delivery !== undefined ||
-      plan.gatewayDelivery !== undefined ||
-      plan.gatewayBindings !== undefined ||
-      plan.appTrustedSources !== undefined ||
-      plan.effects.some((effect) =>
-        ["bindings", "delivery", "gateway-bindings", "gateway-delivery"].includes(effect.kind),
-      ))
-  ) {
+  if (plan.runtimePreparation !== undefined && runtimePreparationConflictsWithDeployment(plan)) {
     ctx.addIssue({
       code: "custom",
       path: ["runtimePreparation"],
@@ -1106,10 +1112,10 @@ export const nativeDeliveryGitRef = (
   if (plan.gatewayDelivery?.gitRef !== undefined) {
     return plan.gatewayDelivery.gitRef;
   }
-  return plan.stage === "app" &&
-    delivery.gitSha !== undefined &&
-    plan.delivery?.repoId === delivery.repoId &&
-    plan.delivery.gitSha === delivery.gitSha
+  if (plan.stage !== "app" || delivery.gitSha === undefined) {
+    return delivery.branch;
+  }
+  return plan.delivery?.repoId === delivery.repoId && plan.delivery.gitSha === delivery.gitSha
     ? plan.delivery.branch
     : delivery.branch;
 };
@@ -1405,20 +1411,26 @@ const retainedConsumedGatewayDeliveryOrigin = (
   if (
     link?.consumedAt === undefined ||
     link.proofRef === undefined ||
-    link.proofSha256 === undefined ||
-    operator.plan.gatewayDelivery === undefined ||
-    operator.plan.publicGateway === undefined
+    link.proofSha256 === undefined
   ) {
     return undefined;
   }
-  return operator.gatewayDeliveryCandidates?.find(
-    (candidate) =>
-      candidate.readyState === "READY" &&
-      candidate.origin === link.endpointOrigin &&
-      candidate.projectId === operator.plan.publicGateway?.projectId &&
+  if (operator.plan.gatewayDelivery === undefined || operator.plan.publicGateway === undefined) {
+    return undefined;
+  }
+  return operator.gatewayDeliveryCandidates?.find((candidate) => {
+    if (
+      candidate.readyState !== "READY" ||
+      candidate.origin !== link.endpointOrigin ||
+      candidate.projectId !== operator.plan.publicGateway?.projectId
+    ) {
+      return false;
+    }
+    return (
       candidate.branch === operator.plan.publicGateway?.branch &&
-      candidate.repoId === operator.plan.gatewayDelivery?.repoId,
-  )?.origin;
+      candidate.repoId === operator.plan.gatewayDelivery?.repoId
+    );
+  })?.origin;
 };
 /** Exact identity scope shared by validation and successor metadata composition. */
 export const matchesHostedOperatorIdentityLinkScope = (
@@ -1428,7 +1440,7 @@ export const matchesHostedOperatorIdentityLinkScope = (
   if (link !== undefined && operator.plan.runtimePreparation !== undefined) {
     return [
       link.publicRelease !== undefined,
-      operator.plan.deploymentBoundary?.composition === "single-project-services",
+      operator.plan.deploymentBoundary?.composition === SINGLE_PROJECT_SERVICES,
       operator.plan.publicGateway?.projectId === operator.plan.selection.projectId,
       link.authResourceId === operator.plan.authDatabase.resourceId,
       link.ownerSessionId === operator.plan.selection.sessionId,

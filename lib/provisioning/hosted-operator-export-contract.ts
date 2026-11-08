@@ -2,6 +2,8 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 
+const EXPORT_RELEASE_APP_MISMATCH = "Export release belongs to another app";
+
 // Shared worker wire v1. Builder's separate plan/journal schemas own approval
 // authority. Parsing worker metadata never authorizes an export or a download.
 const id = z.string().min(1);
@@ -74,7 +76,7 @@ export const tenantExportWorkerInputSchema = z
   })
 
   .refine((value) => value.release.manifestRef.split("/")[3] === value.scope.appId, {
-    message: "Export release belongs to another app",
+    message: EXPORT_RELEASE_APP_MISMATCH,
   });
 // Only the trusted executor later supplies the app-migrator connection in its
 // command-scoped environment. It is absent from JSON, argv and this contract.
@@ -153,7 +155,7 @@ export const tenantExportArtifactManifestSchema = z
 
   .superRefine((value, ctx) => {
     if (value.release.manifestRef.split("/")[3] !== value.scope.appId) {
-      ctx.addIssue({ code: "custom", message: "Export release belongs to another app" });
+      ctx.addIssue({ code: "custom", message: EXPORT_RELEASE_APP_MISMATCH });
     }
     if (new Set(value.files.map((file) => file.name)).size !== value.files.length) {
       ctx.addIssue({ code: "custom", message: "Export member identity repeats" });
@@ -275,7 +277,7 @@ export const hostedTenantExportPlanSchema = z
       ctx.addIssue({ code: "custom", message: "Export target scope differs" });
     }
     if (value.release.manifestRef.split("/")[3] !== value.scope.appId) {
-      ctx.addIssue({ code: "custom", message: "Export release belongs to another app" });
+      ctx.addIssue({ code: "custom", message: EXPORT_RELEASE_APP_MISMATCH });
     }
     if (
       value.destination.artifactPrefix !==

@@ -44,16 +44,19 @@ export const createAppAccessAction =
       const body: unknown = await response.json();
       if (!response.ok) {
         const failure = appAccessFailureSchema.safeParse(body);
-        return {
+        const errorState: Pick<
+          Extract<AppAccessActionState, { status: "error" }>,
+          "status" | "message" | "code"
+        > = {
           status: "error",
           message: failure.success
             ? failure.data.message
             : "Builder couldn’t confirm this update. Retry to check the same request.",
-          ...(failure.success && failure.data.code !== undefined
-            ? { code: failure.data.code }
-            : {}),
-          uncertain: response.status >= 500 || response.status === 409,
         };
+        if (failure.success && failure.data.code !== undefined) {
+          errorState.code = failure.data.code;
+        }
+        return { ...errorState, uncertain: response.status >= 500 || response.status === 409 };
       }
       const snapshot = appAccessSnapshotSchema.parse(body);
       if (snapshot.sessionId !== sessionId) {

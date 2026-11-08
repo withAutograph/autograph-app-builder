@@ -4,6 +4,8 @@ import type {
 } from "./central-integration-host-contract";
 import { z } from "zod";
 
+const AUTHORIZE_APP_CENTRAL_CALLER = "authorize-app-central-caller";
+
 const id = z.string().min(1).max(256);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const generation = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
@@ -27,7 +29,7 @@ export const centralEffectReceiptSchema = z.discriminatedUnion("effect", [
   }),
   z.strictObject({ effect: z.literal("register-deployment-receiver"), id, secretSha256: digest }),
   z.strictObject({
-    effect: z.enum(["authorize-central-inspector", "authorize-app-central-caller"]),
+    effect: z.enum(["authorize-central-inspector", AUTHORIZE_APP_CENTRAL_CALLER]),
     projectId: id,
     callerProjectId: id,
     environment: z.enum(["preview", "production"]),
@@ -68,7 +70,7 @@ export const centralEffectReceiptMatches = (
 ): boolean => {
   if (plan.kind === "central-integration-host-caller-v1") {
     return (
-      receipt.effect === "authorize-app-central-caller" &&
+      receipt.effect === AUTHORIZE_APP_CENTRAL_CALLER &&
       receipt.projectId === plan.central.projectId &&
       receipt.callerProjectId === plan.caller.projectId &&
       receipt.environment === plan.caller.environment
@@ -107,7 +109,7 @@ export const centralEffectReceiptMatches = (
       );
     }
     // A caller grant cannot satisfy a distinct infrastructure setup effect.
-    case "authorize-app-central-caller": {
+    case AUTHORIZE_APP_CENTRAL_CALLER: {
       return false;
     }
     default: {

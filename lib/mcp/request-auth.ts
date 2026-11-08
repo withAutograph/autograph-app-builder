@@ -4,17 +4,17 @@ import { z } from "zod";
 import { verifiedHostedClaimsSchema } from "../eve/hosted-auth";
 import type { VerifiedHostedClaims } from "../eve/hosted-auth";
 
+const sessionScope = "autograph:session";
 const strongAlgorithmSchema = z.enum(["RS256", "PS256", "ES256", "EdDSA"]);
 
 export const hostedMcpAuthConfigSchema = z
-  .object({
+  .strictObject({
     algorithm: strongAlgorithmSchema,
-    audience: z.string().url().startsWith("https://"),
-    issuer: z.string().url().startsWith("https://"),
-    jwksUrl: z.string().url().startsWith("https://"),
-    resourceUrl: z.string().url().startsWith("https://"),
+    audience: z.url().startsWith("https://"),
+    issuer: z.url().startsWith("https://"),
+    jwksUrl: z.url().startsWith("https://"),
+    resourceUrl: z.url().startsWith("https://"),
   })
-  .strict()
   .superRefine((config, context) => {
     for (const [field, value] of [
       ["issuer", config.issuer],
@@ -167,27 +167,40 @@ export function createRemoteJwksAccessTokenVerifier(input: {
         requiredClaims: ["iss", "aud", "sub", "exp", "iat", "nbf", "scope"],
       });
       const { exp, iat, nbf } = payload;
+      const invalidClaimsMessage = "Invalid verified token claims.";
       if (
         payload.iss !== config.issuer ||
         payload.aud !== config.audience ||
         typeof payload.sub !== "string" ||
-        typeof exp !== "number" ||
+        typeof exp !== "number"
+      ) {
+        throw new Error(invalidClaimsMessage);
+      }
+      const invalidIntegerTimes =
         !Number.isInteger(exp) ||
         typeof iat !== "number" ||
         !Number.isInteger(iat) ||
-        typeof nbf !== "number" ||
+        typeof nbf !== "number";
+      if (invalidIntegerTimes) {
+        throw new Error(invalidClaimsMessage);
+      }
+      if (
         !Number.isInteger(nbf) ||
         exp <= nowEpochSeconds ||
         nbf > nowEpochSeconds ||
-        iat > nowEpochSeconds ||
-        // Issuance precedes async membership claims; nbf can legitimately be later.
-        exp - nbf > 300 ||
-        exp - iat > 300 ||
+        iat > nowEpochSeconds
+      ) {
+        throw new Error(invalidClaimsMessage);
+      }
+      // Issuance precedes async membership claims; nbf can legitimately be later.
+      const invalidLifetime = exp - nbf > 300 || exp - iat > 300;
+      if (
+        invalidLifetime ||
         typeof payload.scope !== "string" ||
         !oauthScopeTokenPattern.test(payload.scope) ||
         typeof payload.workspace_id !== "string"
       ) {
-        throw new Error("Invalid verified token claims.");
+        throw new Error(invalidClaimsMessage);
       }
       return verifiedHostedClaimsSchema.parse({
         audience: payload.aud,
@@ -208,7 +221,7 @@ export function protectedResourceMetadata(configInput: HostedMcpAuthConfig) {
     bearer_methods_supported: ["header"],
     resource: config.resourceUrl,
     scopes_supported: [
-      "autograph:session",
+      sessionScope,
       "autograph:start",
       "autograph:get",
       "autograph:send",
@@ -221,13 +234,14 @@ export function protectedResourceMetadata(configInput: HostedMcpAuthConfig) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function challenge(config: HostedMcpAuthConfig, attributes: string[]) {
   const metadataUrl = new URL("/.well-known/oauth-protected-resource", config.resourceUrl).href;
-  return `Bearer ${[...attributes, `resource_metadata="${metadataUrl}"`].join(", ")}`;
+  const metadataAttribute = `resource_metadata="${metadataUrl}"`;
+  return `Bearer ${[...attributes, metadataAttribute].join(", ")}`;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function unauthorizedResponse(
   config: HostedMcpAuthConfig,
-  scopes = ["autograph:session"],
+  scopes = [sessionScope],
 ): Response {
   return Response.json(
     { error: "unauthorized" },
@@ -246,10 +260,7 @@ export function unauthorizedResponse(
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function forbiddenResponse(
-  config: HostedMcpAuthConfig,
-  scopes = ["autograph:session"],
-): Response {
+export function forbiddenResponse(config: HostedMcpAuthConfig, scopes = [sessionScope]): Response {
   return Response.json(
     { error: "forbidden" },
     {

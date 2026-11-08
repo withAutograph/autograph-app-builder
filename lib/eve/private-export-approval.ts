@@ -51,12 +51,17 @@ export const createPrivateTenantExportApprovalCapture = (input: {
   if (!isDeepStrictEqual(input.plan.authority, { issuer, audience, workspaceId, ownerUserId })) {
     throw new Error("Private approval owner differs from its frozen plan.");
   }
-  const capture = createPrivateOperatorApprovalCapture({
+  const captureInput: Parameters<typeof createPrivateOperatorApprovalCapture>[0] = {
     request: input.request,
     ownerUserId: input.principal.ownerUserId,
-    ...(input.callId === undefined ? {} : { callId: input.callId }),
-    ...(input.state === undefined ? {} : { state: input.state }),
-  });
+  };
+  if (input.callId !== undefined) {
+    captureInput.callId = input.callId;
+  }
+  if (input.state !== undefined) {
+    captureInput.state = input.state;
+  }
+  const capture = createPrivateOperatorApprovalCapture(captureInput);
   return {
     observe(event: MessageStreamEvent) {
       if (event.type === "input.requested") {

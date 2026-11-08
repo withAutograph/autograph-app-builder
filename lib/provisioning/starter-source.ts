@@ -19,40 +19,34 @@ import { deploymentArrustedTemplateReader } from "../repository/arrusted-templat
 import type { ArrustedTemplateReader } from "../repository/arrusted-template-reader";
 import { safeSourcePath } from "../repository/source-path";
 
+const STARTER_ARCHIVE_INVALID = "starter-archive-invalid";
+
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const objectId = z.string().regex(/^[0-9a-f]{40}$/u);
 
-export const starterSourceManifestSchema = z
-  .object({
-    archive: z
-      .object({
-        bytes: z.number().int().positive(),
+export const starterSourceManifestSchema = z.strictObject({
+  archive: z.strictObject({
+    bytes: z.number().int().positive(),
+    sha256: digest,
+    url: z.url().startsWith("https://"),
+  }),
+  files: z
+    .array(
+      z.strictObject({
+        bytes: z.number().int().nonnegative(),
+        mode: z.enum(["100644", "100755"]),
+        path: z.string().min(1),
         sha256: digest,
-        url: z.string().url().startsWith("https://"),
-      })
-      .strict(),
-    files: z
-      .array(
-        z
-          .object({
-            bytes: z.number().int().nonnegative(),
-            mode: z.enum(["100644", "100755"]),
-            path: z.string().min(1),
-            sha256: digest,
-          })
-          .strict(),
-      )
-      .min(1),
-    source: z
-      .object({
-        repository: z.literal("https://github.com/withAutograph/arrusted-development"),
-        sha: objectId,
-        tree: objectId,
-      })
-      .strict(),
-    version: z.literal(1),
-  })
-  .strict();
+      }),
+    )
+    .min(1),
+  source: z.strictObject({
+    repository: z.literal("https://github.com/withAutograph/arrusted-development"),
+    sha: objectId,
+    tree: objectId,
+  }),
+  version: z.literal(1),
+});
 
 export type StarterSourceManifest = z.infer<typeof starterSourceManifestSchema>;
 export interface StarterSourceFile {
@@ -145,11 +139,10 @@ function restrictedGit(args: string[], askpass?: { credentialFile: string; askpa
 }
 
 const starterConfigSchema = z
-  .object({
+  .strictObject({
     manifestSha256: digest,
-    manifestUrl: z.string().url().startsWith("https://"),
+    manifestUrl: z.url().startsWith("https://"),
   })
-  .strict()
   .superRefine((value, context) => {
     if (!new URL(value.manifestUrl).pathname.includes(value.manifestSha256)) {
       context.addIssue({
@@ -206,7 +199,7 @@ async function tarFiles(tar: AsyncIterable<Uint8Array>) {
         const next = await iterator.next();
         ended = next.done === true;
         if (!ended) {
-          if (!(next.value instanceof Uint8Array)) throw new Error("starter-archive-invalid");
+          if (!(next.value instanceof Uint8Array)) throw new Error(STARTER_ARCHIVE_INVALID);
           const chunk = Buffer.from(next.value);
           if (chunk.byteLength > 0) {
             chunks.push(chunk);
@@ -217,7 +210,7 @@ async function tarFiles(tar: AsyncIterable<Uint8Array>) {
     }
     if (length < size) {
       if (length === 0 && allowEnd) return null;
-      throw new Error("starter-archive-invalid");
+      throw new Error(STARTER_ARCHIVE_INVALID);
     }
     const bytes = Buffer.concat(chunks, length);
     if (length > size) {
@@ -249,32 +242,27 @@ async function tarFiles(tar: AsyncIterable<Uint8Array>) {
       8,
     );
     const [type] = header.slice(156);
-    if (
-      !safeSourcePath(path) ||
-      !Number.isSafeInteger(size) ||
-      size < 0 ||
-      ![0, 48].includes(type) ||
-      files.has(path)
-    ) {
-      throw new Error("starter-archive-invalid");
+    const invalidPathOrSize = !safeSourcePath(path) || !Number.isSafeInteger(size) || size < 0;
+    if (invalidPathOrSize || ![0, 48].includes(type) || files.has(path)) {
+      throw new Error(STARTER_ARCHIVE_INVALID);
     }
-    if (!Number.isSafeInteger(size)) throw new Error("starter-archive-invalid");
+    if (!Number.isSafeInteger(size)) throw new Error(STARTER_ARCHIVE_INVALID);
     const bytes = await readExact(size);
-    if (!bytes) throw new Error("starter-archive-invalid");
+    if (!bytes) throw new Error(STARTER_ARCHIVE_INVALID);
     files.set(path, {
       bytes,
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       mode: rawMode & 0o111 ? "100755" : "100644",
     });
     const padding = (512 - (size % 512)) % 512;
-    if (padding > 0 && !(await readExact(padding))) throw new Error("starter-archive-invalid");
+    if (padding > 0 && !(await readExact(padding))) throw new Error(STARTER_ARCHIVE_INVALID);
   }
   for await (const chunk of { [Symbol.asyncIterator]: () => iterator }) {
     // Drain the compressed archive so its integrity digest is checked in full.
     void chunk;
   }
   if (!files.size) {
-    throw new Error("starter-archive-invalid");
+    throw new Error(STARTER_ARCHIVE_INVALID);
   }
   return files;
 }
@@ -327,7 +315,7 @@ export async function loadStarterSource(input: {
   if (!archiveResponse.ok) {
     throw new Error("starter-archive-unavailable");
   }
-  if (!archiveResponse.body) throw new Error("starter-archive-invalid");
+  if (!archiveResponse.body) throw new Error(STARTER_ARCHIVE_INVALID);
   let archiveBytes = 0;
   const archiveHash = createHash("sha256");
   /* oxlint-disable promise/prefer-await-to-callbacks -- Transform callbacks keep hashing inside the backpressured byte stream. */

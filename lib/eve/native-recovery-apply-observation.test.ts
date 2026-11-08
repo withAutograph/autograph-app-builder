@@ -67,8 +67,8 @@ const fixture = () => {
     },
   });
   return {
+    binding: { logicalSessionId: "logical", ownerRunId: "physical" },
     descriptor: { logicalSessionId: "logical" },
-    binding: { ownerRunId: "physical", logicalSessionId: "logical" },
     payload: {
       candidates: [
         candidate(30, "terminal-finalizer-input"),
@@ -89,18 +89,18 @@ describe("private apply native observation", () => {
     const before = structuredClone(input);
     const facts = observePrivateApplyRecoveryCandidate(input);
     expect(facts.flags).toMatchObject({
-      grantExplicitNull: true,
-      phasePlanned: true,
-      logicalIdentityMatches: true,
-      latestPendingScopeMatchesCurrent: true,
-      latestContextMatchesCommittedOutput: true,
-      latestSnapshotMatchesCommittedOutput: true,
+      appWorkflowUnchangedSinceInput: true,
       committedOutputAfterSourceInput: true,
+      grantExplicitNull: true,
+      latestContextMatchesCommittedOutput: true,
+      latestPendingScopeMatchesCurrent: true,
+      latestSnapshotMatchesCommittedOutput: true,
+      logicalIdentityMatches: true,
+      noRecordedContextResetAfterInput: true,
+      phasePlanned: true,
       preapprovalGrantExplicitNull: true,
       preapprovalScopeMatchesCurrent: true,
       privateAuthorityUnchangedSinceInput: true,
-      appWorkflowUnchangedSinceInput: true,
-      noRecordedContextResetAfterInput: true,
     });
     expect(facts.counts.matchingPendingCallCount).toBe(1);
     expect(input).toEqual(before);
@@ -122,21 +122,21 @@ describe("private apply native observation", () => {
     input.payload.candidates[0].serializedContext[authorityKey] = { grant: scope, pending: [] };
     input.payload.candidates[0].serializedContext[workflowKey] = {
       ...input.payload.candidates[0].serializedContext[workflowKey],
-      phase: "applied",
       applyReceipt: {},
+      phase: "applied",
     };
     expect(observePrivateApplyRecoveryCandidate(input).flags).toMatchObject({
+      applyReceiptPresent: true,
       grantExplicitNull: false,
+      latestContextMatchesCommittedOutput: false,
+      latestPendingScopeMatchesCurrent: false,
       matchingGrantPresent: true,
       phaseApplied: true,
-      latestPendingScopeMatchesCurrent: false,
-      latestContextMatchesCommittedOutput: false,
-      applyReceiptPresent: true,
     });
     input.payload.candidates[0].serializedContext[workflowKey] = {
       ...input.payload.candidates[0].serializedContext[workflowKey],
-      phase: "apply_failed",
       applyFailure: {},
+      phase: "apply_failed",
     };
     expect(observePrivateApplyRecoveryCandidate(input).flags.phaseApplyFailed).toBe(true);
   });

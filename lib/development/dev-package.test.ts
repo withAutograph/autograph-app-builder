@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import { TOOL_NAMES } from "../../scripts/portable-release";
 import {
@@ -71,17 +72,23 @@ describe("development Codex package", () => {
         port: 3210,
         repositoryRoot: path.resolve("."),
       });
-      const marketplace = JSON.parse(
+      const marketplace: unknown = JSON.parse(
         await readFile(
           path.join(result.marketplaceRoot, ".agents/plugins/marketplace.json"),
           "utf-8",
         ),
       );
-      const manifest = JSON.parse(
-        await readFile(path.join(result.pluginRoot, ".codex-plugin/plugin.json"), "utf-8"),
+      const manifest = z
+        .looseObject({ interface: z.unknown(), name: z.unknown(), version: z.unknown() })
+        .parse(
+          JSON.parse(
+            await readFile(path.join(result.pluginRoot, ".codex-plugin/plugin.json"), "utf-8"),
+          ),
+        );
+      const mcp: unknown = JSON.parse(
+        await readFile(path.join(result.pluginRoot, ".mcp.json"), "utf-8"),
       );
-      const mcp = JSON.parse(await readFile(path.join(result.pluginRoot, ".mcp.json"), "utf-8"));
-      const tools = JSON.parse(
+      const tools: unknown = JSON.parse(
         await readFile(path.join(result.pluginRoot, "tools-list.json"), "utf-8"),
       );
       expect(result.marketplaceRoot).toBe(path.join(root, "marketplace"));
@@ -140,7 +147,17 @@ describe("development Codex package", () => {
           cwd: "/private/native-client",
         },
       });
-      const mcp = JSON.parse(await readFile(path.join(result.pluginRoot, ".mcp.json"), "utf-8"));
+      const mcp = z
+        .looseObject({
+          mcpServers: z.looseObject({
+            "app-builder-dev-3210-hosted": z.looseObject({
+              args: z.union([z.string(), z.array(z.unknown())]),
+              command: z.unknown(),
+              type: z.unknown(),
+            }),
+          }),
+        })
+        .parse(JSON.parse(await readFile(path.join(result.pluginRoot, ".mcp.json"), "utf-8")));
       const server = mcp.mcpServers["app-builder-dev-3210-hosted"];
       expect(server.type).toBe("stdio");
       expect(server.command).toBe("/tools/node");
@@ -148,8 +165,8 @@ describe("development Codex package", () => {
       expect(server.args).toContain("/tools/codex");
       expect(server).not.toHaveProperty("oauth_resource");
       expect(result.receipt).toMatchObject({
-        hostedSessionResource: "https://builder.example.test/mcp",
         execution: "hosted",
+        hostedSessionResource: "https://builder.example.test/mcp",
       });
     } finally {
       await rm(root, { force: true, recursive: true });

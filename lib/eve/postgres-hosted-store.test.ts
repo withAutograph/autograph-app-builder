@@ -16,6 +16,8 @@ import type {
   HostedCheckpointPage,
   HostedOperationRecord,
   HostedSessionRecord,
+  HostedSessionCheckpoint,
+  HostedEveStore,
 } from "./hosted-store";
 import { hostedEveOperationScopes } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
@@ -175,15 +177,28 @@ const cancelledSendFixture = () => {
     if (store.observeSession === undefined) {
       throw new Error("Expected the PostgreSQL observation writer");
     }
-    return store.observeSession({
-      checkpoint: {
-        capturedAtEpochMs: 4000,
-        events: [],
-        ...(stamped ? { nativeDeliveryState: proof } : {}),
-        status: "working",
-        version: 1,
-      },
-      ...(explicit ? { explicitSendOperationId: operation.operationId } : {}),
+    const observeSession = store.observeSession.bind(store);
+    const checkpointPrefix: Pick<
+      HostedSessionCheckpoint,
+      "capturedAtEpochMs" | "events" | "nativeDeliveryState"
+    > = { capturedAtEpochMs: 4000, events: [] };
+    if (stamped) {
+      checkpointPrefix.nativeDeliveryState = proof;
+    }
+    const checkpoint: HostedSessionCheckpoint = {
+      ...checkpointPrefix,
+      status: "working",
+      version: 1,
+    };
+    const observation: Pick<
+      Parameters<NonNullable<HostedEveStore["observeSession"]>>[0],
+      "checkpoint" | "explicitSendOperationId"
+    > = { checkpoint };
+    if (explicit) {
+      observation.explicitSendOperationId = operation.operationId;
+    }
+    return observeSession({
+      ...observation,
       nowEpochMs: 4000,
       principal,
       resumability: "live",
@@ -227,8 +242,8 @@ describe("PostgreSQL explicit SEND cancellation authority", () => {
       adapterGeneration: f.record.adapterGeneration,
       adapterSessionId: f.record.adapterSessionId,
       cancellationRevision: 1,
-      resumedCancellationRevision: 1,
       resumability: "live",
+      resumedCancellationRevision: 1,
       sessionId: f.record.sessionId,
       status: "working",
     });
@@ -244,9 +259,9 @@ describe("PostgreSQL explicit SEND cancellation authority", () => {
     if (f.store.recordCancellationIntent === undefined)
       throw new Error("Missing cancellation writer");
     await f.store.recordCancellationIntent({
+      nowEpochMs: 5000,
       principal,
       sessionId: f.record.sessionId,
-      nowEpochMs: 5000,
     });
     expect(f.row().record).toMatchObject({
       cancellationRevision: 2,

@@ -52,20 +52,20 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
     access: [],
     cost: { class: "shared-recovery-group", description: "fixture", owner: "fixture" },
     effects: [
-      { id: "resources", kind: "resources", description: "Observe resources" },
-      { id: "install", kind: "install", description: "Install" },
-      { id: "access", kind: "access", description: "Access" },
-      { id: "bindings", kind: "bindings", description: "Bind" },
+      { description: "Observe resources", id: "resources", kind: "resources" },
+      { description: "Install", id: "install", kind: "install" },
+      { description: "Access", id: "access", kind: "access" },
+      { description: "Bind", id: "bindings", kind: "bindings" },
     ],
     installer: { reference: "installer", sha256: "a".repeat(64) },
     neon: {
-      projectId: "neon",
       branchId: "branch",
-      endpoint: "ep-fixture.neon.tech",
       connectionRef: "connection",
+      endpoint: "ep-fixture.neon.tech",
+      projectId: "neon",
       source: "synthetic-only",
     },
-    release: { id: "release", artifactRef: "artifact", sha256: "b".repeat(64) },
+    release: { artifactRef: "artifact", id: "release", sha256: "b".repeat(64) },
     retention: { expiresAt: "2027-01-01T00:00:00Z", policy: "retain" },
   });
   const authority = {
@@ -91,9 +91,9 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
       step: "reserved",
       privateState: {
         encryptedToken: "synthetic-ciphertext",
+        keyVersion: "v1",
         tokenIv: "iv",
         tokenTag: "tag",
-        keyVersion: "v1",
       },
       operator: {
         mode: "protected-operator-v1",
@@ -144,12 +144,15 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
       if (failure !== undefined) {
         throw failure;
       }
-      return {
+      const receipt: Awaited<ReturnType<ProtectedHostedOperatorDependencies["executeEffect"]>> = {
         effectId: input.effect.id,
         observedAt: new Date(now).toISOString(),
         resourceVersion: "owned-readback",
-        ...(input.effect.kind === "access" ? { fenceGeneration: input.fenceGeneration } : {}),
       };
+      if (input.effect.kind === "access") {
+        receipt.fenceGeneration = input.fenceGeneration;
+      }
+      return receipt;
     },
   );
   const assertAuthorized = vi.fn(async () => {});
@@ -164,7 +167,7 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
     plan: () => Promise.resolve(plan),
     readApproval: (input) => Promise.resolve({ ...input, approvalId: "approval", approved: true }),
     withResourceLease: async (_input, run) => {
-      const leaseId = row.record.leaseId;
+      const { leaseId } = row.record;
       try {
         return await run(() => {
           const liveExpiry =
@@ -178,7 +181,7 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
         physicalLeaseReleased = true;
       }
     },
-    reconcile: () => Promise.resolve({ status: "absent" }),
+    reconcile: async () => ({ status: "absent" }),
     executeEffect,
     verify: () =>
       Promise.resolve({
@@ -189,36 +192,47 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
         manifestSha256: plan.release.sha256,
         authenticatedBehavior: "unassessed",
       }),
-    bindings: () => Promise.resolve({}),
+    bindings: async () => ({}),
   };
   const handler = createProtectedHostedOperatorHandler(deps);
+  interface FixtureRequestHeaders {
+    [name: string]: string;
+    "content-type": string;
+  }
+  interface FixtureRequestBody {
+    action: "execute" | "status";
+    callId?: string;
+    operationRef: string;
+    planDigest?: string;
+    selection: typeof selection;
+  }
   const request = (
     action: "execute" | "status",
     observe = true,
     signal?: AbortSignal,
     progress?: string,
-  ) =>
-    handler(
+  ) => {
+    const headers: FixtureRequestHeaders = { "content-type": "application/json" };
+    if (progress !== undefined) {
+      headers[OPERATOR_PREPARATION_PROGRESS_HEADER] = progress;
+    }
+    if (observe) {
+      headers[OPERATOR_EXECUTION_OBSERVATION_HEADER] = OPERATOR_EXECUTION_OBSERVATION_PREFERENCE;
+    }
+    const requestBody: FixtureRequestBody = { action, selection, operationRef };
+    if (action === "execute") {
+      requestBody.callId = "approved-call";
+      requestBody.planDigest = operatorPlanDigest(plan);
+    }
+    return handler(
       new Request("https://operator.example/v1/runtime", {
         method: "POST",
         signal,
-        headers: {
-          "content-type": "application/json",
-          ...(progress === undefined ? {} : { [OPERATOR_PREPARATION_PROGRESS_HEADER]: progress }),
-          ...(observe
-            ? { [OPERATOR_EXECUTION_OBSERVATION_HEADER]: OPERATOR_EXECUTION_OBSERVATION_PREFERENCE }
-            : {}),
-        },
-        body: JSON.stringify({
-          action,
-          selection,
-          operationRef,
-          ...(action === "execute"
-            ? { callId: "approved-call", planDigest: operatorPlanDigest(plan) }
-            : {}),
-        }),
+        headers,
+        body: JSON.stringify(requestBody),
       }),
     );
+  };
   const status = async () => {
     const response = await request("status");
     return operatorPublicResultSchema.parse(await response.json());
@@ -275,16 +289,16 @@ describe("canonical execution observation", () => {
       );
       const result = operatorPublicResultSchema.parse(await response.json());
       expect(result).toMatchObject({
-        status: "pending",
         preparationProgress: {
-          lease: "absent",
-          hasPendingEffect: false,
-          hasPendingAttempt: false,
-          allPlanEffectsReceipted: false,
-          missingEffectKinds: ["resources", "install", "access", "bindings"],
-          hasAccountPreparation: false,
           accountsCompleted: false,
+          allPlanEffectsReceipted: false,
+          hasAccountPreparation: false,
+          hasPendingAttempt: false,
+          hasPendingEffect: false,
+          lease: "absent",
+          missingEffectKinds: ["resources", "install", "access", "bindings"],
         },
+        status: "pending",
       });
       expect(result.preparationProgress).not.toHaveProperty("planStage");
       expect(read).toHaveBeenCalledOnce();
@@ -318,7 +332,7 @@ describe("canonical execution observation", () => {
       OPERATOR_PREPARATION_PROGRESS_PREFERENCE,
     );
     const result = operatorPublicResultSchema.parse(await response.json());
-    expect(result).toMatchObject({ status: "blocked", code: "authorization_required" });
+    expect(result).toMatchObject({ code: "authorization_required", status: "blocked" });
     expect(result.preparationProgress).toBeUndefined();
     expect(f.executeEffect).not.toHaveBeenCalled();
   });
@@ -328,7 +342,7 @@ describe("canonical execution observation", () => {
     const execution = f.request("execute");
     await f.entered.promise;
     const effect = readExecutingEffect(f);
-    const revision = f.revision;
+    const { revision } = f;
     const expiresAt = f.record.leaseExpiresAt;
     const providerReads = f.assertAuthorized.mock.calls.length;
     await Promise.all(Array.from({ length: 100 }, () => effect.assertCurrentObservation()));
@@ -362,7 +376,7 @@ describe("canonical execution observation", () => {
     const execution = f.request("execute");
     try {
       await entered.promise;
-      const revision = f.revision;
+      const { revision } = f;
       const providerReads = f.assertAuthorized.mock.calls.length;
       await vi.advanceTimersByTimeAsync(61_000);
       expect(f.revision).toBe(revision + 3);
@@ -391,7 +405,7 @@ describe("canonical execution observation", () => {
       const execution = f.request("execute", true, abort.signal);
       await f.entered.promise;
       const effect = readExecutingEffect(f);
-      const revision = f.revision;
+      const { revision } = f;
       if (lost === "owner") {
         f.assertCanonicalOwner.mockRejectedValue(new HostedOperatorError("authorization_required"));
       }
@@ -432,7 +446,7 @@ describe("canonical execution observation", () => {
     try {
       await f.entered.promise;
       const effect = readExecutingEffect(f);
-      const revision = f.revision;
+      const { revision } = f;
       f.assertCanonicalOwner.mockRejectedValue(new HostedOperatorError("authorization_required"));
       await vi.advanceTimersByTimeAsync(20_000);
       expect(effect.signal?.aborted).toBe(true);
@@ -440,8 +454,8 @@ describe("canonical execution observation", () => {
       f.gate.resolve(undefined);
       const response = await execution;
       expect(await response.json()).toMatchObject({
-        status: "blocked",
         code: "authorization_required",
+        status: "blocked",
       });
       expect(f.executeEffect).toHaveBeenCalledOnce();
       expect(f.record.leaseId).toBeUndefined();
@@ -460,7 +474,7 @@ describe("canonical execution observation", () => {
     try {
       await f.entered.promise;
       const effect = readExecutingEffect(f);
-      const revision = f.revision;
+      const { revision } = f;
       const rechecked = Promise.withResolvers<undefined>();
       vi.spyOn(f.store, "compareAndSet").mockImplementationOnce(() => {
         f.assertCanonicalOwner.mockImplementation(() => {
@@ -477,8 +491,8 @@ describe("canonical execution observation", () => {
       f.gate.resolve(undefined);
       const response = await execution;
       expect(await response.json()).toMatchObject({
-        status: "blocked",
         code: "authorization_required",
+        status: "blocked",
       });
     } finally {
       f.gate.resolve(undefined);
@@ -495,7 +509,7 @@ describe("canonical execution observation", () => {
     const release = Promise.withResolvers<undefined>();
     try {
       await f.entered.promise;
-      const compareAndSet = f.store.compareAndSet;
+      const { compareAndSet } = f.store;
       vi.spyOn(f.store, "compareAndSet").mockImplementationOnce(async (input) => {
         await release.promise;
         return await compareAndSet(input);
@@ -523,7 +537,7 @@ describe("canonical execution observation", () => {
     vi.setSystemTime(now);
     const f = fixture(false, Date.now);
     const lost = Promise.withResolvers<never>();
-    const withResourceLease = f.deps.withResourceLease;
+    const { withResourceLease } = f.deps;
     let callback: Promise<unknown> | undefined;
     f.deps.withResourceLease = async (input, run) => {
       const running = withResourceLease(input, run);
@@ -540,7 +554,7 @@ describe("canonical execution observation", () => {
       expect(await response.json()).toMatchObject({ status: "blocked" });
       expect(effect.signal?.aborted).toBe(true);
       expect(f.record.leaseId).toBeUndefined();
-      const revision = f.revision;
+      const { revision } = f;
       await vi.advanceTimersByTimeAsync(80_000);
       expect(f.revision).toBe(revision);
       expect(vi.getTimerCount()).toBe(0);
@@ -564,7 +578,7 @@ describe("canonical execution observation", () => {
   it("invalidates a prior settled acknowledgement before a legacy technical retry", async () => {
     const f = fixture(true);
     expect(await f.status()).toMatchObject({
-      execution: { state: "settled", outcome: { status: "blocked" } },
+      execution: { outcome: { status: "blocked" }, state: "settled" },
     });
     const execution = f.request("execute", false);
     await f.entered.promise;
@@ -574,8 +588,8 @@ describe("canonical execution observation", () => {
     await execution;
     expect(f.record).not.toHaveProperty("executionObservation");
     expect(await f.status()).toMatchObject({
+      execution: { outcome: { status: "prepared" }, state: "settled" },
       status: "prepared",
-      execution: { state: "settled", outcome: { status: "prepared" } },
     });
     expect(f.executeEffect).toHaveBeenCalledTimes(4);
   });
@@ -607,8 +621,8 @@ describe("canonical execution observation", () => {
       const execution = f.request("execute");
       await f.entered.promise;
       expect(await f.status()).toMatchObject({
-        status: "pending",
         execution: { state: "running" },
+        status: "pending",
       });
       expect(f.record.leaseId).toBeDefined();
       if (outcome === "reconciliation_required") {
@@ -617,15 +631,11 @@ describe("canonical execution observation", () => {
       f.gate.resolve(undefined);
       await execution;
       expect(f.record.leaseId).toBeUndefined();
+      const expectedOutcome =
+        outcome === "prepared" ? { status: "prepared" } : { code: outcome, status: "blocked" };
       expect(await f.status()).toMatchObject({
+        execution: { outcome: expectedOutcome, state: "settled" },
         status: outcome === "prepared" ? "prepared" : "pending",
-        execution: {
-          state: "settled",
-          outcome: {
-            status: outcome === "prepared" ? "prepared" : "blocked",
-            ...(outcome === "prepared" ? {} : { code: outcome }),
-          },
-        },
       });
       expect(f.executeEffect).toHaveBeenCalledTimes(outcome === "prepared" ? 4 : 1);
       expect(f.record.privateState).toEqual(privateState);
@@ -639,7 +649,7 @@ describe("canonical execution observation", () => {
     f.fail(new HostedOperatorError("reconciliation_required"));
     f.gate.resolve(undefined);
     await execution;
-    expect(await f.status()).toMatchObject({ status: "pending", execution: { state: "unknown" } });
+    expect(await f.status()).toMatchObject({ execution: { state: "unknown" }, status: "pending" });
   });
   it.each([
     "different-lease",
@@ -650,7 +660,7 @@ describe("canonical execution observation", () => {
   ] as const)("does not let a stale attempt settle after %s", (drift) => {
     const f = fixture();
     const record = structuredClone(f.record);
-    const operator = record.operator;
+    const { operator } = record;
     if (operator === undefined) {
       throw new Error("Fixture requires an operator");
     }

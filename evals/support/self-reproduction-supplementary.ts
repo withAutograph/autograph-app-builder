@@ -9,6 +9,16 @@ import {
 } from "./self-reproduction-parity";
 import type { Observation } from "./self-reproduction-parity";
 
+const MISSING_FUNCTIONALITY = "missing-functionality";
+const PARITY_EVIDENCE_FILE = "parity-evidence.json";
+const SOURCE_REVIEW = "source-review";
+const REPORT_FILE = "report.json";
+
+const formatOutcomeCells = (sideRows: Awaited<ReturnType<typeof assessParity>>["rows"]) =>
+  ["passed", "failed", "blocked", "unassessed"]
+    .map((status) => `<td>${sideRows.filter((row) => row.status === status).length}</td>`)
+    .join("");
+
 /** Source assertions can supplement behavior, but never erase a failure or supply behavioral method credit. */
 export const mergeSupplementaryObservation = (
   runtime: Observation | undefined,
@@ -33,15 +43,14 @@ export const mergeSupplementaryObservation = (
     );
   }
   const failed =
-    runtime.disposition === "missing-functionality" ||
-    review.disposition === "missing-functionality";
+    runtime.disposition === MISSING_FUNCTIONALITY || review.disposition === MISSING_FUNCTIONALITY;
   const behavioral =
     ["browser", "source-and-browser", "@next/playwright/instant"].includes(runtime.method) &&
     runtime.disposition === "observed";
   return {
     artifacts: [...new Set([...runtime.artifacts, ...review.artifacts])],
     assertions: [...assertions.values()],
-    disposition: failed ? "missing-functionality" : runtime.disposition,
+    disposition: failed ? MISSING_FUNCTIONALITY : runtime.disposition,
     method:
       behavioral && runtime.method !== "@next/playwright/instant"
         ? "source-and-browser"
@@ -118,7 +127,7 @@ export const writeSupplementaryAssessment = async (input: {
     return target;
   };
   const evidence = parityEvidenceSchema.parse(
-    JSON.parse(await readFile(nodePath.join(parityRoot, "parity-evidence.json"), "utf-8")),
+    JSON.parse(await readFile(nodePath.join(parityRoot, PARITY_EVIDENCE_FILE), "utf-8")),
   );
   const review = JSON.parse(
     await readFile(nodePath.join(reviewRoot, "observations.json"), "utf-8"),
@@ -143,21 +152,21 @@ export const writeSupplementaryAssessment = async (input: {
         ...(workflowReview.observations?.[side] ?? []),
       ];
     }
-    await copy(reviewRoot, "workflow-observations.json", "source-review");
+    await copy(reviewRoot, "workflow-observations.json", SOURCE_REVIEW);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       throw error;
     }
   }
   // Retain the original metadata and source review unchanged as provenance snapshots.
-  for (const path of ["report.json", "parity-evidence.json", "revisions.json"]) {
+  for (const path of [REPORT_FILE, PARITY_EVIDENCE_FILE, "revisions.json"]) {
     await copy(parityRoot, path, "original");
   }
   for (const path of ["observations.json", "source-evidence.json", "report.md"]) {
-    await copy(reviewRoot, path, "source-review");
+    await copy(reviewRoot, path, SOURCE_REVIEW);
   }
   const originalReport = JSON.parse(
-    await readFile(nodePath.join(parityRoot, "report.json"), "utf-8"),
+    await readFile(nodePath.join(parityRoot, REPORT_FILE), "utf-8"),
   );
   for (const capture of originalReport.captures ?? []) {
     for (const path of capture.files ?? []) {
@@ -192,9 +201,9 @@ export const writeSupplementaryAssessment = async (input: {
           ...assertion,
           artifacts: assertion.artifacts ?? ["source-evidence.json"],
         })),
-        method: "source-review",
+        method: SOURCE_REVIEW,
       });
-      const source = await rebase(normalized, reviewRoot, "source-review");
+      const source = await rebase(normalized, reviewRoot, SOURCE_REVIEW);
       const index = evidence[side].observations.findIndex(
         (entry) => entry.requirementId === source.requirementId,
       );
@@ -257,13 +266,20 @@ export const writeSupplementaryAssessment = async (input: {
     originalRunId: evidence.runId,
     screenshotPairs,
   };
-  await writeFile(nodePath.join(output, "parity-evidence.json"), JSON.stringify(evidence, null, 2));
-  await writeFile(nodePath.join(output, "report.json"), JSON.stringify(report, null, 2));
+  await writeFile(nodePath.join(output, PARITY_EVIDENCE_FILE), JSON.stringify(evidence, null, 2));
+  await writeFile(nodePath.join(output, REPORT_FILE), JSON.stringify(report, null, 2));
   const rows = assessment.rows.map(
     (row) =>
       `| ${row.side} | ${row.requirementId} | ${row.status} | ${row.reason.replaceAll("|", "\\|").replaceAll("\n", " ")} |`,
   );
-  const md = `# Supplementary self-reproduction assessment\n\nOriginal run: ${evidence.runId}. No generation or runtime rerun. Source review supplements retained behavioral evidence. Anonymous entry remains excluded from cleanup priority.\n\n| Side | Requirement | Status | Evidence finding |\n| --- | --- | --- | --- |\n${rows.join("\n")}\n\n## Diagnostic initial screenshots\n\n${screenshotPairs.map((pair) => `- ${pair.viewport}: [reference](${pair.reference}), [candidate](${pair.candidate}). ${pair.qualification}`).join("\n")}\n`;
+  const formatScreenshotPairs = () =>
+    screenshotPairs
+      .map(
+        (pair) =>
+          `- ${pair.viewport}: [reference](${pair.reference}), [candidate](${pair.candidate}). ${pair.qualification}`,
+      )
+      .join("\n");
+  const md = `# Supplementary self-reproduction assessment\n\nOriginal run: ${evidence.runId}. No generation or runtime rerun. Source review supplements retained behavioral evidence. Anonymous entry remains excluded from cleanup priority.\n\n| Side | Requirement | Status | Evidence finding |\n| --- | --- | --- | --- |\n${rows.join("\n")}\n\n## Diagnostic initial screenshots\n\n${formatScreenshotPairs()}\n`;
   await writeFile(nodePath.join(output, "report.md"), md);
   // oxlint-disable-next-line unicorn/consistent-function-scoping -- report-only HTML helper.
   const escape = (text: string) =>
@@ -272,7 +288,7 @@ export const writeSupplementaryAssessment = async (input: {
   const counts = sides
     .map((side) => {
       const sideRows = assessment.rows.filter((row) => row.side === side);
-      return `<tr><th>${side}</th>${["passed", "failed", "blocked", "unassessed"].map((status) => `<td>${sideRows.filter((row) => row.status === status).length}</td>`).join("")}</tr>`;
+      return `<tr><th>${side}</th>${formatOutcomeCells(sideRows)}</tr>`;
     })
     .join("");
   const priorities = assessment.rows.filter(
@@ -288,16 +304,27 @@ export const writeSupplementaryAssessment = async (input: {
     )
     .join("");
   const findings = assessment.rows
-    .map(
-      (row) =>
-        `<tr><td>${escape(row.side)}</td><th>${escape(row.requirementId)}</th><td class="${row.status}">${row.status}</td><td>${escape(row.reason)}</td><td>${row.artifacts.map((path, index) => `<a href="${escape(path)}">Evidence ${index + 1}</a>`).join("<br>")}</td></tr>`,
-    )
+    .map((row) => {
+      const formatArtifacts = () =>
+        row.artifacts
+          .map((path, index) => `<a href="${escape(path)}">Evidence ${index + 1}</a>`)
+          .join("<br>");
+      return `<tr><td>${escape(row.side)}</td><th>${escape(row.requirementId)}</th><td class="${row.status}">${row.status}</td><td>${escape(row.reason)}</td><td>${formatArtifacts()}</td></tr>`;
+    })
     .join("");
+  const formatPriorities = () =>
+    priorities
+      .map(
+        (row) => `<li><strong>${escape(row.requirementId)}</strong> — ${escape(row.reason)}</li>`,
+      )
+      .join("");
+  const formatImages = () =>
+    images.map((path) => `<li><a href="${escape(path)}">${escape(path)}</a></li>`).join("");
   await writeFile(
     nodePath.join(output, "index.html"),
     `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Supplementary self-reproduction assessment</title><style>
 body{font:15px/1.5 system-ui,sans-serif;margin:32px auto;padding:0 24px;max-width:1500px;color:#202124;background:#fafafa}h1{font-size:28px;margin-bottom:8px}h2{margin-top:32px}a{color:#1555a3}table{border-collapse:collapse;width:100%;background:white}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #ddd;vertical-align:top}thead{background:#eee}.summary{max-width:650px}.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}figure{margin:0;background:white;border:1px solid #ddd}figcaption{padding:10px;font-weight:600}img{display:block;width:100%;height:auto}.qualification{color:#555}.failed{color:#a12622;font-weight:600}.passed{color:#256029}.findings{overflow-x:auto}.provenance{display:flex;flex-wrap:wrap;gap:16px}.note{max-width:1000px}li{margin:6px 0}
-</style></head><body><h1>How close did the generated app get?</h1><p class="note">Supplementary assessment of <strong>${escape(evidence.runId)}</strong>. Existing runtime evidence plus evaluator source review; no generation or runtime rerun. Counts describe requirement evidence, not a numerical similarity score. Anonymous entry is excluded from cleanup priority.</p><table class="summary"><thead><tr><th>Application</th><th>Passed</th><th>Failed</th><th>Blocked</th><th>Unassessed</th></tr></thead><tbody>${counts}</tbody></table><p class="provenance"><a href="original/report.json">Original runtime report</a><a href="original/revisions.json">Original revisions</a><a href="source-review/source-evidence.json">Source review provenance</a>${input.referenceCapturesDirectory ? '<a href="reference-captures/capture-provenance.json">Capture provenance</a>' : ""}<a href="report.json">Assessment JSON</a><a href="report.md">Markdown report</a></p><h2>Initial screen comparison</h2>${pairMarkup || "<p>No paired captures retained.</p>"}<h2>Confirmed candidate gaps</h2><p>Workflow failures appear before framework and capture findings. These are separate requirements, not necessarily independent root causes.</p><ul>${priorities.map((row) => `<li><strong>${escape(row.requirementId)}</strong> — ${escape(row.reason)}</li>`).join("")}</ul><h2>All requirement outcomes</h2><div class="findings"><table><thead><tr><th>Side</th><th>Requirement</th><th>Status</th><th>Finding</th><th>Artifacts</th></tr></thead><tbody>${findings}</tbody></table></div><details><summary>Other retained screenshots (${images.length})</summary><ul>${images.map((path) => `<li><a href="${escape(path)}">${escape(path)}</a></li>`).join("")}</ul></details></body></html>`,
+</style></head><body><h1>How close did the generated app get?</h1><p class="note">Supplementary assessment of <strong>${escape(evidence.runId)}</strong>. Existing runtime evidence plus evaluator source review; no generation or runtime rerun. Counts describe requirement evidence, not a numerical similarity score. Anonymous entry is excluded from cleanup priority.</p><table class="summary"><thead><tr><th>Application</th><th>Passed</th><th>Failed</th><th>Blocked</th><th>Unassessed</th></tr></thead><tbody>${counts}</tbody></table><p class="provenance"><a href="original/report.json">Original runtime report</a><a href="original/revisions.json">Original revisions</a><a href="source-review/source-evidence.json">Source review provenance</a>${input.referenceCapturesDirectory ? '<a href="reference-captures/capture-provenance.json">Capture provenance</a>' : ""}<a href="report.json">Assessment JSON</a><a href="report.md">Markdown report</a></p><h2>Initial screen comparison</h2>${pairMarkup || "<p>No paired captures retained.</p>"}<h2>Confirmed candidate gaps</h2><p>Workflow failures appear before framework and capture findings. These are separate requirements, not necessarily independent root causes.</p><ul>${formatPriorities()}</ul><h2>All requirement outcomes</h2><div class="findings"><table><thead><tr><th>Side</th><th>Requirement</th><th>Status</th><th>Finding</th><th>Artifacts</th></tr></thead><tbody>${findings}</tbody></table></div><details><summary>Other retained screenshots (${images.length})</summary><ul>${formatImages()}</ul></details></body></html>`,
   );
   return report;
 };

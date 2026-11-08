@@ -16,16 +16,16 @@ interface Tail {
   nativeTailIndex: number;
 }
 type Binding = ApprovalReplayProgress["binding"];
+const identicalRequest = (
+  a: { requestId: string; callId: string; toolName: string; toolInput: unknown },
+  b: { requestId: string; callId: string; toolName: string; toolInput: unknown },
+) =>
+  a.requestId === b.requestId &&
+  a.callId === b.callId &&
+  a.toolName === b.toolName &&
+  isDeepStrictEqual(a.toolInput, b.toolInput);
 const retainsCapture = (previous: ApprovalReplayProgress, next: ApprovalReplayProgress) => {
   const current = next.privateApprovalCaptureState;
-  const identicalRequest = (
-    a: { requestId: string; callId: string; toolName: string; toolInput: unknown },
-    b: { requestId: string; callId: string; toolName: string; toolInput: unknown },
-  ) =>
-    a.requestId === b.requestId &&
-    a.callId === b.callId &&
-    a.toolName === b.toolName &&
-    isDeepStrictEqual(a.toolInput, b.toolInput);
   return (
     previous.privateApprovalCaptureState.receipts.every((receipt) =>
       current.receipts.some((candidate) => isDeepStrictEqual(receipt, candidate)),

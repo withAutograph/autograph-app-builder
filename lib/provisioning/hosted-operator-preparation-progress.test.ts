@@ -8,33 +8,33 @@ import {
 
 const now = Date.parse("2026-10-28T12:00:00Z");
 const program = normalActorProgramSchema.parse({
-  version: 1,
-  appId: "reports",
-  origin: "https://reports.example",
   actors: [
     {
+      account: "capture-existing",
       actorKey: "reader",
       email: "reader@example.test",
       name: "Reader",
-      account: "capture-existing",
     },
   ],
-  organizations: [],
-  memberships: [],
   appAccess: [],
+  appId: "reports",
+  memberships: [],
+  organizations: [],
+  origin: "https://reports.example",
+  version: 1,
 });
 type ProgressRecord = Parameters<typeof readOperatorPreparationProgress>[0];
 const fixture = (): ProgressRecord & { operator: NonNullable<ProgressRecord["operator"]> } => ({
   operator: {
     plan: {
-      stage: "auth-bootstrap",
       effects: [
-        { id: "auth-schema", kind: "install", description: "Read Auth schema" },
-        { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind Gateway" },
-        { id: "gateway", kind: "gateway-delivery", description: "Deliver Gateway" },
-        { id: "other-gateway", kind: "gateway-delivery", description: "Observe Gateway" },
+        { description: "Read Auth schema", id: "auth-schema", kind: "install" },
+        { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+        { description: "Deliver Gateway", id: "gateway", kind: "gateway-delivery" },
+        { description: "Observe Gateway", id: "other-gateway", kind: "gateway-delivery" },
       ],
       normalActorProgram: program,
+      stage: "auth-bootstrap",
     },
     receipts: [
       {
@@ -50,26 +50,26 @@ describe("recorded preparation progress", () => {
   it("keeps partial bootstrap distinct from existing Auth readiness and exposes no private values", () => {
     const record = {
       ...fixture(),
-      privateState: { credential: "private-credential" },
       operator: {
         ...fixture().operator,
         authPreparation: { catalogFingerprint: "old-auth-readiness" },
-        pendingEffectId: "gateway",
         pendingEffectAttempt: { id: "private-attempt" },
+        pendingEffectId: "gateway",
       },
+      privateState: { credential: "private-credential" },
     };
     const before = structuredClone(record);
     const progress = readOperatorPreparationProgress(record, now);
     expect(operatorPreparationProgressSchema.parse(progress)).toEqual({
-      planStage: "auth-bootstrap",
-      lease: "absent",
-      hasPendingEffect: true,
-      pendingEffectKind: "gateway-delivery",
-      hasPendingAttempt: true,
-      allPlanEffectsReceipted: false,
-      missingEffectKinds: ["gateway-bindings", "gateway-delivery"],
-      hasAccountPreparation: false,
       accountsCompleted: false,
+      allPlanEffectsReceipted: false,
+      hasAccountPreparation: false,
+      hasPendingAttempt: true,
+      hasPendingEffect: true,
+      lease: "absent",
+      missingEffectKinds: ["gateway-bindings", "gateway-delivery"],
+      pendingEffectKind: "gateway-delivery",
+      planStage: "auth-bootstrap",
     });
     expect(record).toEqual(before);
     const output = JSON.stringify(progress);
@@ -88,7 +88,7 @@ describe("recorded preparation progress", () => {
 
   it("reports complete receipts separately from pending markers", () => {
     const record = fixture();
-    const operator = record.operator;
+    const { operator } = record;
     operator.receipts = operator.plan.effects.map((effect) => ({
       effectId: effect.id,
       observedAt: new Date(now).toISOString(),
@@ -98,8 +98,8 @@ describe("recorded preparation progress", () => {
     const progress = readOperatorPreparationProgress(record, now);
     expect(progress).toMatchObject({
       allPlanEffectsReceipted: true,
-      missingEffectKinds: [],
       hasPendingEffect: true,
+      missingEffectKinds: [],
     });
     expect(progress).not.toHaveProperty("pendingEffectKind");
     expect(JSON.stringify(progress)).not.toContain("unknown-private-effect");
@@ -113,7 +113,7 @@ describe("recorded preparation progress", () => {
     ["private-lease", undefined, "unclassified"],
   ] as const)("classifies lease presence and expiry (%s, %s)", (leaseId, leaseExpiresAt, lease) => {
     expect(
-      readOperatorPreparationProgress({ ...fixture(), leaseId, leaseExpiresAt }, now)?.lease,
+      readOperatorPreparationProgress({ ...fixture(), leaseExpiresAt, leaseId }, now)?.lease,
     ).toBe(lease);
   });
 
@@ -121,14 +121,17 @@ describe("recorded preparation progress", () => {
     "records account completion %s and canonical program association",
     (completed) => {
       const record = fixture();
-      record.accountPreparation = {
+      const accountPreparation: NonNullable<typeof record.accountPreparation> = {
         programDigest: normalActorProgramDigest(program),
-        ...(completed ? { accountsCompletedAt: new Date(now).toISOString() } : {}),
       };
+      if (completed) {
+        accountPreparation.accountsCompletedAt = new Date(now).toISOString();
+      }
+      record.accountPreparation = accountPreparation;
       expect(readOperatorPreparationProgress(record, now)).toMatchObject({
-        hasAccountPreparation: true,
-        accountsCompleted: completed,
         accountProgramMatchesPlan: true,
+        accountsCompleted: completed,
+        hasAccountPreparation: true,
       });
       record.accountPreparation.programDigest = "a".repeat(64);
       expect(readOperatorPreparationProgress(record, now)?.accountProgramMatchesPlan).toBe(false);

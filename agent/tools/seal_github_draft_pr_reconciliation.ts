@@ -20,6 +20,7 @@ import {
   retainDraftReconciliationCompletion,
   updateExactDraftReconciliation,
 } from "@/lib/agent/draft-reconciliation-state";
+import type { DraftReconciliationCompletion } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { inspectDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
 
@@ -53,14 +54,17 @@ export default defineTool({
       state.reviewReceipt.digest !== candidate.originalReviewDigest ||
       candidate.review.digest !== input.expectedReviewDigest
     ) {
+      const diagnosticInput: Parameters<typeof draftSealPrerequisiteDiagnostic>[0] = {
+        candidate,
+        state,
+        expectedReviewDigest: input.expectedReviewDigest,
+      };
+      if (githubSource !== undefined) {
+        diagnosticInput.resolvedSourceDigest = githubSource.digest;
+      }
       throw new Error(
         draftPrerequisiteMessage(
-          draftSealPrerequisiteDiagnostic({
-            candidate,
-            state,
-            expectedReviewDigest: input.expectedReviewDigest,
-            ...(githubSource === undefined ? {} : { resolvedSourceDigest: githubSource.digest }),
-          }),
+          draftSealPrerequisiteDiagnostic(diagnosticInput),
           "The selected app or resolved merge changed. Validate the candidate and review both current diffs before sealing.",
         ),
       );
@@ -121,7 +125,7 @@ export default defineTool({
     });
     // This metadata becomes durable at the ensuing always()-approval checkpoint, before any Git write.
     // It records no approval grant; reconcile still validates its actual approved call and exact receipt.
-    retainDraftReconciliationCompletion({
+    const completion: DraftReconciliationCompletion = {
       preparation: "sealed-before-approval",
       proposal,
       review: candidate.review,
@@ -134,13 +138,14 @@ export default defineTool({
       githubSourceDigest: candidate.githubSourceDigest,
       root: candidate.root,
       compilation,
-      ...(candidate.publishedOrigin === undefined
-        ? {}
-        : { publishedOrigin: candidate.publishedOrigin }),
-      ...(candidate.publicationScope === undefined
-        ? {}
-        : { publicationScope: candidate.publicationScope }),
-    });
+    };
+    if (candidate.publishedOrigin !== undefined) {
+      completion.publishedOrigin = candidate.publishedOrigin;
+    }
+    if (candidate.publicationScope !== undefined) {
+      completion.publicationScope = candidate.publicationScope;
+    }
+    retainDraftReconciliationCompletion(completion);
     return { ...proposal, approvalReceipt: approvalReceiptForExistingDraftUpdate(proposal) };
   },
   inputSchema: z.strictObject({ expectedReviewDigest: digest }),

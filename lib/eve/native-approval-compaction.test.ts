@@ -47,7 +47,7 @@ describe("real native compaction before the SDK approved-tool execution", () => 
         phase: "planned",
         appSpec: { digest: "spec" },
         proposal: { digest: "current-proposal", target: { contract: { appId: "app" } } },
-        workspace: { workspaceId: scope.workspaceId, workspaceDigest: "current-workspace-digest" },
+        workspace: { workspaceDigest: "current-workspace-digest", workspaceId: scope.workspaceId },
       },
     };
     const input = {
@@ -60,7 +60,7 @@ describe("real native compaction before the SDK approved-tool execution", () => 
             origin: { slot: 13 },
             serializedContext: context,
             sessionState: {
-              snapshot: { session: { sessionId: binding.logicalSessionId, history: compacted } },
+              snapshot: { session: { history: compacted, sessionId: binding.logicalSessionId } },
             },
           },
         ],
@@ -93,29 +93,29 @@ describe("real native compaction before the SDK approved-tool execution", () => 
     const messages = [
       originalUser,
       {
-        role: "assistant" as const,
         content: [
           {
-            type: "tool-call" as const,
+            input: {},
             toolCallId: "observed",
             toolName: "inspect_repository",
-            input: {},
+            type: "tool-call" as const,
           },
         ],
+        role: "assistant" as const,
       },
       {
-        role: "tool" as const,
         content: [
           {
-            type: "tool-result" as const,
-            toolCallId: "observed",
-            toolName: "inspect_repository",
             output: {
               type: "text" as const,
               value: "Large controlled observation. ".repeat(30_000),
             },
+            toolCallId: "observed",
+            toolName: "inspect_repository",
+            type: "tool-result" as const,
           },
         ],
+        role: "tool" as const,
       },
       ...history().slice(-2),
     ];
@@ -133,9 +133,9 @@ describe("real native compaction before the SDK approved-tool execution", () => 
   });
   it("preserves genuinely new user instructions instead of moving them across an approval", async () => {
     const latest = {
-      role: "user" as const,
-      kind: "user",
       content: "Cancel this change; first explain the saved app status.",
+      kind: "user",
+      role: "user" as const,
     };
     const compacted = await compact([...history(), latest], 3);
     expect(compacted.at(-1)).toEqual(latest);

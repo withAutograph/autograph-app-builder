@@ -22,11 +22,11 @@ const fullRepositoryName = z
   .max(201)
   .regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u);
 
-export const builderHandoffIdSchema = z.string().uuid();
+export const builderHandoffIdSchema = z.uuid();
 export const builderHandoffDestinationSchema = z.enum(["codex", "cursor"]);
 
 export const builderHandoffIntentSchema = z
-  .object({
+  .strictObject({
     appId: builderAppIdSchema,
     sourceCandidate: sourceCandidateReferenceSchema.optional(),
     appName: z.string().trim().min(1).max(120),
@@ -37,27 +37,23 @@ export const builderHandoffIntentSchema = z
     destination: builderHandoffDestinationSchema.optional(),
     modelId: activeBuilderModelIdSchema,
     providers: z
-      .object({
+      .strictObject({
         githubInstallationId: z
           .string()
           .regex(/^[1-9][0-9]*$/u)
           .optional(),
         vercelInstallationId: z.string().min(1).max(256).optional(),
       })
-      .strict()
       .optional(),
     provisioning: builderProvisionResponseSchema.optional(),
     provisioningRequestDigest: sha256.optional(),
-    provisioningRequestId: z.string().uuid().optional(),
-    repository: z
-      .object({
-        private: z.boolean(),
-        requestedName: repositoryName,
-        resolvedFullName: fullRepositoryName.optional(),
-      })
-      .strict(),
+    provisioningRequestId: z.uuid().optional(),
+    repository: z.strictObject({
+      private: z.boolean(),
+      requestedName: repositoryName,
+      resolvedFullName: fullRepositoryName.optional(),
+    }),
   })
-  .strict()
   .superRefine((intent, context) => {
     if (intent.sourceCandidate !== undefined && intent.sourceCandidate.appId !== intent.appId) {
       context.addIssue({
@@ -99,10 +95,10 @@ export const builderHandoffIntentSchema = z
 export type BuilderHandoffIntent = z.infer<typeof builderHandoffIntentSchema>;
 
 export const builderHandoffRecordSchema = z
-  .object({
+  .strictObject({
     authority: hostedTenantAuthoritySchema,
     createdAt: z.date(),
-    creationRequestId: z.string().uuid(),
+    creationRequestId: z.uuid(),
     expiresAt: z.date(),
     handoffId: builderHandoffIdSchema,
     intent: builderHandoffIntentSchema,
@@ -111,7 +107,6 @@ export const builderHandoffRecordSchema = z
     sessionId: z.string().min(1).max(200).optional(),
     version: z.literal(1),
   })
-  .strict()
   .superRefine((record, context) => {
     if (record.expiresAt <= record.createdAt) {
       context.addIssue({
@@ -168,7 +163,7 @@ export function builderHandoffRequestDigest(input: {
     .update(
       canonical({
         authority: hostedTenantAuthoritySchema.parse(input.authority),
-        creationRequestId: z.string().uuid().parse(input.creationRequestId),
+        creationRequestId: z.uuid().parse(input.creationRequestId),
         intent: builderHandoffIntentSchema.parse(input.intent),
         version: 1,
       }),

@@ -31,7 +31,9 @@ export type ImplementationFile = z.infer<typeof implementationFilesSchema>[numbe
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertExistingAppImplementationFiles(
   files: readonly ImplementationFile[],
-  proposal: TargetProposal,
+  proposal:
+    | TargetProposal
+    | { operation: "iterate-existing-app"; plan: { source: { workspacePath: string } } },
 ) {
   if (
     "operation" in proposal &&

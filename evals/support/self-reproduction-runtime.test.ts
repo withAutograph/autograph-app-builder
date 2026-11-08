@@ -1,3 +1,4 @@
+import type { SandboxSession } from "eve/sandbox";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -7,7 +8,7 @@ import {
 } from "./self-reproduction-runtime";
 
 const backend = (results: { exitCode: number; stdout?: string; stderr?: string }[]) => {
-  const shutdown = vi.fn(() => Promise.resolve());
+  const shutdown = vi.fn<() => Promise<void>>().mockResolvedValue();
   const run = vi.fn(() => {
     const result = results.shift();
     if (!result) {
@@ -15,32 +16,48 @@ const backend = (results: { exitCode: number; stdout?: string; stderr?: string }
     }
     return Promise.resolve({ stderr: "", stdout: "", ...result });
   });
-  const writeTextFile = vi.fn(() => Promise.resolve());
-  const writeBinaryFile = vi.fn(() => Promise.resolve());
+  const writeTextFile = vi.fn<() => Promise<void>>().mockResolvedValue();
+  const writeBinaryFile = vi.fn<() => Promise<void>>().mockResolvedValue();
   const spawn = vi.fn(() =>
     Promise.resolve({
       kill: () => Promise.resolve(),
-      stderr: new ReadableStream(),
-      stdout: new ReadableStream(),
+      stderr: new ReadableStream<Uint8Array>(),
+      stdout: new ReadableStream<Uint8Array>(),
       wait: () => Promise.resolve({ exitCode: 0 }),
     }),
   );
+  const session = {
+    id: "sandbox-fixture",
+    readTextFile: () => Promise.resolve(JSON.stringify({ basePath: "" })),
+    run,
+    spawn,
+    writeBinaryFile,
+    writeTextFile,
+    readFile: () => {
+      throw new Error("Unexpected readFile");
+    },
+    readBinaryFile: () => {
+      throw new Error("Unexpected readBinaryFile");
+    },
+    writeFile: () => {
+      throw new Error("Unexpected writeFile");
+    },
+    removePath: () => {
+      throw new Error("Unexpected removePath");
+    },
+    resolvePath: () => {
+      throw new Error("Unexpected resolvePath");
+    },
+  } satisfies SandboxSession & { id: string };
   return {
     backend: {
       open: () =>
         Promise.resolve({
           id: "sandbox-fixture",
-          session: {
-            id: "sandbox-fixture",
-            readTextFile: () => Promise.resolve(JSON.stringify({ basePath: "" })),
-            run,
-            spawn,
-            writeBinaryFile,
-            writeTextFile,
-          },
+          session,
           shutdown,
         }),
-    } as never,
+    },
     run,
     shutdown,
     spawn,

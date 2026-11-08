@@ -1,7 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Drizzle database requires the full schema.
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { productSourceReviewJournal } from "../db/schema";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import {
@@ -12,7 +10,7 @@ import {
 import type { OwnerAuthorizedSourceReviewJournal } from "./product-source-review-journal";
 
 export const createPostgresSourceReviewJournal = (input: {
-  db: PostgresJsDatabase<typeof databaseSchema>;
+  db: HostedDatabase;
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Exact forwarded authentication is validated at this boundary.
   sessionAuth: unknown;
   sessionId: string;

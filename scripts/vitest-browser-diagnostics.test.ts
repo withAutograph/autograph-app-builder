@@ -98,18 +98,18 @@ describe("Vitest browser failure diagnostics", () => {
     };
     let originalOpenCalls = 0;
     const provider: BrowserProvider = {
-      name: "playwright",
-      supportsParallelism: false,
-      openPage() {
-        originalOpenCalls += 1;
+      close() {
         return Promise.resolve();
       },
       getCommandsContext() {
         return { page };
       },
-      close() {
+      name: "playwright",
+      openPage() {
+        originalOpenCalls += 1;
         return Promise.resolve();
       },
+      supportsParallelism: false,
     };
     const reports: BrowserFailureDiagnostic[] = [];
     const probes: [string, number][] = [];

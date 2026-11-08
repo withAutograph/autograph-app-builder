@@ -4,11 +4,11 @@ import type { ApprovalReplayProgress } from "./postgres-hosted-checkpoint-histor
 import { runHistoricalApprovalReplay } from "./historical-approval-replay-orchestration";
 
 const principal = {
-  issuer: "https://identity.example",
   audience: "builder",
-  workspaceId: "workspace",
+  issuer: "https://identity.example",
   ownerUserId: "owner",
   scopes: ["autograph:get"],
+  workspaceId: "workspace",
 };
 const binding = {
   principal,
@@ -23,8 +23,8 @@ const checkpoint = {
   eventCount: 2,
 };
 const events: PublicEveEvent[] = [
-  { type: "status", status: "working", index: 0 },
-  { type: "status", status: "waiting", index: 1 },
+  { index: 0, status: "working", type: "status" },
+  { index: 1, status: "waiting", type: "status" },
 ];
 const stream = async function* stream(items: PublicEveEvent[]) {
   for (const item of items) {
@@ -56,23 +56,23 @@ const progress = (complete: boolean) => ({
     version: 1 as const,
   },
   privateApprovalCaptureState: {
-    sessionId: "session",
-    version: 1 as const,
     pendingRequests: [],
     receipts: [],
+    sessionId: "session",
+    version: 1 as const,
   },
 });
 const fixture = () => {
   const assertOwner = vi.fn(async () => {});
-  const persistPartial = vi.fn(() => Promise.resolve(true));
-  const publishVerified = vi.fn(() => Promise.resolve(true));
+  const persistPartial = vi.fn().mockResolvedValue(true);
+  const publishVerified = vi.fn().mockResolvedValue(true);
   return {
+    assertOwner,
     binding,
     checkpoint,
-    trustedEvents: () => stream(events),
-    assertOwner,
     persistPartial,
     publishVerified,
+    trustedEvents: () => stream(events),
   };
 };
 describe("historical approval replay orchestration", () => {
@@ -84,8 +84,8 @@ describe("historical approval replay orchestration", () => {
         ...f,
         observe: () =>
           Promise.resolve({
+            nativeTail: { complete: false, nativeTailIndex: 4, nextNativeIndex: 3 },
             progress: first,
-            nativeTail: { complete: false, nextNativeIndex: 3, nativeTailIndex: 4 },
           }),
       }),
     ).resolves.toEqual({ status: "partial" });
@@ -94,11 +94,11 @@ describe("historical approval replay orchestration", () => {
     const observe = vi.fn((prior: ApprovalReplayProgress | undefined) => {
       expect(prior).toEqual(first);
       return Promise.resolve({
+        nativeTail: { complete: true, nativeTailIndex: 4, nextNativeIndex: 5 },
         progress: progress(true),
-        nativeTail: { complete: true, nextNativeIndex: 5, nativeTailIndex: 4 },
       });
     });
-    await expect(runHistoricalApprovalReplay({ ...f, progress: first, observe })).resolves.toEqual({
+    await expect(runHistoricalApprovalReplay({ ...f, observe, progress: first })).resolves.toEqual({
       status: "ready",
     });
     expect(f.publishVerified).toHaveBeenCalledWith(progress(true), checkpoint);
@@ -125,23 +125,23 @@ describe("historical approval replay orchestration", () => {
           ...f,
           observe: () =>
             Promise.resolve({
+              nativeTail: { complete: true, nativeTailIndex: 4, nextNativeIndex: 5 },
               progress: p,
-              nativeTail: { complete: true, nextNativeIndex: 5, nativeTailIndex: 4 },
             }),
         }),
       ).rejects.toThrow();
     }
     const p = {
       ...progress(true),
-      events: [events[0], { type: "status" as const, status: "cancelled" as const, index: 1 }],
+      events: [events[0], { index: 1, status: "cancelled" as const, type: "status" as const }],
     };
     await expect(
       runHistoricalApprovalReplay({
         ...f,
         observe: () =>
           Promise.resolve({
+            nativeTail: { complete: true, nativeTailIndex: 4, nextNativeIndex: 5 },
             progress: p,
-            nativeTail: { complete: true, nextNativeIndex: 5, nativeTailIndex: 4 },
           }),
       }),
     ).rejects.toThrow("prefix mismatch");
@@ -155,8 +155,8 @@ describe("historical approval replay orchestration", () => {
         ...f,
         observe: () =>
           Promise.resolve({
+            nativeTail: { complete: true, nativeTailIndex: 4, nextNativeIndex: 5 },
             progress: progress(true),
-            nativeTail: { complete: true, nextNativeIndex: 5, nativeTailIndex: 4 },
           }),
       }),
     ).rejects.toThrow("checkpoint changed");
@@ -169,8 +169,8 @@ describe("historical approval replay orchestration", () => {
         ...f,
         observe: () =>
           Promise.resolve({
+            nativeTail: { complete: true, nativeTailIndex: 4, nextNativeIndex: 3 },
             progress: progress(false),
-            nativeTail: { complete: true, nextNativeIndex: 3, nativeTailIndex: 4 },
           }),
       }),
     ).rejects.toThrow("incomplete");

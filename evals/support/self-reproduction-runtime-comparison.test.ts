@@ -22,7 +22,7 @@ describe("live sandbox comparison", () => {
       artifactPaths: ["screenshots/root.png"],
       payload,
       script: "// evaluator",
-      session: session as never,
+      session,
     });
     expect(result.status).toBe("completed");
     expect(result.output).toEqual({ observations: [] });
@@ -42,7 +42,7 @@ describe("live sandbox comparison", () => {
       artifactPaths: ["missing.png", "present.png"],
       payload: {},
       script: "// evaluator",
-      session: session as never,
+      session,
     });
     expect(result.status).toBe("failed");
     expect(result.command.stderr).toBe("diagnostic stderr");
@@ -56,7 +56,7 @@ describe("live sandbox comparison", () => {
 
   it("never recovers earlier probe files when the next probe fails before writing", async () => {
     const files = new Map<string, string>();
-    const artifacts = new Map<string, Uint8Array>();
+    const artifacts = new Map<string, Buffer>();
     let invocation = 0;
     const session = {
       readBinaryFile: vi.fn(async ({ path }: { path: string }) => artifacts.get(path) ?? null),
@@ -71,7 +71,7 @@ describe("live sandbox comparison", () => {
           throw new Error("Comparison output path is missing.");
         }
         files.set(outputPath, JSON.stringify({ probe: invocation }));
-        artifacts.set(outputPath.replace("output.json", "capture.png"), new Uint8Array([1]));
+        artifacts.set(outputPath.replace("output.json", "capture.png"), Buffer.from([1]));
         return { exitCode: 0, stderr: "", stdout: "" };
       }),
       writeTextFile: vi.fn(async ({ path, content }: { path: string; content: string }) => {
@@ -83,7 +83,7 @@ describe("live sandbox comparison", () => {
       artifactPaths: ["capture.png"],
       payload: {},
       script: "// evaluator",
-      session: session as never,
+      session,
     };
     const first = await runSandboxRuntimeComparison(input);
     const second = await runSandboxRuntimeComparison(input);
@@ -108,7 +108,7 @@ describe("live sandbox comparison", () => {
         artifactPaths: ["../credential"],
         payload: {},
         script: "",
-        session: session as never,
+        session,
       }),
     ).rejects.toThrow("relative child path");
     expect(session.run).not.toHaveBeenCalled();

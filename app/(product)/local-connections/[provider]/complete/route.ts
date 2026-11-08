@@ -8,6 +8,7 @@ import {
   EMULATED_VERCEL_TEAM_ID,
 } from "@/lib/integrations/provider-emulation-seed";
 
+const INVALID_REQUEST = "Invalid request";
 const allowed = new Set(["vercel", "github"]);
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -56,13 +57,13 @@ export async function POST(request: Request, context: { params: Promise<{ provid
     state.length > 2048 ||
     (phase !== null && phase !== "authorize")
   ) {
-    return new Response("Invalid request", { status: 400 });
+    return new Response(INVALID_REQUEST, { status: 400 });
   }
   const callback = new URL(`/${provider}/installations/callback`, origin);
   callback.searchParams.set("state", state);
   if (provider === "vercel") {
     if (phase !== null) {
-      return new Response("Invalid request", { status: 400 });
+      return new Response(INVALID_REQUEST, { status: 400 });
     }
     const relay = signLocalVercelRelay(
       {
@@ -116,7 +117,7 @@ export async function POST(request: Request, context: { params: Promise<{ provid
       !/^[A-Za-z0-9_-]{43}$/u.test(codeChallenge) ||
       codeChallengeMethod !== "S256"
     ) {
-      return new Response("Invalid request", { status: 400 });
+      return new Response(INVALID_REQUEST, { status: 400 });
     }
     const response = await providerEmulationFetch(
       new URL(`${emulation.githubOrigin}/login/oauth/callback`),

@@ -41,22 +41,27 @@ const { values } = parseArgs({
   },
   strict: true,
 });
-if (values.help) {
+const hasNonemptyOption = (value: string | undefined): value is string =>
+  value !== undefined && value !== "";
+if (values.help === true) {
   console.log(
     "Submit a product brief through public MCP. --endpoint URL --output-dir PATH [--brief-file PATH | --start-file PATH] [--resume] [--responses-file PATH | --message-file PATH] [--timeout-ms 120000] [--poll-ms 2000]. start-file contains an exact existing autograph_start input, including its clientRequestId. Hosted calls may use APP_BUILDER_PUBLIC_MCP_TOKEN from the server-side environment; it is never persisted. Responses file is an array of exact {requestId,response} entries. No approvals are inferred. Resume uses the same original start, session and idempotency keys. Comparison remains separate. Preview capture starts automatically; --no-preview-observation disables it.",
   );
   process.exit(0);
 }
-if (!values.endpoint || !values["output-dir"]) {
+if (!hasNonemptyOption(values.endpoint) || !hasNonemptyOption(values["output-dir"])) {
   throw new Error("--endpoint and --output-dir are required");
 }
-if (values["message-file"] && !values.resume) {
+if (hasNonemptyOption(values["message-file"]) && !values.resume) {
   throw new Error("--message-file requires --resume");
 }
-if (values["brief-file"] && values["start-file"]) {
+if (hasNonemptyOption(values["brief-file"]) && hasNonemptyOption(values["start-file"])) {
   throw new Error("Choose one brief file or exact public start file.");
 }
-if (values.resume && (values["brief-file"] || values["start-file"])) {
+if (
+  values.resume &&
+  (hasNonemptyOption(values["brief-file"]) || hasNonemptyOption(values["start-file"]))
+) {
   throw new Error(
     "Resume uses the saved original start request; do not replace it with a new brief or start file.",
   );
@@ -94,7 +99,7 @@ if (existsSync(path) !== values.resume) {
   );
 }
 const newState = (endpoint: string): PublicState => {
-  const originalStart = values["start-file"]
+  const originalStart = hasNonemptyOption(values["start-file"])
     ? parsePublicStartFile(readFileSync(values["start-file"], "utf-8"))
     : parsePublicStartFile(
         JSON.stringify({
@@ -174,14 +179,16 @@ save();
 try {
   const transport = await makePublicTransport(
     values.endpoint,
-    (record) => recordPublicObservation(output, record),
+    (record) => {
+      recordPublicObservation(output, record);
+    },
     timeoutMs,
     { bearerToken: process.env.APP_BUILDER_PUBLIC_MCP_TOKEN },
   );
-  const responses = values["responses-file"]
+  const responses = hasNonemptyOption(values["responses-file"])
     ? (JSON.parse(readFileSync(values["responses-file"], "utf-8")) as Responses)
     : undefined;
-  const message = values["message-file"]
+  const message = hasNonemptyOption(values["message-file"])
     ? readFileSync(values["message-file"], "utf-8")
     : undefined;
   await runPublicSession({

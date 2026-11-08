@@ -98,14 +98,14 @@ const fixture = () => {
       assetSha256: "9".repeat(64),
       catalogFingerprint: "b".repeat(64),
       database: "auth",
+      observedAt: "2026-11-03T00:00:00Z",
       runtimeRole: "auth_runtime",
       targetDigest: sourcePlan.authSchema?.targetDigest,
-      observedAt: "2026-11-03T00:00:00Z",
     },
     receipts: sourcePlan.effects.map((effect) => ({
       effectId: effect.id,
-      resourceVersion: "observed",
       observedAt: "2026-11-03T00:00:00Z",
+      resourceVersion: "observed",
     })),
   });
   const config = { tokenKey: Buffer.alloc(32, 9), tokenKeyVersion: "fixture" };
@@ -126,11 +126,11 @@ const fixture = () => {
     operator: {
       approvalId: retained.approvalId,
       authPreparation: retained.authPreparation,
+      mode: "protected-operator-v1",
       operationRef: retained.operationRef,
       plan: sourcePlan,
       planDigest: retained.planDigest,
       receipts: retained.receipts,
-      mode: "protected-operator-v1",
     },
   });
   const source: ResourceCredentialInput = { authority, config, plan: sourcePlan, target, record };
@@ -151,16 +151,16 @@ const fixture = () => {
   });
   const nextPlan = hostedOperatorPlanSchema.parse({
     ...sourcePlan,
-    selection: { ...sourcePlan.selection, sessionId: nextTarget.sessionId },
     existingResources: reference,
+    selection: { ...sourcePlan.selection, sessionId: nextTarget.sessionId },
   });
   const nextRecord = hostedRuntimeJournalRecordSchema.parse({
-    version: 1,
+    approvedByCallId: "new-current-approval",
     kind: "app-runtime",
     request: nextTarget,
     status: "pending",
     step: "reserved",
-    approvedByCallId: "new-current-approval",
+    version: 1,
   });
   const targetInput: ResourceCredentialInput = {
     authority,

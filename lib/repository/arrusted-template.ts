@@ -62,7 +62,12 @@ async function acquisitionStage<T>(
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function receiptReadinessDigest(input: Record<string, unknown>) {
+function receiptReadinessDigest(
+  input: Pick<
+    Awaited<ReturnType<typeof readSandboxGitHubSourceSnapshot>>,
+    "sourceSha" | "sourceTree"
+  >,
+) {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }
 
@@ -85,6 +90,10 @@ try {
 } catch { process.exit(2); }
 `;
 const quoteAcquisitionProgram = (text: string) => `'${text.replaceAll("'", "'\"'\"'")}'`;
+const fail = () =>
+  new Error(
+    "Fresh canonical source must match the observed origin/main commit and tree. Preserve this checkout and select a new source acquisition; no saved receipt was changed.",
+  );
 const assertNewCanonicalMain = async (
   sandbox: SandboxSession,
   snapshot: { sourceSha: string; sourceTree: string },
@@ -93,10 +102,6 @@ const assertNewCanonicalMain = async (
     command: `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_NO_REPLACE_OBJECTS=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 node -e ${quoteAcquisitionProgram(canonicalMainAcquisitionProofProgram())}`,
     workingDirectory: "/workspace",
   });
-  const fail = () =>
-    new Error(
-      "Fresh canonical source must match the observed origin/main commit and tree. Preserve this checkout and select a new source acquisition; no saved receipt was changed.",
-    );
   if (result.exitCode !== 0) throw fail();
   let raw: unknown;
   try {
@@ -113,8 +118,8 @@ const assertNewCanonicalMain = async (
       originMatches: z.literal(true),
     })
     .safeParse(raw);
+  if (!proof.success) throw fail();
   if (
-    !proof.success ||
     proof.data.sourceSha !== snapshot.sourceSha ||
     proof.data.sourceTree !== snapshot.sourceTree ||
     proof.data.sourceSha !== proof.data.mainSha ||
@@ -197,12 +202,15 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
       cause: error,
     });
   }
-  if (
+  const invalidSourceIdentity =
     receipt.sourcePath !== SANDBOX_WORKSPACE ||
     receipt.provenance.repository !== ARRUSTED_TEMPLATE_REPOSITORY ||
-    receipt.provenance.ref !== ARRUSTED_TEMPLATE_REF ||
-    !SHA.test(receipt.sourceSha) ||
-    !SHA.test(receipt.sourceTree) ||
+    receipt.provenance.ref !== ARRUSTED_TEMPLATE_REF;
+  const invalidSourceCommit =
+    !invalidSourceIdentity && (!SHA.test(receipt.sourceSha) || !SHA.test(receipt.sourceTree));
+  if (
+    invalidSourceIdentity ||
+    invalidSourceCommit ||
     !DIGEST.test(receipt.eligibilityDigest) ||
     !DIGEST.test(receipt.provenance.readinessDigest)
   ) {
@@ -212,9 +220,11 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
   if (observed === undefined) {
     throw new Error("The canonical Arrusted workspace is missing.");
   }
-  if (
+  const workspaceMismatch =
     observed.workspaceId !== getBuilderSandboxId(input.sandbox) ||
-    observed.sourcePath !== SANDBOX_WORKSPACE ||
+    observed.sourcePath !== SANDBOX_WORKSPACE;
+  if (
+    workspaceMismatch ||
     observed.sourceSha !== receipt.sourceSha ||
     observed.sourceTree !== receipt.sourceTree ||
     observed.eligibilityDigest !== receipt.eligibilityDigest
@@ -269,10 +279,12 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
       throw new Error("The prepared source workspace is missing.");
     }
     observed = status.workspace;
-    if (
+    const sourceMismatch =
       observed.workspaceId !== getBuilderSandboxId(input.sandbox) ||
       observed.sourcePath !== receipt.sourcePath ||
-      observed.sourceSha !== receipt.sourceSha ||
+      observed.sourceSha !== receipt.sourceSha;
+    if (
+      sourceMismatch ||
       observed.sourceTree !== receipt.sourceTree ||
       (input.expectedWorkspace !== undefined &&
         !samePreparedWorkspaceSourceContext(observed, input.expectedWorkspace))
@@ -281,12 +293,16 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
     }
     return observed;
   }
-  if (
+  const sourceMismatch =
     observed.workspaceId !== getBuilderSandboxId(input.sandbox) ||
     observed.sourcePath !== receipt.sourcePath ||
-    observed.sourceSha !== receipt.sourceSha ||
+    observed.sourceSha !== receipt.sourceSha;
+  const invalidSource =
+    sourceMismatch ||
     observed.sourceTree !== receipt.sourceTree ||
-    observed.eligibilityDigest !== receipt.eligibilityDigest ||
+    observed.eligibilityDigest !== receipt.eligibilityDigest;
+  if (
+    invalidSource ||
     (input.expectedWorkspace !== undefined &&
       JSON.stringify(observed) !== JSON.stringify(input.expectedWorkspace))
   ) {

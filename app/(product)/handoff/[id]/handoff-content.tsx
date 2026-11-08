@@ -13,6 +13,12 @@ import handoffStyles from "../../../ui/handoff.module.css";
 
 type HandoffIntent = NonNullable<Awaited<ReturnType<typeof getBuilderHandoffPageData>>>["intent"];
 
+const handoffSignInUrl = (id: string) => {
+  const encodeCallback = encodeURIComponent;
+  const callbackPath = `/handoff/${encodeURIComponent(id)}`;
+  return `/auth/sign-in?callbackURL=${encodeCallback(callbackPath)}`;
+};
+
 const GitHubResource = ({ intent, returnTo }: { intent: HandoffIntent; returnTo: string }) => {
   const github = intent.provisioning?.github;
   const skipped = github?.status === "skipped" && github.code === "not_selected";
@@ -68,20 +74,14 @@ export async function HandoffContent({ params }: { params: Promise<{ id: string 
               Use the same Autograph account and workspace as the web form. If you are already
               signed into that account, try reloading this page.
             </p>
-            <Link
-              href={`/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${encodeURIComponent(id)}`)}`}
-            >
-              Sign in with the same account
-            </Link>
+            <Link href={handoffSignInUrl(id)}>Sign in with the same account</Link>
           </section>
         </main>
       </div>
     );
   }
   if (!data) {
-    redirect(
-      `/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${encodeURIComponent(id)}`)}`,
-    );
+    redirect(handoffSignInUrl(id));
   }
   const { intent, ...controls } = data;
   const vercel = intent.provisioning?.vercel;

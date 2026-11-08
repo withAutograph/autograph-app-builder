@@ -232,8 +232,11 @@ export function createAutographMcpHandler(
   service: EveSessionService,
   options: { requestUrl?: string; advertiseOauth?: boolean; appAccessOrigin?: string } = {},
 ) {
-  const toolAuthMeta = (_operation: string, meta: Record<string, unknown> = {}) => {
-    if (options.advertiseOauth) {
+  const toolAuthMeta = (
+    _operation: string,
+    meta: { ui?: { visibility: ("model" | "app")[] } } = {},
+  ) => {
+    if (options.advertiseOauth === true) {
       return {
         _meta: {
           ...meta,
@@ -498,17 +501,15 @@ const publicDiscoveryMethods = new Set([
 async function isPublicDiscoveryRequest(request: Request): Promise<boolean> {
   try {
     const body: unknown = await request.clone().json();
-    const messages = Array.isArray(body) ? body : [body];
+    const messages: unknown[] = Array.isArray(body) ? body : [body];
     return (
       messages.length > 0 &&
-      messages.every(
-        (message) =>
-          typeof message === "object" &&
-          message !== null &&
-          "method" in message &&
-          typeof message.method === "string" &&
-          publicDiscoveryMethods.has(message.method),
-      )
+      messages.every((message) => {
+        if (typeof message !== "object" || message === null || !("method" in message)) {
+          return false;
+        }
+        return typeof message.method === "string" && publicDiscoveryMethods.has(message.method);
+      })
     );
   } catch {
     return false;
@@ -638,13 +639,18 @@ async function hostedServiceForRequest(
     return notFoundResponse();
   }
 
-  const service = createHostedEveSessionService({
+  const serviceBinding: Pick<
+    Parameters<typeof createHostedEveSessionService>[0],
+    "principal" | "store" | "transport" | "beforeRead"
+  > = {
     principal,
     store: runtime.store,
     transport: runtime.transport,
-    ...(runtime.beforeRead === undefined ? {} : { beforeRead: runtime.beforeRead }),
-    now: runtime.now,
-  });
+  };
+  if (runtime.beforeRead !== undefined) {
+    serviceBinding.beforeRead = runtime.beforeRead;
+  }
+  const service = createHostedEveSessionService({ ...serviceBinding, now: runtime.now });
   return runtime.handoffs === undefined
     ? service
     : withHostedBuilderHandoffs({

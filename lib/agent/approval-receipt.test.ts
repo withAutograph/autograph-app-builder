@@ -12,7 +12,6 @@ import {
   assertApprovalReceipt,
   publicApprovalDescription,
 } from "./approval-receipt";
-import type { ImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
 
 const receipt = {
   baseRef: "refs/heads/main",
@@ -51,7 +50,7 @@ describe("approval receipt", () => {
     },
     resolvedRef: receipt.baseRef,
     resolvedSha: receipt.baseSha,
-  } as ImmutableGitHubSourceReceipt;
+  };
   it("accepts one closed canonical receipt and its exact target", () => {
     expect(approvalReceiptSchema.parse(receipt)).toEqual(receipt);
     expect(approvalTarget(receipt)).toEqual({
@@ -83,7 +82,7 @@ describe("approval receipt", () => {
       name: "arrusted-development",
       owner: "withAutograph",
       repositoryId: receipt.repositoryId,
-    } as Parameters<typeof approvalTargetFromExistingDraftUpdate>[0];
+    };
     const target = approvalTargetFromExistingDraftUpdate(proposal);
     const updateReceipt = {
       ...receipt,

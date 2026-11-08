@@ -190,14 +190,14 @@ describe("prepared Preview release planning", () => {
       appDatabase: {
         database: "app",
         migratorRole: "app_owner",
-        runtimeRole: "app_runtime",
         resourceId: "app-resource",
+        runtimeRole: "app_runtime",
       },
       authDatabase: {
         database: "auth",
         migratorRole: "auth_owner",
-        runtimeRole: "auth_runtime",
         resourceId: "auth-resource",
+        runtimeRole: "auth_runtime",
       },
       cost: { class: "shared-recovery-group", description: "Approved Preview", owner: "owner" },
       delivery: {
@@ -207,11 +207,11 @@ describe("prepared Preview release planning", () => {
         repoId: published.publishedSource.repositoryId,
       },
       effects: [
-        { id: "resources", kind: "resources", description: "Observe owned resources" },
-        { id: "install", kind: "install", description: "Observe prepared release" },
-        { id: "access", kind: "access", description: "Observe approved access" },
-        { id: "bindings", kind: "bindings", description: "Observe owned bindings" },
-        { id: "delivery", kind: "delivery", description: "Observe approved publication" },
+        { description: "Observe owned resources", id: "resources", kind: "resources" },
+        { description: "Observe prepared release", id: "install", kind: "install" },
+        { description: "Observe approved access", id: "access", kind: "access" },
+        { description: "Observe owned bindings", id: "bindings", kind: "bindings" },
+        { description: "Observe approved publication", id: "delivery", kind: "delivery" },
       ],
       installer: { reference: "worker", sha256: "6".repeat(64) },
       neon: {
@@ -313,9 +313,9 @@ describe("prepared Preview release planning", () => {
         appSpecDigest: selected.appSpecDigest,
         artifactRef: selected.artifactRef,
         publishedSource: {
-          repositoryId: f.published.publishedSource.repositoryId,
           branch: target.branch,
           gitSha: f.published.publishedSource.gitSha,
+          repositoryId: f.published.publishedSource.repositoryId,
         },
       },
     );
@@ -364,7 +364,7 @@ describe("prepared Preview release planning", () => {
   });
   it("denies a foreign prepared target before artifact access", async () => {
     const f = preparedFixture();
-    const operator = f.row.record.operator;
+    const { operator } = f.row.record;
     if (operator === undefined) {
       throw new Error("Missing prepared operator");
     }
@@ -375,7 +375,7 @@ describe("prepared Preview release planning", () => {
   });
   it("allows compatible legacy app stage and harmless journal progress metadata", async () => {
     const f = preparedFixture();
-    const operator = f.row.record.operator;
+    const { operator } = f.row.record;
     if (operator === undefined) {
       throw new Error("Missing prepared operator");
     }
@@ -393,7 +393,7 @@ describe("prepared Preview release planning", () => {
   it("rechecks the exact prepared journal after immutable artifact reads", async () => {
     const f = preparedFixture();
     const result = await restore(f);
-    const operator = f.row.record.operator;
+    const { operator } = f.row.record;
     if (operator === undefined) {
       throw new Error("Missing prepared operator");
     }

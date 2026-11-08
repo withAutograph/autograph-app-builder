@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { HOSTED_MANAGED_SKILL_CONTENTS } from "../sandbox/hosted-managed-seeds.generated";
 
 import {
@@ -30,9 +31,13 @@ describe("app-creation skill export", () => {
       ]),
     );
     const repositoryRoot = path.resolve(import.meta.dirname, "../..");
-    const lock = JSON.parse(
-      readFileSync(path.join(repositoryRoot, "agent/vercel-next-workflows.lock.json"), "utf-8"),
-    ) as { revision: string; skills: Record<string, string> };
+    const lock = z
+      .object({ revision: z.string(), skills: z.record(z.string(), z.string()) })
+      .parse(
+        JSON.parse(
+          readFileSync(path.join(repositoryRoot, "agent/vercel-next-workflows.lock.json"), "utf-8"),
+        ),
+      );
     expect(lock.revision).toMatch(/^[0-9a-f]{40}$/u);
     for (const skill of Object.keys(lock.skills)) {
       expect(APP_CREATION_SKILL_ROOTS).toContain(skill);

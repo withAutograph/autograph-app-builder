@@ -26,7 +26,7 @@ function canonicalSelector(value: string) {
   let quote: string | undefined;
   for (let index = 0; index < value.length; index += 1) {
     const char = value.charAt(index);
-    if (quote) {
+    if (quote !== undefined) {
       output += char;
       if (char === quote && value[index - 1] !== "\\") {
         quote = undefined;
@@ -48,7 +48,7 @@ function canonicalSelector(value: string) {
     }
     if (pendingSpace) {
       const previous = output.at(-1);
-      if (previous && !/[>+~([,:=]/u.test(previous) && !/[>+~),:=]/u.test(char)) {
+      if (previous !== undefined && !/[>+~([,:=]/u.test(previous) && !/[>+~),:=]/u.test(char)) {
         output += " ";
       }
     }
@@ -100,7 +100,7 @@ export function collectCssRuleEvidence(files: CssSourceFile[]): CssRuleEvidence[
       const declarations =
         rule.nodes?.filter((node): node is Declaration => node.type === "decl") ?? [];
       const signature = ruleSignature(rule.selector, declarations);
-      if (!signature) {
+      if (signature === undefined) {
         return;
       }
       for (const declaration of declarations) {
@@ -145,7 +145,8 @@ export function generatedCssRule(
       value: declaration.value,
     })),
   );
-  const loaded = actual ? matchingGenerated.filter((rule) => rule.ruleSignature === actual) : [];
+  const loaded =
+    actual === undefined ? [] : matchingGenerated.filter((rule) => rule.ruleSignature === actual);
   const matchingShared = shared.filter(
     (rule) => key(rule.selector, rule.property, rule.value) === tuple,
   );

@@ -150,6 +150,8 @@ export type TargetValidationResult =
   | { ok: true; receipt: TargetValidationReceipt }
   | { ok: false; receipt: TargetValidationFailureReceipt };
 
+const validationCommandEvent = "app_builder.validation_command";
+
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
 const ansiPattern = new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, "gu");
@@ -184,10 +186,11 @@ export const validationOutputExcerpt = (
       const isRepairLine = repairLinePattern.test(line);
       const isFormatterSummary = formatterFailureSummaryPattern.test(line);
       const filename = formatterTimingLinePattern.exec(line)?.groups?.filename?.trim();
-      const isFormatterFileTiming =
-        hasFormatterFailure &&
-        filename !== undefined &&
-        (filename.includes("/") || filename.includes("\\") || /\.[^.\s]+$/u.test(filename));
+      let isFormatterFileTiming = false;
+      if (hasFormatterFailure && filename !== undefined) {
+        isFormatterFileTiming =
+          filename.includes("/") || filename.includes("\\") || /\.[^.\s]+$/u.test(filename);
+      }
       if (!isRepairLine && !isFormatterSummary && !isFormatterFileTiming) {
         continue;
       }
@@ -477,9 +480,16 @@ export const sandboxValidationCommandExecutor =
       command === repositoryDeliveryBuildCommand(appId, options?.alreadyCompiled);
     const shard = isDeliveryBuild ? undefined : command.split(" ").at(-1);
     if (options?.runtime && !isDeliveryBuild) {
-      return await options.runtime.runTask({
+      const { runtime } = options;
+      const runTask = runtime.runTask.bind(runtime);
+      const task: Pick<Parameters<typeof runTask>[0], "task" | "alreadyCompiled"> = {
         task: "repository-test",
-        ...(options.alreadyCompiled === true ? { alreadyCompiled: true } : {}),
+      };
+      if (options.alreadyCompiled === true) {
+        task.alreadyCompiled = true;
+      }
+      return await runTask({
+        ...task,
         environment,
         shard,
         onChunk,
@@ -487,7 +497,7 @@ export const sandboxValidationCommandExecutor =
       });
     }
     const environmentPath = localRuntimeEnvironmentPath(validationRoot, appId);
-    const env = {
+    const env: NonNullable<Parameters<SandboxSession["run"]>[0]["env"]> = {
       ...Object.fromEntries(
         Object.entries(environment ?? {}).filter(
           (entry): entry is [string, string] =>
@@ -497,8 +507,10 @@ export const sandboxValidationCommandExecutor =
         ),
       ),
       APP_RUNTIME_STATE_DIR: nodePath.posix.dirname(environmentPath),
-      ...(options?.alreadyCompiled === true ? { APP_RUNTIME_ALREADY_COMPILED: "1" } : {}),
     };
+    if (options?.alreadyCompiled === true) {
+      env.APP_RUNTIME_ALREADY_COMPILED = "1";
+    }
     const executionCommand = `(
 set -e
 (
@@ -514,12 +526,16 @@ cat "$log"
 rm -f "$log"
 exit "$status"`;
     if (onChunk === undefined) {
-      return await sandbox.run({
+      const run = sandbox.run.bind(sandbox);
+      const commandInput: Parameters<SandboxSession["run"]>[0] = {
         command: detachedCommand,
         env,
         workingDirectory: validationRoot,
-        ...(abortSignal === undefined ? {} : { abortSignal }),
-      });
+      };
+      if (abortSignal !== undefined) {
+        commandInput.abortSignal = abortSignal;
+      }
+      return await run(commandInput);
     }
     const process = await sandbox.spawn({
       abortSignal,
@@ -588,7 +604,7 @@ const failureReceipt = (
   diagnostics?: readonly TargetValidationDiagnostic[],
   output?: TargetValidationOutputExcerpt,
 ): TargetValidationFailureReceipt => {
-  const unsigned = {
+  const unsigned: Omit<TargetValidationFailureReceipt, "digest"> = {
     version: 3 as const,
     ...attemptBinding(attempt),
     attemptDigest: attempt.digest,
@@ -597,10 +613,10 @@ const failureReceipt = (
     recoveryRequired: true as const,
     status: "failed" as const,
     validatedByCallId: attempt.startedByCallId,
-    ...(commandFailure === undefined ? {} : { commandFailure }),
-    ...(diagnostics === undefined || diagnostics.length === 0 ? {} : { diagnostics }),
-    ...(output === undefined ? {} : { output }),
   };
+  if (commandFailure !== undefined) unsigned.commandFailure = commandFailure;
+  if (diagnostics !== undefined && diagnostics.length !== 0) unsigned.diagnostics = diagnostics;
+  if (output !== undefined) unsigned.output = output;
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
 };
 
@@ -667,7 +683,7 @@ export const executeProposalBoundValidation = (input: {
         JSON.stringify({
           callId: input.attempt.startedByCallId,
           command: planned.name,
-          event: "app_builder.validation_command",
+          event: validationCommandEvent,
           phase: "started",
           startedAt,
         }),
@@ -702,7 +718,7 @@ export const executeProposalBoundValidation = (input: {
           callId: input.attempt.startedByCallId,
           command: planned.name,
           elapsedMs,
-          event: "app_builder.validation_command",
+          event: validationCommandEvent,
           exitCode: result.exitCode,
           finishedAt,
           phase: "finished",
@@ -717,7 +733,7 @@ export const executeProposalBoundValidation = (input: {
           command: planned.name,
           elapsedMs: Math.round(performance.now() - startedMonotonic),
           errorName: error instanceof Error ? error.name : "non_error_rejection",
-          event: "app_builder.validation_command",
+          event: validationCommandEvent,
           finishedAt: new Date().toISOString(),
           phase: "provider_error",
           startedAt,
@@ -748,49 +764,50 @@ export const executeProposalBoundValidation = (input: {
         ),
       };
     }
-    const commandReceipt = {
+    const commandReceipt: TargetValidationCommandReceipt = {
       ...planned,
       exitCode: result.exitCode,
       inputTreeDigest: input.apply.postTreeDigest,
       stderrDigest: durableOutput?.stderr.reference.digest ?? sha256(result.stderr),
       stdoutDigest: durableOutput?.stdout.reference.digest ?? sha256(result.stdout),
-      ...(durableOutput === undefined
-        ? {}
-        : {
-            logs: {
-              stderr: durableOutput.stderr.reference,
-              stdout: durableOutput.stdout.reference,
-            },
-          }),
     };
+    if (durableOutput !== undefined) {
+      commandReceipt.logs = {
+        stderr: durableOutput.stderr.reference,
+        stdout: durableOutput.stdout.reference,
+      };
+    }
     commands.push(commandReceipt);
     if (result.exitCode !== 0) {
+      const { attempt } = input;
+      const reason =
+        toolingFailure.classification() === undefined ? "command-failed" : "tooling-prerequisite";
+      const commandFailure: NonNullable<TargetValidationFailureReceipt["commandFailure"]> = {
+        exitCode: result.exitCode,
+        name: planned.name,
+      };
+      if (toolingFailure.classification() !== undefined) {
+        commandFailure.failureClass = toolingFailure.classification();
+        commandFailure.hint =
+          toolingFailure.classification() === "missing-app-task"
+            ? missingAppTaskHint
+            : toolingFailureHint;
+      }
+      if (
+        /(?:script not found|missing script|task .* not found)/iu.test(
+          `${result.stderr}\n${result.stdout}`,
+        )
+      ) {
+        commandFailure.hint =
+          "The repository app task is unavailable. Check the supported mise task and app package scripts before retrying.";
+      }
       return {
         ok: false,
         receipt: failureReceipt(
-          input.attempt,
+          attempt,
           commands,
-          toolingFailure.classification() === undefined ? "command-failed" : "tooling-prerequisite",
-          {
-            exitCode: result.exitCode,
-            name: planned.name,
-            ...(toolingFailure.classification() === undefined
-              ? {}
-              : {
-                  failureClass: toolingFailure.classification(),
-                  hint:
-                    toolingFailure.classification() === "missing-app-task"
-                      ? missingAppTaskHint
-                      : toolingFailureHint,
-                }),
-            ...(/(?:script not found|missing script|task .* not found)/iu.test(
-              `${result.stderr}\n${result.stdout}`,
-            )
-              ? {
-                  hint: "The repository app task is unavailable. Check the supported mise task and app package scripts before retrying.",
-                }
-              : {}),
-          },
+          reason,
+          commandFailure,
           compilerDiagnostics(
             `${durableOutput?.stderr.excerpt ?? result.stderr}\n${durableOutput?.stdout.excerpt ?? result.stdout}`,
           ),

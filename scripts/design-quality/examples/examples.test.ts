@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import {
   calculateCompensation,
@@ -20,15 +21,50 @@ import {
 import type { SpendFixture } from "./spend-import-state";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function fixture<T>(id: string): Promise<T> {
-  return JSON.parse(
-    await readFile(path.resolve(`docs/design-quality-cases/${id}/fixtures.json`), "utf-8"),
-  ) as T;
+async function fixture<T>(id: string, schema: z.ZodType<T>): Promise<T> {
+  return schema.parse(
+    JSON.parse(
+      await readFile(path.resolve(`docs/design-quality-cases/${id}/fixtures.json`), "utf-8"),
+    ),
+  );
 }
+
+const spendFixtureSchema: z.ZodType<SpendFixture> = z.looseObject({
+  fieldMapping: z.record(z.string(), z.string()),
+  import: z.looseObject({ batchId: z.string(), rows: z.number() }),
+  preview: z.looseObject({ creates: z.number(), needsReview: z.number() }),
+  representativeRows: z.array(
+    z.looseObject({
+      id: z.string(),
+      issue: z.string().optional(),
+      source: z.record(z.string(), z.union([z.string(), z.number()])),
+    }),
+  ),
+  uncertainMatches: z.array(
+    z.looseObject({
+      amount: z.number(),
+      candidates: z.array(z.looseObject({ id: z.string(), label: z.string() })),
+      currency: z.string(),
+      id: z.string(),
+      sourceRef: z.string(),
+      transactionDate: z.string(),
+      vendorRaw: z.string(),
+    }),
+  ),
+});
+const compensationFixtureSchema: z.ZodType<CompensationFixture> = z.looseObject({
+  comparison: z.looseObject({ bandMidpoint: z.number(), plannedIncrease: z.number() }),
+  proposal: z.looseObject({
+    annualBenefits: z.number(),
+    baseSalary: z.number(),
+    employerTaxRate: z.number(),
+    targetBonus: z.number(),
+  }),
+});
 
 describe("spend import example", () => {
   it("derives preview rows and the saved outcome from the edited mapping", async () => {
-    const data = await fixture<SpendFixture>("spend-import-review");
+    const data = await fixture("spend-import-review", spendFixtureSchema);
     let state = initialSpendState(data);
     expect(deriveSpendPreview(data, state.mapping)).toMatchObject({
       needsReview: 4,
@@ -58,7 +94,7 @@ describe("spend import example", () => {
   });
 
   it("keeps decision state, counts, visible result, and action availability synchronized", async () => {
-    const data = await fixture<SpendFixture>("spend-import-review");
+    const data = await fixture("spend-import-review", spendFixtureSchema);
     let state = initialSpendState(data);
     state = reduceSpendState(state, { type: "preview-requested" });
     state = reduceSpendState(state, { fixture: data, type: "save-requested" });
@@ -83,7 +119,7 @@ describe("spend import example", () => {
 
 describe("compensation planning example", () => {
   it("recalculates current and proposed totals from editable assumptions", async () => {
-    const data = await fixture<CompensationFixture>("compensation-planning");
+    const data = await fixture("compensation-planning", compensationFixtureSchema);
     let state = initialCompensationState(data);
     expect(calculateCompensation(state.assumptions)).toMatchObject({
       currentTotal: 204_428,
@@ -109,7 +145,7 @@ describe("compensation planning example", () => {
   });
 
   it("requires valid applied assumptions before a planning decision", async () => {
-    const data = await fixture<CompensationFixture>("compensation-planning");
+    const data = await fixture("compensation-planning", compensationFixtureSchema);
     let state = initialCompensationState(data);
     state = reduceCompensationState(state, { type: "recommend" });
     expect(state.decision).toBe("recommended");

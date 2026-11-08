@@ -1,7 +1,6 @@
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { describe, expect, it, vi } from "vitest";
 
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import type { HostedWorkloadIdentity } from "../eve/same-origin-http";
 import { createDeploymentMcpRequestHandler, readHostedDeploymentConfig } from "./hosted-route";
 
@@ -28,7 +27,7 @@ const workloadIdentity: HostedWorkloadIdentity = {
   },
 };
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function request() {
@@ -85,7 +84,9 @@ describe("hosted route composition", () => {
         { ...environment, MCP_RESOURCE_URL: "http://local/mcp" },
         { ...environment, EVE_HOSTED_VERCEL_ENVIRONMENT: "production" },
       ].map(async (invalidEnvironment) => {
-        const openDatabase = vi.fn(() => ({}) as unknown as Database);
+        const openDatabase = vi.fn((): Database => {
+          throw new Error("Invalid configuration must not open the database.");
+        });
         const handler = createDeploymentMcpRequestHandler({
           environment: invalidEnvironment,
           now: () => nowEpochMs,

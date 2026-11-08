@@ -6,6 +6,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { test } from "vitest";
 
+const originalCallId = "original-call";
 const require = createRequire(import.meta.url);
 const sdk = path.dirname(require.resolve("eve/package.json"));
 const { recoverTerminalSession } = await import(
@@ -47,10 +48,10 @@ const fixture = () => {
   };
   const state = {
     calls: [],
-    receipt: undefined,
-    hook: undefined,
     denied: false,
+    hook: undefined,
     options: undefined,
+    receipt: undefined,
   };
   const ports = {
     async authorize() {
@@ -59,39 +60,47 @@ const fixture = () => {
         throw new Error("authority revoked");
       }
     },
-    async readReceipt() {
-      state.calls.push("read-receipt");
-      return state.receipt;
+    async authorizeActivation() {
+      throw new Error("unexpected activation");
     },
     async commitReceipt({ recoveryBinding }) {
       state.calls.push("commit");
       state.receipt = recoveryBinding;
       return recoveryBinding;
     },
-    async authorizeActivation() {
-      throw new Error("unexpected activation");
+    async readReceipt() {
+      state.calls.push("read-receipt");
+      return state.receipt;
     },
   };
   const deps = {
     async collect({ binding, authorizeOwner }) {
       state.calls.push("collect");
       await authorizeOwner(binding);
-      return { kind: "candidate", candidate: payload };
+      return { candidate: payload, kind: "candidate" };
     },
+    async getHook() {
+      if (state.hook === undefined) {
+        throw new Error("hook missing");
+      }
+      return state.hook;
+    },
+    isHookNotFound: (error) => error.message === "hook missing",
+    now: () => 0,
     readCandidate: (candidate) => candidate,
-    async reconcile(candidate, options) {
-      assert.equal(candidate, payload);
-      state.calls.push("reconcile");
-      state.options = options;
-      return options?.repeatableCallIds?.includes("original-call") === true
-        ? { kind: "ready", checkpointCore, provenance: { selectedOrigin: origin } }
-        : { kind: "uncertain", reason: "approval-transcript-unavailable" };
-    },
     async readEntry() {
       return {
         kind: "handoff",
         checkpoint: { sessionTimeoutMs: false, capabilities: { original: true } },
       };
+    },
+    async reconcile(candidate, options) {
+      assert.equal(candidate, payload);
+      state.calls.push("reconcile");
+      state.options = options;
+      return options?.repeatableCallIds?.includes(originalCallId) === true
+        ? { kind: "ready", checkpointCore, provenance: { selectedOrigin: origin } }
+        : { kind: "uncertain", reason: "approval-transcript-unavailable" };
     },
     async start(input) {
       state.calls.push("start");
@@ -102,19 +111,11 @@ const fixture = () => {
         metadata: Promise.resolve({ recoveryBinding: accepted }),
       };
     },
-    async getHook() {
-      if (state.hook === undefined) {
-        throw new Error("hook missing");
-      }
-      return state.hook;
-    },
-    isHookNotFound: (error) => error.message === "hook missing",
-    now: () => 0,
     async wait() {
       throw new Error("unexpected wait");
     },
   };
-  return { input: { auth, descriptor, ports }, deps, state, payload, accepted };
+  return { accepted, deps, input: { auth, descriptor, ports }, payload, state };
 };
 
 test("only exact trusted IDs reach reconciliation after current authority and receipt revalidation", async () => {
@@ -126,13 +127,13 @@ test("only exact trusted IDs reach reconciliation after current authority and re
     assert.equal(input.descriptor, f.input.descriptor);
     assert.equal(input.payload, f.payload);
     assert.deepEqual(input.binding, f.payload.binding);
-    return ["original-call", "original-call"];
+    return [originalCallId, originalCallId];
   };
   assert.deepEqual(await recoverTerminalSession(f.input, f.deps), {
     kind: "accepted",
     recoveryBinding: f.accepted,
   });
-  assert.deepEqual(f.state.options, { repeatableCallIds: ["original-call"] });
+  assert.deepEqual(f.state.options, { repeatableCallIds: [originalCallId] });
   const decision = f.state.calls.indexOf("decision");
   const reconcile = f.state.calls.indexOf("reconcile");
   assert.deepEqual(f.state.calls.slice(decision + 1, reconcile), ["authorize", "read-receipt"]);
@@ -145,7 +146,7 @@ test("missing, failed or malformed app decisions grant no IDs and cannot start a
     async () => {
       throw new Error("unavailable");
     },
-    async () => ["original-call", null],
+    async () => [originalCallId, null],
   ];
   await Promise.all(
     decisions.map(async (decision) => {
@@ -165,7 +166,7 @@ test("revocation during the trusted decision prevents reconciliation and owner c
   const f = fixture();
   f.input.ports.authorizeRepeatableRecoveryCalls = async () => {
     f.state.denied = true;
-    return ["original-call"];
+    return [originalCallId];
   };
   await assert.rejects(recoverTerminalSession(f.input, f.deps), /authority revoked/u);
   assert.equal(f.state.calls.includes("reconcile"), false);
@@ -177,7 +178,7 @@ test("a concurrently committed receipt prevents replay planning and exact retry 
   f.input.ports.authorizeRepeatableRecoveryCalls = async () => {
     decisions += 1;
     f.state.receipt = f.accepted;
-    return ["original-call"];
+    return [originalCallId];
   };
   await assert.rejects(recoverTerminalSession(f.input, f.deps), /receipt changed/u);
   assert.deepEqual(await recoverTerminalSession(f.input, f.deps), {
@@ -194,7 +195,7 @@ test("a foreign candidate binding cannot reach the trusted policy", async () => 
   f.payload.binding.ownerRunId = "foreign-owner";
   f.input.ports.authorizeRepeatableRecoveryCalls = async () => {
     decisions += 1;
-    return ["original-call"];
+    return [originalCallId];
   };
   await assert.rejects(recoverTerminalSession(f.input, f.deps), /source binding changed/u);
   assert.equal(decisions, 0);

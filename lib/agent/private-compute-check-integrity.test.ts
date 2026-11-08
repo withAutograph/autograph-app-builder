@@ -133,7 +133,7 @@ describe("frozen private check policy", () => {
         z
           .object({ source: z.string(), file: z.null(), run: z.array(z.string()) })
           .parse(JSON.parse(replacement.stdout)),
-      ).toEqual({ source: path.join(config, "config.toml"), file: null, run: ["vp check"] });
+      ).toEqual({ file: null, run: ["vp check"], source: path.join(config, "config.toml") });
       expect(await check()).toBe(false);
       await writeFile(
         path.join(config, "config.toml"),
@@ -146,7 +146,7 @@ describe("frozen private check policy", () => {
       await writeFile(task, "#!/bin/sh\nexit 0\n");
       expect(await check()).toBe(false);
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
 });

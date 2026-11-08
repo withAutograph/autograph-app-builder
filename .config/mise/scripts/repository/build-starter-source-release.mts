@@ -28,7 +28,15 @@ function argumentsFrom(values: readonly string[]) {
   const root = args.get("--arrusted-root");
   const output = args.get("--output");
   const releaseOrigin = args.get("--release-origin");
-  if (!root || !output || !releaseOrigin || args.size !== 3)
+  if (
+    root === undefined ||
+    root === "" ||
+    output === undefined ||
+    output === "" ||
+    releaseOrigin === undefined ||
+    releaseOrigin === "" ||
+    args.size !== 3
+  )
     throw new Error(
       "usage: hosted:starter-source-build -- --arrusted-root <path> --output <directory> --release-origin <https-origin>",
     );

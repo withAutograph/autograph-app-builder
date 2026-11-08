@@ -20,14 +20,13 @@ function isLoopbackHostname(hostname: string): boolean {
 }
 
 export const publicAuthorizationUrlSchema = z
-  .string()
   .url()
   .max(2048)
   .superRefine((value, context) => {
     const url = new URL(value);
+    const hasCredentials = url.username || url.password;
     if (
-      url.username ||
-      url.password ||
+      hasCredentials ||
       (url.protocol !== "https:" && !(url.protocol === "http:" && isLoopbackHostname(url.hostname)))
     ) {
       context.addIssue({
@@ -37,26 +36,22 @@ export const publicAuthorizationUrlSchema = z
     }
   });
 
-export const inputPresentationSchema = z
-  .object({
-    control: z.enum(["choice", "provider", "approval"]),
-    section: z.enum(["build-with", "store-in", "deploy-to", "connections"]),
-  })
-  .strict();
+export const inputPresentationSchema = z.strictObject({
+  control: z.enum(["choice", "provider", "approval"]),
+  section: z.enum(["build-with", "store-in", "deploy-to", "connections"]),
+});
 
-export const publicAuthorizationChallengeSchema = z
-  .object({
-    displayName: z.string().min(1).max(200).optional(),
-    expiresAt: z.iso.datetime().optional(),
-    instructions: z.string().min(1).max(2000).optional(),
-    repositoryAccess: githubRepositoryAccessSchema.optional(),
-    url: publicAuthorizationUrlSchema.optional(),
-    userCode: z.string().min(1).max(200).optional(),
-  })
-  .strict();
+export const publicAuthorizationChallengeSchema = z.strictObject({
+  displayName: z.string().min(1).max(200).optional(),
+  expiresAt: z.iso.datetime().optional(),
+  instructions: z.string().min(1).max(2000).optional(),
+  repositoryAccess: githubRepositoryAccessSchema.optional(),
+  url: publicAuthorizationUrlSchema.optional(),
+  userCode: z.string().min(1).max(200).optional(),
+});
 
 export const publicInputRequestSchema = z
-  .object({
+  .strictObject({
     allowFreeform: z.boolean(),
     authorization: publicAuthorizationChallengeSchema.optional(),
     description: z.string().optional(),
@@ -66,7 +61,6 @@ export const publicInputRequestSchema = z
     requestId: z.string().min(1),
     title: z.string().min(1),
   })
-  .strict()
   .superRefine((request, context) => {
     if (request.kind !== "authorization" && request.authorization) {
       context.addIssue({
@@ -134,18 +128,16 @@ export type PublicEveEvent = z.infer<typeof publicEveEventSchema>;
 const sha256DigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 
 export const publicPrototypePreviewUrlSchema = z
-  .string()
   .url()
   .max(1024)
   .superRefine((value, context) => {
     const url = new URL(value);
+    const hasExtras = url.username || url.password || url.search || url.hash;
+    const invalidProtocol = () =>
+      url.protocol !== "https:" && !(url.protocol === "http:" && isLoopbackHostname(url.hostname));
     if (
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash ||
-      (url.protocol !== "https:" &&
-        !(url.protocol === "http:" && isLoopbackHostname(url.hostname))) ||
+      hasExtras ||
+      invalidProtocol() ||
       !/^\/preview\/[A-Za-z0-9][A-Za-z0-9._:@-]{0,199}\/[a-f0-9]{64}$/u.test(url.pathname)
     ) {
       context.addIssue({
@@ -155,22 +147,20 @@ export const publicPrototypePreviewUrlSchema = z
     }
   });
 
-export const publicPrototypeSchema = z
-  .object({
-    content: z.string().min(1),
-    digest: sha256DigestSchema,
-    mediaType: z.literal("text/html"),
-    path: z.string().regex(/^prototype\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/index\.html$/u),
-    previewUrl: publicPrototypePreviewUrlSchema.optional(),
-    revision: sha256DigestSchema,
-  })
-  .strict();
+export const publicPrototypeSchema = z.strictObject({
+  content: z.string().min(1),
+  digest: sha256DigestSchema,
+  mediaType: z.literal("text/html"),
+  path: z.string().regex(/^prototype\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/index\.html$/u),
+  previewUrl: publicPrototypePreviewUrlSchema.optional(),
+  revision: sha256DigestSchema,
+});
 
 export type PublicPrototype = z.infer<typeof publicPrototypeSchema>;
 
 /** Verified v2 artifact manifest; bytes remain in tenant-scoped chunk storage. */
 export const publicPrototypeReferenceSchema = z
-  .object({
+  .strictObject({
     appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
     chunkCount: z.number().int().positive(),
     contentBytes: z.number().int().positive(),
@@ -183,7 +173,6 @@ export const publicPrototypeReferenceSchema = z
     sessionId: z.string().min(1),
     version: z.literal(2),
   })
-  .strict()
   .refine((value) => value.path === `prototype/${value.appId}/index.html`, {
     message: "Prototype reference path must match the app ID.",
     path: ["path"],
@@ -192,59 +181,52 @@ export const publicPrototypeReferenceSchema = z
 export type PublicPrototypeReference = z.infer<typeof publicPrototypeReferenceSchema>;
 
 /** A fixture-backed revision compiled from the prepared Arrusted catalog. */
-export const publicUiPreviewSchema = z
-  .object({
-    appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-    fidelity: z.literal("arrusted-component-catalog"),
-    functionality: z.literal("fixtures-only"),
-    previewUrl: publicPrototypePreviewUrlSchema.optional(),
-    revision: sha256DigestSchema,
-    routes: z.array(z.string().startsWith("/")).min(1),
-  })
-  .strict();
+export const publicUiPreviewSchema = z.strictObject({
+  appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+  fidelity: z.literal("arrusted-component-catalog"),
+  functionality: z.literal("fixtures-only"),
+  previewUrl: publicPrototypePreviewUrlSchema.optional(),
+  revision: sha256DigestSchema,
+  routes: z.array(z.string().startsWith("/")).min(1),
+});
 
 export type PublicUiPreview = z.infer<typeof publicUiPreviewSchema>;
 
 /** A working app verified by the shared preview runtime; expiresAt follows its Sandbox lifetime. */
-export const publicWorkingPreviewSchema = z
-  .object({
-    appId: z.string().min(1),
-    expiresAt: z.iso.datetime(),
-    status: z.literal("ready"),
-    url: z
-      .string()
-      .url()
-      .max(2048)
-      .superRefine((value, context) => {
-        const url = new URL(value);
-        if (url.protocol !== "https:" || url.username || url.password)
-          context.addIssue({
-            code: "custom",
-            message: "Working previews require HTTPS without embedded credentials.",
-          });
-      }),
-    verifiedAt: z.iso.datetime(),
-  })
-  .strict();
+export const publicWorkingPreviewSchema = z.strictObject({
+  appId: z.string().min(1),
+  expiresAt: z.iso.datetime(),
+  status: z.literal("ready"),
+  url: z
+    .url()
+    .max(2048)
+    .superRefine((value, context) => {
+      const url = new URL(value);
+      if (url.protocol !== "https:" || url.username || url.password)
+        context.addIssue({
+          code: "custom",
+          message: "Working previews require HTTPS without embedded credentials.",
+        });
+    }),
+  verifiedAt: z.iso.datetime(),
+});
 
 export type PublicWorkingPreview = z.infer<typeof publicWorkingPreviewSchema>;
 
-export const eveSessionResultSchema = z
-  .object({
-    appAccessUrl: z.url().startsWith("https://").optional(),
-    cursor: z.number().int().nonnegative(),
-    error: z.object({ code: z.string(), message: z.string() }).strict().optional(),
-    events: z.array(publicEveEventSchema),
-    inputRequests: z.array(publicInputRequestSchema).optional(),
-    applicationSource: applicationSourceExportReferenceSchema.optional(),
-    prototype: publicPrototypeSchema.optional(),
-    prototypeRef: publicPrototypeReferenceSchema.optional(),
-    sessionId: z.string(),
-    status: sessionStatusSchema,
-    uiPreview: publicUiPreviewSchema.optional(),
-    workingPreview: publicWorkingPreviewSchema.nullable().optional(),
-  })
-  .strict();
+export const eveSessionResultSchema = z.strictObject({
+  appAccessUrl: z.url().startsWith("https://").optional(),
+  cursor: z.number().int().nonnegative(),
+  error: z.strictObject({ code: z.string(), message: z.string() }).optional(),
+  events: z.array(publicEveEventSchema),
+  inputRequests: z.array(publicInputRequestSchema).optional(),
+  applicationSource: applicationSourceExportReferenceSchema.optional(),
+  prototype: publicPrototypeSchema.optional(),
+  prototypeRef: publicPrototypeReferenceSchema.optional(),
+  sessionId: z.string(),
+  status: sessionStatusSchema,
+  uiPreview: publicUiPreviewSchema.optional(),
+  workingPreview: publicWorkingPreviewSchema.nullable().optional(),
+});
 
 export type EveSessionResult = z.infer<typeof eveSessionResultSchema>;
 
@@ -277,28 +259,24 @@ export const publicSessionResumabilitySchema = z.enum([
   "terminal",
 ]);
 
-export const publicSessionSummarySchema = z
-  .object({
-    appId: z
-      .string()
-      .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)
-      .optional(),
-    resumability: publicSessionResumabilitySchema,
-    sessionId: z.string().min(1),
-    stage: publicSessionStageSchema,
-    status: sessionStatusSchema,
-    title: z.string().min(1).max(200),
-    updatedAt: z.iso.datetime(),
-  })
-  .strict();
+export const publicSessionSummarySchema = z.strictObject({
+  appId: z
+    .string()
+    .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)
+    .optional(),
+  resumability: publicSessionResumabilitySchema,
+  sessionId: z.string().min(1),
+  stage: publicSessionStageSchema,
+  status: sessionStatusSchema,
+  title: z.string().min(1).max(200),
+  updatedAt: z.iso.datetime(),
+});
 
-export const eveSessionListResultSchema = z
-  .object({
-    cursor: z.number().int().nonnegative(),
-    kind: z.literal("session_list"),
-    sessions: z.array(publicSessionSummarySchema).max(250),
-  })
-  .strict();
+export const eveSessionListResultSchema = z.strictObject({
+  cursor: z.number().int().nonnegative(),
+  kind: z.literal("session_list"),
+  sessions: z.array(publicSessionSummarySchema).max(250),
+});
 
 export type EveSessionListResult = z.infer<typeof eveSessionListResultSchema>;
 export type PublicSessionSummary = z.infer<typeof publicSessionSummarySchema>;
@@ -306,14 +284,13 @@ export type PublicSessionSummary = z.infer<typeof publicSessionSummarySchema>;
 export const eveGetResultSchema = z.union([eveSessionResultSchema, eveSessionListResultSchema]);
 
 export const eveStartInputSchema = z
-  .object({
+  .strictObject({
     clientRequestId: z.string().min(1).max(200),
-    handoffId: z.string().uuid().optional(),
+    handoffId: z.uuid().optional(),
     prompt: z.string().trim().min(1).max(32_000).optional(),
     resumeSessionId: z.string().min(1).max(200).optional(),
     resumeMode: z.enum(["recover", "recover-idle"]).optional(),
   })
-  .strict()
   .superRefine(({ prompt, handoffId, resumeSessionId, resumeMode }, context) => {
     if (resumeMode !== undefined && resumeSessionId === undefined) {
       context.addIssue({ code: "custom", message: "Recovery requires an existing session." });
@@ -326,13 +303,12 @@ export const eveStartInputSchema = z
     }
   });
 export const eveGetInputSchema = z
-  .object({
+  .strictObject({
     clientRequestId: z.string().min(1).max(200).optional(),
     cursor: z.number().int().nonnegative().default(0),
     limit: z.number().int().min(1).max(250).default(100),
     sessionId: z.string().min(1).max(200).optional(),
   })
-  .strict()
   .superRefine(({ clientRequestId, sessionId }, context) => {
     if (clientRequestId !== undefined && sessionId !== undefined) {
       context.addIssue({
@@ -342,7 +318,7 @@ export const eveGetInputSchema = z
     }
   });
 export const eveSendInputSchema = z.object({
-  observationCursor: eveGetInputSchema.shape.cursor.removeDefault().optional(),
+  observationCursor: eveGetInputSchema.shape.cursor.unwrap().optional(),
   clientRequestId: z.string().min(1).max(200),
   message: z.string().trim().min(1).max(32_000),
   sessionId: z.string().min(1),
@@ -358,7 +334,7 @@ export const eveResponseSchema = z.discriminatedUnion("kind", [
 ]);
 
 export const eveRespondInputSchema = z
-  .object({
+  .strictObject({
     clientRequestId: z.string().min(1).max(200),
     responses: z
       .array(
@@ -370,7 +346,6 @@ export const eveRespondInputSchema = z
       .min(1),
     sessionId: z.string().min(1),
   })
-  .strict()
   .superRefine(({ responses }, context) => {
     const seen = new Set<string>();
     for (const [index, { requestId }] of responses.entries()) {

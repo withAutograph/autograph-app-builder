@@ -53,6 +53,7 @@ import {
 } from "./repository-access-state";
 import type { RepositoryAccessReceipt } from "./repository-access-state";
 import { configureVercelSessionGitSource } from "../sandbox/vercel-session-source";
+import type { VercelGitSessionSource } from "../sandbox/vercel-session-source";
 import { materializeBuilderSandboxGitSource } from "../sandbox/builder-sandbox";
 import type { BuilderHandoffIntent } from "../handoff/contracts";
 import {
@@ -66,6 +67,8 @@ import {
   readProviderEmulation,
 } from "../integrations/local-provider-emulation";
 import { providerEmulationFetch } from "../integrations/provider-emulation-fetch";
+
+const PROVIDER_UNAVAILABLE = "provider-unavailable";
 
 const failed = (reason: string, message: string, retryable = false) =>
   new ConnectionAuthorizationFailedError("github-repository-access", {
@@ -197,23 +200,19 @@ export function createRepositoryAccessRuntime(input: {
           unavailable = true;
           throw error;
         }
+        const targetAccess: Pick<GitHubRepositoryAccessProvider, "inspectTargetAccess"> = {};
+        if (provider.inspectTargetAccess !== undefined) {
+          targetAccess.inspectTargetAccess = async function inspectTargetAccess(value) {
+            try {
+              return await provider.inspectTargetAccess?.(value);
+            } catch (error) {
+              unavailable = true;
+              throw error;
+            }
+          };
+        }
         return {
-          ...(provider.inspectTargetAccess === undefined
-            ? {}
-            : {
-                async inspectTargetAccess(
-                  value: Parameters<
-                    NonNullable<GitHubRepositoryAccessProvider["inspectTargetAccess"]>
-                  >[0],
-                ) {
-                  try {
-                    return await provider.inspectTargetAccess?.(value);
-                  } catch (error) {
-                    unavailable = true;
-                    throw error;
-                  }
-                },
-              }),
+          ...targetAccess,
           async inspectInstallation(value) {
             try {
               return await provider.inspectInstallation(value);
@@ -248,7 +247,7 @@ export function createRepositoryAccessRuntime(input: {
         };
       },
     });
-    if (result.status === "provider-unavailable" && deniedInstallations.size > 0 && !unavailable) {
+    if (result.status === PROVIDER_UNAVAILABLE && deniedInstallations.size > 0 && !unavailable) {
       return {
         action: "update",
         repository: result.repository,
@@ -335,16 +334,20 @@ export function createRepositoryAccessRuntime(input: {
               true,
             );
           }
-          const continuation = await input.continuations.consume({
-            authority: input.authority,
-            continuationId: resume?.continuationId ?? "",
-            repository: value.repository,
-            requestId: value.requestId,
-            sessionId: value.sessionId,
-            ...(value.selectedInstallationId
-              ? { selectedInstallationId: value.selectedInstallationId }
-              : {}),
-          });
+          const consumeRequest = (): Parameters<typeof input.continuations.consume>[0] => {
+            const continuationInput: Parameters<typeof input.continuations.consume>[0] = {
+              authority: input.authority,
+              continuationId: resume?.continuationId ?? "",
+              repository: value.repository,
+              requestId: value.requestId,
+              sessionId: value.sessionId,
+            };
+            if (value.selectedInstallationId) {
+              continuationInput.selectedInstallationId = value.selectedInstallationId;
+            }
+            return continuationInput;
+          };
+          const continuation = await input.continuations.consume(consumeRequest());
           if (!continuation) {
             throw failed(
               "continuation_invalid",
@@ -360,7 +363,7 @@ export function createRepositoryAccessRuntime(input: {
           if (access.status === "ready") {
             return { token: access.accessDigest };
           }
-          if (access.status === "provider-unavailable") {
+          if (access.status === PROVIDER_UNAVAILABLE) {
             throw failed(
               "provider_unavailable",
               "GitHub could not confirm access to this repository.",
@@ -384,23 +387,29 @@ export function createRepositoryAccessRuntime(input: {
               "Choose which connected GitHub account Autograph should use.",
             );
           }
-          if (access.status === "provider-unavailable") {
+          if (access.status === PROVIDER_UNAVAILABLE) {
             throw failed(
               "provider_unavailable",
               "GitHub could not confirm repository access.",
               true,
             );
           }
-          const continuation = await input.continuations.create({
-            authority: input.authority,
-            repository: value.repository,
-            requestId: value.requestId,
-            sessionId: value.sessionId,
-            ...(value.selectedInstallationId
-              ? { selectedInstallationId: value.selectedInstallationId }
-              : {}),
-            callbackUrl,
-          });
+          const createRequest = (): Parameters<typeof input.continuations.create>[0] => {
+            const continuationInput: Omit<
+              Parameters<typeof input.continuations.create>[0],
+              "callbackUrl"
+            > = {
+              authority: input.authority,
+              repository: value.repository,
+              requestId: value.requestId,
+              sessionId: value.sessionId,
+            };
+            if (value.selectedInstallationId) {
+              continuationInput.selectedInstallationId = value.selectedInstallationId;
+            }
+            return { ...continuationInput, callbackUrl };
+          };
+          const continuation = await input.continuations.create(createRequest());
           const authorizeUrl = new URL("/github/installations", input.origin);
           authorizeUrl.searchParams.set("returnTo", input.returnTo ?? "/");
           authorizeUrl.searchParams.set("resume", continuation.continuationId);
@@ -502,11 +511,16 @@ export function createRepositoryAccessRuntime(input: {
         value.revision?.branch,
         githubSource.resolvedSha,
       );
-      const sandboxSource = {
+      type MutableGitSessionSource = {
+        -readonly [Key in keyof VercelGitSessionSource]: VercelGitSessionSource[Key];
+      };
+      const sandboxSource: MutableGitSessionSource = {
         token: credential.token,
         url: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
-        ...(cloneRevision === undefined ? {} : { revision: cloneRevision }),
       };
+      if (cloneRevision !== undefined) {
+        sandboxSource.revision = cloneRevision;
+      }
       configureVercelSessionGitSource({
         sessionId: value.sessionId,
         source: sandboxSource,
@@ -590,13 +604,10 @@ export function createRepositoryAccessRuntime(input: {
         sourceTree: sourceReceipt.sourceTree,
         workspaceDigest: cloned.workspaceDigest,
       });
-      return {
-        accessReceipt,
-        ...(appBaseline === undefined ? {} : { appBaseline }),
-        githubSource,
-        sourceReceipt,
-        workspace,
-      };
+      if (appBaseline === undefined) {
+        return { accessReceipt, githubSource, sourceReceipt, workspace };
+      }
+      return { accessReceipt, appBaseline, githubSource, sourceReceipt, workspace };
     },
     async resumeAuthorizedForSession(value) {
       const candidates = await input.continuations.authorizedForSession({
@@ -605,15 +616,14 @@ export function createRepositoryAccessRuntime(input: {
       });
       let resumed = 0;
       for (const candidate of candidates) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        const access = await classify({
+        const accessRequest: Parameters<typeof classify>[0] = {
           repository: candidate.record.repository.fullName,
-          ...(candidate.record.selectedInstallationId
-            ? {
-                selectedInstallationId: candidate.record.selectedInstallationId,
-              }
-            : {}),
-        });
+        };
+        if (candidate.record.selectedInstallationId) {
+          accessRequest.selectedInstallationId = candidate.record.selectedInstallationId;
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        const access = await classify(accessRequest);
         if (access.status !== "ready") {
           continue;
         }
@@ -635,14 +645,34 @@ export function createRepositoryAccessRuntime(input: {
   };
 }
 
-let runtimeInput:
-  | {
-      database: ReturnType<typeof openHostedPostgresDatabase>;
-      origin: string;
-      credentials: ReturnType<typeof parseGitHubAppHttpProviderCredentials>;
-      providerFetch?: typeof fetch;
+const continuationOptions = (): Pick<
+  Parameters<typeof createRepositoryAccessContinuationService>[0],
+  "callbackOrigin" | "protectionBypassSecret"
+> => {
+  const options: Pick<
+    Parameters<typeof createRepositoryAccessContinuationService>[0],
+    "callbackOrigin" | "protectionBypassSecret"
+  > = {};
+  if (process.env.VERCEL_ENV === "production") {
+    const productionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+    if (productionUrl !== undefined && productionUrl !== "") {
+      options.callbackOrigin = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
     }
-  | undefined;
+  }
+  const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  if (bypassSecret !== undefined && bypassSecret !== "") {
+    options.protectionBypassSecret = bypassSecret.trim();
+  }
+  return options;
+};
+
+interface RepositoryAccessRuntimeConfiguration {
+  database: ReturnType<typeof openHostedPostgresDatabase>;
+  origin: string;
+  credentials: ReturnType<typeof parseGitHubAppHttpProviderCredentials>;
+  providerFetch?: typeof fetch;
+}
+let runtimeInput: RepositoryAccessRuntimeConfiguration | undefined;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
@@ -653,34 +683,33 @@ export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
     const environment = providerEmulationEnvironment(process.env);
     const installation = readGitHubAppInstallationEnvironment(environment);
     const emulation = readProviderEmulation(environment);
-    runtimeInput = {
+    const configured: RepositoryAccessRuntimeConfiguration = {
       credentials: parseGitHubAppHttpProviderCredentials({
         appId: installation.appId,
         privateKey: environment.GITHUB_APP_PRIVATE_KEY,
       }),
       database: openHostedPostgresDatabase(environment.DATABASE_URL ?? ""),
       origin: new URL(installation.issuer).origin,
-      ...(emulation
-        ? {
-            providerFetch: ((resource, init) => {
-              let resourceUrl: string;
-              if (typeof resource === "string") {
-                resourceUrl = resource;
-              } else if (resource instanceof URL) {
-                resourceUrl = resource.href;
-              } else {
-                resourceUrl = resource.url;
-              }
-              const url = new URL(resourceUrl);
-              return providerEmulationFetch(
-                `${emulation.githubOrigin}${url.pathname}${url.search}`,
-                init,
-                emulation,
-              );
-            }) as typeof fetch,
-          }
-        : {}),
     };
+    if (emulation) {
+      configured.providerFetch = (resource, init) => {
+        let resourceUrl: string;
+        if (typeof resource === "string") {
+          resourceUrl = resource;
+        } else if (resource instanceof URL) {
+          resourceUrl = resource.href;
+        } else {
+          resourceUrl = resource.url;
+        }
+        const url = new URL(resourceUrl);
+        return providerEmulationFetch(
+          `${emulation.githubOrigin}${url.pathname}${url.search}`,
+          init,
+          emulation,
+        );
+      };
+    }
+    runtimeInput = configured;
   }
   const input = runtimeInput;
   const membership = createPostgresWorkspaceMembership(input.database);
@@ -695,22 +724,24 @@ export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
     );
   }
   const installations = createPostgresHostedGitHubInstallationStore(input.database);
-  return createRepositoryAccessRuntime({
+  const runtimeConfiguration: Pick<
+    Parameters<typeof createRepositoryAccessRuntime>[0],
+    "authority" | "continuations" | "installations" | "origin" | "protectionBypassSecret"
+  > = {
     authority,
     continuations: createRepositoryAccessContinuationService({
-      ...(process.env.VERCEL_ENV === "production" && process.env.VERCEL_PROJECT_PRODUCTION_URL
-        ? { callbackOrigin: `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` }
-        : {}),
-      ...(process.env.VERCEL_AUTOMATION_BYPASS_SECRET
-        ? { protectionBypassSecret: process.env.VERCEL_AUTOMATION_BYPASS_SECRET.trim() }
-        : {}),
+      ...continuationOptions(),
       store: createPostgresRepositoryAccessContinuationStore(runtimeInput.database),
     }),
     installations,
     origin: input.origin,
-    ...(process.env.VERCEL_AUTOMATION_BYPASS_SECRET
-      ? { protectionBypassSecret: process.env.VERCEL_AUTOMATION_BYPASS_SECRET.trim() }
-      : {}),
+  };
+  const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  if (bypassSecret !== undefined && bypassSecret !== "") {
+    runtimeConfiguration.protectionBypassSecret = bypassSecret.trim();
+  }
+  return createRepositoryAccessRuntime({
+    ...runtimeConfiguration,
     preparedIntent,
     providerFactory: ({ installation }) =>
       createGitHubAppHttpProvider({
@@ -732,8 +763,14 @@ export async function resumeAuthorizedRepositoryAccessForSession(input: {
   fetchImplementation?: typeof fetch;
 }) {
   const runtime = await repositoryAccessRuntimeForSession(input.sessionAuth);
-  return runtime.resumeAuthorizedForSession({
-    sessionId: input.sessionId,
-    ...(input.fetchImplementation ? { fetchImplementation: input.fetchImplementation } : {}),
-  });
+  const resumeInput = (): Parameters<typeof runtime.resumeAuthorizedForSession>[0] => {
+    const request: Parameters<typeof runtime.resumeAuthorizedForSession>[0] = {
+      sessionId: input.sessionId,
+    };
+    if (input.fetchImplementation) {
+      request.fetchImplementation = input.fetchImplementation;
+    }
+    return request;
+  };
+  return runtime.resumeAuthorizedForSession(resumeInput());
 }

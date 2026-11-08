@@ -8,7 +8,7 @@ import { connectHostedSession, hostedSessionTools } from "./hosted-session-clien
 
 const owned: string[] = [];
 afterEach(async () => {
-  await Promise.all(owned.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(owned.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
 const fixture = async (mode = "normal") => {
   const root = await mkdtemp(path.join(tmpdir(), "builder-native-protocol-"));
@@ -43,7 +43,7 @@ createInterface({input:process.stdin}).on('line',line=>{
 `,
   );
   await chmod(bin, 0o700);
-  return { cwd, codexBin: bin, resourceUrl: "https://builder.example/mcp", trace };
+  return { codexBin: bin, cwd, resourceUrl: "https://builder.example/mcp", trace };
 };
 const readTrace = async (trace: string) => {
   const raw = await readFile(trace, "utf-8");
@@ -76,9 +76,9 @@ it("dispatches the five public tools through the native protocol without a model
           { trace: "opaque" },
         ),
       ).toEqual({
-        content: [{ type: "text", text: "public result" }],
-        structuredContent: { cursor: 1955, sessionId: "retained-session" },
         _meta: { upstream: true },
+        content: [{ text: "public result", type: "text" }],
+        structuredContent: { cursor: 1955, sessionId: "retained-session" },
       });
     }
     await expect(client.call("private_tool", {})).rejects.toThrow("five public");
@@ -95,11 +95,11 @@ it("dispatches the five public tools through the native protocol without a model
     ephemeral: true,
   });
   expect(trace.find((event) => event.method === "mcpServer/tool/call")?.params).toEqual({
-    threadId: "ephemeral-native-thread",
-    server: "a511-original",
-    tool: "autograph_start",
-    arguments: { sessionId: "retained-session", clientRequestId: "stable-request" },
     _meta: { trace: "opaque" },
+    arguments: { clientRequestId: "stable-request", sessionId: "retained-session" },
+    server: "a511-original",
+    threadId: "ephemeral-native-thread",
+    tool: "autograph_start",
   });
   expect(trace[0].args).toContain('plugins."app-builder@autograph-dev".enabled=false');
   expect(trace[0].args).toContain('plugins."app-builder@autograph".enabled=false');
@@ -138,7 +138,7 @@ it.each([
   "https://builder.example/other",
 ])("rejects a noncanonical resource without starting a child: %s", async (resourceUrl) => {
   await expect(
-    connectHostedSession({ codexBin: "/missing", resourceUrl, cwd: "/private/tmp" }),
+    connectHostedSession({ codexBin: "/missing", cwd: "/private/tmp", resourceUrl }),
   ).rejects.toThrow("credential-free HTTPS /mcp");
 });
 

@@ -44,7 +44,7 @@ export const createAppIntegrationCapabilityApprovalCheckpoint = (input: {
     )
     .digest("hex");
   const requestId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
-  const authority = input.plan.authority;
+  const { authority } = input.plan;
   const predicate = and(
     eq(builderProvisioningJournals.issuer, authority.issuer),
     eq(builderProvisioningJournals.audience, authority.audience),
@@ -71,7 +71,9 @@ export const createAppIntegrationCapabilityApprovalCheckpoint = (input: {
     if (row.requestDigest !== digest || record.planDigest !== digest) {
       throw unavailable();
     }
-    expected = { revision: row.revision, observation: record.observation };
+    const { revision } = row;
+    const { observation } = record;
+    expected = { observation, revision };
     return structuredClone(record.observation);
   };
   // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Bound intent, adapter cursor, monotone settlements and CAS are one atomic checkpoint guard.
@@ -171,14 +173,17 @@ export const createAppIntegrationCapabilityApprovalAuthority =
   }) =>
   async (plan: AppIntegrationCapabilityPlan, callId: string) => {
     await input.assertCurrentOwner();
+    const { database } = input;
+    const { owner: checkpointOwner } = input;
+    const { assertCurrentOwner } = input;
     const checkpoint = createAppIntegrationCapabilityApprovalCheckpoint({
-      database: input.database,
+      assertCurrentOwner,
+      database,
+      owner: checkpointOwner,
       plan,
-      owner: input.owner,
-      assertCurrentOwner: input.assertCurrentOwner,
     });
     const state = await checkpoint.read();
-    const transport = createNativeTargetApprovalHistoryTransport({
+    const transportInput: Parameters<typeof createNativeTargetApprovalHistoryTransport>[0] = {
       builderOrigin: input.builderOrigin,
       owner: {
         authority: input.owner.authority,
@@ -193,26 +198,40 @@ export const createAppIntegrationCapabilityApprovalAuthority =
         signal: input.request.signal,
       },
       assertCanonicalAppOwner: input.authority.assertCanonicalAppOwner,
-      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-    });
+    };
+    if (input.fetch !== undefined) {
+      transportInput.fetch = input.fetch;
+    }
+    const transport = createNativeTargetApprovalHistoryTransport(transportInput);
     const observe = transport.observePrivateHistory;
     if (!observe) {
       throw unavailable();
     }
+    const { owner } = input;
+    const observationState: Pick<
+      NonNullable<Parameters<typeof readPrivateAppIntegrationCapabilityApproval>[0]["observation"]>,
+      "state"
+    > = {};
+    if (state !== undefined) {
+      observationState.state = state;
+    }
+    const observation = { ...observationState, save: checkpoint.save };
+    const readHistory: Parameters<
+      typeof readPrivateAppIntegrationCapabilityApproval
+    >[0]["readHistory"] = async (startIndex, onEvent) => {
+      const { principal } = input.owner;
+      const { adapterSessionId } = input.owner;
+      const { sessionId } = input.owner;
+      return await observe({ adapterSessionId, onEvent, principal, sessionId, startIndex });
+    };
+    const { assertCurrentOwner: assertOwner } = input;
     const approval = await readPrivateAppIntegrationCapabilityApproval({
-      plan,
+      assertOwner,
       callId,
-      owner: input.owner,
-      observation: { ...(state === undefined ? {} : { state }), save: checkpoint.save },
-      readHistory: async (startIndex, onEvent) =>
-        await observe({
-          principal: input.owner.principal,
-          adapterSessionId: input.owner.adapterSessionId,
-          sessionId: input.owner.sessionId,
-          startIndex,
-          onEvent,
-        }),
-      assertOwner: input.assertCurrentOwner,
+      observation,
+      owner,
+      plan,
+      readHistory,
     });
     await input.assertCurrentOwner();
     if (approval === null) {

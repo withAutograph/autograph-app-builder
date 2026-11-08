@@ -17,18 +17,19 @@ import type {
 const decimal = z.string().regex(/^[1-9][0-9]*$/u);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
+const SCOPE_SELECTION_REQUIRED = "scope-selection-required";
+const AUTHORIZATION_REQUIRED = "authorization-required";
+const PROVIDER_UNAVAILABLE = "provider-unavailable";
 const repositoryPart = z
   .string()
   .min(1)
   .max(100)
   .regex(/^[A-Za-z0-9_.-]+$/u);
 
-const repositoryReferenceInputSchema = z
-  .object({
-    name: repositoryPart,
-    owner: repositoryPart,
-  })
-  .strict();
+const repositoryReferenceInputSchema = z.strictObject({
+  name: repositoryPart,
+  owner: repositoryPart,
+});
 
 export const repositoryReferenceSchema = repositoryReferenceInputSchema.transform((value) => ({
   ...value,
@@ -36,12 +37,11 @@ export const repositoryReferenceSchema = repositoryReferenceInputSchema.transfor
 }));
 
 const repositoryReferenceResultSchema = z
-  .object({
+  .strictObject({
     fullName: z.string().min(3).max(201),
     name: repositoryPart,
     owner: repositoryPart,
   })
-  .strict()
   .refine((value) => value.fullName === `${value.owner}/${value.name}`, {
     message: "repository-full-name-mismatch",
   });
@@ -63,84 +63,68 @@ export function parseRepositoryReference(value: string): RepositoryReference {
   });
 }
 
-const readPermissionsSchema = z
-  .object({
-    administration: z.literal("none"),
-    contents: z.literal("read"),
-    metadata: z.literal("read"),
-    pullRequests: z.literal("none"),
-    variables: z.literal("read"),
-    workflows: z.literal("none"),
-  })
-  .strict();
+const readPermissionsSchema = z.strictObject({
+  administration: z.literal("none"),
+  contents: z.literal("read"),
+  metadata: z.literal("read"),
+  pullRequests: z.literal("none"),
+  variables: z.literal("read"),
+  workflows: z.literal("none"),
+});
 
-const installationReadBackSchema = z
-  .object({
-    accountId: decimal,
-    accountLogin: z.string().min(1).max(100),
-    accountType: z.enum(["Organization", "User"]),
-    grantedPermissions: readPermissionsSchema,
-    installationId: decimal,
-    repositorySelection: z.enum(["all", "selected"]),
-    selectedRepositoryIds: z.array(decimal),
-  })
-  .strict();
+const installationReadBackSchema = z.strictObject({
+  accountId: decimal,
+  accountLogin: z.string().min(1).max(100),
+  accountType: z.enum(["Organization", "User"]),
+  grantedPermissions: readPermissionsSchema,
+  installationId: decimal,
+  repositorySelection: z.enum(["all", "selected"]),
+  selectedRepositoryIds: z.array(decimal),
+});
 
-export const repositoryAccessSnapshotSchema = z
-  .object({
-    archived: z.literal(false),
-    defaultBranch: z.string().min(1).max(255),
-    headSha: objectId,
-    headTree: objectId,
-    name: repositoryPart,
-    owner: repositoryPart,
-    repositoryId: decimal,
-    repositoryVariableNames: z.array(z.string().min(1).max(255)),
-    visibility: z.literal("private"),
-  })
-  .strict();
+export const repositoryAccessSnapshotSchema = z.strictObject({
+  archived: z.literal(false),
+  defaultBranch: z.string().min(1).max(255),
+  headSha: objectId,
+  headTree: objectId,
+  name: repositoryPart,
+  owner: repositoryPart,
+  repositoryId: decimal,
+  repositoryVariableNames: z.array(z.string().min(1).max(255)),
+  visibility: z.literal("private"),
+});
 
 export type RepositoryAccessSnapshot = z.infer<typeof repositoryAccessSnapshotSchema>;
 
-const scopeSchema = z
-  .object({
-    accountLogin: z.string().min(1).max(100),
-    accountType: z.enum(["Organization", "User"]),
-    installationId: decimal,
-  })
-  .strict();
+const scopeSchema = z.strictObject({
+  accountLogin: z.string().min(1).max(100),
+  accountType: z.enum(["Organization", "User"]),
+  installationId: decimal,
+});
 
 export const repositoryAccessResultSchema = z.discriminatedUnion("status", [
-  z
-    .object({
-      accessDigest: digest,
-      repository: repositoryAccessSnapshotSchema,
-      scope: scopeSchema,
-      status: z.literal("ready"),
-      targetProof: githubTargetAccessProofSchema.optional(),
-    })
-    .strict(),
-  z
-    .object({
-      repository: repositoryReferenceResultSchema,
-      scopes: z.array(scopeSchema).min(2),
-      status: z.literal("scope-selection-required"),
-    })
-    .strict(),
-  z
-    .object({
-      action: z.enum(["connect", "update"]),
-      repository: repositoryReferenceResultSchema,
-      scopes: z.array(scopeSchema),
-      status: z.literal("authorization-required"),
-    })
-    .strict(),
-  z
-    .object({
-      repository: repositoryReferenceResultSchema,
-      status: z.literal("provider-unavailable"),
-    })
-    .strict(),
+  z.strictObject({
+    accessDigest: digest,
+    repository: repositoryAccessSnapshotSchema,
+    scope: scopeSchema,
+    status: z.literal("ready"),
+    targetProof: githubTargetAccessProofSchema.optional(),
+  }),
+  z.strictObject({
+    repository: repositoryReferenceResultSchema,
+    scopes: z.array(scopeSchema).min(2),
+    status: z.literal(SCOPE_SELECTION_REQUIRED),
+  }),
+  z.strictObject({
+    action: z.enum(["connect", "update"]),
+    repository: repositoryReferenceResultSchema,
+    scopes: z.array(scopeSchema),
+    status: z.literal(AUTHORIZATION_REQUIRED),
+  }),
+  z.strictObject({
+    repository: repositoryReferenceResultSchema,
+    status: z.literal(PROVIDER_UNAVAILABLE),
+  }),
 ]);
 
 export type RepositoryAccessResult = z.infer<typeof repositoryAccessResultSchema>;
@@ -160,7 +144,7 @@ export interface GitHubRepositoryAccessProvider {
     operation: "resolve-existing-source";
     requestedPermissions: z.infer<typeof readPermissionsSchema>;
   }) => Promise<unknown>;
-  inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown | undefined>;
+  inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown>;
   inspectTargetAccess?: GitHubTargetAccessProvider["inspectTargetAccess"];
 }
 
@@ -237,7 +221,7 @@ export async function classifyGitHubRepositoryAccess(input: {
       action: anyActive ? "update" : "connect",
       repository,
       scopes: publicScopes,
-      status: "authorization-required",
+      status: AUTHORIZATION_REQUIRED,
     });
   }
 
@@ -290,11 +274,11 @@ export async function classifyGitHubRepositoryAccess(input: {
     return repositoryAccessResultSchema.parse({
       repository,
       scopes: matches.map(({ binding }) => scope(binding)),
-      status: "scope-selection-required",
+      status: SCOPE_SELECTION_REQUIRED,
     });
   }
   const [match] = matches;
-  if (match) {
+  if (match !== undefined) {
     const selectedScope = scope(match.binding);
     return repositoryAccessResultSchema.parse({
       accessDigest: sha256({
@@ -313,14 +297,14 @@ export async function classifyGitHubRepositoryAccess(input: {
   if (providerFailures === active.length) {
     return repositoryAccessResultSchema.parse({
       repository,
-      status: "provider-unavailable",
+      status: PROVIDER_UNAVAILABLE,
     });
   }
   return repositoryAccessResultSchema.parse({
     action: "update",
     repository,
     scopes: publicScopes,
-    status: "authorization-required",
+    status: AUTHORIZATION_REQUIRED,
   });
 }
 
@@ -352,7 +336,7 @@ export async function classifyGitHubRepositoryAccessWithTargetProof(input: {
       action: allActive.length > 0 ? "update" : "connect",
       repository,
       scopes: [],
-      status: "authorization-required",
+      status: AUTHORIZATION_REQUIRED,
     });
   }
   const matches: ReadyRepositoryAccess[] = [];
@@ -409,19 +393,19 @@ export async function classifyGitHubRepositoryAccessWithTargetProof(input: {
     return repositoryAccessResultSchema.parse({
       repository,
       scopes: matches.map((match) => match.scope),
-      status: "scope-selection-required",
+      status: SCOPE_SELECTION_REQUIRED,
     });
   }
-  if (matches[0]) {
+  if (matches[0] !== undefined) {
     return matches[0];
   }
   if (providerFailures === active.length) {
-    return repositoryAccessResultSchema.parse({ repository, status: "provider-unavailable" });
+    return repositoryAccessResultSchema.parse({ repository, status: PROVIDER_UNAVAILABLE });
   }
   return repositoryAccessResultSchema.parse({
     action: "update",
     repository,
     scopes: active.map(scope),
-    status: "authorization-required",
+    status: AUTHORIZATION_REQUIRED,
   });
 }

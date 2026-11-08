@@ -11,8 +11,8 @@ const fixture = () => {
   let revoked = false;
   const invocation = {
     authority: plan.authority,
-    sessionId: plan.selection.sessionId,
     callId: "approval",
+    sessionId: plan.selection.sessionId,
     signal: new AbortController().signal,
   };
   const fetcher = vi.fn<typeof fetch>(async (resource, init) => {
@@ -39,6 +39,7 @@ const fixture = () => {
         throw new Error("owner revoked");
       }
     },
+    fetch: fetcher,
     readPrivateValues: async () => ({
       PLATFORM_PUBLIC_ORIGIN: plan.publicOrigin,
       BETTER_AUTH_URL: plan.publicOrigin,
@@ -48,12 +49,11 @@ const fixture = () => {
         type: "pkcs8",
       }),
     }),
-    fetch: fetcher,
   });
   return {
-    observe,
-    invocation,
     fetcher,
+    invocation,
+    observe,
     revoke: () => {
       revoked = true;
     },
@@ -67,7 +67,7 @@ it("observes anonymous Gateway, exact published public key and BetterAuth withou
 it("does not follow a Vercel login redirect", async () => {
   const f = fixture();
   f.fetcher.mockResolvedValue(
-    new Response(null, { status: 307, headers: { location: "https://vercel.com/login" } }),
+    new Response(null, { headers: { location: "https://vercel.com/login" }, status: 307 }),
   );
   expect(await f.observe(f.invocation, plan)).toBe(false);
   expect(f.fetcher).toHaveBeenCalledOnce();
@@ -119,15 +119,15 @@ it("requires the exact loaded runtime for new purpose plans, even when signing k
   };
   const old = fixture();
   old.fetcher.mockResolvedValueOnce(
-    Response.json({ status: "ok", runtimeBindingDigest: publicReleaseRuntimeBindingDigest(stale) }),
+    Response.json({ runtimeBindingDigest: publicReleaseRuntimeBindingDigest(stale), status: "ok" }),
   );
   expect(await old.observe(old.invocation, selected)).toBe(false);
   expect(old.fetcher).toHaveBeenCalledOnce();
   const current = fixture();
   current.fetcher.mockResolvedValueOnce(
     Response.json({
-      status: "ok",
       runtimeBindingDigest: publicReleaseRuntimeBindingDigest(selected),
+      status: "ok",
     }),
   );
   expect(await current.observe(current.invocation, selected)).toBe(true);

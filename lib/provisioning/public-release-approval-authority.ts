@@ -39,7 +39,7 @@ export const createPublicReleaseApprovalCheckpoint = (input: {
     .update(`public-release-approval-v1:${publicReleaseOperationRef(input.plan)}`)
     .digest("hex");
   const requestId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
-  const authority = input.plan.authority;
+  const { authority } = input.plan;
   const predicate = and(
     eq(builderProvisioningJournals.issuer, authority.issuer),
     eq(builderProvisioningJournals.audience, authority.audience),
@@ -173,7 +173,7 @@ export const createPublicReleaseApprovalAuthority =
       assertCurrentOwner: input.assertCurrentOwner,
     });
     const state = await checkpoint.read();
-    const transport = createNativeTargetApprovalHistoryTransport({
+    const transportInput: Parameters<typeof createNativeTargetApprovalHistoryTransport>[0] = {
       builderOrigin: input.builderOrigin,
       owner: {
         authority: input.owner.authority,
@@ -188,17 +188,27 @@ export const createPublicReleaseApprovalAuthority =
         signal: input.request.signal,
       },
       assertCanonicalAppOwner: input.authority.assertCanonicalAppOwner,
-      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-    });
+    };
+    if (input.fetch !== undefined) {
+      transportInput.fetch = input.fetch;
+    }
+    const transport = createNativeTargetApprovalHistoryTransport(transportInput);
     const observe = transport.observePrivateHistory;
     if (!observe) {
       throw unavailable();
+    }
+    const observationState: Pick<
+      NonNullable<Parameters<typeof readPrivatePublicReleaseApproval>[0]["observation"]>,
+      "state"
+    > = {};
+    if (state !== undefined) {
+      observationState.state = state;
     }
     const approval = await readPrivatePublicReleaseApproval({
       plan,
       callId,
       owner: input.owner,
-      observation: { ...(state === undefined ? {} : { state }), save: checkpoint.save },
+      observation: { ...observationState, save: checkpoint.save },
       readHistory: async (startIndex, onEvent) =>
         await observe({
           principal: input.owner.principal,

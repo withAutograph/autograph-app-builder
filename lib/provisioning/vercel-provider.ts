@@ -12,6 +12,18 @@ import type {
 import { suffixedProviderName } from "./names";
 import { runSequentiallyUntilAsync } from "../async-sequential.ts";
 
+const PROTECTED_DEPLOYMENT_TYPE = "prod_deployment_urls_and_all_previews";
+const PUBLIC_APP = "public-app";
+
+interface VercelProjectCreateBody {
+  framework: "services";
+  name: string;
+  rootDirectory: ".";
+  ssoProtection?: { deploymentType: typeof PROTECTED_DEPLOYMENT_TYPE };
+  oidcTokenConfig?: { enabled: true; issuerMode: "team" };
+  gitRepository?: { repo: string; type: "github" };
+}
+
 const projectSchema = z
   .object({
     framework: z.literal("services"),
@@ -22,7 +34,7 @@ const projectSchema = z
         repo: z.string().min(1),
         type: z.literal("github"),
       })
-      .passthrough()
+      .loose()
       .optional(),
     name: z.string().min(1),
     rootDirectory: z.string().min(1),
@@ -32,7 +44,7 @@ const projectSchema = z
       .nullable()
       .optional(),
   })
-  .passthrough();
+  .loose();
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function suffix() {
@@ -85,7 +97,8 @@ export async function provisionVercelProject(input: {
     }
     let response: Response;
     try {
-      response = await request(`https://api.vercel.com${args.path}${query}`, {
+      const url = `https://api.vercel.com${args.path}${query}`;
+      const options: RequestInit = {
         headers: {
           Accept: "application/json",
           Authorization: `Bearer ${input.token}`,
@@ -95,8 +108,11 @@ export async function provisionVercelProject(input: {
         method: args.method ?? "GET",
         redirect: "error",
         signal: AbortSignal.timeout(20_000),
-        ...(args.body === undefined ? {} : { body: JSON.stringify(args.body) }),
-      });
+      };
+      if (args.body !== undefined) {
+        options.body = JSON.stringify(args.body);
+      }
+      response = await request(url, options);
     } catch {
       throw new Error("provider-unavailable");
     }
@@ -109,20 +125,26 @@ export async function provisionVercelProject(input: {
       const requestRef = vercelProvisionDiagnosticSchema.shape.requestRef.safeParse(
         response.headers.get("x-vercel-id"),
       );
-      providerDiagnostic = {
+      const diagnostic: VercelProvisionDiagnostic = {
         statusCode: response.status,
-        ...(requestRef.success ? { requestRef: requestRef.data } : {}),
       };
+      if (requestRef.success) {
+        diagnostic.requestRef = requestRef.data;
+      }
+      providerDiagnostic = diagnostic;
     }
 
     if (failed) {
       const requestRef = vercelProvisionDiagnosticSchema.shape.requestRef.safeParse(
         response.headers.get("x-vercel-id"),
       );
-      providerDiagnostic = {
+      const diagnostic: VercelProvisionDiagnostic = {
         statusCode: response.status,
-        ...(requestRef.success ? { requestRef: requestRef.data } : {}),
       };
+      if (requestRef.success) {
+        diagnostic.requestRef = requestRef.data;
+      }
+      providerDiagnostic = diagnostic;
     }
     let body: unknown;
     try {
@@ -183,7 +205,7 @@ export async function provisionVercelProject(input: {
 
   const baseName = `apps-${input.appId}`;
   const linkedRepository = input.github.status === "succeeded" ? input.github.fullName : undefined;
-  if (input.reconcilePriorWrite) {
+  if (input.reconcilePriorWrite ?? false) {
     try {
       let uncertainWrite = false;
       for (const candidate of input.persistedCandidates) {
@@ -247,27 +269,21 @@ export async function provisionVercelProject(input: {
           await input.persistAbsent(candidate);
         }
         if (before.status === 404) {
+          const body: VercelProjectCreateBody = {
+            framework: "services",
+            name: candidate,
+            rootDirectory: ".",
+          };
+          if (input.deploymentAccess === PUBLIC_APP) {
+            body.ssoProtection = { deploymentType: PROTECTED_DEPLOYMENT_TYPE };
+            body.oidcTokenConfig = { enabled: true, issuerMode: "team" };
+          }
+          if (linkedRepository) {
+            body.gitRepository = { repo: linkedRepository, type: "github" };
+          }
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const created = await vercel({
-            body: {
-              framework: "services",
-              name: candidate,
-              rootDirectory: ".",
-              ...(input.deploymentAccess === "public-app"
-                ? {
-                    ssoProtection: { deploymentType: "prod_deployment_urls_and_all_previews" },
-                    oidcTokenConfig: { enabled: true, issuerMode: "team" },
-                  }
-                : {}),
-              ...(linkedRepository
-                ? {
-                    gitRepository: {
-                      repo: linkedRepository,
-                      type: "github",
-                    },
-                  }
-                : {}),
-            },
+            body,
             expected: [200, 201, 400, 403, 409, 429],
             method: "POST",
             path: "/v11/projects",
@@ -282,9 +298,15 @@ export async function provisionVercelProject(input: {
             } else if (created.status === 429) {
               code = "provider_rate_limited";
             }
+            const failure: Pick<
+              Extract<VercelProvisionResult, { status: "failed" }>,
+              "code" | "providerDiagnostic"
+            > = { code };
+            if (providerDiagnostic !== undefined) {
+              failure.providerDiagnostic = providerDiagnostic;
+            }
             return {
-              code,
-              ...(providerDiagnostic === undefined ? {} : { providerDiagnostic }),
+              ...failure,
               retryable: created.status === 429,
               status: "failed",
             };
@@ -319,12 +341,12 @@ export async function provisionVercelProject(input: {
         if (
           project.name !== candidate ||
           project.rootDirectory !== "." ||
-          (input.deploymentAccess === "public-app" &&
-            (project.ssoProtection?.deploymentType !== "prod_deployment_urls_and_all_previews" ||
+          (input.deploymentAccess === PUBLIC_APP &&
+            (project.ssoProtection?.deploymentType !== PROTECTED_DEPLOYMENT_TYPE ||
               project.oidcTokenConfig?.enabled !== true ||
               project.oidcTokenConfig?.issuerMode !== "team")) ||
-          (input.deploymentAccess === "public-app" &&
-            (project.ssoProtection?.deploymentType !== "prod_deployment_urls_and_all_previews" ||
+          (input.deploymentAccess === PUBLIC_APP &&
+            (project.ssoProtection?.deploymentType !== PROTECTED_DEPLOYMENT_TYPE ||
               project.oidcTokenConfig?.enabled !== true ||
               project.oidcTokenConfig?.issuerMode !== "team")) ||
           (linkedRepository !== undefined &&
@@ -337,7 +359,7 @@ export async function provisionVercelProject(input: {
             status: "failed",
           };
         }
-        return {
+        const success: Extract<VercelProvisionResult, { status: "succeeded" }> = {
           dashboardUrl: `https://vercel.com/${input.installation.slug}/${project.name}`,
           framework: "services",
           installationId: input.installation.installationId,
@@ -350,34 +372,51 @@ export async function provisionVercelProject(input: {
             type: input.installation.scopeType,
           },
           status: "succeeded",
-          ...(linkedRepository ? { linkedGitHubRepository: linkedRepository } : {}),
         };
+        if (linkedRepository) {
+          success.linkedGitHubRepository = linkedRepository;
+        }
+        return success;
       },
     );
     return result ?? { code: "provider_unavailable", retryable: true, status: "failed" };
   } catch (error) {
     if (error instanceof Error && error.message === "provider-rate-limited") {
-      return {
+      const failure: Extract<VercelProvisionResult, { status: "failed" }> = {
         code: "provider_rate_limited",
         retryable: true,
         status: "failed",
-        ...(providerDiagnostic === undefined ? {} : { providerDiagnostic }),
       };
+      if (providerDiagnostic !== undefined) {
+        failure.providerDiagnostic = providerDiagnostic;
+      }
+      return failure;
     }
     if (error instanceof Error && error.message === "provider-permission-denied") {
-      return {
+      const failure: Extract<VercelProvisionResult, { status: "failed" }> = {
         code: "provider_permission_denied",
         retryable: false,
         status: "failed",
-        ...(providerDiagnostic === undefined ? {} : { providerDiagnostic }),
       };
+      if (providerDiagnostic !== undefined) {
+        failure.providerDiagnostic = providerDiagnostic;
+      }
+      return failure;
     }
-    return {
+    const failure: Pick<
+      Extract<VercelProvisionResult, { status: "failed" }>,
+      "code" | "providerDiagnostic"
+    > = {
       code:
         error instanceof Error && error.message === "credential-rejected"
           ? "credential_unavailable"
           : "provider_unavailable",
-      ...(providerDiagnostic === undefined ? {} : { providerDiagnostic }),
+    };
+    if (providerDiagnostic !== undefined) {
+      failure.providerDiagnostic = providerDiagnostic;
+    }
+    return {
+      ...failure,
       retryable: true,
       status: "failed",
     };

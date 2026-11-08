@@ -24,6 +24,9 @@ import {
   readDraftReconciliationDiff,
 } from "@/lib/repository/sandbox-draft-reconciliation";
 
+const PUBLICATION_RECOVERY_KIND = "publication-recovery";
+const DRAFT_HEAD = "draft-head";
+
 type RepairInspectionInput =
   | { kind: "changes"; against: "base" | "head"; cursor?: number }
   | { kind: "diff"; against: "base" | "head"; cursor?: number; path?: string };
@@ -37,7 +40,7 @@ const inspectPublishedDraftRepair = async (
     return {
       status: "candidate" as const,
       kind: "published-draft-repair" as const,
-      baseline: "draft-head" as const,
+      baseline: DRAFT_HEAD,
       root: candidate.root,
       headSha: candidate.headSha,
       nextAction:
@@ -47,7 +50,7 @@ const inspectPublishedDraftRepair = async (
   if (input.kind === "changes") {
     return {
       status: "changes" as const,
-      against: "draft-head" as const,
+      against: DRAFT_HEAD,
       ...summarizeReconciliationChanges(review.changes, candidate.appId, input.cursor),
       reviewDigest: review.digest,
     };
@@ -62,7 +65,7 @@ const inspectPublishedDraftRepair = async (
   });
   return {
     status: "diff" as const,
-    against: "draft-head" as const,
+    against: DRAFT_HEAD,
     content: Buffer.from(page.chunkBase64, "base64").toString("utf-8"),
     cursor: page.cursor,
     path: input.path,
@@ -80,6 +83,13 @@ const inspectRepairCandidate = (
   candidate.kind === "published-draft-repair" && input.kind !== "conflict"
     ? inspectPublishedDraftRepair(input, candidate, ctx)
     : undefined;
+
+interface PublicationRecoverySubject {
+  branch: string;
+  proposalDigest: string;
+  releaseId?: string;
+  repositoryId: string;
+}
 
 const publicationRecoveryCall = (completion: DraftPublicationCompletion) =>
   "kind" in completion
@@ -108,7 +118,7 @@ export default defineTool({
     const workflow = appBuilderWorkflowState.get();
     const state =
       resolveDraftReviewedWorkflow(workflow, draftReconciliationState.get()) ?? workflow;
-    if (input.kind === "publication-recovery") {
+    if (input.kind === PUBLICATION_RECOVERY_KIND) {
       const currentAppSpec = "appSpec" in state ? state.appSpec : undefined;
       const completions = [
         ...draftReconciliationCompletions.get(),
@@ -121,12 +131,15 @@ export default defineTool({
       );
       const recoveries = [];
       for (const completion of completions) {
+        const adapterSessionId = ctx.session.id;
+        const callbackExecution = hostedOperatorCallbackExecution(ctx.session);
+        const sessionAuth = ctx.session.auth;
         // oxlint-disable-next-line eslint/no-await-in-loop -- Revalidate owner and accepted selection before exposing each retained context.
         await assertReconciliationCompletionOwnerForSession({
+          adapterSessionId,
+          callbackExecution,
           completion,
-          adapterSessionId: ctx.session.id,
-          callbackExecution: hostedOperatorCallbackExecution(ctx.session),
-          sessionAuth: ctx.session.auth,
+          sessionAuth,
         });
         const current = appBuilderWorkflowState.get();
         if (
@@ -142,15 +155,15 @@ export default defineTool({
               "The accepted app specification changed while reading retained publication context. Read publication-recovery again for the current selection; no publication or association was attempted.",
           };
         }
-        recoveries.push({
+        const recovery: PublicationRecoverySubject = {
           proposalDigest: completion.proposal.digest,
           repositoryId: completion.proposal.repositoryId,
           branch: completion.proposal.branchName,
-          ...(completion.compilation.release.status === "published"
-            ? { releaseId: completion.compilation.release.selection.releaseId }
-            : {}),
-          nextCall: publicationRecoveryCall(completion),
-        });
+        };
+        if (completion.compilation.release.status === "published") {
+          recovery.releaseId = completion.compilation.release.selection.releaseId;
+        }
+        recoveries.push({ ...recovery, nextCall: publicationRecoveryCall(completion) });
       }
       return {
         status: "publication-recovery" as const,
@@ -225,7 +238,7 @@ export default defineTool({
     };
   },
   inputSchema: z.discriminatedUnion("kind", [
-    z.strictObject({ kind: z.literal("publication-recovery") }),
+    z.strictObject({ kind: z.literal(PUBLICATION_RECOVERY_KIND) }),
     z.strictObject({ kind: z.literal("conflict"), path: z.string().min(1) }),
     z.strictObject({
       against: z.enum(["base", "head"]),

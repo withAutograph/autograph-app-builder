@@ -50,8 +50,9 @@ const ctx = (turnId = "correction", sequence = 2): HookContext =>
   ({
     session: { id: "owned", turn: { id: turnId, sequence } },
   }) as HookContext;
+const hash = (letter: string) => letter.repeat(64);
+
 const seed = () => {
-  const hash = (letter: string) => letter.repeat(64);
   const changes = [
     {
       path: "apps/example/app/page.tsx",
@@ -122,8 +123,8 @@ const deny = (current: ReturnType<typeof seed>) => {
 const request = (owner = ctx()) => {
   observePlannedAuthoringRequest(owner, {
     message: "Correct the current draft and tests before asking for fresh Build.",
-    turnId: owner.session.turn.id,
     sequence: 0,
+    turnId: owner.session.turn.id,
   });
 };
 const inspection = (current: ReturnType<typeof seed>, owner = ctx(), callId = "actual-inspect") => {
@@ -131,30 +132,30 @@ const inspection = (current: ReturnType<typeof seed>, owner = ctx(), callId = "a
     {
       appId: "example",
       expectedProposalDigest: current.proposal.digest,
-      paths: [],
       pathIndex: 0,
+      paths: [],
     },
     owner as unknown as Pick<ToolContext, "session" | "abortSignal">,
   );
   return {
-    type: "action.result",
     data: {
-      status: "completed",
       result: {
-        kind: "tool-result",
-        toolName: "inspect_existing_app",
         callId,
+        kind: "tool-result",
         output,
+        toolName: "inspect_existing_app",
       },
+      status: "completed",
     },
+    type: "action.result",
   } as unknown as Parameters<typeof observePlannedAuthoringInspection>[0];
 };
 const run = (operation: () => void | Promise<void>) =>
   contextStorage.run(new ContextContainer(), operation);
 const decision = (owner = ctx()) =>
   currentAuthoringDecision(owner, {
-    completed: true,
     blocked: false,
+    completed: true,
     pendingInput: false,
   });
 
@@ -171,10 +172,10 @@ describe("declined current-proposal drafting observation", () => {
       const observed = decision();
       expect(observed.decision).toBe("runnable");
       expect(observed.scope?.correction).toMatchObject({
-        proposalDigest: current.proposal.digest,
-        inspectionCallId: "actual-inspect",
-        requestTurnId: "correction",
         denialEvidenceDigest: authority.terminalDecisions?.[0]?.evidenceDigest,
+        inspectionCallId: "actual-inspect",
+        proposalDigest: current.proposal.digest,
+        requestTurnId: "correction",
       });
       expect(preapprovalAuthoringDecisionSchema.parse(observed)).toEqual(observed);
       expect(readPrivateApplyAuthority()).toEqual(authority);
@@ -202,9 +203,7 @@ describe("declined current-proposal drafting observation", () => {
         requestPrivateApplyApproval({ ...scope(current), proposalDigest: "other" }, "pending");
       }
       const owner =
-        mode === "foreign"
-          ? ({ ...ctx(), session: { ...ctx().session, id: "foreign" } } as HookContext)
-          : ctx();
+        mode === "foreign" ? { ...ctx(), session: { ...ctx().session, id: "foreign" } } : ctx();
       request(owner);
       if (mode !== "granted") {
         observePlannedAuthoringInspection(inspection(current, owner), owner);
@@ -228,10 +227,10 @@ describe("declined current-proposal drafting observation", () => {
         }
         if (mode === "other-proposal" && event.data.result.kind === "tool-result") {
           event.data.result.output = {
-            source: "current-proposal",
-            status: "UNAPPLIED",
             appId: "example",
             proposalDigest: "other",
+            source: "current-proposal",
+            status: "UNAPPLIED",
           };
         }
         observePlannedAuthoringInspection(event, mode === "other-turn" ? ctx("other", 3) : ctx());
@@ -268,8 +267,8 @@ describe("declined current-proposal drafting observation", () => {
         {
           data: {
             message: "Correct this unapproved draft",
-            turnId: owner.session.turn.id,
             sequence: 0,
+            turnId: owner.session.turn.id,
           },
         } as never,
         owner,
@@ -364,8 +363,8 @@ describe("declined current-proposal drafting observation", () => {
       expect(decision().decision).toBe("runnable");
       observePlannedAuthoringRequest(ctx(), {
         message: "different bytes",
-        turnId: "correction",
         sequence: 0,
+        turnId: "correction",
       });
       expect(decision().decision).toBe("planned");
       expect(readPrivateApplyAuthority().grant).toBeNull();

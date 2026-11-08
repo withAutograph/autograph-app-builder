@@ -8,6 +8,9 @@ export function escapeHtml(value: unknown) {
       ({ '"': "&quot;", "&": "&amp;", "'": "&#39;", "<": "&lt;", ">": "&gt;" })[char] ?? char,
   );
 }
+const renderListItem = (value: string) => `<li>${escapeHtml(value)}</li>`;
+const renderCaseEvidence = (item: { repo: string; path: string; status: string }) =>
+  `<li>${escapeHtml(item.repo)}: <code>${escapeHtml(item.path)}</code> — ${escapeHtml(item.status)}</li>`;
 // Keep report rendering helpers scoped to the report artifact.
 // oxlint-disable-next-line eslint/func-style, unicorn/consistent-function-scoping -- Preserve function declaration hoisting and initialization timing.
 export function renderReport(report: {
@@ -38,6 +41,10 @@ export function renderReport(report: {
 }) {
   const pretty = (v: unknown) =>
     `<pre>${escapeHtml(JSON.stringify(v, (key, value) => (key === "observations" && Array.isArray(value) ? { count: value.length, details: "Download report.json for individual observations" } : value), 2))}</pre>`;
+  const renderExcerpt = (excerpt: string | undefined) =>
+    (excerpt ?? "") === ""
+      ? "Source text not supplied; location only."
+      : `<pre>${escapeHtml(excerpt)}</pre>`;
   const { adherence } = report;
   // Keep report formatting helpers local to this artifact.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
@@ -55,7 +62,24 @@ export function renderReport(report: {
       .slice(Math.max(0, line - 2), line + 2)
       .map((text, offset) => `${Math.max(1, line - 1) + offset}: ${text}`)
       .join("\n");
-    return `<article id="finding-${index}"><strong>${escapeHtml(o.classification ?? o.dimension)} · ${escapeHtml(o.verdict)}</strong><p>${escapeHtml(o.summary)}</p>${candidateNote}<small>${escapeHtml(o.evidence)} evidence${o.source ? ` · <a href="#source-${index}">${escapeHtml(o.source.path)}:${o.source.line}</a>` : ""}${o.capture ? ` · <a href="#${escapeHtml(o.capture)}">Screenshot region</a>` : ""}</small>${o.source ? `<details id="source-${index}"><summary>Source location: ${escapeHtml(o.source.path)}:${o.source.line}</summary>${excerpt ? `<pre>${escapeHtml(excerpt)}</pre>` : "Source text not supplied; location only."}</details>` : ""}</article>`;
+    return [
+      `<article id="finding-${index}"><strong>${escapeHtml(o.classification ?? o.dimension)} · ${escapeHtml(o.verdict)}</strong><p>${escapeHtml(o.summary)}</p>${candidateNote}<small>${escapeHtml(o.evidence)} evidence`,
+      o.source
+        ? ` · <a href="#source-${index}">${escapeHtml(o.source.path)}:${o.source.line}</a>`
+        : "",
+      (o.capture?.length ?? 0) > 0
+        ? ` · <a href="#${escapeHtml(o.capture)}">Screenshot region</a>`
+        : "",
+      "</small>",
+      o.source
+        ? [
+            `<details id="source-${index}"><summary>Source location: ${escapeHtml(o.source.path)}:${o.source.line}</summary>`,
+            renderExcerpt(excerpt),
+            "</details>",
+          ].join("")
+        : "",
+      "</article>",
+    ].join("");
   };
   const groups = (
     [
@@ -67,12 +91,15 @@ export function renderReport(report: {
     .map(([group, title]) => {
       const entries = observations
         .map((o, index) => ({ index, o }))
-        .filter(({ o }) =>
-          group === "unknown"
-            ? o.provenance === "unknown" ||
+        .filter(({ o }) => {
+          if (group === "unknown") {
+            return (
+              o.provenance === "unknown" ||
               (o.provenance === "generated" && o.verdict === "unassessed")
-            : o.provenance === group && (group === "shared" || o.verdict === "nonconforming"),
-        );
+            );
+          }
+          return o.provenance === group && (group === "shared" || o.verdict === "nonconforming");
+        });
       const visible = group === "unknown" ? entries.slice(0, 30) : entries;
       return `<details${group === "generated" ? " open" : ""}><summary>${title} (${entries.length})</summary>${visible.map(({ o, index }) => location(o, index)).join("") || "No findings in assessed evidence."}${visible.length < entries.length ? '<p>Showing 30 representative unknowns. <a href="report.json">Download every observation and source location</a>.</p>' : ""}</details>`;
     })
@@ -98,16 +125,16 @@ export function renderReport(report: {
             .slice(Math.max(0, diagnostic.line - 2), diagnostic.line + 1)
             .map((text, offset) => `${Math.max(1, diagnostic.line - 1) + offset}: ${text}`)
             .join("\n");
-          return `<article id="implementation-${index}"><strong>TypeScript ${escapeHtml(diagnostic.code)}</strong><p>${escapeHtml(diagnostic.message)}</p><small>Generated source · <a href="#implementation-source-${index}">${escapeHtml(diagnostic.path)}:${diagnostic.line}:${diagnostic.column}</a></small><details id="implementation-source-${index}"><summary>Source location</summary>${excerpt ? `<pre>${escapeHtml(excerpt)}</pre>` : "Source text not supplied; location only."}</details></article>`;
+          return `<article id="implementation-${index}"><strong>TypeScript ${escapeHtml(diagnostic.code)}</strong><p>${escapeHtml(diagnostic.message)}</p><small>Generated source · <a href="#implementation-source-${index}">${escapeHtml(diagnostic.path)}:${diagnostic.line}:${diagnostic.column}</a></small><details id="implementation-source-${index}"><summary>Source location</summary>${renderExcerpt(excerpt)}</details></article>`;
         })
         .join("")}</details>`
     : "";
   const measuredSummary =
     (report.case
-      ? `<section><h2>${escapeHtml(report.case.title)}</h2><p>${escapeHtml(report.case.notes)}</p><details><summary>Case evidence and review questions</summary><ul>${report.case.evidence.map((item) => `<li>${escapeHtml(item.repo)}: <code>${escapeHtml(item.path)}</code> — ${escapeHtml(item.status)}</li>`).join("")}</ul><h3>Review questions</h3><ul>${report.case.reviewQuestions.map((question) => `<li>${escapeHtml(question)}</li>`).join("")}</ul><h3>Intended outcomes, not asserted results</h3><ul>${report.case.outcomes.map((outcome) => `<li>${escapeHtml(outcome)}</li>`).join("")}</ul></details></section>`
+      ? `<section><h2>${escapeHtml(report.case.title)}</h2><p>${escapeHtml(report.case.notes)}</p><details><summary>Case evidence and review questions</summary><ul>${report.case.evidence.map(renderCaseEvidence).join("")}</ul><h3>Review questions</h3><ul>${report.case.reviewQuestions.map(renderListItem).join("")}</ul><h3>Intended outcomes, not asserted results</h3><ul>${report.case.outcomes.map(renderListItem).join("")}</ul></details></section>`
       : "") +
     (report.evaluationNotes?.length
-      ? `<details><summary>Capture context and limitations</summary><ul>${report.evaluationNotes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul></details>`
+      ? `<details><summary>Capture context and limitations</summary><ul>${report.evaluationNotes.map(renderListItem).join("")}</ul></details>`
       : "") +
     (adherence
       ? `<h2>Arrusted adherence: ${adherence.score === null ? "Not assessed" : `${adherence.score}/100`} · ${escapeHtml(adherence.status)}</h2><p>Evidence coverage: ${pct(adherence.coveragePercent)}. Evaluator ${adherence.version}. This measures inspected evidence, not all rendered UI.</p><table><thead><tr><th>Dimension</th><th>Conforming</th><th>Nonconforming</th><th>Unassessed</th><th>Adherence</th><th>Static / browser</th></tr></thead><tbody>${Object.entries(
@@ -119,7 +146,7 @@ export function renderReport(report: {
           )
           .join(
             "",
-          )}</tbody></table><p>${escapeHtml(adherence.method)}</p><ul>${adherence.limitations.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ul>${groups}<details><summary>All adherence observations</summary><p><a href="report.json" download>Download all counts, declarations, locations, and observations as JSON</a>.</p></details>`
+          )}</tbody></table><p>${escapeHtml(adherence.method)}</p><ul>${adherence.limitations.map(renderListItem).join("")}</ul>${groups}<details><summary>All adherence observations</summary><p><a href="report.json" download>Download all counts, declarations, locations, and observations as JSON</a>.</p></details>`
       : "<p>Historical report: this evaluation predates measured adherence scoring.</p>") +
     implementationFindings;
   const judge = report.judge as {
@@ -182,6 +209,6 @@ export function renderReport(report: {
           )
           .join("")}</tbody></table>`
       : ""
-  }${judge.strengths?.length ? `<h3>Strengths</h3><ul>${judge.strengths.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ul>` : ""}${judge.findings?.length ? `<h3>Recommended improvements</h3>${judge.findings.map((f, index) => `<article id="design-${index}"><h4>${escapeHtml(f.severity)} · <a href="#${escapeHtml(f.image)}">${escapeHtml(f.image)}</a></h4><p>${escapeHtml(f.explanation)}</p><p><strong>Improve:</strong> ${escapeHtml(f.improvement)}</p><small>Screenshot region: x ${f.region.x}, y ${f.region.y}, width ${f.region.width}, height ${f.region.height}</small></article>`).join("")}` : ""}`;
+  }${judge.strengths?.length ? `<h3>Strengths</h3><ul>${judge.strengths.map(renderListItem).join("")}</ul>` : ""}${judge.findings?.length ? `<h3>Recommended improvements</h3>${judge.findings.map((f, index) => `<article id="design-${index}"><h4>${escapeHtml(f.severity)} · <a href="#${escapeHtml(f.image)}">${escapeHtml(f.image)}</a></h4><p>${escapeHtml(f.explanation)}</p><p><strong>Improve:</strong> ${escapeHtml(f.improvement)}</p><small>Screenshot region: x ${f.region.x}, y ${f.region.y}, width ${f.region.width}, height ${f.region.height}</small></article>`).join("")}` : ""}`;
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Generated UI design report</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1100px;color:#222}h1,h2{line-height:1.2}img{max-width:100%;height:auto;display:block}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f4f4;padding:16px;border-radius:8px}section,article{margin:32px 0}summary{cursor:pointer}a{color:#334ba0}table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:12px;border-bottom:1px solid #ddd;vertical-align:top}.capture{position:relative}.region{position:absolute;border:2px dashed #a94700;box-sizing:border-box}.region:focus{outline:3px solid blue}</style><main><h1>Generated UI design report</h1><p>Advisory evaluation of an existing preview. Not a release gate or proof of backend behavior.</p><p>${escapeHtml(report.createdAt)} · <a href="report.json" download>Download full evidence JSON</a></p>${measuredSummary}<h2>AI design review</h2>${summary}<details><summary>Full scoring metadata and limitations</summary>${pretty(report.judge)}</details><details><summary>Generated-source evidence and reference diagnostics</summary>${pretty({ reference: report.reference, source: report.source })}</details>${report.captures.map((c) => `<section id="${escapeHtml(c.name)}"><h2>${escapeHtml(c.name)} — ${escapeHtml(c.state)}</h2>${annotated(c)}<details><summary>Browser findings and interactions</summary>${pretty({ interaction: c.interaction, measurements: c.measurements })}</details><details><summary>Token evidence and coverage</summary>${pretty(c.styles ?? "See initial state for style evidence")}</details></section>`).join("")}</main></html>`;
 }

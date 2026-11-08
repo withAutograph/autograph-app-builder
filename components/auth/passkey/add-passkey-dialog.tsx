@@ -61,7 +61,7 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
     submitRequest({
       ...(name ? { name } : {}),
       ...(authenticatorAttachment ? { authenticatorAttachment } : {}),
-    } as AddPasskeyParams<PasskeyAuthClient>);
+    });
   };
 
   const needsFreshSession = isSessionNotFreshError(addPasskey.error);

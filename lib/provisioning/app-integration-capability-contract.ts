@@ -10,6 +10,12 @@ import { z } from "zod";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { builderAppIdSchema } from "./names";
 
+const prepareControlDatabaseEffect = "prepare-control-database";
+const installControlSchemaEffect = "install-control-schema";
+const bindServiceMembershipsEffect = "bind-service-memberships";
+const registerCentralAppEffect = "register-central-app";
+const prepareProviderDestinationEffect = "prepare-provider-destination";
+
 const id = z.string().min(1).max(256);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const sqlName = z.string().regex(/^[a-z][a-z0-9_]{0,62}$/u);
@@ -34,11 +40,11 @@ export const integrationCapabilityMembershipSchema = z.strictObject({
   role: sqlName,
 });
 export const integrationCapabilityEffectSchema = z.enum([
-  "prepare-control-database",
-  "install-control-schema",
-  "bind-service-memberships",
-  "register-central-app",
-  "prepare-provider-destination",
+  prepareControlDatabaseEffect,
+  installControlSchemaEffect,
+  bindServiceMembershipsEffect,
+  registerCentralAppEffect,
+  prepareProviderDestinationEffect,
 ]);
 export type IntegrationCapabilityEffect = z.infer<typeof integrationCapabilityEffectSchema>;
 export const appIntegrationCapabilityPlanSchema = z
@@ -151,17 +157,17 @@ export const appIntegrationCapabilityPlanSchema = z
     privateConfigurationSeed: z.strictObject({ reference: z.uuid(), sha256: digest }),
     effects: z.union([
       z.tuple([
-        z.literal("prepare-control-database"),
-        z.literal("install-control-schema"),
-        z.literal("bind-service-memberships"),
-        z.literal("register-central-app"),
+        z.literal(prepareControlDatabaseEffect),
+        z.literal(installControlSchemaEffect),
+        z.literal(bindServiceMembershipsEffect),
+        z.literal(registerCentralAppEffect),
       ]),
       z.tuple([
-        z.literal("prepare-control-database"),
-        z.literal("install-control-schema"),
-        z.literal("bind-service-memberships"),
-        z.literal("prepare-provider-destination"),
-        z.literal("register-central-app"),
+        z.literal(prepareControlDatabaseEffect),
+        z.literal(installControlSchemaEffect),
+        z.literal(bindServiceMembershipsEffect),
+        z.literal(prepareProviderDestinationEffect),
+        z.literal(registerCentralAppEffect),
       ]),
     ]),
   })
@@ -284,7 +290,7 @@ export const appIntegrationCapabilityOperationRef = (plan: AppIntegrationCapabil
   return `${value.slice(0, 8)}-${value.slice(8, 12)}-5${value.slice(13, 16)}-a${value.slice(17, 20)}-${value.slice(20, 32)}`;
 };
 export const integrationProviderDestinationReceiptSchema = z.strictObject({
-  effect: z.literal("prepare-provider-destination"),
+  effect: z.literal(prepareProviderDestinationEffect),
   destinationId: id,
   name: id,
   url: z.url(),
@@ -296,7 +302,7 @@ export const preparedIntegrationProviderDestinationSchema =
 export const integrationCapabilityReceiptSchema = z.discriminatedUnion("effect", [
   integrationProviderDestinationReceiptSchema,
   z.strictObject({
-    effect: z.literal("prepare-control-database"),
+    effect: z.literal(prepareControlDatabaseEffect),
     resourceVersion: id,
     resourceId: id,
     database: sqlName,
@@ -304,12 +310,12 @@ export const integrationCapabilityReceiptSchema = z.discriminatedUnion("effect",
     migratorRole: role,
   }),
   z.strictObject({
-    effect: z.literal("install-control-schema"),
+    effect: z.literal(installControlSchemaEffect),
     resourceVersion: id,
     schemaSha256: digest,
   }),
   z.strictObject({
-    effect: z.literal("bind-service-memberships"),
+    effect: z.literal(bindServiceMembershipsEffect),
     resourceVersion: id,
     memberships: z
       .array(
@@ -320,7 +326,7 @@ export const integrationCapabilityReceiptSchema = z.discriminatedUnion("effect",
       .min(1),
   }),
   z.strictObject({
-    effect: z.literal("register-central-app"),
+    effect: z.literal(registerCentralAppEffect),
     resourceVersion: id,
     appId: builderAppIdSchema,
     resourceProfileId: id,
@@ -434,7 +440,7 @@ export const appIntegrationCapabilityRecordSchema = z
   .superRefine((record, context) => {
     const invalid = [
       record.planDigest !== appIntegrationCapabilityPlanDigest(record.plan),
-      record.plan.version === 1 && record.effects["prepare-provider-destination"] !== undefined,
+      record.plan.version === 1 && record.effects[prepareProviderDestinationEffect] !== undefined,
       record.plan.effects.some((effect) => {
         const state = record.effects[effect];
         return (

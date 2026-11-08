@@ -14,6 +14,8 @@ import {
 } from "../integrations/vercel-installation";
 import type { VercelTokenKeyringConfig } from "../integrations/vercel-installation";
 
+const PUBLIC_RELEASE_CONFIGURATION_KIND = "public-release-runtime-configuration-v1";
+
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const id = z.string().min(1);
 const origin = z
@@ -49,17 +51,18 @@ const sealedSchema = z.strictObject({
 });
 const valuesSchema = z.record(z.string().regex(/^[A-Z_][A-Z0-9_]*$/u), z.string().min(1));
 const recordSchema = z.strictObject({
-  kind: z.literal("public-release-runtime-configuration-v1"),
+  kind: z.literal(PUBLIC_RELEASE_CONFIGURATION_KIND),
   scope: publicReleaseRuntimeConfigurationScopeSchema,
   sealed: sealedSchema,
 });
 const authResourceSchema = publicRealmResourceSchema.omit({ version: true });
 const unavailable = () => new Error("public_release_runtime_configuration_unavailable");
+const normalized = (hostname: string) => hostname.replace(/-pooler(?=\.)/u, "");
 const identity = (scope: PublicReleaseRuntimeConfigurationScope) => {
   const hash = createHash("sha256")
     .update(
       JSON.stringify([
-        "public-release-runtime-configuration-v1",
+        PUBLIC_RELEASE_CONFIGURATION_KIND,
         publicReleaseRuntimeConfigurationScopeSchema.parse(scope),
       ]),
     )
@@ -92,7 +95,6 @@ export const createFreshPublicAuthValues = (input: {
   const production = /^(?<hostname>[a-z0-9.-]+\.neon\.tech)\/[^/]+$/u.exec(
     input.productionDatabaseIdentity,
   );
-  const normalized = (hostname: string) => hostname.replace(/-pooler(?=\.)/u, "");
   if (
     // oxlint-disable-next-line sonarjs/expression-complexity -- Dedicated restricted runtime and a different normalized production endpoint are mandatory together.
     resource.hostname !== runtime.hostname ||
@@ -227,7 +229,7 @@ export const createPublicReleaseRuntimeConfigurationStore = (input: {
             requestDigest: identity(scope).digest,
             revision: 1,
             record: recordSchema.parse({
-              kind: "public-release-runtime-configuration-v1",
+              kind: PUBLIC_RELEASE_CONFIGURATION_KIND,
               scope,
               sealed,
             }),

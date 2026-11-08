@@ -57,7 +57,7 @@ const program = normalActorProgramSchema.parse({
   appId: target.appId,
   origin: "https://apps.example.com",
   actors: [
-    { actorKey: "owner", email: "owner@example.com", name: "Owner", account: "capture-existing" },
+    { account: "capture-existing", actorKey: "owner", email: "owner@example.com", name: "Owner" },
   ],
   organizations: [],
   memberships: [],
@@ -77,24 +77,24 @@ const plan = hostedOperatorPlanSchema.parse({
     sessionId: target.sessionId,
   },
   appDatabase: {
-    resourceId: "app-resource",
     database: "normal",
     migratorRole: "normal_owner",
+    resourceId: "app-resource",
     runtimeRole: "normal_runtime",
   },
   authDatabase: {
-    resourceId: "auth-resource",
     database: "auth",
     migratorRole: "auth_owner",
+    resourceId: "auth-resource",
     runtimeRole: "auth_runtime",
   },
   contextId: "accepted-spec",
   cost: { class: "shared-recovery-group", description: "Approved normal accounts", owner: "owner" },
   effects: [
     {
+      description: "Capture approved actual accounts",
       id: "normal-accounts",
       kind: "normal-accounts",
-      description: "Capture approved actual accounts",
     },
   ],
   installer: { reference: "owned-worker", sha256: "a".repeat(64) },
@@ -276,7 +276,7 @@ const fixture = () => {
   const noOp = vi.fn(async () => {
     await Promise.resolve();
   });
-  const capture = { context, preparation, actorKey: "owner", organizationId: undefined, link };
+  const capture = { actorKey: "owner", context, link, organizationId: undefined, preparation };
   const readPending = vi.fn(async () => await Promise.resolve(capture));
   const readStaging = vi.fn(
     async () =>
@@ -296,12 +296,12 @@ const fixture = () => {
         assertAccountApproval: noOp,
         assertMutationAuthority: noOp,
         store: {
-          read: async () => {
+          compareAndSet: async () => {
             await Promise.resolve();
             // oxlint-disable-next-line unicorn/no-useless-undefined -- The actual journal port distinguishes an absent row or lost CAS from a void result.
             return undefined;
           },
-          compareAndSet: async () => {
+          read: async () => {
             await Promise.resolve();
             // oxlint-disable-next-line unicorn/no-useless-undefined -- The actual journal port distinguishes an absent row or lost CAS from a void result.
             return undefined;
@@ -334,14 +334,14 @@ const fixture = () => {
   const normalTransport = vi.fn<NonNullable<NormalActorCaptureDeploymentIo["normalTransport"]>>(
     async (input) =>
       await createHostedOperatorNormalAuthTransport(input, {
+        fetch: authFetch,
         getOidc: async () => await Promise.resolve("native-token"),
         verifyOidc: async () => {
           await Promise.resolve();
         },
-        fetch: authFetch,
       }),
   );
-  return { resources, readPending, readStaging, noOp, normalTransport, authFetch };
+  return { authFetch, noOp, normalTransport, readPending, readStaging, resources };
 };
 
 describe("native normal capture deployment assembly", () => {
@@ -366,19 +366,19 @@ describe("native normal capture deployment assembly", () => {
     >(async (incoming, options) => await jwtVerify(incoming, keys.publicKey, options));
     const ports = createNormalActorCaptureDeploymentPorts(f.resources, { verifyNativeToken });
     expect(await ports.verifySender(token, ports.sender)).toEqual({
-      iss: sender.issuer,
       aud: sender.audience,
+      environment: sender.environment,
+      iss: sender.issuer,
       owner_id: sender.ownerId,
       project_id: sender.projectId,
-      environment: sender.environment,
       sub: sender.subject,
     });
     expect(verifyNativeToken).toHaveBeenCalledWith(token, {
       audience: sender.audience,
+      environment: sender.environment,
       issuer: sender.issuer,
       ownerId: sender.ownerId,
       projectId: sender.projectId,
-      environment: sender.environment,
       subject: sender.subject,
     });
     const wrongSubject = await new SignJWT({
@@ -424,18 +424,18 @@ describe("native normal capture deployment assembly", () => {
     expect(verified.payload.actual).toBe(true);
     await pending.readback(
       new Request(`${link.endpointOrigin}/api/auth/platform/operator-identity/readback`, {
-        method: "POST",
         body: "{}",
+        method: "POST",
       }),
     );
     expect(remote).toHaveBeenCalledTimes(2);
     await pending.assertCurrent();
     f.readPending.mockResolvedValueOnce({
-      context,
-      preparation,
       actorKey: "different",
-      organizationId: undefined,
+      context,
       link,
+      organizationId: undefined,
+      preparation,
     });
     await expect(pending.assertCurrent()).rejects.toThrow(
       "realm_browser_session_capture_unavailable",

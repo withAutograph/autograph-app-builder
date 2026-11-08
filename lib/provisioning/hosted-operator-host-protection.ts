@@ -22,10 +22,15 @@ export const matchesExternalTrustedSources = (
   teamId: string,
   appProjectId: string,
   gatewayProjectId: string,
-) =>
-  policy.teamId === teamId &&
-  appProjectId !== gatewayProjectId &&
-  policy.appPreview.sourceProjectId === gatewayProjectId &&
-  policy.appPreview.targetProjectId === appProjectId &&
-  policy.gatewayPreview.sourceProjectId === appProjectId &&
-  policy.gatewayPreview.targetProjectId === gatewayProjectId;
+) => {
+  const appBindingMatches =
+    policy.teamId === teamId &&
+    appProjectId !== gatewayProjectId &&
+    policy.appPreview.sourceProjectId === gatewayProjectId &&
+    policy.appPreview.targetProjectId === appProjectId;
+  return (
+    appBindingMatches &&
+    policy.gatewayPreview.sourceProjectId === appProjectId &&
+    policy.gatewayPreview.targetProjectId === gatewayProjectId
+  );
+};

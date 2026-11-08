@@ -164,7 +164,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
           scope.installationId === target.selectedInstallationId),
     );
     const configurationUrl =
-      matchingScopes.length === 1 && matchingScopes[0]
+      matchingScopes.length === 1 && matchingScopes[0] !== undefined
         ? installationSettingsUrl(matchingScopes[0])
         : undefined;
     return { configurationUrl, kind: "missing", target } as const;

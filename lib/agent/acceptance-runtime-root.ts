@@ -213,7 +213,7 @@ export const resolveAcceptanceRuntimeRoot = async (input: {
     },
     recover: async () => {
       const access = repositoryAccessReceiptSchema.parse(repositoryAccessReceiptState.get());
-      const delivery = projection.plan.delivery;
+      const { delivery } = projection.plan;
       if (
         access.sessionId !== ctx.session.id ||
         delivery?.gitSha === undefined ||

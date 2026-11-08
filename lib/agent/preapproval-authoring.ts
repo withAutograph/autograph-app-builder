@@ -120,9 +120,20 @@ export const decidePreapprovalAuthoring = (input: {
   ) {
     return { ...base, decision: "blocked" };
   }
+  const authoringAuthority = (): Pick<
+    PreapprovalAuthoringScope,
+    "authoritySessionId" | "correction"
+  > => {
+    const authority: Pick<PreapprovalAuthoringScope, "authoritySessionId" | "correction"> = {
+      authoritySessionId: input.adapterSessionId,
+    };
+    if (correcting) {
+      authority.correction = input.correction;
+    }
+    return authority;
+  };
   const candidate = preapprovalAuthoringScopeSchema.safeParse({
-    authoritySessionId: input.adapterSessionId,
-    ...(correcting ? { correction: input.correction } : {}),
+    ...authoringAuthority(),
     appId: current.appSpec.appId,
     appSpecDigest: current.appSpec.digest,
     acceptedByCallId: current.appSpec.acceptedByCallId,

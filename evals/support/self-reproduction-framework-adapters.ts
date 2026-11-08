@@ -29,14 +29,21 @@ const structuralHints = (files: readonly SourceFile[]) => ({
  * runtime fixtures must supply assertions; filenames and rendered body text
  * cannot prove authorization, server rendering, cache scope, or token provenance.
  */
-export const createDefaultFrameworkAdapter = (input: {
+type FrameworkAdapter<PageInput> = Omit<TrustedFrameworkAdapter, "exerciseBrowser"> & {
+  exerciseBrowser: (
+    page: PageInput,
+    requirement: Parameters<TrustedFrameworkAdapter["exerciseBrowser"]>[1],
+  ) => ReturnType<TrustedFrameworkAdapter["exerciseBrowser"]>;
+};
+
+export const createDefaultFrameworkAdapter = <PageInput = unknown>(input: {
   side: "reference" | "candidate";
   files: readonly SourceFile[];
   baseURL: string;
   sourceReview?: TrustedFrameworkAdapter["reviewSource"];
-  browserFixture?: TrustedFrameworkAdapter["exerciseBrowser"];
+  browserFixture?: FrameworkAdapter<PageInput>["exerciseBrowser"];
   navigationFixture?: TrustedFrameworkAdapter["instantNavigationRecipe"];
-}): TrustedFrameworkAdapter => {
+}): FrameworkAdapter<PageInput> => {
   const hints = structuralHints(input.files);
   return {
     exerciseBrowser:

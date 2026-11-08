@@ -74,10 +74,11 @@ export function assertBoundGhcrPayload(
   if (
     Object.keys(record).toSorted().join(",") !== "Secret,ServerURL,Username" ||
     record.ServerURL !== registry ||
-    record.Username !== expectedUsername ||
-    typeof record.Secret !== "string" ||
-    !/^[A-Za-z0-9_]{20,4096}$/u.test(record.Secret)
+    record.Username !== expectedUsername
   ) {
+    throw new Error("GHCR provider identity did not match approval.");
+  }
+  if (typeof record.Secret !== "string" || !/^[A-Za-z0-9_]{20,4096}$/u.test(record.Secret)) {
     throw new Error("GHCR provider identity did not match approval.");
   }
   const secret = Buffer.from(record.Secret, "ascii");
@@ -134,13 +135,16 @@ type GhStatusRecord = Readonly<{
   tokenSource: "keyring";
 }>;
 
+const malformedAuthenticationStatus = "GitHub authentication status was malformed.";
+const unsafeGitHubStateRoot = "GitHub state root is unsafe.";
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseGhAuthStatus(payload: string, expectedUsername: string): GhStatusRecord {
   let parsed: unknown;
   try {
     parsed = JSON.parse(payload);
   } catch {
-    throw new Error("GitHub authentication status was malformed.");
+    throw new Error(malformedAuthenticationStatus);
   }
   if (
     typeof parsed !== "object" ||
@@ -148,7 +152,7 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
     Array.isArray(parsed) ||
     Object.keys(parsed).join(",") !== "hosts"
   ) {
-    throw new Error("GitHub authentication status was malformed.");
+    throw new Error(malformedAuthenticationStatus);
   }
   const { hosts } = parsed as { hosts?: unknown };
   if (
@@ -157,7 +161,7 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
     Array.isArray(hosts) ||
     Object.keys(hosts).join(",") !== githubHost
   ) {
-    throw new Error("GitHub authentication status was malformed.");
+    throw new Error(malformedAuthenticationStatus);
   }
   const records = (hosts as Record<string, unknown>)[githubHost];
   if (!Array.isArray(records) || records.length !== 1) {
@@ -165,21 +169,23 @@ export function parseGhAuthStatus(payload: string, expectedUsername: string): Gh
   }
   const [record] = records;
   if (typeof record !== "object" || record === null || Array.isArray(record)) {
-    throw new Error("GitHub authentication status was malformed.");
+    throw new Error(malformedAuthenticationStatus);
   }
   const value = record as Record<string, unknown>;
+  const identityMismatch = "GitHub keyring identity did not match approval.";
   if (
     Object.keys(value).toSorted().join(",") !==
       "active,gitProtocol,host,login,scopes,state,tokenSource" ||
     value.active !== true ||
-    value.gitProtocol !== "https" ||
-    value.host !== githubHost ||
-    value.login !== expectedUsername ||
-    value.state !== "success" ||
-    value.tokenSource !== "keyring" ||
-    typeof value.scopes !== "string"
+    value.gitProtocol !== "https"
   ) {
-    throw new Error("GitHub keyring identity did not match approval.");
+    throw new Error(identityMismatch);
+  }
+  if (value.host !== githubHost || value.login !== expectedUsername || value.state !== "success") {
+    throw new Error(identityMismatch);
+  }
+  if (value.tokenSource !== "keyring" || typeof value.scopes !== "string") {
+    throw new Error(identityMismatch);
   }
   const scopes = new Set(
     value.scopes
@@ -226,10 +232,10 @@ export function githubConfigDigest(configRoot: string): string {
   }
   const uid = process.getuid?.();
   const rootStat = lstatSync(configRoot);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink() || uid === undefined) {
+    throw new Error("GitHub configuration root is unsafe.");
+  }
   if (
-    !rootStat.isDirectory() ||
-    rootStat.isSymbolicLink() ||
-    uid === undefined ||
     rootStat.uid !== uid ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (rootStat.mode & 0o022) !== 0
@@ -271,15 +277,15 @@ export function assertGithubStateRoot(stateRoot: string): void {
   }
   const uid = process.getuid?.();
   const rootStat = lstatSync(stateRoot);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink() || uid === undefined) {
+    throw new Error(unsafeGitHubStateRoot);
+  }
   if (
-    !rootStat.isDirectory() ||
-    rootStat.isSymbolicLink() ||
-    uid === undefined ||
     rootStat.uid !== uid ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (rootStat.mode & 0o777) !== 0o700
   ) {
-    throw new Error("GitHub state root is unsafe.");
+    throw new Error(unsafeGitHubStateRoot);
   }
 
   const rootEntries = readdirSync(stateRoot, { withFileTypes: true });
@@ -301,7 +307,7 @@ export function assertGithubStateRoot(stateRoot: string): void {
   const ghStat = lstatSync(ghRoot);
   // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   if (ghStat.uid !== uid || (ghStat.mode & 0o022) !== 0) {
-    throw new Error("GitHub state root is unsafe.");
+    throw new Error(unsafeGitHubStateRoot);
   }
 
   const ghEntries = readdirSync(ghRoot, { withFileTypes: true });
@@ -326,10 +332,12 @@ export function assertGithubStateRoot(stateRoot: string): void {
     deviceStat.nlink !== 1 ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (deviceStat.mode & 0o022) !== 0 ||
-    deviceStat.size === 0 ||
-    deviceStat.size > 256
+    deviceStat.size === 0
   ) {
-    throw new Error("GitHub state root is unsafe.");
+    throw new Error(unsafeGitHubStateRoot);
+  }
+  if (deviceStat.size > 256) {
+    throw new Error(unsafeGitHubStateRoot);
   }
 }
 
@@ -470,11 +478,12 @@ function parseExactToken(raw: Buffer): Buffer {
   const token = Buffer.from(raw.subarray(0, end));
   // Keep token validation local to the parser.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
-  const validByte = (byte: number) =>
-    (byte >= 0x30 && byte <= 0x39) ||
-    (byte >= 0x41 && byte <= 0x5a) ||
-    byte === 0x5f ||
-    (byte >= 0x61 && byte <= 0x7a);
+  const validByte = (byte: number) => {
+    if ((byte >= 0x30 && byte <= 0x39) || (byte >= 0x41 && byte <= 0x5a)) {
+      return true;
+    }
+    return byte === 0x5f || (byte >= 0x61 && byte <= 0x7a);
+  };
   if (
     token.length < 20 ||
     token.length > maximumCredentialBytes ||

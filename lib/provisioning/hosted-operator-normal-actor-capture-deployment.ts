@@ -395,8 +395,8 @@ export const createNormalActorCaptureDeploymentHandler =
       return Response.json(
         { error: "realm_browser_session_capture_unavailable" },
         {
-          status: 403,
           headers: { "cache-control": "no-store", "referrer-policy": "no-referrer" },
+          status: 403,
         },
       );
     } finally {

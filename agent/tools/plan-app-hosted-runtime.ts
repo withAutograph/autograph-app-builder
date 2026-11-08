@@ -8,7 +8,12 @@ import { defineTool } from "eve/tools";
 import { authorizeHostedNeonForTool } from "@/lib/agent/hosted-neon-authorization";
 import { z } from "zod";
 import { hostedOperatorClientForSession } from "@/lib/provisioning/hosted-operator-client";
-import type { OperatorSelection } from "@/lib/provisioning/hosted-operator-contract";
+import type {
+  OperatorPublicResult,
+  OperatorRequest,
+  OperatorSelection,
+} from "@/lib/provisioning/hosted-operator-contract";
+import type { ContinuityRuntimeSelection } from "@/lib/provisioning/hosted-operator-continuity-contract";
 import {
   HostedOperatorError,
   hostedOperatorAuthSignupPolicyInputSchema,
@@ -41,23 +46,30 @@ export default defineTool({
         return ctx.session.id;
       }
     };
-    const blocked = (code: HostedOperatorError["code"], selection?: OperatorSelection) =>
-      withBuilderDestinationGuidance(
-        withAppPublicationGuidance({
-          appId: input.appId,
-          authenticatedBehavior: "unassessed" as const,
-          code,
-          status: "blocked" as const,
-          ...(code === "export_customer_selection_required"
-            ? {
-                nextAction:
-                  "Name the organization to export. No export was planned or data extracted.",
-              }
-            : {}),
-          ...(selection === undefined ? {} : { approvedPreviewTarget: selection }),
-        }),
+    const blocked = (code: HostedOperatorError["code"], selection?: OperatorSelection) => {
+      const result: Pick<OperatorPublicResult, "appId" | "authenticatedBehavior"> & {
+        code: HostedOperatorError["code"];
+        status: "blocked";
+        nextAction?: string;
+        approvedPreviewTarget?: OperatorSelection;
+      } = {
+        appId: input.appId,
+        authenticatedBehavior: "unassessed",
+        code,
+        status: "blocked",
+      };
+      if (code === "export_customer_selection_required") {
+        result.nextAction =
+          "Name the organization to export. No export was planned or data extracted.";
+      }
+      if (selection !== undefined) {
+        result.approvedPreviewTarget = selection;
+      }
+      return withBuilderDestinationGuidance(
+        withAppPublicationGuidance(result),
         destinationSessionId(code),
       );
+    };
     try {
       operator = await hostedOperatorClientForSession(
         ctx.session.auth,
@@ -136,13 +148,13 @@ export default defineTool({
             await resolveAcceptanceRuntimeRoot({ appId, fallbackRoot: root, sandbox, state, ctx }),
         });
         continuityStage = "tool_sandbox_identity";
-        const runtime = {
+        const runtime: ContinuityRuntimeSelection = {
           sandboxId: getBuilderSandboxId(sandbox),
           root: selected.root,
-          ...(input.browserSelection === undefined
-            ? {}
-            : { browserSelection: input.browserSelection }),
         };
+        if (input.browserSelection !== undefined) {
+          runtime.browserSelection = input.browserSelection;
+        }
         continuityStage = "tool_plan_request";
         return await operator.planContinuity(
           selection,
@@ -170,21 +182,21 @@ export default defineTool({
           ctx.abortSignal,
         );
       }
-      const result = await operator.request(
-        {
-          action: "plan",
-          ...(input.authSignupPolicy === undefined
-            ? {}
-            : { authSignupPolicy: input.authSignupPolicy }),
-          ...(input.normalActorProgram === undefined
-            ? {}
-            : { normalActorProgram: input.normalActorProgram }),
-          operation,
-          ...(input.releaseIntent === undefined ? {} : { releaseIntent: input.releaseIntent }),
-          selection,
-        },
-        ctx.abortSignal,
-      );
+      const requestPlan = operator.request.bind(operator);
+      type PlanRequest = Extract<OperatorRequest, { action: "plan" }>;
+      const policies: Pick<PlanRequest, "authSignupPolicy" | "normalActorProgram"> = {};
+      if (input.authSignupPolicy !== undefined) {
+        policies.authSignupPolicy = input.authSignupPolicy;
+      }
+      if (input.normalActorProgram !== undefined) {
+        policies.normalActorProgram = input.normalActorProgram;
+      }
+      const planBase = { action: "plan" as const, ...policies, operation };
+      const release: Pick<PlanRequest, "releaseIntent"> = {};
+      if (input.releaseIntent !== undefined) {
+        release.releaseIntent = input.releaseIntent;
+      }
+      const result = await requestPlan({ ...planBase, ...release, selection }, ctx.abortSignal);
       return withBuilderDestinationGuidance(
         withAppPublicationGuidance(result),
         destinationSessionId(result.code),

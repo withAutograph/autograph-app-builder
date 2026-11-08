@@ -107,6 +107,11 @@ const genericUnexpectedMessage = (safeCause: string): string => {
   return message;
 };
 
+type SessionToolResponse<Result extends EveSessionListResult | EveSessionResult> = {
+  content: { text: string; type: "text" }[];
+  structuredContent: Result;
+} & { _meta?: { ui: { resourceUri: string } } };
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function toolResult<const Result extends EveSessionListResult | EveSessionResult>(
   result: Result,
@@ -124,12 +129,19 @@ export function toolResult<const Result extends EveSessionListResult | EveSessio
       ? `${text}\n\nManage app access and people: ${result.appAccessUrl}`
       : text;
 
-  return {
-    content: [{ text: accessText, type: "text" as const }],
+  const output: SessionToolResponse<Result> = {
+    content: [{ text: accessText, type: "text" }],
     structuredContent: result,
-    ...(needsInteractiveSessionUi ? { _meta: { ui: { resourceUri: SESSION_RESOURCE_URI } } } : {}),
   };
+  if (needsInteractiveSessionUi) {
+    output._meta = { ui: { resourceUri: SESSION_RESOURCE_URI } };
+  }
+  return output;
 }
+
+type ErrorToolResponse = Omit<ReturnType<typeof toolResult<EveSessionResult>>, "_meta"> & {
+  _meta?: { ui: { resourceUri: string } } | { "mcp/www_authenticate": string[] };
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function safeToolError(
@@ -198,7 +210,7 @@ export function safeToolError(
     code = "already_continuing";
     message = "This app is already continuing in another place. Try again shortly.";
   } else if (localRecoveryUnavailable) {
-    code = localSessionRecoveryError.code;
+    ({ code } = localSessionRecoveryError);
     message =
       "Builder couldn’t recover this local session. Keep the original session open and contact your administrator before trying again.";
   } else if (recoveryUnavailable) {
@@ -221,9 +233,9 @@ export function safeToolError(
     sessionId,
     status: "failed",
   };
-  return {
-    ...toolResult(result, message),
-    ...(authenticationRequired ? { _meta: { "mcp/www_authenticate": [error.challenge] } } : {}),
-    isError: true,
-  };
+  const response: ErrorToolResponse = toolResult(result, message);
+  if (authenticationRequired) {
+    response._meta = { "mcp/www_authenticate": [error.challenge] };
+  }
+  return { ...response, isError: true };
 }

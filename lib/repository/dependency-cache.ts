@@ -61,7 +61,14 @@ const REQUIRED_EXECUTION_PACKAGES = [
 const sha256Digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const gitObjectId = z.string().regex(/^[0-9a-f]{40}$/u);
 const dependencyDigest = z.union([sha256Digest, z.literal("absent")]);
-const liveTemplatePlatformSchema = z.union([z.literal("linux/arm64"), z.literal("linux/x86_64")]);
+const linuxArm64 = "linux/arm64";
+const linuxX8664 = "linux/x86_64";
+const microfrontendsPackage = "@vercel/microfrontends";
+const builderExecutionScope = "builder-execution";
+const developmentExecutionScope = "development-execution";
+const liveTemplateExecutionScope = "live-template-execution";
+const sandboxWorkspaceRoot = "/workspace";
+const liveTemplatePlatformSchema = z.union([z.literal(linuxArm64), z.literal(linuxX8664)]);
 
 const dependencyCacheManifestShapeSchema = z.strictObject({
   closure: z.strictObject({
@@ -71,19 +78,15 @@ const dependencyCacheManifestShapeSchema = z.strictObject({
     cargoArchiveBytes: z.number().int().positive(),
     cargoArchivePath: z.literal(DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH),
     cargoArchiveSha256: sha256Digest,
-    package: z.literal("@vercel/microfrontends"),
+    package: z.literal(microfrontendsPackage),
     version: z.literal(ARRUSTED_MICROFRONTENDS_VERSION),
   }),
-  platform: z.union([
-    z.literal("linux/arm64"),
-    z.literal("linux/x86_64"),
-    z.literal("linux/portable"),
-  ]),
+  platform: z.union([z.literal(linuxArm64), z.literal(linuxX8664), z.literal("linux/portable")]),
   runtime: z.strictObject({
     bun: z.literal(ARRUSTED_BUN_VERSION),
     rust: z.literal(ARRUSTED_RUST_VERSION),
   }),
-  scope: z.literal("builder-execution"),
+  scope: z.literal(builderExecutionScope),
   target: z.strictObject({
     appContractSha256: z.literal(
       "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
@@ -115,12 +118,12 @@ export const hostedExecutionDependencyCacheManifestSchema = z.strictObject({
     archiveBytes: z.number().int().positive(),
     archivePath: z.literal(DEPENDENCY_CACHE_ARCHIVE_PATH),
     archiveSha256: sha256Digest,
-    package: z.literal("@vercel/microfrontends"),
+    package: z.literal(microfrontendsPackage),
     version: z.literal(ARRUSTED_MICROFRONTENDS_VERSION),
   }),
-  platform: z.literal("linux/x86_64"),
+  platform: z.literal(linuxX8664),
   runtime: z.strictObject({ bun: z.literal(ARRUSTED_BUN_VERSION) }),
-  scope: z.literal("builder-execution"),
+  scope: z.literal(builderExecutionScope),
   target: z.strictObject({
     appContractSha256: z.literal(
       "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
@@ -152,7 +155,7 @@ export const developmentDependencyCacheManifestSchema = z.strictObject({
       .regex(
         /^\/workspace\/\.app-builder\/dependency-cache\/dependencies\/[0-9a-f]{64}\/node_modules$/u,
       ),
-    package: z.literal("@vercel/microfrontends"),
+    package: z.literal(microfrontendsPackage),
     version: z.literal(ARRUSTED_MICROFRONTENDS_VERSION),
   }),
   dependencyKey: sha256Digest,
@@ -162,14 +165,14 @@ export const developmentDependencyCacheManifestSchema = z.strictObject({
     "Cargo.lock": dependencyDigest,
     "bun.lock": dependencyDigest,
   }),
-  platform: z.union([z.literal("linux/arm64"), z.literal("linux/amd64")]),
+  platform: z.union([z.literal(linuxArm64), z.literal("linux/amd64")]),
   runtime: z.strictObject({
     bun: z.literal(ARRUSTED_BUN_VERSION),
     mise: z.literal("2026.9.12"),
     node: z.literal("24.18.0"),
     rust: z.literal(ARRUSTED_RUST_VERSION),
   }),
-  scope: z.literal("development-execution"),
+  scope: z.literal(developmentExecutionScope),
   version: z.literal(3),
 });
 
@@ -226,14 +229,14 @@ const liveTemplateDependencyCacheManifestSchema = z.strictObject({
   }),
   dependencyInputs: liveTemplateDependencyInputsSchema,
   dependencyKey: sha256Digest,
-  platform: z.union([z.literal("linux/arm64"), z.literal("linux/x86_64")]),
+  platform: z.union([z.literal(linuxArm64), z.literal(linuxX8664)]),
   runtime: z.strictObject({
     bun: z.literal(ARRUSTED_BUN_VERSION),
     mise: z.literal(HOSTED_MISE_VERSION),
     node: z.literal(HOSTED_NODE_VERSION),
     rust: z.literal(ARRUSTED_RUST_VERSION),
   }),
-  scope: z.literal("live-template-execution"),
+  scope: z.literal(liveTemplateExecutionScope),
   version: z.literal(4),
 });
 
@@ -320,11 +323,14 @@ export const dependencyTargetForWorkspace = function dependencyTargetForWorkspac
   cache: ObservedDependencyCache,
   workspace: ExactSourceBinding,
 ): { sha: string; tree: string } {
-  return cache.manifest.scope === "development-execution" ||
-    cache.manifest.scope === "live-template-execution"
+  return cache.manifest.scope === developmentExecutionScope ||
+    cache.manifest.scope === liveTemplateExecutionScope
     ? { sha: workspace.sourceSha, tree: workspace.sourceTree }
     : { sha: cache.manifest.target.sha, tree: cache.manifest.target.tree };
 };
+
+const invalidDependencyTargetMessage =
+  "The prepared source does not match the immutable dependency target.";
 
 export const assertExactDependencyTargetBinding =
   function assertExactDependencyTargetBinding(input: {
@@ -338,8 +344,8 @@ export const assertExactDependencyTargetBinding =
     // bytes. A moving source tree is normal planning input for those caches and
     // must not invalidate an otherwise intact dependency closure.
     if (
-      input.cache.manifest.scope === "development-execution" ||
-      input.cache.manifest.scope === "live-template-execution"
+      input.cache.manifest.scope === developmentExecutionScope ||
+      input.cache.manifest.scope === liveTemplateExecutionScope
     ) {
       return;
     }
@@ -348,28 +354,42 @@ export const assertExactDependencyTargetBinding =
       input.workspace.sourceSha !== input.sourceReceipt.sourceSha ||
       input.workspace.sourceTree !== input.sourceReceipt.sourceTree ||
       input.workspace.sourceSha !== target.sha ||
-      input.workspace.sourceTree !== target.tree ||
-      (input.dependencyReceipt !== undefined &&
-        (input.dependencyReceipt.sourceSha !== input.workspace.sourceSha ||
-          input.dependencyReceipt.sourceTree !== input.workspace.sourceTree ||
-          input.sourceReceipt.digest === undefined ||
-          input.dependencyReceipt.sourceReceiptDigest !== input.sourceReceipt.digest ||
-          input.dependencyReceipt.targetSha !== target.sha ||
-          input.dependencyReceipt.targetTree !== target.tree))
+      input.workspace.sourceTree !== target.tree
     ) {
-      throw new Error("The prepared source does not match the immutable dependency target.");
+      throw new Error(invalidDependencyTargetMessage);
+    }
+    if (input.dependencyReceipt !== undefined) {
+      if (
+        input.dependencyReceipt.sourceSha !== input.workspace.sourceSha ||
+        input.dependencyReceipt.sourceTree !== input.workspace.sourceTree ||
+        input.sourceReceipt.digest === undefined ||
+        input.dependencyReceipt.sourceReceiptDigest !== input.sourceReceipt.digest
+      ) {
+        throw new Error(invalidDependencyTargetMessage);
+      }
+      if (
+        input.dependencyReceipt.targetSha !== target.sha ||
+        input.dependencyReceipt.targetTree !== target.tree
+      ) {
+        throw new Error(invalidDependencyTargetMessage);
+      }
     }
   };
+
+const invalidLiveTemplateCacheMessage = "The live template dependency cache binding drifted.";
 
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
 const isLiveTemplateDependencyInputPath = function isLiveTemplateDependencyInputPath(path: string) {
-  return (
-    requiredLiveTemplateDependencyInputs.includes(
-      path as (typeof requiredLiveTemplateDependencyInputs)[number],
-    ) ||
+  const requiredInputs: readonly string[] = requiredLiveTemplateDependencyInputs;
+  if (
+    requiredInputs.includes(path) ||
     path.endsWith("/package.json") ||
-    path.endsWith("/Cargo.toml") ||
+    path.endsWith("/Cargo.toml")
+  ) {
+    return true;
+  }
+  return (
     path === "bunfig.toml" ||
     path.endsWith("/bunfig.toml") ||
     path === "rust-toolchain.toml" ||
@@ -471,7 +491,7 @@ export const dependencyExecutionLayout = function dependencyExecutionLayout(
   if (fixtureDependencyCacheEnabled(environment)) {
     return { kind: "fixture", roots: [], version: 1, workspaceLinks: [] };
   }
-  if (observed.manifest.scope === "live-template-execution") {
+  if (observed.manifest.scope === liveTemplateExecutionScope) {
     return executionDependencyLayoutSchema.parse({
       kind: "cache",
       roots: [
@@ -639,7 +659,7 @@ export const materializeExecutionDependencyView =
     });
     const result = await input.sandbox.run({
       command: `node - '/workspace/${layoutPath}' '/workspace/${input.overlayRoot}' '/workspace/${viewRoot}' '/workspace' '${input.layout.kind === "cache" && input.layout.roots.some((root) => root.cachePath.startsWith(`${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/`)) ? "1" : "0"}' <<'NODE'\n${executionDependencyViewScript}\nNODE`,
-      workingDirectory: "/workspace",
+      workingDirectory: sandboxWorkspaceRoot,
     });
     if (result.exitCode !== 0) {
       throw new Error("The dependency execution view could not be materialized.");
@@ -771,6 +791,8 @@ for (const root of attached) {
 }
 `;
 
+const quoteDependencyViewArgument = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
+
 /** Reuse installed checkout dependencies without resolving workspace packages to old source. */
 export const attachCheckoutDependencyView = async (input: {
   sandbox: Pick<SandboxSession, "run">;
@@ -778,11 +800,10 @@ export const attachCheckoutDependencyView = async (input: {
   candidateRoot: string;
   workspaceRoot: string;
 }): Promise<void> => {
-  const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
   const viewKey = sha256(input.candidateRoot);
   const viewRoot = `${input.workspaceRoot}/.app-builder/dependency-views/checkout/${viewKey}`;
   const result = await input.sandbox.run({
-    command: `node -e ${quote(checkoutDependencyViewScript)} ${[input.checkoutRoot, input.candidateRoot, viewRoot, input.workspaceRoot].map(quote).join(" ")}`,
+    command: `node -e ${quoteDependencyViewArgument(checkoutDependencyViewScript)} ${[input.checkoutRoot, input.candidateRoot, viewRoot, input.workspaceRoot].map(quoteDependencyViewArgument).join(" ")}`,
     workingDirectory: input.workspaceRoot,
   });
   if (result.exitCode !== 0) {
@@ -833,10 +854,9 @@ export const detachCheckoutDependencyView = async (input: {
   workspaceRoot: string;
   signal?: AbortSignal;
 }): Promise<void> => {
-  const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
   const viewRoot = `${input.workspaceRoot}/.app-builder/dependency-views/checkout/${sha256(input.candidateRoot)}`;
   const result = await input.sandbox.run({
-    command: `node -e ${quote(detachCheckoutDependencyViewScript)} ${[input.checkoutRoot, input.candidateRoot, viewRoot, input.workspaceRoot].map(quote).join(" ")}`,
+    command: `node -e ${quoteDependencyViewArgument(detachCheckoutDependencyViewScript)} ${[input.checkoutRoot, input.candidateRoot, viewRoot, input.workspaceRoot].map(quoteDependencyViewArgument).join(" ")}`,
     workingDirectory: input.workspaceRoot,
     abortSignal: input.signal,
   });
@@ -886,15 +906,15 @@ const fixtureManifest = function fixtureManifest(
       cargoArchiveBytes: 1,
       cargoArchivePath: DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH,
       cargoArchiveSha256: "3".repeat(64),
-      package: "@vercel/microfrontends",
+      package: microfrontendsPackage,
       version: ARRUSTED_MICROFRONTENDS_VERSION,
     },
-    platform: "linux/arm64",
+    platform: linuxArm64,
     runtime: {
       bun: ARRUSTED_BUN_VERSION,
       rust: ARRUSTED_RUST_VERSION,
     },
-    scope: "builder-execution",
+    scope: builderExecutionScope,
     target: {
       appContractSha256: "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
       appIdentitySha256: "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
@@ -1104,7 +1124,7 @@ const liveTemplatePlatform = async function liveTemplatePlatform(
   const result = await sandbox.run({
     command:
       'set -eu; test "$(uname -s)" = Linux; case "$(uname -m)" in x86_64) printf "%s\\n" linux/x86_64 ;; aarch64|arm64) printf "%s\\n" linux/arm64 ;; *) exit 1 ;; esac',
-    workingDirectory: "/workspace",
+    workingDirectory: sandboxWorkspaceRoot,
   });
   if (result.exitCode !== 0) {
     throw new Error("The template dependency platform is unsupported.");
@@ -1135,10 +1155,7 @@ const inspectLiveTemplateDependencyIdentity = async function inspectLiveTemplate
   }
   let entries: z.infer<typeof preparedDependencyInputSchema>[];
   try {
-    entries = z
-      .array(preparedDependencyInputSchema)
-      .min(1)
-      .parse(JSON.parse(manifestSource) as unknown);
+    entries = z.array(preparedDependencyInputSchema).min(1).parse(JSON.parse(manifestSource));
   } catch {
     throw new Error("The prepared source manifest is invalid.");
   }
@@ -1208,16 +1225,24 @@ const assertExactLiveTemplateManifest = function assertExactLiveTemplateManifest
     manifest.platform !== identity.platform ||
     manifest.dependencyKey !== identity.dependencyKey ||
     JSON.stringify(manifest.dependencyInputs) !== JSON.stringify(identity.dependencyInputs) ||
-    JSON.stringify(manifest.runtime) !== JSON.stringify(identity.runtime) ||
+    JSON.stringify(manifest.runtime) !== JSON.stringify(identity.runtime)
+  ) {
+    throw new Error(invalidLiveTemplateCacheMessage);
+  }
+  if (
     manifest.bootstrapVersion !== identity.bootstrapVersion ||
     manifest.closure.nodeModulesPath !== expectedLiveTemplateNodeModulesPath(identity) ||
-    manifest.closure.cargoHomePath !== expectedLiveTemplateCargoHomePath(identity) ||
+    manifest.closure.cargoHomePath !== expectedLiveTemplateCargoHomePath(identity)
+  ) {
+    throw new Error(invalidLiveTemplateCacheMessage);
+  }
+  if (
     manifest.closure.workspaceNodeModules.some(
       (entry) => entry.nodeModulesPath !== `${sourceRoot}/${entry.path}`,
     ) ||
     manifest.closure.workspaceLinks.some((entry) => entry.path === entry.sourcePath)
   ) {
-    throw new Error("The live template dependency cache binding drifted.");
+    throw new Error(invalidLiveTemplateCacheMessage);
   }
 };
 
@@ -1225,11 +1250,13 @@ const assertExactLiveTemplateClosure = function assertExactLiveTemplateClosure(
   manifest: z.infer<typeof liveTemplateDependencyCacheManifestSchema>,
   observation: z.infer<typeof liveTemplateClosureObservationSchema>,
 ) {
-  if (
+  const dependencyMismatch =
     observation.platform !== manifest.platform ||
     observation.nodeModulesDigest !== manifest.closure.nodeModulesDigest ||
     JSON.stringify(observation.workspaceNodeModules) !==
-      JSON.stringify(manifest.closure.workspaceNodeModules) ||
+      JSON.stringify(manifest.closure.workspaceNodeModules);
+  if (
+    dependencyMismatch ||
     JSON.stringify(observation.workspaceLinks) !==
       JSON.stringify(manifest.closure.workspaceLinks) ||
     observation.cargoHomeDigest !== manifest.closure.cargoHomeDigest ||
@@ -1245,13 +1272,13 @@ const inspectLiveTemplateClosure = async function inspectLiveTemplateClosure(inp
 }) {
   const result = await input.sandbox.run({
     command: liveTemplateClosureInspectionCommand(input.identity),
-    workingDirectory: "/workspace",
+    workingDirectory: sandboxWorkspaceRoot,
   });
   if (result.exitCode !== 0) {
     throw new Error("The live template dependency cache closure is missing.");
   }
   try {
-    return liveTemplateClosureObservationSchema.parse(JSON.parse(result.stdout) as unknown);
+    return liveTemplateClosureObservationSchema.parse(JSON.parse(result.stdout));
   } catch {
     throw new Error("The live template dependency cache closure is invalid.");
   }
@@ -1285,7 +1312,7 @@ export const bootstrapLiveTemplateDependencies =
     if (prior !== null) {
       let manifest: z.infer<typeof liveTemplateDependencyCacheManifestSchema>;
       try {
-        manifest = liveTemplateDependencyCacheManifestSchema.parse(JSON.parse(prior) as unknown);
+        manifest = liveTemplateDependencyCacheManifestSchema.parse(JSON.parse(prior));
       } catch {
         throw new Error("The live template dependency cache manifest is invalid.");
       }
@@ -1307,16 +1334,14 @@ export const bootstrapLiveTemplateDependencies =
     await setBuilderSandboxNetworkPolicy(input.sandbox, "allow-all");
     const result = await input.sandbox.run({
       command: liveTemplateBootstrapCommand(identity),
-      workingDirectory: "/workspace",
+      workingDirectory: sandboxWorkspaceRoot,
     });
     if (result.exitCode !== 0) {
       throw new Error("The canonical template dependencies could not be bootstrapped.");
     }
     let observation: z.infer<typeof liveTemplateClosureObservationSchema>;
     try {
-      observation = liveTemplateClosureObservationSchema.parse(
-        JSON.parse(result.stdout) as unknown,
-      );
+      observation = liveTemplateClosureObservationSchema.parse(JSON.parse(result.stdout));
     } catch {
       throw new Error("The canonical template dependency bootstrap receipt is invalid.");
     }
@@ -1380,9 +1405,7 @@ export const inspectDependencyCache = async function inspectDependencyCache(
     }
     let manifest: z.infer<typeof liveTemplateDependencyCacheManifestSchema>;
     try {
-      manifest = liveTemplateDependencyCacheManifestSchema.parse(
-        JSON.parse(liveManifest) as unknown,
-      );
+      manifest = liveTemplateDependencyCacheManifestSchema.parse(JSON.parse(liveManifest));
     } catch {
       throw new Error("The live template dependency cache manifest is invalid.");
     }
@@ -1403,7 +1426,7 @@ export const inspectDependencyCache = async function inspectDependencyCache(
 
   const manifestResult = await sandbox.run({
     command: `cat -- ${cachePaths.manifest}`,
-    workingDirectory: "/workspace",
+    workingDirectory: sandboxWorkspaceRoot,
   });
   if (manifestResult.exitCode !== 0) {
     throw new DependencyCacheMissingError(
@@ -1413,7 +1436,7 @@ export const inspectDependencyCache = async function inspectDependencyCache(
   const manifestPayload = commandPayload(manifestResult.stdout);
   let parsed: unknown;
   try {
-    parsed = JSON.parse(manifestPayload) as unknown;
+    parsed = JSON.parse(manifestPayload);
   } catch {
     throw new Error("The fixed offline dependency cache manifest is invalid.");
   }
@@ -1448,7 +1471,7 @@ export const inspectDependencyCache = async function inspectDependencyCache(
   }
   const archiveResult = await sandbox.run({
     command: archiveCommand,
-    workingDirectory: "/workspace",
+    workingDirectory: sandboxWorkspaceRoot,
   });
   if (archiveResult.exitCode !== 0) {
     throw new Error("The fixed offline dependency cache archive is missing.");
@@ -1526,16 +1549,16 @@ export const materializeOfflineDependencies = async function materializeOfflineD
     sourceReceipt: input.target,
     workspace: input.target,
   });
-  const developmentExecution = observed.manifest.scope === "development-execution";
+  const developmentExecution = observed.manifest.scope === developmentExecutionScope;
   const root = planningOverlayRoot(input.artifactRevision);
   const dependencyLayout = dependencyExecutionLayout(observed, environment);
   if (!fixtureDependencyCacheEnabled(environment)) {
-    const liveTemplate = observed.manifest.scope === "live-template-execution";
+    const liveTemplate = observed.manifest.scope === liveTemplateExecutionScope;
     const hostedExecution =
       !liveTemplate && hostedWorkspaceDependencyExtractionEnabled(environment);
     const hostedDependencyRoot = `/workspace/.app-builder/hosted-dependencies/${observed.contentDigest}`;
     const absoluteNodeModules =
-      observed.manifest.scope === "live-template-execution"
+      observed.manifest.scope === liveTemplateExecutionScope
         ? observed.manifest.closure.nodeModulesPath
         : materializedDependencyNodeModulesRoot(observed.contentDigest, environment);
     const installHostedClosure = hostedExecution
@@ -1547,7 +1570,7 @@ export const materializeOfflineDependencies = async function materializeOfflineD
     ).join(" && ");
     const extraction = await input.sandbox.run({
       command: `${installHostedClosure}test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && ${developmentExecution ? `test "$(realpath ${DEVELOPMENT_DEPENDENCY_CACHE_ROOT})" = "${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}" && test "$(realpath ${absoluteNodeModules})" = "${absoluteNodeModules}" && ` : ""}${requiredExecutionClosure} && test -x ${absoluteNodeModules}/.bin/next && test -x ${absoluteNodeModules}/.bin/turbo && test -x ${absoluteNodeModules}/.bin/vp && bun ${absoluteNodeModules}/.bin/next --version >/dev/null && bun ${absoluteNodeModules}/.bin/turbo --version >/dev/null && bun ${absoluteNodeModules}/.bin/vp --version >/dev/null && ${developmentExecution ? `if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /022 -print -quit | grep -q .; then exit 1; fi && ` : `if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /222 -print -quit | grep -q .; then exit 1; fi && `}test ! -e /workspace/repository/node_modules && test ! -L /workspace/repository/node_modules`,
-      workingDirectory: "/workspace",
+      workingDirectory: sandboxWorkspaceRoot,
     });
     if (extraction.exitCode !== 0) {
       throw new Error("The fixed offline dependency cache could not be materialized.");
@@ -1574,7 +1597,7 @@ export const materializeOfflineDependencies = async function materializeOfflineD
     throw new Error("The required offline dependency closure is invalid.");
   }
   const expectedMicrofrontendsVersion =
-    observed.manifest.scope === "live-template-execution"
+    observed.manifest.scope === liveTemplateExecutionScope
       ? observed.manifest.closure.microfrontendsVersion
       : ARRUSTED_MICROFRONTENDS_VERSION;
   if (packageVersion !== expectedMicrofrontendsVersion) {
@@ -1583,7 +1606,7 @@ export const materializeOfflineDependencies = async function materializeOfflineD
   if (
     !fixtureDependencyCacheEnabled(environment) &&
     !hostedArtifactDependencyCacheEnabled(environment) &&
-    observed.manifest.scope !== "live-template-execution"
+    observed.manifest.scope !== liveTemplateExecutionScope
   ) {
     const resolution = await input.sandbox.run({
       command: `bun -e 'const fs=require("node:fs"); const read=(path)=>JSON.parse(fs.readFileSync(path,"utf-8")).version; const {match}=require("path-to-regexp"); const result=match("/vendor")("/vendor"); if(read("../../node_modules/path-to-regexp/package.json")!=="${ARRUSTED_PATH_TO_REGEXP_VERSION}" || read("../../node_modules/@vercel/microfrontends/package.json")!=="${ARRUSTED_MICROFRONTENDS_VERSION}" || read("../../node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json")!=="${ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION}" || result?.path!=="/vendor") process.exit(1)'`,
@@ -1605,7 +1628,7 @@ export const materializeOfflineDependencies = async function materializeOfflineD
 };
 
 export const dependencyCacheReceiptDigest = function dependencyCacheReceiptDigest(
-  observed: ObservedDependencyCache,
+  observed: Pick<ObservedDependencyCache, "manifestDigest">,
 ) {
   return `sha256:${observed.manifestDigest}`;
 };

@@ -7,6 +7,7 @@ import * as databaseSchema from "./schema";
 import { hostedRuntimePostgresOptions, parseHostedDatabaseUrl } from "./postgres-connection-policy";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
+export type HostedDatabase = Database;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function openHostedPostgresDatabase(databaseUrl: string): Database {

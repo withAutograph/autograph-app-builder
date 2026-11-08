@@ -146,11 +146,20 @@ const reconciliationLineageRequest = (
     original?.appId === state.appSpec.appId ? original.proposal : undefined;
   const publishedReconciliation =
     original?.appId === state.appSpec.appId ? original.publishedReconciliation : undefined;
-  return {
-    ...(previousReconciliation === undefined ? {} : { previousReconciliation }),
-    ...(publishedReconciliation === undefined ? {} : { publishedReconciliation }),
-    ...(priorPublishedProposalDigest === undefined ? {} : { priorPublishedProposalDigest }),
-  };
+  const lineage: Pick<
+    ReconciliationSourceRequest,
+    "previousReconciliation" | "publishedReconciliation" | "priorPublishedProposalDigest"
+  > = {};
+  if (previousReconciliation !== undefined) {
+    lineage.previousReconciliation = previousReconciliation;
+  }
+  if (publishedReconciliation !== undefined) {
+    lineage.publishedReconciliation = publishedReconciliation;
+  }
+  if (priorPublishedProposalDigest !== undefined) {
+    lineage.priorPublishedProposalDigest = priorPublishedProposalDigest;
+  }
+  return lineage;
 };
 
 const retainedPublishedReconciliation = (
@@ -264,8 +273,8 @@ export default defineTool({
       ...draftReconciliationCompletions.get().map((completion) => completion.root),
     ];
     const workspaceMaintenance = await retireUnusedDraftWorktrees({
-      sandbox,
       retainedRoots,
+      sandbox,
       signal: ctx.abortSignal,
     });
     try {
@@ -338,17 +347,23 @@ export default defineTool({
         publishedHeadSha: source.publishedHeadSha,
         resolvedRef: state.githubSource.resolvedRef,
       });
-      const unpublished =
-        state.reviewReceipt.changes.length === 0
-          ? undefined
-          : {
-              changes: state.reviewReceipt.changes,
-              ...(source.publishedHeadSha === undefined
-                ? {}
-                : { priorPublishedHeadSha: source.publishedHeadSha }),
-              contentSource: publicationContentSourceForReviewedWorkflow({ sandbox, state }),
-              reviewDigest: state.reviewReceipt.digest,
-            };
+      let unpublished: DraftReconciliationInput["unpublished"];
+      if (state.reviewReceipt.changes.length !== 0) {
+        const changes = { changes: state.reviewReceipt.changes };
+        const prior: Pick<
+          NonNullable<DraftReconciliationInput["unpublished"]>,
+          "priorPublishedHeadSha"
+        > = {};
+        if (source.publishedHeadSha !== undefined) {
+          prior.priorPublishedHeadSha = source.publishedHeadSha;
+        }
+        unpublished = {
+          ...changes,
+          ...prior,
+          contentSource: publicationContentSourceForReviewedWorkflow({ sandbox, state }),
+          reviewDigest: state.reviewReceipt.digest,
+        };
+      }
       const request: DraftReconciliationInput = {
         appId: state.appSpec.appId,
         baseBranch: source.draft.baseBranch,

@@ -66,13 +66,13 @@ const hooks = vi.hoisted(() => {
     },
     release: { status: "not-required" },
   };
+  const completions: DraftReconciliationCompletion[] = [];
   return {
     sandbox: vi.fn(),
     assertApproval: vi.fn(),
     assertOwner: vi.fn<() => Promise<void>>(),
     applied: vi.fn(),
-    // SAFETY: The closed test fixture supplies only trusted completion metadata consumed by this tool.
-    completions: [] as DraftReconciliationCompletion[],
+    completions,
     content: vi.fn(),
     inspect: vi.fn(),
     record: vi.fn(),
@@ -118,10 +118,10 @@ vi.mock("./approval-receipt", async (importOriginal) => ({
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: async () =>
     await Promise.resolve({
-      publishDraftPullRequest: hooks.publish,
-      updateExistingDraft: hooks.update,
-      reconcileExistingDraft: hooks.reconcile,
       inspectAppliedExistingDraftReconciliation: hooks.applied,
+      publishDraftPullRequest: hooks.publish,
+      reconcileExistingDraft: hooks.reconcile,
+      updateExistingDraft: hooks.update,
     }),
 }));
 vi.mock("./github-publication-content-source", () => ({
@@ -169,9 +169,9 @@ vi.mock("./compiled-operator-artifacts", () => ({
 }));
 
 const tools = [
-  { name: "initial publication", tool: publishTool, publish: hooks.publish },
-  { name: "existing draft update", tool: updateTool, publish: hooks.update },
-  { name: "draft reconciliation", tool: reconcileTool, publish: hooks.reconcile },
+  { name: "initial publication", publish: hooks.publish, tool: publishTool },
+  { name: "existing draft update", publish: hooks.update, tool: updateTool },
+  { name: "draft reconciliation", publish: hooks.reconcile, tool: reconcileTool },
 ];
 const input = {
   expectedProposalDigest: "a".repeat(64),
@@ -206,7 +206,7 @@ const completionFixture = (): DraftReconciliationCompletion => ({
 });
 
 const recoveryCompletionFixture = (): DraftReconciliationCompletion => {
-  const completion = hooks.completions[0];
+  const [completion] = hooks.completions;
   if (completion === undefined) {
     throw new Error("Expected original retained completion");
   }
@@ -227,7 +227,7 @@ describe("publication records actual source for its compiled app release", () =>
     hooks.candidate = structuredClone(originalCandidate);
     hooks.state = structuredClone(originalState);
     hooks.completions = [completionFixture()];
-    hooks.inspect.mockResolvedValue({ unresolvedConflicts: [], resolvedTree: "tree" });
+    hooks.inspect.mockResolvedValue({ resolvedTree: "tree", unresolvedConflicts: [] });
     hooks.candidate.publishedReconciliation = undefined;
   });
 
@@ -266,13 +266,13 @@ describe("publication records actual source for its compiled app release", () =>
                   appId: hooks.state.appSpec.appId,
                   appSpecDigest: hooks.state.appSpec.digest,
                   backendKind: hooks.state.appBackendKind,
-                  root: hooks.state.applyReceipt.applyRoot,
                   callId: ctx.callId,
                   review: hooks.state.reviewReceipt,
+                  root: hooks.state.applyReceipt.applyRoot,
                 }),
             adapterSessionId: ctx.session.id,
-            sessionAuth: ctx.session.auth,
             publication,
+            sessionAuth: ctx.session.auth,
           }),
         );
         expect(result).not.toHaveProperty("appSourceRecording.recoveryRequired");
@@ -296,7 +296,7 @@ describe("publication records actual source for its compiled app release", () =>
       const result = await entry.tool.execute(input, ctx as never);
       expect(result).toMatchObject({
         ...publication,
-        appSourceRecording: { status: "unavailable", recoveryRequired: true },
+        appSourceRecording: { recoveryRequired: true, status: "unavailable" },
       });
       expect(JSON.stringify(result)).not.toContain("private artifact detail");
       expect(entry.publish).toHaveBeenCalledTimes(1);
@@ -348,7 +348,7 @@ describe("publication records actual source for its compiled app release", () =>
       if (!("status" in found) || found.status !== "publication-recovery") {
         throw new Error("Expected retained recovery discovery");
       }
-      const recovery = found.recoveries[0];
+      const [recovery] = found.recoveries;
       if (recovery === undefined) {
         throw new Error("Expected original retained completion");
       }
@@ -423,9 +423,9 @@ describe("publication records actual source for its compiled app release", () =>
         ctx as never,
       );
       expect(found).toMatchObject({
+        recoveries: [],
         status: "publication-recovery",
         verification: "unverified",
-        recoveries: [],
       });
       expect(hooks.applied).not.toHaveBeenCalled();
       expect(hooks.record).not.toHaveBeenCalled();
@@ -452,9 +452,9 @@ describe("publication records actual source for its compiled app release", () =>
     await expect(
       inspectReconciliation.execute({ kind: "publication-recovery" }, ctx as never),
     ).resolves.toMatchObject({
+      recoveries: [],
       status: "selection-changed",
       verification: "unverified",
-      recoveries: [],
     });
     expect(hooks.applied).not.toHaveBeenCalled();
     expect(hooks.record).not.toHaveBeenCalled();
@@ -462,7 +462,7 @@ describe("publication records actual source for its compiled app release", () =>
   });
 
   it("uses normal approved read-only reconciliation to associate a current equivalent capture without Git writes", async () => {
-    const completion = hooks.completions[0];
+    const [completion] = hooks.completions;
     hooks.applied.mockResolvedValue({
       applied: true,
       observation: { repositoryId: "repository", headSha: "verified-existing-head" },
@@ -474,8 +474,8 @@ describe("publication records actual source for its compiled app release", () =>
     await expect(
       reconcileTool.execute({ ...input, recordCurrentEquivalentRelease: true }, ctx as never),
     ).resolves.toMatchObject({
-      headSha: "verified-existing-head",
       appSourceRecording: { status: "recorded" },
+      headSha: "verified-existing-head",
     });
     expect(hooks.record).toHaveBeenCalledWith(
       expect.objectContaining({ completion, recordCurrentEquivalentRelease: true }),
@@ -495,7 +495,7 @@ describe("publication records actual source for its compiled app release", () =>
     await expect(
       reconcileTool.execute({ ...input, recordCurrentEquivalentRelease: true }, ctx as never),
     ).resolves.toMatchObject({
-      appSourceRecording: { status: "selection-changed", recoveryRequired: true },
+      appSourceRecording: { recoveryRequired: true, status: "selection-changed" },
     });
     expect(hooks.reconcile).not.toHaveBeenCalled();
     expect(hooks.inspect).not.toHaveBeenCalled();
@@ -536,7 +536,7 @@ describe("publication records actual source for its compiled app release", () =>
   });
 
   it("recovers an accepted write/readback failure after the candidate is lost, with zero further Git writes", async () => {
-    const completion = hooks.completions[0];
+    const [completion] = hooks.completions;
     hooks.reconcile.mockRejectedValueOnce(
       new Error("GitHub accepted update; readback unavailable"),
     );
@@ -561,7 +561,7 @@ describe("publication records actual source for its compiled app release", () =>
   });
 
   it("recovers an original publication after a new candidate changes without inspecting it", async () => {
-    const original = hooks.completions[0];
+    const [original] = hooks.completions;
     hooks.candidate = {
       ...hooks.candidate,
       root: "/workspace/new-candidate",
@@ -578,7 +578,7 @@ describe("publication records actual source for its compiled app release", () =>
   });
 
   it("keeps fresh publication checkout checks and never writes a changed tree", async () => {
-    hooks.inspect.mockResolvedValue({ unresolvedConflicts: [], resolvedTree: "changed-tree" });
+    hooks.inspect.mockResolvedValue({ resolvedTree: "changed-tree", unresolvedConflicts: [] });
     // SAFETY: Minimal production tool context with trusted ports mocked.
     await expect(reconcileTool.execute(input, ctx as never)).rejects.toThrow("checkout changed");
     expect(hooks.reconcile).not.toHaveBeenCalled();

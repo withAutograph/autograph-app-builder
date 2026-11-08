@@ -17,7 +17,9 @@ export const prototypeArtifactPathPattern =
   // oxlint-disable-next-line prefer-named-capture-group -- Tool JSON Schema validators reject named groups.
   /^prototype\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/(app-spec\.md|decisions\.md|index\.html)$/u;
 
-export const prototypeArtifactMediaTypes = ["text/markdown", "text/html"] as const;
+const MARKDOWN_MEDIA_TYPE = "text/markdown";
+
+export const prototypeArtifactMediaTypes = [MARKDOWN_MEDIA_TYPE, "text/html"] as const;
 
 export type PrototypeArtifactMediaType = (typeof prototypeArtifactMediaTypes)[number];
 
@@ -124,30 +126,30 @@ const assertArtifactChunkFitsEve = (input: Parameters<typeof artifactChunkEnvelo
   }
 };
 
+const isPrototypeArtifactFileName = (
+  value: string | undefined,
+): value is "app-spec.md" | "decisions.md" | "index.html" =>
+  ["app-spec.md", "decisions.md", "index.html"].includes(value ?? "");
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function parsePrototypeArtifactPath(path: string): {
-  appId: string;
-  fileName: "app-spec.md" | "decisions.md" | "index.html";
-} {
+export function parsePrototypeArtifactPath(path: string) {
   const match = prototypeArtifactPathPattern.exec(path);
   const appId = match?.[1];
   const fileName = match?.[2];
-  if (
-    appId === undefined ||
-    !validAppId(appId) ||
-    !["app-spec.md", "decisions.md", "index.html"].includes(fileName ?? "")
-  ) {
+  if (appId === undefined || !validAppId(appId) || !isPrototypeArtifactFileName(fileName)) {
     throw new Error("Prototype artifact path is not allowed.");
   }
   return {
     appId,
-    fileName: fileName as "app-spec.md" | "decisions.md" | "index.html",
+    fileName,
   };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function expectedPrototypeArtifactMediaType(path: string): PrototypeArtifactMediaType {
-  return parsePrototypeArtifactPath(path).fileName === "index.html" ? "text/html" : "text/markdown";
+  return parsePrototypeArtifactPath(path).fileName === "index.html"
+    ? "text/html"
+    : MARKDOWN_MEDIA_TYPE;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -235,14 +237,19 @@ export function exactPrototypeArtifact(
   },
 ): StoredPrototypeArtifact {
   parsePrototypeArtifactPath(input.path);
-  const artifact = artifacts.find(
-    (candidate) =>
-      candidate.path === input.path &&
-      candidate.digest === input.digest &&
-      candidate.transfer === undefined &&
+  const artifact = artifacts.find((candidate) => {
+    if (
+      candidate.path !== input.path ||
+      candidate.digest !== input.digest ||
+      candidate.transfer !== undefined
+    ) {
+      return false;
+    }
+    return (
       (input.revision === undefined || candidate.revision === input.revision) &&
-      candidate.sessionId === input.sessionId,
-  );
+      candidate.sessionId === input.sessionId
+    );
+  });
   if (artifact === undefined) {
     throw new Error(
       "The prototype artifact digest or revision is stale or unavailable in this session.",
@@ -378,21 +385,24 @@ const resolveChunkContinuation = (
 ): ChunkContinuation => {
   if (
     prior?.transfer === undefined &&
-    prior?.lastChunkReceipt?.expectedDigest === input.expectedDigest &&
-    prior.lastChunkReceipt.lastChunkIndex === input.chunkIndex &&
-    prior.lastChunkReceipt.lastChunkDigest === chunkDigest &&
-    prior.lastChunkReceipt.lastCallId === input.callId
+    prior?.lastChunkReceipt?.expectedDigest === input.expectedDigest
   ) {
-    return {
-      kind: "retry",
-      result: {
-        artifact: prior,
-        artifacts: input.artifacts,
-        complete: true,
-        nextChunkIndex: input.chunkIndex + 1,
-        reused: true,
-      },
-    };
+    if (
+      prior.lastChunkReceipt.lastChunkIndex === input.chunkIndex &&
+      prior.lastChunkReceipt.lastChunkDigest === chunkDigest &&
+      prior.lastChunkReceipt.lastCallId === input.callId
+    ) {
+      return {
+        kind: "retry",
+        result: {
+          artifact: prior,
+          artifacts: input.artifacts,
+          complete: true,
+          nextChunkIndex: input.chunkIndex + 1,
+          reused: true,
+        },
+      };
+    }
   }
   const restart =
     prior?.transfer !== undefined &&
@@ -565,8 +575,12 @@ export function completeBuildReadyPrototypeAppSpec(input: {
   if (
     appSpec === undefined ||
     !byPath.has(`${prefix}index.html`) ||
-    !byPath.has(`${prefix}decisions.md`) ||
-    appSpec.mediaType !== "text/markdown" ||
+    !byPath.has(`${prefix}decisions.md`)
+  ) {
+    return undefined;
+  }
+  if (
+    appSpec.mediaType !== MARKDOWN_MEDIA_TYPE ||
     isPrototypeArtifactV2(appSpec) ||
     !validateBuildReadyAppSpec(appSpec.content).valid
   ) {
@@ -601,14 +615,14 @@ export function recordPrototypeArtifactBundle(input: {
     },
     {
       content: input.decisionsMarkdown,
-      mediaType: "text/markdown" as const,
+      mediaType: MARKDOWN_MEDIA_TYPE,
       path: `prototype/${input.appId}/decisions.md`,
-    },
+    } as const,
     {
       content: appSpecMarkdown,
-      mediaType: "text/markdown" as const,
+      mediaType: MARKDOWN_MEDIA_TYPE,
       path: `prototype/${input.appId}/app-spec.md`,
-    },
+    } as const,
   ]) {
     const recorded = recordPrototypeArtifactRevision({
       artifacts,

@@ -69,6 +69,8 @@ try {
 }
 `;
 
+const checkTaskDigest = (text: string) => createHash("sha256").update(text).digest("hex");
+
 /** A reviewed app-owned task mutation; preserve custom tasks and every lint/type-check family. */
 export const applyPrivateComputeCheckPolicy = async (input: {
   sandbox: Pick<SandboxSession, "run">;
@@ -78,8 +80,7 @@ export const applyPrivateComputeCheckPolicy = async (input: {
 }) => {
   input.abortSignal?.throwIfAborted();
   const policy = privateComputeProfileSchema.parse(input.profile).checkPolicy;
-  const hash = (text: string) => createHash("sha256").update(text).digest("hex");
-  if (policy.afterSha256 !== hash(PRIVATE_COMPUTE_CHECK_TASK)) {
+  if (policy.afterSha256 !== checkTaskDigest(PRIVATE_COMPUTE_CHECK_TASK)) {
     throw new Error(
       "The reviewed compute check policy does not match its installed implementation.",
     );

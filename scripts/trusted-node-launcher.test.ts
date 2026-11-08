@@ -14,6 +14,7 @@ import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 const repositoryRoot = pathModule.resolve(import.meta.dirname, "..");
 const launcher = pathModule.resolve(repositoryRoot, ".config/mise/scripts/trusted-node-launcher");
@@ -54,8 +55,8 @@ describe("trusted Node launcher", () => {
     );
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
-      root: environment.ARRUSTED_MANAGED_RUNTIME_TEST_ROOT,
       bun: environment.BUN_BINARY,
+      root: environment.ARRUSTED_MANAGED_RUNTIME_TEST_ROOT,
     });
   });
 
@@ -179,10 +180,9 @@ describe("trusted Node launcher", () => {
       },
     );
     expect(installed.status, `${installed.stdout}\n${installed.stderr}`).toBe(0);
-    const observation = JSON.parse(readFileSync(receipt, "utf-8")) as {
-      executable: string;
-      path: string;
-    };
+    const observation = z
+      .object({ executable: z.string(), path: z.string() })
+      .parse(JSON.parse(readFileSync(receipt, "utf-8")));
     expect(observation.executable).toBe(pinnedNode);
     expect(observation.path).not.toContain(hostile);
     expect(observation.path.endsWith(`${pathModule.dirname(pinnedNode)}:/usr/bin:/bin`)).toBe(true);
@@ -385,15 +385,15 @@ describe("trusted Node launcher", () => {
       const expectedHome = privateHome ? runtimeHome : accountHome;
       const expectedDataHome = privateHome ? undefined : dataHome;
       expect(JSON.parse(result.stdout)).toEqual({
-        result: { refreshed: true },
         home: expectedHome,
         invocations: ["development-env-pull", "owner-bind"].map((operation) => ({
-          operation,
-          home: expectedHome,
           dataHome: expectedDataHome ?? null,
           dataPresent: expectedDataHome !== undefined,
+          home: expectedHome,
+          operation,
           unexpected: [],
         })),
+        result: { refreshed: true },
       });
     },
   );

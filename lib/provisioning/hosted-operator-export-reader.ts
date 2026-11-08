@@ -45,9 +45,9 @@ const privateHeaders = {
   "x-content-type-options": "nosniff",
 };
 const unavailable = () =>
-  new Response("Export is unavailable.", { status: 404, headers: privateHeaders });
+  new Response("Export is unavailable.", { headers: privateHeaders, status: 404 });
 const workerFor = (record: TenantExportJournalRecord): TenantExportWorkerInput => {
-  const completion = record.completion;
+  const { completion } = record;
   if (!completion) {
     throw operatorArtifactUnavailable();
   }
@@ -67,6 +67,9 @@ const workerFor = (record: TenantExportJournalRecord): TenantExportWorkerInput =
 };
 const responseBody = (iterator: AsyncIterator<Uint8Array>) =>
   new ReadableStream<Uint8Array>({
+    async cancel() {
+      await iterator.return?.();
+    },
     async pull(controller) {
       try {
         const next = await iterator.next();
@@ -79,9 +82,6 @@ const responseBody = (iterator: AsyncIterator<Uint8Array>) =>
         controller.error(operatorArtifactUnavailable());
         await iterator.return?.();
       }
-    },
-    async cancel() {
-      await iterator.return?.();
     },
   });
 
@@ -97,8 +97,8 @@ export const createTenantExportReader =
       const authority = await ports.authenticate(request);
       if (!authority) {
         return new Response("Sign in to download this export.", {
-          status: 401,
           headers: privateHeaders,
+          status: 401,
         });
       }
       const rawRecord = await ports.readCompletion({ exportId, authority });
@@ -133,7 +133,7 @@ export const createTenantExportReader =
       ) {
         return unavailable();
       }
-      const manifest = inspection.manifest;
+      const { manifest } = inspection;
       const name = input.member?.at(0);
       if (name === undefined) {
         const path = `/api/hosted-operator/exports/${exportId}`;
@@ -244,11 +244,11 @@ export const createTenantExportDownloadDeploymentHandler = (
         return {
           authenticate,
           readCompletion: createTenantExportCompletionLookup({
-            database,
             assertOwner: assertAuthority,
+            database,
           }),
           assertCurrentOwner,
-          store: createPostgresOperatorArtifactReader({ database, assertCurrentOwner }),
+          store: createPostgresOperatorArtifactReader({ assertCurrentOwner, database }),
         };
       };
     }

@@ -2,11 +2,12 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 import { McpBlockStoryLayout } from "@/.storybook/create-app/layouts";
 import { ApprovalRequest } from "./approval-request";
+import type { SessionAnswer } from "./view";
 
 const meta = {
   args: {
     description: "Build and validate the preview shown above in the private App Builder workspace.",
-    onAnswer: fn(),
+    onAnswer: fn<(answer: SessionAnswer) => void>(),
     title: "Build this app?",
   },
   component: ApprovalRequest,

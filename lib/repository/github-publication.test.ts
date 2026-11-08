@@ -32,7 +32,6 @@ import type {
   FreshRepositoryReadBack,
   GitHubInstallationIdentity,
   GitHubMutationAcknowledgement,
-  GitHubMutationReceipt,
   GitHubOperation,
   GitHubPublicationAdapter,
   GitHubDraftPullRequestContent,
@@ -68,14 +67,11 @@ const branchSha = "3".repeat(40);
 const branchTree = "4".repeat(40);
 const reviewedBytes = new TextEncoder().encode("export default 'demo';\n");
 const reviewedBytesDigest = createHash("sha256").update(reviewedBytes).digest("hex");
-const reviewedAfter = (): { mode: "644"; digest: string } =>
-  Object.fromEntries([
-    ["mode", "644"],
-    ["digest", reviewedBytesDigest],
-  ]) as {
-    mode: "644";
-    digest: string;
-  };
+const reviewedAfter = () =>
+  ({
+    mode: "644",
+    digest: reviewedBytesDigest,
+  }) satisfies NonNullable<NormalizedChangeSet["changes"][number]["after"]>;
 const reviewedChange = (
   change: NormalizedChangeSet["changes"][number],
 ): NormalizedChangeSet["changes"][number] => {
@@ -530,7 +526,9 @@ describe("closed GitHub publication contract", () => {
       "apps/demo/\u{E000}.tsx",
       "apps/demo/\u{10000}.tsx",
     ]);
-    expect(() => assertExactDraftPullRequestProposal(proposal)).not.toThrow();
+    expect(() => {
+      assertExactDraftPullRequestProposal(proposal);
+    }).not.toThrow();
   });
 
   it("derives operation-specific least-privilege identities", () => {
@@ -565,28 +563,30 @@ describe("closed GitHub publication contract", () => {
     });
 
     expect(identity.repositorySelection).toBe("all");
-    expect(() => assertExactInstallationIdentity(identity)).not.toThrow();
+    expect(() => {
+      assertExactInstallationIdentity(identity);
+    }).not.toThrow();
     const reordered = Object.fromEntries(Object.entries(identity).toReversed()) as typeof identity;
     reordered.permissions = Object.fromEntries(
       Object.entries(identity.permissions).toReversed(),
     ) as typeof identity.permissions;
-    expect(() => assertExactInstallationIdentity(reordered)).not.toThrow();
+    expect(() => {
+      assertExactInstallationIdentity(reordered);
+    }).not.toThrow();
   });
 
   it("rejects unknown keys and permission escalation", () => {
     const identity = installation("publish-draft-pull-request");
-    expect(() =>
-      assertExactInstallationIdentity({
-        ...identity,
-        token: "secret",
-      } as never),
-    ).toThrow(/schema/u);
-    expect(() =>
+    expect(() => {
+      const identityWithToken = { ...identity, token: "secret" };
+      assertExactInstallationIdentity(identityWithToken);
+    }).toThrow(/schema/u);
+    expect(() => {
       assertExactInstallationIdentity({
         ...identity,
         permissions: { ...identity.permissions, administration: "write" },
-      } as GitHubInstallationIdentity),
-    ).toThrow(/over-privileged/u);
+      });
+    }).toThrow(/over-privileged/u);
   });
 
   it("resolves only constrained exact private branch refs", async () => {
@@ -632,22 +632,27 @@ describe("closed GitHub publication contract", () => {
 
   it("accepts exact active release-gate observations and rejects schema or digest drift", () => {
     const repo = repository(installation("resolve-existing-source"));
-    expect(() => assertExactRepositoryObservation({ ...repo, url: "private" } as never)).toThrow(
-      /schema/u,
-    );
-    expect(() => assertExactRepositoryObservation({ ...repo, headTree: "9".repeat(40) })).toThrow(
-      /non-canonical/u,
-    );
+    expect(() => {
+      const repositoryWithUrl = { ...repo, url: "private" };
+      assertExactRepositoryObservation(repositoryWithUrl);
+    }).toThrow(/schema/u);
+    expect(() => {
+      assertExactRepositoryObservation({ ...repo, headTree: "9".repeat(40) });
+    }).toThrow(/non-canonical/u);
     const active = repository(installation("resolve-existing-source"), {
       releaseGate: { configured: true, name: "REPOSITORY_RELEASE_ENABLED" },
     });
     expect(active.releaseGate.configured).toBe(true);
-    expect(() => assertExactRepositoryObservation(active)).not.toThrow();
+    expect(() => {
+      assertExactRepositoryObservation(active);
+    }).not.toThrow();
     const reordered = Object.fromEntries(Object.entries(active).toReversed()) as typeof active;
     reordered.releaseGate = Object.fromEntries(
       Object.entries(active.releaseGate).toReversed(),
     ) as typeof active.releaseGate;
-    expect(() => assertExactRepositoryObservation(reordered)).not.toThrow();
+    expect(() => {
+      assertExactRepositoryObservation(reordered);
+    }).not.toThrow();
   });
 
   it("keeps fresh repositories release-disabled", () => {
@@ -665,7 +670,9 @@ describe("closed GitHub publication contract", () => {
       ...unsigned,
       digest: hash(unsigned),
     };
-    expect(() => assertExactFreshRepositoryProposal(releaseEnabled as never)).toThrow(/malformed/u);
+    expect(() => {
+      assertExactFreshRepositoryProposal(releaseEnabled as never);
+    }).toThrow(/malformed/u);
   });
 
   it("binds a fresh proposal to the exact reviewed source receipt", () => {
@@ -725,12 +732,10 @@ describe("closed GitHub publication contract", () => {
     const adapter = new Adapter();
     const fresh = freshProposal(adapter);
     const draft = draftProposal(adapter);
-    expect(() =>
-      assertExactDraftPullRequestProposal({
-        ...draft,
-        endpoint: "https://example.com",
-      } as never),
-    ).toThrow(/schema/u);
+    expect(() => {
+      const draftWithEndpoint = { ...draft, endpoint: "https://example.com" };
+      assertExactDraftPullRequestProposal(draftWithEndpoint);
+    }).toThrow(/schema/u);
     expect(() =>
       createFreshRepositoryProposal({
         destinationName: "../bad",
@@ -808,13 +813,14 @@ describe("closed GitHub publication contract", () => {
     if (change?.kind === "added") {
       expect(change.after.bytes).toEqual(reviewedBytes);
     }
-    expect(() =>
+    expect(() => {
+      const contentWithToken = { ...content, token: "secret" };
       assertExactGitHubPublicationContent({
-        content: { ...content, token: "secret" } as never,
+        content: contentWithToken,
         proposal,
         review: review(),
-      }),
-    ).toThrow(/schema is not closed/u);
+      });
+    }).toThrow(/schema is not closed/u);
   });
 
   it("names the reviewed content field that differs from the sealed proposal", async () => {
@@ -825,12 +831,12 @@ describe("closed GitHub publication contract", () => {
       review: review(),
       source: publicationContentSource(reviewedBytes),
     });
-    expect(() =>
+    expect(() => {
       assertExactGitHubDraftPullRequestContent({
         content: { ...content, changedContentDigest: "f".repeat(64) },
         proposal,
-      }),
-    ).toThrow(/changedContentDigest/u);
+      });
+    }).toThrow(/changedContentDigest/u);
   });
 
   it("publishes a sealed overlay with its original property insertion order", async () => {
@@ -854,9 +860,9 @@ describe("closed GitHub publication contract", () => {
       source: publicationContentSource(),
     });
     expect(content.changes).toHaveLength(1);
-    expect(() =>
-      assertExactGitHubPublicationContent({ content, proposal, review: reviewed }),
-    ).not.toThrow();
+    expect(() => {
+      assertExactGitHubPublicationContent({ content, proposal, review: reviewed });
+    }).not.toThrow();
   });
 
   it("accepts only the exact immutable source manifest and defensively copies fresh bytes", async () => {
@@ -899,18 +905,22 @@ describe("closed GitHub publication contract", () => {
               if (file === undefined) {
                 throw new Error("missing fixture file");
               }
-              return {
-                ...exact,
-                ...(drift === "tree" ? { sourceTree: "0".repeat(40) } : {}),
-                files: [
-                  {
-                    ...file,
-                    ...(drift === "mode" ? { mode: "100755" as const } : {}),
-                    ...(drift === "object" ? { objectId: "0".repeat(40) } : {}),
-                    ...(drift === "bytes" ? { bytes: new TextEncoder().encode("drift\n") } : {}),
-                  },
-                ],
-              };
+              const drifted: GitHubFreshRepositoryContent = { ...exact };
+              if (drift === "tree") {
+                drifted.sourceTree = "0".repeat(40);
+              }
+              const driftedFile: GitHubFreshRepositoryContent["files"][number] = { ...file };
+              if (drift === "mode") {
+                driftedFile.mode = "100755";
+              }
+              if (drift === "object") {
+                driftedFile.objectId = "0".repeat(40);
+              }
+              if (drift === "bytes") {
+                driftedFile.bytes = new TextEncoder().encode("drift\n");
+              }
+              drifted.files = [driftedFile];
+              return drifted;
             },
           },
         }),
@@ -1274,7 +1284,10 @@ describe("closed GitHub publication contract", () => {
         store,
       }).catch((error: unknown) => error);
       expect(failure).toBeInstanceOf(Error);
-      expect((failure as Error).message).toMatch(fixture.message);
+      if (!(failure instanceof Error)) {
+        throw new Error("Expected publication failure to be an Error.");
+      }
+      expect(failure.message).toMatch(fixture.message);
       expect(JSON.stringify(failure)).not.toContain("raw-content-source-secret");
       expect(adapter.draftCalls).toBe(0);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -1438,7 +1451,7 @@ describe("closed GitHub publication contract", () => {
         adapter.draftOutcome = {
           ...unsigned,
           digest: hash(unsigned),
-        } as DraftPublicationReadBack;
+        };
       },
       (adapter, proposal) => {
         const staleRepo = repository(adapter.identities.publish, {
@@ -1520,7 +1533,7 @@ describe("closed GitHub publication contract", () => {
         adapter.draftOutcome = {
           ...injected,
           digest: hash(injected),
-        } as DraftPublicationReadBack;
+        };
       }
       return acknowledgement;
     };
@@ -1614,7 +1627,7 @@ describe("closed GitHub publication contract", () => {
     store.values.set(proposal.digest, {
       ...unsigned,
       digest: hash(unsigned),
-    } as GitHubMutationReceipt);
+    });
     await expect(
       publishApprovedDraftPullRequest({
         adapter,

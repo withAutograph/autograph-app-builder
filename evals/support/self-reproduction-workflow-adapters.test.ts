@@ -6,7 +6,10 @@ import type { Browser } from "playwright";
 import { describe, expect, it, vi } from "vitest";
 
 import { assessParity, requirements } from "./self-reproduction-parity";
-import { parityEvidenceFromReceipts } from "./self-reproduction-parity-evidence";
+import {
+  parityEvidenceFromReceipts,
+  runtimeReceiptSchema,
+} from "./self-reproduction-parity-evidence";
 import { runTrustedBrowserWorkflows } from "./self-reproduction-workflow-adapters";
 import type {
   TrustedBrowserWorkflowAdapter,
@@ -72,7 +75,7 @@ const adapter = (input?: {
 });
 
 const browser = () => {
-  const close = vi.fn(() => Promise.resolve());
+  const close = vi.fn<() => Promise<void>>().mockResolvedValue();
   const newPage = vi.fn(() => Promise.resolve({}));
   const newContext = vi.fn(() => Promise.resolve({ close, newPage }));
   return { close, newContext, newPage, value: { newContext } as unknown as Browser };
@@ -112,10 +115,12 @@ describe("trusted browser workflow adapters", () => {
           .every((row) => row.status === "passed"),
       ).toBe(true);
       expect(fixtureBrowser.newContext.mock.calls.length).toBeGreaterThan(22);
-      const receipt = JSON.parse(
-        await readFile(
-          path.join(outputRoot, "parity/workflows/durable-draft/candidate.json"),
-          "utf-8",
+      const receipt = runtimeReceiptSchema.parse(
+        JSON.parse(
+          await readFile(
+            path.join(outputRoot, "parity/workflows/durable-draft/candidate.json"),
+            "utf-8",
+          ),
         ),
       );
       expect(receipt.producer).toBe("evaluator");

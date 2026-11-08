@@ -136,9 +136,9 @@ describe("initial draft destination review workflow", () => {
     const observed = {
       ...expected,
       githubDestinationReviewRead: {
-        changeSetDigest: "observed-diff",
-        beforeComplete: true,
         afterComplete: false,
+        beforeComplete: true,
+        changeSetDigest: "observed-diff",
       },
     };
     expect(() => {

@@ -572,7 +572,7 @@ const runIncrementalValidation = async (
   }
   const originalStep = run.steps[run.nextIndex];
   const originalStepCommand = originalStep?.command;
-  const schemaTaskCompleted = run.schemaTaskCompleted;
+  const { schemaTaskCompleted } = run;
   const dependenciesPrepared = run.commands.some(
     ({ command, exitCode }) =>
       exitCode === 0 &&
@@ -678,7 +678,7 @@ const runIncrementalValidation = async (
   }
   let result: ValidationStepResult;
   let recovery: ValidationStep | undefined;
-  let compilation = run.compilation;
+  let { compilation } = run;
   try {
     if (step.kind === "install") {
       if (step.command !== installCommand) {
@@ -705,7 +705,7 @@ const runIncrementalValidation = async (
     } else if (step.kind === "capture") {
       try {
         const captured = await publishCandidateArtifacts(ctx, candidate, sandbox);
-        compilation = captured.compilation;
+        ({ compilation } = captured);
       } catch {
         ctx.abortSignal?.throwIfAborted();
         return {
@@ -1060,7 +1060,7 @@ export const validateDraftReconciliation = async (
     workspaceRoot: candidate.workspaceRoot,
   });
   let current = candidate;
-  let expectedCommand = input.expectedCommand;
+  let { expectedCommand } = input;
   for (;;) {
     // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Single-call mode uses the same durable ordered steps as incremental mode.
     const result = await runIncrementalValidation(

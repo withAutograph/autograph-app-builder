@@ -1,18 +1,16 @@
 import { createHash } from "node:crypto";
 
 import { and, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
-// oxlint-disable-next-line sonarjs/no-wildcard-import -- Drizzle's database type requires the complete schema namespace.
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { prototypeArtifactChunks } from "../db/schema";
 import type { HostedPrincipal } from "../eve/hosted-auth";
 import { parsePrototypeArtifactPath } from "./prototype-artifacts";
 import type { PrototypeArtifactV2 } from "./workflow-state";
 import { streamVerifiedPrototypeArtifact } from "./prototype-artifact-stream";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 
 /** Check the additive migration before enabling hosted artifact writes. */
 export const assertPrototypeChunkSchemaReady = async (db: Database): Promise<void> => {

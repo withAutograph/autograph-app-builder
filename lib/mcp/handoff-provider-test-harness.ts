@@ -14,6 +14,9 @@ import { createGitHubAppHttpProvider } from "../repository/github-app-http-provi
 import { initialBuilderProvisionJournalRecord } from "../provisioning/journal";
 import type { BuilderProvisionJournalRow } from "../provisioning/journal";
 
+const preparedRepositoryName = "prepared-vendor-review";
+const preparedRepositoryFullName = "acme/prepared-vendor-review";
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function preparedJournal(
   authority: HostedSessionTenantAuthority,
@@ -28,7 +31,7 @@ export function preparedJournal(
         githubInstallationId: "10",
         vercelInstallationId: "icfg_prepared",
       },
-      repository: { name: "prepared-vendor-review", private: true },
+      repository: { name: preparedRepositoryName, private: true },
       requestId,
       version: 1,
     },
@@ -37,11 +40,11 @@ export function preparedJournal(
   record.response.status = "settled";
   record.response.github = {
     defaultBranch: "main",
-    fullName: "acme/prepared-vendor-review",
+    fullName: preparedRepositoryFullName,
     headSha: "a".repeat(40),
     headTree: "b".repeat(40),
     installationId: "10",
-    name: "prepared-vendor-review",
+    name: preparedRepositoryName,
     owner: "acme",
     repositoryId: "100",
     scope: { id: "110", login: "acme", type: "organization" },
@@ -54,8 +57,8 @@ export function preparedJournal(
     dashboardUrl: "https://vercel.com/acme/prepared-vendor-review",
     framework: "nextjs",
     installationId: "icfg_prepared",
-    linkedGitHubRepository: "acme/prepared-vendor-review",
-    name: "prepared-vendor-review",
+    linkedGitHubRepository: preparedRepositoryFullName,
+    name: preparedRepositoryName,
     projectId: "prj_prepared",
     rootDirectory: "apps/prepared-vendor-review",
     scope: { id: "team_prepared", slug: "acme", type: "team" },
@@ -102,7 +105,7 @@ export function preparedProviderFixture(input: {
   isActiveMember: (authority: HostedSessionTenantAuthority) => Promise<boolean>;
 }) {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-  const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();
+  const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" });
   let credentialRevision = 1;
   let vercelStatus = 200;
   const githubToken = () => `ghs_mock_server_installation_token_${credentialRevision}`;
@@ -147,7 +150,7 @@ export function preparedProviderFixture(input: {
         archived: false,
         default_branch: "main",
         id: 100,
-        name: "prepared-vendor-review",
+        name: preparedRepositoryName,
         owner: { login: "acme" },
         private: true,
       });
@@ -218,7 +221,7 @@ export function preparedProviderFixture(input: {
       const { authority } = exactForwardedSessionAuthority(sessionAuth);
       expect(authority).toEqual(input.authority);
       expect(selection).toEqual({
-        repository: "acme/prepared-vendor-review",
+        repository: preparedRepositoryFullName,
         selectedInstallationId: "10",
       });
       return classifyGitHubRepositoryAccess({

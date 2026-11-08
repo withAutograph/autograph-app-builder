@@ -3,11 +3,10 @@ import type { McpOptions } from "@better-auth/mcp";
 import { z } from "zod";
 
 const previewOAuthConfigSchema = z
-  .object({
-    issuer: z.string().url(),
-    resource: z.string().url(),
+  .strictObject({
+    issuer: z.url(),
+    resource: z.url(),
   })
-  .strict()
   .superRefine((config, context) => {
     const issuer = new URL(config.issuer);
     const resource = new URL(config.resource);
@@ -21,26 +20,17 @@ const previewOAuthConfigSchema = z
         path: ["issuer"],
       });
     }
-    if (
-      issuer.username ||
-      issuer.password ||
-      issuer.search ||
-      issuer.hash ||
-      issuer.pathname !== "/api/auth"
-    ) {
+    const issuerHasExtras = issuer.username || issuer.password || issuer.search || issuer.hash;
+    if (issuerHasExtras || issuer.pathname !== "/api/auth") {
       context.addIssue({
         code: "custom",
         message: "Preview OAuth issuer must be the exact /api/auth URL.",
         path: ["issuer"],
       });
     }
-    if (
-      resource.username ||
-      resource.password ||
-      resource.search ||
-      resource.hash ||
-      resource.pathname !== "/mcp"
-    ) {
+    const resourceHasExtras =
+      resource.username || resource.password || resource.search || resource.hash;
+    if (resourceHasExtras || resource.pathname !== "/mcp") {
       context.addIssue({
         code: "custom",
         message: "Preview OAuth resource must be the exact /mcp URL.",
@@ -114,12 +104,14 @@ export function buildPreviewMcpOAuthOptions(input: {
     clientRegistrationRequirePKCE: true,
     consentPage: "/auth/consent",
     customAccessTokenClaims: async ({ user, referenceId, resources }) => {
+      const inactiveMessage = "Preview OAuth membership is not active.";
+      if (user === null || user === undefined || referenceId === undefined) {
+        throw new Error(inactiveMessage);
+      }
+      if (resources?.length !== 1 || resources[0] !== config.resource) {
+        throw new Error(inactiveMessage);
+      }
       if (
-        user === null ||
-        user === undefined ||
-        referenceId === undefined ||
-        resources?.length !== 1 ||
-        resources[0] !== config.resource ||
         !(await input.membership.isActiveMember({
           audience: config.resource,
           issuer: config.issuer,
@@ -127,7 +119,7 @@ export function buildPreviewMcpOAuthOptions(input: {
           workspaceId: referenceId,
         }))
       ) {
-        throw new Error("Preview OAuth membership is not active.");
+        throw new Error(inactiveMessage);
       }
       return {
         nbf: Math.floor(now() / 1000),
@@ -204,15 +196,17 @@ export function buildPreviewCimdOptions(input: {
         throw new Error("Preview CIMD resources must be JSON objects.");
       }
 
-      const record = document as Record<string, unknown>;
       const looksLikeClientMetadata =
-        "client_name" in record ||
-        "redirect_uris" in record ||
-        "token_endpoint_auth_method" in record;
-      if (!looksLikeClientMetadata && Array.isArray(record.keys)) {
+        "client_name" in document ||
+        "redirect_uris" in document ||
+        "token_endpoint_auth_method" in document;
+      if (!looksLikeClientMetadata && "keys" in document && Array.isArray(document.keys)) {
         return response;
       }
-      if (record.token_endpoint_auth_method !== "none") {
+      if (
+        !("token_endpoint_auth_method" in document) ||
+        document.token_endpoint_auth_method !== "none"
+      ) {
         throw new Error("Preview CIMD clients must use token_endpoint_auth_method none.");
       }
       return response;

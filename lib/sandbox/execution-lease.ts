@@ -10,7 +10,7 @@ import type { SandboxExecutionPolicy } from "./execution-policy";
 const sha256Digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 
 export const sandboxExecutionLeaseSchema = z
-  .object({
+  .strictObject({
     acquiredAtEpochMs: z.number().int().nonnegative(),
     adapterSessionId: hostedIdentifierSchema,
     epoch: z.number().int().positive(),
@@ -34,7 +34,6 @@ export const sandboxExecutionLeaseSchema = z
     state: z.enum(["active", "released", "orphaned"]),
     version: z.literal(1),
   })
-  .strict()
   .superRefine((lease, context) => {
     if (
       lease.acquiredAtEpochMs > lease.heartbeatAtEpochMs ||
@@ -167,10 +166,10 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     input: Parameters<SandboxExecutionLeaseStore["assertCurrent"]>[0],
   ): Promise<SandboxExecutionLease> {
     const lease = this.leases.get(sandboxLeaseKey(input.principal, input.adapterSessionId));
+    const unavailable =
+      lease === undefined || lease.state !== "active" || lease.expiresAtEpochMs <= input.nowEpochMs;
     if (
-      lease === undefined ||
-      lease.state !== "active" ||
-      lease.expiresAtEpochMs <= input.nowEpochMs ||
+      unavailable ||
       lease.epoch !== input.epoch ||
       lease.providerSandboxId !== input.providerSandboxId ||
       lease.policyDigest !== input.policyDigest
@@ -248,7 +247,11 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     input: Parameters<SandboxExecutionLeaseStore["claimExpired"]>[0],
   ): Promise<readonly SandboxExecutionLease[]> {
     const claimed: SandboxExecutionLease[] = [];
-    for (const [key, current] of [...this.leases.entries()].toSorted()) {
+    for (const [key, current] of [...this.leases.entries()].toSorted(([left], [right]) => {
+      if (left < right) return -1;
+      if (left > right) return 1;
+      return 0;
+    })) {
       if (
         claimed.length >= input.limit ||
         current.state === "released" ||

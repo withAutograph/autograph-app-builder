@@ -19,10 +19,10 @@ import type { ProtectedHostedOperatorDependencies } from "./hosted-operator-serv
 import { authority, context, selection, setup } from "./hosted-acceptance-recovery.test-fixture";
 
 const ownerContext = {
-  kind: "direct" as const,
-  adapterSessionId: "native-owner-anchor",
   adapterGeneration: 1,
+  adapterSessionId: "native-owner-anchor",
   authority,
+  kind: "direct" as const,
   principal: { ...authority, scopes: ["autograph:send"] },
   sessionId: context.target.sessionId,
 };
@@ -73,18 +73,33 @@ const composed = async () => {
   let historyUnavailable = false;
   let loseExecuteResponse = false;
   const starts: number[] = [];
-  f.deps.readApproval = async (_ctx, request, callId, observation) =>
-    await readPrivateOperatorApproval({
-      owner: ownerContext,
-      ...(observation === undefined ? {} : { observation }),
-      capture: (state) =>
-        createPrivateContinuityApprovalCapture({
+  f.deps.readApproval = async (_ctx, request, callId, observation) => {
+    const approvalContext: Pick<
+      Parameters<typeof readPrivateOperatorApproval>[0],
+      "owner" | "observation"
+    > = { owner: ownerContext };
+    if (observation !== undefined) {
+      approvalContext.observation = observation;
+    }
+    return await readPrivateOperatorApproval({
+      ...approvalContext,
+      assertOwner: async () => {
+        await f.deps.assertOwner(context);
+      },
+      capture: (state) => {
+        const captureInput: Parameters<typeof createPrivateContinuityApprovalCapture>[0] = {
           plan: saved.plan,
-          request,
           principal: ownerContext.principal,
-          ...(callId === undefined ? {} : { callId }),
-          ...(state === undefined ? {} : { state }),
-        }),
+          request,
+        };
+        if (callId !== undefined) {
+          captureInput.callId = callId;
+        }
+        if (state !== undefined) {
+          captureInput.state = state;
+        }
+        return createPrivateContinuityApprovalCapture(captureInput);
+      },
       readHistory: async (startIndex, onEvent) => {
         starts.push(startIndex);
         if (historyUnavailable) {
@@ -95,15 +110,13 @@ const composed = async () => {
           onEvent(event);
         }
         return {
-          nextNativeIndex: end,
-          nativeTailIndex: events.length,
           complete: end === events.length,
+          nativeTailIndex: events.length,
+          nextNativeIndex: end,
         };
       },
-      assertOwner: async () => {
-        await f.deps.assertOwner(context);
-      },
     });
+  };
   const verifyWorkload = async (request: Request) => {
     if (request.headers.get("authorization") !== "Bearer controlled-workload") {
       throw new HostedOperatorError("authorization_required");
@@ -128,9 +141,6 @@ const composed = async () => {
   const client = () => {
     const operations = createHostedContinuityOperations(f.deps);
     const dispatcher = createContinuityDispatcher({
-      store: f.deps.store,
-      operations,
-      verifyWorkload,
       authorize,
       authorizeRead: async (request, current) => {
         await verifyWorkload(request);
@@ -141,33 +151,33 @@ const composed = async () => {
         return current;
       },
       bindWorkload: () => {},
+      operations,
+      store: f.deps.store,
+      verifyWorkload,
     });
     const handler = createProtectedHostedOperatorHandler({
-      authorize,
       assertAuthorized: unexpected,
+      authorize,
+      bindings: unexpected,
+      continuityRequest: dispatcher,
+      executeEffect: unexpected,
       plan: unexpected,
       readApproval: unexpected,
-      withResourceLease: unexpected,
       reconcile: unexpected,
-      executeEffect: unexpected,
-      verify: unexpected,
-      bindings: unexpected,
       store: {
+        compareAndSet: unexpected,
         read: unexpected,
         reserve: unexpected,
-        compareAndSet: unexpected,
         reserveFenceGeneration: unexpected,
       },
-      continuityRequest: dispatcher,
+      verify: unexpected,
+      withResourceLease: unexpected,
     });
     return createHostedOperatorClient({
       endpoint: "https://operator.fixture.test",
-      ownerContext,
-      sessionId: context.target.sessionId,
-      token: async () => "controlled-workload",
       fetch: async (url, init) => {
         const request = new Request(url instanceof Request ? url.url : url, init);
-        const action = continuityTransportRequestSchema.parse(await request.clone().json()).action;
+        const { action } = continuityTransportRequestSchema.parse(await request.clone().json());
         const result = await handler(request);
         if (action === "continuity" && loseExecuteResponse) {
           loseExecuteResponse = false;
@@ -175,23 +185,26 @@ const composed = async () => {
         }
         return result;
       },
+      ownerContext,
+      sessionId: context.target.sessionId,
+      token: async () => "controlled-workload",
     });
   };
   return {
-    f,
-    saved,
-    events,
-    starts,
     client,
-    setPageSize: (value: number) => {
-      pageSize = value;
-    },
-    setHistoryUnavailable: (value: boolean) => {
-      historyUnavailable = value;
-    },
+    events,
+    f,
     loseNextExecuteResponse: () => {
       loseExecuteResponse = true;
     },
+    saved,
+    setHistoryUnavailable: (value: boolean) => {
+      historyUnavailable = value;
+    },
+    setPageSize: (value: number) => {
+      pageSize = value;
+    },
+    starts,
   };
 };
 
@@ -200,8 +213,8 @@ it("recovers the original native approval after a paginated interruption, then d
   c.setPageSize(1);
   await expect(c.client().continuityApproval(c.saved.request)).rejects.toMatchObject({
     code: "operator_unavailable",
-    recoveryStage: "native_history",
     recoveryProgressAdvanced: true,
+    recoveryStage: "native_history",
   });
   expect(c.f.rows.get(c.saved.plan.intentId)?.approvalObservation?.nextNativeIndex).toBe(1);
   expect(c.f.events).toEqual([]);
@@ -260,7 +273,7 @@ it("distinguishes a retained approval still awaiting settlement from a fresh req
 
 it("reconciles the exact receipt when another approval reader wins the journal write", async () => {
   const c = await composed();
-  const compareAndSet = c.f.deps.store.compareAndSet;
+  const { compareAndSet } = c.f.deps.store;
   let raced = false;
   c.f.deps.store.compareAndSet = async (input): ReturnType<typeof compareAndSet> => {
     if (!raced && input.record.approval !== undefined) {
@@ -304,7 +317,7 @@ it.each(["cancelled", "foreign", "different-request", "changed-digest", "conflic
   "never dispatches from %s native evidence",
   async (failure) => {
     const c = await composed();
-    const settlement = c.events[1];
+    const [, settlement] = c.events;
     if (settlement?.type !== "approval.settled") {
       throw new Error("Missing controlled native settlement");
     }
@@ -326,11 +339,11 @@ it.each(["cancelled", "foreign", "different-request", "changed-digest", "conflic
       c.setPageSize(c.events.length);
     }
     if (failure === "changed-digest") {
-      const requested = c.events[0];
+      const [requested] = c.events;
       if (requested?.type !== "input.requested") {
         throw new Error("Missing controlled request");
       }
-      const first = requested.data.requests[0];
+      const [first] = requested.data.requests;
       if (first?.kind !== "tool-approval") {
         throw new Error("Missing controlled tool approval");
       }

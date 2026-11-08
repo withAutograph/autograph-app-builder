@@ -1,3 +1,5 @@
+const unmappedValue = "Not mapped";
+
 export type SpendTarget =
   | "vendor_name"
   | "amount"
@@ -97,7 +99,10 @@ function mappedValue(
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function deriveSpendPreview(fixture: SpendFixture, mapping: SpendMapping): SpendPreview {
-  const complete = requiredTargets.every((target) => sourceFor(mapping, target));
+  const complete = requiredTargets.every((target) => {
+    const source = sourceFor(mapping, target);
+    return source !== undefined && source !== "";
+  });
   const representativeBaselineReady = fixture.representativeRows.filter(
     ({ issue }) => !issue,
   ).length;
@@ -115,12 +120,12 @@ export function deriveSpendPreview(fixture: SpendFixture, mapping: SpendMapping)
               currency: String(currency),
               style: "currency",
             }).format(amount)
-          : "Not mapped",
-      date: date === undefined ? "Not mapped" : String(date),
+          : unmappedValue,
+      date: date === undefined ? unmappedValue : String(date),
       id: row.id,
       result: complete && !row.issue ? "Ready" : "Needs review",
       sourceRef: sourceRef === undefined ? "Not imported" : String(sourceRef),
-      vendor: vendor === undefined ? "Not mapped" : String(vendor),
+      vendor: vendor === undefined ? unmappedValue : String(vendor),
     } satisfies SpendPreviewRow;
   });
   const ready = complete
@@ -128,11 +133,13 @@ export function deriveSpendPreview(fixture: SpendFixture, mapping: SpendMapping)
     : 0;
   const needsReview = fixture.import.rows - ready;
   const ignored = Object.values(mapping).filter((value) => value === "ignore").length;
+  let mappingSummary = "All source columns are included.";
+  if (ignored !== 0) {
+    const columnDescription = ignored === 1 ? "column is" : "columns are";
+    mappingSummary = `${ignored} source ${columnDescription} excluded.`;
+  }
   return {
-    mappingSummary:
-      ignored === 0
-        ? "All source columns are included."
-        : `${ignored} source ${ignored === 1 ? "column is" : "columns are"} excluded.`,
+    mappingSummary,
     needsReview,
     ready,
     rows,

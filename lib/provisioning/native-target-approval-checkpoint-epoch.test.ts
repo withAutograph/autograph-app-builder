@@ -22,40 +22,40 @@ const observation = (
   adapterSessionId: string,
   nextNativeIndex: number,
 ): PrivateNativeTargetApprovalObservation => ({
-  version: 1,
   native: {
-    adapterSessionId,
     adapterGeneration: 1,
-    nextNativeIndex,
+    adapterSessionId,
     capture: {
-      request: {
-        action: "native-target",
-        planRef: "retained-plan",
-        planDigest,
-        idempotencyKey: appId,
-      },
-      ownerUserId: authority.ownerUserId,
       entries: [
         {
-          requestId: "prior-approved-request",
-          callId: "prior-approved-call",
           approved: true,
+          callId: "prior-approved-call",
           cancelled: false,
           completedApproved: true,
           completedCancelled: false,
+          requestId: "prior-approved-request",
         },
       ],
+      ownerUserId: authority.ownerUserId,
+      request: {
+        action: "native-target",
+        idempotencyKey: appId,
+        planDigest,
+        planRef: "retained-plan",
+      },
     },
+    nextNativeIndex,
   },
   terminals: [
     {
-      requestId: "prior-approved-request",
       callId: "prior-approved-call",
-      responderPrincipalId: authority.ownerUserId,
-      outcome: "approved",
       observedAt: "2026-10-29T21:03:00.000Z",
+      outcome: "approved",
+      requestId: "prior-approved-request",
+      responderPrincipalId: authority.ownerUserId,
     },
   ],
+  version: 1,
 });
 
 interface Row {
@@ -187,12 +187,12 @@ describe("native target approval checkpoint adapter epochs", () => {
     const f = fixture();
     const prior = observation("old-adapter", 68_259);
     prior.native.capture.entries.push({
-      requestId: "cancelled-request",
-      callId: "cancelled-call",
       approved: false,
+      callId: "cancelled-call",
       cancelled: true,
       completedApproved: false,
       completedCancelled: true,
+      requestId: "cancelled-request",
     });
     await f.checkpoint("old-adapter").save(prior);
     f.current("recovered-adapter");
@@ -213,7 +213,7 @@ describe("native target approval checkpoint adapter epochs", () => {
       observation: {
         state: saved.native,
         save: async (native) => {
-          await checkpoint.save({ version: 1, native, terminals: prior.terminals });
+          await checkpoint.save({ native, terminals: prior.terminals, version: 1 });
         },
       },
       capture: (state) => {

@@ -8,6 +8,9 @@ import { archiveFiles, verifyPortableProofArtifact } from "./portable-proof-arti
 import { deterministicGzip, deterministicTar, sha256 } from "./portable-release";
 import { runSequentially } from "../lib/async-sequential";
 
+const RELEASE_RECEIPT_FILE = "release-receipt.json";
+const SYSTEM_EXECUTABLE_PATH = "/usr/bin:/bin";
+
 const { join, resolve: pathResolve } = nodePath;
 
 const run = async (script: string, args: string[], expected = 0) => {
@@ -84,8 +87,10 @@ try {
   if (!firstMarketplaceArchive.equals(secondMarketplaceArchive)) {
     throw new Error("Codex marketplace archive is not reproducible.");
   }
-  const firstReceipt = JSON.parse(await readFile(join(first, "release-receipt.json"), "utf-8"));
-  const secondReceipt = JSON.parse(await readFile(join(second, "release-receipt.json"), "utf-8"));
+  const firstReceipt = JSON.parse(await readFile(join(first, RELEASE_RECEIPT_FILE), "utf-8"));
+  const secondReceipt: unknown = JSON.parse(
+    await readFile(join(second, RELEASE_RECEIPT_FILE), "utf-8"),
+  );
   if (JSON.stringify(firstReceipt) !== JSON.stringify(secondReceipt)) {
     throw new Error("Portable release receipt is not reproducible.");
   }
@@ -99,7 +104,7 @@ try {
   const extracted = join(temp, "extracted");
   await mkdir(extracted);
   execFileSync("/usr/bin/tar", ["-xzf", join(first, archiveName), "-C", extracted], {
-    env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
+    env: { LC_ALL: "C", NODE_ENV: "test", PATH: SYSTEM_EXECUTABLE_PATH },
     stdio: "inherit",
   });
   await run("validate-plugin.mts", [
@@ -111,7 +116,7 @@ try {
   const marketplace = join(temp, "codex-marketplace");
   await mkdir(marketplace);
   execFileSync("/usr/bin/tar", ["-xzf", join(first, marketplaceArchiveName), "-C", marketplace], {
-    env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
+    env: { LC_ALL: "C", NODE_ENV: "test", PATH: SYSTEM_EXECUTABLE_PATH },
     stdio: "inherit",
   });
   const marketplaceManifest = JSON.parse(
@@ -175,7 +180,7 @@ try {
   ) => {
     const root = join(temp, `tampered-${name}`);
     await cp(first, root, { recursive: true });
-    const path = join(root, "release-receipt.json");
+    const path = join(root, RELEASE_RECEIPT_FILE);
     const receipt = JSON.parse(await readFile(path, "utf-8"));
     mutation(receipt);
     await writeFile(path, `${JSON.stringify(receipt, null, 2)}\n`);
@@ -235,7 +240,7 @@ try {
   }
   const missingAssetArchive = deterministicGzip(deterministicTar(missingAssetFiles));
   await writeFile(missingAssetArchivePath, missingAssetArchive);
-  const missingAssetReceiptPath = join(missingMarketplaceAsset, "release-receipt.json");
+  const missingAssetReceiptPath = join(missingMarketplaceAsset, RELEASE_RECEIPT_FILE);
   const missingAssetReceipt = JSON.parse(await readFile(missingAssetReceiptPath, "utf-8"));
   missingAssetReceipt.codexMarketplaceArchive.sha256 = sha256(missingAssetArchive);
   await writeFile(missingAssetReceiptPath, `${JSON.stringify(missingAssetReceipt, null, 2)}\n`);
@@ -256,7 +261,7 @@ try {
   tamperedAssetFiles.set(missingAssetPath, Buffer.from("tampered manifest-referenced asset"));
   const tamperedAssetArchive = deterministicGzip(deterministicTar(tamperedAssetFiles));
   await writeFile(tamperedAssetArchivePath, tamperedAssetArchive);
-  const tamperedAssetReceiptPath = join(tamperedMarketplaceAsset, "release-receipt.json");
+  const tamperedAssetReceiptPath = join(tamperedMarketplaceAsset, RELEASE_RECEIPT_FILE);
   const tamperedAssetReceipt = JSON.parse(await readFile(tamperedAssetReceiptPath, "utf-8"));
   tamperedAssetReceipt.codexMarketplaceArchive.sha256 = sha256(tamperedAssetArchive);
   const tamperedAssetFile = tamperedAssetFiles.get(missingAssetPath);
@@ -280,7 +285,7 @@ try {
     "/usr/bin/git",
     ["clone", "--quiet", "--no-hardlinks", pathResolve("."), checkoutDriftRepository],
     {
-      env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
+      env: { LC_ALL: "C", NODE_ENV: "test", PATH: SYSTEM_EXECUTABLE_PATH },
       stdio: "inherit",
     },
   );
@@ -295,7 +300,7 @@ try {
       "https://github.com/withAutograph/autograph-app-builder.git",
     ],
     {
-      env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
+      env: { LC_ALL: "C", NODE_ENV: "test", PATH: SYSTEM_EXECUTABLE_PATH },
       stdio: "inherit",
     },
   );
@@ -307,7 +312,7 @@ try {
   treeDriftFiles.set(missingAssetPath, treeDriftBytes);
   const treeDriftArchive = deterministicGzip(deterministicTar(treeDriftFiles));
   await writeFile(treeDriftArchivePath, treeDriftArchive);
-  const treeDriftReceiptPath = join(fullyReboundTreeDrift, "release-receipt.json");
+  const treeDriftReceiptPath = join(fullyReboundTreeDrift, RELEASE_RECEIPT_FILE);
   const treeDriftReceipt = JSON.parse(await readFile(treeDriftReceiptPath, "utf-8"));
   treeDriftReceipt.codexMarketplaceArchive.sha256 = sha256(treeDriftArchive);
   treeDriftReceipt.codexMarketplaceAssets[missingAssetPath] = sha256(treeDriftBytes);

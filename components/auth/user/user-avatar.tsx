@@ -33,7 +33,7 @@ export interface UserAvatarProps {
 export function UserAvatar({ className, user, isPending, fallback }: UserAvatarProps) {
   const { authClient } = useAuth<UsernameAuthClient>();
   const { data: session, isPending: sessionPending } = useSession(authClient, {
-    enabled: !user && !isPending,
+    enabled: !user && !(isPending ?? false),
   });
 
   if ((isPending || sessionPending) && !user) {

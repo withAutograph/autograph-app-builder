@@ -28,6 +28,7 @@ const closedObject = (value: unknown, name: string): Record<string, unknown> => 
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${name} was not an object.`);
   }
+  // SAFETY: The checks above exclude null, arrays, and non-object values; property values remain unknown.
   return value as Record<string, unknown>;
 };
 
@@ -118,7 +119,7 @@ export const resolveInstalledEveCli = (repositoryRootInput: string): string => {
   const repositoryPackagePath = nodePath.join(repositoryRoot, "package.json");
   assertOwnerNonWritable(repositoryPackagePath);
   const rootMetadata = closedObject(
-    JSON.parse(readFileSync(repositoryPackagePath, "utf-8")) as unknown,
+    JSON.parse(readFileSync(repositoryPackagePath, "utf-8")),
     "Repository package",
   );
   const declared = [
@@ -147,7 +148,7 @@ export const resolveInstalledEveCli = (repositoryRootInput: string): string => {
   assertOwnerBoundResolvedDirectory(packageRoot);
   assertOwnerNonWritable(metadataPath);
   const metadata = closedObject(
-    JSON.parse(readFileSync(metadataPath, "utf-8")) as unknown,
+    JSON.parse(readFileSync(metadataPath, "utf-8")),
     "Installed Eve package",
   );
   const bin =
@@ -190,11 +191,12 @@ const requiredInteger = (value: Record<string, unknown>, key: string): number =>
   if (!Number.isSafeInteger(candidate)) {
     throw new TypeError(`Required ${key} was unavailable.`);
   }
+  // SAFETY: Number.isSafeInteger returns true only for values that are numbers.
   return candidate as number;
 };
 
 export const parseLinkedVercelProject = (source: string): LinkedVercelProject => {
-  const value = closedObject(JSON.parse(source) as unknown, "Vercel project");
+  const value = closedObject(JSON.parse(source), "Vercel project");
   return {
     orgId: requiredString(value, "orgId"),
     projectId: requiredString(value, "projectId"),
@@ -210,16 +212,16 @@ export const readOwnerBoundLocalFile = (
 ): string => {
   const stat = lstatSync(path);
   const ownerId = input.ownerId ?? process.getuid?.();
+  const ownerBoundFileError = "Local credential input was not an owner-bound file.";
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || ownerId === undefined) {
+    throw new Error(ownerBoundFileError);
+  }
   if (
-    !stat.isFile() ||
-    stat.isSymbolicLink() ||
-    stat.nlink !== 1 ||
-    ownerId === undefined ||
     stat.uid !== ownerId ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (stat.mode & (input.confidential ? 0o077 : 0o022)) !== 0
   ) {
-    throw new Error("Local credential input was not an owner-bound file.");
+    throw new Error(ownerBoundFileError);
   }
   return readFileSync(path, "utf-8");
 };
@@ -231,7 +233,7 @@ export const parseLocalVercelOidcToken = (source: string): string => {
     throw new Error("Expected exactly one VERCEL_OIDC_TOKEN entry.");
   }
   const encoded = match.slice("VERCEL_OIDC_TOKEN=".length);
-  const token = encoded.startsWith('"') ? (JSON.parse(encoded) as unknown) : encoded;
+  const token: unknown = encoded.startsWith('"') ? JSON.parse(encoded) : encoded;
   if (
     typeof token !== "string" ||
     token.length > 8192 ||
@@ -291,26 +293,32 @@ export const validateLocalVercelOidcClaims = (input: {
   const issuerAllowed =
     claims.iss === "https://oidc.vercel.com" ||
     claims.iss === `https://oidc.vercel.com/${claims.owner}`;
+  const projectMismatch = "OIDC token did not match the linked Development project.";
   if (
     !/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/u.test(claims.owner) ||
     !issuerAllowed ||
     claims.aud !== expectedAudience ||
-    claims.sub !== expectedSubject ||
+    claims.sub !== expectedSubject
+  ) {
+    throw new Error(projectMismatch);
+  }
+  if (
     claims.owner_id !== input.project.orgId ||
     claims.project !== input.project.projectName ||
     claims.project_id !== input.project.projectId ||
     claims.environment !== "development"
   ) {
-    throw new Error("OIDC token did not match the linked Development project.");
+    throw new Error(projectMismatch);
   }
-  if (
-    claims.iat > input.nowEpochSeconds ||
-    claims.nbf > input.nowEpochSeconds ||
-    (!input.allowExpired && claims.exp <= input.nowEpochSeconds) ||
-    claims.nbf < claims.iat ||
-    claims.exp - claims.iat > 43_200
-  ) {
-    throw new Error("OIDC token was not current and bounded.");
+  const invalidLifetime = "OIDC token was not current and bounded.";
+  if (claims.iat > input.nowEpochSeconds || claims.nbf > input.nowEpochSeconds) {
+    throw new Error(invalidLifetime);
+  }
+  if (!(input.allowExpired ?? false) && claims.exp <= input.nowEpochSeconds) {
+    throw new Error(invalidLifetime);
+  }
+  if (claims.nbf < claims.iat || claims.exp - claims.iat > 43_200) {
+    throw new Error(invalidLifetime);
   }
   return {
     audienceBound: true,

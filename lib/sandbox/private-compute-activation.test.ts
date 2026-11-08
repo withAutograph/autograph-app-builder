@@ -17,13 +17,13 @@ const profile = () =>
       afterSha256: "b".repeat(64),
     },
     limits: {
-      version: 1,
+      limited: false,
+      maxVcpus: 8,
+      observedAt: "2026-11-03T12:00:00.000Z",
+      plan: "pro",
       projectId: "prj_private",
       teamId: "team_private",
-      plan: "pro",
-      maxVcpus: 8,
-      limited: false,
-      observedAt: "2026-11-03T12:00:00.000Z",
+      version: 1,
     },
   });
 const fixture = () => {
@@ -84,21 +84,21 @@ const fixture = () => {
     sessionId: "actual-session",
   };
   return {
-    input,
-    ports,
-    native,
     effects,
-    get record() {
-      return record;
+    input,
+    native,
+    observeConfigured: () => {
+      vcpus = 8;
     },
     observeStatus: (value: PrivateComputeNative["status"]) => {
       status = value;
     },
+    ports,
+    get record() {
+      return record;
+    },
     uncertain: () => {
       uncertainUpdate = true;
-    },
-    observeConfigured: () => {
-      vcpus = 8;
     },
   };
 };
@@ -107,7 +107,7 @@ describe("approved private compute transition", () => {
     const f = fixture();
     await expect(activatePrivateComputeProfile(f.input, f.ports)).resolves.toBe(f.native);
     expect(f.effects).toEqual(["stop", "update", "resume"]);
-    expect(f.native.currentSession()).toEqual({ vcpus: 8, memory: 16_384 });
+    expect(f.native.currentSession()).toEqual({ memory: 16_384, vcpus: 8 });
     expect(f.record).toMatchObject({ phase: "ready", proposalDigest: f.input.proposalDigest });
     await activatePrivateComputeProfile({ ...f.input, proposalDigest: "2".repeat(64) }, f.ports);
     expect(f.effects).toEqual(["stop", "update", "resume"]);

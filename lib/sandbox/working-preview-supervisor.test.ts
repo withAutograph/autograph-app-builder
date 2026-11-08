@@ -3,12 +3,12 @@ import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
-import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { createWorkingPreviewAccess } from "./working-preview-access";
 import { previewOwnershipRoot, previewOwnershipSource } from "./working-preview-ownership";
 import { workingPreviewSupervisorSource } from "./working-preview-runtime";
@@ -22,8 +22,8 @@ const distinctPreviewPorts = async () => {
     app.listen(0, "127.0.0.1");
     await once(app, "listening");
     return {
-      appPort: (app.address() as AddressInfo).port,
-      gatewayPort: (gateway.address() as AddressInfo).port,
+      appPort: z.object({ port: z.number() }).parse(app.address()).port,
+      gatewayPort: z.object({ port: z.number() }).parse(gateway.address()).port,
     };
   } finally {
     await Promise.all(
@@ -94,10 +94,9 @@ describe("generated working preview supervisor", () => {
         await waitFor(() => existsSync(readyPath));
         await writeFile(configurationPath, access.configuration);
         await waitFor(() => existsSync(failurePath));
-        const failure = JSON.parse(await readFile(failurePath, "utf-8")) as {
-          message: string;
-          stderr: string;
-        };
+        const failure = z
+          .looseObject({ message: z.string(), stderr: z.string() })
+          .parse(JSON.parse(await readFile(failurePath, "utf-8")));
         expect(failure.message).toBe(expected);
         expect(JSON.stringify(failure)).not.toContain(environmentPath);
         expect(JSON.stringify(failure)).not.toContain("APP_RUNTIME_TEST_VALUE");
@@ -200,7 +199,8 @@ describe("generated working preview supervisor", () => {
         ],
         { stdio: "ignore" },
       );
-      const [initializerCode] = await once(initializer, "exit");
+      const initializerExit: unknown[] = await once(initializer, "exit");
+      const [initializerCode] = initializerExit;
       expect(initializerCode).toBe(0);
       await writeFile(
         supervisorPath,

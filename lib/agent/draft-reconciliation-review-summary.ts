@@ -13,16 +13,16 @@ export interface ReconciliationChangeSummary {
   changes: OverlayChange[];
 }
 
-const changeMetadata = (change: OverlayChange): OverlayChange => ({
-  kind: change.kind,
-  path: change.path,
-  ...(change.before === undefined
-    ? {}
-    : { before: { digest: change.before.digest, mode: change.before.mode } }),
-  ...(change.after === undefined
-    ? {}
-    : { after: { digest: change.after.digest, mode: change.after.mode } }),
-});
+const changeMetadata = (change: OverlayChange): OverlayChange => {
+  const metadata: OverlayChange = { kind: change.kind, path: change.path };
+  if (change.before !== undefined) {
+    metadata.before = { digest: change.before.digest, mode: change.before.mode };
+  }
+  if (change.after !== undefined) {
+    metadata.after = { digest: change.after.digest, mode: change.after.mode };
+  }
+  return metadata;
+};
 
 /** Optional change-index pages retain every path and never decide review or publication eligibility. */
 export const summarizeReconciliationChanges = (

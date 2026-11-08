@@ -2,6 +2,7 @@ import { cp, mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   AUTOGRAPH_PACKAGE_VERSION,
   buildAgentPluginPackage,
@@ -21,8 +22,28 @@ const copyPortablePackage = async () => {
   return root;
 };
 
+const mcpFixtureSchema = z.looseObject({
+  mcpServers: z.record(
+    z.string(),
+    z.looseObject({
+      headers: z.record(z.string(), z.string()).optional(),
+      type: z.string(),
+      url: z.string(),
+    }),
+  ),
+});
+const mcpFixture = z.custom<z.infer<typeof mcpFixtureSchema>>(
+  (value) => mcpFixtureSchema.safeParse(value).success,
+);
+const pluginFixtureSchema = z.looseObject({ version: z.string() });
+const pluginFixture = z.custom<z.infer<typeof pluginFixtureSchema>>(
+  (value) => pluginFixtureSchema.safeParse(value).success,
+);
+
 const writeMcpHeaders = async (root: string, headers: Record<string, string>) => {
-  const mcp = JSON.parse(await readFile(path.resolve(repositoryRoot, "mcp.json"), "utf-8"));
+  const mcp = mcpFixture.parse(
+    JSON.parse(await readFile(path.resolve(repositoryRoot, "mcp.json"), "utf-8")),
+  );
   mcp.mcpServers["app-builder"].headers = headers;
   await writeFile(path.resolve(root, "mcp.json"), JSON.stringify(mcp));
 };
@@ -33,13 +54,17 @@ const writeMcp = async (
     mcpServers: Record<string, { type: string; url: string; headers?: Record<string, string> }>;
   }) => void,
 ) => {
-  const mcp = JSON.parse(await readFile(path.resolve(repositoryRoot, "mcp.json"), "utf-8"));
+  const mcp = mcpFixture.parse(
+    JSON.parse(await readFile(path.resolve(repositoryRoot, "mcp.json"), "utf-8")),
+  );
   mutation(mcp);
   await writeFile(path.resolve(root, "mcp.json"), JSON.stringify(mcp));
 };
 
 const writePluginVersion = async (root: string, version: string) => {
-  const plugin = JSON.parse(await readFile(path.resolve(repositoryRoot, "plugin.json"), "utf-8"));
+  const plugin = pluginFixture.parse(
+    JSON.parse(await readFile(path.resolve(repositoryRoot, "plugin.json"), "utf-8")),
+  );
   plugin.version = version;
   await writeFile(path.resolve(root, "plugin.json"), JSON.stringify(plugin));
 };

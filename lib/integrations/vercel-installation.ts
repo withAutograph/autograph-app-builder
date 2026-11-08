@@ -15,6 +15,8 @@ import type { ProviderConnectionReturn } from "./provider-connection-return";
 import type { ProviderEmulation } from "./local-provider-emulation";
 import { VercelTokenDecryptionKeyError } from "./vercel-token-decryption-key-error";
 
+const MEMBERSHIP_INACTIVE_ERROR = "membership-inactive";
+
 export { VercelTokenDecryptionKeyError } from "./vercel-token-decryption-key-error";
 
 type Authority = HostedAdminPlanRequest["authority"];
@@ -49,7 +51,9 @@ const tokenKeyringSchema = z
     tokenKeyVersion: tokenKeyVersionSchema,
   })
   .superRefine((config, context) => {
-    if (config.previousTokenKeys?.some((entry) => entry.version === config.tokenKeyVersion)) {
+    if (
+      config.previousTokenKeys?.some((entry) => entry.version === config.tokenKeyVersion) === true
+    ) {
       context.addIssue({
         code: "custom",
         message: "The active token key version cannot also be a previous key.",
@@ -59,19 +63,20 @@ const tokenKeyringSchema = z
   });
 
 const configSchema = z
-  .object({
+  .strictObject({
     clientId: z.string().min(1).max(512),
     clientSecret: z.string().min(1).max(512),
-    issuer: z.string().url(),
+    issuer: z.url(),
     previousTokenKeys: previousTokenKeysSchema.optional(),
-    resource: z.string().url(),
+    resource: z.url(),
     slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$/u),
     tokenKey: z.instanceof(Buffer).refine((value) => value.length === 32),
     tokenKeyVersion: tokenKeyVersionSchema,
   })
-  .strict()
   .superRefine((config, context) => {
-    if (config.previousTokenKeys?.some((entry) => entry.version === config.tokenKeyVersion)) {
+    if (
+      config.previousTokenKeys?.some((entry) => entry.version === config.tokenKeyVersion) === true
+    ) {
       context.addIssue({
         code: "custom",
         message: "The active token key version cannot also be a previous key.",
@@ -335,33 +340,24 @@ export function decryptVersionedVercelInstallationToken(input: {
   throw lastError;
 }
 
-const tokenResponseSchema = z.object({ access_token: z.string().min(1).max(8192) }).passthrough();
-const teamSchema = z
-  .object({
-    billing: z
-      .object({ plan: z.string().min(1) })
-      .passthrough()
-      .optional(),
-    id: z.string().min(1),
-    name: z.string().min(1),
-    slug: z.string().min(1),
-  })
-  .passthrough();
+const tokenResponseSchema = z.looseObject({ access_token: z.string().min(1).max(8192) });
+const teamSchema = z.looseObject({
+  billing: z.looseObject({ plan: z.string().min(1) }).optional(),
+  id: z.string().min(1),
+  name: z.string().min(1),
+  slug: z.string().min(1),
+});
 const teamResponseSchema = z.union([
   teamSchema,
   z.object({ team: teamSchema }).transform(({ team }) => team),
 ]);
-const userSchema = z
-  .object({
-    user: z
-      .object({
-        id: z.string().min(1),
-        name: z.string().min(1).optional(),
-        username: z.string().min(1),
-      })
-      .passthrough(),
-  })
-  .passthrough();
+const userSchema = z.looseObject({
+  user: z.looseObject({
+    id: z.string().min(1),
+    name: z.string().min(1).optional(),
+    username: z.string().min(1),
+  }),
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createVercelInstallationAuthorization(input: {
@@ -387,7 +383,7 @@ export function createVercelInstallationAuthorization(input: {
     ) {
       const authority = hostedTenantAuthoritySchema.parse(authorityInput);
       if (!(await input.membership.isActiveMember(authority))) {
-        throw new Error("membership-inactive");
+        throw new Error(MEMBERSHIP_INACTIVE_ERROR);
       }
       const state = nonce();
       const issuedAt = now();
@@ -403,7 +399,7 @@ export function createVercelInstallationAuthorization(input: {
         ? new URL("/local-connections/vercel", config.issuer)
         : new URL(`/integrations/${config.slug}/new`, "https://vercel.com");
       url.searchParams.set("state", state);
-      if (input.emulation && returnState.resumeKey) {
+      if (input.emulation && returnState.resumeKey !== undefined && returnState.resumeKey !== "") {
         url.searchParams.set("resume", returnState.resumeKey);
       }
       return url.toString();
@@ -419,9 +415,10 @@ export function createVercelInstallationAuthorization(input: {
         .min(1)
         .max(256)
         .parse(url.searchParams.get("configurationId"));
-      const teamId = url.searchParams.get("teamId") || undefined;
+      const requestedTeamId = url.searchParams.get("teamId");
+      const teamId = requestedTeamId === "" ? undefined : (requestedTeamId ?? undefined);
       if (!(await input.membership.isActiveMember(authority))) {
-        throw new Error("membership-inactive");
+        throw new Error(MEMBERSHIP_INACTIVE_ERROR);
       }
       const returnState = await input.states.consume({
         authority,
@@ -481,7 +478,7 @@ export function createVercelInstallationAuthorization(input: {
         Authorization: `Bearer ${token}`,
       };
       let binding: Omit<VercelInstallationBinding, "active" | "updatedAt">;
-      if (teamId) {
+      if (teamId !== undefined && teamId !== "") {
         const response = await request(
           `${input.emulation?.vercelOrigin ?? "https://api.vercel.com"}/v2/teams/${encodeURIComponent(teamId)}`,
           {
@@ -523,7 +520,7 @@ export function createVercelInstallationAuthorization(input: {
         };
       }
       if (!(await input.membership.isActiveMember(authority))) {
-        throw new Error("membership-inactive");
+        throw new Error(MEMBERSHIP_INACTIVE_ERROR);
       }
       const persistedBinding = await input.installations.bind({
         authority,
@@ -542,7 +539,11 @@ export function verifyVercelWebhook(input: {
   signature: string | null;
   secret: string;
 }) {
-  if (!input.signature || !/^[a-f0-9]{40}$/iu.test(input.signature)) {
+  if (
+    input.signature === null ||
+    input.signature === "" ||
+    !/^[a-f0-9]{40}$/iu.test(input.signature)
+  ) {
     return false;
   }
   const expected = createHmac("sha1", input.secret).update(input.body).digest();

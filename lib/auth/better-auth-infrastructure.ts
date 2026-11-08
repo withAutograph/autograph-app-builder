@@ -21,7 +21,7 @@ export interface BetterAuthInfrastructureSummary {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function readApiKey(value: string | undefined): string {
   const apiKey = value?.trim();
-  if (!apiKey) {
+  if (apiKey === undefined || apiKey === "") {
     throw new Error("BETTER_AUTH_API_KEY is required when Better Auth Infrastructure is enabled");
   }
   return apiKey;
@@ -31,7 +31,7 @@ function readApiKey(value: string | undefined): string {
 export function resolveBetterAuthInfrastructure(options: BetterAuthInfrastructureOptions) {
   const configuredValue = options.environment.BETTER_AUTH_INFRASTRUCTURE?.trim();
 
-  if (!configuredValue) {
+  if (configuredValue === undefined || configuredValue === "") {
     return {
       plugins: [],
       summary: {

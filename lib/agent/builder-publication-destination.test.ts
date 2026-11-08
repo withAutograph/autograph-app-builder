@@ -62,50 +62,54 @@ const fixture = (withoutDestination = false) => {
   let drift = false;
   let reads = 0;
   const read = createBuilderPublicationDestinationReader({
-    readSelection: async () => {
-      if (drift) {
-        epoch += 1;
-      }
-      return {
-        authority,
-        appId: "saved-app",
-        publicSessionId: "saved-public-session",
-        ...(withoutDestination
-          ? {}
-          : {
-              destination: {
-                appId: "saved-app",
-                requestId: request.requestId,
-                requestDigest: digest,
-              },
-            }),
-        owner: { adapterGeneration: epoch },
-      };
-    },
     readProvisioning: async (input) => {
       reads += 1;
       expect(input.authority).toEqual(authority);
       return row;
     },
+    readSelection: async () => {
+      if (drift) {
+        epoch += 1;
+      }
+      type Selection = Awaited<
+        ReturnType<Parameters<typeof createBuilderPublicationDestinationReader>[0]["readSelection"]>
+      >;
+      const selected: Pick<Selection, "authority" | "appId" | "publicSessionId" | "destination"> = {
+        appId: "saved-app",
+        authority,
+        publicSessionId: "saved-public-session",
+      };
+      if (!withoutDestination) {
+        selected.destination = {
+          appId: "saved-app",
+          requestDigest: digest,
+          requestId: request.requestId,
+        };
+      }
+      return {
+        ...selected,
+        owner: { adapterGeneration: epoch },
+      };
+    },
   });
   return {
-    read,
-    row,
     drift: () => {
       drift = true;
     },
+    read,
     reads: () => reads,
+    row,
   };
 };
 it("selects the saved Builder-created destination without changing starter provenance or performing writes", async () => {
   const f = fixture();
   expect(await f.read()).toEqual({
-    publicSessionId: "saved-public-session",
     destination: {
       repository: "owner/saved-app",
       repositoryId: "123",
       selectedInstallationId: "456",
     },
+    publicSessionId: "saved-public-session",
   });
   expect(f.reads()).toBe(2);
 });

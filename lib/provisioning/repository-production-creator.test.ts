@@ -41,9 +41,9 @@ const harness = (
     operationRef: repositoryProductionOperationRef(targetScope),
     revision: 0,
     record: initialRepositoryProductionRecord(targetScope, {
+      creatorRoles: ["editor"],
       sessionId: "original-session",
       sourceSha: "a".repeat(40),
-      creatorRoles: ["editor"],
       storage: { kind: "none" },
     }),
   };
@@ -72,27 +72,9 @@ const harness = (
     },
   });
   const bridge = createRepositoryProductionCreator({
-    builderOrigin: "https://builder.example",
-    realmDigest: () => options.realmDigest ?? "e".repeat(64),
-    async *linkedCreatorCandidates() {
-      for (const candidate of options.candidates ?? []) {
-        yield candidate.row;
-      }
-    },
-    now: () => clock,
-    readOwner: async () => ({ email: "Creator@Example.com" }),
-    readCurrent: async () => row,
-    findInvitation: async (id) => (id === row.operationRef ? row : undefined),
-    readInvitation: async (saved) =>
-      saved.operationRef === row.operationRef
-        ? invitation
-        : options.candidates?.find((candidate) => candidate.row.operationRef === saved.operationRef)
-            ?.invitation,
     assertAuthorized,
-    resume: async (_row, sessionId) => {
-      resumes.push(sessionId);
-      return { state: "ready" };
-    },
+    builderOrigin: "https://builder.example",
+    findInvitation: async (id) => (id === row.operationRef ? row : undefined),
     invokeAuth: async (current, request) => {
       const parsed = z
         .object({
@@ -144,6 +126,24 @@ const harness = (
         }
       }
       return invitation;
+    },
+    async *linkedCreatorCandidates() {
+      for (const candidate of options.candidates ?? []) {
+        yield candidate.row;
+      }
+    },
+    now: () => clock,
+    readCurrent: async () => row,
+    readInvitation: async (saved) =>
+      saved.operationRef === row.operationRef
+        ? invitation
+        : options.candidates?.find((candidate) => candidate.row.operationRef === saved.operationRef)
+            ?.invitation,
+    readOwner: async () => ({ email: "Creator@Example.com" }),
+    realmDigest: () => options.realmDigest ?? "e".repeat(64),
+    resume: async (_row, sessionId) => {
+      resumes.push(sessionId);
+      return { state: "ready" };
     },
   });
   return {
@@ -216,9 +216,9 @@ describe("Production creator continuation", () => {
     await next.bridge.prepare(next.context());
     expect(next.requests.map((request) => request.action)).toEqual(["create", "link-creator"]);
     expect(await next.bridge.readCreator(next.row())).toMatchObject({
-      kind: "managed-invitation",
       actorId: "actor-1",
       invitationId: next.row().operationRef,
+      kind: "managed-invitation",
     });
     expect(next.row().operationRef).not.toBe(source.row.operationRef);
     expect(source.invitation?.status).toBe("accepted");
@@ -252,19 +252,22 @@ describe("Production creator continuation", () => {
     "does not reuse a verified creator across a different %s",
     async (difference) => {
       const source = await linkedOwner();
-      const next = harness({
-        scope: {
-          ...scope,
-          appId: "another-app",
-          authority: {
-            ...scope.authority,
-            ...(difference === "owner" ? { ownerUserId: "other-owner" } : {}),
-            ...(difference === "workspace" ? { workspaceId: "other-workspace" } : {}),
-          },
-        },
-        ...(difference === "realm" ? { realmDigest: "f".repeat(64) } : {}),
-        candidates: [source],
-      });
+      const targetScope: RepositoryProductionScope = {
+        ...scope,
+        appId: "another-app",
+        authority: { ...scope.authority },
+      };
+      if (difference === "owner") {
+        targetScope.authority.ownerUserId = "other-owner";
+      }
+      if (difference === "workspace") {
+        targetScope.authority.workspaceId = "other-workspace";
+      }
+      const options: NonNullable<Parameters<typeof harness>[0]> = { scope: targetScope };
+      if (difference === "realm") {
+        options.realmDigest = "f".repeat(64);
+      }
+      const next = harness({ ...options, candidates: [source] });
       await next.bridge.prepare(next.context());
       expect(next.requests.map((request) => request.action)).toEqual(["create", "send"]);
       expect(await next.bridge.readCreator(next.row())).toHaveProperty("state", "required");
@@ -322,7 +325,7 @@ describe("Production creator continuation", () => {
     h.patchInvitation({ expiresAt });
     const before = [...h.requests];
     h.advance();
-    expect(await h.bridge.readCreator(h.row())).toMatchObject({ state: "required", expiresAt });
+    expect(await h.bridge.readCreator(h.row())).toMatchObject({ expiresAt, state: "required" });
     expect(await h.bridge.describe(h.row())).toMatchObject({ expiresAt });
     expect(h.requests).toEqual(before);
     expect(h.resumes).toEqual([]);
@@ -345,9 +348,9 @@ describe("Production creator continuation", () => {
     expect(h.resumes).toEqual([]);
     h.patchInvitation({ verifiedSessionId: "real-auth-session" });
     expect(await h.bridge.readCreator(h.row())).toEqual({
-      kind: "managed-invitation",
-      invitationId: h.row().operationRef,
       actorId: "actor-1",
+      invitationId: h.row().operationRef,
+      kind: "managed-invitation",
       scopeDigest: "b".repeat(64),
     });
     expect(await h.bridge.complete(h.row().operationRef)).toBe("ready");

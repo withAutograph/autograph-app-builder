@@ -14,7 +14,7 @@ const fixture = () => {
       throw new Error("owner revoked");
     }
   });
-  const readFile = vi.fn<Session["readFile"]>(() => Promise.resolve(null));
+  const readFile = vi.fn<Session["readFile"]>().mockResolvedValue(null);
   const currentSession = vi.fn(() => ({ readFile }));
   const get = vi.fn<Lookup>(() => Promise.resolve({ currentSession }));
   return {

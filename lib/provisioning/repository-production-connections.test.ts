@@ -82,10 +82,9 @@ const fixture = (
   });
   const assertCurrent = vi.fn(async () => {});
   return {
+    assertCurrent,
     environment,
     io,
-    request,
-    assertCurrent,
     read: createRepositoryProductionConnectionReader({
       connection: connection ?? { ...secrets, operator },
       resources: configuredResources,
@@ -95,6 +94,7 @@ const fixture = (
       assertCurrent,
       signal: new AbortController().signal,
     }),
+    request,
   };
 };
 

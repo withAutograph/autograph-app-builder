@@ -31,6 +31,18 @@ const result = {
   status: "completed" as const,
 };
 
+const unexpectedServiceCall = (): never => {
+  throw new Error("Unexpected Eve session operation in preview fixture");
+};
+const previewService = (get: EveSessionService["get"]): EveSessionService => ({
+  cancel: unexpectedServiceCall,
+  get,
+  list: unexpectedServiceCall,
+  respond: unexpectedServiceCall,
+  send: unexpectedServiceCall,
+  start: unexpectedServiceCall,
+});
+
 describe("Browser prototype preview", () => {
   it.each(["authorized", "missing", "wrong-public", "wrong-native"])(
     "requires a server-authorized exact %s public/native alias tuple",
@@ -285,7 +297,7 @@ describe("Browser prototype preview", () => {
   it("reads the requested owned session through the selected service", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     const get = vi.fn(async () => result);
-    const service = { get } as unknown as EveSessionService;
+    const service = previewService(get);
     const resolver = createServicePrototypePreviewResolver({
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
       serviceForRequest: async () => service,
@@ -305,12 +317,12 @@ describe("Browser prototype preview", () => {
 
   it("waits briefly for a prototype event that is still being delivered", async () => {
     const get = vi
-      .fn()
+      .fn<EveSessionService["get"]>()
       .mockResolvedValueOnce({ ...result, prototype: undefined })
       .mockResolvedValueOnce(result);
     const resolver = createServicePrototypePreviewResolver({
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
-      serviceForRequest: async () => ({ get }) as unknown as EveSessionService,
+      serviceForRequest: async () => previewService(get),
     });
     await expect(
       resolver({

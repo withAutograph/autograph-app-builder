@@ -122,14 +122,13 @@ export function createVercelInstallationDeploymentHandler(
       return redirect("failed", reason, returnState);
     };
 
-    if (
-      (kind === "start" &&
-        (request.method !== "POST" ||
-          request.headers.get("origin") !== origin ||
-          request.headers.get("content-type")?.split(";", 1)[0] !==
-            "application/x-www-form-urlencoded")) ||
-      (kind === "callback" && request.method !== "GET")
-    ) {
+    const invalidStartRequest =
+      kind === "start" &&
+      (request.method !== "POST" ||
+        request.headers.get("origin") !== origin ||
+        request.headers.get("content-type")?.split(";", 1)[0] !==
+          "application/x-www-form-urlencoded");
+    if (invalidStartRequest || (kind === "callback" && request.method !== "GET")) {
       return fail("request-invalid");
     }
 
@@ -207,14 +206,14 @@ const webhookSchema = z
       .object({
         configuration: z
           .object({ id: z.string().min(1) })
-          .passthrough()
+          .loose()
           .optional(),
         configurationId: z.string().min(1).optional(),
       })
-      .passthrough(),
+      .loose(),
     type: z.string(),
   })
-  .passthrough();
+  .loose();
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createVercelWebhookDeploymentHandler(
@@ -236,7 +235,7 @@ export function createVercelWebhookDeploymentHandler(
       const event = webhookSchema.parse(JSON.parse(body));
       if (event.type === "integration-configuration.removed") {
         const id = event.payload.configuration?.id ?? event.payload.configurationId;
-        if (!id) {
+        if (id === undefined || id === null || id === "") {
           return new Response("Invalid event", { status: 400 });
         }
         await runtime.installations.deactivate(id, new Date());

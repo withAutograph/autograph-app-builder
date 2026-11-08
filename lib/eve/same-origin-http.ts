@@ -72,22 +72,29 @@ const SESSION_SETTLEMENT_MAX_POLL_INTERVAL_MS = 2000;
 const VERCEL_TRUSTED_OIDC_HEADER = "x-vercel-trusted-oidc-idp-token";
 const EVE_STREAM_FORMAT = "ndjson";
 const EVE_STREAM_VERSION = "25";
+const CONTENT_TYPE_HEADER = "content-type";
+const EVE_SESSION_PATH = "/eve/v1/session";
+const INSPECT_SOURCE_PHASE = "inspect-source";
+const INPUT_REQUESTED = "input.requested";
+const INPUT_RESOLVED = "input.resolved";
+const APPROVAL_SETTLED = "approval.settled";
+const TURN_COMPLETED = "turn.completed";
+const TURN_FAILED = "turn.failed";
+const TURN_CANCELLED = "turn.cancelled";
+const SESSION_WAITING = "session.waiting";
+const SESSION_COMPLETED = "session.completed";
+const SESSION_FAILED = "session.failed";
 
 const sameOriginConfigSchema = z
-  .object({
-    baseUrl: z.string().url().startsWith("https://"),
+  .strictObject({
+    baseUrl: z.url().startsWith("https://"),
     timeoutMs: z.number().int().min(1).max(30_000).default(DEFAULT_TIMEOUT_MS),
   })
-  .strict()
   .transform((config, context) => {
     const baseUrl = new URL(config.baseUrl);
-    if (
-      baseUrl.username ||
-      baseUrl.password ||
-      baseUrl.search ||
-      baseUrl.hash ||
-      (baseUrl.pathname !== "/" && baseUrl.pathname !== "")
-    ) {
+    const hasCredentialsOrQuery =
+      baseUrl.username || baseUrl.password || baseUrl.search || baseUrl.hash;
+    if (hasCredentialsOrQuery || (baseUrl.pathname !== "/" && baseUrl.pathname !== "")) {
       context.addIssue({
         code: "custom",
         message: "The canonical Eve API must use a credential-free HTTPS origin.",
@@ -98,36 +105,33 @@ const sameOriginConfigSchema = z
     return { ...config, baseUrl: baseUrl.origin };
   });
 
-const acceptedTurnSchema = z
-  .object({
-    deliveryId: z.string().min(1).max(500).optional(),
+const acceptedTurnSchema = z.strictObject({
+  deliveryId: z.string().min(1).max(500).optional(),
+  ok: z.literal(true),
+  sessionId: z.string().min(1).max(500),
+  status: z.literal("accepted"),
+  recoveryBinding: nativeRecoveryBindingSchema.optional(),
+});
+
+const sourceInspectionAcceptedSchema = acceptedTurnSchema.extend({
+  sourceDiagnostic: z.unknown().optional(),
+});
+
+const cancelResponseSchema = z.discriminatedUnion("status", [
+  z.strictObject({
     ok: z.literal(true),
     sessionId: z.string().min(1).max(500),
     status: z.literal("accepted"),
-    recoveryBinding: nativeRecoveryBindingSchema.optional(),
-  })
-  .strict();
-
-const sourceInspectionAcceptedSchema = acceptedTurnSchema
-  .extend({ sourceDiagnostic: z.unknown().optional() })
-  .strict();
-
-const cancelResponseSchema = z.discriminatedUnion("status", [
-  z
-    .object({
-      ok: z.literal(true),
-      sessionId: z.string().min(1).max(500),
-      status: z.literal("accepted"),
-    })
-    .strict(),
-  z.object({ ok: z.literal(true), status: z.literal("no_active_turn") }).strict(),
+  }),
+  z.strictObject({ ok: z.literal(true), status: z.literal("no_active_turn") }),
 ]);
 
-const errorResponseSchema = z.object({ code: z.string().min(1).max(100) }).passthrough();
+const errorResponseSchema = z.looseObject({ code: z.string().min(1).max(100) });
 
-const streamEnvelopeSchema = z
-  .object({ data: z.record(z.string(), z.unknown()), type: z.string().min(1) })
-  .passthrough();
+const streamEnvelopeSchema = z.looseObject({
+  data: z.record(z.string(), z.unknown()),
+  type: z.string().min(1),
+});
 
 export interface HostedWorkloadIdentity {
   token: () => Promise<string>;
@@ -151,21 +155,27 @@ function endpoint(config: z.infer<typeof sameOriginConfigSchema>, path: string):
   return new URL(path, `${config.baseUrl}/`).href;
 }
 
+interface ForwardedPrincipalAttributes {
+  "mcp:audience": HostedPrincipal["audience"];
+  "mcp:scopes": HostedPrincipal["scopes"];
+  "mcp:workspace-id": HostedPrincipal["workspaceId"];
+  "autograph:source-handoff-id"?: string;
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function forwardedPrincipal(principalInput: HostedPrincipal, sourceHandoffId?: string) {
   const principal = hostedPrincipalSchema.parse(principalInput);
+  const attributes: ForwardedPrincipalAttributes = {
+    "mcp:audience": principal.audience,
+    "mcp:scopes": principal.scopes,
+    "mcp:workspace-id": principal.workspaceId,
+  };
+  if (sourceHandoffId !== undefined) {
+    attributes["autograph:source-handoff-id"] = z.uuid().parse(sourceHandoffId);
+  }
   return {
     current: {
-      attributes: {
-        "mcp:audience": principal.audience,
-        "mcp:scopes": principal.scopes,
-        "mcp:workspace-id": principal.workspaceId,
-        ...(sourceHandoffId === undefined
-          ? {}
-          : {
-              "autograph:source-handoff-id": z.string().uuid().parse(sourceHandoffId),
-            }),
-      },
+      attributes,
       authenticator: "mcp-oauth-jwks",
       issuer: principal.issuer,
       principalId: principal.ownerUserId,
@@ -184,9 +194,16 @@ async function workloadHeaders(identity: HostedWorkloadIdentity) {
   };
 }
 
+interface MutationReadbackFields {
+  ok: boolean | undefined;
+  sessionId?: string;
+  status?: string;
+  deliveryId?: string;
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readJson(response: Response): Promise<unknown> {
-  const contentType = response.headers.get("content-type")?.split(";", 1)[0];
+  const contentType = response.headers.get(CONTENT_TYPE_HEADER)?.split(";", 1)[0];
   if (contentType !== "application/json") {
     throw new Error("The canonical Eve API returned a non-JSON response.");
   }
@@ -204,12 +221,18 @@ async function readJson(response: Response): Promise<unknown> {
     ],
     { allowedRootKeys: ["ok", "sessionId", "status", "deliveryId"] },
   );
-  return {
-    ok: parsed.matches[0],
-    ...(parsed.values[1] === undefined ? {} : { sessionId: parsed.values[1] }),
-    ...(parsed.values[2] === undefined ? {} : { status: parsed.values[2] }),
-    ...(parsed.values[3] === undefined ? {} : { deliveryId: parsed.values[3] }),
-  };
+  const result: MutationReadbackFields = { ok: parsed.matches[0] };
+  const [, sessionId, status, deliveryId] = parsed.values;
+  if (sessionId !== undefined) {
+    result.sessionId = sessionId;
+  }
+  if (status !== undefined) {
+    result.status = status;
+  }
+  if (deliveryId !== undefined) {
+    result.deliveryId = deliveryId;
+  }
+  return result;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -248,7 +271,7 @@ async function postMutation(input: {
       method: "POST",
       redirect: "manual",
       signal: AbortSignal.timeout(
-        input.path === "/eve/v1/session" && input.body.recovery !== undefined
+        input.path === EVE_SESSION_PATH && input.body.recovery !== undefined
           ? TERMINAL_RECOVERY_TIMEOUT_MS
           : input.config.timeoutMs,
       ),
@@ -269,7 +292,7 @@ async function postMutation(input: {
     // Only this private recovery response carries a structured receipt. The
     // ordinary session response remains on the bounded streaming reader.
     const body: unknown =
-      (input.body.recovery !== undefined || input.body.recoveryPhase === "inspect-source") &&
+      (input.body.recovery !== undefined || input.body.recoveryPhase === INSPECT_SOURCE_PHASE) &&
       response.status === 202
         ? await response.json()
         : await readJson(response);
@@ -286,10 +309,10 @@ async function postMutation(input: {
       throw new Error("Unexpected response status.");
     }
     const accepted =
-      input.body.recoveryPhase === "inspect-source"
+      input.body.recoveryPhase === INSPECT_SOURCE_PHASE
         ? sourceInspectionAcceptedSchema.parse(body)
         : acceptedTurnSchema.parse(body);
-    if (input.path !== "/eve/v1/session" && accepted.deliveryId === undefined) {
+    if (input.path !== EVE_SESSION_PATH && accepted.deliveryId === undefined) {
       throw new Error("Canonical Eve omitted the accepted delivery identity.");
     }
     return accepted;
@@ -365,12 +388,15 @@ export async function* streamSameOriginEveEvents(input: {
     (input.readDeadline === true ? AbortSignal.timeout(SESSION_READ_TIMEOUT_MS) : undefined);
   let response: Response;
   try {
-    response = await authenticatedFetch({
+    const fetchInput: Parameters<typeof authenticatedFetch>[0] = {
       ...input,
       path,
       timeout: "unbounded",
-      ...(signal === undefined ? {} : { init: { signal } }),
-    });
+    };
+    if (signal !== undefined) {
+      fetchInput.init = { signal };
+    }
+    response = await authenticatedFetch(fetchInput);
   } catch (error) {
     if (signal?.aborted === true) {
       throw new HostedSessionReadTimeoutError();
@@ -379,7 +405,7 @@ export async function* streamSameOriginEveEvents(input: {
   }
   input.readTrace?.enter("headers");
   try {
-    const contentType = response.headers.get("content-type")?.split(";", 1)[0];
+    const contentType = response.headers.get(CONTENT_TYPE_HEADER)?.split(";", 1)[0];
     const observedSessionId = response.headers.get("x-eve-session-id");
     const observedFormat = response.headers.get("x-eve-stream-format");
     const observedVersion = response.headers.get("x-eve-stream-version");
@@ -411,7 +437,7 @@ export async function* streamSameOriginEveEvents(input: {
   if (response.status !== 200 || response.body === null) {
     throw new Error("Canonical Eve stream was unavailable.");
   }
-  if (response.headers.get("content-type")?.split(";", 1)[0] !== "application/x-ndjson") {
+  if (response.headers.get(CONTENT_TYPE_HEADER)?.split(";", 1)[0] !== "application/x-ndjson") {
     throw new Error("Canonical Eve returned an invalid stream type.");
   }
   if (
@@ -530,12 +556,10 @@ const artifactTools = new Set([
 ]);
 const markdownPrototypePath =
   /^prototype\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/(?:app-spec|decisions)\.md$/u;
-const markdownPrototypeInputSchema = z
-  .object({
-    mediaType: z.string().optional(),
-    path: z.string().regex(markdownPrototypePath),
-  })
-  .passthrough();
+const markdownPrototypeInputSchema = z.looseObject({
+  mediaType: z.string().optional(),
+  path: z.string().regex(markdownPrototypePath),
+});
 
 const v2ReadRequestSchema = z.object({
   digest: z.string().regex(/^[a-f0-9]{64}$/u),
@@ -627,21 +651,37 @@ const createArtifactReadbackClassifier = (sessionId: string, seed?: ArtifactRead
       if (result.toolName === "get_prototype_artifact") {
         const read = v2ReadRequestSchema.safeParse(request.input);
         const output = v2ReadResultSchema.safeParse(result.output);
+        if (!read.success || !output.success || reference === undefined) {
+          legacy = true;
+          return;
+        }
         if (
-          !read.success ||
-          !output.success ||
-          reference === undefined ||
           read.data.path !== reference.path ||
           read.data.digest !== reference.digest ||
           read.data.revision !== reference.revision ||
-          read.data.offsetBytes !== output.data.byteOffset ||
+          read.data.offsetBytes !== output.data.byteOffset
+        ) {
+          legacy = true;
+          return;
+        }
+        if (
           output.data.path !== reference.path ||
           output.data.digest !== reference.digest ||
           output.data.revision !== reference.revision ||
-          output.data.totalBytes !== reference.contentBytes ||
+          output.data.totalBytes !== reference.contentBytes
+        ) {
+          legacy = true;
+          return;
+        }
+        if (
           output.data.nextOffsetBytes <= output.data.byteOffset ||
           output.data.nextOffsetBytes > reference.contentBytes ||
-          output.data.complete !== (output.data.nextOffsetBytes === reference.contentBytes) ||
+          output.data.complete !== (output.data.nextOffsetBytes === reference.contentBytes)
+        ) {
+          legacy = true;
+          return;
+        }
+        if (
           createHash("sha256").update(output.data.content).digest("hex") !==
             output.data.chunkDigest ||
           Buffer.byteLength(output.data.content, "utf-8") !==
@@ -653,16 +693,14 @@ const createArtifactReadbackClassifier = (sessionId: string, seed?: ArtifactRead
       }
       if (result.toolName === "record_prototype_artifact") {
         const chunk = z
-          .object({
+          .looseObject({
             expectedDigest: z.string().regex(/^[a-f0-9]{64}$/u),
             finalChunk: z.literal(false),
             path: z.string(),
           })
-          .passthrough()
           .safeParse(request.input);
         const incomplete = z
-          .object({ complete: z.literal(false), path: z.string(), version: z.literal(2) })
-          .passthrough()
+          .looseObject({ complete: z.literal(false), path: z.string(), version: z.literal(2) })
           .safeParse(result.output);
         if (chunk.success && incomplete.success && chunk.data.path === incomplete.data.path) {
           incompleteArtifacts.add(chunk.data.path);
@@ -670,10 +708,9 @@ const createArtifactReadbackClassifier = (sessionId: string, seed?: ArtifactRead
         }
       }
       if (result.toolName === "record_ui_preview") {
-        const preview = z.object({ appId: z.string() }).passthrough().safeParse(request.input);
+        const preview = z.looseObject({ appId: z.string() }).safeParse(request.input);
         const incomplete = z
-          .object({ complete: z.literal(false), transferId: z.string() })
-          .passthrough()
+          .looseObject({ complete: z.literal(false), transferId: z.string() })
           .safeParse(result.output);
         if (preview.success && incomplete.success) {
           incompleteUiPreviews.add(preview.data.appId);
@@ -681,8 +718,7 @@ const createArtifactReadbackClassifier = (sessionId: string, seed?: ArtifactRead
         }
       }
       const output = z
-        .object({ complete: z.literal(true), version: z.literal(2) })
-        .passthrough()
+        .looseObject({ complete: z.literal(true), version: z.literal(2) })
         .safeParse(result.output);
       if (
         !output.success ||
@@ -792,15 +828,15 @@ const reprojectRetainedPendingInputs = async (
       },
     })) {
       if (count < state.nextNativeIndex) {
-        if (event.type === "input.requested") {
+        if (event.type === INPUT_REQUESTED) {
           for (const request of event.data.requests) {
             pending.set(request.requestId, event);
           }
-        } else if (event.type === "input.resolved") {
+        } else if (event.type === INPUT_RESOLVED) {
           for (const resolution of event.data.resolutions) {
             pending.delete(resolution.requestId);
           }
-        } else if (event.type === "approval.settled") {
+        } else if (event.type === APPROVAL_SETTLED) {
           pending.delete(event.data.requestId);
         }
       }
@@ -827,7 +863,7 @@ const reprojectRetainedPendingInputs = async (
         0,
       );
       for (const entry of projected) {
-        if (entry.type !== "input.requested" || entry.request === undefined) {
+        if (entry.type !== INPUT_REQUESTED || entry.request === undefined) {
           return undefined;
         }
         requests.push(entry.request);
@@ -905,7 +941,7 @@ export async function observeSameOriginEveStream(
             const indexed: InternalEveEvent = {
               index: publicEventCount,
               request,
-              type: "input.requested",
+              type: INPUT_REQUESTED,
             };
             // Append the repaired presentation at the existing public cursor; native history is unchanged.
             // oxlint-disable-next-line eslint/no-await-in-loop -- Preserve public storage backpressure and event order.
@@ -972,35 +1008,35 @@ export async function observeSameOriginEveStream(
         if (
           turnId !== undefined &&
           turnId !== "" &&
-          !["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type)
+          ![TURN_COMPLETED, TURN_FAILED, TURN_CANCELLED].includes(event.type)
         ) {
           currentTurnId = turnId;
         }
         if (
-          ["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type) &&
+          [TURN_COMPLETED, TURN_FAILED, TURN_CANCELLED].includes(event.type) &&
           (turnId === undefined || turnId === currentTurnId)
         ) {
           currentTurnId = undefined;
         }
-        if (["session.waiting", "session.completed", "session.failed"].includes(event.type)) {
+        if ([SESSION_WAITING, SESSION_COMPLETED, SESSION_FAILED].includes(event.type)) {
           currentTurnId = undefined;
         }
-        if (event.type === "turn.cancelled") {
+        if (event.type === TURN_CANCELLED) {
           boundary = "cancelled";
         }
-        if (event.type === "session.waiting") {
+        if (event.type === SESSION_WAITING) {
           boundary = "waiting";
         }
-        if (event.type === "session.completed") {
+        if (event.type === SESSION_COMPLETED) {
           boundary = "completed";
         }
-        if (event.type === "session.failed") {
+        if (event.type === SESSION_FAILED) {
           boundary = "failed";
         }
         if (event.type === "step.started" || event.type === "turn.started") {
           boundary = "working";
         }
-        if (event.type === "approval.settled") {
+        if (event.type === APPROVAL_SETTLED) {
           pending.delete(event.data.requestId);
         }
         const nextUiPreview = latestInstalledUiPreview([event]);
@@ -1017,10 +1053,10 @@ export async function observeSameOriginEveStream(
           if (toPublicEvent(indexed) !== null) {
             publicEventCount += 1;
           }
-          if (indexed.type === "input.requested" && indexed.request !== undefined) {
+          if (indexed.type === INPUT_REQUESTED && indexed.request !== undefined) {
             pending.set(indexed.request.requestId, indexed.request);
           }
-          if (indexed.type === "input.resolved") {
+          if (indexed.type === INPUT_RESOLVED) {
             for (const requestId of indexed.requestIds ?? []) {
               if (
                 indexed.resolutionKind !== "authorization" ||
@@ -1031,7 +1067,7 @@ export async function observeSameOriginEveStream(
             }
           }
           if (
-            event.type === "input.requested" &&
+            event.type === INPUT_REQUESTED &&
             indexed.type === "status" &&
             indexed.status === "failed"
           ) {
@@ -1068,42 +1104,89 @@ export async function observeSameOriginEveStream(
       status = "input_required";
     }
     readTrace.completed();
-    return {
+    const observationPrefix: Pick<
+      Awaited<ReturnType<typeof observeSameOriginEveStream>>,
+      | "artifactProjectionRequiresLegacyReadback"
+      | "installedEventCount"
+      | "observationComplete"
+      | "nativeTailIndex"
+    > = {
       artifactProjectionRequiresLegacyReadback: artifactReadback.requiresLegacy(),
       installedEventCount,
       observationComplete,
-      ...(nativeTailIndex === undefined ? {} : { nativeTailIndex }),
-      nativeObservationState: nativeObservationStateSchema.parse({
-        adapterSessionId: input.sessionId,
-        artifactReadback: artifactReadback.checkpoint(),
-        boundary,
-        invalidInput,
-        ...(retainedNativeDeliveryState(nativeDeliveryState) === undefined
-          ? {}
-          : { nativeDeliveryState }),
-        nextNativeIndex: installedEventCount,
-        pendingRequests: [...pending.values()],
-        privateInputState,
-        prototypeProjector: prototype.checkpoint(),
-        prototypeReference: prototypeReference.checkpoint(),
-        publicEventCount,
-        version: 1,
-        ...(currentTurnId === undefined ? {} : { currentTurnId }),
-        ...(uiPreview === undefined ? {} : { uiPreview }),
-        ...(workingPreview === undefined ? {} : { workingPreview }),
-      }),
+    };
+    if (nativeTailIndex !== undefined) {
+      observationPrefix.nativeTailIndex = nativeTailIndex;
+    }
+    const checkpointPrefix: Pick<
+      z.input<typeof nativeObservationStateSchema>,
+      "adapterSessionId" | "artifactReadback" | "boundary" | "invalidInput" | "nativeDeliveryState"
+    > = {
+      adapterSessionId: input.sessionId,
+      artifactReadback: artifactReadback.checkpoint(),
+      boundary,
+      invalidInput,
+    };
+    if (retainedNativeDeliveryState(nativeDeliveryState) !== undefined) {
+      checkpointPrefix.nativeDeliveryState = nativeDeliveryState;
+    }
+    const checkpoint: z.input<typeof nativeObservationStateSchema> = {
+      ...checkpointPrefix,
       nextNativeIndex: installedEventCount,
       pendingRequests: [...pending.values()],
-      ...(prototype.current() === undefined ? {} : { prototype: prototype.current() }),
-      ...(prototypeReference.snapshot() === undefined
-        ? {}
-        : { prototypeRef: prototypeReference.snapshot() }),
+      privateInputState,
+      prototypeProjector: prototype.checkpoint(),
+      prototypeReference: prototypeReference.checkpoint(),
+      publicEventCount,
+      version: 1,
+    };
+    if (currentTurnId !== undefined) {
+      checkpoint.currentTurnId = currentTurnId;
+    }
+    if (uiPreview !== undefined) {
+      checkpoint.uiPreview = uiPreview;
+    }
+    if (workingPreview !== undefined) {
+      checkpoint.workingPreview = workingPreview;
+    }
+    const observation: Pick<
+      Awaited<ReturnType<typeof observeSameOriginEveStream>>,
+      | "artifactProjectionRequiresLegacyReadback"
+      | "installedEventCount"
+      | "observationComplete"
+      | "nativeTailIndex"
+      | "nativeObservationState"
+      | "nextNativeIndex"
+      | "pendingRequests"
+      | "prototype"
+      | "prototypeRef"
+    > = {
+      ...observationPrefix,
+      nativeObservationState: nativeObservationStateSchema.parse(checkpoint),
+      nextNativeIndex: installedEventCount,
+      pendingRequests: [...pending.values()],
+    };
+    if (prototype.current() !== undefined) {
+      observation.prototype = prototype.current();
+    }
+    if (prototypeReference.snapshot() !== undefined) {
+      observation.prototypeRef = prototypeReference.snapshot();
+    }
+    const result: Awaited<ReturnType<typeof observeSameOriginEveStream>> = {
+      ...observation,
       publicEventCount,
       status,
-      ...(currentTurnId === undefined ? {} : { activeTurnId: currentTurnId }),
-      ...(uiPreview === undefined ? {} : { uiPreview }),
-      ...(workingPreview === undefined ? {} : { workingPreview }),
     };
+    if (currentTurnId !== undefined) {
+      result.activeTurnId = currentTurnId;
+    }
+    if (uiPreview !== undefined) {
+      result.uiPreview = uiPreview;
+    }
+    if (workingPreview !== undefined) {
+      result.workingPreview = workingPreview;
+    }
+    return result;
   } catch (error) {
     readTrace.failed();
     throw error;
@@ -1138,18 +1221,30 @@ async function readInstalledSnapshot(
   const workingPreview = latestInstalledWorkingPreview(events);
   const privateInputState = retainedPrivateInputState(privateInputForEvents(events));
   const nativeDeliveryState = retainedNativeDeliveryState(nativeDeliveryForEvents(events));
-  return {
-    installed: events,
-    snapshot: {
-      events: projected,
-      ...(privateInputState === undefined ? {} : { privateInputState }),
-      ...(nativeDeliveryState === undefined ? {} : { nativeDeliveryState }),
-      status: nativeRecoveryBootFailed ? "failed" : deriveInstalledEveStatus(events),
-      ...(prototype === undefined ? {} : { prototype }),
-      ...(uiPreview === undefined ? {} : { uiPreview }),
-      ...(workingPreview === undefined ? {} : { workingPreview }),
-    },
+  const snapshotFields: Pick<
+    HostedEngineSnapshot,
+    "events" | "privateInputState" | "nativeDeliveryState"
+  > = { events: projected };
+  if (privateInputState !== undefined) {
+    snapshotFields.privateInputState = privateInputState;
+  }
+  if (nativeDeliveryState !== undefined) {
+    snapshotFields.nativeDeliveryState = nativeDeliveryState;
+  }
+  const snapshot: HostedEngineSnapshot = {
+    ...snapshotFields,
+    status: nativeRecoveryBootFailed ? "failed" : deriveInstalledEveStatus(events),
   };
+  if (prototype !== undefined) {
+    snapshot.prototype = prototype;
+  }
+  if (uiPreview !== undefined) {
+    snapshot.uiPreview = uiPreview;
+  }
+  if (workingPreview !== undefined) {
+    snapshot.workingPreview = workingPreview;
+  }
+  return { installed: events, snapshot };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -1173,17 +1268,27 @@ async function readSnapshot(
     observation.nativeObservationState.privateInputState === undefined
       ? undefined
       : retainedPrivateInputState(observation.nativeObservationState.privateInputState);
-  return {
-    events,
-    ...(privateInputState === undefined ? {} : { privateInputState }),
-    ...(nativeDeliveryState === undefined ? {} : { nativeDeliveryState }),
-    status: observation.status,
-    ...(latest === undefined ? {} : { prototype: latest }),
-    ...(observation.uiPreview === undefined ? {} : { uiPreview: observation.uiPreview }),
-    ...(observation.workingPreview === undefined
-      ? {}
-      : { workingPreview: observation.workingPreview }),
-  };
+  const snapshotFields: Pick<
+    HostedEngineSnapshot,
+    "events" | "privateInputState" | "nativeDeliveryState"
+  > = { events };
+  if (privateInputState !== undefined) {
+    snapshotFields.privateInputState = privateInputState;
+  }
+  if (nativeDeliveryState !== undefined) {
+    snapshotFields.nativeDeliveryState = nativeDeliveryState;
+  }
+  const snapshot: HostedEngineSnapshot = { ...snapshotFields, status: observation.status };
+  if (latest !== undefined) {
+    snapshot.prototype = latest;
+  }
+  if (observation.uiPreview !== undefined) {
+    snapshot.uiPreview = observation.uiPreview;
+  }
+  if (observation.workingPreview !== undefined) {
+    snapshot.workingPreview = observation.workingPreview;
+  }
+  return snapshot;
 }
 
 /** A create reply may name a losing candidate; only its started stream proves ownership. */
@@ -1214,17 +1319,17 @@ function activeTurnId(events: readonly MessageStreamEvent[]): string | undefined
         : undefined;
     if (
       turnId !== undefined &&
-      !["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type)
+      ![TURN_COMPLETED, TURN_FAILED, TURN_CANCELLED].includes(event.type)
     ) {
       active = turnId;
     }
     if (
-      ["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type) &&
+      [TURN_COMPLETED, TURN_FAILED, TURN_CANCELLED].includes(event.type) &&
       (turnId === undefined || turnId === active)
     ) {
       active = undefined;
     }
-    if (["session.waiting", "session.completed", "session.failed"].includes(event.type)) {
+    if ([SESSION_WAITING, SESSION_COMPLETED, SESSION_FAILED].includes(event.type)) {
       active = undefined;
     }
   }
@@ -1232,15 +1337,13 @@ function activeTurnId(events: readonly MessageStreamEvent[]): string | undefined
 }
 
 const endsTurn = (event: MessageStreamEvent, turnId: string): boolean =>
-  (event.type === "turn.completed" ||
-    event.type === "turn.failed" ||
-    event.type === "turn.cancelled") &&
+  (event.type === TURN_COMPLETED || event.type === TURN_FAILED || event.type === TURN_CANCELLED) &&
   event.data.turnId === turnId;
 
 const isSessionBoundary = (event: MessageStreamEvent): boolean =>
-  event.type === "session.waiting" ||
-  event.type === "session.completed" ||
-  event.type === "session.failed";
+  event.type === SESSION_WAITING ||
+  event.type === SESSION_COMPLETED ||
+  event.type === SESSION_FAILED;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function cancellationSettled(
@@ -1262,17 +1365,17 @@ function cancellationSettled(
 function outstandingRequestIds(events: readonly MessageStreamEvent[]): ReadonlySet<string> {
   const outstanding = new Set<string>();
   for (const event of events) {
-    if (event.type === "input.requested") {
+    if (event.type === INPUT_REQUESTED) {
       for (const request of event.data.requests) {
         outstanding.add(request.requestId);
       }
     }
-    if (event.type === "input.resolved") {
+    if (event.type === INPUT_RESOLVED) {
       for (const resolution of event.data.resolutions) {
         outstanding.delete(resolution.requestId);
       }
     }
-    if (event.type === "approval.settled") {
+    if (event.type === APPROVAL_SETTLED) {
       outstanding.delete(event.data.requestId);
     }
   }
@@ -1432,12 +1535,12 @@ async function readCancellationSettlementIncremental(input: {
           : undefined;
       if (
         eventTurnId !== undefined &&
-        !["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type)
+        ![TURN_COMPLETED, TURN_FAILED, TURN_CANCELLED].includes(event.type)
       ) {
         currentTurnId = eventTurnId;
       }
       if (
-        ["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type) &&
+        [TURN_COMPLETED, TURN_FAILED, TURN_CANCELLED].includes(event.type) &&
         (eventTurnId === undefined || eventTurnId === currentTurnId)
       ) {
         currentTurnId = undefined;
@@ -1445,7 +1548,7 @@ async function readCancellationSettlementIncremental(input: {
       if (currentTurnId !== undefined && currentTurnId !== input.turnId) {
         throw new HostedCancellationUnsettledError();
       }
-      if (["session.waiting", "session.completed", "session.failed"].includes(event.type)) {
+      if ([SESSION_WAITING, SESSION_COMPLETED, SESSION_FAILED].includes(event.type)) {
         currentTurnId = undefined;
       }
       if (endsTurn(event, input.turnId)) {
@@ -1741,9 +1844,13 @@ export function createSameOriginEveTransport(input: {
       const cancelled = cancelResponseSchema.parse(await readJson(response));
       if (
         (response.status === 202 && cancelled.status !== "accepted") ||
-        (response.status === 200 && cancelled.status !== "no_active_turn") ||
-        (cancelled.status === "accepted" &&
-          cancelled.sessionId !== (request.logicalSessionId ?? request.adapterSessionId))
+        (response.status === 200 && cancelled.status !== "no_active_turn")
+      ) {
+        throw new SubmissionOutcomeUnknownError();
+      }
+      if (
+        cancelled.status === "accepted" &&
+        cancelled.sessionId !== (request.logicalSessionId ?? request.adapterSessionId)
       ) {
         throw new SubmissionOutcomeUnknownError();
       }
@@ -1799,11 +1906,15 @@ export function createSameOriginEveTransport(input: {
       if (accepted.sessionId !== (request.logicalSessionId ?? request.adapterSessionId)) {
         throw new SubmissionOutcomeUnknownError();
       }
-      return readRespondSettlement({
+      const settlement: typeof common &
+        Pick<Parameters<typeof readRespondSettlement>[0], "internalSessionLimitResponse"> = {
         ...common,
-        ...(request.internalSessionLimitResponse === undefined
-          ? {}
-          : { internalSessionLimitResponse: request.internalSessionLimitResponse }),
+      };
+      if (request.internalSessionLimitResponse !== undefined) {
+        settlement.internalSessionLimitResponse = request.internalSessionLimitResponse;
+      }
+      return readRespondSettlement({
+        ...settlement,
         requestIds: request.responses.map(({ requestId }) => requestId),
         sessionId: request.adapterSessionId,
       });
@@ -1854,11 +1965,15 @@ export function createSameOriginEveTransport(input: {
       if (accepted.sessionId !== (request.logicalSessionId ?? request.adapterSessionId)) {
         throw new SubmissionOutcomeUnknownError();
       }
+      const settlement: Pick<
+        Parameters<typeof readRespondSettlementIncremental>[0],
+        "nativeObservationState" | "internalSessionLimitResponse"
+      > = { nativeObservationState };
+      if (request.internalSessionLimitResponse !== undefined) {
+        settlement.internalSessionLimitResponse = request.internalSessionLimitResponse;
+      }
       await readRespondSettlementIncremental({
-        nativeObservationState,
-        ...(request.internalSessionLimitResponse === undefined
-          ? {}
-          : { internalSessionLimitResponse: request.internalSessionLimitResponse }),
+        ...settlement,
         ...common,
         requestIds: request.responses.map(({ requestId }) => requestId),
         sessionId: request.adapterSessionId,
@@ -1918,8 +2033,8 @@ export function createSameOriginEveTransport(input: {
       try {
         accepted = await postMutation({
           ...common,
-          body: { recoveryPhase: "inspect-source", sourceObservation: request.source },
-          path: "/eve/v1/session",
+          body: { recoveryPhase: INSPECT_SOURCE_PHASE, sourceObservation: request.source },
+          path: EVE_SESSION_PATH,
           principal: request.principal,
           sourceHandoffId: request.sourceHandoffId,
         });
@@ -1946,7 +2061,7 @@ export function createSameOriginEveTransport(input: {
           recovery: request.recovery,
           recoveryPhase: "observe",
         },
-        path: "/eve/v1/session",
+        path: EVE_SESSION_PATH,
         principal: request.principal,
         sourceHandoffId: request.sourceHandoffId,
       });
@@ -1965,7 +2080,7 @@ export function createSameOriginEveTransport(input: {
           recovery: request.recovery,
           recoveryPhase: "activate",
         },
-        path: "/eve/v1/session",
+        path: EVE_SESSION_PATH,
         principal: request.principal,
         sourceHandoffId: request.sourceHandoffId,
         startDiagnostic: {
@@ -1997,7 +2112,7 @@ export function createSameOriginEveTransport(input: {
           request.recovery === undefined
             ? { message: request.prompt, operationId: request.operationId }
             : { operationId: request.operationId, recovery: request.recovery },
-        path: "/eve/v1/session",
+        path: EVE_SESSION_PATH,
         principal: request.principal,
         sourceHandoffId: request.sourceHandoffId,
         startDiagnostic: {
@@ -2027,9 +2142,15 @@ export function createSameOriginEveTransport(input: {
           throw new SubmissionOutcomeUnknownError();
         }
       }
+      const started: Pick<
+        Awaited<ReturnType<HostedEveTransport["start"]>>,
+        "adapterSessionId" | "recoveryBinding"
+      > = { adapterSessionId: accepted.sessionId };
+      if (recoveryBinding !== undefined) {
+        started.recoveryBinding = recoveryBinding;
+      }
       return {
-        adapterSessionId: accepted.sessionId,
-        ...(recoveryBinding === undefined ? {} : { recoveryBinding }),
+        ...started,
         // Ownership is established; the model may still be running. Persist
         // the provisional public session and observe the turn on autograph_get.
         snapshot: { events: [], status: "working" },

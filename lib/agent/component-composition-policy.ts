@@ -28,21 +28,17 @@ function sortedUnique<T extends z.ZodType<string>>(item: T) {
 /** The target-owned policy is copied into every source-bound apply overlay. */
 export const ARRUSTED_COMPONENT_COMPOSITION_POLICY_PATH = "docs/component-composition.json";
 
-export const arrustedComponentCompositionPolicySchema = z
-  .object({
-    kind: z.literal("arrusted-component-composition-v1"),
-    providers: sortedUnique(identifier),
-    publicImports: sortedUnique(identifier),
-    routeGlue: z
-      .object({
-        allowedFiles: sortedUnique(relativePath),
-        allowedStyleFiles: sortedUnique(relativePath),
-      })
-      .strict(),
-    tokenEntrypoints: sortedUnique(identifier),
-    version: z.literal(1),
-  })
-  .strict();
+export const arrustedComponentCompositionPolicySchema = z.strictObject({
+  kind: z.literal("arrusted-component-composition-v1"),
+  providers: sortedUnique(identifier),
+  publicImports: sortedUnique(identifier),
+  routeGlue: z.strictObject({
+    allowedFiles: sortedUnique(relativePath),
+    allowedStyleFiles: sortedUnique(relativePath),
+  }),
+  tokenEntrypoints: sortedUnique(identifier),
+  version: z.literal(1),
+});
 
 export type ArrustedComponentCompositionPolicy = z.infer<
   typeof arrustedComponentCompositionPolicySchema

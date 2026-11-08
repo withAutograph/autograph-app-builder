@@ -210,19 +210,16 @@ export const createHostedRuntimePriorApprovalReader =
     ctx.abortSignal.throwIfAborted();
     await readOwned();
     if (shouldRestoreOriginalPlan(dependencies, current)) {
-      const restored = await operator.request(
-        {
-          action: "plan",
-          operation: "prepare",
-          selection,
-          ...(parsed.plan.normalActorProgram === undefined
-            ? {}
-            : {
-                normalActorProgram: parsed.plan.normalActorProgram,
-              }),
-        },
-        ctx.abortSignal,
-      );
+      const request = operator.request.bind(operator);
+      const plan: Extract<Parameters<typeof operator.request>[0], { action: "plan" }> = {
+        action: "plan",
+        operation: "prepare",
+        selection,
+      };
+      if (parsed.plan.normalActorProgram !== undefined) {
+        plan.normalActorProgram = parsed.plan.normalActorProgram;
+      }
+      const restored = await request(plan, ctx.abortSignal);
       ctx.abortSignal.throwIfAborted();
       await readOwned();
       if (!matchesRestoredApproval(restored, parsed)) {
@@ -294,7 +291,7 @@ export const readHostedRuntimePriorApproval = async (
       hostedOperatorCallbackExecution(ctx.session),
     ));
   const store = await openHostedRuntimeApprovalStore();
-  return await createHostedRuntimePriorApprovalReader({ store, now: Date.now, ...options })(
+  return await createHostedRuntimePriorApprovalReader({ now: Date.now, store, ...options })(
     input,
     ctx,
     operator,
@@ -312,9 +309,9 @@ const readApprovalCaptureSeed = async (
   }
   try {
     const { currentSession: session } = await readHostedOperatorCallbackOwner({
-      store,
-      owner,
       execution,
+      owner,
+      store,
     });
     const ref = session.checkpointRef;
     if (ref === undefined) {
@@ -347,7 +344,7 @@ const readApprovalCaptureSeed = async (
     const capture = privateHostedApprovalCaptureStateSchema.safeParse(
       page.metadata.privateApprovalCaptureState,
     );
-    await readHostedOperatorCallbackOwner({ store, owner, execution });
+    await readHostedOperatorCallbackOwner({ execution, owner, store });
     if (!native.success || !capture.success) {
       return null;
     }
@@ -381,12 +378,15 @@ export const captureHostedRuntimeApproval = async (input: {
   const owner = operatorOwnerContextSchema.parse(input.ownerContext);
   const seed = await readApprovalCaptureSeed(input.store, owner, input.execution);
   input.signal.throwIfAborted();
-  const recorder = createPrivateHostedApprovalRecorder({
+  const recorderInput: Parameters<typeof createPrivateHostedApprovalRecorder>[0] = {
     principal: owner.principal,
     sessionId: owner.sessionId,
     store: input.store,
-    ...(seed === null ? {} : { state: seed.capture }),
-  });
+  };
+  if (seed !== null) {
+    recorderInput.state = seed.capture;
+  }
+  const recorder = createPrivateHostedApprovalRecorder(recorderInput);
   const transport = createSameOriginEveTransport({
     config: { baseUrl: input.baseUrl },
     workloadIdentity: input.workloadIdentity,
@@ -419,8 +419,13 @@ export const captureHostedRuntimeApproval = async (input: {
   if (transport.observe === undefined) {
     throw new HostedOperatorError("operator_unavailable");
   }
-  await transport.observe({
-    ...(seed === null ? {} : { nativeObservationState: seed.native }),
+  const observe = transport.observe.bind(transport);
+  const observation: Pick<Parameters<typeof observe>[0], "nativeObservationState"> = {};
+  if (seed !== null) {
+    observation.nativeObservationState = seed.native;
+  }
+  await observe({
+    ...observation,
     adapterSessionId: owner.adapterSessionId,
     principal: owner.principal,
     sessionId: owner.sessionId,
@@ -479,6 +484,6 @@ export const captureHostedRuntimeExecutionApproval = async (ctx: Context, operat
 };
 
 export const readHostedRuntimeExecutionApproval = createHostedRuntimeExecutionApprovalReader({
-  readPrior: readHostedRuntimePriorApproval,
   capture: captureHostedRuntimeExecutionApproval,
+  readPrior: readHostedRuntimePriorApproval,
 });

@@ -97,7 +97,9 @@ export function SignIn({
 
       resetFetchOptions();
     },
-    onSuccess: (data) => continueSignIn(data),
+    onSuccess: (data) => {
+      continueSignIn(data);
+    },
   });
 
   const signInMutating = useIsMutating({
@@ -127,7 +129,7 @@ export function SignIn({
     signInEmail({
       email,
       password,
-      ...(emailAndPassword?.rememberMe ? { rememberMe } : {}),
+      ...(emailAndPassword?.rememberMe === true ? { rememberMe } : {}),
       fetchOptions,
     });
   };
@@ -160,7 +162,7 @@ export function SignIn({
                   <ProviderButtons socialLayout={socialLayout} view="signIn" />
                 )}
 
-                {showSeparator && (
+                {showSeparator === true && (
                   <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card m-0 text-xs flex items-center">
                     {localization.auth.or}
                   </FieldSeparator>
@@ -275,7 +277,7 @@ export function SignIn({
                     <FieldError>{fieldErrors.password}</FieldError>
                   </Field>
 
-                  {emailAndPassword.rememberMe && (
+                  {emailAndPassword.rememberMe === true && (
                     <Field className="my-1">
                       <div className="flex items-center gap-3">
                         <Checkbox id="rememberMe" name="rememberMe" disabled={isPending} />
@@ -309,7 +311,7 @@ export function SignIn({
 
             {socialPosition === "bottom" && (
               <>
-                {showSeparator && (
+                {showSeparator === true && (
                   <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card text-xs flex items-center">
                     {localization.auth.or}
                   </FieldSeparator>

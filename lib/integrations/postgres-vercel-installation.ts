@@ -1,9 +1,8 @@
 import { and, asc, eq, gt, isNull } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { parseProviderConnectionReturn } from "./provider-connection-return";
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase } from "../db/hosted-postgres";
 import { hostedVercelInstallations, vercelInstallationAuthorizationStates } from "../db/schema";
 import {
   decryptVersionedVercelInstallationToken,
@@ -19,7 +18,7 @@ import type {
   VercelInstallationStore,
 } from "./vercel-installation";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = HostedDatabase;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function tenant(table: typeof hostedVercelInstallations, authorityInput: unknown) {
@@ -52,7 +51,7 @@ export async function readActiveVercelInstallationToken(input: {
     )
     .limit(1);
   const [row] = rows;
-  if (!row) {
+  if (row === undefined) {
     return;
   }
   let token: string;
@@ -135,13 +134,16 @@ export function createPostgresVercelAuthorizationStateStore(
           returnTo: vercelInstallationAuthorizationStates.returnTo,
         });
       const [row] = rows;
-      if (!row || rows.length !== 1) {
+      if (row === undefined || rows.length !== 1) {
         return;
       }
-      return parseProviderConnectionReturn({
+      const returnState: Parameters<typeof parseProviderConnectionReturn>[0] = {
         returnTo: row.returnTo,
-        ...(row.resumeKey ? { resumeKey: row.resumeKey } : {}),
-      });
+      };
+      if (row.resumeKey) {
+        returnState.resumeKey = row.resumeKey;
+      }
+      return parseProviderConnectionReturn(returnState);
     },
     async create(input) {
       await database.insert(vercelInstallationAuthorizationStates).values({
@@ -175,13 +177,16 @@ export function createPostgresVercelAuthorizationStateStore(
           ),
         )
         .limit(1);
-      if (!rows[0]) {
+      if (rows[0] === undefined) {
         return;
       }
-      return parseProviderConnectionReturn({
+      const returnState: Parameters<typeof parseProviderConnectionReturn>[0] = {
         returnTo: rows[0].returnTo,
-        ...(rows[0].resumeKey ? { resumeKey: rows[0].resumeKey } : {}),
-      });
+      };
+      if (rows[0].resumeKey) {
+        returnState.resumeKey = rows[0].resumeKey;
+      }
+      return parseProviderConnectionReturn(returnState);
     },
   };
 }

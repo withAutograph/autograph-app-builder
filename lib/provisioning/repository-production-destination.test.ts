@@ -58,7 +58,7 @@ describe("Production destination authority", () => {
     expect(request).not.toHaveProperty("source");
   });
   it("resolves a fresh frontend-only app from its owned publication without a SQL selection", () => {
-    const publishedSource = selection.publishedSource;
+    const { publishedSource } = selection;
     if (publishedSource === undefined) {
       throw new Error("fixture publication missing");
     }
@@ -76,7 +76,7 @@ describe("Production destination authority", () => {
     ).toEqual({ profile, sourceSha: publishedSource.gitSha });
   });
   it("rejects a foreign generic destination and contradictory publication evidence", () => {
-    const publishedSource = selection.publishedSource;
+    const { publishedSource } = selection;
     if (publishedSource === undefined) {
       throw new Error("fixture publication missing");
     }

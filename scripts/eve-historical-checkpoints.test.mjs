@@ -7,6 +7,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { it } from "vitest";
 
+const parentReviewId = "parent-review";
 const require = createRequire(import.meta.url);
 const sdk = process.env.EVE_PATCH_EDIT_DIR ?? path.dirname(require.resolve("eve/package.json"));
 const { createHistoricalCheckpointVisitor } = await import(
@@ -27,14 +28,13 @@ const event = (runId, slot, stepId, eventType = "step_completed", name = "turnSt
   eventType,
   eventData: { stepName: name },
 });
-const step = (runId, stepId, output, input) => ({
-  runId,
-  stepId,
-  stepName: "turnStep",
-  status: "completed",
-  output,
-  ...(input === undefined ? {} : { input: { args: [input] } }),
-});
+const step = (runId, stepId, output, input) => {
+  const value = { runId, stepId, stepName: "turnStep", status: "completed", output };
+  if (input !== undefined) {
+    value.input = { args: [input] };
+  }
+  return value;
+};
 
 const fixture = () => {
   const runId = "prior-owner";
@@ -48,12 +48,6 @@ const fixture = () => {
   let onList;
   const reads = [];
   const world = {
-    runs: {
-      get: async (id) => {
-        reads.push(["run", id]);
-        return { runId: id, status: "completed" };
-      },
-    },
     events: {
       get: async (id, eid) => {
         reads.push(["event", id]);
@@ -75,7 +69,9 @@ const fixture = () => {
           );
         const offset = Number(pagination.cursor ?? 0);
         const data = items.slice(offset, offset + 1);
-        return { data, hasMore: offset + 1 < items.length, cursor: String(offset + 1) };
+        const hasMore = offset + 1 < items.length;
+        const cursor = String(offset + 1);
+        return { cursor, data, hasMore };
       },
       listByCorrelationId: async ({ runId: id, correlationId, pagination }) => {
         reads.push(["correlation", id]);
@@ -84,7 +80,15 @@ const fixture = () => {
           .toSorted((a, b) => a.eventId.localeCompare(b.eventId));
         const offset = Number(pagination.cursor ?? 0);
         const data = items.slice(offset, offset + 1);
-        return { data, hasMore: offset + 1 < items.length, cursor: String(offset + 1) };
+        const hasMore = offset + 1 < items.length;
+        const cursor = String(offset + 1);
+        return { cursor, data, hasMore };
+      },
+    },
+    runs: {
+      get: async (id) => {
+        reads.push(["run", id]);
+        return { runId: id, status: "completed" };
       },
     },
     steps: {
@@ -105,17 +109,17 @@ const fixture = () => {
   };
   const deps = {
     getWorld: async () => world,
-    resolveRunEncryptionKey: async () => {
-      // Fixture data is not encrypted.
-    },
-    hydrateStepReturnValue: async (value) => value,
-    hydrateStepArguments: async (value) => value,
-    readDurableSession: (value) => value.snapshot.session,
-    requireEventSlot: (id) => Number(id.slice(5)),
-    now: () => 0,
     guardWorld: (value) => value,
     guardedDependencies: () => {
       throw new Error("unexpected handoff");
+    },
+    hydrateStepArguments: async (value) => value,
+    hydrateStepReturnValue: async (value) => value,
+    now: () => 0,
+    readDurableSession: (value) => value.snapshot.session,
+    requireEventSlot: (id) => Number(id.slice(5)),
+    resolveRunEncryptionKey: async () => {
+      // Fixture data is not encrypted.
     },
   };
   const cutoff = {
@@ -127,28 +131,28 @@ const fixture = () => {
     checkpointVersion: 1,
   };
   const options = {
+    authorizeCurrent: authorizeRead,
+    contextKey: key,
     descriptor: { logicalSessionId: logical },
     payload: { handoffChain: [] },
-    contextKey: key,
-    authorizeCurrent: authorizeRead,
     visitPredecessors: async (visit) => {
-      await visit({ ownerRunId: runId, logicalSessionId: logical, cutoff, authorizeRead });
+      await visit({ authorizeRead, cutoff, logicalSessionId: logical, ownerRunId: runId });
     },
   };
   return {
-    runId,
-    events,
-    steps,
-    options,
-    deps,
     cutoff,
+    deps,
+    events,
+    onList: (callback) => {
+      onList = callback;
+    },
+    options,
     reads,
     revoke: () => {
       revoked = true;
     },
-    onList: (callback) => {
-      onList = callback;
-    },
+    runId,
+    steps,
   };
 };
 const run = async (f) => {
@@ -272,12 +276,12 @@ it("visits an older native handoff parent only after the receipt-bound run has n
   const f = fixture();
   f.steps.set("review", step(f.runId, "review", paired("validated")));
   const parent = "handoff-parent";
-  const older = event(parent, 1, "parent-review");
+  const older = event(parent, 1, parentReviewId);
   const start = event(parent, 2, "parent-handoff", "step_started", "startSessionOwnerStep");
   f.events.push(older, start);
   f.steps.set(
-    "parent-review",
-    step(parent, "parent-review", paired("reviewed", { digest: "native-parent" })),
+    parentReviewId,
+    step(parent, parentReviewId, paired("reviewed", { digest: "native-parent" })),
   );
   f.options.visitPredecessors = async (visit) => {
     await visit({

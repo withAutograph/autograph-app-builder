@@ -48,16 +48,16 @@ function parseArguments(args: readonly string[]) {
   values.delete("--arrusted-root");
   values.delete("--artifact");
   values.delete("--artifact-sha256");
+  const usage =
+    "Usage: hosted:artifact-prove -- --arrusted-root <path> --artifact <path> --artifact-sha256 <sha256>";
   if (
     miseBin === undefined ||
     arrustedRoot === undefined ||
     artifact === undefined ||
-    artifactSha256 === undefined ||
-    values.size !== 0
+    artifactSha256 === undefined
   )
-    throw new Error(
-      "Usage: hosted:artifact-prove -- --arrusted-root <path> --artifact <path> --artifact-sha256 <sha256>",
-    );
+    throw new Error(usage);
+  if (values.size !== 0) throw new Error(usage);
   return {
     arrustedRoot: realpathSync(arrustedRoot),
     artifact: realpathSync(artifact),

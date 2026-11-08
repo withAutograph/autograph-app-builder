@@ -61,6 +61,8 @@ import { readNeonAuthorizationConfiguration } from "./hosted-operator-neon-autho
 import type { HostedOperatorRequestDependencyLoader } from "./hosted-operator-native";
 import { reportHostedOperatorNativeFailure } from "./hosted-operator-native-diagnostic";
 
+const SINGLE_PROJECT_SERVICES = "single-project-services";
+
 // Identity projection only: the existing protected handler validates the complete operation.
 // Onboarding/consent actions have their own authority and do not need a configured app yet.
 const configurationRequestSchema = z.union([
@@ -215,15 +217,18 @@ export const resolveOwnedStandardRuntimeConfiguration = async (input: {
   ) {
     throw new HostedOperatorError("resource_mismatch");
   }
-  const result = assembleStandardBuilderRuntimeConfiguration({
+  const assemblyInput: Parameters<typeof assembleStandardBuilderRuntimeConfiguration>[0] = {
     base: input.configuration,
     authority: input.context.authority,
     appId: input.context.target.appId,
     destination,
     captured,
     environment: input.environment,
-    ...(verifiedPublicOrigin === undefined ? {} : { verifiedPublicOrigin }),
-  });
+  };
+  if (verifiedPublicOrigin !== undefined) {
+    assemblyInput.verifiedPublicOrigin = verifiedPublicOrigin;
+  }
+  const result = assembleStandardBuilderRuntimeConfiguration(assemblyInput);
   await input.resources.owner.assertCanonicalAppOwner(input.context);
   if (
     (await input.resources.readStandardOriginSelection?.(input.context, destination)) !==
@@ -261,7 +266,7 @@ export const createNativeTargetConfigurationResolver =
       try {
         stage = "resolver_owner";
         const selected = await selectedApp(parsed.data, request, resources);
-        const ownerContext = parsed.data.ownerContext;
+        const { ownerContext } = parsed.data;
         if (ownerContext === undefined || ownerContext.sessionId !== selected.sessionId) {
           throw new HostedOperatorError("authorization_required");
         }
@@ -277,9 +282,9 @@ export const createNativeTargetConfigurationResolver =
           };
           return await resolveOwnedStandardRuntimeConfiguration({
             configuration: input.configuration,
-            resources,
             context,
             environment: input.environment ?? {},
+            resources,
           });
         }
         if (input.environment?.PROTECTED_HOSTED_OPERATOR_STANDARD_RUNTIME_PROFILES !== undefined) {
@@ -309,7 +314,7 @@ export const createNativeTargetConfigurationResolver =
           await resources.owner.assertCanonicalAppOwner(context);
           return configuration;
         }
-        if (input.configuration.composition === "single-project-services") {
+        if (input.configuration.composition === SINGLE_PROJECT_SERVICES) {
           await resources.owner.verifyWorkload(request);
           await resources.owner.assertCanonicalAppOwner({
             authority: ownerContext.authority,
@@ -336,12 +341,12 @@ export const createNativeTargetConfigurationResolver =
         }
         // Public delivery cannot borrow a historical dedicated Preview registration.
         if (isPublicReleaseRequest(parsed.data)) {
-          if (input.configuration.composition !== "single-project-services") {
+          if (input.configuration.composition !== SINGLE_PROJECT_SERVICES) {
             throw new HostedOperatorError("builder_destination_configuration_required");
           }
           return structuredClone(input.configuration);
         }
-        if (input.configuration.composition === "single-project-services") {
+        if (input.configuration.composition === SINGLE_PROJECT_SERVICES) {
           await resources.owner.verifyWorkload(request);
           await resources.owner.assertCanonicalAppOwner({
             authority: ownerContext.authority,
@@ -368,7 +373,7 @@ export const createNativeTargetConfigurationResolver =
         }
         // Public delivery cannot borrow a historical dedicated Preview registration.
         if (isPublicReleaseRequest(parsed.data)) {
-          if (input.configuration.composition !== "single-project-services") {
+          if (input.configuration.composition !== SINGLE_PROJECT_SERVICES) {
             throw new HostedOperatorError("builder_destination_configuration_required");
           }
           return structuredClone(input.configuration);
@@ -396,7 +401,7 @@ export const createNativeTargetConfigurationResolver =
         stage = "resolver_effective_config";
         return await resolveNativeTargetEffectiveConfiguration({
           configuration: input.configuration,
-          invocation: { request, ownerContext, sessionId: selected.sessionId },
+          invocation: { ownerContext, request, sessionId: selected.sessionId },
           appId: selected.appId,
           selectResourceConfiguration: (ready) => {
             try {
@@ -487,8 +492,8 @@ export const openNativeTargetConfigurationResources = async (
             readVercelCredential: (credential) =>
               readActiveVercelInstallationToken({
                 ...credential,
-                database,
                 config: tokenKeyring,
+                database,
               }),
           },
           context,
@@ -512,7 +517,7 @@ export const openNativeTargetConfigurationResources = async (
           findProvisioningForAppRepository:
             createPostgresBuilderProvisionJournalStore(database).findSettledAppRepository,
           readVercelCredential: (credential: { authority: unknown; installationId: string }) =>
-            readActiveVercelInstallationToken({ ...credential, database, config: tokenKeyring }),
+            readActiveVercelInstallationToken({ ...credential, config: tokenKeyring, database }),
         };
         const choiceStore = createBuilderPublicOriginStore(database);
         const choiceScope = {
@@ -527,9 +532,15 @@ export const openNativeTargetConfigurationResources = async (
           authority: context.authority,
           scope: choiceScope,
         });
+        const originInput: Pick<
+          Parameters<typeof readStandardBuilderPublicOrigin>[0],
+          "destination" | "selectedPublicOrigin"
+        > = { destination };
+        if (selectedPublicOrigin !== undefined) {
+          originInput.selectedPublicOrigin = selectedPublicOrigin;
+        }
         return await readStandardBuilderPublicOrigin({
-          destination,
-          ...(selectedPublicOrigin === undefined ? {} : { selectedPublicOrigin }),
+          ...originInput,
           assertCurrent: async () => {
             if (
               (await choiceStore.read({ authority: context.authority, scope: choiceScope })) !==
@@ -548,8 +559,8 @@ export const openNativeTargetConfigurationResources = async (
             await readActiveVercelInstallationToken({
               authority: context.authority,
               installationId: destination.installationId,
-              database,
               config: tokenKeyring,
+              database,
             }),
         });
       },
@@ -564,23 +575,23 @@ export const openNativeTargetConfigurationResources = async (
           await readCanonicalAppOwnerSession(ownerDependencies, context);
         };
         const selections = createPostgresOperatorArtifactSelections({
-          database,
           assertCurrentOwner,
+          database,
         });
         const selection = await selections.read(artifactContext, spec.appSpecDigest);
         if (selection === undefined || selection.appId !== context.target.appId) {
           throw new HostedOperatorError("builder_destination_configuration_required");
         }
         const publication = createOperatorArtifactPublication({
-          store: createPostgresOperatorArtifactStore({ database, assertCurrentOwner }),
           assertCurrentOwner,
+          store: createPostgresOperatorArtifactStore({ assertCurrentOwner, database }),
         });
         const captured = await publication.readGeneratedRelease(artifactContext, selection);
         await assertCurrentOwner();
         if (captured.description === undefined) {
           throw new HostedOperatorError("builder_destination_configuration_required");
         }
-        return { selection, description: captured.description };
+        return { description: captured.description, selection };
       },
 
       registry: createPostgresNativeTargetOnboardingStore(database),

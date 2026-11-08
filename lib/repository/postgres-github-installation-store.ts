@@ -1,24 +1,20 @@
 import { and, asc, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import type * as databaseSchema from "../db/schema";
+import type { HostedDatabase as Database } from "../db/hosted-postgres";
 import { hostedGitHubInstallationBindings, hostedGitHubInstallations } from "../db/schema";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
 export type HostedGitHubTenantAuthority = z.infer<typeof hostedTenantAuthoritySchema>;
 
-export const hostedGitHubInstallationBindingSchema = z
-  .object({
-    accountId: z.string().regex(/^[1-9][0-9]*$/u),
-    accountLogin: z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?$/u),
-    accountType: z.enum(["Organization", "User"]),
-    active: z.boolean(),
-    installationId: z.string().regex(/^[1-9][0-9]*$/u),
-    updatedAt: z.date(),
-  })
-  .strict();
+export const hostedGitHubInstallationBindingSchema = z.strictObject({
+  accountId: z.string().regex(/^[1-9][0-9]*$/u),
+  accountLogin: z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?$/u),
+  accountType: z.enum(["Organization", "User"]),
+  active: z.boolean(),
+  installationId: z.string().regex(/^[1-9][0-9]*$/u),
+  updatedAt: z.date(),
+});
 
 export type HostedGitHubInstallationBinding = z.infer<typeof hostedGitHubInstallationBindingSchema>;
 

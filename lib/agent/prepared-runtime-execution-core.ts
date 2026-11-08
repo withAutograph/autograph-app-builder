@@ -70,6 +70,11 @@ export type RuntimeTransport = Pick<Sandbox, "writeFiles"> & {
     signal?: AbortSignal;
   }) => Promise<RuntimeCommand>;
 };
+type RuntimeTaskEnvironment = NonNullable<Parameters<RuntimeTransport["runCommand"]>[0]["env"]> & {
+  APP_RUNTIME_STATE_DIR: string;
+  APP_TEST_BASE_URL?: string;
+  APP_TEST_IDENTITIES_FILE?: string;
+};
 export interface PreparedRuntimeExecutionContext {
   callbackExecution?: HostedOperatorCallbackExecution;
   appId: string;
@@ -366,11 +371,16 @@ export const restorePreparedRuntimeExecution = async (input: {
         );
       }
     };
+  interface PreparedBrowserOptions {
+    browserTestEntryPath: typeof browserTestEntryPath;
+    browserTestBaseUrl?: string;
+  }
+  const browserOptions: PreparedBrowserOptions = { browserTestEntryPath };
+  if ((input.browserTestBaseUrl ?? input.normalActors?.origin) !== undefined) {
+    browserOptions.browserTestBaseUrl = input.browserTestBaseUrl ?? input.normalActors?.origin;
+  }
   return {
-    browserTestEntryPath,
-    ...((input.browserTestBaseUrl ?? input.normalActors?.origin) === undefined
-      ? {}
-      : { browserTestBaseUrl: input.browserTestBaseUrl ?? input.normalActors?.origin }),
+    ...browserOptions,
     environmentPath,
     installationProof: {
       ...proof,
@@ -415,6 +425,23 @@ export const restorePreparedRuntimeExecution = async (input: {
         ) {
           throw new Error("A saved browser command cannot be resumed with a new test selection.");
         }
+        const taskEnvironment = (): RuntimeTaskEnvironment => {
+          const result: RuntimeTaskEnvironment = {
+            ...Object.fromEntries(
+              Object.entries(environment ?? {}).filter(
+                (entry): entry is [string, string] =>
+                  entry[1] !== undefined && entry[0] !== "APP_RUNTIME_ALREADY_COMPILED",
+              ),
+            ),
+            APP_RUNTIME_STATE_DIR: input.binding.stateDirectory,
+            ...completedCompilationEnvironment(task, alreadyCompiled),
+          };
+          if (task === "test-e2e" && normalActors) {
+            result.APP_TEST_BASE_URL = normalActors.origin;
+            result.APP_TEST_IDENTITIES_FILE = normalActors.identitiesPath;
+          }
+          return result;
+        };
         const command = await resolveTaskCommand(
           { commandId, commandCheckpoint, allowDispatch },
           {
@@ -433,22 +460,7 @@ export const restorePreparedRuntimeExecution = async (input: {
             cmd: "/usr/bin/env",
             cwd: input.root,
             detached: true,
-            env: {
-              ...Object.fromEntries(
-                Object.entries(environment ?? {}).filter(
-                  (entry): entry is [string, string] =>
-                    entry[1] !== undefined && entry[0] !== "APP_RUNTIME_ALREADY_COMPILED",
-                ),
-              ),
-              APP_RUNTIME_STATE_DIR: input.binding.stateDirectory,
-              ...completedCompilationEnvironment(task, alreadyCompiled),
-              ...(task === "test-e2e" && normalActors
-                ? {
-                    APP_TEST_BASE_URL: normalActors.origin,
-                    APP_TEST_IDENTITIES_FILE: normalActors.identitiesPath,
-                  }
-                : {}),
-            },
+            env: taskEnvironment(),
             signal: signal ?? input.signal,
           },
         );

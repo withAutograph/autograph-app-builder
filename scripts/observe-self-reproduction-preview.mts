@@ -18,6 +18,7 @@ import type {
 
 import { observePreviewWebSockets } from "./self-reproduction-preview-websockets";
 
+const reportIndexFilename = "index.html";
 const { values } = parseArgs({
   options: {
     "brief-file": { type: "string" },
@@ -28,13 +29,18 @@ const { values } = parseArgs({
   },
   strict: true,
 });
-if (values.help) {
+if (values.help === true) {
   console.log(
     "Observe an existing delivered preview. --state-file OWNER_STATE_JSON --output-dir EXTERNAL_PATH [--brief-file PATH] [--timeout-ms 30000]",
   );
   process.exit(0);
 }
-if (!values["state-file"] || !values["output-dir"]) {
+if (
+  values["state-file"] === undefined ||
+  values["state-file"] === "" ||
+  values["output-dir"] === undefined ||
+  values["output-dir"] === ""
+) {
   throw new Error("--state-file and --output-dir are required.");
 }
 const statePath = path.resolve(values["state-file"]);
@@ -44,16 +50,17 @@ if (output === path.dirname(statePath)) {
 }
 const repository = path.resolve(import.meta.dirname, "..");
 const relative = path.relative(repository, output);
-if (!relative || (!relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))) {
+if (relative === "" || (!relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))) {
   throw new Error("Observation output must remain outside the reference source tree.");
 }
 const timeoutMs = Number(values["timeout-ms"]);
 if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
   throw new Error("--timeout-ms must be a positive integer.");
 }
-const syntheticBrief = values["brief-file"]
-  ? await readFile(path.resolve(values["brief-file"]), "utf-8")
-  : undefined;
+const syntheticBrief =
+  values["brief-file"] !== undefined && values["brief-file"] !== ""
+    ? await readFile(path.resolve(values["brief-file"]), "utf-8")
+    : undefined;
 const finding = await loadWorkingPreview(statePath);
 
 if (finding.status === "ready") {
@@ -179,9 +186,9 @@ if (finding.status === "ready") {
         }
         await mkdir(path.join(output, "screenshots"), { mode: 0o700, recursive: true });
         await page.screenshot({ fullPage: true, path: path.join(output, screenshot) });
+        const responseFailed = response === null || !response.ok();
         const failed =
-          response === null ||
-          !response.ok() ||
+          responseFailed ||
           consoleErrors.length > 0 ||
           pageErrors.length > 0 ||
           brief?.status === "failed";
@@ -241,7 +248,7 @@ if (finding.status === "ready") {
       viewports,
     };
     await writePreviewObservationReport(output, report);
-    console.log(`Preview observation complete; report: ${path.join(output, "index.html")}`);
+    console.log(`Preview observation complete; report: ${path.join(output, reportIndexFilename)}`);
     if (rows.some((row) => row.status === "failed" || row.status === "blocked")) {
       process.exitCode = 1;
     }
@@ -263,7 +270,7 @@ if (finding.status === "ready") {
       browserRow.reason += ` Observation stopped after an evaluator error: ${sanitizePreviewEvidence(String(error)).slice(0, 1000)}`;
     }
     await writePreviewObservationReport(output, report);
-    console.error(`Preview observation blocked; report: ${path.join(output, "index.html")}`);
+    console.error(`Preview observation blocked; report: ${path.join(output, reportIndexFilename)}`);
     process.exitCode = 75;
   } finally {
     await browser?.close().catch(() => {
@@ -272,6 +279,8 @@ if (finding.status === "ready") {
   }
 } else {
   await writePreviewObservationReport(output, unavailablePreviewReport(statePath, finding));
-  console.log(`Preview observation ${finding.status}; report: ${path.join(output, "index.html")}`);
+  console.log(
+    `Preview observation ${finding.status}; report: ${path.join(output, reportIndexFilename)}`,
+  );
   process.exitCode = finding.status === "expired" ? 75 : 1;
 }

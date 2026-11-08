@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import type { SandboxSession } from "eve/sandbox";
 
@@ -31,6 +32,24 @@ import {
   validationOutputExcerpt,
   sanitizeValidationDiagnosticText,
 } from "./target-validation";
+
+const unexpectedSandboxOperation = () =>
+  Promise.reject(new Error("Unexpected sandbox operation in validation fixture"));
+const createSandbox = (overrides: Partial<SandboxSession>): SandboxSession => ({
+  readBinaryFile: unexpectedSandboxOperation,
+  readFile: unexpectedSandboxOperation,
+  readTextFile: unexpectedSandboxOperation,
+  removePath: unexpectedSandboxOperation,
+  resolvePath: () => {
+    throw new Error("Unexpected sandbox operation in validation fixture");
+  },
+  run: unexpectedSandboxOperation,
+  spawn: unexpectedSandboxOperation,
+  writeBinaryFile: unexpectedSandboxOperation,
+  writeFile: unexpectedSandboxOperation,
+  writeTextFile: unexpectedSandboxOperation,
+  ...overrides,
+});
 
 const digest = (value: string) => value.repeat(64).slice(0, 64);
 
@@ -91,10 +110,11 @@ function sandboxFixture() {
     run,
     sandbox: {
       id: "sandbox",
-      run,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      writeTextFile: vi.fn(async () => {}),
-    } as unknown as SandboxSession,
+      ...createSandbox({
+        run,
+        writeTextFile: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      }),
+    },
   };
 }
 
@@ -311,7 +331,7 @@ describe("target validation", () => {
           path: "apps/example/test/review.test.ts",
         }),
       );
-      const events = info.mock.calls.map(([entry]) => JSON.parse(entry as string));
+      const events = info.mock.calls.map(([entry]) => JSON.parse(z.string().parse(entry)));
       expect(events).toEqual([
         expect.objectContaining({
           command: "check-build",
@@ -379,7 +399,7 @@ describe("target validation", () => {
         sandbox,
       });
       expect(result.ok).toBe(false);
-      expect(JSON.parse(warn.mock.calls[0]?.[0] as string)).toMatchObject({
+      expect(JSON.parse(z.string().parse(warn.mock.calls[0]?.[0]))).toMatchObject({
         elapsedMs: 31,
         finishedAt: "2026-10-09T12:00:00.031Z",
         phase: "provider_error",
@@ -426,7 +446,7 @@ describe("target validation", () => {
         runTask,
         stateDirectory: "/private-state",
       };
-      const executor = sandboxValidationCommandExecutor({ runtime, alreadyCompiled });
+      const executor = sandboxValidationCommandExecutor({ alreadyCompiled, runtime });
       const onChunk = vi.fn();
       const environment = { APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]' };
       const result = await executor({
@@ -438,15 +458,18 @@ describe("target validation", () => {
         validationRoot: "/workspace/repository",
       });
       expect(result).toMatchObject({ exitCode: 0, stdout: "checks passed" });
-      expect(runTask).toHaveBeenCalledWith(
-        expect.objectContaining({
-          environment,
-          onChunk,
-          task,
-          ...(shard ? { shard } : {}),
-          ...(alreadyCompiled ? { alreadyCompiled: true } : {}),
-        }),
-      );
+      const expected: Partial<Parameters<PreparedRuntimeExecution["runTask"]>[0]> = {
+        environment,
+        onChunk,
+        task,
+      };
+      if (shard !== undefined) {
+        expected.shard = shard;
+      }
+      if (alreadyCompiled) {
+        expected.alreadyCompiled = true;
+      }
+      expect(runTask).toHaveBeenCalledWith(expect.objectContaining(expected));
     },
   );
   it("links a filtered failure receipt to its complete sanitized durable log", async () => {
@@ -577,8 +600,8 @@ describe("target validation", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected a missing task prerequisite");
     expect(result.receipt).toMatchObject({
+      commandFailure: { exitCode: 1, failureClass: "missing-app-task", name: "check-build" },
       reason: "tooling-prerequisite",
-      commandFailure: { name: "check-build", exitCode: 1, failureClass: "missing-app-task" },
     });
     expect(result.receipt.commandFailure?.hint).toContain("executable mode");
     // SAFETY: Project the precise trusted workflow fields consumed by the classifier;
@@ -593,17 +616,17 @@ describe("target validation", () => {
     } as AppBuilderWorkflowState;
     expect(
       decideApprovedBuildContinuation({
-        state,
         adapterSessionId: "owned-session",
-        turnId: "actual-validation",
-        turnSequence: 1,
+        approvalMatches: () => true,
         blocked: false,
         pendingInput: false,
-        approvalMatches: () => true,
+        state,
+        turnId: "actual-validation",
+        turnSequence: 1,
       }),
     ).toMatchObject({
       decision: "blocked",
-      validation: { reason: "tooling-prerequisite", failureClass: "missing-app-task" },
+      validation: { failureClass: "missing-app-task", reason: "tooling-prerequisite" },
     });
   });
   it("retains complete repair diagnostics while redacting common credentials", () => {
@@ -811,7 +834,6 @@ describe("target validation", () => {
         appId: "example",
         apply,
         attempt: createTargetValidationAttempt(apply, "checker-panic"),
-        sandbox,
         dependencyLayout: { kind: "fixture", roots: [], version: 1, workspaceLinks: [] },
         executor: async ({ onChunk }) => {
           if (delivery === "streamed") {
@@ -820,18 +842,19 @@ describe("target validation", () => {
           }
           return { exitCode: 134, stderr: delivery === "returned" ? panic : "", stdout: "" };
         },
+        sandbox,
       });
       expect(result).toMatchObject({
         ok: false,
         receipt: {
-          reason: "tooling-prerequisite",
           commandFailure: {
-            name: "check-build",
             exitCode: 134,
             failureClass: "native-tool-panic",
             // oxlint-disable-next-line typescript/no-unsafe-assignment -- Vitest asymmetric matcher checks the safe prerequisite hint.
             hint: expect.stringContaining("repairOnly"),
+            name: "check-build",
           },
+          reason: "tooling-prerequisite",
         },
       });
     },
@@ -842,13 +865,13 @@ describe("target validation", () => {
       appId: "example",
       apply,
       attempt: createTargetValidationAttempt(apply, "unknown-134"),
-      sandbox,
       dependencyLayout: { kind: "fixture", roots: [], version: 1, workspaceLinks: [] },
       executor: () => Promise.resolve({ exitCode: 134, stderr: "no diagnostic", stdout: "" }),
+      sandbox,
     });
     expect(result).toMatchObject({
       ok: false,
-      receipt: { reason: "command-failed", commandFailure: { exitCode: 134 } },
+      receipt: { commandFailure: { exitCode: 134 }, reason: "command-failed" },
     });
   });
   it("identifies a provider failure before the first validation command returns", async () => {
@@ -968,11 +991,11 @@ describe("target validation", () => {
       const routePath = `apps/example/app/${segment}/page.tsx`;
       expect(compilerDiagnostics(`${routePath}(4,2): error TS2304: private source text`)).toEqual([
         {
-          path: routePath,
-          line: 4,
-          column: 2,
           code: "TS2304",
+          column: 2,
+          line: 4,
           message: "A referenced name is missing; inspect its declaration or import.",
+          path: routePath,
         },
       ]);
       expect(
@@ -1022,7 +1045,7 @@ describe("target validation", () => {
         stderr: "Formatting issues found",
         stdout: "",
       }));
-      const sandbox = { run } as unknown as SandboxSession;
+      const sandbox = createSandbox({ run });
 
       const result = await sandboxValidationCommandExecutor({ alreadyCompiled })({
         appId: "example",
@@ -1128,8 +1151,8 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
           appId: "example",
           command: validationCommand,
           environment: {
-            APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
             APP_RUNTIME_STATE_DIR: "/untrusted-state-directory",
+            APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
             OPTIONAL_INPUT: undefined,
           },
           onChunk: streaming
@@ -1138,15 +1161,15 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
                 return Promise.resolve();
               }
             : undefined,
-          sandbox: { run, spawn } as unknown as SandboxSession,
+          sandbox: createSandbox({ run, spawn }),
           validationRoot: directory,
         });
         expect(result.exitCode).toBe(0);
         expect(streaming ? chunks.join("") : result.stdout).toContain(stateDirectory);
         expect(streaming ? spawn : run).toHaveBeenCalledOnce();
         expect((streaming ? spawn : run).mock.calls[0]?.[0].env).toEqual({
-          APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
           APP_RUNTIME_STATE_DIR: stateDirectory,
+          APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
         });
         expect(streaming ? run : spawn).not.toHaveBeenCalled();
       } finally {
@@ -1157,20 +1180,20 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
   );
 
   it.each([
-    { outcome: "build", exitCode: 0 },
-    { outcome: "already compiled", alreadyCompiled: true as const, exitCode: 0 },
-    { outcome: "native output rejected", exitCode: 42 },
-    { outcome: "compile failed", exitCode: 43 },
-    { outcome: "private runner with catalog helper", privateRunner: true, exitCode: 0 },
+    { exitCode: 0, outcome: "build" },
+    { alreadyCompiled: true as const, exitCode: 0, outcome: "already compiled" },
+    { exitCode: 42, outcome: "native output rejected" },
+    { exitCode: 43, outcome: "compile failed" },
+    { exitCode: 0, outcome: "private runner with catalog helper", privateRunner: true },
     {
+      exitCode: 0,
+      legacyEnv: true,
       outcome: "oldest runner helper names",
       privateRunner: true,
-      legacyEnv: true,
-      exitCode: 0,
     },
-    { outcome: "catalog failed", privateRunner: true, exitCode: 45 },
-    { outcome: "build failed", privateRunner: true, exitCode: 44 },
-    { outcome: "private verifier rejected", privateRunner: true, exitCode: 1 },
+    { exitCode: 45, outcome: "catalog failed", privateRunner: true },
+    { exitCode: 44, outcome: "build failed", privateRunner: true },
+    { exitCode: 1, outcome: "private verifier rejected", privateRunner: true },
   ])("executes the selected checkout's build without lint: $outcome", async (scenario) => {
     const directory = mkdtempSync(path.join(tmpdir(), "builder-native-delivery-"));
     const environmentPath = localRuntimeEnvironmentPath(directory, "example");
@@ -1290,7 +1313,7 @@ exit 134
       })({
         appId: "example",
         command,
-        sandbox: { run } as unknown as SandboxSession,
+        sandbox: createSandbox({ run }),
         validationRoot: directory,
       });
       expect(run).toHaveBeenCalledOnce();
@@ -1357,14 +1380,14 @@ exit 99
       const result = await sandboxValidationCommandExecutor()({
         appId: "example",
         command: repositoryDeliveryBuildCommand("example"),
-        sandbox: { run } as unknown as SandboxSession,
+        sandbox: createSandbox({ run }),
         validationRoot: directory,
       });
       expect(result.exitCode).toBe(13);
       expect(result.stdout).toContain("declared tool installation failed");
       expect(result.stdout).not.toContain("validation must not run");
     } finally {
-      rmSync(directory, { recursive: true, force: true });
+      rmSync(directory, { force: true, recursive: true });
     }
   });
 
@@ -1401,7 +1424,7 @@ exit 99
       const result = await sandboxValidationCommandExecutor()({
         appId: "example",
         command: "mise run --no-deps --skip-tools app:test example 1/1",
-        sandbox: { run } as unknown as SandboxSession,
+        sandbox: createSandbox({ run }),
         validationRoot: directory,
       });
       expect(result.exitCode).toBe(17);

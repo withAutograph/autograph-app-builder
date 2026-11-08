@@ -40,7 +40,7 @@ const address = z.object({ port: z.number().int().positive() }).safeParse(listen
 if (!address.success) {
   throw new Error("Local fixture port unavailable");
 }
-const port = address.data.port;
+const { port } = address.data;
 const closed = once(listener, "close");
 listener.close();
 await closed;

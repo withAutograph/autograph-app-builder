@@ -54,6 +54,9 @@ import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
 
+const unavailableDiagnosticLog = "an unavailable private diagnostic log";
+const localPublicationGitPath = "app-builder/local-publication.json";
+
 interface FileState {
   kind: "absent" | "regular" | "directory" | "symlink" | "special";
   mode?: string;
@@ -177,10 +180,15 @@ const runGitCapture = async function runGitCapture(
     output.push(Buffer.from(chunk));
   });
   child.stderr.pipe(diagnosticCapture.writer);
+  // SAFETY: This spawned ChildProcess emits close with its exit code and termination signal.
   const [code] = (await once(child, "close")) as [number | null, NodeJS.Signals | null];
   const stderrLogPath = await finishGitDiagnosticCapture(diagnosticCapture, code !== 0);
+  const initial: Pick<GitProcessResult, "stderrLogPath"> = {};
+  if (stderrLogPath !== undefined) {
+    initial.stderrLogPath = stderrLogPath;
+  }
   return {
-    ...(stderrLogPath === undefined ? {} : { stderrLogPath }),
+    ...initial,
     status: code ?? -1,
     stdout: Buffer.concat(output),
   };
@@ -204,8 +212,8 @@ const fixedGitApply = async function fixedGitApply(
       "-C",
       root,
       "apply",
-      ...(options.reverse ? ["--reverse"] : []),
-      ...(options.check ? ["--check"] : []),
+      ...((options.reverse ?? false) ? ["--reverse"] : []),
+      ...((options.check ?? false) ? ["--check"] : []),
       "--binary",
       "--whitespace=nowarn",
       "-",
@@ -228,11 +236,12 @@ const fixedGitApply = async function fixedGitApply(
   ) {
     throw inputResult.reason;
   }
+  // SAFETY: The fulfilled promise is once(child, "close"), whose arguments are the exit code and signal.
   const [code, signal] = processResult.value as [number | null, NodeJS.Signals | null];
   const stderrLogPath = await finishGitDiagnosticCapture(diagnosticCapture, code !== 0);
   if (code !== 0) {
     const statusDetail = signal ?? `exit ${code}`;
-    const diagnosticPath = stderrLogPath ?? "an unavailable private diagnostic log";
+    const diagnosticPath = stderrLogPath ?? unavailableDiagnosticLog;
     throw new Error(
       `Git apply failed for ${root} using patch ${patchPath} (${statusDetail}); sanitized stderr is available at ${diagnosticPath}.`,
     );
@@ -337,18 +346,20 @@ const buildExactGitPatch = async function buildExactGitPatch(input: {
       );
       child.stderr.pipe(diagnosticCapture.writer);
       const resultPromise = once(child, "close");
+      // SAFETY: The spawned stdout is a binary pipe and no text encoding is set.
       // oxlint-disable-next-line eslint/no-await-in-loop -- consume diff output sequentially to keep memory bounded
       for await (const chunk of child.stdout as AsyncIterable<Buffer>) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- write each streamed diff chunk before reading more
         await patchFile.writeFile(chunk);
       }
+      // SAFETY: resultPromise observes this spawned ChildProcess's close event, carrying exit code and signal.
       // oxlint-disable-next-line eslint/no-await-in-loop -- finish each streamed diff before starting the next one
       const [code, signal] = (await resultPromise) as [number | null, NodeJS.Signals | null];
       // oxlint-disable-next-line eslint/no-await-in-loop -- finish each patch diagnostic before the next patch starts.
       const stderrLogPath = await finishGitDiagnosticCapture(diagnosticCapture, code !== 1);
       if (code !== 1) {
         const statusDetail = signal ?? `exit ${code}`;
-        const diagnosticPath = stderrLogPath ?? "an unavailable private diagnostic log";
+        const diagnosticPath = stderrLogPath ?? unavailableDiagnosticLog;
         throw new Error(
           `Could not build the exact publication patch for ${path} in ${input.gitDirectoryPath} (${statusDetail}); sanitized stderr is available at ${diagnosticPath}.`,
         );
@@ -369,7 +380,7 @@ const git = async function git(path: string, args: readonly string[]): Promise<s
   const result = await runGitCapture(["-C", path, ...args]);
   if (result.status !== 0) {
     throw new Error(
-      `Git ${args[0] ?? "command"} failed for ${path} (${result.status}); sanitized stderr is available at ${result.stderrLogPath ?? "an unavailable private diagnostic log"}.`,
+      `Git ${args[0] ?? "command"} failed for ${path} (${result.status}); sanitized stderr is available at ${result.stderrLogPath ?? unavailableDiagnosticLog}.`,
     );
   }
   return result.stdout.toString("utf-8");
@@ -379,7 +390,7 @@ const gitBuffer = async function gitBuffer(path: string, args: readonly string[]
   const result = await runGitCapture(["-C", path, ...args]);
   if (result.status !== 0) {
     throw new Error(
-      `Git ${args[0] ?? "command"} failed for ${path} (${result.status}); sanitized stderr is available at ${result.stderrLogPath ?? "an unavailable private diagnostic log"}.`,
+      `Git ${args[0] ?? "command"} failed for ${path} (${result.status}); sanitized stderr is available at ${result.stderrLogPath ?? unavailableDiagnosticLog}.`,
     );
   }
   return result.stdout;
@@ -498,6 +509,7 @@ const fileState = async function fileState(path: string): Promise<FileState> {
     }
     const hash = createHash("sha256");
     let size = 0;
+    // SAFETY: createReadStream has no encoding option here, so its data chunks are Buffers.
     // oxlint-disable-next-line eslint/no-await-in-loop -- hash file content incrementally instead of buffering it
     for await (const chunk of createReadStream(path) as AsyncIterable<Buffer>) {
       hash.update(chunk);
@@ -529,17 +541,15 @@ const dirtyEntry = async function dirtyEntry(
     throw new Error("Git reported an unsafe dirty path.");
   }
   const state = await fileState(nodePath.resolve(root, parsed.path));
-  return {
-    ...parsed,
-    kind: state.kind,
-    ...(state.mode === undefined ? {} : { mode: state.mode }),
-    ...(state.digest === undefined || state.size === undefined
-      ? {}
-      : {
-          contentDigest: state.digest,
-          size: state.size,
-        }),
-  };
+  const entry: DirtyPathSnapshot = { ...parsed, kind: state.kind };
+  if (state.mode !== undefined) {
+    entry.mode = state.mode;
+  }
+  if (state.digest !== undefined && state.size !== undefined) {
+    entry.contentDigest = state.digest;
+    entry.size = state.size;
+  }
+  return entry;
 };
 
 const gitOwnedPath = async function gitOwnedPath(root: string, name: string): Promise<string> {
@@ -752,9 +762,9 @@ const createInitialJournal = async function createInitialJournal(
 };
 
 const assertJournal = function assertJournal(journal: LocalPublicationJournal): void {
+  const invalidJournalValue = journal === null || typeof journal !== "object";
   if (
-    journal === null ||
-    typeof journal !== "object" ||
+    invalidJournalValue ||
     (journal.status !== "pending" && journal.status !== "succeeded" && journal.status !== "failed")
   ) {
     throw new Error("The durable local-publication journal has an unsupported state.");
@@ -766,7 +776,7 @@ export const readLocalPublicationJournal = async function readLocalPublicationJo
   destinationPath: string,
 ): Promise<LocalPublicationJournal | undefined> {
   const root = await resolveAllowedRepository(destinationPath);
-  const path = await gitOwnedPath(root, "app-builder/local-publication.json");
+  const path = await gitOwnedPath(root, localPublicationGitPath);
   try {
     const journal = JSON.parse(await readFile(path, "utf-8")) as LocalPublicationJournal;
     assertJournal(journal);
@@ -797,12 +807,16 @@ const acquireLock = async function acquireLock(root: string): Promise<() => Prom
 const pathEvidence = function pathEvidence(
   proposal: LocalPublicationProposal,
 ): readonly PublicationPathEvidence[] {
-  return proposal.changes.map((change) => ({
-    operation: change.kind,
-    path: change.path,
-    ...(change.before === undefined ? {} : { before: change.before }),
-    ...(change.after === undefined ? {} : { after: change.after }),
-  }));
+  return proposal.changes.map((change) => {
+    const evidence: PublicationPathEvidence = { operation: change.kind, path: change.path };
+    if (change.before !== undefined) {
+      evidence.before = change.before;
+    }
+    if (change.after !== undefined) {
+      evidence.after = change.after;
+    }
+    return evidence;
+  });
 };
 
 const verifyPreconditions = async function verifyPreconditions(input: {
@@ -995,7 +1009,7 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
     });
     const pendingUnsigned = {
       ...proposalFields,
-      appliedPaths: [] as readonly string[],
+      appliedPaths: [],
       beforeStatusDigest,
       intentPaths: input.proposal.executionPaths,
       pathEvidence: evidence,
@@ -1007,10 +1021,7 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
       ...pendingUnsigned,
       digest: stableDigest(pendingUnsigned),
     };
-    const journalPath = await gitOwnedPath(
-      snapshot.canonicalPath,
-      "app-builder/local-publication.json",
-    );
+    const journalPath = await gitOwnedPath(snapshot.canonicalPath, localPublicationGitPath);
     await createInitialJournal(journalPath, pending);
     pendingWritten = true;
     await input.hooks?.afterPendingJournal?.();
@@ -1025,10 +1036,12 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
     }
     await input.hooks?.beforeGitApply?.();
     const immediate = await verifyPreconditions(input);
-    if (
+    const rootIdentityChanged =
       immediate.rootIdentity.device !== input.proposal.rootIdentity.device ||
       immediate.rootIdentity.inode !== input.proposal.rootIdentity.inode ||
-      immediate.gitDirectoryPath !== input.proposal.gitDirectoryPath ||
+      immediate.gitDirectoryPath !== input.proposal.gitDirectoryPath;
+    if (
+      rootIdentityChanged ||
       immediate.gitDirectoryIdentity.device !== input.proposal.gitDirectoryIdentity.device ||
       immediate.gitDirectoryIdentity.inode !== input.proposal.gitDirectoryIdentity.inode
     ) {
@@ -1076,7 +1089,7 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
       afterStatusDigest: after.statusDigest,
       appliedPaths,
       beforeStatusDigest,
-      conflictedPaths: [] as readonly string[],
+      conflictedPaths: [],
       intentPaths: input.proposal.executionPaths,
       pathEvidence: evidence,
       postconditionDigest: stableDigest(
@@ -1085,9 +1098,9 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
       proposalDigest,
       publishedByCallId: input.publishedByCallId,
       recoveryRequired: false,
-      rolledBackPaths: [] as readonly string[],
+      rolledBackPaths: [],
       status: "succeeded" as const,
-      uncertainPaths: [] as readonly string[],
+      uncertainPaths: [],
     };
     const receipt: LocalPublicationSuccessReceipt = {
       ...successUnsigned,
@@ -1241,7 +1254,7 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
     if (pendingWritten) {
       const journalPath = await gitOwnedPath(
         input.proposal.destinationPath,
-        "app-builder/local-publication.json",
+        localPublicationGitPath,
       );
       await input.hooks?.beforeTerminalJournalWrite?.("failed");
       await writeJournal(journalPath, receipt);

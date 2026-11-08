@@ -123,10 +123,10 @@ const ownedFixture = (
       updatedAtEpochMs: 1000,
       version: 2,
     }),
-    ...(options.nativeRecoveryBinding === undefined
-      ? {}
-      : { nativeRecoveryBinding: options.nativeRecoveryBinding }),
   };
+  if (options.nativeRecoveryBinding !== undefined) {
+    record.nativeRecoveryBinding = options.nativeRecoveryBinding;
+  }
   const metadata: HostedPagedCheckpointMetadata = {
     capturedAtEpochMs: 1000,
     status: "completed",
@@ -207,6 +207,10 @@ const ownedFixture = (
   return { artifact, getSession, handler, observe, publicId, readCheckpointPage, record, request };
 };
 
+const unexpectedServiceCall = (): never => {
+  throw new Error("Unexpected Eve session operation in preview fixture");
+};
+
 describe("deployment Browser preview route", () => {
   beforeEach(() => {
     for (const mock of Object.values(providers)) {
@@ -228,11 +232,11 @@ describe("deployment Browser preview route", () => {
   it("scopes receipt reads to the authenticated workspace and returns only verification fields", async () => {
     const fixture = ownedFixture();
     providers.receipt.mockResolvedValue({
-      operationId: "operation",
       logicalSessionId: "wrun_original",
-      sourceOwnerRunId: "wrun_source",
+      operationId: "operation",
       ownerRunId: "wrun_recovered",
       provenance: { checkpointOwnerRunId: "wrun_checkpoint", sourceEventId: "private" },
+      sourceOwnerRunId: "wrun_source",
     });
     const response = await fixture.handler.readRecoveryReceipt(fixture.request, {
       sessionId: fixture.publicId,
@@ -242,24 +246,24 @@ describe("deployment Browser preview route", () => {
     expect(providers.receipt).toHaveBeenCalledWith(
       {},
       {
-        principal: owner,
         authoritySessionId: fixture.publicId,
         logicalSessionId: "wrun_original",
         ownerRunId: "wrun_recovered",
+        principal: owner,
       },
     );
     expect(response.headers.get("cache-control")).toBe("no-store");
     await expect(response.json()).resolves.toEqual({
-      operationId: "operation",
-      logicalSessionId: "wrun_original",
-      sourceOwnerRunId: "wrun_source",
-      ownerRunId: "wrun_recovered",
       checkpointOwnerRunId: "wrun_checkpoint",
+      logicalSessionId: "wrun_original",
+      operationId: "operation",
+      ownerRunId: "wrun_recovered",
+      sourceOwnerRunId: "wrun_source",
     });
   });
 
   it("recovers the exact authenticated saved build before reading its artifact", async () => {
-    const resume = vi.fn<ResumeRealmContinuation>().mockImplementation(() => Promise.resolve());
+    const resume = vi.fn<ResumeRealmContinuation>().mockResolvedValue();
     const fixture = ownedFixture({ resumeRealmContinuation: resume });
     const response = await fixture.handler(fixture.request, {
       digest,
@@ -269,15 +273,15 @@ describe("deployment Browser preview route", () => {
     await expect(response.text()).resolves.toBe(content);
     expect(resume).toHaveBeenCalledTimes(1);
     expect(resume).toHaveBeenCalledWith({
-      principal: owner,
-      sessionId: fixture.publicId,
       adapterSessionId: fixture.record.adapterSessionId,
       environment: { EVE_HOSTED_ADAPTER: "1" },
+      principal: owner,
+      sessionId: fixture.publicId,
     });
   });
 
   it("does not recover another account's saved build", async () => {
-    const resume = vi.fn<ResumeRealmContinuation>().mockImplementation(() => Promise.resolve());
+    const resume = vi.fn<ResumeRealmContinuation>().mockResolvedValue();
     const fixture = ownedFixture({ resumeRealmContinuation: resume });
     providers.auth.mockResolvedValue({ user: { id: "other-owner" } });
     const response = await fixture.handler(fixture.request, {
@@ -302,8 +306,16 @@ describe("deployment Browser preview route", () => {
       sessionId: "session-one",
       status: "completed" as const,
     }));
+    const service: EveSessionService = {
+      cancel: unexpectedServiceCall,
+      get,
+      list: unexpectedServiceCall,
+      respond: unexpectedServiceCall,
+      send: unexpectedServiceCall,
+      start: unexpectedServiceCall,
+    };
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const serviceForRequest = vi.fn(async () => ({ get }) as unknown as EveSessionService);
+    const serviceForRequest = vi.fn(async () => service);
     const handler = createDeploymentPrototypePreviewRequestHandler({
       environment: {},
       serviceForRequest,

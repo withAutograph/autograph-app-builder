@@ -8,6 +8,11 @@ import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { test } from "vitest";
 
+const EVE_SESSION_PATH = "/eve/v1/session";
+const EVE_HEALTH_PATH = "/eve/v1/health";
+const WORKFLOW_FLOW_PATH = "/.well-known/workflow/v1/flow";
+const EVE_SERVER_PATH = "/eve/__server";
+
 const require = createRequire(import.meta.url);
 const installed = require.resolve("eve/package.json");
 const nativeRoot = process.env.EVE_RECOVERY_NATIVE_ROOT ?? path.dirname(installed);
@@ -38,7 +43,7 @@ test("embedded Eve service routes only session creation to its real 1800-second 
     const handler = path.join(root, "handler.mjs");
     await mkdir(host, { recursive: true });
     await writeFile(handler, 'export default () => "local artifact fixture";\n');
-    const options = createEveVercelOptions({ enabled: true, agentName: "duration-fixture" });
+    const options = createEveVercelOptions({ agentName: "duration-fixture", enabled: true });
     nitro = await createNitro({
       rootDir: root,
       serverDir: false,
@@ -49,11 +54,11 @@ test("embedded Eve service routes only session creation to its real 1800-second 
       output: { dir: output },
       vercel: options,
       handlers: [
-        { route: "/eve/v1/session", handler },
+        { route: EVE_SESSION_PATH, handler },
         { route: "/eve/v1/session/:id", handler },
-        { route: "/eve/v1/health", handler },
+        { route: EVE_HEALTH_PATH, handler },
         { route: "/eve/v1/**", handler },
-        { route: "/.well-known/workflow/v1/flow", handler },
+        { route: WORKFLOW_FLOW_PATH, handler },
       ],
     });
     await prepare(nitro);
@@ -73,20 +78,20 @@ test("embedded Eve service routes only session creation to its real 1800-second 
     assert.equal(sessionConfig.runtime, "nodejs24.x");
     const serviceConfig = await readJson(path.join(output, "config.json"));
     assert.equal(
-      serviceConfig.routes.find((route) => route.src === "/eve/v1/session").dest,
-      "/eve/v1/session",
+      serviceConfig.routes.find((route) => route.src === EVE_SESSION_PATH).dest,
+      EVE_SESSION_PATH,
     );
     assert.equal(
       serviceConfig.routes.find((route) => route.src === "/eve/v1/session/(?<id>[^/]+)").dest,
-      "/eve/__server",
+      EVE_SERVER_PATH,
     );
     assert.equal(
-      serviceConfig.routes.find((route) => route.src === "/eve/v1/health").dest,
-      "/eve/__server",
+      serviceConfig.routes.find((route) => route.src === EVE_HEALTH_PATH).dest,
+      EVE_SERVER_PATH,
     );
-    assert.equal(firstRoute(serviceConfig.routes, "/eve/v1/session").dest, "/eve/v1/session");
-    assert.equal(firstRoute(serviceConfig.routes, "/eve/v1/session/child").dest, "/eve/__server");
-    assert.equal(firstRoute(serviceConfig.routes, "/eve/v1/health").dest, "/eve/__server");
+    assert.equal(firstRoute(serviceConfig.routes, EVE_SESSION_PATH).dest, EVE_SESSION_PATH);
+    assert.equal(firstRoute(serviceConfig.routes, "/eve/v1/session/child").dest, EVE_SERVER_PATH);
+    assert.equal(firstRoute(serviceConfig.routes, EVE_HEALTH_PATH).dest, EVE_SERVER_PATH);
     const shared = await readJson(path.join(output, "functions/eve/__server.func/.vc-config.json"));
     assert.notEqual(shared.maxDuration, 1800);
     const finalFlow = await readJson(flowConfig);
@@ -94,8 +99,8 @@ test("embedded Eve service routes only session creation to its real 1800-second 
     assert.deepEqual(finalFlow.experimentalTriggers, originalFlow.experimentalTriggers);
     assert.equal(originalFlow.experimentalTriggers[0].type, "queue/v2beta");
     assert.equal(
-      serviceConfig.routes.find((route) => route.src === "/.well-known/workflow/v1/flow").dest,
-      "/.well-known/workflow/v1/flow",
+      serviceConfig.routes.find((route) => route.src === WORKFLOW_FLOW_PATH).dest,
+      WORKFLOW_FLOW_PATH,
     );
 
     // This is the same emitter invoked by withEve during embedded Next configuration.
@@ -117,16 +122,16 @@ test("embedded Eve service routes only session creation to its real 1800-second 
       ],
     });
     const embedded = await readJson(path.join(host, ".vercel/output/config.json"));
-    const mounted = firstRoute(embedded.routes, "/eve/v1/session");
+    const mounted = firstRoute(embedded.routes, EVE_SESSION_PATH);
     assert.deepEqual(mounted.destination, { service: "eve", type: "service" });
     assert.equal(
       path.resolve(host, embedded.services.eve.root, embedded.services.eve.outputDirectory),
       output,
     );
     assert.match(embedded.services.eve.buildCommand, /EVE_INTERNAL_BUILD_OUTPUT_DIRECTORY/u);
-    const serviceMount = firstRoute(embedded.services.eve.routes, "/eve/v1/session");
+    const serviceMount = firstRoute(embedded.services.eve.routes, EVE_SESSION_PATH);
     assert.equal(serviceMount.transforms[0].args, "/eve/v1/$1");
-    assert.equal(new RegExp(serviceMount.src, "u").exec("/eve/v1/session")[1], "session");
+    assert.equal(new RegExp(serviceMount.src, "u").exec(EVE_SESSION_PATH)[1], "session");
     const proofPath = process.env.EVE_SESSION_DURATION_PROOF_PATH;
     if (proofPath !== undefined) {
       // Optional local evidence contains only synthetic artifact configuration.
@@ -136,11 +141,11 @@ test("embedded Eve service routes only session creation to its real 1800-second 
           runtime: sessionConfig.runtime,
           maxDuration: sessionConfig.maxDuration,
           realDirectory: sessionStat.isDirectory(),
-          firstMatchedDestination: firstRoute(serviceConfig.routes, "/eve/v1/session").dest,
+          firstMatchedDestination: firstRoute(serviceConfig.routes, EVE_SESSION_PATH).dest,
         },
         otherProtocol: {
           sessionChildDestination: firstRoute(serviceConfig.routes, "/eve/v1/session/child").dest,
-          healthDestination: firstRoute(serviceConfig.routes, "/eve/v1/health").dest,
+          healthDestination: firstRoute(serviceConfig.routes, EVE_HEALTH_PATH).dest,
           sharedDurationUnchanged: shared.maxDuration !== 1800,
         },
         workflow: {
@@ -149,7 +154,7 @@ test("embedded Eve service routes only session creation to its real 1800-second 
             finalFlow.experimentalTriggers,
             originalFlow.experimentalTriggers,
           ),
-          destination: firstRoute(serviceConfig.routes, "/.well-known/workflow/v1/flow").dest,
+          destination: firstRoute(serviceConfig.routes, WORKFLOW_FLOW_PATH).dest,
         },
         embedded: {
           firstMatchedDestination: mounted.destination,
@@ -167,20 +172,20 @@ test("embedded Eve service routes only session creation to its real 1800-second 
     }
   } finally {
     await nitro?.close();
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { force: true, recursive: true });
   }
 }, 30_000);
 
 test("only the exact session function destination survives protocol normalization", () => {
   const routes = normalizeEveVercelRoutes([
-    { src: "/eve/v1/session", dest: "/eve/v1/session" },
-    { src: "/eve/v1/session", dest: "/__server" },
-    { src: "/eve/v1/session/extra", dest: "/eve/v1/session" },
-    { src: "/eve/v1/session/(.*)", dest: "/eve/v1/session" },
-    { src: "/eve/v1/health", dest: "/eve/v1/health" },
+    { dest: EVE_SESSION_PATH, src: EVE_SESSION_PATH },
+    { dest: "/__server", src: EVE_SESSION_PATH },
+    { dest: EVE_SESSION_PATH, src: "/eve/v1/session/extra" },
+    { dest: EVE_SESSION_PATH, src: "/eve/v1/session/(.*)" },
+    { dest: EVE_HEALTH_PATH, src: EVE_HEALTH_PATH },
   ]);
-  assert.equal(routes[0].dest, "/eve/v1/session");
+  assert.equal(routes[0].dest, EVE_SESSION_PATH);
   for (const route of routes.slice(1)) {
-    assert.equal(route.dest, "/eve/__server");
+    assert.equal(route.dest, EVE_SERVER_PATH);
   }
 });

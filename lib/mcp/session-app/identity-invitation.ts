@@ -31,12 +31,14 @@ export const reduceIdentityInvitations = (
     lastIndex = Math.max(lastIndex, event.index);
     if (event.type === "auth_identity_invitation") {
       const { callId, url, expiresAt, operationRef } = event;
-      invitations.set(invitationKey(event), {
-        callId,
-        url,
-        expiresAt,
-        ...(operationRef === undefined ? {} : { operationRef }),
-      });
+      const makeInvitation = (): PublicIdentityInvitation => {
+        const invitation: PublicIdentityInvitation = { callId, url, expiresAt };
+        if (operationRef !== undefined) {
+          invitation.operationRef = operationRef;
+        }
+        return invitation;
+      };
+      invitations.set(invitationKey(event), makeInvitation());
     } else if (event.type === "auth_identity_invitation_resolved") {
       invitations.delete(invitationKey(event));
     }

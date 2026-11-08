@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { betterAuth } from "better-auth";
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import {
   createPreviewUserManagementLifecycle,
@@ -39,11 +40,19 @@ const verifiedUser = {
 describe("Preview Better Auth user management", () => {
   it("keeps the workspace field aligned with the Drizzle model key", () => {
     const [organizationPlugin] = previewUserManagementPlugins(createAuthority());
-    const schema = organizationPlugin?.schema as {
-      organization?: {
-        fields?: Record<string, { fieldName?: string }>;
-      };
-    };
+    const schema = z
+      .looseObject({
+        organization: z
+          .looseObject({
+            fields: z
+              .looseObject({
+                workspaceId: z.looseObject({ fieldName: z.string().optional() }).optional(),
+              })
+              .optional(),
+          })
+          .optional(),
+      })
+      .parse(organizationPlugin?.schema);
 
     expect(schema.organization?.fields?.workspaceId).toEqual(
       expect.objectContaining({ input: false, required: true }),

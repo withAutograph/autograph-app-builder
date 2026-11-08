@@ -17,7 +17,7 @@ import { publishLocalDevelopmentOidcLease } from "./local-oidc-lease";
 const roots: string[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { force: true, recursive: true });
   }
 });
 const fixture = () => {
@@ -63,7 +63,7 @@ const fixture = () => {
       mode: 0o600,
     });
   };
-  return { root, repositoryRoot, applicationRoot, runtimeHome, token, install, project };
+  return { applicationRoot, install, project, repositoryRoot, root, runtimeHome, token };
 };
 it("the actual OIDC SDK recovers an expired process token from the renewed isolated project lease", () => {
   const f = fixture();

@@ -171,7 +171,7 @@ const recordResult = (
   event: NativeEvent<"action.result">,
   index: number,
 ) => {
-  const result = event.data.result;
+  const { result } = event.data;
   if (result.kind !== "tool-result") {
     return;
   }
@@ -360,7 +360,7 @@ export const summarizeNativeTurnExecution = (input: {
   }
   const attempts = [...selected.attempts.values()];
   const historical = historicalFailure(turns, selected);
-  return {
+  const prefix: Omit<NativeTurnExecutionEvidence, "selectedTurn"> = {
     version: 1,
     kind: "native-turn-execution-evidence-v1",
     sessionId: input.sessionId,
@@ -368,15 +368,29 @@ export const summarizeNativeTurnExecution = (input: {
     nativeCursor: input.nativeCursor,
     selectedBy: selectionKind(input.selector),
     unassociatedEvents,
+  };
+  const turn: Pick<
+    NativeTurnExecutionEvidence["selectedTurn"],
+    "turnId" | "sequence" | "started" | "acceptedMessages" | "boundary"
+  > = {
+    turnId: selected.turnId,
+    sequence: selected.sequence,
+    started: selected.started,
+    acceptedMessages: selected.messages,
+  };
+  if (selected.boundary !== undefined) {
+    turn.boundary = selected.boundary;
+  }
+  const evidence: NativeTurnExecutionEvidence = {
+    ...prefix,
     selectedTurn: {
-      turnId: selected.turnId,
-      sequence: selected.sequence,
-      started: selected.started,
-      acceptedMessages: selected.messages,
-      ...(selected.boundary === undefined ? {} : { boundary: selected.boundary }),
+      ...turn,
       attempts,
       execution: disposition(attempts),
     },
-    ...(historical === undefined ? {} : { lastHistoricalFailedExecution: historical }),
   };
+  if (historical !== undefined) {
+    evidence.lastHistoricalFailedExecution = historical;
+  }
+  return evidence;
 };

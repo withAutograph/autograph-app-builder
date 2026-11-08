@@ -37,13 +37,13 @@ const profile = () =>
       afterSha256: hash(PRIVATE_COMPUTE_CHECK_TASK),
     },
     limits: {
-      version: 1,
-      teamId: "team_owned",
-      projectId: "prj_owned",
-      plan: "pro",
-      maxVcpus: 8,
       limited: false,
+      maxVcpus: 8,
       observedAt: "2026-11-03T12:00:00.000Z",
+      plan: "pro",
+      projectId: "prj_owned",
+      teamId: "team_owned",
+      version: 1,
     },
   });
 const modeOf = async (file: string) => {
@@ -52,7 +52,7 @@ const modeOf = async (file: string) => {
 };
 const roots: string[] = [];
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
 const fixture = async (content = LEGACY_PRIVATE_COMPUTE_CHECK_TASK, mode = 0o755) => {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "builder-check-policy-")));
@@ -92,7 +92,7 @@ const fixture = async (content = LEGACY_PRIVATE_COMPUTE_CHECK_TASK, mode = 0o755
     file,
     calls,
     sandbox,
-    input: { sandbox, applyRoot: "/workspace/repository", profile: profile() },
+    input: { applyRoot: "/workspace/repository", profile: profile(), sandbox },
   };
 };
 describe("reviewed private check task", () => {

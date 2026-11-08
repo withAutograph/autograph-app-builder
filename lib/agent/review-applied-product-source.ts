@@ -50,6 +50,9 @@ import { getBuilderSandboxId } from "../sandbox/builder-sandbox";
 import type { PreparedApplicationReviewContext } from "./application-review-context-store";
 import { emptySourceReviewInvocation } from "./product-source-review-batches";
 
+const MOCK_PROFILE_REVIEW_UNASSESSED =
+  "Independent review is unassessed in the credential-free mock profile.";
+
 export interface AppliedSourceObservation {
   source: Pick<ProductSourceReviewInput, "files" | "omissions" | "sourceDigest">;
   currentDigest: () => Promise<string>;
@@ -106,10 +109,7 @@ export const reviewObservedProductSource = async (
   input.abortSignal?.throwIfAborted();
   let assessment: ProductSourceAssessment;
   if (input.mockModel) {
-    assessment = unavailableSourceAssessment(
-      input.reviewInput,
-      "Independent review is unassessed in the credential-free mock profile.",
-    );
+    assessment = unavailableSourceAssessment(input.reviewInput, MOCK_PROFILE_REVIEW_UNASSESSED);
   } else if (input.reviewInput.originalRequest === null) {
     assessment = unavailableSourceAssessment(
       input.reviewInput,
@@ -189,12 +189,12 @@ export const reviewApplicationWithJournal = async (
   }
   const options: ApplicationSourceReviewOptions = {
     ...input.options,
-    cacheSessionId: applicationSourceReviewCacheSessionId(input.options?.sessionId, key),
     async assertCurrentOwner() {
       assertNotStopped();
       await input.journal.assertCurrentOwner();
       assertNotStopped();
     },
+    cacheSessionId: applicationSourceReviewCacheSessionId(input.options?.sessionId, key),
   };
   const assessment = reusable
     ? { ...retained.assessment, invocation: { ...emptySourceReviewInvocation(), journalReuses: 1 } }
@@ -217,7 +217,7 @@ export const reviewApplicationWithJournal = async (
   const { invocation, ...durableAssessment } = assessment;
   if (
     !completedReviewForInput(
-      { kind: applicationCompletedKind, assessment: durableAssessment },
+      { assessment: durableAssessment, kind: applicationCompletedKind },
       input.reviewInput,
     )
   ) {
@@ -235,7 +235,11 @@ export const reviewApplicationWithJournal = async (
   if (!completedReviewForInput(recorded, input.reviewInput)) {
     throw new Error("Completed application review could not be retained under the current policy.");
   }
-  return { ...recorded.assessment, ...(invocation === undefined ? {} : { invocation }) };
+  const result: ProductSourceAssessment = { ...recorded.assessment };
+  if (invocation !== undefined) {
+    result.invocation = invocation;
+  }
+  return result;
 };
 
 /** Shared post-validation assessment; never substitutes for executed product behavior. */
@@ -281,10 +285,7 @@ export const reviewAppliedProductSource = async (input: {
     sourceDigest: input.applyReceipt.postTreeDigest,
   };
   if (hasTestCapability("mock-model")) {
-    return unavailableSourceAssessment(
-      reviewInput,
-      "Independent review is unassessed in the credential-free mock profile.",
-    );
+    return unavailableSourceAssessment(reviewInput, MOCK_PROFILE_REVIEW_UNASSESSED);
   }
   if (request.original === null) {
     return unavailableSourceAssessment(
@@ -318,14 +319,16 @@ export const reviewAppliedProductSource = async (input: {
       selectedBaseline === undefined
         ? undefined
         : await readAppBaselineMarker(sandbox, selectedBaseline);
+    const observedPaths = observed.files.map((file) => file.path);
+    const changedPaths = input.normalizedChanges.map((change) => change.path);
     const visibility = applicationReviewVisibility({
-      observedPaths: observed.files.map((file) => file.path),
-      changedPaths: input.normalizedChanges.map((change) => change.path),
+      changedPaths,
       hasSelectedBaseline: selectedBaseline !== undefined,
+      observedPaths,
       unexposedReleasePrefixes: marker?.unexposedReleasePrefixes,
     });
     currentInput.omissions.push(...visibility.omissions);
-    const evidence = createApplicationReviewEvidence({
+    const evidenceInput: Parameters<typeof createApplicationReviewEvidence>[0] = {
       abortSignal: input.abortSignal,
       applyRoot: input.applyReceipt.applyRoot,
       changedPaths: input.normalizedChanges.map((change) => change.path),
@@ -333,21 +336,20 @@ export const reviewAppliedProductSource = async (input: {
       reviewInput: currentInput,
       sandbox,
       visiblePaths: visibility.paths,
-      ...(input.appSpec.version === 2
-        ? {
-            appSpecParts: () =>
-              acceptedAppSpecTextParts({
-                accepted: input.appSpec,
-                artifacts: input.artifacts ?? [],
-                sessionAuth: input.sessionAuth,
-                sessionId: input.sessionId ?? "",
-              }),
-          }
-        : {}),
-    });
+    };
+    if (input.appSpec.version === 2) {
+      evidenceInput.appSpecParts = () =>
+        acceptedAppSpecTextParts({
+          accepted: input.appSpec,
+          artifacts: input.artifacts ?? [],
+          sessionAuth: input.sessionAuth,
+          sessionId: input.sessionId ?? "",
+        });
+    }
+    const evidence = createApplicationReviewEvidence(evidenceInput);
+    const { abortSignal, sessionId } = input;
     const options: ApplicationSourceReviewOptions = {
-      abortSignal: input.abortSignal,
-      sessionId: input.sessionId,
+      abortSignal,
       onInvocation(invocation) {
         console.info(
           JSON.stringify({
@@ -355,6 +357,16 @@ export const reviewAppliedProductSource = async (input: {
             event: "app_builder.source_review_invocation",
             sessionId: input.sessionId,
             ...invocation,
+          }),
+        );
+      },
+      onRequest(completedRequest) {
+        console.info(
+          JSON.stringify({
+            callId: input.callId,
+            event: "app_builder.source_review_request_finished",
+            sessionId: input.sessionId,
+            ...completedRequest,
           }),
         );
       },
@@ -371,27 +383,18 @@ export const reviewAppliedProductSource = async (input: {
           }),
         );
       },
-      onRequest(completedRequest) {
-        console.info(
-          JSON.stringify({
-            callId: input.callId,
-            event: "app_builder.source_review_request_finished",
-            sessionId: input.sessionId,
-            ...completedRequest,
-          }),
-        );
-      },
+      sessionId,
     };
     const assessment = await reviewApplicationWithJournal({
-      reviewInput: currentInput,
-      normalizedChanges: input.normalizedChanges,
-      evidence,
-      journal,
-      options,
       currentDigest: async () => {
         const { treeDigest } = await inspectApplyOverlay(sandbox, input.applyReceipt.applyRoot);
         return treeDigest;
       },
+      evidence,
+      journal,
+      normalizedChanges: input.normalizedChanges,
+      options,
+      reviewInput: currentInput,
     });
     input.abortSignal?.throwIfAborted();
     retainScopedProductSourceAssessment(assessment, bindingDigest);
@@ -444,7 +447,7 @@ export const prepareAppliedProductSourceReview = async (
   const assertNotStopped = () => input.abortSignal?.throwIfAborted();
   assertNotStopped();
   if (hasTestCapability("mock-model")) {
-    return unavailable("Independent review is unassessed in the credential-free mock profile.");
+    return unavailable(MOCK_PROFILE_REVIEW_UNASSESSED);
   }
   if (reviewInput.originalRequest === null || input.sessionId === undefined) {
     return unavailable("Original requirements or the owning review session are unavailable.");
@@ -486,10 +489,12 @@ export const prepareAppliedProductSourceReview = async (
     const baseline = selected?.appId === input.appSpec.appId ? selected : undefined;
     const marker =
       baseline === undefined ? undefined : await readAppBaselineMarker(sandbox, baseline);
+    const observedPaths = input.observed.files.map((file) => file.path);
+    const changedPaths = input.normalizedChanges.map((change) => change.path);
     const visibility = applicationReviewVisibility({
-      observedPaths: input.observed.files.map((file) => file.path),
-      changedPaths: input.normalizedChanges.map((change) => change.path),
+      changedPaths,
       hasSelectedBaseline: baseline !== undefined,
+      observedPaths,
       unexposedReleasePrefixes: marker?.unexposedReleasePrefixes,
     });
     if (input.appSpec.version === 2) {
@@ -530,11 +535,13 @@ export const prepareAppliedProductSourceReview = async (
       reviewKey,
       reviewInput: privateReviewInput,
     };
+    const { appId } = input.appSpec;
+    const { sessionAuth, sessionId, abortSignal } = input;
     const store = await sourceReviewContextStoreForSession({
-      appId: input.appSpec.appId,
-      sessionAuth: input.sessionAuth,
-      sessionId: input.sessionId,
-      abortSignal: input.abortSignal,
+      abortSignal,
+      appId,
+      sessionAuth,
+      sessionId,
     });
     return {
       reference: {
@@ -566,11 +573,13 @@ export const finalizeAppliedProductSourceReview = async (
     if (input.sessionId === undefined || input.reference.appId !== input.appSpec.appId) {
       return unavailable();
     }
+    const { appId } = input.appSpec;
+    const { sessionAuth, sessionId, abortSignal } = input;
     const store = await sourceReviewContextStoreForSession({
-      appId: input.appSpec.appId,
-      sessionAuth: input.sessionAuth,
-      sessionId: input.sessionId,
-      abortSignal: input.abortSignal,
+      abortSignal,
+      appId,
+      sessionAuth,
+      sessionId,
     });
     const context = await store.readContext(input.reference.contextRef);
     const currentKey = applicationSourceReviewKey(current, input.normalizedChanges);
@@ -598,7 +607,7 @@ export const finalizeAppliedProductSourceReview = async (
     }
     if (
       !completedReviewForInput(
-        { kind: applicationCompletedKind, assessment: outcome.assessment },
+        { assessment: outcome.assessment, kind: applicationCompletedKind },
         current,
       )
     ) {
@@ -618,7 +627,11 @@ export const finalizeAppliedProductSourceReview = async (
       return unavailable();
     }
     retainScopedProductSourceAssessment(recorded.assessment, currentKey);
-    return { ...recorded.assessment, ...(invocation === undefined ? {} : { invocation }) };
+    const result: ProductSourceAssessment = { ...recorded.assessment };
+    if (invocation !== undefined) {
+      result.invocation = invocation;
+    }
+    return result;
   } catch {
     input.abortSignal?.throwIfAborted();
     return unavailable();
