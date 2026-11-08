@@ -194,8 +194,8 @@ describe("private native target terminal approval", () => {
         }
         reader.observe(
           requested({
-            toolName: scenario === "wrong tool" ? "plan-app-native-target" : undefined,
             toolInput: changed,
+            toolName: scenario === "wrong tool" ? "plan-app-native-target" : undefined,
           }),
         );
       }
@@ -228,9 +228,9 @@ describe("private native target terminal approval", () => {
     all.proveComplete();
     expect(() => all.read()).toThrow("ambiguous");
     const current = createPrivateNativeTargetApprovalCapture({
+      callId: "call-two",
       owner,
       record,
-      callId: "call-two",
       state: all.snapshot(),
       terminals: all.terminalSnapshot(),
     });
@@ -375,7 +375,7 @@ describe("private native target terminal approval", () => {
       ]);
       const result = await readPrivateNativeTargetApproval({
         ...base,
-        observation: { state, save },
+        observation: { save, state },
         readHistory: (start) => {
           expect(start).toBe(2);
           return Promise.resolve({ complete: true, nativeTailIndex: 1, nextNativeIndex: 2 });
@@ -417,7 +417,7 @@ describe("private native target terminal approval", () => {
         owner: { ...owner, adapterSessionId: replacement.adapterSessionId, adapterGeneration: 2 },
         record,
         historyOwner: replacement,
-        observation: { state, save },
+        observation: { save, state },
         assertOwner: () => Promise.resolve(),
         readHistory: (start, onEvent) => {
           expect(start).toBe(0);

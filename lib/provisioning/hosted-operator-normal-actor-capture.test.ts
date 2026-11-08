@@ -219,7 +219,19 @@ const fixture = () => {
     },
   });
   return {
+    get approvals() {
+      return approvals;
+    },
+    conflictOnce() {
+      conflict = true;
+    },
     journal,
+    revokeApproval() {
+      approved = false;
+    },
+    revokeOwner() {
+      owned = false;
+    },
     get row() {
       return row;
     },
@@ -228,18 +240,6 @@ const fixture = () => {
     },
     get writes() {
       return writes;
-    },
-    get approvals() {
-      return approvals;
-    },
-    revokeApproval() {
-      approved = false;
-    },
-    revokeOwner() {
-      owned = false;
-    },
-    conflictOnce() {
-      conflict = true;
     },
   };
 };
@@ -394,21 +394,21 @@ const captureFixture = async () => {
       body: JSON.stringify(requestBody(phase, extra)),
     });
   return {
-    value,
+    consume() {
+      pendingConsumed = true;
+    },
     handler,
-    request,
     get readbacks() {
       return readbacks;
     },
+    request,
     swapEmail() {
       actualEmail = "other@example.test";
     },
     swapSender() {
       senderProject = "wrong-auth-project";
     },
-    consume() {
-      pendingConsumed = true;
-    },
+    value,
   };
 };
 

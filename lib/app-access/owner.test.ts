@@ -179,7 +179,7 @@ const fixture = async () => {
   const execute = vi.fn(
     async (owner: AppAccessOwner, _command: AppAccessCommand) => await read(owner),
   );
-  const route = createAppAccessRouteHandler({ origin, resolveOwner, read, execute });
+  const route = createAppAccessRouteHandler({ execute, origin, read, resolveOwner });
   return {
     selected,
     unrelated,
@@ -211,12 +211,12 @@ describe("recovered web app access owner", () => {
       expect(await response.json()).toMatchObject({ appId: "requests", sessionId: requested });
       expect(f.reads[0]).toMatchObject({
         appId: "requests",
-        sessionId: f.selected.original.sessionId,
         ownerContext: {
-          sessionId: f.selected.original.sessionId,
           adapterSessionId: f.selected.child.adapterSessionId,
           principal,
+          sessionId: f.selected.original.sessionId,
         },
+        sessionId: f.selected.original.sessionId,
       });
       expect(f.reads[0]?.sessionId).not.toBe(f.unrelated.original.sessionId);
       expect(await f.sessions.getSession(principal, f.selected.original.sessionId)).toEqual(
@@ -245,8 +245,8 @@ describe("recovered web app access owner", () => {
     expect(f.execute).toHaveBeenCalledTimes(1);
     const [call] = f.execute.mock.calls;
     expect(call?.[0]).toMatchObject({
-      sessionId: f.selected.original.sessionId,
       ownerContext: { adapterSessionId: f.selected.child.adapterSessionId },
+      sessionId: f.selected.original.sessionId,
     });
     expect(call?.[1]).toEqual(command);
     expect(await response.json()).toMatchObject({ sessionId });
@@ -292,10 +292,10 @@ describe("recovered web app access owner", () => {
       };
     });
     const route = createAppAccessRouteHandler({
-      origin,
-      resolveOwner: f.resolveOwner,
-      read,
       execute: f.execute,
+      origin,
+      read,
+      resolveOwner: f.resolveOwner,
     });
     const { sessionId } = f.selected.child;
     const response = await route(request(sessionId), sessionId);

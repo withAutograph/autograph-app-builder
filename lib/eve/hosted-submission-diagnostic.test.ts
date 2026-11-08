@@ -100,17 +100,17 @@ describe("sanitized hosted submission diagnostics", () => {
         clientRequestIdHash: hash(canary),
         sendDeliveryObservation: {
           ackObserved: true,
-          sameAdapterSession: true,
-          sameAdapterGeneration: true,
-          nativeDeliveryStatePresent: true,
-          nativeTurnCount: 1,
-          deliveryTurnMatchCount: 1,
-          startedStampMatchCount: 0,
           boundaryStampMatchCount: 0,
-          startedOrBoundaryMatch: false,
           currentTurnPresent: true,
-          nativeReadObserved: true,
+          deliveryTurnMatchCount: 1,
+          nativeDeliveryStatePresent: true,
           nativeRead,
+          nativeReadObserved: true,
+          nativeTurnCount: 1,
+          sameAdapterGeneration: true,
+          sameAdapterSession: true,
+          startedOrBoundaryMatch: false,
+          startedStampMatchCount: 0,
         },
       }),
     );
@@ -151,13 +151,13 @@ describe("sanitized hosted submission diagnostics", () => {
         },
       });
       expect(observation).toMatchObject({
-        sameAdapterSession: false,
-        sameAdapterGeneration: false,
-        deliveryTurnMatchCount: 1,
-        startedStampMatchCount: stamp === "started" ? 1 : 0,
         boundaryStampMatchCount: stamp === "boundary" ? 1 : 0,
-        startedOrBoundaryMatch: true,
+        deliveryTurnMatchCount: 1,
         nativeRead: { observationComplete: false },
+        sameAdapterGeneration: false,
+        sameAdapterSession: false,
+        startedOrBoundaryMatch: true,
+        startedStampMatchCount: stamp === "started" ? 1 : 0,
       });
     },
   );
@@ -581,7 +581,7 @@ describe("native recovery verification diagnostics", () => {
       clientRequestId: "diagnostic-recovery",
       resumeSessionId: original.sessionId,
     };
-    return { service, store, transport, sink, activate, recoveryRequest };
+    return { activate, recoveryRequest, service, sink, store, transport };
   };
   it("allowlists internal verification tags without reading accessors or changing the public message", () => {
     const sink = vi.fn<HostedSubmissionDiagnosticSink>();
@@ -646,7 +646,7 @@ describe("native recovery verification diagnostics", () => {
     await expect(f.service.start(f.recoveryRequest)).rejects.toBeInstanceOf(
       HostedSubmissionUnknownError,
     );
-    await expect(f.service.get({ sessionId, cursor: 0, limit: 10 })).rejects.toBeInstanceOf(
+    await expect(f.service.get({ cursor: 0, limit: 10, sessionId })).rejects.toBeInstanceOf(
       HostedSubmissionUnknownError,
     );
     expect(f.sink).toHaveBeenLastCalledWith(
@@ -669,7 +669,7 @@ describe("native recovery verification diagnostics", () => {
       Promise.resolve({ ...bindingFor(recovery), ownerRunId: "different-private-owner" }),
     );
     await expect(
-      f.service.get({ sessionId: child.sessionId, cursor: 0, limit: 10 }),
+      f.service.get({ cursor: 0, limit: 10, sessionId: child.sessionId }),
     ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     expect(f.sink).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -680,7 +680,7 @@ describe("native recovery verification diagnostics", () => {
     const lookup = vi.spyOn(f.store, "getPrivateOperation").mockResolvedValue(null);
     f.activate.mockClear();
     await expect(
-      f.service.get({ sessionId: child.sessionId, cursor: 0, limit: 10 }),
+      f.service.get({ cursor: 0, limit: 10, sessionId: child.sessionId }),
     ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     expect(f.sink).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -692,7 +692,7 @@ describe("native recovery verification diagnostics", () => {
     expect(f.transport.start).toHaveBeenCalledTimes(2);
     lookup.mockRejectedValue(new Error(canary));
     await expect(
-      f.service.get({ sessionId: child.sessionId, cursor: 0, limit: 10 }),
+      f.service.get({ cursor: 0, limit: 10, sessionId: child.sessionId }),
     ).rejects.toThrow(canary);
     expect(f.sink).toHaveBeenLastCalledWith(
       expect.objectContaining({

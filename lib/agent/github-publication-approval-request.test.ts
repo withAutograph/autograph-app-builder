@@ -106,8 +106,8 @@ vi.mock("./workflow-state", async (importOriginal) => ({
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: () =>
     Promise.resolve({
-      sealDraftPullRequestProposal: fixture.seal,
       publishDraftPullRequest: fixture.publish,
+      sealDraftPullRequestProposal: fixture.seal,
     }),
 }));
 vi.mock("./app-baseline-state", () => ({ appBaselineState: { get: () => null } }));
