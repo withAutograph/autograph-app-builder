@@ -41,8 +41,8 @@ import type { HostedRuntimeJournalRow } from "./hosted-runtime-journal";
 
 const accountOperationRef = "11111111-1111-4111-8111-111111111111";
 const authority = {
-  issuer: "https://builder.example.test/api/auth",
   audience: "https://builder.example.test/mcp",
+  issuer: "https://builder.example.test/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
@@ -50,11 +50,11 @@ const target = {
   appId: "normal-app",
   branch: "preview",
   environment: "preview" as const,
-  projectId: "prj_app",
-  sessionId: "owner-session",
   installationId: "installation",
+  projectId: "prj_app",
   scopeId: "team",
   scopeType: "team" as const,
+  sessionId: "owner-session",
 };
 const context = { authority, target };
 const program = normalActorProgramSchema.parse({
@@ -402,7 +402,7 @@ const fixture = async (
     expect(new URL(request.url).searchParams.get("disableRefresh")).toBe("true");
     expect(request.headers.get("cookie")).toContain("actual-retained-cookie");
     return Response.json({
-      user: { id: "real-owner", email: "owner@example.test" },
+      user: { email: "owner@example.test", id: "real-owner" },
       session: {
         id: "real-session",
         userId: "real-owner",
@@ -540,11 +540,11 @@ describe("approved additive capture participant state", () => {
       f.fetchSession.mockImplementation(async (url, init) => {
         if (new Request(url, init).headers.get("cookie")?.includes("qa-cookie") === true) {
           return Response.json({
-            user: { id: "qa-actor", email: "qa@example.test" },
+            user: { email: "qa@example.test", id: "qa-actor" },
             session: {
+              expiresAt: "2030-01-01T00:00:00.000Z",
               id: "qa-session",
               userId: "qa-actor",
-              expiresAt: "2030-01-01T00:00:00.000Z",
             },
           });
         }
@@ -614,11 +614,11 @@ describe("approved additive capture participant state", () => {
           const qa = new Request(url, init).headers.get("cookie")?.includes("qa-cookie") === true;
           const actorId = qa ? "qa-actor" : "real-owner";
           return Response.json({
-            user: { id: actorId, email: qa ? "qa@example.test" : "owner@example.test" },
+            user: { email: qa ? "qa@example.test" : "owner@example.test", id: actorId },
             session: {
+              expiresAt: "2026-10-29T22:19:00.000Z",
               id: qa ? "qa-session" : "real-session",
               userId: actorId,
-              expiresAt: "2026-10-29T22:19:00.000Z",
             },
           });
         });
@@ -739,16 +739,16 @@ describe("approved additive capture participant state", () => {
       if (outcome === "valid") {
         const projection = await runtime({
           ...context,
+          operationRef: currentOperation,
           ownerContext,
           plan: current,
-          operationRef: currentOperation,
         });
         expect(projection?.identities.actors).toHaveLength(2);
         const retained = await f.journal.read(context);
         expect(retained?.state.actors[0]).toEqual(f.state.actors[0]);
       } else {
         await expect(
-          runtime({ ...context, ownerContext, plan: current, operationRef: currentOperation }),
+          runtime({ ...context, operationRef: currentOperation, ownerContext, plan: current }),
         ).rejects.toMatchObject({
           code:
             outcome === "expired actual session"
@@ -811,12 +811,12 @@ describe("approved additive capture participant state", () => {
     f.approve();
     f.fetchSession.mockImplementation(async () =>
       Response.json({
-        user: { id: "real-owner", email: "owner@example.test" },
+        user: { email: "owner@example.test", id: "real-owner" },
         session: {
+          activeOrganizationId: "changed-outside-program",
+          expiresAt: "2030-01-01T00:00:00.000Z",
           id: "real-session",
           userId: "real-owner",
-          expiresAt: "2030-01-01T00:00:00.000Z",
-          activeOrganizationId: "changed-outside-program",
         },
       }),
     );
@@ -864,7 +864,7 @@ describe("approved additive capture participant state", () => {
         const body = z.object({ email: z.email() }).parse(await request.json());
         signups.push(body.email);
         return Response.json(
-          { user: { id: "qa-actor", email: "qa@example.test" } },
+          { user: { email: "qa@example.test", id: "qa-actor" } },
           {
             headers: {
               "set-cookie": "__Secure-session=qa-cookie; Path=/; Secure; HttpOnly; SameSite=Lax",
@@ -874,12 +874,12 @@ describe("approved additive capture participant state", () => {
       }
       if (request.headers.get("cookie")?.includes("qa-cookie") === true) {
         return Response.json({
-          user: { id: "qa-actor", email: "qa@example.test" },
+          user: { email: "qa@example.test", id: "qa-actor" },
           session: {
+            activeOrganizationId: null,
+            expiresAt: "2030-01-01T00:00:00.000Z",
             id: "qa-session",
             userId: "qa-actor",
-            expiresAt: "2030-01-01T00:00:00.000Z",
-            activeOrganizationId: null,
           },
         });
       }
@@ -963,11 +963,11 @@ describe("approved additive capture participant state", () => {
     if (changed === "foreign session") {
       f.fetchSession.mockResolvedValue(
         Response.json({
-          user: { id: "foreign", email: "owner@example.test" },
+          user: { email: "owner@example.test", id: "foreign" },
           session: {
+            expiresAt: "2030-01-01T00:00:00.000Z",
             id: "foreign-session",
             userId: "foreign",
-            expiresAt: "2030-01-01T00:00:00.000Z",
           },
         }),
       );
@@ -980,11 +980,11 @@ describe("approved additive capture participant state", () => {
           requireFixture(f.row.record.operator).planDigest = "f".repeat(64);
         }
         return Response.json({
-          user: { id: "real-owner", email: "owner@example.test" },
+          user: { email: "owner@example.test", id: "real-owner" },
           session: {
+            expiresAt: "2030-01-01T00:00:00.000Z",
             id: "real-session",
             userId: "real-owner",
-            expiresAt: "2030-01-01T00:00:00.000Z",
           },
         });
       });

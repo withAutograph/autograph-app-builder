@@ -34,19 +34,19 @@ type NativeApprovalInputPrefix = Pick<
 >;
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
+  workspaceId: "workspace",
 };
 const principal = { ...authority, scopes: ["autograph:session"] };
 const historyOwner = {
-  authority,
-  principal,
-  kind: "direct" as const,
-  sessionId: "public-one",
-  adapterSessionId: "adapter-one",
   adapterGeneration: 1,
+  adapterSessionId: "adapter-one",
+  authority,
+  kind: "direct" as const,
+  principal,
+  sessionId: "public-one",
 };
 const current = {
   authority,
@@ -200,9 +200,9 @@ const fixture = (workloadAuthorized = true, selectedPlan = plan) => {
     },
     createProject,
     observeProject: async () => ({
-      status: "uncertain" as const,
       projectId: "project-id",
       reason: "provider_unavailable" as const,
+      status: "uncertain" as const,
     }),
   };
   const readCapturedRelease = vi.spyOn(dependencies, "readCapturedRelease");
@@ -275,7 +275,7 @@ describe("protected native target onboarding service", () => {
     const create = vi.fn(
       async (input: Parameters<NativeTargetOnboardingServiceDependencies["createProject"]>[0]) => {
         await input.authorizeAttempt();
-        return { status: "rejected" as const, reason: "permission_denied" as const };
+        return { reason: "permission_denied" as const, status: "rejected" as const };
       },
     );
     f.dependencies.createProject = create;
@@ -294,14 +294,14 @@ describe("protected native target onboarding service", () => {
   it("reads same-credential authorization evidence after a retired permission failure without another attempt or journal write", async () => {
     const { f, create, retained, planned } = await permissionRejected();
     const observation = {
-      status: "observed" as const,
-      statusCode: 200,
-      installationMatches: true,
-      teamMatches: true,
-      ownerMatches: true,
-      projectWriteConfigured: true,
       allProjectsConfigured: true,
       disabled: false,
+      installationMatches: true,
+      ownerMatches: true,
+      projectWriteConfigured: true,
+      status: "observed" as const,
+      statusCode: 200,
+      teamMatches: true,
     };
     const inspect = vi
       .fn<NonNullable<NativeTargetOnboardingServiceDependencies["inspectProviderAuthorization"]>>()
@@ -322,7 +322,7 @@ describe("protected native target onboarding service", () => {
     const f = fixture();
     const inspect = vi
       .fn<NonNullable<NativeTargetOnboardingServiceDependencies["inspectProviderAuthorization"]>>()
-      .mockResolvedValue({ status: "unavailable", failure: "request_failed" });
+      .mockResolvedValue({ failure: "request_failed", status: "unavailable" });
     f.dependencies.inspectProviderAuthorization = inspect;
     const planned = await f.planOnce();
     await f.send({
@@ -350,7 +350,7 @@ describe("protected native target onboarding service", () => {
     const controller = new AbortController();
     f.dependencies.inspectProviderAuthorization = () => {
       controller.abort(new Error("cancelled"));
-      return Promise.resolve({ status: "unavailable", failure: "cancelled" });
+      return Promise.resolve({ failure: "cancelled", status: "unavailable" });
     };
     await expect(
       f.send(
@@ -679,10 +679,10 @@ describe("exact native preparation invocation approval", () => {
                 requestId,
                 prompt: "Approve exact saved target",
                 action: {
-                  kind: "tool-call",
-                  toolName: "prepare-app-native-target",
                   callId,
                   input: prepared,
+                  kind: "tool-call",
+                  toolName: "prepare-app-native-target",
                 },
               },
             ],
@@ -859,10 +859,10 @@ describe("retired attempt preparation with immutable initial approval", () => {
                 requestId,
                 prompt: "Approve saved plan",
                 action: {
-                  kind: "tool-call",
-                  toolName: "prepare-app-native-target",
                   callId,
                   input: prepared,
+                  kind: "tool-call",
+                  toolName: "prepare-app-native-target",
                 },
               },
             ],
@@ -973,10 +973,10 @@ describe("side-effect-free approval peek with an incomplete durable tail", () =>
               requestId,
               prompt: "Approve exact saved plan",
               action: {
-                kind: "tool-call",
-                toolName: "prepare-app-native-target",
                 callId,
                 input: prepared,
+                kind: "tool-call",
+                toolName: "prepare-app-native-target",
               },
             },
           ],
@@ -984,7 +984,7 @@ describe("side-effect-free approval peek with an incomplete durable tail", () =>
       });
       history.push(requested("old-request", "old-call"), {
         type: "approval.settled",
-        meta: { id: "settled-old", at: "2026-10-30T20:00:01.000Z" },
+        meta: { at: "2026-10-30T20:00:01.000Z", id: "settled-old" },
         data: {
           sequence: 2,
           stepIndex: 0,
@@ -1062,7 +1062,7 @@ describe("side-effect-free approval peek with an incomplete durable tail", () =>
       if (outcome === "cancelled") {
         history.push({
           type: "approval.settled",
-          meta: { id: "late-old-cancellation", at: "2026-10-30T20:00:02.000Z" },
+          meta: { at: "2026-10-30T20:00:02.000Z", id: "late-old-cancellation" },
           data: {
             sequence: 3,
             stepIndex: 0,
@@ -1075,7 +1075,7 @@ describe("side-effect-free approval peek with an incomplete durable tail", () =>
       }
       history.push({
         type: "approval.settled",
-        meta: { id: "settled-fresh", at: "2026-10-30T20:00:02.000Z" },
+        meta: { at: "2026-10-30T20:00:02.000Z", id: "settled-fresh" },
         data: {
           sequence: 3,
           stepIndex: 0,

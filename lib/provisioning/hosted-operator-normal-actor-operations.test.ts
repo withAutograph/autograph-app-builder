@@ -1078,9 +1078,9 @@ describe("normal actor operations", () => {
     const appOperationRef = "22222222-2222-4222-8222-222222222222";
     const firstState = await f.operations.prepareNormalActorMemberships({
       ...f.effect,
-      plan: fullPlan,
-      operationRef: appOperationRef,
       effect: first,
+      operationRef: appOperationRef,
+      plan: fullPlan,
     });
     expect(
       firstState.memberships
@@ -1094,16 +1094,16 @@ describe("normal actor operations", () => {
     ).toBe(true);
     await f.operations.prepareNormalActorMemberships({
       ...f.effect,
-      plan: fullPlan,
-      operationRef: appOperationRef,
       effect: second,
+      operationRef: appOperationRef,
+      plan: fullPlan,
     });
     const before = f.requests.length;
     const verified = await f.operations.verifyNormalActorMemberships({
       ...f.effect,
-      plan: fullPlan,
-      operationRef: appOperationRef,
       effect: second,
+      operationRef: appOperationRef,
+      plan: fullPlan,
     });
     expect(
       verified.organizationSessions?.every(
@@ -1130,9 +1130,9 @@ describe("normal actor operations", () => {
     await expect(
       f.operations.verifyNormalActorMemberships({
         ...f.effect,
-        plan: fullPlan,
-        operationRef: appOperationRef,
         effect: second,
+        operationRef: appOperationRef,
+        plan: fullPlan,
       }),
     ).rejects.toMatchObject({ code: "auth_identity_required" });
     expect(f.requests.slice(beforeStaleVerify).every((request) => request.method === "GET")).toBe(
