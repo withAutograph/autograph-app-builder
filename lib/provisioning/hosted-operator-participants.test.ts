@@ -852,7 +852,7 @@ describe("capture-only participant program successor", () => {
       selection,
       normalActorProgram: nextProgram,
     });
-    const record = requireFixture(f.row).record;
+    const { record } = requireFixture(f.row);
     const original = requireFixture(record.accountPreparation);
     const operation = z.uuid().parse(pending.operationRef);
     const preparation = {

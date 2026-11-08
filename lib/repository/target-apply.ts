@@ -714,7 +714,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       }
     }
     if ("operation" in proposal && proposal.applicationSourceImport !== undefined) {
-      const registration = proposal.applicationSourceImport.registration;
+      const { registration } = proposal.applicationSourceImport;
       if (
         registration === undefined ||
         registration.projectName !== appId ||

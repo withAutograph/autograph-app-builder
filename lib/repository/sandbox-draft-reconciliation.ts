@@ -634,11 +634,15 @@ const outsideCandidateChanges = async (
   root: string,
 ): Promise<boolean> => {
   const dependencyCatalog = retainedDependencyCatalog(input, root);
-  const catalogPaths = await inspectDependencyCatalog(input.sandbox, {
+  const { sandbox } = input;
+  const catalogInput: Parameters<typeof inspectDependencyCatalog>[1] = {
     root,
     appId: input.appId,
-    ...(dependencyCatalog === undefined ? {} : { dependencyCatalog }),
-  });
+  };
+  if (dependencyCatalog !== undefined) {
+    catalogInput.dependencyCatalog = dependencyCatalog;
+  }
+  const catalogPaths = await inspectDependencyCatalog(sandbox, catalogInput);
   if (input.ownedPublication !== undefined) {
     const scope = retainedPublicationScope(input, root);
     if (

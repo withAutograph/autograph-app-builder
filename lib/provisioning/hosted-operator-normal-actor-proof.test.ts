@@ -825,7 +825,7 @@ describe("normal organization owner proof collector", () => {
     const f = await fixture();
     await f.beginAppPlanning();
     const before = structuredClone(f.row.record);
-    const revision = f.row.revision;
+    const { revision } = f.row;
     expect(before.accountPreparation?.organizationProofs).toBeUndefined();
     const signups = f.requests.filter(
       (request) => new URL(request.url).pathname === "/api/auth/sign-up/email",

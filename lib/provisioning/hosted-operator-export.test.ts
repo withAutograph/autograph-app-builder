@@ -387,7 +387,7 @@ describe("protected tenant export orchestration", () => {
     expect(await f.operations.execute(context, planned.request, "retry")).toMatchObject({
       state: "complete",
     });
-    const attempts = f.read().journal.attempts;
+    const { attempts } = f.read().journal;
     expect(attempts).toHaveLength(2);
     expect(attempts[0]?.state).toBe("failed");
     expect(attempts[0]?.attemptId).not.toBe(attempts[1]?.attemptId);

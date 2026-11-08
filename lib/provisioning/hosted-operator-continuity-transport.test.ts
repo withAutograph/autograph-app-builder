@@ -625,7 +625,7 @@ it("reads the exact saved continuity intent after the prepared target changes wi
   );
   const original = f.record;
   const writes = f.snapshots.length;
-  const authorizations = f.stats.authorizations;
+  const { authorizations } = f.stats;
   f.selectPreparedTarget({
     ...preparedPlan.selection,
     branch: "new-preview",

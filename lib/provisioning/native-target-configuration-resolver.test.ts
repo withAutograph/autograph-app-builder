@@ -325,7 +325,7 @@ describe("production native target configuration resolver", () => {
   });
   it("resolves an ordinary selected app operation through fresh registry authorization", async () => {
     const fixture = setup();
-    const target = context().target;
+    const { target } = context();
     const effective = await fixture.resolve(
       request({
         action: "plan",

@@ -392,7 +392,7 @@ describe("original owner organization export selection", () => {
   it("clarifies rather than choosing among multiple authenticated original organizations", async () => {
     const f = await fixture();
     const second = structuredClone(f.historical);
-    const plan = second.operator.plan;
+    const { plan } = second.operator;
     if (plan.authMembership?.kind !== "create-owned-organization") {
       throw new Error("Missing membership");
     }

@@ -702,7 +702,7 @@ describe("completed enrollment and Gateway bootstrap handoff", () => {
     "programDigest",
   ] as const)("rejects an app plan with changed original %s", (field) => {
     const record = incompleteAppRecord();
-    const plan = requiredFixture(record.operator).plan;
+    const { plan } = requiredFixture(record.operator);
     requiredFixture(plan.normalActorPreparation)[field] = "unrelated-authority";
     expect(inspectCompletedParticipantBootstrap(plan, record)).toBeUndefined();
   });

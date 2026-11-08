@@ -492,7 +492,7 @@ describe("approved managed app continuity service", () => {
   it("reads back a committed session pair after response loss without changing the attempt or duplicating dispatch", async () => {
     const f = setup();
     const { planned, retained } = await retainPreDispatchAttempt(f);
-    const compareAndSet = f.deps.store.compareAndSet;
+    const { compareAndSet } = f.deps.store;
     let responseLost = false;
     f.deps.store.compareAndSet = async (input) => {
       const saved = await compareAndSet(input);
