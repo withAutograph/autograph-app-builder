@@ -158,9 +158,9 @@ describe("public profile with the actual native OIDC signature and claim verifie
     if (variant === "valid") {
       await expect(profile).resolves.toMatchObject({
         appId: "orchard",
-        publicOrigin: origin,
         jwksUrl: `${origin}/_platform/jwks.json`,
         keys: [gatewayKey],
+        publicOrigin: origin,
       });
       expect(https.get).toHaveBeenCalled();
       expect(gatewayFetch).toHaveBeenCalledTimes(1);
@@ -173,12 +173,12 @@ describe("public profile with the actual native OIDC signature and claim verifie
       expect(assertCurrentOwner).toHaveBeenCalledTimes(2);
     } else {
       const expected = {
-        "foreign-project": /project_id/u,
-        "wrong-environment": /environment/u,
-        "foreign-owner": /owner_id/u,
-        "wrong-issuer": /iss/u,
-        "wrong-audience": /aud/u,
         "bad-signature": /signature verification failed/u,
+        "foreign-owner": /owner_id/u,
+        "foreign-project": /project_id/u,
+        "wrong-audience": /aud/u,
+        "wrong-environment": /environment/u,
+        "wrong-issuer": /iss/u,
       }[variant];
       await expect(profile).rejects.toThrow(expected);
       expect(gatewayFetch).not.toHaveBeenCalled();

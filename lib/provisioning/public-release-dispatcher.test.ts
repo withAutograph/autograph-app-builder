@@ -25,9 +25,9 @@ const common = {
 // oxlint-disable-next-line anti-slop/no-object-parameters -- Malformed external JSON is deliberately sent through the real request parser.
 const request = (body: object, path = "/v1/public-release") =>
   new Request(`https://operator.example${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
+    headers: { "content-type": "application/json" },
+    method: "POST",
   });
 const fixture = () => {
   const row = {

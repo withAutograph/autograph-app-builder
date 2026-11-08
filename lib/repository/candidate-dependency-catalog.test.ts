@@ -25,7 +25,7 @@ import {
 const roots: string[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { force: true, recursive: true });
   }
 });
 const fixture = (peerVersion = "1.2.3") => {
@@ -101,7 +101,7 @@ const fixture = (peerVersion = "1.2.3") => {
     };
   };
   const read = (file: string) => JSON.parse(readFileSync(path.join(root, file), "utf-8"));
-  return { root, run: normalize, plan: run, apply, read };
+  return { apply, plan: run, read, root, run: normalize };
 };
 
 const stream = (bytes: Uint8Array) =>

@@ -54,10 +54,10 @@ describe("approved creator role revisions", () => {
     const context = fixture();
     const commands: AppAccessCommand[] = [];
     const update = createRepositoryProductionRoleUpdater({
-      readMembers: async () => [{ id: "creator" }],
       execute: async (_context, command) => {
         commands.push(command);
       },
+      readMembers: async () => [{ id: "creator" }],
     });
     expect(await update(context)).toBe("applied");
     expect(commands).toEqual([
@@ -78,10 +78,10 @@ describe("approved creator role revisions", () => {
     revision.roles = [];
     const commands: AppAccessCommand[] = [];
     const update = createRepositoryProductionRoleUpdater({
-      readMembers: async () => [{ id: "creator" }],
       execute: async (_context, command) => {
         commands.push(command);
       },
+      readMembers: async () => [{ id: "creator" }],
     });
     expect(await update(context)).toBe("applied");
     expect(commands).toEqual([
@@ -97,10 +97,10 @@ describe("approved creator role revisions", () => {
     const context = fixture();
     const commands: AppAccessCommand[] = [];
     const update = createRepositoryProductionRoleUpdater({
-      readMembers: async () => [],
       execute: async (_context, command) => {
         commands.push(command);
       },
+      readMembers: async () => [],
     });
     expect(await update(context)).toBe("skipped");
     expect(commands).toEqual([]);
@@ -111,7 +111,6 @@ describe("approved creator role revisions", () => {
     let active = true;
     let interrupted = false;
     const update = createRepositoryProductionRoleUpdater({
-      readMembers: async () => (active ? [{ id: "creator" }] : []),
       execute: async (_context, command) => {
         commands.push(command);
         if (!interrupted) {
@@ -121,6 +120,7 @@ describe("approved creator role revisions", () => {
         }
         active = true;
       },
+      readMembers: async () => (active ? [{ id: "creator" }] : []),
     });
     await expect(update(context)).rejects.toThrow("lost after role revocation");
     expect(() => {

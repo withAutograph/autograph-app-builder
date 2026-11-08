@@ -52,7 +52,7 @@ const modeOf = async (file: string) => {
 };
 const roots: string[] = [];
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
 const fixture = async (content = LEGACY_PRIVATE_COMPUTE_CHECK_TASK, mode = 0o755) => {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "builder-check-policy-")));
@@ -92,7 +92,7 @@ const fixture = async (content = LEGACY_PRIVATE_COMPUTE_CHECK_TASK, mode = 0o755
     file,
     calls,
     sandbox,
-    input: { sandbox, applyRoot: "/workspace/repository", profile: profile() },
+    input: { applyRoot: "/workspace/repository", profile: profile(), sandbox },
   };
 };
 describe("reviewed private check task", () => {

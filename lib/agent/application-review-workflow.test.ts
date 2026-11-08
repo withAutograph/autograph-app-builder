@@ -85,7 +85,7 @@ describe("durable application review workflow orchestration", () => {
       .fn<Steps["round"]>()
       .mockResolvedValueOnce({ continuation: first })
       .mockResolvedValueOnce({ continuation: second })
-      .mockResolvedValueOnce({ continuation: second, assessment });
+      .mockResolvedValueOnce({ assessment, continuation: second });
     const save = vi.fn<Steps["save"]>().mockResolvedValue(outcome);
     expect(await continueApplicationReviewWorkflow(reference, ctx, { load, round, save })).toEqual(
       outcome,
@@ -164,7 +164,7 @@ describe("durable application review workflow orchestration", () => {
       .fn<Steps["round"]>()
       .mockResolvedValueOnce({ continuation: first })
       .mockResolvedValueOnce({ continuation: second })
-      .mockResolvedValueOnce({ continuation: second, assessment });
+      .mockResolvedValueOnce({ assessment, continuation: second });
     const save = vi.fn<Steps["save"]>().mockResolvedValue(outcome);
     expect(await continueApplicationReviewWorkflow(reference, ctx, { round, save })).toEqual(
       outcome,

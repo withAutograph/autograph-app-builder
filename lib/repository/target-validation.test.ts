@@ -446,7 +446,7 @@ describe("target validation", () => {
         runTask,
         stateDirectory: "/private-state",
       };
-      const executor = sandboxValidationCommandExecutor({ runtime, alreadyCompiled });
+      const executor = sandboxValidationCommandExecutor({ alreadyCompiled, runtime });
       const onChunk = vi.fn();
       const environment = { APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]' };
       const result = await executor({
@@ -1387,7 +1387,7 @@ exit 99
       expect(result.stdout).toContain("declared tool installation failed");
       expect(result.stdout).not.toContain("validation must not run");
     } finally {
-      rmSync(directory, { recursive: true, force: true });
+      rmSync(directory, { force: true, recursive: true });
     }
   });
 

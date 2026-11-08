@@ -91,9 +91,9 @@ describe("native target Vercel project provider", () => {
     expect(await createNativeTargetVercelProject({ ...f.input, settings: rootOnly })).toEqual({
       name,
       projectId: project.id,
+      protection: nativeTargetRequiredProjectProtection,
       scopeId: installation.scopeId,
       settings: rootOnly,
-      protection: nativeTargetRequiredProjectProtection,
       status: "verified",
     });
     const createOptions = f.request.mock.calls[0]?.[1];
@@ -144,9 +144,9 @@ describe("native target Vercel project provider", () => {
     expect(await createNativeTargetVercelProject(f.input)).toEqual({
       name,
       projectId: project.id,
+      protection: nativeTargetRequiredProjectProtection,
       scopeId: installation.scopeId,
       settings,
-      protection: nativeTargetRequiredProjectProtection,
       status: "verified",
     });
     expect(f.order).toEqual(["journal", "POST", "receipt", "GET"]);

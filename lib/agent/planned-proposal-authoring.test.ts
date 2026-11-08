@@ -172,10 +172,10 @@ describe("declined current-proposal drafting observation", () => {
       const observed = decision();
       expect(observed.decision).toBe("runnable");
       expect(observed.scope?.correction).toMatchObject({
-        proposalDigest: current.proposal.digest,
-        inspectionCallId: "actual-inspect",
-        requestTurnId: "correction",
         denialEvidenceDigest: authority.terminalDecisions?.[0]?.evidenceDigest,
+        inspectionCallId: "actual-inspect",
+        proposalDigest: current.proposal.digest,
+        requestTurnId: "correction",
       });
       expect(preapprovalAuthoringDecisionSchema.parse(observed)).toEqual(observed);
       expect(readPrivateApplyAuthority()).toEqual(authority);

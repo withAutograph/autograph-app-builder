@@ -13,7 +13,7 @@ import { call, execute } from "./native-approval-compaction.test-fixture";
 const roots: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
 const fixture = async () => {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "builder-local-private-apply-")));
@@ -88,7 +88,7 @@ const fixture = async () => {
       payload,
       binding,
     })) ?? [];
-  return { recovery, native, client, publicId, auth, request, policy };
+  return { auth, client, native, policy, publicId, recovery, request };
 };
 it("uses the real local authority ports to recover the original exact private call after a known rejected preparation", async () => {
   const f = await fixture();
