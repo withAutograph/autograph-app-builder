@@ -208,7 +208,7 @@ describe("recovered web app access owner", () => {
       const originalBefore = await f.sessions.getSession(principal, f.selected.original.sessionId);
       const response = await f.route(request(requested), requested);
       expect(response.status).toBe(200);
-      expect(await response.json()).toMatchObject({ sessionId: requested, appId: "requests" });
+      expect(await response.json()).toMatchObject({ appId: "requests", sessionId: requested });
       expect(f.reads[0]).toMatchObject({
         appId: "requests",
         sessionId: f.selected.original.sessionId,
