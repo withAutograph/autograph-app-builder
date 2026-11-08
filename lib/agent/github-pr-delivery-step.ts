@@ -134,14 +134,19 @@ export async function approveGitHubPrDelivery(
 ): Promise<ApprovalStatus> {
   "use step";
   const { appBuilderWorkflowState } = await import("./workflow-state");
+  const { draftReconciliationState } = await import("./draft-reconciliation-state");
+  const { resolveGitHubPrDeliverySubject } = await import("./github-pr-delivery-subject");
   // Eve binds this approval to the invoking session and this exact tool call.
-  const state = appBuilderWorkflowState.get();
+  const subject = resolveGitHubPrDeliverySubject(
+    appBuilderWorkflowState.get(),
+    draftReconciliationState.get(),
+  );
   const inputSession = ctx.toolInput?.sessionId ?? ctx.session.id;
   if (
     ctx.toolInput === undefined ||
     inputSession !== ctx.session.id ||
-    state.phase !== "reviewed" ||
-    state.githubDraftProposal?.proposal.digest !== ctx.toolInput.proposalDigest
+    subject === undefined ||
+    subject.proposalDigest !== ctx.toolInput.proposalDigest
   ) {
     return {
       reason: "The approved revision must belong to this session's current reviewed publication.",
@@ -150,12 +155,8 @@ export async function approveGitHubPrDelivery(
   }
   const { reconciliationDigest } = ctx.toolInput;
   if (reconciliationDigest !== undefined) {
-    const { draftReconciliationState } = await import("./draft-reconciliation-state");
-    const candidate = draftReconciliationState.get();
-    const reconciliation = candidate?.publishedReconciliation;
-    const installationId = state.githubDestinationReview?.installation.installationId;
+    const { reconciliation, installationId } = subject;
     if (
-      candidate?.appId !== state.appSpec.appId ||
       reconciliation?.digest !== reconciliationDigest ||
       installationId !== ctx.toolInput.installationId
     ) {

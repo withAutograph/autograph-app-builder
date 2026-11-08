@@ -76,6 +76,8 @@ beforeEach(() => {
   mocks.getState.mockReturnValue({
     appSpec: { appId: "example-app" },
     githubDraftProposal: { proposal: { digest: approval.proposalDigest } },
+    reviewReceipt: { digest: "original-review" },
+    githubSource: { digest: "selected-source" },
     phase: "reviewed",
   });
 });
@@ -97,6 +99,8 @@ it("requires provider proof of the retained reconciliation before approving its 
   const reconciled = { ...approval, reconciliationDigest: reconciliation.digest };
   mocks.getCandidate.mockReturnValue({
     appId: "example-app",
+    originalReviewDigest: "original-review",
+    githubSourceDigest: "selected-source",
     publishedReconciliation: reconciliation,
   });
   mocks.inspectReconciled.mockResolvedValue(reconciled.headSha);

@@ -522,7 +522,14 @@ Production are not fallback authority for this boundary.
 ## Reviewed pull request delivery
 
 `read_github_pr_delivery` reads the current PR from the session's owned draft
-publication receipt. An open draft defers validation. On a ready Arrusted PR,
+publication receipt. Candidate validation may leave the creation workflow outside
+its reviewed phase; delivery then resolves the original review through the same
+verified app, specification, source, apply and workspace lineage used by draft
+reconciliation. It retains the original publication digest and selected GitHub
+installation, preserves private candidate edits, and still reads the published
+reconciliation from GitHub before offering or accepting its exact Ready approval.
+A private sealed proposal is not publication proof. An open draft defers
+validation. On a ready Arrusted PR,
 the required evidence is a successful canonical `Check` job for the published
 head and current ready cycle. Builder reads the repository's result without
 repeating affected-code selection. A moved revision is visible but cannot use
