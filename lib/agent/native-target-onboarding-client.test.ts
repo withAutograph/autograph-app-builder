@@ -171,16 +171,16 @@ const fixture = () => {
     observedAt: "2026-10-21T16:00:00Z",
   };
   return {
-    owner,
-    input,
-    plan,
-    ctx,
     actor,
-    responseCtx,
-    request,
-    sent,
     client,
+    ctx,
+    input,
+    owner,
+    plan,
     proof,
+    request,
+    responseCtx,
+    sent,
     setOutput: (value: NativeTargetTransportResponse) => {
       output = value;
     },
@@ -582,8 +582,8 @@ describe("native target protected client", () => {
     );
     expect(ownerResolver).toHaveBeenCalledWith(
       expect.objectContaining({
-        sessionAuth: { current: f.actor, initiator: f.actor },
         authority: f.owner.authority,
+        sessionAuth: { current: f.actor, initiator: f.actor },
       }),
     );
   });

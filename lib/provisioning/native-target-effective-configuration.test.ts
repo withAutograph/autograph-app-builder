@@ -238,21 +238,21 @@ const context = (appId = "new-app"): HostedOperatorContext => ({
 });
 const unavailable = (): Promise<never> => Promise.reject(new Error("Unexpected effect"));
 const dependencies = (): ProtectedHostedOperatorDependencies => ({
-  authorize: unavailable,
   assertAuthorized: unavailable,
+  authorize: unavailable,
   bindings: unavailable,
   executeEffect: unavailable,
   plan: unavailable,
   readApproval: unavailable,
   reconcile: unavailable,
-  verify: unavailable,
-  withResourceLease: unavailable,
   store: {
     compareAndSet: unavailable,
     read: unavailable,
     reserve: unavailable,
     reserveFenceGeneration: unavailable,
   },
+  verify: unavailable,
+  withResourceLease: unavailable,
 });
 const request = (appId = "new-app") =>
   new Request("https://operator.example/v1/runtime", {
@@ -591,7 +591,7 @@ const resourceProfileFixture = () => {
   if (verified.stage !== "ready") {
     throw new Error("Expected ready resource profile fixture.");
   }
-  return { base, selected, registration: verified };
+  return { base, registration: verified, selected };
 };
 
 describe("ready target selected resource custody", () => {
@@ -615,10 +615,10 @@ describe("ready target selected resource custody", () => {
       publicOrigin: "https://isolated-apps.example",
     });
     expect(effective.applications["new-app"]).toMatchObject({
-      nativeTargetRegistration: true,
-      projectId: f.registration.registration.observed.projectId,
       appDatabase: f.registration.plan.appDatabase,
       branch: f.registration.plan.branch,
+      nativeTargetRegistration: true,
+      projectId: f.registration.registration.observed.projectId,
     });
     expect(effective.sandbox.workers["new-app"]).toEqual(f.registration.plan.worker);
     expect(effective.gateway.protectedApplicationIds).toContain("new-app");

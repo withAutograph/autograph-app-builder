@@ -322,10 +322,10 @@ describe("independent application source review", () => {
     const model = applicationModel([inspectApplication, recordApplication, completeApplication]);
     const starts: ApplicationSourceReviewRequestStart[] = [];
     const options = {
-      testModel: model,
       onRequestStart: (request: ApplicationSourceReviewRequestStart) => {
         starts.push(request);
       },
+      testModel: model,
     };
     const first = await assessApplicationSourceRound(input, applicationEvidence(), options);
     expect(model.doGenerateCalls).toHaveLength(1);
@@ -449,10 +449,10 @@ describe("independent application source review", () => {
         input,
         applicationEvidence(),
         {
-          testModel: model,
           onRequestStart: (request) => {
             starts.push(request);
           },
+          testModel: model,
         },
         continuation,
       );
@@ -488,15 +488,15 @@ describe("independent application source review", () => {
       revoked ? Promise.reject(new Error("private revoked owner")) : Promise.resolve(),
     );
     const first = await assessApplicationSourceRound(input, applicationEvidence(), {
-      testModel: model,
       assertCurrentOwner,
+      testModel: model,
     });
     revoked = true;
     const restoredEvidence = applicationEvidence();
     const second = await assessApplicationSourceRound(
       input,
       restoredEvidence,
-      { testModel: model, assertCurrentOwner },
+      { assertCurrentOwner, testModel: model },
       structuredClone(first.continuation),
     );
     expect(second.assessment).toMatchObject({ reviewCompleted: false, status: "blocked" });
@@ -641,13 +641,13 @@ describe("independent application source review", () => {
     const starts: ApplicationSourceReviewRequestStart[] = [];
     const completed: SourceReviewRequest[] = [];
     const result = await assessApplicationSource(input, evidence, {
-      testModel: model,
-      onRequestStart: (request) => {
-        starts.push(request);
-      },
       onRequest: (request) => {
         completed.push(request);
       },
+      onRequestStart: (request) => {
+        starts.push(request);
+      },
+      testModel: model,
     });
     expect(result.reviewCompleted).toBe(true);
     expect(starts.map(({ requestOrdinal }) => requestOrdinal)).toEqual([1, 2, 3]);
@@ -988,10 +988,10 @@ describe("independent application source review", () => {
   it("keeps diagnostic callback failure from changing review completion or dispatch", async () => {
     const model = applicationModel([completeApplication]);
     const result = await assessApplicationSource(input, applicationEvidence(), {
-      testModel: model,
       onRequestStart() {
         throw new Error("private logging failure");
       },
+      testModel: model,
     });
     expect(result.reviewCompleted).toBe(true);
     expect(model.doGenerateCalls).toHaveLength(1);

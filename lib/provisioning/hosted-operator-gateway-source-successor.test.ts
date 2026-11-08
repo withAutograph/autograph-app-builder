@@ -522,7 +522,7 @@ describe("Gateway source repair", () => {
       gatewayDelivery: { ...bootstrapPlan.gatewayDelivery, gitSha: "2".repeat(40) },
     });
     f.deps.plan = async () => repaired;
-    return { f, original, previous, repaired, execute };
+    return { execute, f, original, previous, repaired };
   };
 
   it("retains completed setup and original authority, then executes only delivery after normal approval", async () => {
@@ -535,13 +535,12 @@ describe("Gateway source repair", () => {
     expect(successor.planDigest).toBe(operatorPlanDigest(repaired));
     expect(f.row?.record).toMatchObject({
       approvedByCallId: "operator:unapproved-plan",
-      privateState: previous.record.privateState,
       operator: {
-        receipts: previous.record.operator?.receipts,
-        gatewayEnvironment: previous.record.operator?.gatewayEnvironment,
         gatewayDeliveryCandidates: [
           { deploymentId: "failed-native-gateway", operationRef: original.operationRef },
         ],
+        gatewayEnvironment: previous.record.operator?.gatewayEnvironment,
+        receipts: previous.record.operator?.receipts,
         retainedGatewayDeliveries: [
           {
             approvedByCallId: original.callId,
@@ -890,15 +889,15 @@ describe("shared host protection plan successor", () => {
     expect(successor.planDigest).not.toBe(original.planDigest);
     expect(f.row?.record).toMatchObject({
       approvedByCallId: "operator:unapproved-plan",
-      privateState: previous.record.privateState,
       operator: {
-        receipts: previous.record.operator?.receipts,
-        pendingEffectId: "gateway-bindings",
         pendingEffectAttempt: previous.record.operator?.pendingEffectAttempt,
+        pendingEffectId: "gateway-bindings",
+        receipts: previous.record.operator?.receipts,
         retainedGatewayDeliveries: [
           { approvedByCallId: original.callId, operator: previous.record.operator },
         ],
       },
+      privateState: previous.record.privateState,
     });
     expect(f.row?.record.operator?.approvalId).toBeUndefined();
     await expect(f.client.request(successor)).resolves.toMatchObject({
@@ -935,11 +934,11 @@ describe("shared host protection plan successor", () => {
       if (input.effect.kind === "gateway-delivery") {
         expect(input.gatewayDeliveryProvenance).toEqual([
           {
+            approvalId: previous.record.operator?.approvalId,
+            approvedByCallId: previous.record.approvedByCallId,
             operationRef: original.operationRef,
             plan: previous.record.operator?.plan,
             planDigest: original.planDigest,
-            approvalId: previous.record.operator?.approvalId,
-            approvedByCallId: previous.record.approvedByCallId,
           },
         ]);
       }
@@ -997,11 +996,11 @@ describe("shared host protection plan successor", () => {
     const provenance = sharedHostProtectionDeliveryProvenance(approvedRecord);
     expect(provenance).toEqual([
       {
+        approvalId: prior.approvalId,
+        approvedByCallId: previous.record.approvedByCallId,
         operationRef: prior.operationRef,
         plan: prior.plan,
         planDigest: prior.planDigest,
-        approvalId: prior.approvalId,
-        approvedByCallId: previous.record.approvedByCallId,
       },
     ]);
     const [originalProvenance] = provenance;
@@ -1080,8 +1079,8 @@ describe("shared host protection plan successor", () => {
       expect(
         await f.client.request({ action: "plan", operation: "prepare", selection }),
       ).toMatchObject({
-        status: "blocked",
         code: change === "approval" ? "authorization_required" : "operation_in_progress",
+        status: "blocked",
       });
       expect(f.row?.record.operator?.planDigest).toBe(original.planDigest);
     },
@@ -1145,7 +1144,7 @@ describe("pending app installer repair", () => {
       installer: { ...originalPlan.installer, sha256: "2".repeat(64) },
     });
     f.deps.plan = async () => repaired;
-    return { f, original, previous, repaired, execute };
+    return { execute, f, original, previous, repaired };
   };
 
   it("retains uncertain history and resources but requires the repaired plan's own approval", async () => {
@@ -1256,7 +1255,7 @@ describe("pending native app project settings repair", () => {
       createProjectSettingsSuccessorPlan(previous.record, undefined, Date.now()),
     ).toBeUndefined();
     f.deps.plan = async () => repaired;
-    return { f, original, previous, repaired, execute };
+    return { execute, f, original, previous, repaired };
   };
 
   it("returns the same saved unapproved profile proposal without fresh composition or effects", async () => {
@@ -1264,7 +1263,7 @@ describe("pending native app project settings repair", () => {
     f.deps.readAppProjectSettings = async () => repaired.delivery?.projectSettings;
     const request = { action: "plan" as const, operation: "prepare" as const, selection };
     const proposed = await f.client.request(request);
-    expect(proposed).toMatchObject({ status: "planned", operationRef: original.operationRef });
+    expect(proposed).toMatchObject({ operationRef: original.operationRef, status: "planned" });
     const before = structuredClone(f.row);
     const compose = vi.fn<ProtectedHostedOperatorDependencies["plan"]>(async () => {
       throw new HostedOperatorError("operation_in_progress");
@@ -1345,13 +1344,12 @@ describe("pending native app project settings repair", () => {
     expect(successor.planDigest).toBe(operatorPlanDigest(repaired));
     expect(f.row?.record).toMatchObject({
       approvedByCallId: "operator:unapproved-plan",
-      privateState: previous.record.privateState,
       operator: {
-        operationRef: original.operationRef,
         fenceGeneration: previous.record.operator?.fenceGeneration,
-        receipts: previous.record.operator?.receipts,
+        operationRef: original.operationRef,
         pendingEffectId: "bind",
         plan: { retention: previous.record.operator?.plan.retention },
+        receipts: previous.record.operator?.receipts,
         retainedProjectSettingsOperations: [
           {
             approvedByCallId: original.callId,
@@ -1566,31 +1564,31 @@ describe("pending native app project settings repair", () => {
     expect(successor.operationRef).toBe(original.operationRef);
     expect(successor.planDigest).toBe(operatorPlanDigest(repaired));
     expect(active).toMatchObject({
-      operationRef: original.operationRef,
+      deliveryCandidates: [],
       fenceGeneration: previous.record.operator.fenceGeneration,
+      managedEnvironment: ownedRows,
+      operationRef: original.operationRef,
       pendingEffectId: "delivery",
       receipts: previous.record.operator.receipts,
-      managedEnvironment: ownedRows,
-      deliveryCandidates: [],
     });
     expect(active?.retainedProjectSettingsOperations).toHaveLength(2);
     expect(active?.retainedProjectSettingsOperations?.[0]).toMatchObject({
       approvedByCallId: "approval-899",
       operator: {
-        planDigest: operatorPlanDigest(original899Plan),
         deliveryCandidates: [{ deploymentId: "dpl_blocked_899", readyState: "BLOCKED" }],
+        planDigest: operatorPlanDigest(original899Plan),
       },
     });
     expect(active?.retainedProjectSettingsOperations?.[1]).toMatchObject({
       approvedByCallId: original.callId,
       operator: {
-        planDigest: original.planDigest,
-        pendingEffectId: "delivery",
-        pendingEffectAttempt: previous.record.operator.pendingEffectAttempt,
         deliveryCandidates: [
           { deploymentId: "dpl_failed_fs2", readyState: "ERROR" },
           { deploymentId: "dpl_failed_retry", readyState: "ERROR" },
         ],
+        pendingEffectAttempt: previous.record.operator.pendingEffectAttempt,
+        pendingEffectId: "delivery",
+        planDigest: original.planDigest,
       },
     });
     expect(f.row?.record.privateState).toEqual(previous.record.privateState);
@@ -1598,9 +1596,9 @@ describe("pending native app project settings repair", () => {
       active === undefined ? undefined : projectSettingsDeliveryProvenance(active, repaired),
     ).toMatchObject({
       approvedByCallId: original.callId,
+      operationRef: original.operationRef,
       plan: originalPlan,
       planDigest: original.planDigest,
-      operationRef: original.operationRef,
     });
 
     f.deps.executeEffect = execute;
@@ -1743,7 +1741,7 @@ describe("APP Gateway source continuation", () => {
     f.deps.readGatewayDeliverySource = async () => desired;
     f.deps.plan = async () =>
       readAppGatewaySourceContinuationPlan(f.row?.record, desired, Date.now()) ?? originalPlan;
-    return { f, original, previous, execute };
+    return { execute, f, original, previous };
   };
 
   // oxlint-disable-next-line eslint/complexity -- This sequential recovery journey checks the original and successor authority at each durable boundary.
@@ -1810,9 +1808,9 @@ describe("APP Gateway source continuation", () => {
     expect(settled?.record.operator?.workerCheckpoints).toEqual(pending.workerCheckpoints);
     expect(settled?.record.leaseId).toBeUndefined();
     expect(settled?.record.executionObservation).toMatchObject({
-      state: "settled",
       outcome: { status: "planned" },
       planDigest: original.planDigest,
+      state: "settled",
     });
     const status = await f.client.request({
       action: "status",
@@ -1820,10 +1818,10 @@ describe("APP Gateway source continuation", () => {
       selection,
     });
     expect(status).toMatchObject({
-      status: "pending",
+      execution: { outcome: { status: "planned" }, state: "settled" },
       operationRef: original.operationRef,
       planDigest: original.planDigest,
-      execution: { outcome: { status: "planned" }, state: "settled" },
+      status: "pending",
     });
     const { readApproval } = f.deps;
     f.deps.readApproval = async (input) =>

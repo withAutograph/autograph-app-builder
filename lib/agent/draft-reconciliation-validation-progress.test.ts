@@ -203,7 +203,7 @@ const incremental = async (expectedCommand: string) => {
 describe("draft reconciliation command progress", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.retire.mockResolvedValue({ status: "unavailable", retired: 0, retained: 0, reasons: {} });
+    mocks.retire.mockResolvedValue({ reasons: {}, retained: 0, retired: 0, status: "unavailable" });
     mocks.completions = [];
     mocks.publish.mockResolvedValue({
       status: "published",
@@ -294,10 +294,10 @@ describe("draft reconciliation command progress", () => {
       reviewReceipt: { digest },
     };
     mocks.inspect.mockResolvedValue({
-      resolvedTree: tree,
-      unresolvedConflicts: [],
       baseChanges: [],
       headChanges: [],
+      resolvedTree: tree,
+      unresolvedConflicts: [],
     });
     mocks.run.mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
     mocks.check.mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
@@ -400,8 +400,8 @@ describe("draft reconciliation command progress", () => {
 
   it("stops before installation when borrowed dependency roots cannot be detached safely", async () => {
     mocks.run
-      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
-      .mockResolvedValueOnce({ exitCode: 1, stdout: "", stderr: "foreign dependency root" });
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "foreign dependency root", stdout: "" });
     await expect(
       validateReconciliation.execute(
         {
@@ -545,7 +545,7 @@ describe("draft reconciliation command progress", () => {
       });
       expect(input.sandbox.run).toBeTypeOf("function");
       events.push("retire");
-      return { status: "complete", retired: 0, retained: 0, reasons: {} };
+      return { reasons: {}, retained: 0, retired: 0, status: "complete" };
     });
     mocks.run.mockImplementation(async () => {
       events.push("attach");
@@ -596,10 +596,10 @@ describe("draft reconciliation command progress", () => {
       mocks.inspect.mockImplementation(() => {
         expect(attached).toBe(true);
         return Promise.resolve({
-          resolvedTree: tree,
-          unresolvedConflicts: [],
           baseChanges: [],
           headChanges: [],
+          resolvedTree: tree,
+          unresolvedConflicts: [],
         });
       });
       mocks.compile.mockImplementation(() => {

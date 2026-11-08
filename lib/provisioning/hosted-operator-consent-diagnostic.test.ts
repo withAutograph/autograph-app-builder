@@ -52,7 +52,7 @@ describe("closed Neon consent diagnostics", () => {
         "owner_session_binding",
       ] as const) {
         for (const outcome of ["started", "verified"] as const) {
-          report({ boundary: "builder", phase: "inline", stage, outcome });
+          report({ boundary: "builder", outcome, phase: "inline", stage });
         }
       }
       expect(log).not.toHaveBeenCalled();
@@ -71,7 +71,7 @@ describe("closed Neon consent diagnostics", () => {
         "owner_membership",
         "owner_session_binding",
       ] as const) {
-        report({ boundary: "builder", phase: "inline", stage, outcome: "operator_access_denied" });
+        report({ boundary: "builder", outcome: "operator_access_denied", phase: "inline", stage });
         expect(log.mock.calls.at(-1)?.[1]).toMatchObject({
           outcome: "operator_access_denied",
           stage,
@@ -81,9 +81,9 @@ describe("closed Neon consent diagnostics", () => {
       expect(log.mock.calls.at(-1)?.[1]).toMatchObject(value);
       report({
         boundary: "operator",
+        outcome: "verified",
         phase: "inline",
         stage: "owner_authority",
-        outcome: "verified",
       });
       expect(log.mock.calls.at(-1)?.[1]).toMatchObject({
         boundary: "operator",
@@ -99,7 +99,7 @@ describe("closed Neon consent diagnostics", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const report = createHostedOperatorConsentDiagnostic(secret, sink);
     for (const outcome of ["started", "verified"] as const) {
-      report({ boundary: "builder", phase: "inline", stage: "owner_membership", outcome });
+      report({ boundary: "builder", outcome, phase: "inline", stage: "owner_membership" });
       expect(sink.mock.calls.at(-1)?.[0]).toMatchObject({ outcome, stage: "owner_membership" });
     }
     await Promise.resolve();
@@ -129,9 +129,9 @@ describe("closed Neon consent diagnostics", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const report = createHostedOperatorConsentDiagnostic(secret, sink);
     const failure = {
-      stage: "update_patch" as const,
-      reason: "provider_rejected" as const,
       httpStatus: 404,
+      reason: "provider_rejected" as const,
+      stage: "update_patch" as const,
     };
     for (const requestTarget of ["environment_row", "project_settings"] as const) {
       report({ ...value, hostedEnvironmentBindingFailure: { ...failure, requestTarget } });
@@ -168,11 +168,11 @@ describe("closed Neon consent diagnostics", () => {
       const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
       const report = createHostedOperatorConsentDiagnostic(secret, sink);
       const failure = {
-        stage: "update_patch" as const,
-        reason: "provider_rejected" as const,
-        requestTarget: "project_settings" as const,
         httpStatus: 404,
         providerCode,
+        reason: "provider_rejected" as const,
+        requestTarget: "project_settings" as const,
+        stage: "update_patch" as const,
       };
       report({ ...value, hostedEnvironmentBindingFailure: failure });
       expect(sink.mock.calls[0]?.[0].hostedEnvironmentBindingFailure).toEqual(failure);
@@ -183,11 +183,11 @@ describe("closed Neon consent diagnostics", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const report = createHostedOperatorConsentDiagnostic(secret, sink);
     const failure = {
-      stage: "update_patch" as const,
+      approvedPairCovered: false,
+      approvedSourcePresent: true,
       reason: "provider_rejected" as const,
       requestTarget: "project_settings" as const,
-      approvedSourcePresent: true,
-      approvedPairCovered: false,
+      stage: "update_patch" as const,
     };
     for (const trustedSourcesVisibility of ["absent", "null", "present"] as const) {
       const observed = { ...failure, trustedSourcesVisibility };
@@ -216,12 +216,12 @@ describe("closed Neon consent diagnostics", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const report = createHostedOperatorConsentDiagnostic(secret, sink);
     const gatewayBindings = {
-      mode: "bind" as const,
-      stage: "write" as const,
-      result: "failed" as const,
-      requestTarget: "project_settings" as const,
-      trustedSourcesVisibility: "absent" as const,
       missingApprovedPairCount: 2,
+      mode: "bind" as const,
+      requestTarget: "project_settings" as const,
+      result: "failed" as const,
+      stage: "write" as const,
+      trustedSourcesVisibility: "absent" as const,
     };
     report({ ...value, gatewayBindings });
     expect(sink.mock.calls[0]?.[0].gatewayBindings).toEqual(gatewayBindings);
@@ -353,12 +353,12 @@ describe("closed Neon consent diagnostics", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const report = createHostedOperatorConsentDiagnostic(secret, sink);
     const inventoryReadFailure = {
-      target: "gateway" as const,
+      errorClass: "operator_error" as const,
+      httpStatus: 404,
       operation: "public_alias" as const,
       phase: "http_response" as const,
-      httpStatus: 404,
-      errorClass: "operator_error" as const,
       publicCode: "operator_unavailable" as const,
+      target: "gateway" as const,
     };
     report({ ...value, inventoryReadFailure });
     expect(sink.mock.calls[0]?.[0].inventoryReadFailure).toEqual(inventoryReadFailure);
@@ -571,13 +571,13 @@ describe("private operator planning stage observer", () => {
     await expect(observeOperatorPlanStage(secret, planStage, run, sink)).rejects.toBe(rejection);
     expect(run).toHaveBeenCalledOnce();
     expect(sink).toHaveBeenCalledExactlyOnceWith({
-      event: "builder.hosted_neon_consent",
-      sessionIdHash: `sha256:${createHash("sha256").update(secret).digest("hex")}`,
       boundary: "operator",
-      phase: "inline",
-      stage: "operator_request",
+      event: "builder.hosted_neon_consent",
       outcome: "setup_unavailable",
-      planningFailure: { stage: planStage, errorClass: "unexpected" },
+      phase: "inline",
+      planningFailure: { errorClass: "unexpected", stage: planStage },
+      sessionIdHash: `sha256:${createHash("sha256").update(secret).digest("hex")}`,
+      stage: "operator_request",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
