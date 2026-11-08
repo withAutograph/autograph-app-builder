@@ -277,7 +277,7 @@ describe("closed outbound operator action diagnostics", () => {
         );
         expect(logs).toHaveBeenCalledWith(
           "[builder:hosted-neon-consent]",
-          expect.objectContaining({ operatorAction: action, httpStatus: 200, outcome: "verified" }),
+          expect.objectContaining({ httpStatus: 200, operatorAction: action, outcome: "verified" }),
         );
         const serialized = JSON.stringify(logs.mock.calls);
         for (const secret of ["private-session", "private-call", "private-bearer", operationRef]) {
@@ -536,7 +536,7 @@ describe("continuity planning failure diagnostics", () => {
       const pending = client.planContinuity(
         // @ts-expect-error -- Exercise the malformed runtime boundary while preserving its public TypeScript contract.
         undefined,
-        { sandboxId: "sandbox", root: "/owned/source" },
+        { root: "/owned/source", sandboxId: "sandbox" },
         "continuity-call",
       );
       await expect(pending).rejects.toBeInstanceOf(z.ZodError);
@@ -617,8 +617,8 @@ describe("saved continuity read diagnostics", () => {
       client.readContinuity("9f54c444-a3c1-447f-87c9-b6f69e232fd7"),
     ).rejects.toMatchObject({
       code: "operator_unavailable",
-      message: "operator_unavailable",
       continuityReadStage: stage,
+      message: "operator_unavailable",
     });
   });
 });

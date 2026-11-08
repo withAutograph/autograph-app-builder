@@ -358,9 +358,9 @@ describe("native private Realm identity handoff", () => {
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ code: "auth_identity_required" });
     expect(log).toHaveBeenCalledExactlyOnceWith("realm_identity_callback_failure", {
-      stage,
-      errorClass: "operator_error",
       code,
+      errorClass: "operator_error",
+      stage,
     });
   });
   it("allowlists JOSE codes while discarding private error details", async () => {
@@ -374,9 +374,9 @@ describe("native private Realm identity handoff", () => {
     );
     expect((await f.nativePost()).status).toBe(401);
     expect(log).toHaveBeenCalledExactlyOnceWith("realm_identity_callback_failure", {
-      stage: "proof_verification",
-      errorClass: "jose_error",
       code: "ERR_JWKS_TIMEOUT",
+      errorClass: "jose_error",
+      stage: "proof_verification",
     });
     expect(JSON.stringify(log.mock.calls)).not.toContain(f.proof);
     expect(JSON.stringify(log.mock.calls)).not.toContain(f.nonce);
@@ -389,34 +389,34 @@ describe("native private Realm identity handoff", () => {
     expected: { httpStatus: number; contentType: string; vercelError?: string };
   }>([
     {
-      status: 403,
-      headers: {
-        "content-type": "text/html; charset=utf-8",
-        "x-vercel-error": "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH",
-      },
       expected: {
         httpStatus: 403,
         contentType: "html",
         vercelError: "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH",
       },
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "x-vercel-error": "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH",
+      },
+      status: 403,
     },
     {
-      status: 403,
+      expected: { httpStatus: 403, contentType: "other", vercelError: "other" },
       headers: {
         "content-type": "private-content-type; private-parameter=private-value",
         "x-vercel-error": "private-provider-error",
       },
-      expected: { httpStatus: 403, contentType: "other", vercelError: "other" },
+      status: 403,
     },
     {
-      status: 200,
-      headers: { "content-type": "application/json; private-parameter=private-value" },
       expected: { httpStatus: 200, contentType: "json" },
+      headers: { "content-type": "application/json; private-parameter=private-value" },
+      status: 200,
     },
     {
-      status: 404,
-      headers: { "x-vercel-error": "DEPLOYMENT_NOT_FOUND" },
       expected: { httpStatus: 404, contentType: "missing", vercelError: "DEPLOYMENT_NOT_FOUND" },
+      headers: { "x-vercel-error": "DEPLOYMENT_NOT_FOUND" },
+      status: 404,
     },
   ])("reports only closed JWKS response metadata on failure: $expected", async (input) => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -427,10 +427,10 @@ describe("native private Realm identity handoff", () => {
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ code: "auth_identity_required" });
     expect(log).toHaveBeenCalledExactlyOnceWith("realm_identity_callback_failure", {
-      stage: "proof_verification",
-      errorClass: "jose_error",
       code: "ERR_JOSE_GENERIC",
+      errorClass: "jose_error",
       jwks: input.expected,
+      stage: "proof_verification",
     });
     expect(f.ports.fetch).toHaveBeenCalledOnce();
     expect(f.ports.identityHandoff.artifacts.put).not.toHaveBeenCalled();

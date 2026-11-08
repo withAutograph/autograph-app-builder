@@ -351,20 +351,20 @@ const prepared = async (f: ReturnType<typeof fixture>) => {
 };
 
 const normalProgram = {
-  version: 1 as const,
-  appId: selection.appId,
-  origin: "https://apps-preview.example.test",
   actors: [
     {
+      account: "capture-existing" as const,
       actorKey: "owner",
       email: "owner@example.test",
       name: "Owner",
-      account: "capture-existing" as const,
     },
   ],
-  organizations: [],
-  memberships: [],
   appAccess: [],
+  appId: selection.appId,
+  memberships: [],
+  organizations: [],
+  origin: "https://apps-preview.example.test",
+  version: 1 as const,
 };
 const actorProjection = {
   origin: normalProgram.origin,
@@ -600,7 +600,7 @@ const publicBoundFixture = async () => {
     bindings: Object.fromEntries(
       publicPlan.environment.map((entry) => [
         entry.key,
-        { state: "applied", acceptedEnvId: "provider-owned-env" },
+        { acceptedEnvId: "provider-owned-env", state: "applied" },
       ]),
     ),
     approvalReceipts: [
@@ -633,9 +633,9 @@ describe("normal public application runtime handoff", () => {
     const result = await f.client.bindings(f.request);
     expect(result.nativePreview).toBeUndefined();
     expect(result.publicDelivery).toMatchObject({
-      kind: "public-application-runtime-v1",
-      environment: "production",
       deploymentId: "dpl_public",
+      environment: "production",
+      kind: "public-application-runtime-v1",
       publicOrigin: actorProjection.origin,
     });
     expect(result.normalActors).toEqual(actorProjection);
