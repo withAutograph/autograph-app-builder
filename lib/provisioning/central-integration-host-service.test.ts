@@ -555,7 +555,7 @@ test("separate revision session receives read-only canonical caller READY pointe
     appId: original.selection.initiatingAppId,
     kind: "caller",
   });
-  expect(result).toEqual({ status: "ready", receipt, ...receipt.callerSetup });
+  expect(result).toEqual({ receipt, status: "ready", ...receipt.callerSetup });
   expect(originalAuthorityReads).toBe(1);
   expect("plan" in result).toBe(false);
   expect(centralHostPlanResultSchema.parse(result)).toEqual(result);

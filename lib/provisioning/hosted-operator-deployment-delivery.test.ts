@@ -438,42 +438,42 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
       }),
   });
   return {
-    calls,
-    wait,
     aliasState,
-    observeAlias,
-    project,
-    team,
+    calls,
+    checkpoint,
     deployment,
     differentDeployment,
-    checkpoint,
-    input,
     failCandidateReads: () => {
       failCandidateReads = true;
+    },
+    input,
+    observeAlias,
+    oldPlan,
+    priorProfilePlan,
+    project,
+    revoke: () => {
+      deny = true;
     },
     seedCandidate: () => {
       count = 1;
     },
-    revoke: () => {
-      deny = true;
+    setPriorNativePreviewClaims: (value: typeof priorNativePreviewClaims) => {
+      priorNativePreviewClaims = value;
+    },
+    setPriorNativePreviewSha: (value: string) => {
+      priorNativePreviewSha = value;
     },
     setReady: (value: string) => {
       ready = value;
     },
+    team,
     useOldBlockedProduction: () => {
       oldBlockedProduction = true;
     },
     useOldFailedNativePreview: () => {
       oldFailedNativePreview = true;
     },
-    setPriorNativePreviewSha: (value: string) => {
-      priorNativePreviewSha = value;
-    },
-    setPriorNativePreviewClaims: (value: typeof priorNativePreviewClaims) => {
-      priorNativePreviewClaims = value;
-    },
-    oldPlan,
-    priorProfilePlan,
+    wait,
     writer,
   };
 };
@@ -490,12 +490,12 @@ it("requests standard Preview delivery from approved Git source and observes rea
   expect(f.calls.filter((call) => call.method === "POST")).toHaveLength(1);
   expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
     gitSource: { ref: "feature", repoId: "repo", sha, type: "github" },
-    project: "prj_app",
     meta: {
       autograph_operator_effect: "deliver",
       autograph_operator_operation: f.input.operationRef,
       autograph_operator_plan: operatorPlanDigest(plan),
     },
+    project: "prj_app",
   });
   expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
     projectSettings: appProjectSettings,
@@ -749,18 +749,18 @@ it.each(["services", "nextjs", null, "future-provider-framework", undefined])(
     const building = await f.writer.deliver(f.input);
     expect(building.status).toBe("applied");
     expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
+      gitSource: { ref: plan.delivery?.branch, repoId: plan.delivery?.repoId, sha },
       project: plan.selection.projectId,
-      gitSource: { repoId: plan.delivery?.repoId, ref: plan.delivery?.branch, sha },
     });
     f.setReady("READY");
     const result = await f.writer.reconcile(f.input);
     expect(result.status).toBe("applied");
     if (result.status === "applied") {
       expect(result.selected).toMatchObject({
-        projectId: plan.selection.projectId,
-        repoId: plan.delivery?.repoId,
         branch: plan.delivery?.branch,
+        projectId: plan.selection.projectId,
         readyState: "READY",
+        repoId: plan.delivery?.repoId,
       });
     }
   },
@@ -874,10 +874,10 @@ it("reconciles historical staging delivery with Preview claims without changing 
   expect(observed.status).toBe("applied");
   if (observed.status === "applied") {
     expect(observed.selected).toMatchObject({
-      projectId: plan.selection.projectId,
-      repoId: plan.delivery?.repoId,
       branch: plan.delivery?.branch,
       operationRef: f.input.operationRef,
+      projectId: plan.selection.projectId,
+      repoId: plan.delivery?.repoId,
     });
   }
 });

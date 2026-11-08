@@ -508,11 +508,11 @@ describe("participant preparation service branch", () => {
       stage: "app",
       normalActorProgram: program,
       normalActorPreparation: {
-        accountOperationRef: preparation.accountOperationRef,
-        programDigest: preparation.programDigest,
-        accountPlanDigest: preparation.accountPlanDigest,
         accountApprovalId: preparation.accountApprovalId,
         accountApprovedByCallId: preparation.accountApprovedByCallId,
+        accountOperationRef: preparation.accountOperationRef,
+        accountPlanDigest: preparation.accountPlanDigest,
+        programDigest: preparation.programDigest,
       },
     });
     f.deps.plan = vi.fn(async () => appPlan);
@@ -658,11 +658,11 @@ const captureSuccessorFixture = () => {
     access: [],
     normalActorProgram: original.program,
     normalActorPreparation: {
-      accountOperationRef: original.accountOperationRef,
-      programDigest: original.programDigest,
-      accountPlanDigest: original.accountPlanDigest,
       accountApprovalId: original.accountApprovalId,
       accountApprovedByCallId: original.accountApprovedByCallId,
+      accountOperationRef: original.accountOperationRef,
+      accountPlanDigest: original.accountPlanDigest,
+      programDigest: original.programDigest,
     },
   });
   current.f.row = {
@@ -752,9 +752,9 @@ describe("capture-only participant program successor", () => {
     expect(f.row?.record.privateState).toEqual(before.record.privateState);
     expect(f.row?.record.participantPreparationHistory).toEqual([
       {
-        preparation: before.record.accountPreparation,
-        operator: before.record.operator,
         approvedByCallId: before.record.approvedByCallId,
+        operator: before.record.operator,
+        preparation: before.record.accountPreparation,
         proof: before.record.proof,
       },
     ]);
@@ -888,11 +888,11 @@ describe("capture-only participant program successor", () => {
       access: [],
       normalActorProgram: nextProgram,
       normalActorPreparation: {
+        accountApprovalId: preparation.accountApprovalId,
+        accountApprovedByCallId: preparation.accountApprovedByCallId,
         accountOperationRef: operation,
         accountPlanDigest: preparation.accountPlanDigest,
         programDigest: preparation.programDigest,
-        accountApprovalId: preparation.accountApprovalId,
-        accountApprovedByCallId: preparation.accountApprovedByCallId,
       },
     });
     f.deps.plan = vi.fn(async () => appPlan);

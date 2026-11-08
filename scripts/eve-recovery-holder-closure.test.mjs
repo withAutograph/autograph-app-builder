@@ -75,6 +75,12 @@ const fixture = () => {
   let onDispose = noEffect;
   const input = {
     auth,
+    authorizeCurrent() {
+      if (currentError !== null) {
+        throw new Error(currentError);
+      }
+      return Promise.resolve();
+    },
     descriptor,
     ports: {
       async authorizeRecoveryHolderClosure(request) {
@@ -83,40 +89,8 @@ const fixture = () => {
         return proof;
       },
     },
-    authorizeCurrent() {
-      if (currentError !== null) {
-        throw new Error(currentError);
-      }
-      return Promise.resolve();
-    },
   };
   const deps = {
-    getHook(requestedToken) {
-      reads.push({ kind: "token", requestedToken });
-      const hook = hooksByToken.get(requestedToken);
-      if (hook === undefined) {
-        throw new Error(HOOK_NOT_FOUND_MESSAGE);
-      }
-      return Promise.resolve(hook);
-    },
-    getHookById(requestedHookId) {
-      reads.push({ kind: "id", requestedHookId });
-      const byId = hooksById.get(requestedHookId);
-      if (byId === undefined) {
-        throw new Error(HOOK_NOT_FOUND_MESSAGE);
-      }
-      return Promise.resolve(byId);
-    },
-    readRunEntry(runId) {
-      reads.push({ kind: "entry", runId });
-      assert.equal(runId, holderOwnerRunId);
-      return Promise.resolve({ runId, status, entry });
-    },
-    readRun(runId) {
-      reads.push({ kind: "run", runId });
-      assert.equal(runId, holderOwnerRunId);
-      return Promise.resolve({ runId, status });
-    },
     async cancelRun(runId) {
       effects.push({ kind: "cancel", runId });
       assert.equal(runId, holderOwnerRunId);
@@ -135,10 +109,42 @@ const fixture = () => {
       }
       await onDispose(request);
     },
+    getHook(requestedToken) {
+      reads.push({ kind: "token", requestedToken });
+      const hook = hooksByToken.get(requestedToken);
+      if (hook === undefined) {
+        throw new Error(HOOK_NOT_FOUND_MESSAGE);
+      }
+      return Promise.resolve(hook);
+    },
+    getHookById(requestedHookId) {
+      reads.push({ kind: "id", requestedHookId });
+      const byId = hooksById.get(requestedHookId);
+      if (byId === undefined) {
+        throw new Error(HOOK_NOT_FOUND_MESSAGE);
+      }
+      return Promise.resolve(byId);
+    },
     isHookNotFound: (error) => error?.message === HOOK_NOT_FOUND_MESSAGE,
+    readRun(runId) {
+      reads.push({ kind: "run", runId });
+      assert.equal(runId, holderOwnerRunId);
+      return Promise.resolve({ runId, status });
+    },
+    readRunEntry(runId) {
+      reads.push({ kind: "entry", runId });
+      assert.equal(runId, holderOwnerRunId);
+      return Promise.resolve({ runId, status, entry });
+    },
   };
   return {
+    activationToken: terminalRecoveryActivationToken(auth, holderDescriptor),
+    addHook: (targetToken, next) => {
+      hooksByToken.set(targetToken, next);
+      hooksById.set(next.hookId, next);
+    },
     auth,
+    close: async () => await closeNoncanonicalRecoveryInboxHolder(input, deps),
     deps,
     descriptor,
     effects,
@@ -148,16 +154,8 @@ const fixture = () => {
     input,
     proofInputs,
     reads,
-    token,
-    activationToken: terminalRecoveryActivationToken(auth, holderDescriptor),
-    winnerOwnerRunId,
-    close: async () => await closeNoncanonicalRecoveryInboxHolder(input, deps),
-    setHook: (next, targetToken = token) => {
-      if (next === undefined) {
-        hooksByToken.delete(targetToken);
-      } else {
-        hooksByToken.set(targetToken, next);
-      }
+    rejectCurrent: (reason) => {
+      currentError = reason;
     },
     setById: (next, targetId = holderHookId) => {
       if (next === undefined) {
@@ -165,10 +163,6 @@ const fixture = () => {
       } else {
         hooksById.set(targetId, next);
       }
-    },
-    addHook: (targetToken, next) => {
-      hooksByToken.set(targetToken, next);
-      hooksById.set(next.hookId, next);
     },
     setCheckpointAliases: (aliases, continuationToken = "") => {
       entry = {
@@ -185,14 +179,12 @@ const fixture = () => {
     setEntry: (next) => {
       entry = next;
     },
-    setStatus: (next) => {
-      status = next;
-    },
-    setProof: (next) => {
-      proof = next;
-    },
-    setOnProof: (effect) => {
-      onProof = effect;
+    setHook: (next, targetToken = token) => {
+      if (next === undefined) {
+        hooksByToken.delete(targetToken);
+      } else {
+        hooksByToken.set(targetToken, next);
+      }
     },
     setOnCancel: (effect) => {
       onCancel = effect;
@@ -200,9 +192,17 @@ const fixture = () => {
     setOnDispose: (effect) => {
       onDispose = effect;
     },
-    rejectCurrent: (reason) => {
-      currentError = reason;
+    setOnProof: (effect) => {
+      onProof = effect;
     },
+    setProof: (next) => {
+      proof = next;
+    },
+    setStatus: (next) => {
+      status = next;
+    },
+    token,
+    winnerOwnerRunId,
   };
 };
 
@@ -552,16 +552,12 @@ it("adopts an already committed receipt or a concurrent winner without entering 
       const invoked = [];
       const ports = {
         authorize: () => Promise.resolve(),
-        readReceipt: () => Promise.resolve(receipt),
         commitReceipt: () => {
           throw new Error("unexpected-commit");
         },
+        readReceipt: () => Promise.resolve(receipt),
       };
       const dependencies = {
-        getHook: () => {
-          throw new Error(HOOK_NOT_FOUND_MESSAGE);
-        },
-        isHookNotFound: (error) => error?.message === HOOK_NOT_FOUND_MESSAGE,
         async closeHolder(input) {
           invoked.push("closure");
           await input.authorizeCurrent();
@@ -570,6 +566,10 @@ it("adopts an already committed receipt or a concurrent winner without entering 
         collect: () => {
           throw new Error("unexpected-collection");
         },
+        getHook: () => {
+          throw new Error(HOOK_NOT_FOUND_MESSAGE);
+        },
+        isHookNotFound: (error) => error?.message === HOOK_NOT_FOUND_MESSAGE,
       };
       const result = await recoverTerminalSession(
         { auth: f.auth, descriptor: f.descriptor, ports },

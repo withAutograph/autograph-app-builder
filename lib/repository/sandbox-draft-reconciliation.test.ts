@@ -1867,9 +1867,9 @@ const registeredFixture = () => {
 };
 const retire = async (f: ReturnType<typeof registeredFixture>, retainedRoots: string[] = []) =>
   await retireUnusedDraftWorktrees({
+    retainedRoots,
     sandbox: f.sandbox,
     workspaceRoot: f.workspaceRoot,
-    retainedRoots,
   });
 
 const retireWithFault = async (
@@ -1931,9 +1931,9 @@ describe("unused draft worktree retirement", () => {
       writeFileSync(path.join(source, "private-cache"), "external dependency bytes\n");
     }
     await attachCheckoutDependencyView({
-      sandbox: f.sandbox,
-      checkoutRoot: f.checkout,
       candidateRoot: f.retiredRoot,
+      checkoutRoot: f.checkout,
+      sandbox: f.sandbox,
       workspaceRoot: f.workspaceRoot,
     });
     return roots.map((relative) => {
@@ -2042,7 +2042,7 @@ describe("unused draft worktree retirement", () => {
     "returns unavailable for an untrusted cleanup response %# without exposing command details",
     async (response) => {
       const run = vi.fn<SandboxSession["run"]>().mockResolvedValue(response);
-      const result = await retireUnusedDraftWorktrees({ sandbox: { run }, retainedRoots: [] });
+      const result = await retireUnusedDraftWorktrees({ retainedRoots: [], sandbox: { run } });
       expect(result).toEqual({ reasons: {}, retained: 0, retired: 0, status: "unavailable" });
       expect(run).toHaveBeenCalledOnce();
       expect(JSON.stringify(result)).not.toContain("private");
