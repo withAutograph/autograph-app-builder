@@ -45,7 +45,15 @@ it.each(["signIn", "signUp"] as const)(
   "keeps %s disabled until its client handler is hydrated",
   async (view) => {
     container = document.createElement("div");
-    container.innerHTML = renderToString(<PasskeyButton view={view} />);
+    const serverMarkup = new DOMParser().parseFromString(
+      renderToString(<PasskeyButton view={view} />),
+      "text/html",
+    );
+    const serverButton = serverMarkup.body.firstChild;
+    if (!serverButton) {
+      throw new Error("Expected passkey button markup");
+    }
+    container.replaceChildren(serverButton);
     document.body.append(container);
     const button = container.querySelector("button");
     if (!button) {
@@ -66,7 +74,15 @@ it.each(["signIn", "signUp"] as const)(
 it("shows an inline retry after a hydrated verification transport failure", async () => {
   auth.signIn.mockRejectedValueOnce(new TypeError("Failed to fetch"));
   container = document.createElement("div");
-  container.innerHTML = renderToString(<PasskeyButton view="signIn" />);
+  const serverMarkup = new DOMParser().parseFromString(
+    renderToString(<PasskeyButton view="signIn" />),
+    "text/html",
+  );
+  const serverButton = serverMarkup.body.firstChild;
+  if (!serverButton) {
+    throw new Error("Expected passkey button markup");
+  }
+  container.replaceChildren(serverButton);
   document.body.append(container);
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   await act(async () => {

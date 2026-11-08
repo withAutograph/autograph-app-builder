@@ -885,7 +885,6 @@ export default defineConfig({
       files: ["**/*.{test,spec}.{js,jsx,ts,tsx,mjs,mts,cjs,cts}"],
       rules: {
         "anti-slop/no-module-mocking": "off",
-        "github/no-inner-html": "off",
         "sonarjs/code-eval": "off",
         "sonarjs/no-hardcoded-ip": "off",
         "typescript/no-implied-eval": "off",

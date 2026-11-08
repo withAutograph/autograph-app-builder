@@ -155,7 +155,11 @@ describe("durable handoff controls", () => {
       const open = vi.spyOn(window, "open").mockReturnValue(null);
       const data = persisted;
       container = document.createElement("div");
-      container.innerHTML = renderToString(<HandoffControls initial={data} />);
+      const range = document.createRange();
+      range.selectNodeContents(container);
+      container.append(
+        range.createContextualFragment(renderToString(<HandoffControls initial={data} />)),
+      );
       document.body.append(container);
       const actionLabel = status === "expired" ? "Renew handoff" : "Open in Codex";
       const button = [...container.querySelectorAll("button")].find(

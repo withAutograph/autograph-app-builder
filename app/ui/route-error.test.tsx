@@ -35,7 +35,9 @@ describe("native route error recovery", () => {
       });
       const element = <Boundary error={error} retry={retry} />;
       const container = document.createElement("div");
-      container.innerHTML = renderToString(element);
+      const range = document.createRange();
+      range.selectNodeContents(container);
+      container.append(range.createContextualFragment(renderToString(element)));
       document.body.append(container);
       expect(container.textContent).toContain(title);
       expect(container.textContent).not.toContain(error.message);

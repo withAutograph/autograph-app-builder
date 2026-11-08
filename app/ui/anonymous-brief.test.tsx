@@ -38,7 +38,9 @@ afterEach(async () => {
 
 it("renders the full server composition and disables every interactive control before hydration", () => {
   container = document.createElement("div");
-  container.innerHTML = renderToString(<AnonymousBuilder />);
+  const range = document.createRange();
+  range.selectNodeContents(container);
+  container.append(range.createContextualFragment(renderToString(<AnonymousBuilder />)));
   expect(container.querySelector("h1")?.textContent).toBe("Build an app");
   expect(container.querySelector("label")?.htmlFor).toBe("anonymous-brief");
   expect(container.querySelector("textarea")?.disabled).toBe(true);
@@ -47,7 +49,9 @@ it("renders the full server composition and disables every interactive control b
 
 it("hydrates the brief island and persists the selected brief before sign-in navigation", async () => {
   container = document.createElement("div");
-  container.innerHTML = renderToString(<AnonymousBrief />);
+  const range = document.createRange();
+  range.selectNodeContents(container);
+  container.append(range.createContextualFragment(renderToString(<AnonymousBrief />)));
   document.body.append(container);
   const textarea = container.querySelector("textarea");
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning React act callback
@@ -72,7 +76,11 @@ it("hydrates the brief island and persists the selected brief before sign-in nav
 it("supports the isolated story continuation without browser navigation", async () => {
   const onContinue = vi.fn<(brief: string) => void>();
   container = document.createElement("div");
-  container.innerHTML = renderToString(<AnonymousBrief onContinue={onContinue} />);
+  const range = document.createRange();
+  range.selectNodeContents(container);
+  container.append(
+    range.createContextualFragment(renderToString(<AnonymousBrief onContinue={onContinue} />)),
+  );
   document.body.append(container);
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning React act callback
   await act(async () => {
