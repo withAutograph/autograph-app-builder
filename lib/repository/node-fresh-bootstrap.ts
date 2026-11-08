@@ -460,20 +460,20 @@ const assertExactIdentity = async (
   }
   const value = await lstat(expected.path);
   const uid = process.geteuid?.();
-  if (
+  const invalidNodeType =
     uid === undefined ||
     value.isSymbolicLink() ||
-    (kind === "directory" ? !value.isDirectory() : !value.isFile()) ||
-    value.uid !== uid ||
-    String(value.uid) !== expected.uid ||
-    String(value.dev) !== expected.device ||
-    String(value.ino) !== expected.inode ||
+    (kind === "directory" ? !value.isDirectory() : !value.isFile());
+  const invalidOwner = invalidNodeType || value.uid !== uid || String(value.uid) !== expected.uid;
+  const invalidDeviceOrInode =
+    invalidOwner || String(value.dev) !== expected.device || String(value.ino) !== expected.inode;
+  const invalidMode =
+    invalidDeviceOrInode ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (value.mode & 0o777).toString(8) !== expected.mode ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (value.mode & 0o777) !== (kind === "directory" ? 0o700 : 0o600) ||
-    (kind === "file" && value.nlink !== 1)
-  ) {
+    (value.mode & 0o777) !== (kind === "directory" ? 0o700 : 0o600);
+  if (invalidMode || (kind === "file" && value.nlink !== 1)) {
     throw new Error("The bootstrap capability identity changed or is unsafe.");
   }
 };

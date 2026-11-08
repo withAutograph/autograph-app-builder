@@ -54,6 +54,7 @@ const repositoryIdentityChangedCode = "repository-identity-changed";
 const invalidPublicationMaterialCode = "invalid-publication-material";
 const reviewedPathChangedCode = "reviewed-path-changed";
 const branchMovedCode = "branch-moved";
+const pullRequestChangedCode = "pull-request-changed";
 
 const reconciliationCommitMessage = (proposal: ExistingDraftReconciliationProposal): string =>
   `Reconcile draft pull request #${proposal.pullRequestNumber} with ${proposal.baseBranch}\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`;
@@ -199,10 +200,11 @@ const stringProperty = (value: unknown, key: string): string => {
 
 const decimalProperty = (value: unknown, key: string): string => {
   const result = property(value, key);
-  if (
-    (typeof result !== "number" || !Number.isSafeInteger(result) || result < 1) &&
-    (typeof result !== "string" || !decimal.safeParse(result).success)
-  ) {
+  if (typeof result === "number") {
+    if (!Number.isSafeInteger(result) || result < 1) {
+      throw new TypeError(invalidResponseMessage);
+    }
+  } else if (typeof result !== "string" || !decimal.safeParse(result).success) {
     throw new TypeError(invalidResponseMessage);
   }
   return String(result);
@@ -1069,11 +1071,13 @@ export const createGitHubAppHttpProvider = (input: {
       const appSlug = stringProperty(appInfo.data, "slug");
       const author = property(pull.body, "user");
       const commitMessage = stringProperty(property(commit.body, "commit"), "message");
-      if (
+      const verifiedAuthor =
         appId === config.appId &&
         stringProperty(author, "type") === "Bot" &&
         stringProperty(author, "login") === `${appSlug}[bot]` &&
-        headBranch === `app-builder/review-${marker.slice(0, 20)}` &&
+        headBranch === `app-builder/review-${marker.slice(0, 20)}`;
+      if (
+        verifiedAuthor &&
         (commitMessage.includes(`App-Builder-Idempotency: ${marker}`) ||
           commitMessage.includes(`App-Builder-Origin: ${marker}`))
       ) {
@@ -1796,10 +1800,10 @@ export const createGitHubAppHttpProvider = (input: {
                   ["mode", change.after.mode === "100755" ? "755" : "644"],
                   ["digest", sha256(change.after.content)],
                 ]);
-          if (
-            (change.kind === "added" && (change.before !== undefined || after === undefined)) ||
-            (change.kind === "deleted" && (change.before === undefined || after !== undefined))
-          ) {
+          if (change.kind === "added" && (change.before !== undefined || after === undefined)) {
+            throw new Error(invalidMaterialMessage);
+          }
+          if (change.kind === "deleted" && (change.before === undefined || after !== undefined)) {
             throw new Error(invalidMaterialMessage);
           }
           if (change.kind === "modified" && (change.before === undefined || after === undefined)) {
@@ -1973,13 +1977,17 @@ export const createGitHubAppHttpProvider = (input: {
         current.pullRequestId !== proposal.pullRequestId ||
         !current.draft ||
         current.state !== "open" ||
-        current.repositoryId !== proposal.repositoryId ||
+        current.repositoryId !== proposal.repositoryId
+      ) {
+        return { code: pullRequestChangedCode, status: "rejected" };
+      }
+      if (
         current.headRepositoryId !== proposal.repositoryId ||
         current.baseRepositoryId !== proposal.repositoryId ||
         current.headBranch !== proposal.branchName ||
         current.baseBranch !== proposal.baseBranch
       ) {
-        return { code: "pull-request-changed", status: "rejected" };
+        return { code: pullRequestChangedCode, status: "rejected" };
       }
       if (
         current.headSha !== proposal.expectedHeadSha ||
@@ -2125,12 +2133,16 @@ export const createGitHubAppHttpProvider = (input: {
         current.pullRequestId !== proposal.pullRequestId ||
         !current.draft ||
         current.state !== "open" ||
-        current.headRepositoryId !== proposal.repositoryId ||
+        current.headRepositoryId !== proposal.repositoryId
+      ) {
+        return { code: pullRequestChangedCode, status: "rejected" };
+      }
+      if (
         current.baseRepositoryId !== proposal.repositoryId ||
         current.headBranch !== proposal.branchName ||
         current.baseBranch !== proposal.baseBranch
       ) {
-        return { code: "pull-request-changed", status: "rejected" };
+        return { code: pullRequestChangedCode, status: "rejected" };
       }
       if (
         current.headSha !== proposal.expectedHeadSha ||

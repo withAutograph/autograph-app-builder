@@ -1464,25 +1464,30 @@ export function assertExactFreshRepositoryProposal(proposal: FreshRepositoryProp
     reviewDigest: proposal.reviewDigest,
     sourceReceiptDigest: proposal.sourceReceiptDigest,
   });
-  if (
+  const invalidDestination =
     proposal.version !== GITHUB_PUBLICATION_VERSION ||
     !safeName(proposal.destinationOwner) ||
     !safeName(proposal.destinationName) ||
-    proposal.visibility !== "private" ||
+    proposal.visibility !== "private";
+  const invalidSource = () =>
     proposal.defaultBranch !== "main" ||
     !isObjectId(proposal.sourceSha) ||
     !isObjectId(proposal.sourceTree) ||
-    !isDigest(proposal.sourceReceiptDigest) ||
+    !isDigest(proposal.sourceReceiptDigest);
+  const invalidEvidence = () =>
     !isDigest(proposal.contractDigest) ||
     !isDigest(proposal.eligibilityDigest) ||
     !isDigest(proposal.reviewDigest) ||
-    !isDigest(proposal.changeSetDigest) ||
-    proposal.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
-    proposal.releaseGate.configured !== false ||
+    !isDigest(proposal.changeSetDigest);
+  const invalidOutcome = () =>
     proposal.initialCommitMessage !== "Initialize repository from supported template" ||
     proposal.intendedOutcome !== "create-private-fresh-history-repository" ||
-    proposal.idempotencyKey !== expectedKey
-  ) {
+    proposal.idempotencyKey !== expectedKey;
+  const invalidRelease = () =>
+    proposal.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
+    proposal.releaseGate.configured !== false ||
+    invalidOutcome();
+  if (invalidDestination || invalidSource() || invalidEvidence() || invalidRelease()) {
     throw new Error("The fresh repository proposal is malformed.");
   }
 }
@@ -1631,19 +1636,21 @@ function assertFreshReadBack(
   }
   exactDigest(readBack, "Fresh repository provider read-back");
   assertExactRepositoryObservation(readBack.repository);
-  if (
+  const invalidIdentity =
     readBack.version !== GITHUB_PUBLICATION_VERSION ||
     readBack.idempotencyKey !== proposal.idempotencyKey ||
     readBack.repository.installationIdentityDigest !== proposal.installationIdentityDigest ||
-    readBack.repository.owner !== proposal.destinationOwner ||
+    readBack.repository.owner !== proposal.destinationOwner;
+  const invalidDestination = () =>
     readBack.repository.name !== proposal.destinationName ||
     readBack.repository.visibility !== "private" ||
     readBack.repository.defaultBranch !== proposal.defaultBranch ||
-    readBack.repository.headSha !== readBack.initialCommit.sha ||
+    readBack.repository.headSha !== readBack.initialCommit.sha;
+  const invalidHistory = () =>
     readBack.repository.headTree !== readBack.initialCommit.tree ||
     readBack.initialCommit.tree !== proposal.sourceTree ||
-    !releaseGateAbsent(readBack.repository)
-  ) {
+    !releaseGateAbsent(readBack.repository);
+  if (invalidIdentity || invalidDestination() || invalidHistory()) {
     throw new Error("Fresh repository provider read-back does not match the proposal.");
   }
 }

@@ -132,7 +132,11 @@ export function createBranchWorktreePublicationProposal(input: {
     source.canonicalPath !== sourceReceipt.sourcePath ||
     source.headSha !== sourceReceipt.sourceSha ||
     source.headTree !== sourceReceipt.sourceTree ||
-    source.contractDigest !== sourceReceipt.contractDigest ||
+    source.contractDigest !== sourceReceipt.contractDigest
+  ) {
+    throw new Error("The source checkout is not the exact reviewed existing repository.");
+  }
+  if (
     review.sourceSha !== sourceReceipt.sourceSha ||
     review.sourceTree !== sourceReceipt.sourceTree ||
     review.repositoryContractDigest !== sourceReceipt.contractDigest

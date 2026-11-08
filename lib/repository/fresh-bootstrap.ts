@@ -463,26 +463,44 @@ const dirnameForComparison = (path: string): string => {
 };
 
 export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapProposal): void => {
+  const invalidProposal = "The fresh-bootstrap proposal is not canonical V3.";
   if (
     !isRecord(proposal) ||
     !isRecord(proposal.capability) ||
     !isRecord(proposal.destinationPrestate) ||
-    !isRecord(proposal.repositoryIdentity) ||
+    !isRecord(proposal.repositoryIdentity)
+  ) {
+    throw new Error(invalidProposal);
+  }
+  if (
     !Array.isArray(proposal.exactTree) ||
     !isPathIdentity(proposal.capability.stateRoot) ||
     !isPathIdentity(proposal.capability.allowedRoot) ||
-    !isPathIdentity(proposal.destinationPrestate.parent) ||
+    !isPathIdentity(proposal.destinationPrestate.parent)
+  ) {
+    throw new Error(invalidProposal);
+  }
+  if (
     (proposal.destinationPrestate.kind === emptyDirectoryKind &&
       !isPathIdentity(proposal.destinationPrestate.destination)) ||
     (proposal.destinationPrestate.kind !== emptyDirectoryKind &&
-      proposal.destinationPrestate.kind !== "absent") ||
+      proposal.destinationPrestate.kind !== "absent")
+  ) {
+    throw new Error(invalidProposal);
+  }
+  if (
     !isExecutableIdentity(proposal.capability.systemGitIdentity) ||
     !isExecutableIdentity(proposal.capability.systemPythonIdentity) ||
     !isExecutableIdentity(proposal.capability.systemNodeIdentity) ||
-    !isExecutableIdentity(proposal.capability.lockHelperIdentity) ||
-    (proposal.capability.lockStrategy !== "flock" && proposal.capability.lockStrategy !== "lockf")
+    !isExecutableIdentity(proposal.capability.lockHelperIdentity)
   ) {
-    throw new Error("The fresh-bootstrap proposal is not canonical V3.");
+    throw new Error(invalidProposal);
+  }
+  if (
+    proposal.capability.lockStrategy !== "flock" &&
+    proposal.capability.lockStrategy !== "lockf"
+  ) {
+    throw new Error(invalidProposal);
   }
   if (
     !hasExactKeys(proposal, [
@@ -581,7 +599,7 @@ export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapPropos
       }) ||
     proposal.digest !== stableDigest(canonicalProposal(proposal))
   ) {
-    throw new Error("The fresh-bootstrap proposal is not canonical V3.");
+    throw new Error(invalidProposal);
   }
 };
 

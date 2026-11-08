@@ -1125,9 +1125,10 @@ export const latestInstalledUiPreview = (
       continue;
     }
     const preview = uiPreviewResultSchema.safeParse(event.data.result.output);
+    if (!preview.success || preview.data.complete === false) {
+      continue;
+    }
     if (
-      !preview.success ||
-      preview.data.complete === false ||
       (preview.data.content !== undefined &&
         sha256(preview.data.content) !== preview.data.digest) ||
       (preview.data.content === undefined && preview.data.requiresChunkedRead !== true)
