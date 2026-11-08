@@ -256,6 +256,7 @@ const marketplaceArchiveName = `${portable.name}-codex-marketplace-${portable.ve
 await writeFile(path.join(output, marketplaceArchiveName), marketplaceArchive);
 
 const auxiliaryFiles = new Map<string, Uint8Array>();
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const compareDefaultSort = (left: unknown, right: unknown) => {
   const a = String(left);
   const b = String(right);

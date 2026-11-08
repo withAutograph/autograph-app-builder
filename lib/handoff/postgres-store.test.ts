@@ -63,6 +63,7 @@ function store(input: {
   const database = {
     select,
     update: () => ({
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
       set: (values: unknown) => {
         set(values);
         return { where: updateCondition };

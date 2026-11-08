@@ -74,6 +74,7 @@ const authorizationCoordinatesSchema = z.object({
   name: z.string().min(1),
   turnId: z.string().min(1),
 });
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const authorizationRequestId = (data: unknown): string | undefined => {
   const coordinates = authorizationCoordinatesSchema.safeParse(data);
   if (!coordinates.success) {
@@ -118,6 +119,7 @@ const visibleOperationLabels = new Set([
   "Preparing local app data",
 ]);
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const draftValidationCommandLabel = (value: unknown): string | undefined => {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value !== "string") {
@@ -156,6 +158,7 @@ const draftValidationCommandLabel = (value: unknown): string | undefined => {
   return local?.groups?.appId === undefined ? undefined : "Preparing local app data";
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const recordStringField = (value: unknown, key: string): string | undefined => {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value !== "object" || value === null || !(key in value)) {
@@ -169,6 +172,7 @@ const recordStringField = (value: unknown, key: string): string | undefined => {
 
 const draftValidationLabel = (
   toolName: string,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   value: unknown,
   requested: boolean,
 ): string | undefined => {
@@ -411,6 +415,7 @@ export const createInstalledPrototypeReferenceReducer = (input: {
   const requestedUiPreview = new Map<string, string>(state?.requestedUiPreview);
   let latest: PublicPrototypeReference | undefined = state?.latest;
   return {
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     accept(candidate: unknown) {
       const event = z.object({ data: z.unknown(), type: z.string() }).loose().safeParse(candidate);
       if (!event.success) {
@@ -1349,6 +1354,7 @@ const inputRequest = (request: {
 };
 
 /** Only the ordinary invitation is public; the rest of a suspended tool result stays private. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const hostedIdentityInvitation = (value: unknown): string | undefined => {
   const invitation = z
     .object({ authIdentityLink: z.url().startsWith("https://") })

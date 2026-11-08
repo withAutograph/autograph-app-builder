@@ -155,6 +155,7 @@ const restoreReceiptOrder = (record: GitHubMutationReceipt): GitHubMutationRecei
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function parseGitHubPublicationJournalRow(input: unknown): GitHubMutationReceipt {
   const row = journalRowSchema.parse(input);
   const receipt = restoreReceiptOrder(row.record as GitHubMutationReceipt);

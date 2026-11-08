@@ -102,6 +102,7 @@ export const extBld05EvidenceReceiptSchema = z.strictObject({
 export type ExtBld05EvidenceReceipt = z.infer<typeof extBld05EvidenceReceiptSchema>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function canonical(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(canonical).join(",")}]`;
@@ -117,11 +118,13 @@ function canonical(value: unknown): string {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function digest(value: unknown): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(canonical(value)).digest("hex")}`;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function buildExtBld05EvidenceReceipt(input: unknown): ExtBld05EvidenceReceipt {
   const evidence = extBld05EvidenceInputSchema.parse(input);
   return extBld05EvidenceReceiptSchema.parse({

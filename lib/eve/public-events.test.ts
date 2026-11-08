@@ -50,6 +50,7 @@ const isRecordedResult = (
 ): event is MessageStreamEvent & z.infer<typeof recordedResultSchema> =>
   recordedResultSchema.safeParse(event).success;
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const installedEvent = (event: unknown) => event as MessageStreamEvent;
 
 describe("authorization completion projection", () => {
@@ -1601,6 +1602,7 @@ const result = (events: ReturnType<typeof projectInstalledEveEvents>) => ({
 });
 
 describe("public draft pull request approval scope", () => {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   const requested = (toolName: string, approvalReceipt: unknown) =>
     installedEvent({
       data: {
@@ -1689,6 +1691,7 @@ describe("public draft pull request approval scope", () => {
 
 describe("suspended hosted identity invitation", () => {
   const link = "https://auth.example.com/api/auth/platform/operator-link?nonce=ordinary-link-nonce";
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   const partial = (output: unknown, toolName = "prepare-app-hosted-runtime") =>
     installedEvent({
       type: "action.partial",
@@ -1792,6 +1795,7 @@ describe("Production app identity invitation", () => {
     members: [{ email: "private-email@example.com" }],
     proof: "private-proof",
   });
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   const completed = (toolName: string, callId: string, value: unknown, isError = false) =>
     installedEvent({
       type: "action.result",

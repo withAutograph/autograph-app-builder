@@ -32,7 +32,7 @@ const mocks = vi.hoisted(() => ({
   },
   workspace: { workspaceId: "sandbox", workspacePath: "/workspace/repository" },
 }));
-// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled eve/tools dependency used by this test.
+// oxlint-disable-next-line anti-slop/no-module-mocking, anti-slop/no-unknown-parameters -- Keep the controlled eve/tools dependency used by this test. Preserve the existing unknown input contract.
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./source-bound-sandbox dependency used by this test.
 vi.mock("./source-bound-sandbox", () => ({

@@ -25,6 +25,7 @@ import { HostedMcpProofClient } from "./hosted-portable-proof";
 import { TOOL_NAMES } from "./portable-release";
 
 const promotionReceiptName = "promotion-receipt.json";
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const compareAssetNames = (left: unknown, right: unknown) => {
   const leftText = String(left);
   const rightText = String(right);
@@ -170,7 +171,7 @@ async function removePublicationTree(root: string) {
       await chmod(path, 0o600);
     }
   }
-  // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+  // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
   await makeWritable(root).catch((error: unknown) => {
     if (
       // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.

@@ -4,6 +4,7 @@ import { expect } from "playwright/test";
 import postgres from "postgres";
 import { selfReproductionDraft } from "./self-reproduction-draft-fixture";
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const sessionUserId = (session: unknown): string | undefined => {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (session === null || typeof session !== "object" || !("user" in session)) {

@@ -220,6 +220,7 @@ export function preparedProviderFixture(input: {
   const github = vi.fn(
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async (
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
       sessionAuth: unknown,
       selection: { repository: string; selectedInstallationId?: string },
     ) => {

@@ -351,7 +351,7 @@ export const inspectSupportedTemplateDependencyClosure =
     };
   };
 
-// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Preserve the existing open-ended value contract.
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-parameters -- Preserve the existing open-ended value contract. Preserve the existing unknown input contract.
 const configurationRecord = function configurationRecord(value: unknown): Record<string, unknown> {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -928,6 +928,7 @@ const developmentWorkingTreeArchive = async function developmentWorkingTreeArchi
 };
 
 export const parsePreparedWorkspace = function parsePreparedWorkspace(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   input: unknown,
 ): PreparedSandboxWorkspace {
   if (
@@ -987,6 +988,7 @@ export const parsePreparedWorkspace = function parsePreparedWorkspace(
 };
 
 const parsePreparedSourceFiles = function parsePreparedSourceFiles(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   input: unknown,
 ): PreparedSourceFile[] {
   if (!Array.isArray(input) || input.length === 0) {

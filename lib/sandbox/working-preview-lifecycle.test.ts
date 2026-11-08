@@ -41,6 +41,7 @@ const context = {
   getSandbox: () => Promise.resolve({ id: "sandbox", stop: mocks.stop }),
   session: { auth: {}, id: "session" },
 } as unknown as HookContext;
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const events = hook.events as Record<string, (event: unknown, ctx: HookContext) => Promise<void>>;
 
 describe.each([false, true])("preview completion lifecycle hosted=%s", (hosted) => {

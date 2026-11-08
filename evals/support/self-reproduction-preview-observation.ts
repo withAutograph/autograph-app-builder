@@ -49,7 +49,7 @@ export const sanitizePreviewEvidence = (value: string) =>
       }
     });
 
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve arbitrary observation values during redaction.
+// oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-unknown-parameters -- Preserve arbitrary observation values during redaction. Preserve the existing unknown input contract.
 const sanitizeValue = (value: unknown): unknown => {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value === "string") {
@@ -72,7 +72,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const previewProvenance = (
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   sourceRevision: unknown,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   sessionId: unknown,
   receipt: PreviewReceipt,
 ): PreviewSourceProvenance => ({

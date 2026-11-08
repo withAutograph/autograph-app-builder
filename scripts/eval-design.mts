@@ -161,7 +161,7 @@ async function main() {
   const scenarios = hasNonemptyOption(scenarioPath)
     ? scenariosSchema.parse(
         JSON.parse(
-          // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+          // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
           await readFile(scenarioPath, "utf-8").catch((error: unknown) => {
             if (
               !hasNonemptyOption(values.scenario) &&
@@ -299,7 +299,7 @@ async function main() {
 // oxlint-disable-next-line promise/prefer-await-to-callbacks
 // Keep the CLI's terminal error handler attached to the promise.
 // oxlint-disable-next-line promise/prefer-await-to-then
-// oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+// oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
 main().catch((error: unknown) => {
   // Do not print network errors that can contain secret preview query strings.
   console.error(

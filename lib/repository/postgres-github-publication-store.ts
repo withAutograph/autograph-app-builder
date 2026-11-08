@@ -67,6 +67,7 @@ const hasExactStoredKeys = (value: GitHubPublicationProposal, keys: readonly str
   JSON.stringify(Object.keys(value).toSorted()) === JSON.stringify([...keys].toSorted());
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function parseProposal(input: unknown): GitHubPublicationProposal {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
@@ -143,6 +144,7 @@ function parseProposal(input: unknown): GitHubPublicationProposal {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function parseGitHubPublicationProposalRow(input: unknown): GitHubPublicationProposal {
   const row = proposalRowSchema.parse(input);
   const proposal = parseProposal(row.proposal);

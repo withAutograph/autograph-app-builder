@@ -285,6 +285,7 @@ export const withLifecycleLock = async function withLifecycleLock<T>(
     // oxlint-disable-next-line github/no-then -- Preserve the existing promise sequencing and settlement behavior.
     const acquired = await listening.then(
       () => true,
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
       (error: unknown) => {
         if (
           // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -581,6 +582,7 @@ const writeReceipt = function writeReceipt(
   filename: string,
   kind: string,
   provenance: ImageProvenance,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   result: unknown,
 ): ReceiptEnvelope {
   const unsigned = { kind, provenance, result, version: 1 as const };

@@ -20,6 +20,7 @@ const browser = () => {
 };
 
 const adapter = {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   exerciseBrowser: (_page: unknown, id: string) => {
     const requirement = frameworkMatrix.find((row) => row.id === id);
     if (!requirement) {

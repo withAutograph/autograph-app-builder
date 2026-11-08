@@ -71,6 +71,7 @@ function childEnvironment() {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function gateAEvalWorkflowBodyTimeout(profile: unknown): string | undefined {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof profile !== "object" || profile === null || !Object.isFrozen(profile)) {

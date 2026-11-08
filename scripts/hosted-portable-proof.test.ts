@@ -69,6 +69,7 @@ const scenario = hostedProofScenarioSchema.parse({
 function jwt(subject: string, workspaceId: string) {
   // Keep JWT encoding local to this fixture.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   return `${encode({ alg: "RS256", kid: "proof" })}.${encode({
     aud: scenario.oauth.audience,
@@ -84,6 +85,7 @@ function jwt(subject: string, workspaceId: string) {
 const primaryToken = jwt("proof-user-primary", "workspace-primary");
 const secondaryToken = jwt("proof-user-secondary", "workspace-secondary");
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const rpc = (id: unknown, result: unknown, status = 200) =>
   new Response(
     status === 204
@@ -194,6 +196,7 @@ function hostedFixture(
     const { name, arguments: args } = z
       .object({ arguments: z.record(z.string(), z.unknown()), name: z.string() })
       .parse(body.params);
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     const tool = (structuredContent: unknown, isError = false) =>
       rpc(body.id, { isError, structuredContent });
     const denialFailure = (direction: "primary-reads-secondary" | "secondary-reads-primary") => {

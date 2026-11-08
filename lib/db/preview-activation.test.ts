@@ -57,6 +57,7 @@ const activationDatabase = async () => {
         throw new Error("Expected a parameterized SQL query");
       }
       const statement = segments.join("?").replace(/\s+for update\s*$/iu, "");
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
       const bindings: SQLInputValue[] = parameters.map((value: unknown) => {
         if (value instanceof Date) {
           return value.toISOString();

@@ -632,6 +632,7 @@ export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapPropos
   }
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const freshBootstrapJournalDigest = (value: unknown) => stableDigest(value);
 
 export const proposalFromFreshBootstrapJournal = (

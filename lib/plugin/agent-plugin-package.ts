@@ -138,6 +138,7 @@ const prepareSafeOutputParent = async (root: string, output: string) => {
   }
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const schemaVersion = (schema: unknown) => {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof schema !== "string") {
@@ -147,6 +148,7 @@ const schemaVersion = (schema: unknown) => {
   return /\/schemas\/(?<version>[^/]+)\/(?:plugin|mcp)\.schema\.json$/u.exec(schema)?.[1];
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const assertAutographMcpEndpoint = (value: unknown, { release }: { release: boolean }) => {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value !== "string") {

@@ -53,6 +53,7 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function property(value: unknown, key: string) {
   if (!record(value) || !(key in value)) {
     throw new TypeError(INVALID_RESPONSE);
@@ -61,6 +62,7 @@ function property(value: unknown, key: string) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function stringProperty(value: unknown, key: string) {
   const result = property(value, key);
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -71,6 +73,7 @@ function stringProperty(value: unknown, key: string) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function decimalProperty(value: unknown, key: string) {
   const result = property(value, key);
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -89,6 +92,7 @@ function suffix() {
 }
 
 // eslint-disable-next-line eslint/func-style -- Shared by the GitHub request boundary.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function retryAfterMilliseconds(headers: unknown, now: number): number | undefined {
   if (!record(headers)) {
     return undefined;

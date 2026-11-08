@@ -298,6 +298,7 @@ function liveTemplateCacheFixture() {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function sandboxFixture(inputManifest: unknown = manifest) {
   const run = vi
     .fn<SandboxSession["run"]>()
@@ -328,6 +329,7 @@ function sandboxFixture(inputManifest: unknown = manifest) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function hostedExecutionSandbox(inputManifest: unknown = hostedExecutionManifest) {
   const run = vi
     .fn()

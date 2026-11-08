@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => {
     wrap: vi.fn(),
   };
 });
-// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled eve/tools dependency used by this test.
+// oxlint-disable-next-line anti-slop/no-module-mocking, anti-slop/no-unknown-parameters -- Keep the controlled eve/tools dependency used by this test. Preserve the existing unknown input contract.
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled eve/context dependency used by this test.
@@ -24,7 +24,7 @@ vi.mock("eve/context", () => ({
     let state = initial();
     return {
       get: () => state,
-      // oxlint-disable-next-line anti-slop/no-unknown-returns -- The state fixture retains arbitrary callback values.
+      // oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-unknown-parameters -- The state fixture retains arbitrary callback values. Preserve the existing unknown input contract.
       update: (change: (current: unknown) => unknown) => {
         state = change(state);
       },

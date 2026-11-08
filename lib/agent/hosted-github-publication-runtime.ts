@@ -37,12 +37,14 @@ export type HostedGitHubPublicationProviderFactory = (input: {
 
 export interface HostedGitHubPublicationRuntimeResolver {
   resolve: (
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     sessionAuth: unknown,
     selection?: { selectedInstallationId: string },
   ) => Promise<GitHubPublicationRuntime>;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function exactGitHubPublicationAuthority(sessionAuth: unknown) {
   try {
     return exactForwardedSessionAuthority(sessionAuth);
@@ -67,6 +69,7 @@ interface PublicationStores {
 }
 
 export interface HostedGitHubPublicationRuntimeResolverDependencies {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   readPreparedHandoff: (sessionAuth: unknown) => Promise<
     | (BuilderHandoffIntent & {
         providers?: {
@@ -142,7 +145,7 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
     // oxlint-disable-next-line promise/prefer-await-to-callbacks
     // Preserve the shared lazy promise while clearing it after a failed open.
     // oxlint-disable-next-line promise/prefer-await-to-then
-    // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+    // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
     databasePromise ??= Promise.resolve(input.openDatabase()).catch((error: unknown) => {
       databasePromise = undefined;
       throw error;

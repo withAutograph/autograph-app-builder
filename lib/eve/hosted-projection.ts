@@ -41,6 +41,7 @@ function* internalEvents(candidates: readonly unknown[]): Generator<InternalEveE
 }
 
 const publicEventFromCandidate = (
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   candidate: unknown,
 ): z.infer<typeof publicEveEventSchema> | undefined => {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -58,6 +59,7 @@ const publicEventFromCandidate = (
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function projectHostedSnapshot(
   sessionId: string,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   snapshotInput: unknown,
   cursor = 0,
   limit = 100,

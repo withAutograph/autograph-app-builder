@@ -62,6 +62,7 @@ report.archive = {
 await writeFile(path.join(destination, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
 // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing archived report JSON boundary.
 await writeFile(path.join(destination, "index.html"), renderReport(report));
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const md = (v: unknown) =>
   String(v).replaceAll(/[<>|]/gu, (c) => ({ "<": "&lt;", ">": "&gt;", "|": "\\|" })[c] ?? c);
 const lines = [

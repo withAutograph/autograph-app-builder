@@ -51,6 +51,7 @@ export interface AdditionalFieldProps {
 }
 
 /** Convert a `defaultValue` into a `Date` for the calendar. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const toDate = function toDate(value: unknown): Date | undefined {
   if (value instanceof Date) {
     return value;

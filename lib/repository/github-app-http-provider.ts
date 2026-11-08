@@ -86,6 +86,7 @@ class GitHubBlobWriteFailureError extends Error {
   }
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const providerHttpStatus = (error: unknown): number | undefined => {
   if (!(error instanceof Error)) {
     return;
@@ -120,6 +121,7 @@ const credentialsSchema = configSchema.omit({ installationId: true });
 export type GitHubAppHttpProviderCredentials = z.infer<typeof credentialsSchema>;
 
 export const parseGitHubAppHttpProviderCredentials = (
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   input: unknown,
 ): GitHubAppHttpProviderCredentials => {
   const parsed = credentialsSchema.safeParse(input);
@@ -137,6 +139,7 @@ export const parseGitHubAppHttpProviderCredentials = (
   return parsed.data;
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const parseGitHubAppHttpProviderConfig = (input: unknown): GitHubAppHttpProviderConfig => {
   const parsed = configSchema.safeParse(input);
   if (!parsed.success) {
@@ -191,7 +194,7 @@ const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep provider data untrusted until its consumer validates it.
+// oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-unknown-parameters -- Keep provider data untrusted until its consumer validates it. Preserve the existing unknown input contract.
 const property = (value: unknown, key: string): unknown => {
   if (!record(value) || !(key in value)) {
     throw new TypeError(invalidResponseMessage);
@@ -199,6 +202,7 @@ const property = (value: unknown, key: string): unknown => {
   return value[key];
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const stringProperty = (value: unknown, key: string): string => {
   const result = property(value, key);
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -208,6 +212,7 @@ const stringProperty = (value: unknown, key: string): string => {
   return result;
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const decimalProperty = (value: unknown, key: string): string => {
   const result = property(value, key);
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -230,6 +235,7 @@ const safeRepositoryIdNumber = (value: string): number => {
   return parsed;
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const booleanProperty = (value: unknown, key: string): boolean => {
   const result = property(value, key);
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -239,6 +245,7 @@ const booleanProperty = (value: unknown, key: string): boolean => {
   return result;
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const arrayProperty = (value: unknown, key: string): unknown[] => {
   const result = property(value, key);
   if (!Array.isArray(result)) {
@@ -330,6 +337,7 @@ const permissionRequest = (permission: PermissionSnapshot): GitHubPermissionRequ
   return request;
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const normalizedPermissions = (value: unknown): PermissionSnapshot => {
   if (!record(value)) {
     throw new Error(invalidResponseMessage);

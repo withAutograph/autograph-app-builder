@@ -27,6 +27,7 @@ const exactCapabilities = (value: unknown): value is readonly TestCapability[] =
 export function testCapabilityEnabled(
   capability: TestCapability,
   environment: Readonly<Record<string, string | undefined>>,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   injected: unknown,
 ): boolean {
   if (capability === mockModelCapability && environment.APP_BUILDER_TEST_MODEL !== "1") {

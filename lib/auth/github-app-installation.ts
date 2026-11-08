@@ -90,6 +90,7 @@ interface GitHubInstallationAuthorizationDiagnostic {
   installationValidation?: GitHubInstallationValidationSubstage;
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const githubInstallationAuthorizationDiagnostic = (error: unknown) => {
   if (!(error instanceof GitHubInstallationAuthorizationError)) {
     return;
@@ -213,6 +214,7 @@ export interface GitHubInstallationMembershipAuthority {
 
 type Fetch = typeof fetch;
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const githubOAuthErrorCategory = (value: unknown) => {
   if (
     value === "incorrect_client_credentials" ||
@@ -251,7 +253,7 @@ const invalidToken = "invalid-token";
 const isNonArrayObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- Property values from external data remain untrusted.
+// oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-unknown-parameters -- Property values from external data remain untrusted. Preserve the existing unknown input contract.
 const property = (value: unknown, key: string): unknown => {
   if (!isNonArrayObject(value) || !(key in value)) {
     throw new Error(invalidResponse);
@@ -259,6 +261,7 @@ const property = (value: unknown, key: string): unknown => {
   return value[key];
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const decimalProperty = (value: unknown, key: string): string => {
   const candidate = property(value, key);
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -272,6 +275,7 @@ const decimalProperty = (value: unknown, key: string): string => {
   throw new Error(invalidResponse);
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const stringProperty = (value: unknown, key: string): string => {
   const candidate = property(value, key);
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -281,6 +285,7 @@ const stringProperty = (value: unknown, key: string): string => {
   return candidate;
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const nullableStringProperty = (value: unknown, key: string): string | null => {
   const candidate = property(value, key);
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -567,6 +572,7 @@ const githubCallbackDiagnostic = (url: string): GitHubCallbackDiagnostic => {
   return { ...details, unknownKeyCount: unknownKeys.length };
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const oauthErrorCategoryFromException = (error: unknown) => {
   try {
     return githubOAuthErrorCategory(
@@ -577,7 +583,7 @@ const oauthErrorCategoryFromException = (error: unknown) => {
   }
 };
 
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- Property values from external data remain untrusted.
+// oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-unknown-parameters -- Property values from external data remain untrusted. Preserve the existing unknown input contract.
 const propertyOrUndefined = (value: unknown, key: string): unknown => {
   if (!isNonArrayObject(value)) {
     return undefined;
@@ -585,6 +591,7 @@ const propertyOrUndefined = (value: unknown, key: string): unknown => {
   return key in value ? value[key] : undefined;
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const normalizedUserTokens = (authentication: unknown, now: number) => {
   try {
     const accessToken = stringProperty(authentication, "token");
@@ -635,6 +642,7 @@ const normalizedUserTokens = (authentication: unknown, now: number) => {
   }
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const installationIdentity = (value: unknown) => {
   const account = property(value, "account");
   return {

@@ -32,6 +32,7 @@ export type PreparedGitHubSelection = Pick<
 
 /** Call only after the durable handoff reader has verified the session. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function preparedHandoffReturnPath(sessionAuth: unknown) {
   const parsed = z
     .object({
@@ -492,13 +493,17 @@ export async function readPreparedVercelAccess(input: {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPreparedAppContextReader(input: {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   readHandoff: (sessionAuth: unknown) => Promise<PreparedIntent | undefined>;
   github: (
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     sessionAuth: unknown,
     input: RepositoryAccessToolInput,
   ) => Promise<RepositoryAccessResult>;
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   vercel: (sessionAuth: unknown, intent: PreparedIntent) => Promise<PreparedVercelAccess>;
 }) {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   return async (sessionAuth: unknown) => {
     // The trusted reader establishes tenant ownership before any provider work.
     const intent = await input.readHandoff(sessionAuth);
@@ -612,6 +617,7 @@ export function createPreparedAppContextReader(input: {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export async function readPreparedAppContext(sessionAuth: unknown) {
   return await createPreparedAppContextReader({
     async github(auth, value) {

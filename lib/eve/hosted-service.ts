@@ -1075,6 +1075,7 @@ export function createHostedEveSessionService(input: {
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function requireOwnedOperation(
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     operationInput: unknown,
     expected: {
       operationId: string;
@@ -1551,6 +1552,7 @@ export function createHostedEveSessionService(input: {
   }
   const reconcileResourceApprovalOperation = async (
     operation: HostedOperationRecord,
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     request: unknown,
   ): Promise<EveSessionResult | undefined> => {
     const parsed = resourceApprovalResponseProofSchema.shape.request.safeParse(request);
@@ -2365,6 +2367,7 @@ export function createHostedEveSessionService(input: {
     let recoveringStart = false;
     const diagnose = (
       phase: HostedSubmissionPhase,
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
       error: unknown,
       adapterSessionId?: string,
     ): void => {

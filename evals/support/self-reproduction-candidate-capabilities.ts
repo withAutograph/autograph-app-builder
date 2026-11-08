@@ -30,7 +30,7 @@ export const candidateCapabilities = (
 
 /** Redact complete diagnostics before serialization, including bare credential values. */
 export const redactCandidateEvidence = <T>(value: T, secrets: readonly string[]): T => {
-  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve arbitrary candidate evidence values during redaction.
+  // oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-unknown-parameters -- Preserve arbitrary candidate evidence values during redaction. Preserve the existing unknown input contract.
   const redact = (item: unknown): unknown => {
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
     if (typeof item === "string") {

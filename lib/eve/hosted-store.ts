@@ -158,6 +158,7 @@ export const hostedCheckpointRefSchema = z.strictObject({
   id: z.uuid(),
 });
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const canonicalRecordValue = (value: unknown): string => {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalRecordValue).join(",")}]`;
@@ -174,6 +175,7 @@ const canonicalRecordValue = (value: unknown): string => {
 
 // JSON storage omits undefined object members and writes undefined array items
 // as null. Hash the same shape that a checkpoint can retain after persistence.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const canonicalPersistedValue = (value: unknown): string => {
   if (Array.isArray(value)) {
     return `[${value.map((entry) => (entry === undefined ? "null" : canonicalPersistedValue(entry))).join(",")}]`;

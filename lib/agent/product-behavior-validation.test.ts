@@ -82,11 +82,12 @@ vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
 }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./prepared-runtime-execution dependency used by this test.
 vi.mock("./prepared-runtime-execution", () => ({ resolvePreparedRuntimeExecution: mocks.runtime }));
-// oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled eve/tools dependency used by this test.
+// oxlint-disable-next-line anti-slop/no-module-mocking, anti-slop/no-unknown-parameters -- Keep the controlled eve/tools dependency used by this test. Preserve the existing unknown input contract.
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./workflow-state dependency used by this test.
 vi.mock("./workflow-state", () => ({
   APP_BUILDER_WORKFLOW_VERSION: 1,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   assertExactWorkflowState: (latest: unknown, expected: unknown) => {
     if (JSON.stringify(latest) !== JSON.stringify(expected)) {
       throw new Error("Workflow changed concurrently");

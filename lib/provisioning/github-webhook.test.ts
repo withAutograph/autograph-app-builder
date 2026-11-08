@@ -8,6 +8,7 @@ import { createGitHubProvisioningWebhookHandler } from "./github-webhook";
 const secret = "github-webhook-secret-that-is-long-enough";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function signedRequest(event: string, body: unknown, signatureSecret = secret) {
   const bytes = JSON.stringify(body);
   const signature = `sha256=${createHmac("sha256", signatureSecret).update(bytes).digest("hex")}`;
@@ -26,6 +27,7 @@ function signedRequest(event: string, body: unknown, signatureSecret = secret) {
 function database() {
   const updates: unknown[] = [];
   interface FakeDatabase {
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     update: (table: unknown) => {
       set: () => {
         where: () => Promise<undefined>;
@@ -38,6 +40,7 @@ function database() {
     async transaction<T>(operation: (transaction: FakeDatabase) => Promise<T>) {
       return await operation(value);
     },
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     update(table: unknown) {
       updates.push(table);
       return {

@@ -80,7 +80,7 @@ const run = async (
     child.stdin.end();
   }
   const closed = once(child, "close");
-  // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+  // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
   const [code] = await closed.catch((error: unknown) => {
     spawnError = error instanceof Error ? error : new Error(String(error));
     return [null];
@@ -128,6 +128,7 @@ const availableDistinctLoopbackPort = async (
   return port === excludedPort ? await availableDistinctLoopbackPort(excludedPort) : port;
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const answerFor = (result: unknown, answers: Record<string, string>) => {
   const serialized = JSON.stringify(result).toLowerCase();
   if (serialized.includes("approve")) {

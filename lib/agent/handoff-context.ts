@@ -12,6 +12,7 @@ export function createPreparedHandoffReader(input: {
   read: BuilderHandoffStore["read"];
   isActiveMember: (authority: HostedSessionTenantAuthority) => Promise<boolean>;
 }) {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   return async (sessionAuth: unknown) => {
     const handoffId = sourceHandoffIdForSessionAuth(sessionAuth);
     if (handoffId === undefined) {
@@ -64,7 +65,7 @@ async function createDeploymentPreparedHandoffReader() {
     isActiveMember: (value) => membership.isActiveMember(value),
     read: createPostgresBuilderHandoffStore(database).read,
   });
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+  // oxlint-disable-next-line eslint/require-await, anti-slop/no-unknown-parameters -- preserve Promise-returning framework or interface contract Preserve the existing unknown input contract.
   return async (sessionAuth: unknown) => {
     const { authority } = exactForwardedSessionAuthority(sessionAuth);
     if (authority.issuer !== config.issuer || authority.audience !== config.resource) {
@@ -79,6 +80,7 @@ async function createDeploymentPreparedHandoffReader() {
 let deploymentReader: ReturnType<typeof createDeploymentPreparedHandoffReader> | undefined;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export async function readPreparedHandoffContext(sessionAuth: unknown) {
   if (sourceHandoffIdForSessionAuth(sessionAuth) === undefined) {
     return;
@@ -88,7 +90,7 @@ export async function readPreparedHandoffContext(sessionAuth: unknown) {
   // oxlint-disable-next-line promise/prefer-await-to-callbacks
   // Preserve the shared lazy promise while clearing it after a failed creation.
   // oxlint-disable-next-line promise/prefer-await-to-then
-  // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+  // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
   deploymentReader ??= createDeploymentPreparedHandoffReader().catch((error: unknown) => {
     deploymentReader = undefined;
     throw error;

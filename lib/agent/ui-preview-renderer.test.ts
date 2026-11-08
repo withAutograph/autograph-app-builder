@@ -49,6 +49,7 @@ describe("preview runtime initialization", () => {
     // initialization and routing, without mounting a DOM or calling providers.
     // oxlint-disable-next-line sonarjs/code-eval -- Execute the generated preview entry against controlled fixtures.
     runInNewContext(entry.replaceAll(/^import .*;\n/gmu, ""), {
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
       React: { createElement: (component: unknown) => component },
       Screen0: overview,
       Screen1: details,

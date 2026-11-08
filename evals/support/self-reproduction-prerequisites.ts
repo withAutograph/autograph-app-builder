@@ -14,6 +14,7 @@ const acceptedSpecPhases = new Set([
 ]);
 
 /** Stop before target preparation when design did not produce its required artifact. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const assertAcceptedAppSpec = (status: unknown): void => {
   const phase =
     typeof status === "object" && status !== null && "phase" in status ? status.phase : undefined;

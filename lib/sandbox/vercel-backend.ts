@@ -21,6 +21,7 @@ const PROVIDER_RETRY_DELAY_MS = 250;
 const SANDBOX_WORKSPACE = "/workspace";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function retryableProviderFailure(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
@@ -36,6 +37,7 @@ function retryableProviderFailure(error: unknown): boolean {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function providerDiagnostic(error: unknown): string {
   if (!(error instanceof Error)) {
     return "unknown";

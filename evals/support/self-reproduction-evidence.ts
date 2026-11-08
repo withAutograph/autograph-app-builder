@@ -8,9 +8,10 @@ export const evidencePrefix = "SELF_REPRODUCTION_EVIDENCE ";
 // Apply to structured receipts and native diagnostics before persistence. Never
 // serialize the runtime environment or session continuation credentials.
 export function sanitizeEvidence(value: string): string;
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve arbitrary evidence values while redacting them.
+// oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-unknown-parameters -- Preserve arbitrary evidence values while redacting them. Preserve the existing unknown input contract.
 export function sanitizeEvidence(value: unknown): unknown;
 // eslint-disable-next-line eslint/func-style, anti-slop/no-unknown-returns -- Preserve arbitrary evidence values while redacting them. Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function sanitizeEvidence(value: unknown): unknown {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value === "string") {

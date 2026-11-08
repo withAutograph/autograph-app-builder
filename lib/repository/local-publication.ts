@@ -19,6 +19,7 @@ export const executionOrder = (paths: readonly string[]): readonly string[] => [
   ...paths.filter((path) => path === topologyPath),
 ];
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const stableDigest = (value: unknown): string =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 

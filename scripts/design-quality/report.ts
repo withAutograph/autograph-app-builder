@@ -1,6 +1,7 @@
 import type { Adherence, Observation } from "./evidence";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function escapeHtml(value: unknown) {
   return String(value).replaceAll(
     /[&<>"']/gu,
@@ -41,7 +42,9 @@ export function renderReport(report: {
     height?: number;
   }[];
 }) {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   const pretty = (v: unknown) =>
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     `<pre>${escapeHtml(JSON.stringify(v, (key, value: unknown) => (key === "observations" && Array.isArray(value) ? { count: value.length, details: "Download report.json for individual observations" } : value), 2))}</pre>`;
   const renderExcerpt = (excerpt: string | undefined) =>
     (excerpt ?? "") === ""

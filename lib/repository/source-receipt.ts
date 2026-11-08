@@ -133,6 +133,7 @@ const hasExactKeys = (value: Record<string, unknown>, expected: readonly string[
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplateSnapshot => {
   if (
     !isRecord(value) ||
@@ -274,6 +275,7 @@ const validProvenance = (value: unknown): value is ClonedTemplateProvenance => {
   return value.method === "git-clone-v1" && isDigest(value.readinessDigest);
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const parseSourceReceiptEvidence = (value: unknown): SourceReceiptEvidence => {
   if (!isRecord(value)) {
     throw new Error("Source receipt evidence is invalid or has an unsupported schema.");
@@ -342,6 +344,7 @@ export const sourceReceiptEvidence = (receipt: SourceReceipt): SourceReceiptEvid
   });
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const parseSourceReceipt = (value: unknown): SourceReceipt => {
   if (!isRecord(value)) {
     throw new Error("Source receipt has an unsupported schema.");

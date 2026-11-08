@@ -68,6 +68,7 @@ const leaseValues = (lease: SandboxExecutionLease) => ({
   workspaceId: lease.principal.workspaceId,
 });
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const parseSandboxExecutionLeaseRow = (input: unknown) => {
   const row = input as ReturnType<typeof leaseValues>;
   const lease = sandboxExecutionLeaseSchema.parse(row.record);

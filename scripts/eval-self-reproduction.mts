@@ -444,6 +444,7 @@ const escapeHtml = (value: string) => {
   return value.replaceAll(/[&<>"']/gu, (character) => replacements[character] ?? character);
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const jsonFile = async (name: string, data: unknown) => {
   await artifactFile(name, `${JSON.stringify(sanitizeEvidence(data), null, 2)}\n`);
 };

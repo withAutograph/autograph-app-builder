@@ -32,7 +32,7 @@ it("waits for a real request before starting shared auth initialization", async 
   // oxlint-disable-next-line typescript/no-unsafe-member-access -- Inspect the rendered test boundary's children.
   const boundary = page.props.children[1] as ReactElement<{ children: ReactElement }>;
   const child = boundary.props.children;
-  // oxlint-disable-next-line anti-slop/no-unknown-returns -- The test invokes the rendered boundary with untrusted props.
+  // oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-unknown-parameters -- The test invokes the rendered boundary with untrusted props. Preserve the existing unknown input contract.
   const check = child.type as (props: unknown) => Promise<unknown>;
   const pending = check(child.props);
   await Promise.resolve();

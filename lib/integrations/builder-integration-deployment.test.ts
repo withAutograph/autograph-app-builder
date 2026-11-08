@@ -36,6 +36,7 @@ vi.mock("./postgres-vercel-installation", () => ({
 vi.mock("./vercel-installation", () => ({ readVercelIntegrationEnvironment: () => ({}) }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled ./local-provider-emulation dependency used by this test.
 vi.mock("./local-provider-emulation", () => ({
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   providerEmulationEnvironment: (value: unknown) => value,
 }));
 

@@ -4,6 +4,7 @@ interface PasskeyClientError {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function passkeyResultError(result: unknown): PasskeyClientError | null {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (result === null || typeof result !== "object" || !("error" in result)) {
@@ -16,6 +17,7 @@ function passkeyResultError(result: unknown): PasskeyClientError | null {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function passkeyClientError(result: unknown): Error | null {
   const error = passkeyResultError(result);
   if (!error) {

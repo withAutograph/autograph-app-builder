@@ -58,6 +58,7 @@ export class HostedSessionAuthorityError extends Error {
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function exactForwardedSessionAuthority(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   sessionAuth: unknown,
   continuationOptions?: RealmContinuationSessionAuthorityOptions,
 ): {
@@ -128,6 +129,7 @@ export function exactForwardedSessionAuthority(
 /** A prepared app belongs to the initiating session, not a later message. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sourceHandoffIdForSessionAuth(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   sessionAuth: unknown,
   continuationOptions?: RealmContinuationSessionAuthorityOptions,
 ) {

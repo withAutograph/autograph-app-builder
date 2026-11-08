@@ -110,6 +110,7 @@ export type ExactProvenanceInput = Readonly<{
 
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const canonical = (value: unknown): string => JSON.stringify(value);
 
 const exactSha = (value: string, pattern: RegExp, label: string): void => {
@@ -153,6 +154,7 @@ export const assertStandaloneGitMetadata = (isDirectory: boolean, label: string)
   }
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const assertNoSecretMaterial = (value: unknown, receiptPath = "receipt"): void => {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof value === "string") {

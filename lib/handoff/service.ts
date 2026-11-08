@@ -56,6 +56,7 @@ export interface BuilderHandoffStore {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requireOwnedRecord(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   value: unknown,
   expected: { authority: Authority; handoffId?: string },
 ) {

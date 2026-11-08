@@ -50,6 +50,7 @@ export interface ManagementResolverDependencies<Profile extends ManagementProfil
   ) => Promise<RepositoryProductionCapture>;
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const routingUnavailable = (error: unknown) => {
   if (error instanceof RepositoryProductionDestinationRequiredError) {
     return true;

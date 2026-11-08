@@ -102,6 +102,7 @@ function route(input: { authenticated?: boolean } = {}) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function request(body: unknown, input: { origin?: string } = {}) {
   return new Request(`${origin}/api/builder/handoffs`, {
     body: JSON.stringify(body),

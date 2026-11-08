@@ -55,7 +55,7 @@ export const originalPublicStart = (state: PublicState): PublicStartInput =>
 export const parsePublicStartFile = (contents: string): PublicStartInput =>
   eveStartInputSchema.parse(JSON.parse(contents));
 
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve untrusted observation values while redacting URLs.
+// oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-unknown-parameters -- Preserve untrusted observation values while redacting URLs. Preserve the existing unknown input contract.
 const redactObservationUrls = (entry: unknown): unknown => {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   if (typeof entry === "string") {
@@ -80,11 +80,12 @@ const redactObservationUrls = (entry: unknown): unknown => {
 };
 
 /** Public artifacts retain URL origins only; opaque capabilities can live in paths or queries. */
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve the untrusted observation's shape.
+// oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-unknown-parameters -- Preserve the untrusted observation's shape. Preserve the existing unknown input contract.
 export const sanitizePublicObservation = (value: unknown): unknown =>
   redactObservationUrls(sanitizeEvidence(value));
 
 /** Preserve every original public response privately, separately from the shareable transcript. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export const recordPublicObservation = (outputDir: string, record: unknown) => {
   const privatePath = path.join(outputDir, "transcript.private.jsonl");
   if (existsSync(privatePath)) {
@@ -177,7 +178,7 @@ export const validatePublicEndpoint = (endpoint: string) => {
   return url;
 };
 
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve untrusted transport values while redacting tokens.
+// oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-unknown-parameters -- Preserve untrusted transport values while redacting tokens. Preserve the existing unknown input contract.
 const redactTransportToken = (value: unknown, bearerToken: string | undefined): unknown => {
   if (bearerToken === undefined) {
     return value;
@@ -226,6 +227,7 @@ const publicRequestHeaders = (
 
 export const makePublicTransport = async (
   endpoint: string,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   record: (value: unknown) => void,
   timeoutMs: number,
   options: PublicTransportOptions = {},
@@ -235,6 +237,7 @@ export const makePublicTransport = async (
   if (bearerToken !== undefined && (!bearerToken || /[\r\n]/u.test(bearerToken))) {
     throw new Error("The public MCP access token must be nonempty and contain no line breaks.");
   }
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   const recordSafely = (value: unknown) => {
     record(redactTransportToken(value, bearerToken));
   };
@@ -242,6 +245,7 @@ export const makePublicTransport = async (
   let sequence = 0;
   const performRpc = async (
     method: string,
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     params: unknown,
     notification = false,
     // oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve the untrusted RPC response until its caller narrows it.
@@ -321,7 +325,7 @@ export const makePublicTransport = async (
     }
     return envelope.result;
   };
-  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve the untrusted RPC response until its caller narrows it.
+  // oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-unknown-parameters -- Preserve the untrusted RPC response until its caller narrows it. Preserve the existing unknown input contract.
   const rpc = async (method: string, params: unknown, notification = false): Promise<unknown> => {
     try {
       return await performRpc(method, params, notification);
@@ -394,6 +398,7 @@ interface SessionOptions {
   onObservation?: (state: PublicState) => void;
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 type AcceptSession = (raw: unknown) => void;
 
 const canRecoverStart = (result: EveSessionResult): boolean =>
@@ -407,6 +412,7 @@ const observeOriginalStart = async (
   const { state, transport, save } = options;
   const originalStart = originalPublicStart(state);
   state.originalStart = originalStart;
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   const observe = (raw: unknown): boolean => {
     const result = eveSessionResultSchema.parse(raw);
     if (result.sessionId.length > 0) {
@@ -631,6 +637,7 @@ export const runPublicSession = async (options: SessionOptions) => {
     throw new Error("Send one complete response batch or one ordinary message at a time");
   }
   const deadline = Date.now() + options.timeoutMs;
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   const accept = (raw: unknown) => {
     const result = eveSessionResultSchema.parse(raw);
     if (!result.sessionId) {

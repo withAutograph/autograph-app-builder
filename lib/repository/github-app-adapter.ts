@@ -307,12 +307,14 @@ export interface GitHubAppInstallationProvider {
   ) => Promise<unknown>;
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const inspectSelectedRepositoryRevisionAction = "inspect the selected repository revision";
 
 const providerStatus = z.looseObject({ status: z.number().int().min(400).max(599) });
 
 // eslint-disable-next-line eslint/func-style -- Keep provider errors free of URLs, headers, and tokens.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function safeProviderStatus(error: unknown): number | undefined {
   const direct = providerStatus.safeParse(error);
   if (direct.success) {
@@ -364,6 +366,7 @@ async function sanitizedProviderCall(
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function parseProviderResponse<T>(schema: z.ZodType<T>, input: unknown): T {
   const result = schema.safeParse(input);
   if (!result.success) {
@@ -374,6 +377,7 @@ function parseProviderResponse<T>(schema: z.ZodType<T>, input: unknown): T {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function repositoryObservation(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   snapshotInput: unknown,
   installationIdentityDigest: string,
 ): GitHubRepositoryObservation {

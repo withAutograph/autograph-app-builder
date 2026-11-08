@@ -29,6 +29,7 @@ export interface WorkingPreviewRuntime {
   priorValidatedArtifact?: { applyDigest: string; validationDigest: string };
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const missingRuntimeFile = (error: unknown): null => {
   if (error instanceof Error && "code" in error && error.code === "ENOENT") {
     return null;
@@ -36,6 +37,7 @@ const missingRuntimeFile = (error: unknown): null => {
   throw error;
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const isMissingPreviewCommand = (error: unknown): boolean =>
   error instanceof APIError &&
   error.response.status === 404 &&
@@ -247,7 +249,7 @@ const waitForPreview = async (input: {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Observe the existing supervisor without collecting output.
       const supervisor = await input.provider
         .getCommand(input.commandId, { signal: probeSignal() })
-        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+        // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
         .catch((error: unknown) => {
           input.signal.throwIfAborted();
           if (isMissingPreviewCommand(error)) {
@@ -282,7 +284,7 @@ const waitForPreview = async (input: {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Read the same attempt's startup diagnostics.
       const failure = await input.provider.fs
         .readFile(input.failurePath, { encoding: "utf-8", signal: diagnosticSignal })
-        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+        // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
         .catch((error: unknown) => {
           input.signal.throwIfAborted();
           if (diagnosticSignal.aborted) {

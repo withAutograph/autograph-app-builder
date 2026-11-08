@@ -132,6 +132,7 @@ let defaultResolver: HostedGitHubPublicationRuntimeResolver | undefined;
 /** Lazily parses deployment configuration so local discovery stays disabled. */
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 export async function githubPublicationRuntimeForSession(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   sessionAuth: unknown,
   selection?: { selectedInstallationId: string },
 ) {

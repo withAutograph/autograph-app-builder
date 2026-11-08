@@ -4,6 +4,7 @@ import { prepareReferenceCaptureFixture } from "./self-reproduction-reference-ca
 import { selfReproductionDraft } from "./self-reproduction-draft-fixture";
 
 const fixture = vi.hoisted(() => ({
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   authenticate: vi.fn<(page: unknown, provider: string) => Promise<void>>().mockResolvedValue(),
   end: vi.fn<() => Promise<void>>().mockResolvedValue(),
   query: vi.fn(),

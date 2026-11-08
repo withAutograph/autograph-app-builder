@@ -25,6 +25,7 @@ export type EveEvalPrewarmLockReceipt = Readonly<{
 }>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function isErrno(error: unknown, code: string) {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
   return typeof error === "object" && error !== null && "code" in error && error.code === code;

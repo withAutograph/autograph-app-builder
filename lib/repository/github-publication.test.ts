@@ -47,6 +47,7 @@ import { parseGitHubPublicationProposalRow } from "./postgres-github-publication
 import { sealExistingDraftUpdate, updateExistingDraft } from "./github-draft-update";
 import type { ExistingDraftObservation, ExistingDraftUpdateAdapter } from "./github-draft-update";
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const sha = "1".repeat(40);
 const templateBytes = new TextEncoder().encode("# Template\n");
@@ -1286,7 +1287,7 @@ describe("closed GitHub publication contract", () => {
         proposal,
         review: review(),
         store,
-        // oxlint-disable-next-line github/no-then -- Preserve the existing rejection handling and settlement behavior.
+        // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
       }).catch((error: unknown) => error);
       expect(failure).toBeInstanceOf(Error);
       if (!(failure instanceof Error)) {

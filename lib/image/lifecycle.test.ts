@@ -359,6 +359,7 @@ function writeFixtureReceipt(
   filename: string,
   kind: string,
   exact: ReturnType<typeof createExactImageProvenance>,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   result: unknown,
 ): FixtureReceipt {
   const unsigned = { kind, provenance: exact, result, version: 1 as const };

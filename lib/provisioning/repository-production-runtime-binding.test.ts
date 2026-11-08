@@ -133,6 +133,7 @@ const fixture = (configurationId?: string) => {
       loseBoundaryResponse = true;
     },
     boundaryWrites: () => boundaryWrites,
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     detail: (value: unknown) => {
       detail = value;
     },

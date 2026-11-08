@@ -15,6 +15,7 @@ vi.mock("node:timers/promises", async (importOriginal) => {
 });
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function response(body: unknown, status = 200, sessionId?: string) {
   return new Response(body === undefined ? undefined : JSON.stringify(body), {
     headers: sessionId ? { "mcp-session-id": sessionId } : undefined,
@@ -90,6 +91,7 @@ describe("development MCP readiness", () => {
     const requestedWaits: number[] = [];
     let elapsedMs = 0;
     const now = vi.spyOn(Date, "now").mockImplementation(() => elapsedMs);
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     const deterministicDelay = (ms: number, value?: unknown) => {
       requestedWaits.push(ms);
       elapsedMs += ms;
@@ -134,6 +136,7 @@ describe("development MCP readiness", () => {
     let elapsedMs = 0;
     const requestedWaits: number[] = [];
     const now = vi.spyOn(Date, "now").mockImplementation(() => elapsedMs);
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     const deterministicDelay = (ms: number, value?: unknown) => {
       requestedWaits.push(ms);
       elapsedMs += ms;

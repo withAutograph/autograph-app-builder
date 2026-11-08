@@ -129,6 +129,7 @@ export const digest = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest("hex");
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function canonicalPublicResult(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalPublicResult).join(",")}]`;
@@ -331,6 +332,7 @@ export class HostedMcpProofClient {
 
   private async post(
     method: string,
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
     params: unknown,
     options: { authenticate?: boolean; notification?: boolean } = {},
   ): Promise<ProofHttpResult> {
@@ -402,6 +404,7 @@ export class HostedMcpProofClient {
     return listed.tools.map(({ name }) => name);
   }
 
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   async callTool(name: (typeof TOOL_NAMES)[number], args: unknown) {
     const response = await this.post("tools/call", { arguments: args, name });
     if (response.status !== 200 || response.payload?.error !== undefined) {
@@ -423,6 +426,7 @@ export class HostedMcpProofClient {
     };
   }
 
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   async callToolAndDiscardResult(name: (typeof TOOL_NAMES)[number], args: unknown) {
     const response = await this.post("tools/call", { arguments: args, name });
     if (response.status !== 200 || response.payload?.error !== undefined) {
@@ -449,6 +453,7 @@ export class HostedMcpProofClient {
     };
   }
 
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
   async callToolMatchingDiscardedResult(name: (typeof TOOL_NAMES)[number], args: unknown) {
     const discarded = this.discardedResult;
     if (discarded === undefined || discarded.name !== name) {

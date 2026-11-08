@@ -86,6 +86,7 @@ const defaultDependencies: RuntimeDependencies = {
 let dependencies = defaultDependencies;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 function errorWithCleanupEvidence(error: unknown, evidence: SandboxCleanupEvidence) {
   const preserved =
     error instanceof Error
@@ -102,6 +103,7 @@ function errorWithCleanupEvidence(error: unknown, evidence: SandboxCleanupEviden
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve the existing unknown input contract.
 export function sandboxCleanupEvidence(error: unknown) {
   return error instanceof Error
     ? // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/no-unsafe-dictionary-type -- Cleanup evidence is attached to errors under a private symbol.; Preserve the existing open-ended value contract.
