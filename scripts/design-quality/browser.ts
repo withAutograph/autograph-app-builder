@@ -75,7 +75,10 @@ export const scenariosSchema = z.array(
           selector: z.string().optional(),
           value: z.string().optional(),
         })
-        .refine((s) => Boolean(s.selector || (s.role && s.name)), "Select a role/name or selector"),
+        .refine(
+          (s) => Boolean(s.selector) || (Boolean(s.role) && Boolean(s.name)),
+          "Select a role/name or selector",
+        ),
     ),
   }),
 );
@@ -262,7 +265,7 @@ export function mappedSharedCssRule(input: {
     return;
   }
   const [file] = files;
-  if (!file) {
+  if (file === undefined) {
     return;
   }
   const declarations = sharedCssRules.filter(
@@ -395,7 +398,7 @@ export async function measurePage(page: Page) {
         for (const [i, h] of headers.entries()) {
           const cell = cells[i];
           if (
-            cell &&
+            cell !== undefined &&
             Math.abs(h.getBoundingClientRect().left - cell.getBoundingClientRect().left) > 4
           ) {
             findings.push({
@@ -413,7 +416,7 @@ export async function measurePage(page: Page) {
       for (let j = i + 1; j < Math.min(controls.length, 150); j += 1) {
         const a = controls[i];
         const b = controls[j];
-        if (!a || !b) {
+        if (a === undefined || b === undefined) {
           continue;
         }
         if (a.parentElement !== b.parentElement || a.contains(b) || b.contains(a)) {
@@ -728,7 +731,9 @@ export async function measureStyles(
         const rules = (matched.matchedCSSRules ?? []).filter(
           (m) =>
             m.rule.origin !== "user-agent" &&
-            !(m.rule.media ?? []).some((media) => media.mediaList?.every((q) => !q.active)),
+            !(m.rule.media ?? []).some((media) =>
+              Boolean(media.mediaList?.every((q) => !q.active)),
+            ),
         );
         const inherited = /^(?<property>font-|line-height|letter-spacing|color$)/u.test(property)
           ? (matched.inherited ?? []).flatMap((i) =>
@@ -751,7 +756,7 @@ export async function measureStyles(
             )
           : [];
         const unsupportedGap = gapShorthands.some(
-          (declaration) => declaration.value.trim() && !singleGapValue(declaration.value),
+          (declaration) => Boolean(declaration.value.trim()) && !singleGapValue(declaration.value),
         );
         const gapFallback =
           needsGapFallback && !unsupportedGap
@@ -762,7 +767,7 @@ export async function measureStyles(
                       p.name === "gap" &&
                       p.disabled !== true &&
                       p.parsedOk !== false &&
-                      singleGapValue(p.value),
+                      Boolean(singleGapValue(p.value)),
                   )
                   .map((p) => ({
                     p,
