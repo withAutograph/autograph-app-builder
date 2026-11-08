@@ -67,20 +67,20 @@ describe("development process supervision", () => {
     if (process.platform === "win32") {
       return;
     }
-    // ChildProcess is an EventEmitter in Node, not an EventTarget.
-    // oxlint-disable-next-line unicorn/prefer-event-target
-    const child = new EventEmitter() as ChildProcess;
     const directSignals: (NodeJS.Signals | number | undefined)[] = [];
     const groupSignals: Parameters<typeof process.kill>[1][] = [];
-    Object.defineProperties(child, {
-      exitCode: { value: null, writable: true },
-      pid: { value: 43_210 },
-      signalCode: { value: null, writable: true },
-    });
-    child.kill = (signal?: NodeJS.Signals | number) => {
-      directSignals.push(signal);
-      return true;
+    const childState: Pick<ChildProcess, "exitCode" | "signalCode" | "pid" | "kill"> = {
+      exitCode: null,
+      kill: (signal?: NodeJS.Signals | number) => {
+        directSignals.push(signal);
+        return true;
+      },
+      pid: 43_210,
+      signalCode: null,
     };
+    // ChildProcess is an EventEmitter in Node, not an EventTarget.
+    // oxlint-disable-next-line unicorn/prefer-event-target
+    const child = Object.assign(new EventEmitter(), childState);
     const kill = vi.spyOn(process, "kill").mockImplementation((_pid, signal) => {
       groupSignals.push(signal);
       if (signal === "SIGKILL") {

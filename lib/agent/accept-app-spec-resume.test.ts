@@ -51,14 +51,24 @@ const accepted = {
   content: legacyContent,
   digest: artifact.digest,
 };
-const getSandbox = vi.fn();
-// SAFETY: acceptance uses only these context fields; preparation is mocked and must not request a sandbox during reuse.
+const unexpectedContextOperation = () => {
+  throw new Error("Unexpected tool context operation");
+};
+const getSandbox = vi.fn(unexpectedContextOperation);
 const context = {
+  abortSignal: new AbortController().signal,
   callId: "retry-acceptance",
   getSandbox,
   getSkill: vi.fn(),
-  session: { id: artifact.sessionId },
-} as unknown as Parameters<typeof acceptAppSpec.execute>[1];
+  getToken: unexpectedContextOperation,
+  requireAuth: unexpectedContextOperation,
+  session: {
+    auth: { current: null, initiator: null },
+    id: artifact.sessionId,
+    turn: { id: "retry-acceptance-turn", sequence: 0 },
+  },
+  toolName: "accept_app_spec",
+};
 
 const seed = (phase: AppBuilderWorkflowState["phase"], prepared = true) => {
   const fixture = {

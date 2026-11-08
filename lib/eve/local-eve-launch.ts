@@ -325,7 +325,7 @@ export function localEveLaunchReceipt(invocation: LocalEveInvocation) {
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function waitForForwardedEveChild(
-  child: ChildProcess,
+  child: NodeJS.EventEmitter & Pick<ChildProcess, "kill">,
   signalTarget: SignalTarget = process,
 ) {
   const forwardInterrupt = () => child.kill("SIGINT");

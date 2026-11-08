@@ -349,11 +349,12 @@ describe("passkey-first onboarding authority", () => {
 
   it("fails closed when expired-context cleanup fails", async () => {
     const cleanupFailure = new Error("cleanup failed");
-    const deleteMany = vi.fn().mockRejectedValue(cleanupFailure);
-    const create = vi.fn();
-    const adapter = { create, deleteMany } as unknown as Parameters<
-      typeof issuePasskeyOnboardingContext
-    >[0];
+    type Adapter = Parameters<typeof issuePasskeyOnboardingContext>[0];
+    const deleteMany = vi.fn<Adapter["deleteMany"]>().mockRejectedValue(cleanupFailure);
+    const create = vi.fn((): never => {
+      throw new Error("Unexpected onboarding context creation");
+    });
+    const adapter: Adapter = { create, deleteMany };
 
     await expect(issuePasskeyOnboardingContext(adapter, previewConfig, fixedNow)).rejects.toBe(
       cleanupFailure,

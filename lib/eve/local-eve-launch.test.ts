@@ -10,8 +10,6 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import type { ChildProcess } from "node:child_process";
-
 import { describe, expect, it } from "vitest";
 import {
   readLocalOperatorArtifactAuthority,
@@ -89,20 +87,21 @@ describe("closed local Eve launch", () => {
     // Node's signal-target contract requires EventEmitter's once/off API.
     // oxlint-disable-next-line unicorn/prefer-event-target
     const signals = new EventEmitter();
+    const forwarded: NodeJS.Signals[] = [];
     // ChildProcess is an EventEmitter in Node, not an EventTarget.
     // oxlint-disable-next-line unicorn/prefer-event-target
-    const child = new EventEmitter() as ChildProcess;
-    const forwarded: NodeJS.Signals[] = [];
+    const child = Object.assign(new EventEmitter(), {
+      kill: (signal?: NodeJS.Signals | number) => {
+        if (typeof signal === "string") {
+          forwarded.push(signal);
+        }
+        return true;
+      },
+    });
     Object.defineProperties(child, {
       exitCode: { value: null, writable: true },
       signalCode: { value: null, writable: true },
     });
-    child.kill = (signal?: NodeJS.Signals | number) => {
-      if (typeof signal === "string") {
-        forwarded.push(signal);
-      }
-      return true;
-    };
 
     const stopped = waitForForwardedEveChild(child, signals);
     signals.emit("SIGTERM");

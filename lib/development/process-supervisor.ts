@@ -3,6 +3,9 @@ import { once } from "node:events";
 import { createConnection } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
 
+type DevelopmentChild = NodeJS.EventEmitter &
+  Pick<ChildProcess, "exitCode" | "signalCode" | "pid" | "kill">;
+
 type DevelopmentSignal = "SIGINT" | "SIGTERM";
 
 type SignalTarget = Readonly<{
@@ -47,7 +50,7 @@ export function waitForDevelopmentShutdown(signal: AbortSignal, exitCode: () => 
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function developmentChildExit(child: ChildProcess) {
+export function developmentChildExit(child: DevelopmentChild) {
   if (child.exitCode !== null) {
     return Promise.resolve(child.exitCode);
   }
@@ -59,7 +62,7 @@ export function developmentChildExit(child: ChildProcess) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function stopDevelopmentChild(
-  child: ChildProcess,
+  child: DevelopmentChild,
   options: Readonly<{
     processGroup?: boolean;
     gracefulTimeoutMs?: number;
