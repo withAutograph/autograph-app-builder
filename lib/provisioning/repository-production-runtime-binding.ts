@@ -7,6 +7,10 @@ import type {
   RepositoryProductionObservation,
 } from "./repository-production-setup";
 
+interface RuntimeRequestHeaders extends Record<string, string> {
+  authorization: string;
+}
+
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const rowSchema = z.object({
   id: z.string(),
@@ -41,17 +45,24 @@ export const createRepositoryProductionRuntimeBinding = (input: {
     await context.assertCurrent();
     const url = new URL(path, "https://api.vercel.com");
     url.searchParams.set("teamId", input.teamId);
-    const response = await (input.fetch ?? fetch)(url, {
+    const fetchRequest = input.fetch ?? fetch;
+    const initial: Pick<RequestInit, "method" | "cache" | "redirect" | "signal"> = {
       method: body === undefined ? "GET" : "POST",
       cache: "no-store",
       redirect: "error",
       signal: input.signal,
-      headers: {
-        authorization: `Bearer ${token}`,
-        ...(body === undefined ? {} : { "content-type": "application/json" }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
+    };
+    const headers: RuntimeRequestHeaders = {
+      authorization: `Bearer ${token}`,
+    };
+    if (body !== undefined) {
+      headers["content-type"] = "application/json";
+    }
+    const options: RequestInit = { ...initial, headers };
+    if (body !== undefined) {
+      options.body = JSON.stringify(body);
+    }
+    const response = await fetchRequest(url, options);
     if (!response.ok) {
       await response.body?.cancel();
       throw new Error("repository_production_runtime_provider_failed");
