@@ -518,16 +518,14 @@ describe("installed Eve 0.68 projection", () => {
   });
   it("recovers only the latest receipt-bound HTML prototype", () => {
     const first = recordedPrototypeEvents();
+    const updatedContent = "<!doctype html><html><body>Updated review queue</body></html>";
     const second = recordedPrototypeEvents({
       callId: "call_prototype_2",
-      content: "<!doctype html><html><body>Updated review queue</body></html>",
+      content: updatedContent,
     });
-    const expected = second[0] as MessageStreamEvent & {
-      data: { actions: [{ input: { content: string } }] };
-    };
 
     expect(latestInstalledPrototype([...first, ...second])).toMatchObject({
-      content: expected.data.actions[0].input.content,
+      content: updatedContent,
       mediaType: "text/html",
       path: "prototype/vendor-onboarding/index.html",
     });

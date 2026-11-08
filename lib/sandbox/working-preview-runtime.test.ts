@@ -4,13 +4,17 @@ import type { Sandbox } from "@vercel/sandbox";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { startWorkingPreview, stopWorkingPreviewCommand } from "./working-preview-runtime";
+import type { PreviewAttempt, previewOwnershipOperation } from "./working-preview-ownership";
 
-const ownership = vi.hoisted(() => ({ current: null as Record<string, unknown> | null }));
+const ownership = vi.hoisted(() => ({ current: null as Partial<PreviewAttempt> | null }));
 vi.mock("./working-preview-ownership", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
-    previewOwnershipOperation: (_provider: unknown, operation: Record<string, unknown>) => {
+    previewOwnershipOperation: (
+      _provider: unknown,
+      operation: Parameters<typeof previewOwnershipOperation>[1],
+    ) => {
       if (operation.kind === "read") {
         return Promise.resolve(ownership.current);
       }
@@ -18,7 +22,7 @@ vi.mock("./working-preview-ownership", async (importOriginal) => {
         if (ownership.current !== null) {
           return Promise.resolve({ claimed: false });
         }
-        ownership.current = operation.attempt as Record<string, unknown>;
+        ownership.current = operation.attempt;
         return Promise.resolve({ claimed: true });
       }
       if (ownership.current?.attemptId !== operation.attemptId) {
@@ -28,7 +32,7 @@ vi.mock("./working-preview-ownership", async (importOriginal) => {
         ownership.current = null;
       }
       if (operation.kind === "update") {
-        ownership.current = { ...ownership.current, ...(operation.patch as object) };
+        ownership.current = { ...ownership.current, ...operation.patch };
       }
       return Promise.resolve(ownership.current);
     },
@@ -402,7 +406,10 @@ describe("safe interrupted startup diagnostics", () => {
       signal: AbortSignal.timeout(100),
     }).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(Error);
-    const { message } = failure as Error;
+    if (!(failure instanceof Error)) {
+      throw new Error("Expected preview startup to fail with an Error.");
+    }
+    const { message } = failure;
     expect(message).toContain("application HTTP readiness. Last observation: Application HTTP 503");
     expect(message).not.toMatch(/secret|https:|token|cookie|preview\.example/u);
   });
@@ -569,7 +576,10 @@ it("sanitizes startup error files and keeps the safe cause visible if cleanup fa
     observed = error;
   }
   expect(observed).toBeInstanceOf(AggregateError);
-  const { message } = observed as Error;
+  if (!(observed instanceof AggregateError)) {
+    throw new Error("Expected preview startup to fail with an AggregateError.");
+  }
+  const { message } = observed;
   expect(message).toContain("The application server failed to start");
   expect(message).toContain("Error:");
   expect(message).not.toMatch(/private-value|private-token|https:/u);

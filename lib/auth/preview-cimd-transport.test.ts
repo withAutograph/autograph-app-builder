@@ -36,7 +36,10 @@ function runLookup(options: LookupOptions) {
     if (lookupError) {
       throw lookupError;
     }
-    return { address: lookupAddress as string | LookupAddress[], family: lookupFamily };
+    if (lookupAddress === undefined) {
+      throw new Error("Expected a DNS lookup address.");
+    }
+    return { address: lookupAddress, family: lookupFamily };
   });
 }
 

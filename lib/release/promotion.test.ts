@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import { IMAGE_REPOSITORY } from "../image/lifecycle";
 import {
@@ -319,9 +320,9 @@ describe("release promotion contract", () => {
 
     const receiptMutation = await candidate();
     const receiptPath = path.join(receiptMutation, "promotion-receipt.json");
-    const receipt = JSON.parse(await readFile(receiptPath, "utf-8")) as {
-      digest: string;
-    };
+    const receipt = z
+      .record(z.string(), z.unknown())
+      .parse(JSON.parse(await readFile(receiptPath, "utf-8")));
     receipt.digest = "0".repeat(64);
     await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
     await expect(verifyPromotionCandidate({ candidateRoot: receiptMutation })).rejects.toThrow(
