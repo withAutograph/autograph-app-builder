@@ -60,23 +60,23 @@ const fixture = (change?: (typeof mutations)[number]) => {
       body.principalGeneration += 1;
     }
     return Response.json(body, {
-      status: change === "vercel-login" ? 403 : 200,
       headers: {
         "x-autograph-integration-readiness-signature":
           change === "signature" ? "0".repeat(64) : signature("response", JSON.stringify(body)),
       },
+      status: change === "vercel-login" ? 403 : 200,
     });
   });
   return {
     http,
     input: {
-      publicOrigin: "https://invoice-app.example",
-      attachment,
-      setupProofSecret: secret,
       assertCurrent: vi.fn(async () => {}),
-      signal: new AbortController().signal,
+      attachment,
       fetch: http,
       now: () => seconds * 1000,
+      publicOrigin: "https://invoice-app.example",
+      setupProofSecret: secret,
+      signal: new AbortController().signal,
     },
   };
 };

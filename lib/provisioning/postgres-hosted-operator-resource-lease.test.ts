@@ -219,9 +219,9 @@ describe("dedicated-session protected resource lease", () => {
         authority,
         teamId: context.target.scopeId,
         app: {
-          projectId: plan.selection.projectId,
           branch: plan.selection.branch,
           environment: "preview",
+          projectId: plan.selection.projectId,
         },
         gateway: { branch: "gateway", environment: "preview", projectId: "shared-gateway" },
         operator: {
@@ -249,8 +249,6 @@ describe("dedicated-session protected resource lease", () => {
     const external = hostedOperatorPlanSchema.parse({
       ...legacy,
       hostProtection: {
-        mode: "externally-managed-trusted-sources",
-        teamId: context.target.scopeId,
         appPreview: {
           from: "preview",
           sourceProjectId: "shared-gateway",
@@ -263,11 +261,13 @@ describe("dedicated-session protected resource lease", () => {
           targetProjectId: "shared-gateway",
           to: "preview",
         },
+        mode: "externally-managed-trusted-sources",
         observedAt: "2026-10-19T12:00:00Z",
         provenance: {
           kind: "administrator-provider-readback",
           reference: "synthetic-independent-readback",
         },
+        teamId: context.target.scopeId,
       },
     });
     expect(hostedOperatorVercelProjectLockKeys(external, context.target.scopeId)).toEqual(

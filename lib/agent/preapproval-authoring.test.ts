@@ -32,15 +32,15 @@ const accepted = (durable = false): AppBuilderWorkflowState =>
     workspace: { workspaceId: "workspace", workspaceDigest: hash("d") },
   }) as unknown as AppBuilderWorkflowState;
 const input = (state = accepted()) => ({
-  state,
   adapterSessionId: "logical",
+  blocked: false,
+  completed: true,
+  pendingApproval: false,
+  pendingInput: false,
+  sourcePrerequisite: false,
+  state,
   turnId: "turn",
   turnSequence: 4,
-  completed: true,
-  pendingInput: false,
-  pendingApproval: false,
-  blocked: false,
-  sourcePrerequisite: false,
 });
 describe("preapproval drafting intent", () => {
   it.each([false, true])(
