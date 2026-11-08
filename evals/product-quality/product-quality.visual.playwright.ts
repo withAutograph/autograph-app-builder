@@ -37,9 +37,9 @@ test.beforeAll(async () => {
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     response.end(vendorOnboardingPrototype);
   });
-  const { promise, resolve } = Promise.withResolvers<undefined>();
+  const { promise, resolve } = Promise.withResolvers<void>();
   prototypeServer.listen(0, "127.0.0.1", () => {
-    resolve(undefined);
+    resolve();
   });
   await promise;
   const address = prototypeServer.address() as AddressInfo;

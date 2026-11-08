@@ -731,16 +731,16 @@ test("a session created after context issuance blocks registration", async ({ co
   reportPasskeyFailures(page);
   const authenticator = await VirtualAuthenticator.create(context, page);
   // Keep callback fixtures scoped to this scenario.
-  const optionsResponse = Promise.withResolvers<undefined>();
+  const optionsResponse = Promise.withResolvers<void>();
   const { promise: optionsResponseMayContinue, resolve: releaseOptionsResponse } = optionsResponse;
-  const generatedOptions = Promise.withResolvers<undefined>();
+  const generatedOptions = Promise.withResolvers<void>();
   const { promise: optionsGenerated, resolve: markOptionsGenerated } = generatedOptions;
   let sessionPage: Page | undefined;
 
   try {
     await page.route(/\/api\/auth\/passkey\/generate-register-options(?:\?|$)/u, async (route) => {
       const response = await route.fetch();
-      markOptionsGenerated(undefined);
+      markOptionsGenerated();
       await optionsResponseMayContinue;
       await route.fulfill({ response });
     });
@@ -758,7 +758,7 @@ test("a session created after context issuance blocks registration", async ({ co
     const verificationResponsePromise = page.waitForResponse(
       (response) => new URL(response.url()).pathname === "/api/auth/passkey/verify-registration",
     );
-    releaseOptionsResponse(undefined);
+    releaseOptionsResponse();
     await clickPromise;
     const verificationResponse = await verificationResponsePromise;
 
@@ -772,7 +772,7 @@ test("a session created after context issuance blocks registration", async ({ co
     const finalCounts = await authCounts();
     expect(finalCounts.passkeys).toBe(0);
   } finally {
-    releaseOptionsResponse(undefined);
+    releaseOptionsResponse();
     await sessionPage?.close();
     await authenticator.dispose();
   }

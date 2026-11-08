@@ -899,10 +899,10 @@ const acquireLease = async (
   holder.stderr.on("data", (chunk: string) => {
     helperError = `${helperError}${chunk}`.slice(-2000);
   });
-  const { promise: exited, resolve: resolveExit } = Promise.withResolvers<undefined>();
+  const { promise: exited, resolve: resolveExit } = Promise.withResolvers<void>();
   holder.once("error", (error) => {
     terminal = error;
-    resolveExit(undefined);
+    resolveExit();
   });
   holder.once("exit", (code, signal) => {
     if (terminal === undefined && (!releasing || code !== 0 || signal !== null)) {
@@ -910,9 +910,9 @@ const acquireLease = async (
       const detail = helperError.trim() === "" ? "." : `: ${helperError.trim()}`;
       terminal = new Error(`${message}${detail}`);
     }
-    resolveExit(undefined);
+    resolveExit();
   });
-  const { promise: ready, reject, resolve } = Promise.withResolvers<undefined>();
+  const { promise: ready, reject, resolve } = Promise.withResolvers<void>();
   const timeout = setTimeout(() => {
     holder.kill("SIGKILL");
     reject(new Error("Lease timeout."));
@@ -921,7 +921,7 @@ const acquireLease = async (
   holder.stdout.once("data", (chunk: string) => {
     clearTimeout(timeout);
     if (chunk === "READY\n") {
-      resolve(undefined);
+      resolve();
     } else {
       reject(new Error("Lease handshake failed."));
     }
@@ -1019,11 +1019,11 @@ const quiesceAbandonedLease = async (
   let stderr = "";
   holder.stderr.setEncoding("utf-8");
   holder.stderr.on("data", (chunk: string) => (stderr += chunk));
-  const { promise: exited, resolve: resolveExit } = Promise.withResolvers<undefined>();
+  const { promise: exited, resolve: resolveExit } = Promise.withResolvers<void>();
   holder.once("exit", () => {
-    resolveExit(undefined);
+    resolveExit();
   });
-  const { promise: ready, reject, resolve } = Promise.withResolvers<undefined>();
+  const { promise: ready, reject, resolve } = Promise.withResolvers<void>();
   const timeout = setTimeout(() => {
     holder.kill("SIGKILL");
     reject(new Error("Lease quiescence timeout."));
@@ -1032,7 +1032,7 @@ const quiesceAbandonedLease = async (
   holder.stdout.once("data", (chunk: string) => {
     clearTimeout(timeout);
     if (chunk === "READY\n") {
-      resolve(undefined);
+      resolve();
     } else {
       reject(new Error("Lease quiescence handshake failed."));
     }

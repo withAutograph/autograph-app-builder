@@ -14,6 +14,30 @@ export default defineConfig({
   },
   overrides: [
     {
+      // Existing explicit undefined values awaiting contract review.
+      files: [
+        "app/actions/builder.test.ts",
+        "app/ui/app-builder.test.tsx",
+        "app/ui/builder-draft-outbox.ts",
+        "app/ui/handoff-controls.tsx",
+        "app/ui/handoff-provisioning-progress.tsx",
+        "app/ui/use-builder-controller.ts",
+        "components/auth/passkey/add-passkey-dialog.tsx",
+        "lib/agent/deployment-repository-access-runtime.test.ts",
+        "lib/agent/fresh-published-draft-preparation.test.ts",
+        "lib/agent/hosted-github-publication-runtime.test.ts",
+        "lib/agent/prepare-app-creation-projection.test.ts",
+        "lib/agent/review-applied-product-source.test.ts",
+        "lib/db/migrate-execution.test.ts",
+        "lib/db/preview-activation-cli.mts",
+        "lib/handoff/deployment.test.ts",
+        "lib/handoff/page-data.test.ts",
+        "lib/provisioning/hosted-operator-ready-delivery-replacement.test.ts",
+        "lib/provisioning/repository-production-creator.test.ts",
+      ],
+      rules: { "unicorn/no-useless-undefined": "off" },
+    },
+    {
       // Preserve the existing error classes at these validation boundaries.
       files: [
         ".config/mise/scripts/repository/build-hosted-arrusted-artifact.mts",
@@ -194,7 +218,6 @@ export default defineConfig({
     "typescript/strict-void-return": "off",
     "typescript/unbound-method": "off",
     "unicorn/consistent-function-scoping": "off",
-    "unicorn/no-useless-undefined": "off",
     "eslint/complexity": "off",
     // Temporary migration items: re-enable after the existing findings are fixed.
     "eslint/sort-keys": "off",

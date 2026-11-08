@@ -239,7 +239,7 @@ describe("local Eve acceptance", () => {
   });
 
   it("keeps buffered progress readable while a clean response close tails a live turn", async () => {
-    const tailReady = Promise.withResolvers<undefined>();
+    const tailReady = Promise.withResolvers<void>();
     const response = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
@@ -292,7 +292,7 @@ describe("local Eve acceptance", () => {
     expect(snapshot).not.toHaveBeenCalled();
     expect(attach).toHaveBeenCalledWith(started.sessionId, { streamIndex: 1 });
 
-    tailReady.resolve(undefined);
+    tailReady.resolve();
     await vi.waitFor(async () => {
       await expect(
         service.get({ cursor: 0, limit: 100, sessionId: started.sessionId }),
@@ -563,7 +563,7 @@ describe("local Eve acceptance", () => {
   });
 
   it("makes an active local turn resumable after its Eve child restarts", async () => {
-    const oldResponseOpen = Promise.withResolvers<undefined>();
+    const oldResponseOpen = Promise.withResolvers<void>();
     const oldResponse = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
@@ -657,7 +657,7 @@ describe("local Eve acceptance", () => {
       streamIndex: 1,
     });
     expect(session.snapshot).toHaveBeenCalledTimes(1);
-    oldResponseOpen.resolve(undefined);
+    oldResponseOpen.resolve();
   });
 
   it("keeps a verified prototype on cursor-at-tail and accepted follow-ups", async () => {
@@ -1043,11 +1043,11 @@ describe("local Eve acceptance", () => {
   });
 
   it("keeps get, send, and cancel independent while rejecting a non-outstanding response", async () => {
-    const cancelled = Promise.withResolvers<undefined>();
+    const cancelled = Promise.withResolvers<void>();
     const response = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => {
-        cancelled.resolve(undefined);
+        cancelled.resolve();
         return { status: "accepted" };
       }),
       async *[Symbol.asyncIterator]() {
