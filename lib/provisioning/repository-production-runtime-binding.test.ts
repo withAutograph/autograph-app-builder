@@ -51,7 +51,7 @@ const fixture = () => {
   let writes = 0;
   let detail: unknown;
   let httpFailure: { phase: "list" | "detail" | "write"; status: number } | undefined;
-  let rejection: unknown;
+  let rejection: Error | undefined;
   const fetcher: typeof fetch = async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : input.toString());
     expect(url.searchParams.get("teamId")).toBe("team");
@@ -95,7 +95,7 @@ const fixture = () => {
     failHttp: (phase: "list" | "detail" | "write", status: number) => {
       httpFailure = { phase, status };
     },
-    reject: (value: unknown) => {
+    reject: (value: Error) => {
       rejection = value;
     },
     service: createRepositoryProductionRuntimeBinding({
