@@ -448,9 +448,13 @@ const referenceAdapter = (
 
 export const createWorkflowAdapters = (
   input: WorkflowAdapterFactoryInput,
-): Partial<Record<"reference" | "candidate", TrustedBrowserWorkflowAdapter>> => ({
-  ...(input.referenceUrl
-    ? { reference: referenceAdapter(input.referenceUrl, input.referenceFixtureRoot) }
-    : {}),
-  ...(input.candidateUrl ? { candidate: semanticCandidateAdapter(input.candidateUrl) } : {}),
-});
+): Partial<Record<"reference" | "candidate", TrustedBrowserWorkflowAdapter>> => {
+  const adapters: Partial<Record<"reference" | "candidate", TrustedBrowserWorkflowAdapter>> = {};
+  if (input.referenceUrl) {
+    adapters.reference = referenceAdapter(input.referenceUrl, input.referenceFixtureRoot);
+  }
+  if (input.candidateUrl) {
+    adapters.candidate = semanticCandidateAdapter(input.candidateUrl);
+  }
+  return adapters;
+};

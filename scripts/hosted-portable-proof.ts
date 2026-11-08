@@ -10,6 +10,17 @@ import { approvalReceiptSchema } from "../lib/agent/approval-receipt";
 
 export { approvalReceiptSchema } from "../lib/agent/approval-receipt";
 
+interface ProofRpcPrefix {
+  id?: number;
+  jsonrpc: string;
+}
+
+interface ProofQuestionAnswer {
+  kind: "answer";
+  optionId?: HostedProofScenario["questionResponses"][number]["optionId"];
+  value: HostedProofScenario["questionResponses"][number]["value"];
+}
+
 const MCP_PROTOCOL_VERSION = "2025-03-26";
 const WWW_AUTHENTICATE_HEADER = "www-authenticate";
 
@@ -328,12 +339,11 @@ export class HostedMcpProofClient {
     if (!options.notification) {
       this.requestId += 1;
     }
-    const body = {
-      jsonrpc: "2.0",
-      ...(options.notification ? {} : { id: this.requestId }),
-      method,
-      params,
-    };
+    const prefix: ProofRpcPrefix = { jsonrpc: "2.0" };
+    if (!options.notification) {
+      prefix.id = this.requestId;
+    }
+    const body = { ...prefix, method, params };
     const response = await this.fetcher(this.endpoint, {
       body: JSON.stringify(body),
       headers,
@@ -536,13 +546,11 @@ function responseFor(
       throw new Error("Question did not match exactly one title-bound response.");
     }
     const [match] = matches;
-    return {
-      response: {
-        kind: "answer" as const,
-        value: match.value,
-        ...(match.optionId === undefined ? {} : { optionId: match.optionId }),
-      },
-    };
+    const response: ProofQuestionAnswer = { kind: "answer", value: match.value };
+    if (match.optionId !== undefined) {
+      response.optionId = match.optionId;
+    }
+    return { response };
   }
   if (request.kind !== "approval" || request.description === undefined) {
     throw new Error("Only closed question or approval requests can be automated.");

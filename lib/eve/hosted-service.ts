@@ -1390,15 +1390,20 @@ export function createHostedEveSessionService(input: {
         : { progress: metadata.approvalReplayProgress }),
       assertOwner,
       observe: async (previous) => {
-        const spool = await spoolObservedSession({
+        const spoolDetails: Pick<
+          Parameters<typeof spoolObservedSession>[0],
+          "adapterSessionId" | "allowPartialObservation"
+        > &
+          Partial<Parameters<typeof spoolObservedSession>[0]> = {
           adapterSessionId: session.adapterSessionId,
           allowPartialObservation: true,
-          ...(previous === undefined
-            ? {}
-            : {
-                nativeObservationState: previous.nativeObservationState,
-                privateApprovalCaptureState: previous.privateApprovalCaptureState,
-              }),
+        };
+        if (previous !== undefined) {
+          spoolDetails.nativeObservationState = previous.nativeObservationState;
+          spoolDetails.privateApprovalCaptureState = previous.privateApprovalCaptureState;
+        }
+        const spool = await spoolObservedSession({
+          ...spoolDetails,
           privateApprovalSessionId: approvalSessionId,
           principal,
           sessionId: session.sessionId,
@@ -4550,11 +4555,15 @@ export function createHostedEveSessionService(input: {
                 queued = evidence;
               },
             );
+            const dispatchResult: {
+              result: EveSessionResult;
+              queuedSend?: { delivery: SendDelivery; evidence: SendReadEvidence };
+            } = { result };
+            if (queued !== undefined) {
+              dispatchResult.queuedSend = { delivery: sendDelivery, evidence: queued };
+            }
             return {
-              result,
-              ...(queued === undefined
-                ? {}
-                : { queuedSend: { delivery: sendDelivery, evidence: queued } }),
+              ...dispatchResult,
               sendDeliveryResolution: await nativeDeliveriesForSession(
                 await requireSession(request.sessionId),
               ),

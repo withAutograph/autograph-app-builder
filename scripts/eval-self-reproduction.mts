@@ -479,6 +479,15 @@ const reportHtml = (report: {
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>App Builder self-reproduction eval</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1280px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td:first-child{text-transform:uppercase;font-weight:700}pre{white-space:pre-wrap;background:#f5f5f5;padding:16px}li{margin:14px 0}</style><main><h1>App Builder self-reproduction eval</h1><p>One unassisted baseline. Static evidence does not prove runtime behavior. Missing or unavailable evidence is never reported as success.</p><p>${escape(report.createdAt)} · <a href="report.json">JSON evidence</a> · <a href="report.md">Markdown summary</a></p><h2>Generation</h2><pre>${escape(JSON.stringify(report.generation, null, 2))}</pre><h2>Prioritized gaps</h2>${gaps}<h2>Requirements</h2><table><thead><tr><th>Status</th><th>Side</th><th>Requirement</th><th>Reason</th><th>Artifacts</th></tr></thead><tbody>${rows}</tbody></table><h2>Browser evidence</h2>${diagnosticPairs}<ul>${captureItems || "<li>Not captured.</li>"}</ul></main></html>`;
 };
 
+interface TemplateAcquisition {
+  acquisition?: Awaited<ReturnType<typeof prepareSelfReproductionTemplateSource>>;
+}
+
+interface GeneratorInterruption {
+  interrupted?: string;
+  status?: "failed";
+}
+
 const runGenerator = async (arrustedRoot: string | undefined) => {
   if (values["report-only"] === true) {
     return { reason: "Report-only mode selected.", status: "not-run" };
@@ -649,10 +658,15 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
   } else if (!nativePassed) {
     nativeFailure = { reason: "Native strict eval did not pass.", status: "failed" };
   }
+  const completed = { ...completion, ...result };
+  const interruption: GeneratorInterruption = {};
+  if (interrupted) {
+    interruption.interrupted = interrupted;
+    interruption.status = "failed";
+  }
   return {
-    ...completion,
-    ...result,
-    ...(interrupted ? { interrupted, status: "failed" } : {}),
+    ...completed,
+    ...interruption,
     elapsedMs: Date.now() - childStarted,
     nativeResult: nativeResultFile,
     ...nativeFailure,
@@ -1002,11 +1016,13 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
           })
         : undefined;
     const arrustedRoot = templateSource?.sourcePath;
+    const arrustedRevision = revision(arrustedRoot);
+    const acquisition: TemplateAcquisition = {};
+    if (templateSource) {
+      acquisition.acquisition = templateSource;
+    }
     revisions = {
-      arrusted: {
-        ...revision(arrustedRoot),
-        ...(templateSource ? { acquisition: templateSource } : {}),
-      },
+      arrusted: { ...arrustedRevision, ...acquisition },
       builder: revision(root),
     };
     await jsonFile("revisions.json", revisions);

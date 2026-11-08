@@ -24,6 +24,12 @@ export type ImageLifecycleAction =
   | "prepare-proof-runtime"
   | "prove";
 
+interface LifecycleArguments {
+  approval: LifecycleApproval;
+  image?: string;
+  username?: string;
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseLifecycleArguments(
   action: ImageLifecycleAction,
@@ -60,11 +66,14 @@ export function parseLifecycleArguments(
   const username = action === "login" ? required("--username") : undefined;
   if (entries.size !== 0)
     throw new Error(`Unknown image lifecycle arguments: ${[...entries.keys()].join(", ")}.`);
-  return {
-    approval,
-    ...(image === undefined ? {} : { image }),
-    ...(username === undefined ? {} : { username }),
-  };
+  const result: LifecycleArguments = { approval };
+  if (image !== undefined) {
+    result.image = image;
+  }
+  if (username !== undefined) {
+    result.username = username;
+  }
+  return result;
 }
 
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.

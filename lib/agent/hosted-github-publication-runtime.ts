@@ -192,15 +192,19 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
 
       const stores = dependencies.publicationStores(pool, authority);
       const adapter = await input.providerFactory({ authority, installation });
+      const runtimeInput: Omit<Parameters<typeof composeGitHubPublicationRuntime>[0], "receipts"> =
+        {
+          adapter,
+          adoptions: stores.adoptions ?? createPostgresGitHubDraftAdoptionStore(pool, authority),
+          authority,
+          enabled: true,
+          proposals: stores.proposals,
+        };
+      if (input.prEffectsEnabled === true) {
+        runtimeInput.prEffects = createPostgresGitHubPrEffectStore(pool, authority);
+      }
       return composeGitHubPublicationRuntime({
-        adapter,
-        adoptions: stores.adoptions ?? createPostgresGitHubDraftAdoptionStore(pool, authority),
-        authority,
-        enabled: true,
-        proposals: stores.proposals,
-        ...(input.prEffectsEnabled === true
-          ? { prEffects: createPostgresGitHubPrEffectStore(pool, authority) }
-          : {}),
+        ...runtimeInput,
         receipts: stores.receipts,
       });
     },

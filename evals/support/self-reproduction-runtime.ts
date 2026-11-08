@@ -474,11 +474,17 @@ export const evaluateCandidateRuntime = async (input: {
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const receipt: Pick<CandidateRuntimeReceipt, "commands" | "producer" | "reason" | "sandboxId"> =
+      {
+        commands: [],
+        producer: "evaluator",
+        reason: message,
+      };
+    if (handle !== undefined) {
+      receipt.sandboxId = handle.id;
+    }
     return {
-      commands: [],
-      producer: "evaluator",
-      reason: message,
-      ...(handle === undefined ? {} : { sandboxId: handle.id }),
+      ...receipt,
       probes: [],
       status:
         handle === undefined && /credential|oidc|sandbox|network|fetch/iu.test(message)
