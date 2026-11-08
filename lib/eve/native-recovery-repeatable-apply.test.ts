@@ -5,14 +5,14 @@ const scope = {
   appId: "app",
   appSpecDigest: "spec",
   proposalDigest: "proposal",
-  workspaceId: "workspace",
   sessionId: "logical",
+  workspaceId: "workspace",
 };
 const fixture = () => ({
   descriptor: { logicalSessionId: "logical" },
-  binding: { ownerRunId: "physical", logicalSessionId: "logical" },
+  binding: { logicalSessionId: "logical", ownerRunId: "physical" },
   payload: {
-    binding: { ownerRunId: "physical", logicalSessionId: "logical" },
+    binding: { logicalSessionId: "logical", ownerRunId: "physical" },
     candidates: [
       {
         origin: { slot: 24 },
@@ -51,23 +51,23 @@ const fixture = () => ({
         sessionState: {
           snapshot: {
             session: {
-              sessionId: "logical",
               history: [
                 {
-                  role: "assistant",
                   content: [
-                    { type: "tool-call", toolName: "apply_app_creation", toolCallId: "call" },
-                    { type: "tool-approval-request", toolCallId: "call", approvalId: "approval" },
+                    { toolCallId: "call", toolName: "apply_app_creation", type: "tool-call" },
+                    { approvalId: "approval", toolCallId: "call", type: "tool-approval-request" },
                   ],
+                  role: "assistant",
                 },
                 {
-                  role: "tool",
                   content: [
-                    { type: "tool-approval-response", approvalId: "approval", approved: true },
+                    { approvalId: "approval", approved: true, type: "tool-approval-response" },
                   ],
+                  role: "tool",
                 },
-                { role: "assistant", content: "retained terminal text" },
+                { content: "retained terminal text", role: "assistant" },
               ],
+              sessionId: "logical",
             },
           },
         },
@@ -143,16 +143,16 @@ it("does not authorize other tools, denied approvals, completed calls, or missin
   for (const history of [
     [
       {
+        content: [{ toolCallId: "call", toolName: "external_mutation", type: "tool-call" }],
         role: "assistant",
-        content: [{ type: "tool-call", toolName: "external_mutation", toolCallId: "call" }],
       },
     ],
-    [...session.history, { role: "tool", content: [{ type: "tool-result", toolCallId: "call" }] }],
+    [...session.history, { content: [{ toolCallId: "call", type: "tool-result" }], role: "tool" }],
     [
       session.history[0],
       {
+        content: [{ approvalId: "approval", approved: false, type: "tool-approval-response" }],
         role: "tool",
-        content: [{ type: "tool-approval-response", approvalId: "approval", approved: false }],
       },
     ],
   ]) {
@@ -187,7 +187,7 @@ it("validates every old candidate while selecting the greatest slot without chan
   const malformed = {
     ...older,
     sessionState: {
-      snapshot: { session: { sessionId: "logical", history: [{ role: 7, content: [] }] } },
+      snapshot: { session: { history: [{ content: [], role: 7 }], sessionId: "logical" } },
     },
   };
   expect(

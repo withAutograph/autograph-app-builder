@@ -41,9 +41,9 @@ const harness = (
     operationRef: repositoryProductionOperationRef(targetScope),
     revision: 0,
     record: initialRepositoryProductionRecord(targetScope, {
+      creatorRoles: ["editor"],
       sessionId: "original-session",
       sourceSha: "a".repeat(40),
-      creatorRoles: ["editor"],
       storage: { kind: "none" },
     }),
   };
@@ -216,9 +216,9 @@ describe("Production creator continuation", () => {
     await next.bridge.prepare(next.context());
     expect(next.requests.map((request) => request.action)).toEqual(["create", "link-creator"]);
     expect(await next.bridge.readCreator(next.row())).toMatchObject({
-      kind: "managed-invitation",
       actorId: "actor-1",
       invitationId: next.row().operationRef,
+      kind: "managed-invitation",
     });
     expect(next.row().operationRef).not.toBe(source.row.operationRef);
     expect(source.invitation?.status).toBe("accepted");
@@ -322,7 +322,7 @@ describe("Production creator continuation", () => {
     h.patchInvitation({ expiresAt });
     const before = [...h.requests];
     h.advance();
-    expect(await h.bridge.readCreator(h.row())).toMatchObject({ state: "required", expiresAt });
+    expect(await h.bridge.readCreator(h.row())).toMatchObject({ expiresAt, state: "required" });
     expect(await h.bridge.describe(h.row())).toMatchObject({ expiresAt });
     expect(h.requests).toEqual(before);
     expect(h.resumes).toEqual([]);
@@ -345,9 +345,9 @@ describe("Production creator continuation", () => {
     expect(h.resumes).toEqual([]);
     h.patchInvitation({ verifiedSessionId: "real-auth-session" });
     expect(await h.bridge.readCreator(h.row())).toEqual({
-      kind: "managed-invitation",
-      invitationId: h.row().operationRef,
       actorId: "actor-1",
+      invitationId: h.row().operationRef,
+      kind: "managed-invitation",
       scopeDigest: "b".repeat(64),
     });
     expect(await h.bridge.complete(h.row().operationRef)).toBe("ready");

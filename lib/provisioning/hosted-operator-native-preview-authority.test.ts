@@ -516,7 +516,7 @@ describe("concrete native Preview owner and approval callbacks", () => {
         expect.arrayContaining([
           expect.objectContaining({
             httpStatus: status,
-            planningFailure: { stage: "neon_source_project_access", errorClass: "unexpected" },
+            planningFailure: { errorClass: "unexpected", stage: "neon_source_project_access" },
           }),
         ]),
       );
@@ -591,7 +591,7 @@ describe("concrete native Preview owner and approval callbacks", () => {
     expect(diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          planningFailure: { stage: "neon_source_project_access", errorClass: "type_error" },
+          planningFailure: { errorClass: "type_error", stage: "neon_source_project_access" },
         }),
       ]),
     );
@@ -635,7 +635,7 @@ describe("concrete native Preview owner and approval callbacks", () => {
       expect.arrayContaining([
         expect.objectContaining({
           httpStatus: 403,
-          planningFailure: { stage: "neon_native_store", errorClass: "unexpected" },
+          planningFailure: { errorClass: "unexpected", stage: "neon_native_store" },
         }),
       ]),
     );

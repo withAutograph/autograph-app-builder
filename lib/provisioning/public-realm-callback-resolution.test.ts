@@ -101,14 +101,14 @@ const fixture = () => {
       assetSha256: "9".repeat(64),
       catalogFingerprint: "b".repeat(64),
       database: "auth",
+      observedAt: "2026-11-03T00:00:00Z",
       runtimeRole: "auth_runtime",
       targetDigest: sourcePlan.authSchema?.targetDigest,
-      observedAt: "2026-11-03T00:00:00Z",
     },
     receipts: sourcePlan.effects.map((effect) => ({
       effectId: effect.id,
-      resourceVersion: "observed",
       observedAt: "2026-11-03T00:00:00Z",
+      resourceVersion: "observed",
     })),
   });
   const enrollmentRef = "88888888-8888-4888-a888-888888888888";
@@ -146,9 +146,9 @@ const fixture = () => {
         environment: "production",
       },
       sourceBootstrap: {
+        authResourceId: "auth-resource",
         operationRef: retained.operationRef,
         planDigest: retained.planDigest,
-        authResourceId: "auth-resource",
       },
       resource: physical,
     },
@@ -157,7 +157,7 @@ const fixture = () => {
     builderCallbackPath: "/api/hosted-operator/realm-identity",
     operatorOrigin: "https://operator.example",
     identityHandoff: { sender },
-    browserSessionCapture: { sender, path: "/api/hosted-operator/realm-browser-session" },
+    browserSessionCapture: { path: "/api/hosted-operator/realm-browser-session", sender },
     readonlyAttesters: {
       builderProduction: { ...sender },
       operatorPreview: { ...sender, environment: "preview" },
@@ -270,9 +270,9 @@ it("requires unique READY approved public release, exact original Auth and seale
     planDigest: f.candidate.requestDigest,
   });
   expect(result.publicJwk).toMatchObject({
-    kty: "OKP",
     crv: "Ed25519",
     kid: f.values.PLATFORM_GATEWAY_IDENTITY_KEY_ID,
+    kty: "OKP",
   });
   expect(f.deps.assertSourceApproval).toHaveBeenCalledOnce();
   expect(f.deps.assertPublicApproval).toHaveBeenCalledOnce();

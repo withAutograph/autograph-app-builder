@@ -179,7 +179,7 @@ const fixture = () => {
       const technical =
         input.command.includes(check) || input.command.includes(" app:test orchard ");
       if (technical) {
-        commands.push({ root: cwd, command: input.command });
+        commands.push({ command: input.command, root: cwd });
         if (failure === "interrupted") {
           throw new Error("controlled external transport interruption");
         }
@@ -532,10 +532,6 @@ describe("same-session draft review lineage with real shared state and draft byt
         const state = { ...f.reviewed, phase: "validated" as const };
         const variants = {
           app: () => ({ ...state, appSpec: { ...state.appSpec, appId: "foreign" } }),
-          source: () => ({
-            ...state,
-            githubSource: { ...state.githubSource!, digest: hash("foreign-source") },
-          }),
           apply: () => ({
             ...state,
             applyReceipt: { ...state.applyReceipt, digest: hash("different-apply") },
@@ -546,6 +542,10 @@ describe("same-session draft review lineage with real shared state and draft byt
               ...f.reviewed.reviewReceipt,
               digest: hash("different-current-review"),
             },
+          }),
+          source: () => ({
+            ...state,
+            githubSource: { ...state.githubSource!, digest: hash("foreign-source") },
           }),
         };
         const changedState = variants[changed]();
