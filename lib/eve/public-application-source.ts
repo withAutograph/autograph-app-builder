@@ -23,12 +23,11 @@ export const latestInstalledApplicationSource = (events: readonly MessageStreamE
     ) {
       continue;
     }
-    if (!requested.has(event.data.result.callId)) {
-      continue;
-    }
-    const result = applicationSourceExportReferenceSchema.safeParse(event.data.result.output);
-    if (result.success) {
-      latest = result.data;
+    if (requested.has(event.data.result.callId)) {
+      const result = applicationSourceExportReferenceSchema.safeParse(event.data.result.output);
+      if (result.success) {
+        latest = result.data;
+      }
     }
   }
   return latest;

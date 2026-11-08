@@ -73,14 +73,12 @@ export const createPrivateTenantExportApprovalCapture = (input: {
             continue;
           }
           const parsed = tenantExportApprovalInputSchema.safeParse(requested.action.input);
-          if (!parsed.success) {
-            continue;
+          if (parsed.success) {
+            const { plan, ...request } = parsed.data;
+            if (isDeepStrictEqual(plan, input.plan) && isDeepStrictEqual(request, input.request)) {
+              capture.acceptRequest(requested.requestId, requested.action.callId);
+            }
           }
-          const { plan, ...request } = parsed.data;
-          if (!isDeepStrictEqual(plan, input.plan) || !isDeepStrictEqual(request, input.request)) {
-            continue;
-          }
-          capture.acceptRequest(requested.requestId, requested.action.callId);
         }
         return;
       }

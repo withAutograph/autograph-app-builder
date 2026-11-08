@@ -110,13 +110,12 @@ export const reconstructNativeApprovalResponse = (input: {
     const targetCount = captured.filter(
       (matches) => matches[0] !== undefined && isTarget(matches[0]),
     ).length;
-    if (targetCount === 0) {
-      continue;
+    if (targetCount !== 0) {
+      if (targetCount !== resolved.batch.requests.length) {
+        return undefined;
+      }
+      selected.push(resolved);
     }
-    if (targetCount !== resolved.batch.requests.length) {
-      return undefined;
-    }
-    selected.push(resolved);
   }
   if (selected.length === 0) {
     return undefined;

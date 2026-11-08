@@ -83,11 +83,8 @@ export default defineConfig({
         "lib/eve/native-recovery-repeatable-apply.ts",
         "lib/eve/private-apply-denial-evidence.ts",
         "lib/eve/private-continuity-approval.ts",
-        "lib/eve/private-export-approval.ts",
         "lib/eve/private-repository-production-approval.ts",
-        "lib/eve/public-application-source.ts",
         sharedLintFile27,
-        "lib/eve/reconstruct-native-approval-response.ts",
         sharedLintFile29,
         "lib/integrations/repository-access.ts",
         "lib/provisioning/github-provider.ts",
@@ -117,7 +114,6 @@ export default defineConfig({
       // Preserve existing control flow pending focused review.
       files: [
         "agent/tools/artifact_workflow_status.ts",
-        "agent/tools/read_github_pr_delivery.ts",
         "agent/tools/target_execution_status.ts",
         "app/(product)/local-connections/*/complete/route.ts",
         "app/(product)/local-oauth/*/approve/completion.ts",
@@ -132,7 +128,6 @@ export default defineConfig({
         "lib/agent/approval-receipt.ts",
         "lib/agent/prepare-app-creation.ts",
         "lib/agent/prototype-artifacts.ts",
-        "lib/agent/published-draft-repair.ts",
         "lib/agent/target-execution.ts",
         "lib/auth/github-app-installation.ts",
         sharedLintFile25,

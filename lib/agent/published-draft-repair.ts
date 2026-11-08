@@ -70,7 +70,11 @@ export const retainedPublishedDraftOriginForReview = (
   if (
     state.publishedGitHubDraftProposalDigest !== undefined ||
     candidate === null ||
-    retained === undefined ||
+    retained === undefined
+  ) {
+    return undefined;
+  }
+  if (
     retained.phase !== "reviewed" ||
     state.sourceReceipt.sourceKind !== "fresh-template" ||
     state.githubSource !== undefined

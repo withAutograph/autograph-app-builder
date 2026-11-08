@@ -34,11 +34,12 @@ export default defineTool({
     const observation = await runtime.inspectPublishedPullRequest(proposalDigest, reconciledHead);
     const checks = observation.draft ? "deferred" : observation.checks;
     const result = { ...observation, checks };
+    const reconciliationIsReady = reconciliation === undefined || reconciledHead !== undefined;
     if (
       runtime.runPublishedPullRequestEffect !== undefined &&
       observation.state === "open" &&
       observation.reviewedRevision &&
-      (reconciliation === undefined || reconciledHead !== undefined)
+      reconciliationIsReady
     ) {
       const target: typeof observation.reviewedTarget & { installationId?: string } = {
         ...observation.reviewedTarget,
