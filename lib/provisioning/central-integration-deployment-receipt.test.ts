@@ -88,8 +88,8 @@ it("retains conflicting native IDs or changed delivery bytes as a conflict rathe
     providerDeploymentId: "dpl_second",
   });
   expect(conflict).toEqual({
-    status: "conflict",
     providerDeploymentIds: ["dpl_native_one", "dpl_second"],
+    status: "conflict",
   });
   expect(retainCentralNativeDeploymentReceipt(conflict, receipt)).toEqual(conflict);
   expect(

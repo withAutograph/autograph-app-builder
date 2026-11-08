@@ -278,16 +278,16 @@ describe("canonical execution observation", () => {
       );
       const result = operatorPublicResultSchema.parse(await response.json());
       expect(result).toMatchObject({
-        status: "pending",
         preparationProgress: {
-          lease: "absent",
-          hasPendingEffect: false,
-          hasPendingAttempt: false,
-          allPlanEffectsReceipted: false,
-          missingEffectKinds: ["resources", "install", "access", "bindings"],
-          hasAccountPreparation: false,
           accountsCompleted: false,
+          allPlanEffectsReceipted: false,
+          hasAccountPreparation: false,
+          hasPendingAttempt: false,
+          hasPendingEffect: false,
+          lease: "absent",
+          missingEffectKinds: ["resources", "install", "access", "bindings"],
         },
+        status: "pending",
       });
       expect(result.preparationProgress).not.toHaveProperty("planStage");
       expect(read).toHaveBeenCalledOnce();
@@ -567,7 +567,7 @@ describe("canonical execution observation", () => {
   it("invalidates a prior settled acknowledgement before a legacy technical retry", async () => {
     const f = fixture(true);
     expect(await f.status()).toMatchObject({
-      execution: { state: "settled", outcome: { status: "blocked" } },
+      execution: { outcome: { status: "blocked" }, state: "settled" },
     });
     const execution = f.request("execute", false);
     await f.entered.promise;
@@ -577,8 +577,8 @@ describe("canonical execution observation", () => {
     await execution;
     expect(f.record).not.toHaveProperty("executionObservation");
     expect(await f.status()).toMatchObject({
+      execution: { outcome: { status: "prepared" }, state: "settled" },
       status: "prepared",
-      execution: { state: "settled", outcome: { status: "prepared" } },
     });
     expect(f.executeEffect).toHaveBeenCalledTimes(4);
   });
@@ -610,8 +610,8 @@ describe("canonical execution observation", () => {
       const execution = f.request("execute");
       await f.entered.promise;
       expect(await f.status()).toMatchObject({
-        status: "pending",
         execution: { state: "running" },
+        status: "pending",
       });
       expect(f.record.leaseId).toBeDefined();
       if (outcome === "reconciliation_required") {
@@ -642,7 +642,7 @@ describe("canonical execution observation", () => {
     f.fail(new HostedOperatorError("reconciliation_required"));
     f.gate.resolve(undefined);
     await execution;
-    expect(await f.status()).toMatchObject({ status: "pending", execution: { state: "unknown" } });
+    expect(await f.status()).toMatchObject({ execution: { state: "unknown" }, status: "pending" });
   });
   it.each([
     "different-lease",

@@ -63,9 +63,9 @@ describe("approved creator role revisions", () => {
     expect(commands).toEqual([
       {
         action: "change-role",
+        clientRequestId: "11111111-1111-4111-a111-111111111111",
         memberId: "creator",
         roles: ["approver"],
-        clientRequestId: "11111111-1111-4111-a111-111111111111",
       },
     ]);
   });
@@ -87,9 +87,9 @@ describe("approved creator role revisions", () => {
     expect(commands).toEqual([
       {
         action: "change-role",
+        clientRequestId: "11111111-1111-4111-a111-111111111111",
         memberId: "creator",
         roles: [],
-        clientRequestId: "11111111-1111-4111-a111-111111111111",
       },
     ]);
   });

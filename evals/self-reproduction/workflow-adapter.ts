@@ -33,6 +33,9 @@ export interface WorkflowAdapterFactoryInput {
   outputRoot: string;
 }
 
+const infrastructureUnavailable = "infrastructure-unavailable";
+const providerReturnSuccess = "provider-return-success";
+
 const fixedName = "Self reproduction parity draft";
 const fixedBrief = "Create one small independent issue tracker with durable server persistence.";
 
@@ -123,7 +126,7 @@ const semanticCandidateAdapter = (candidateUrl: string): TrustedBrowserWorkflowA
       const response = await page.goto(entryUrl);
       if (!response?.ok()) {
         return {
-          disposition: "infrastructure-unavailable",
+          disposition: infrastructureUnavailable,
           ready: false,
           reason: `Candidate runtime did not answer at ${entryUrl}.`,
         };
@@ -147,7 +150,7 @@ const referenceAdapter = (
   const supported = new Set<WorkflowId>([
     "authentication",
     "durable-draft",
-    "provider-return-success",
+    providerReturnSuccess,
     "provider-return-error",
     "documentation",
   ]);
@@ -325,7 +328,7 @@ const referenceAdapter = (
             "Returned a denial using actual pending emulated OAuth state, then replayed the consumed callback through the application.",
         };
       }
-      if (workflowId === "provider-return-success") {
+      if (workflowId === providerReturnSuccess) {
         await installProvider(page, "GitHub");
         return {
           assertions: [
@@ -376,7 +379,7 @@ const referenceAdapter = (
       }
       if (new URL(referenceUrl).origin !== appOrigin) {
         return {
-          disposition: "infrastructure-unavailable",
+          disposition: infrastructureUnavailable,
           ready: false,
           reason: `Reference E2E helpers are bound to ${appOrigin}; received ${referenceUrl}.`,
         };
@@ -391,7 +394,7 @@ const referenceAdapter = (
           passkeyOverride = await encryptOverrides({ passkeys: true }, secret, "1h");
         } catch {
           return {
-            disposition: "infrastructure-unavailable",
+            disposition: infrastructureUnavailable,
             ready: false,
             reason: "Reference authentication requires the emulated passkey flag fixture secret.",
           };
@@ -402,7 +405,7 @@ const referenceAdapter = (
       return { ready: true };
     },
     async verify(workflowId) {
-      if (workflowId === "provider-return-success") {
+      if (workflowId === providerReturnSuccess) {
         const counts = await applicationCounts();
         return {
           assertions: [

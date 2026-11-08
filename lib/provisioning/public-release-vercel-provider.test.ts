@@ -474,8 +474,8 @@ it("persists the actual adapter rejection with the pending key and never retries
     bindings: { INVOICE_APP_DATABASE_URL: { state: "pending" } },
     effects: { "bind-production-runtime": "pending", "publish-release-source": "idle" },
     lastProviderFailure: {
+      diagnostic: { code: "forbidden", requestRef: "iad1::denial_123", statusCode: 403 },
       phase: "bind-production-runtime",
-      diagnostic: { statusCode: 403, code: "forbidden", requestRef: "iad1::denial_123" },
     },
   });
   expect(JSON.stringify(row)).not.toContain("private-provider-payload");

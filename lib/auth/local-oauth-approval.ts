@@ -81,7 +81,7 @@ export function parseLocalOAuthAuthorization(input: {
   emulation: ProviderEmulation;
   githubClientId: string;
   vercelClientId: string;
-}): { provider: LocalOAuthProvider; authorization: LocalOAuthAuthorization } {
+}) {
   const provider = localOAuthProviderSchema.parse(input.provider);
   const authorization = authorizationSchema.parse(input.values);
   const expectedClientId = provider === "github" ? input.githubClientId : input.vercelClientId;

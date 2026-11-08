@@ -61,15 +61,15 @@ describe("recorded preparation progress", () => {
     const before = structuredClone(record);
     const progress = readOperatorPreparationProgress(record, now);
     expect(operatorPreparationProgressSchema.parse(progress)).toEqual({
-      planStage: "auth-bootstrap",
-      lease: "absent",
-      hasPendingEffect: true,
-      pendingEffectKind: "gateway-delivery",
-      hasPendingAttempt: true,
-      allPlanEffectsReceipted: false,
-      missingEffectKinds: ["gateway-bindings", "gateway-delivery"],
-      hasAccountPreparation: false,
       accountsCompleted: false,
+      allPlanEffectsReceipted: false,
+      hasAccountPreparation: false,
+      hasPendingAttempt: true,
+      hasPendingEffect: true,
+      lease: "absent",
+      missingEffectKinds: ["gateway-bindings", "gateway-delivery"],
+      pendingEffectKind: "gateway-delivery",
+      planStage: "auth-bootstrap",
     });
     expect(record).toEqual(before);
     const output = JSON.stringify(progress);
@@ -98,8 +98,8 @@ describe("recorded preparation progress", () => {
     const progress = readOperatorPreparationProgress(record, now);
     expect(progress).toMatchObject({
       allPlanEffectsReceipted: true,
-      missingEffectKinds: [],
       hasPendingEffect: true,
+      missingEffectKinds: [],
     });
     expect(progress).not.toHaveProperty("pendingEffectKind");
     expect(JSON.stringify(progress)).not.toContain("unknown-private-effect");

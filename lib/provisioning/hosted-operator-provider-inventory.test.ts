@@ -481,8 +481,8 @@ describe("private read-only operator provider inventory", () => {
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
           executionFailure: {
-            stage: "final_inventory_readback",
             errorClass: "validation_error",
+            stage: "final_inventory_readback",
           },
         }),
       ]);

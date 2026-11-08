@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { appendFileSync } from "node:fs";
 
+const redactedPrefix = "$<prefix>[REDACTED]";
+
 export const evidencePrefix = "SELF_REPRODUCTION_EVIDENCE ";
 
 // Apply to structured receipts and native diagnostics before persistence. Never
@@ -13,15 +15,15 @@ export function sanitizeEvidence(value: unknown): unknown {
       .replaceAll(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu, "[REDACTED JWT]")
       .replaceAll(
         /(?<prefix>[A-Z_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)[A-Z_]*["']?\s*[:=]\s*["']?)[^\s"',}]+/gu,
-        "$<prefix>[REDACTED]",
+        redactedPrefix,
       )
       .replaceAll(
         /(?<prefix>["'](?:authorization|cookie|continuationToken|[^"']*(?:token|secret|password)|api[_-]?key)["']\s*:\s*["'])[^"']+/giu,
-        "$<prefix>[REDACTED]",
+        redactedPrefix,
       )
       .replaceAll(
         /(?<prefix>[?&](?:token|key|signature|code|state|x-vercel-protection-bypass)=)[^&\s"']+/giu,
-        "$<prefix>[REDACTED]",
+        redactedPrefix,
       );
   }
   if (Array.isArray(value)) {

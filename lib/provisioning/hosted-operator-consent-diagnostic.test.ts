@@ -1132,9 +1132,9 @@ it("preserves a plan owner authorization rejection with only the fixed private s
   expect(sink).toHaveBeenCalledWith(
     expect.objectContaining({
       planningFailure: {
-        stage: "plan_owner_authorization",
-        errorClass: "operator_error",
         code: "authorization_required",
+        errorClass: "operator_error",
+        stage: "plan_owner_authorization",
       },
     }),
   );
@@ -1351,7 +1351,7 @@ it("keeps preparation failure reporting nonthrowing for hostile errors and throw
   }).not.toThrow();
   expect(sink).toHaveBeenCalledWith(
     expect.objectContaining({
-      preparationFailure: { stage: "client_resolution", errorClass: "unexpected" },
+      preparationFailure: { errorClass: "unexpected", stage: "client_resolution" },
     }),
   );
 });
@@ -1542,15 +1542,15 @@ describe("closed normal Auth execution diagnostics", () => {
       ),
     ).rejects.toBe(error);
     expect(sink.mock.calls[0]?.[0].executionFailure).toEqual({
-      stage: "execution_settlement",
       errorClass: "unexpected",
       normalAuth: {
-        code: "auth_rejected",
-        operation: "invite_member",
-        httpStatus: 403,
         authCode: "YOU_ARE_NOT_ALLOWED_TO_INVITE_USERS_TO_THIS_ORGANIZATION",
+        code: "auth_rejected",
+        httpStatus: 403,
+        operation: "invite_member",
         retryAfterMs: 1500,
       },
+      stage: "execution_settlement",
     });
     expect(getter).not.toHaveBeenCalled();
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);

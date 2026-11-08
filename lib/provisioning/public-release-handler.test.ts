@@ -311,8 +311,8 @@ it("records observation failures without changing completed effects or claiming 
   );
   const row = await f.store.read(authority, selected.operationRef);
   expect(row?.record.lastProviderFailure).toEqual({
+    diagnostic: { code: "forbidden", statusCode: 403 },
     phase: "observe-production",
-    diagnostic: { statusCode: 403, code: "forbidden" },
   });
   expect(Object.values(row?.record.effects ?? {})).toEqual(["applied", "applied"]);
   expect(row?.record.observation).toBeUndefined();

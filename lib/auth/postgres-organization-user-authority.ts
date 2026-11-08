@@ -1,9 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
-import type * as databaseSchema from "../db/schema";
+import type { openHostedPostgresDatabase } from "../db/hosted-postgres";
 import type { PreviewOAuthMembershipAuthority } from "./preview-oauth-contract";
 import { OrganizationProvisioningError } from "./preview-user-management";
 import type {
@@ -14,7 +13,7 @@ import type {
 const accessRevokedErrorCode = "access-revoked";
 const workspaceSetupFailedErrorCode = "workspace-setup-failed";
 
-type Database = PostgresJsDatabase<typeof databaseSchema>;
+type Database = ReturnType<typeof openHostedPostgresDatabase>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 interface OrganizationRow {

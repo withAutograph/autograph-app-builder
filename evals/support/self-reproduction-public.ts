@@ -525,7 +525,7 @@ const submitResponse = async (options: SessionOptions, accept: AcceptSession) =>
   if (!pending || !state.session) {
     throw new Error("Missing pending response session");
   }
-  const sessionId = state.session.sessionId;
+  const { sessionId } = state.session;
   const result = eveSessionResultSchema.parse(
     await transport.call("autograph_respond", { ...pending, sessionId }),
   );

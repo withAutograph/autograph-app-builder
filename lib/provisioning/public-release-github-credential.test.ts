@@ -44,8 +44,8 @@ const fixture = () => {
     expect(url.pathname).toBe("/app/installations/456/access_tokens");
     expect(init?.method).toBe("POST");
     expect(JSON.parse(z.string().parse(init?.body))).toEqual({
-      repository_ids: [123],
       permissions: { contents: "write", metadata: "read" },
+      repository_ids: [123],
     });
     if (revokeDuringMint) {
       active = false;

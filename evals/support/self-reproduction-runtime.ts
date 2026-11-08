@@ -10,6 +10,8 @@ import {
 } from "../../lib/sandbox/development-toolchain";
 import { requirements } from "./self-reproduction-parity";
 
+const infrastructureUnavailable = "infrastructure-unavailable";
+
 export interface RuntimeCommandReceipt {
   command: string;
   exitCode: number | null;
@@ -51,8 +53,8 @@ const runtimeFailureObservations = (input: {
     return [];
   }
   const disposition =
-    input.receipt.status === "infrastructure-unavailable"
-      ? "infrastructure-unavailable"
+    input.receipt.status === infrastructureUnavailable
+      ? infrastructureUnavailable
       : "missing-functionality";
   const artifact = input.artifact ?? "candidate-runtime.json";
   return requirements
@@ -286,7 +288,7 @@ export const evaluateCandidateRuntime = async (input: {
         producer: "evaluator",
         reason: "Candidate runtime toolchain installation failed.",
         sandboxId: handle.id,
-        status: "infrastructure-unavailable",
+        status: infrastructureUnavailable,
       };
     }
     const runtimeEnvironment = Object.entries(DEVELOPMENT_SANDBOX_ENVIRONMENT)
@@ -450,7 +452,7 @@ export const evaluateCandidateRuntime = async (input: {
       } else {
         probes.push({
           detail: `Evaluator browser was unavailable: ${browser.stderr || browser.stdout}`,
-          disposition: "infrastructure-unavailable",
+          disposition: infrastructureUnavailable,
           id: "documentation",
           method: "browser",
           passed: false,
@@ -480,7 +482,7 @@ export const evaluateCandidateRuntime = async (input: {
       probes: [],
       status:
         handle === undefined && /credential|oidc|sandbox|network|fetch/iu.test(message)
-          ? "infrastructure-unavailable"
+          ? infrastructureUnavailable
           : "failed",
     };
   } finally {

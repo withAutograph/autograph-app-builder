@@ -93,9 +93,9 @@ describe("Production runtime credential binding", () => {
     await f.service.apply(f.context, runtimeUrl);
     expect(f.writes()).toBe(1);
     expect(f.row()).toMatchObject({
+      key: "REQUESTS_DATABASE_URL",
       target: ["production"],
       type: "encrypted",
-      key: "REQUESTS_DATABASE_URL",
     });
   });
   it("reconciles a lost creation response from owned provider readback without duplicate writes", async () => {

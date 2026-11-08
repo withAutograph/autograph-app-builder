@@ -144,13 +144,13 @@ describe("builder provisioning journal", () => {
       dependencies,
     });
     expect(result.vercel).toMatchObject({
-      status: "failed",
       code: "provider_permission_denied",
       providerDiagnostic: {
-        statusCode: 403,
         code: "integration_configuration_disabled",
         requestRef: "iad1::denied_123",
+        statusCode: 403,
       },
+      status: "failed",
     });
     const retry = await executeBuilderProvisioning({
       authority,
@@ -234,13 +234,13 @@ describe("builder provisioning journal", () => {
       dependencies: dependencies as never,
     });
     expect(result.vercel).toMatchObject({
-      status: "failed",
       code: "provider_permission_denied",
       providerDiagnostic: {
-        statusCode: 403,
         code: "integration_configuration_disabled",
         requestRef: "iad1::denied_123",
+        statusCode: 403,
       },
+      status: "failed",
     });
     const retry = await executeBuilderProvisioning({
       authority,

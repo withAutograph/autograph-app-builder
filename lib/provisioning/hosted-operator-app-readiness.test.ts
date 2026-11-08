@@ -187,10 +187,10 @@ it("reports a closed runtime failure before preserving the sanitized readiness r
       "[builder:hosted-neon-consent]",
       expect.objectContaining({
         executionFailure: {
-          stage: "final_runtime_readiness",
           errorClass: "unexpected",
-          sqlState: "42501",
           runtimeReadinessStage: "runtime_connection",
+          sqlState: "42501",
+          stage: "final_runtime_readiness",
         },
       }),
     ]);
