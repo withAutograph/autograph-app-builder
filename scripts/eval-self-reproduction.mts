@@ -600,7 +600,9 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
       rawOutput += chunk;
       stdout.write(chunk);
     });
-    child.stderr.on("data", (chunk: string) => stderr.write(chunk));
+    child.stderr.on("data", (chunk: string) => {
+      stderr.write(chunk);
+    });
     let spawnError: string | undefined;
     child.on("error", (error) => {
       spawnError = error.message;

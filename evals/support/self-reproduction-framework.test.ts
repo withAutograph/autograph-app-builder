@@ -144,10 +144,10 @@ it("keeps a missing browser fixture unassessed after a source review", async () 
           Promise.resolve({
             artifacts: [],
             assertions: [],
-            disposition: "not-run",
+            disposition: "not-run" as const,
             reason: "Fixture not bound",
           }),
-      } as never,
+      },
     },
     browser: browser().value,
     outputRoot,

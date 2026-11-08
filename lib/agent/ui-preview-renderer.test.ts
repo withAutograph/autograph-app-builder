@@ -1,6 +1,7 @@
 import { runInNewContext } from "node:vm";
 import postcss from "postcss";
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import type { UiPreviewInput } from "./ui-preview";
 import { workspaceBinInstallCommand } from "../repository/workspace-bin-install";
@@ -98,9 +99,9 @@ describe("preview stylesheet provenance", () => {
     if (sourceMap === undefined) {
       throw new Error("Inline source map is missing");
     }
-    const map = JSON.parse(Buffer.from(sourceMap, "base64").toString("utf-8")) as {
-      sourcesContent?: (string | null)[];
-    };
+    const map = z
+      .looseObject({ sourcesContent: z.array(z.string().nullable()).optional() })
+      .parse(JSON.parse(Buffer.from(sourceMap, "base64").toString("utf-8")));
     expect(map.sourcesContent).toContain(themeCss);
     expect(map.sourcesContent).not.toContain(`${themeCss}\n@source ".builder-preview";`);
 

@@ -329,7 +329,7 @@ describe("local Development OIDC startup", () => {
 
   it("does not include child output in a command failure", () => {
     const leaked = "secret-token-and-claims";
-    expect(() =>
+    expect(() => {
       runLocalOidcStartupCommand({
         args: ["-c", `printf '%s' '${leaked}' >&2; exit 1`],
         cwd: "/tmp",
@@ -340,8 +340,8 @@ describe("local Development OIDC startup", () => {
         },
         executable: "/bin/sh",
         operation: "development-env-pull",
-      }),
-    ).toThrow("Local OIDC development-env-pull failed.");
+      });
+    }).toThrow("Local OIDC development-env-pull failed.");
     try {
       runLocalOidcStartupCommand({
         args: ["-c", `printf '%s' '${leaked}' >&2; exit 1`],
