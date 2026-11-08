@@ -22,9 +22,23 @@ import {
 import { workflowMatrix } from "../support/self-reproduction-parity";
 import type {
   AssertionResult,
+  Preparation,
   TrustedBrowserWorkflowAdapter,
   WorkflowId,
 } from "../support/self-reproduction-workflow-adapters";
+
+interface CandidatePreparationPage {
+  goto: (url: string) => Promise<{ ok: () => boolean } | null>;
+}
+
+type WorkflowAdapter<PageInput> = Omit<TrustedBrowserWorkflowAdapter, "prepare"> & {
+  prepare: (page: PageInput, workflowId: WorkflowId) => Promise<Preparation>;
+};
+
+interface WorkflowAdapters {
+  reference?: WorkflowAdapter<object>;
+  candidate?: WorkflowAdapter<CandidatePreparationPage>;
+}
 
 export interface WorkflowAdapterFactoryInput {
   referenceUrl?: string;
@@ -72,7 +86,9 @@ const firstVisible = async (locators: Locator[]) => {
   return await find(0);
 };
 
-const semanticCandidateAdapter = (candidateUrl: string): TrustedBrowserWorkflowAdapter => {
+const semanticCandidateAdapter = (
+  candidateUrl: string,
+): WorkflowAdapter<CandidatePreparationPage> => {
   const entryUrl = new URL(candidateUrl).href;
   return {
     contextOptions: { baseURL: entryUrl },
@@ -146,7 +162,7 @@ const semanticCandidateAdapter = (candidateUrl: string): TrustedBrowserWorkflowA
 const referenceAdapter = (
   referenceUrl: string,
   fixtureRoot = process.cwd(),
-): TrustedBrowserWorkflowAdapter => {
+): WorkflowAdapter<object> => {
   const supported = new Set<WorkflowId>([
     "authentication",
     "durable-draft",
@@ -446,10 +462,8 @@ const referenceAdapter = (
   };
 };
 
-export const createWorkflowAdapters = (
-  input: WorkflowAdapterFactoryInput,
-): Partial<Record<"reference" | "candidate", TrustedBrowserWorkflowAdapter>> => {
-  const adapters: Partial<Record<"reference" | "candidate", TrustedBrowserWorkflowAdapter>> = {};
+export const createWorkflowAdapters = (input: WorkflowAdapterFactoryInput): WorkflowAdapters => {
+  const adapters: WorkflowAdapters = {};
   if (input.referenceUrl) {
     adapters.reference = referenceAdapter(input.referenceUrl, input.referenceFixtureRoot);
   }

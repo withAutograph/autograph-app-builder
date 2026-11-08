@@ -1071,9 +1071,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       const url = String(request);
       calls.push(url);
       if (url.endsWith("/app/installations/456/access_tokens")) {
-        const body = JSON.parse(String(init.body)) as {
-          permissions: Record<string, string>;
-        };
+        const body = z
+          .looseObject({ permissions: z.record(z.string(), z.string()) })
+          .parse(JSON.parse(String(init.body)));
         return json(
           {
             permissions: body.permissions,
@@ -1214,7 +1214,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const provider = createProvider(async (request, init = {}) => {
       const url = String(request);
       if (url.endsWith("/app/installations/456/access_tokens")) {
-        const body = JSON.parse(String(init.body)) as { permissions: Record<string, string> };
+        const body = z
+          .looseObject({ permissions: z.record(z.string(), z.string()) })
+          .parse(JSON.parse(String(init.body)));
         return json(
           { permissions: body.permissions, token: "ghs_operation_scoped_token_value" },
           201,
@@ -1273,7 +1275,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         const url = String(request);
         calls.push({ method: init.method ?? "GET", url });
         if (url.endsWith("/app/installations/456/access_tokens")) {
-          const body = JSON.parse(String(init.body)) as { permissions: Record<string, string> };
+          const body = z
+            .looseObject({ permissions: z.record(z.string(), z.string()) })
+            .parse(JSON.parse(String(init.body)));
           return json(
             { permissions: body.permissions, token: "ghs_operation_scoped_installation_token" },
             201,
@@ -1456,7 +1460,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       calls.push(url);
       const method = init.method ?? "GET";
       if (url.endsWith("/app/installations/456/access_tokens")) {
-        const body = JSON.parse(String(init.body)) as { permissions: Record<string, string> };
+        const body = z
+          .looseObject({ permissions: z.record(z.string(), z.string()) })
+          .parse(JSON.parse(String(init.body)));
         return json(
           { permissions: body.permissions, token: "ghs_operation_scoped_installation_token" },
           201,

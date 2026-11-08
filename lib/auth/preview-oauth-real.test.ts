@@ -37,6 +37,9 @@ const tokenResponseSchema = z.looseObject({
   access_token: z.string(),
   refresh_token: z.string().optional(),
 });
+const jwksResponseSchema = z.looseObject({
+  keys: z.array(z.looseObject({ kty: z.string().optional() })),
+});
 
 describe("real Better Auth Preview OAuth handler", () => {
   it("reuses one web login for Cursor and Codex, persists consent, and refreshes actual tokens", async () => {
@@ -149,9 +152,7 @@ describe("real Better Auth Preview OAuth handler", () => {
 
     const jwksResponse = await customFetchImpl(`${issuer}/jwks`);
     expect(jwksResponse.status).toBe(200);
-    const jwks = (await jwksResponse.json()) as {
-      keys: Record<string, unknown>[];
-    };
+    const jwks = jwksResponseSchema.parse(await jwksResponse.json());
     expect(jwks.keys).toHaveLength(1);
     expect(jwks.keys[0]).toMatchObject({
       alg: "ES256",
@@ -285,7 +286,7 @@ describe("real Better Auth Preview OAuth handler", () => {
     });
 
     const jwksResponse = await customFetchImpl(`${issuer}/jwks`);
-    const jwks = (await jwksResponse.json()) as { keys: JsonWebKey[] };
+    const jwks = jwksResponseSchema.parse(await jwksResponse.json());
     const verified = await jwtVerify(tokenBody.access_token, createLocalJWKSet(jwks), {
       algorithms: ["ES256"],
       audience: resource,
@@ -408,7 +409,7 @@ describe("real Better Auth Preview OAuth handler", () => {
     expect(signInStatuses.at(-1)).toBe(429);
 
     const jwksResponse = await customFetchImpl(`${issuer}/jwks`);
-    const jwks = (await jwksResponse.json()) as { keys: JsonWebKey[] };
+    const jwks = jwksResponseSchema.parse(await jwksResponse.json());
     await expect(
       jwtVerify(tokenBody.access_token, createLocalJWKSet(jwks), {
         algorithms: ["ES256"],
