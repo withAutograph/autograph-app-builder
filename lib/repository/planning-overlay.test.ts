@@ -613,7 +613,7 @@ describe("planning from the current checkout", () => {
       .mockResolvedValueOnce({ exitCode: 1, stderr: "Cannot find module dependency", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "installed" })
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "identity" });
-    const setNetworkPolicy = vi.fn(() => Promise.resolve());
+    const setNetworkPolicy = vi.fn<() => Promise<void>>().mockResolvedValue();
     const sandbox = { ...createSandbox({ run }), setNetworkPolicy };
     const result = await sandboxTargetCommandExecutor(sandbox)({
       appId: "stock-exceptions",

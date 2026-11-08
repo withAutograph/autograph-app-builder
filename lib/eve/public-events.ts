@@ -13,6 +13,7 @@ import {
   publicWorkingPreviewSchema,
 } from "../mcp/contracts";
 import type {
+  EveSessionResult,
   EveSessionStatus,
   PublicEveEvent,
   PublicInputRequest,
@@ -1180,12 +1181,14 @@ export const createInstalledPreviewMetadataReducer = () => {
       }
     },
     snapshot() {
-      return {
-        ...(uiPreview === undefined ? {} : { uiPreview }),
-        ...(workingPreview === undefined
-          ? {}
-          : { workingPreview: currentWorkingPreview(workingPreview) }),
-      };
+      const snapshot: Pick<EveSessionResult, "uiPreview" | "workingPreview"> = {};
+      if (uiPreview !== undefined) {
+        snapshot.uiPreview = uiPreview;
+      }
+      if (workingPreview !== undefined) {
+        snapshot.workingPreview = currentWorkingPreview(workingPreview);
+      }
+      return snapshot;
     },
   };
 };

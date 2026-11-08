@@ -367,10 +367,9 @@ export const assertExactDependencyTargetBinding =
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
 const isLiveTemplateDependencyInputPath = function isLiveTemplateDependencyInputPath(path: string) {
+  const requiredInputs: readonly string[] = requiredLiveTemplateDependencyInputs;
   return (
-    requiredLiveTemplateDependencyInputs.includes(
-      path as (typeof requiredLiveTemplateDependencyInputs)[number],
-    ) ||
+    requiredInputs.includes(path) ||
     path.endsWith("/package.json") ||
     path.endsWith("/Cargo.toml") ||
     path === "bunfig.toml" ||
