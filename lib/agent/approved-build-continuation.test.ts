@@ -259,8 +259,8 @@ describe("approved stopped build continuation", () => {
           decision: failureClass === "native-tool-panic" ? "runnable" : "blocked",
           validation: {
             exitCode: 134,
-            reason: "tooling-prerequisite",
             failureClass,
+            reason: "tooling-prerequisite",
           },
         });
         // SAFETY: An actual later apply phase has no pending validation failure authority.

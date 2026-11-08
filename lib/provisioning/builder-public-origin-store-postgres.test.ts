@@ -240,13 +240,13 @@ describe.skipIf(tools === undefined)(
       }
       const target = hostedRuntimeTargetSchema.parse({
         appId: "retained-app",
-        sessionId: "original-session",
         branch: "main",
         environment: "preview",
+        installationId: "installation",
         projectId: "retained-project",
         scopeId: "team",
         scopeType: "team",
-        installationId: "installation",
+        sessionId: "original-session",
       });
       const reference = ownedAppResourceSourceSchema.parse({
         kind: "owned-app-resources-v1",

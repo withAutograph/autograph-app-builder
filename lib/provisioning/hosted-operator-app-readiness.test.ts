@@ -231,9 +231,9 @@ it.each([
       "[builder:hosted-neon-consent]",
       expect.objectContaining({
         executionFailure: {
-          stage: "final_runtime_readiness",
-          runtimeReadinessStage: stage,
           errorClass: "type_error",
+          runtimeReadinessStage: stage,
+          stage: "final_runtime_readiness",
         },
       }),
     ]);
@@ -499,7 +499,7 @@ it("verifies an installation-only release through its retained active actor scop
   const f = installationOnlyFixture();
   const before = structuredClone(f.input.plan);
   const result = await f.verify(f.input);
-  expect(result).toMatchObject({ tenants: 1, releaseId: plan.release.id, actors: 0 });
+  expect(result).toMatchObject({ actors: 0, releaseId: plan.release.id, tenants: 1 });
   expect(f.readActiveOrganization).toHaveBeenCalledWith(f.retained[0]);
   expect(f.readInstallationScopes).toHaveBeenCalledTimes(2);
   expect(f.scopes).toEqual([]);
@@ -652,8 +652,8 @@ it("reads only the original plan's approved scopes after owner and runtime ident
   const result = await createHostedOperatorTenantBindingReadback(f.deps)(input);
   expect(result.bindings).toEqual(
     ["reviewer", "requester"].map((role) => ({
-      appId: "spend-review",
       actorId: "synthetic-reviewer",
+      appId: "spend-review",
       organizationId: "synthetic-org",
       role,
       status: "principal_scope_denied",

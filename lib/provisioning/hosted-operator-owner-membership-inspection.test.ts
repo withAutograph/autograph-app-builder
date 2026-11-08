@@ -200,9 +200,9 @@ const membershipInspectionFixture = () => {
     operator: {
       ...original,
       approvalId: "current-request",
+      fenceGeneration: 7,
       plan: currentPlan,
       planDigest: operatorPlanDigest(currentPlan),
-      fenceGeneration: 7,
       receipts: [],
       retainedInstallerOperations: [{ approvedByCallId: approval.callId, operator: original }],
     },
@@ -377,10 +377,10 @@ const selectedInspectionFixture = () => {
     origin: current.plan.publicGateway?.origin,
     actors: [
       {
+        account: "capture-existing",
         actorKey: "owner",
         email: "owner@example.test",
         name: "Owner",
-        account: "capture-existing",
       },
     ],
     organizations: organizations.map((organization) => ({
@@ -390,13 +390,13 @@ const selectedInspectionFixture = () => {
       ownerActorKey: "owner",
     })),
     memberships: organizations.map(({ organizationId }) => ({
-      organizationId,
       actorKey: "owner",
+      organizationId,
       role: "owner",
     })),
     appAccess: organizations.map(({ organizationId }) => ({
-      organizationId,
       actorKey: "owner",
+      organizationId,
       roles: ["member"],
     })),
   });
@@ -405,10 +405,10 @@ const selectedInspectionFixture = () => {
     authMembership: { kind: "create-owned-organizations", organizations },
     normalActorProgram: program,
     normalActorPreparation: {
-      accountOperationRef: "33333333-3333-4333-8333-333333333333",
-      accountPlanDigest: "a".repeat(64),
       accountApprovalId: "account-approval",
       accountApprovedByCallId: "account-call",
+      accountOperationRef: "33333333-3333-4333-8333-333333333333",
+      accountPlanDigest: "a".repeat(64),
       programDigest: normalActorProgramDigest(program),
     },
     effects: current.plan.effects.flatMap((effect) =>

@@ -139,7 +139,7 @@ const fixture = () => {
     ...plan,
     effects: [
       ...plan.effects,
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind shared Gateway" },
+      { description: "Bind shared Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
     ],
     gatewayBindings: {
       authBrowserOrigin: "https://auth-preview.example.test",
@@ -349,8 +349,8 @@ describe("prepared operation reentry through the actual service lease", () => {
       }
       const before = structuredClone(f.row);
       expect(await f.request(execute)).toMatchObject({
-        status: "blocked",
         code: guard === "active-lease" ? "operation_in_progress" : "authorization_required",
+        status: "blocked",
       });
       expect(f.deps.verify).toHaveBeenCalledOnce();
       expect(f.deps.executeEffect).toHaveBeenCalledTimes(plan.effects.length + 1);

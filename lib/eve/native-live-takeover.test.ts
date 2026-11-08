@@ -30,9 +30,9 @@ const source = durableHostedSessionRecordSchema.parse({
   updatedAtEpochMs: 1,
   lastProgressAtEpochMs: 1,
   checkpointRef: {
-    id: "123e4567-e89b-42d3-a456-426614174001",
     digest: `sha256:${"a".repeat(64)}`,
     eventCount: 0,
+    id: "123e4567-e89b-42d3-a456-426614174001",
   },
   checkpointDigest: `sha256:${"a".repeat(64)}`,
   checkpointProgressDigest: `sha256:${"d".repeat(64)}`,
@@ -187,8 +187,8 @@ describe("explicit live native takeover", () => {
     expect(
       eveStartInputSchema.parse({
         clientRequestId: "x",
-        resumeSessionId: source.sessionId,
         resumeMode: "recover",
+        resumeSessionId: source.sessionId,
       }).resumeMode,
     ).toBe("recover");
   });

@@ -74,8 +74,8 @@ describe("request-owned approval observation", () => {
     await f.observer.forContext({ ...owned })(observation);
     expect(f.ambientToken).not.toHaveBeenCalled();
     expect(f.verifyReadAuthority).toHaveBeenCalledWith({
-      principal,
       adapterSessionId: "wrun_1",
+      principal,
       sessionId: "public-session",
     });
     const boundHeaders = new Headers(f.fetchImplementation.mock.calls[0]?.[1]?.headers);
