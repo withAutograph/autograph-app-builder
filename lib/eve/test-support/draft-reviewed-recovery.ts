@@ -337,7 +337,6 @@ const installation = (operation: "resolve-existing-source" | "publish-draft-pull
   });
 
 /** Construct real provider-bound owned-publication receipts against a controlled provider. */
-// oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep the helper scoped to its invocation and preserve its identity.
 export const freshFixture = async () => {
   const f = fixture();
   const sourceEvidence = {
@@ -428,6 +427,7 @@ export const freshFixture = async () => {
     ...unsigned,
     digest: createHash("sha256").update(JSON.stringify(unsigned)).digest("hex"),
   };
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep this helper scoped to its fixture or invocation.
   const unavailable = async (): Promise<never> => {
     throw new Error("Unexpected provider effect");
   };

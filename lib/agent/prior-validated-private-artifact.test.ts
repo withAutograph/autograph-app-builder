@@ -37,7 +37,6 @@ const sourceFile = {
   path: "apps/example/app/page.tsx",
 };
 
-// oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
 const seed = (
   approval: "denied" | "pending" | "not-requested" = "denied",
   files: readonly OverlayFile[] = [sourceFile],
@@ -144,12 +143,14 @@ const seed = (
       );
     }
   }
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep this helper scoped to its fixture or invocation.
   const result = (observed: readonly OverlayFile[] = postTree) => ({
     exitCode: 0,
     stderr: "",
     stdout: observed.map(({ mode, digest, path }) => `${mode}\t${digest}\t${path}\n`).join(""),
   });
   const run = vi.fn(() => Promise.resolve(result()));
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep this helper scoped to its fixture or invocation.
   const unexpectedSandboxOperation = () => {
     throw new Error("Unexpected sandbox operation");
   };

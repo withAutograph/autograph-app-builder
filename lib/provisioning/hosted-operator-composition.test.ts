@@ -1160,10 +1160,10 @@ const participantResolutionFixture = (captureOnly = false) => {
   return { ...f, accountPlan, base, organizations, ports, preparation, program, state };
 };
 
-// oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
 const unusedCompositionControlPlane = (): Parameters<
   typeof composeHostedOperatorDependencies
 >[1] => {
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep this helper scoped to its fixture or invocation.
   const unexpectedPort = (): never => {
     throw new Error("Unexpected control-plane operation in signup guard fixture");
   };

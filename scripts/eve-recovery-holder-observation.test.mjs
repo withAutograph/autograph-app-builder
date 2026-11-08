@@ -19,7 +19,6 @@ const { sessionCommandHookToken, sessionInboxHookToken } = await import(
 );
 
 let sequence = 0;
-// oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
 const fixture = () => {
   sequence += 1;
   const id = sequence;
@@ -68,7 +67,9 @@ const fixture = () => {
       sessionState: { sessionId: descriptor.logicalSessionId },
     },
   };
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep this helper scoped to its fixture or invocation.
   let onRead = () => Promise.resolve();
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep this helper scoped to its fixture or invocation.
   let onBinding = () => Promise.resolve();
   const facts = {
     committedChildMatches: false,

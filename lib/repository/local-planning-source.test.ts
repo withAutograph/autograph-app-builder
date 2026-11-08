@@ -25,18 +25,19 @@ import {
 } from "./local-planning-git-base";
 import { planningSourceReconciliationProgram } from "./planning-source-reconciliation";
 
-// oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep fixture helpers scoped to their test or fixture instance.
 const fixture = () => {
   const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "owned-local-source-")));
   const source = path.join(directory, "source");
   const candidate = path.join(directory, "candidate");
   mkdirSync(source);
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep this helper scoped to its fixture or invocation.
   const git = (root: string, ...args: string[]) =>
     execFileSync(
       "/usr/bin/git",
       ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "-C", root, ...args],
       { encoding: "utf-8" },
     ).trim();
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep this helper scoped to its fixture or invocation.
   const write = (root: string, file: string, bytes: string) => {
     mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
     writeFileSync(path.join(root, file), bytes);
