@@ -73,7 +73,7 @@ const fixture = () => {
   const dependencies = {
     authorize: vi
       .fn<ProvisioningEventRouteDependencies["authorize"]>()
-      .mockResolvedValue({ claim, auth }),
+      .mockResolvedValue({ auth, claim }),
     findObsoleteAuthWait: vi
       .fn<ProvisioningEventRouteDependencies["findObsoleteAuthWait"]>()
       .mockResolvedValue({ requestId: "legacy-auth-wait" }),
@@ -120,7 +120,7 @@ const fixture = () => {
       .mockResolvedValue([{ requestId: "legacy-auth-wait" }]),
     respond: vi
       .fn<ProvisioningEventRouteDependencies["respond"]>()
-      .mockResolvedValue({ status: "accepted", sessionId: claim.adapterSessionId }),
+      .mockResolvedValue({ sessionId: claim.adapterSessionId, status: "accepted" }),
   } satisfies ProvisioningEventRouteDependencies;
   return { dependencies, handlers: createProvisioningEventHandlers(dependencies) };
 };
@@ -446,8 +446,8 @@ const streamSession = (events: NativeEvent[], live = false) => {
       ) => Promise<{ status: "accepted"; sessionId: string }>
     >()
     .mockResolvedValue({
-      status: "accepted",
       sessionId: claim.adapterSessionId,
+      status: "accepted",
     });
   const getStreamTailIndex = vi
     .fn<NativeSession["getStreamTailIndex"]>()
@@ -490,7 +490,7 @@ describe("exact legacy technical response and owner proof", () => {
           }),
         );
       }
-      return Promise.resolve({ status: "accepted", sessionId: claim.adapterSessionId });
+      return Promise.resolve({ sessionId: claim.adapterSessionId, status: "accepted" });
     });
     dependencies.respond.mockImplementation(respondToRealmContinuationWait);
     dependencies.wasAccepted.mockImplementation(wasRealmContinuationResponseApplied);
@@ -518,7 +518,7 @@ describe("exact legacy technical response and owner proof", () => {
     const native = streamSession(events, true);
     native.respond.mockImplementation((responses) => {
       events.push(nativeEvent({ type: "message.received", data: { message: responses[0]?.text } }));
-      return Promise.resolve({ status: "accepted", sessionId: claim.adapterSessionId });
+      return Promise.resolve({ sessionId: claim.adapterSessionId, status: "accepted" });
     });
     dependencies.respond.mockImplementation(respondToRealmContinuationWait);
     dependencies.wasAccepted.mockImplementation(wasRealmContinuationResponseApplied);

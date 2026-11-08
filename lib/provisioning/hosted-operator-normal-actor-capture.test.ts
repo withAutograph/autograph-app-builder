@@ -23,8 +23,8 @@ import { realmIdentityNonceSha256 } from "./hosted-operator-auth-identity";
 
 const accountOperationRef = "11111111-1111-4111-8111-111111111111";
 const authority = {
-  issuer: "https://builder.example.test/api/auth",
   audience: "https://builder.example.test/mcp",
+  issuer: "https://builder.example.test/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
@@ -32,23 +32,23 @@ const target = {
   appId: "normal-app",
   branch: "preview",
   environment: "preview" as const,
-  projectId: "prj_app",
-  sessionId: "owner-session",
   installationId: "installation",
+  projectId: "prj_app",
   scopeId: "team",
   scopeType: "team" as const,
+  sessionId: "owner-session",
 };
 const context = { authority, target };
 const program = normalActorProgramSchema.parse({
-  version: 1,
-  appId: target.appId,
-  origin: "https://apps.example.test",
   actors: [
     { account: "capture-existing", actorKey: "owner", email: "owner@example.test", name: "Owner" },
   ],
-  organizations: [],
-  memberships: [],
   appAccess: [],
+  appId: target.appId,
+  memberships: [],
+  organizations: [],
+  origin: "https://apps.example.test",
+  version: 1,
 });
 const plan = hostedOperatorPlanSchema.parse({
   version: 1,
@@ -96,14 +96,13 @@ const plan = hostedOperatorPlanSchema.parse({
   retention: { expiresAt: "2030-01-01T00:00:00.000Z", policy: "Retain Auth" },
   publicGateway: { branch: target.branch, origin: program.origin, projectId: "prj_gateway" },
   deploymentBoundary: {
-    authority,
-    teamId: "team",
     app: {
       branch: target.branch,
       deploymentId: "dpl_app",
       environment: "preview",
       projectId: target.projectId,
     },
+    authority,
     gateway: {
       branch: target.branch,
       deploymentId: "dpl_gateway",
@@ -111,6 +110,7 @@ const plan = hostedOperatorPlanSchema.parse({
       projectId: "prj_gateway",
     },
     operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
+    teamId: "team",
     verification: {
       gatewayOrigin: "https://gateway.example.test",
       jwksUrl: "https://gateway.example.test/_platform/jwks.json",
@@ -322,11 +322,11 @@ const captureFixture = async () => {
         return Response.json({
           resource,
           identity: {
-            version: 1,
             actorId: "actual-actor",
+            expiresAt: "2030-01-01T00:00:00.000Z",
             organizationId: null,
             sessionId: "actual-session",
-            expiresAt: "2030-01-01T00:00:00.000Z",
+            version: 1,
           },
         });
       },
@@ -343,17 +343,17 @@ const captureFixture = async () => {
       expect(input.normalCookie.value).toBe(normalCookie.value);
       return {
         actorId: "actual-actor",
-        sessionId: "actual-session",
         email: actualEmail,
         expiresAt: "2030-01-01T00:00:00.000Z",
+        sessionId: "actual-session",
       };
     },
     verifySender: async () => ({
-      iss: "https://oidc.vercel.example",
       aud: "audience",
+      environment: "preview",
+      iss: "https://oidc.vercel.example",
       owner_id: "team",
       project_id: senderProject,
-      environment: "preview",
       sub: "auth-subject",
     }),
   };

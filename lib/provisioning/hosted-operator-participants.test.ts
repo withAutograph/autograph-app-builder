@@ -440,12 +440,12 @@ describe("participant preparation service branch", () => {
     f.row.record.operator.pendingEffectId = "normal-accounts";
     f.row.record.operator.pendingEffectAttempt = { id: "00000000-0000-4000-8000-000000000004" };
     f.deps.reconcile = vi.fn<ProtectedHostedOperatorDependencies["reconcile"]>(async (input) => ({
-      status: "applied",
       receipt: {
         effectId: input.effect.id,
         observedAt: "2026-10-14T12:00:00.000Z",
         resourceVersion: "verified",
       },
+      status: "applied",
     }));
     f.deps.verifyNormalActorAccounts = vi.fn(async () => state);
     f.approve();
@@ -458,9 +458,9 @@ describe("participant preparation service branch", () => {
     const { f, program } = participantServiceFixture();
     const result = await f.client.request({
       action: "plan",
+      normalActorProgram: program,
       operation: "prepare",
       selection,
-      normalActorProgram: program,
     });
     expect(result.status).toBe("planned");
     expect(f.deps.plan).toHaveBeenCalledWith(
@@ -505,8 +505,6 @@ describe("participant preparation service branch", () => {
     const appPlan = hostedOperatorPlanSchema.parse({
       ...plan,
       access: [],
-      stage: "app",
-      normalActorProgram: program,
       normalActorPreparation: {
         accountApprovalId: preparation.accountApprovalId,
         accountApprovedByCallId: preparation.accountApprovedByCallId,
@@ -514,6 +512,8 @@ describe("participant preparation service branch", () => {
         accountPlanDigest: preparation.accountPlanDigest,
         programDigest: preparation.programDigest,
       },
+      normalActorProgram: program,
+      stage: "app",
     });
     f.deps.plan = vi.fn(async () => appPlan);
     const replanned = await f.client.request({ action: "plan", operation: "prepare", selection });
@@ -544,14 +544,14 @@ describe("participant preparation service branch", () => {
       ...f.row,
       record: hostedRuntimeJournalRecordSchema.parse({
         ...f.row.record,
-        approvedByCallId: execution.callId,
         accountPreparation: preparation,
-        status: "participants-prepared",
+        approvedByCallId: execution.callId,
         operator: {
           ...f.row.record.operator,
           approvalId: preparation.accountApprovalId,
           receipts: [originalReceipt],
         },
+        status: "participants-prepared",
       }),
     };
     f.deps.verifyNormalActorAccounts = vi.fn<
@@ -563,14 +563,14 @@ describe("participant preparation service branch", () => {
         throw new Error("Missing leased account preparation");
       }
       const journalAuthority = createNormalActorJournalAuthority({
-        store: f.deps.store,
+        assertApprovedOwner: f.deps.assertAuthorized,
+        assertCanonicalOwner: async () => {
+          await f.deps.assertAuthorized({ authority, plan: fixtureInput.accountPlan, target });
+        },
         keyring: { tokenKey: Buffer.alloc(32, 1), tokenKeyVersion: "fixture-key" },
         now: Date.now,
-        assertCanonicalOwner: async () => {
-          await f.deps.assertAuthorized({ authority, target, plan: fixtureInput.accountPlan });
-        },
-        assertApprovedOwner: f.deps.assertAuthorized,
         readApproval: f.deps.readApproval,
+        store: f.deps.store,
       });
       await journalAuthority.assertMutationAuthority(input, current);
       await input.checkpointAccountPreparation({
@@ -654,9 +654,7 @@ const captureSuccessorFixture = () => {
   const original = completion.preparation;
   const appPlan = hostedOperatorPlanSchema.parse({
     ...plan,
-    stage: "app",
     access: [],
-    normalActorProgram: original.program,
     normalActorPreparation: {
       accountApprovalId: original.accountApprovalId,
       accountApprovedByCallId: original.accountApprovedByCallId,
@@ -664,31 +662,21 @@ const captureSuccessorFixture = () => {
       accountPlanDigest: original.accountPlanDigest,
       programDigest: original.programDigest,
     },
+    normalActorProgram: original.program,
+    stage: "app",
   });
   current.f.row = {
-    revision: 10,
     record: hostedRuntimeJournalRecordSchema.parse({
-      version: 1,
-      kind: "app-runtime",
-      request: target,
-      status: "prepared",
-      step: "bound",
-      approvedByCallId: "app-call",
       accountPreparation: original,
-      proof,
-      privateState: {
-        encryptedToken: "original-resources",
-        keyVersion: "fixture",
-        tokenIv: "iv",
-        tokenTag: "tag",
-      },
+      approvedByCallId: "app-call",
+      kind: "app-runtime",
       operator: {
+        approvalId: "durable-human-decision",
+        fenceGeneration: 1,
         mode: "protected-operator-v1",
         operationRef: "22222222-2222-4222-8222-222222222222",
         plan: appPlan,
         planDigest: operatorPlanDigest(appPlan),
-        approvalId: "durable-human-decision",
-        fenceGeneration: 1,
         receipts: appPlan.effects.map((effect) => {
           const receipt: OperatorReceipt = {
             effectId: effect.id,
@@ -701,7 +689,19 @@ const captureSuccessorFixture = () => {
           return receipt;
         }),
       },
+      privateState: {
+        encryptedToken: "original-resources",
+        keyVersion: "fixture",
+        tokenIv: "iv",
+        tokenTag: "tag",
+      },
+      proof,
+      request: target,
+      status: "prepared",
+      step: "bound",
+      version: 1,
     }),
+    revision: 10,
   };
   const qa = Array.from({ length: 7 }, (_, index) => ({
     account: "create-email-password",
@@ -742,9 +742,9 @@ describe("capture-only participant program successor", () => {
     const before = structuredClone(requireFixture(f.row));
     const result = await f.client.request({
       action: "plan",
+      normalActorProgram: nextProgram,
       operation: "prepare",
       selection,
-      normalActorProgram: nextProgram,
     });
     expect(result.status).toBe("planned");
     expect(result.operationRef).not.toBe(before.record.operator?.operationRef);
@@ -840,9 +840,9 @@ describe("capture-only participant program successor", () => {
     await expect(
       f.client.request({
         action: "plan",
+        normalActorProgram: nextProgram,
         operation: "prepare",
         selection,
-        normalActorProgram: nextProgram,
       }),
     ).resolves.toMatchObject({ status: "blocked" });
     expect(f.row).toEqual(before);
@@ -853,9 +853,9 @@ describe("capture-only participant program successor", () => {
     const { f, nextProgram, successor } = captureSuccessorFixture();
     const pending = await f.client.request({
       action: "plan",
+      normalActorProgram: nextProgram,
       operation: "prepare",
       selection,
-      normalActorProgram: nextProgram,
     });
     const { record } = requireFixture(f.row);
     const original = requireFixture(record.accountPreparation);
@@ -884,9 +884,7 @@ describe("capture-only participant program successor", () => {
     ];
     const appPlan = hostedOperatorPlanSchema.parse({
       ...plan,
-      stage: "app",
       access: [],
-      normalActorProgram: nextProgram,
       normalActorPreparation: {
         accountApprovalId: preparation.accountApprovalId,
         accountApprovedByCallId: preparation.accountApprovedByCallId,
@@ -894,14 +892,16 @@ describe("capture-only participant program successor", () => {
         accountPlanDigest: preparation.accountPlanDigest,
         programDigest: preparation.programDigest,
       },
+      normalActorProgram: nextProgram,
+      stage: "app",
     });
     f.deps.plan = vi.fn(async () => appPlan);
     const history = structuredClone(record.participantPreparationHistory);
     const proposed = await f.client.request({
       action: "plan",
+      normalActorProgram: nextProgram,
       operation: "prepare",
       selection,
-      normalActorProgram: nextProgram,
     });
     expect(proposed.status).toBe("planned");
     expect(proposed.operationRef).not.toBe(operation);
@@ -920,20 +920,20 @@ describe("capture-only participant program successor", () => {
       const { f, nextProgram } = captureSuccessorFixture();
       const result = await f.client.request({
         action: "plan",
+        normalActorProgram: nextProgram,
         operation: "prepare",
         selection,
-        normalActorProgram: nextProgram,
       });
       const before = structuredClone(requireFixture(f.row).record.accountPreparation);
       f.deps.readApproval = async (input) =>
         outcome === "unapproved"
           ? null
           : {
-              approved: false,
               action: input.action,
+              approvalId: "cancelled-successor",
+              approved: false,
               callId: input.callId,
               planDigest: input.planDigest,
-              approvalId: "cancelled-successor",
             };
       const executed = await f.client.request({
         action: "execute",
