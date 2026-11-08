@@ -676,23 +676,21 @@ export function analyzeSource({
           ) {
             collectStyleExpression(attribute.initializer.expression, literals);
           }
-          if (
-            name === "style" &&
-            attribute.initializer &&
-            ts.isJsxExpression(attribute.initializer) &&
-            attribute.initializer.expression &&
-            ts.isObjectLiteralExpression(attribute.initializer.expression)
-          ) {
-            for (const property of attribute.initializer.expression.properties) {
+          const styleExpression =
+            name === "style" && attribute.initializer && ts.isJsxExpression(attribute.initializer)
+              ? attribute.initializer.expression
+              : undefined;
+          if (styleExpression && ts.isObjectLiteralExpression(styleExpression)) {
+            for (const property of styleExpression.properties) {
               if (!ts.isPropertyAssignment(property)) {
                 continue;
               }
               const value = property.initializer;
-              if (
-                !ts.isStringLiteral(value) &&
-                !ts.isNoSubstitutionTemplateLiteral(value) &&
-                !ts.isNumericLiteral(value)
-              ) {
+              const isStaticStyleLiteral =
+                ts.isStringLiteral(value) ||
+                ts.isNoSubstitutionTemplateLiteral(value) ||
+                ts.isNumericLiteral(value);
+              if (!isStaticStyleLiteral) {
                 observations.push(
                   observation(
                     `styling:style-dynamic:${file.path}:${property.getStart(source)}`,

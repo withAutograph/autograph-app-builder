@@ -1047,15 +1047,16 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
   await saveReport();
   try {
     const providedCheckout = values["arrusted-root"] ?? process.env.SELF_REPRODUCTION_ARRUSTED_ROOT;
-    const templateSource =
+    const shouldPrepareTemplateSource =
       Boolean(providedCheckout) ||
       values["candidate-runtime"] === true ||
-      (values["report-only"] !== true && !values.generator)
-        ? await prepareSelfReproductionTemplateSource({
-            outputDirectory: output,
-            providedCheckout,
-          })
-        : undefined;
+      (values["report-only"] !== true && !values.generator);
+    const templateSource = shouldPrepareTemplateSource
+      ? await prepareSelfReproductionTemplateSource({
+          outputDirectory: output,
+          providedCheckout,
+        })
+      : undefined;
     const arrustedRoot = templateSource?.sourcePath;
     const arrustedRevision = revision(arrustedRoot);
     const acquisition: TemplateAcquisition = {};

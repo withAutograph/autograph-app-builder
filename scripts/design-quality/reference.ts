@@ -705,117 +705,117 @@ export const checkJsxAttributes = ({
       }
       const diagnostics = program.getSemanticDiagnostics(source);
       const visit = (node: ts.Node) => {
-        if (
-          ts.isJsxAttribute(node) &&
-          node.initializer &&
-          ((ts.isJsxExpression(node.initializer) && node.initializer.expression) ||
-            ts.isStringLiteral(node.initializer))
-        ) {
-          const expression = ts.isJsxExpression(node.initializer)
-            ? (node.initializer.expression ?? node.initializer)
-            : node.initializer;
-          const actual = ts.isStringLiteral(node.initializer)
-            ? checker.getStringLiteralType(node.initializer.text)
-            : checker.getTypeAtLocation(expression);
-          let expected = checker.getContextualType(expression);
-          // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-          if (!expected || expected.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) {
-            expected = jsxAttributeExpectedType(node, checker);
-          }
-          const key = {
-            path:
-              files.find(
-                (file) =>
-                  nodePath.resolve(arrustedRoot, ".design-quality-virtual", file.path) === path,
-              )?.path ?? path,
-            start: node.getStart(source),
-          };
-          const initializerStart = node.initializer.getStart(source);
-          const initializerEnd = node.initializer.getEnd();
-          const attributeDiagnostics = diagnostics.filter((item) => {
-            const start = item.start ?? -1;
-            const end = start + (item.length ?? 0);
-            return start >= initializerStart && end <= initializerEnd;
-          });
-          const implementationOnlyDiagnostics = attributeDiagnostics.filter(
-            (item) => ![2322, 2353].includes(item.code),
-          );
-          for (const item of implementationOnlyDiagnostics) {
-            const position = source.getLineAndCharacterOfPosition(item.start ?? 0);
-            implementationDiagnostics.push({
-              code: item.code,
-              column: position.character + 1,
-              line: position.line + 1,
-              message: ts.flattenDiagnosticMessageText(item.messageText, " "),
-              path: key.path,
+        if (ts.isJsxAttribute(node) && node.initializer) {
+          const hasSupportedInitializer =
+            (ts.isJsxExpression(node.initializer) && Boolean(node.initializer.expression)) ||
+            ts.isStringLiteral(node.initializer);
+          if (hasSupportedInitializer) {
+            const expression = ts.isJsxExpression(node.initializer)
+              ? (node.initializer.expression ?? node.initializer)
+              : node.initializer;
+            const actual = ts.isStringLiteral(node.initializer)
+              ? checker.getStringLiteralType(node.initializer.text)
+              : checker.getTypeAtLocation(expression);
+            let expected = checker.getContextualType(expression);
+            // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
+            if (!expected || expected.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) {
+              expected = jsxAttributeExpectedType(node, checker);
+            }
+            const key = {
+              path:
+                files.find(
+                  (file) =>
+                    nodePath.resolve(arrustedRoot, ".design-quality-virtual", file.path) === path,
+                )?.path ?? path,
+              start: node.getStart(source),
+            };
+            const initializerStart = node.initializer.getStart(source);
+            const initializerEnd = node.initializer.getEnd();
+            const attributeDiagnostics = diagnostics.filter((item) => {
+              const start = item.start ?? -1;
+              const end = start + (item.length ?? 0);
+              return start >= initializerStart && end <= initializerEnd;
             });
-          }
-          const safetyDiagnostics = implementationOnlyDiagnostics.filter((item) =>
-            [2531, 2532, 18_047, 18_048].includes(item.code),
-          );
-          const propDiagnostics = attributeDiagnostics.filter((item) =>
-            [2322, 2353].includes(item.code),
-          );
-          if (safetyDiagnostics.length) {
-            attributes.push({
-              ...key,
-              reason:
-                "A generated-source TypeScript diagnostic affects this expression; prop assignability is unassessed.",
-              verdict: "unassessed",
-            });
-          } else if (propDiagnostics.length) {
-            attributes.push({
-              ...key,
-              reason: `TypeScript prop error: ${propDiagnostics
-                .slice(0, 3)
-                .map((item) => ts.flattenDiagnosticMessageText(item.messageText, " "))
-                .join("; ")}`,
-              verdict: "nonconforming",
-            });
-          } else if (expected) {
-            const finite = finiteLiteralEvidence(expression, expected, checker);
-            if (
-              finite === undefined &&
-              // JSX/object aliases and imports can hide mutable or
-              // externally-owned values even when their widened types are
-              // reliable. State bindings retain the existing type-only path.
-              (requiresFiniteIdentifierEvidence(expression, checker) ||
-                !reliableExpressionType(actual, checker))
-            ) {
+            const implementationOnlyDiagnostics = attributeDiagnostics.filter(
+              (item) => ![2322, 2353].includes(item.code),
+            );
+            for (const item of implementationOnlyDiagnostics) {
+              const position = source.getLineAndCharacterOfPosition(item.start ?? 0);
+              implementationDiagnostics.push({
+                code: item.code,
+                column: position.character + 1,
+                line: position.line + 1,
+                message: ts.flattenDiagnosticMessageText(item.messageText, " "),
+                path: key.path,
+              });
+            }
+            const safetyDiagnostics = implementationOnlyDiagnostics.filter((item) =>
+              [2531, 2532, 18_047, 18_048].includes(item.code),
+            );
+            const propDiagnostics = attributeDiagnostics.filter((item) =>
+              [2322, 2353].includes(item.code),
+            );
+            if (safetyDiagnostics.length) {
+              attributes.push({
+                ...key,
+                reason:
+                  "A generated-source TypeScript diagnostic affects this expression; prop assignability is unassessed.",
+                verdict: "unassessed",
+              });
+            } else if (propDiagnostics.length) {
+              attributes.push({
+                ...key,
+                reason: `TypeScript prop error: ${propDiagnostics
+                  .slice(0, 3)
+                  .map((item) => ts.flattenDiagnosticMessageText(item.messageText, " "))
+                  .join("; ")}`,
+                verdict: "nonconforming",
+              });
+            } else if (expected) {
+              const finite = finiteLiteralEvidence(expression, expected, checker);
+              if (
+                finite === undefined &&
+                // JSX/object aliases and imports can hide mutable or
+                // externally-owned values even when their widened types are
+                // reliable. State bindings retain the existing type-only path.
+                (requiresFiniteIdentifierEvidence(expression, checker) ||
+                  !reliableExpressionType(actual, checker))
+              ) {
+                attributes.push({
+                  ...key,
+                  reason:
+                    "The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive, or callback-shaped.",
+                  verdict: "unassessed",
+                });
+              } else {
+                const assignable = finite
+                  ? checker.isTypeAssignableTo(actual, expected)
+                  : reliableExpectedAssignment(actual, expected, checker);
+                if (assignable === undefined) {
+                  attributes.push({
+                    ...key,
+                    reason:
+                      "The expected prop type has no independently reliable branch for this static JSX expression.",
+                    verdict: "unassessed",
+                  });
+                } else {
+                  attributes.push({
+                    ...key,
+                    reason: assignable
+                      ? "The static JSX expression is assignable to the selected Arrusted prop type."
+                      : "The static JSX expression is not assignable to the selected Arrusted prop type.",
+                    verdict: assignable ? "conforming" : "nonconforming",
+                  });
+                }
+              }
+            } else {
               attributes.push({
                 ...key,
                 reason:
                   "The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive, or callback-shaped.",
                 verdict: "unassessed",
               });
-            } else {
-              const assignable = finite
-                ? checker.isTypeAssignableTo(actual, expected)
-                : reliableExpectedAssignment(actual, expected, checker);
-              if (assignable === undefined) {
-                attributes.push({
-                  ...key,
-                  reason:
-                    "The expected prop type has no independently reliable branch for this static JSX expression.",
-                  verdict: "unassessed",
-                });
-              } else {
-                attributes.push({
-                  ...key,
-                  reason: assignable
-                    ? "The static JSX expression is assignable to the selected Arrusted prop type."
-                    : "The static JSX expression is not assignable to the selected Arrusted prop type.",
-                  verdict: assignable ? "conforming" : "nonconforming",
-                });
-              }
             }
-          } else {
-            attributes.push({
-              ...key,
-              reason:
-                "The JSX expression or expected prop type is dynamic, unresolved, any, unknown, recursive, or callback-shaped.",
-              verdict: "unassessed",
-            });
           }
         }
         ts.forEachChild(node, visit);

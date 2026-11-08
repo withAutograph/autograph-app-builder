@@ -572,11 +572,13 @@ export async function measureStyles(
       let map: CssSourceMap | undefined;
       try {
         const parsed = text ? JSON.parse(text) : undefined;
-        if (
+        const hasValidSources =
           parsed &&
           parsed.version === 3 &&
           Array.isArray(parsed.sources) &&
-          allStrings(parsed.sources) &&
+          allStrings(parsed.sources);
+        if (
+          hasValidSources &&
           (parsed.sourceRoot === undefined || typeof parsed.sourceRoot === "string") &&
           typeof parsed.mappings === "string"
         ) {
