@@ -73,6 +73,7 @@ interface PreparationInput {
   pullRequestNumber: number;
   recovery?: "reopen-current-owned-draft";
   restoreInitialAppSource?: boolean;
+  repairOriginalPublication?: { discardAddedPaths: string[] };
 }
 
 /** Rebuild request-local recovery authority from owned workflow metadata, never public arguments. */
@@ -518,6 +519,11 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
   const { access, runtime, owned, repair } = await acquireOwnedPublishedDraft(input, previous);
   const { ownedPrevious, preservedPrevious, recoveryMode, reopenCurrent, previousInput } =
     reconciliationPreparationLineage(input, previous, repair);
+  const originalPublicationRepair =
+    input.repairOriginalPublication ??
+    (ownedPrevious?.headSha === repair.draft.headSha
+      ? ownedPrevious.originalPublicationRepair
+      : undefined);
   const inspectionRequest = (): Parameters<
     typeof runtime.inspectExistingDraftReconciliationSource
   >[0] => {
@@ -605,6 +611,9 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
         headSha: source.draft.headSha,
         ownedPublication: { proposal: owned.proposal, publication: owned.publication },
       };
+      if (originalPublicationRepair !== undefined) {
+        candidateInput.originalPublicationRepair = originalPublicationRepair;
+      }
       if (!(input.recovery === undefined && input.restoreInitialAppSource !== true)) {
         candidateInput.forceFreshCandidate = true;
       }

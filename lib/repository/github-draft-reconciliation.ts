@@ -27,7 +27,7 @@ const fileDigest = /^[0-9a-f]{64}$/u;
 const draftPublicationOperation = "publish-draft-pull-request" as const;
 const digestBytes = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
 
-/** Original owned publication plus the non-app index produced by Git's actual merge. */
+/** Owned publication plus the non-app index from its native merge and verified composition repair. */
 export interface OwnedPublicationReconciliationScope {
   kind: "owned-publication";
   proposal: DraftPullRequestProposal;

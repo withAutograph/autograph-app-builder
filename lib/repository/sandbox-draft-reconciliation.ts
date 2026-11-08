@@ -11,6 +11,12 @@ import {
 } from "./github-draft-reconciliation";
 import type { OwnedPublicationReconciliationScope } from "./github-draft-reconciliation";
 import { planApplicationSourceRegistration } from "./application-source-registration";
+import {
+  planOriginalPublicationRepair,
+  stageOriginalPublicationRepair,
+  rebuildOriginalPublicationComposition,
+} from "./owned-draft-composition";
+import type { OriginalPublicationRepair } from "./owned-draft-composition";
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
 import { attachCheckoutDependencyView } from "./dependency-cache";
@@ -94,6 +100,8 @@ export interface DraftReconciliationInput {
   /** Explicit owned-draft reopening preserves all previous roots and creates a new private candidate. */
   forceFreshCandidate?: boolean;
   ownedPublication?: Pick<OwnedPublicationReconciliationScope, "proposal" | "publication">;
+  /** Explicit Builder-selected original additions; all bytes and ownership are reverified. */
+  originalPublicationRepair?: OriginalPublicationRepair;
   unpublished?: {
     reviewDigest: string;
     restoreInitialAppSource?: true;
@@ -115,6 +123,7 @@ export interface PreparedDraftReconciliation {
   headTree: string;
   conflicts: readonly string[];
   publicationScope?: OwnedPublicationReconciliationScope;
+  originalPublicationRepair?: OriginalPublicationRepair;
   /** Exact server-produced catalog normalization in this retained candidate. */
   dependencyCatalog?: {
     files: readonly { path: string; digest: string }[];
@@ -161,6 +170,14 @@ const appPath = (appId: string, path: string) =>
 
 const initialRegistrationPaths = new Set(["package.json", "bun.lock", "microfrontends.json"]);
 
+const assertOriginalPublicationRepairAuthority = (input: DraftReconciliationInput) => {
+  if (input.originalPublicationRepair !== undefined && input.ownedPublication === undefined) {
+    throw new Error(
+      "Original-publication composition repair requires this app's owned publication.",
+    );
+  }
+};
+
 const verifyInputs = (input: DraftReconciliationInput) => {
   const fields = [
     [NAME, input.repository.owner],
@@ -177,6 +194,7 @@ const verifyInputs = (input: DraftReconciliationInput) => {
   if (fields.some(([pattern, value]) => !pattern.test(value))) {
     throw new Error(INVALID_INPUT);
   }
+  assertOriginalPublicationRepairAuthority(input);
   const initialSource = input.unpublished?.initialSourceRevision;
   if (
     initialSource !== undefined &&
@@ -1003,7 +1021,11 @@ const readCandidateConflicts = async (
     "inspect the isolated draft candidate",
     git(root, ["rev-parse", "HEAD"]),
   );
-  if (currentHead !== input.headSha && input.unpublished === undefined) {
+  if (
+    currentHead !== input.headSha &&
+    input.unpublished === undefined &&
+    input.originalPublicationRepair === undefined
+  ) {
     throw new Error(
       `Builder's saved reconciliation checkout has a different head (${currentHead}). Re-observe the current draft before retrying.`,
     );
@@ -1023,15 +1045,12 @@ const readCandidateConflicts = async (
   return conflicts;
 };
 
-const selectCandidateRoot = async (
-  input: DraftReconciliationInput,
-  workspaceRoot: string,
-  canonicalRoot: string,
-) => {
+const replayableCandidate = (input: DraftReconciliationInput, workspaceRoot: string) => {
   const previous = input.previousCandidate;
-  const replayEligible =
-    input.forceFreshCandidate !== true &&
-    previous !== undefined &&
+  if (previous === undefined) {
+    return null;
+  }
+  return input.forceFreshCandidate !== true &&
     input.replayPreviousCandidate === true &&
     [
       previous.appId === input.appId,
@@ -1041,20 +1060,39 @@ const selectCandidateRoot = async (
       /^[-a-f0-9]+$/u.test(
         previous.root.slice(`${workspaceRoot}/.app-builder/draft-reconcile/`.length),
       ),
-    ].every(Boolean);
-  const advancedBase = replayEligible && previous.baseSha !== input.baseSha;
-  let root = replayEligible && !advancedBase ? previous.root : canonicalRoot;
+    ].every(Boolean)
+    ? previous
+    : null;
+};
+
+const selectCandidateRoot = async (
+  input: DraftReconciliationInput,
+  workspaceRoot: string,
+  canonicalRoot: string,
+) => {
+  const previous = input.previousCandidate;
+  const replay = replayableCandidate(input, workspaceRoot);
+  const advancedBase = replay !== null && replay.baseSha !== input.baseSha;
+  const changedRepair =
+    previous !== undefined &&
+    !isDeepStrictEqual(previous.originalPublicationRepair, input.originalPublicationRepair);
+  let root = replay !== null && !advancedBase && !changedRepair ? replay.root : canonicalRoot;
   let created = await candidateNeedsCreation(input.sandbox, root);
   let preservedCandidateRoot: string | undefined;
   let replayedAppChanges = false;
-  const changedLineage = previous !== undefined && !replayEligible;
-  const needsFreshRoot = input.forceFreshCandidate === true || advancedBase || changedLineage;
+  const changedLineage = previous !== undefined && replay === null;
+  const needsFreshRoot =
+    input.forceFreshCandidate === true || advancedBase || changedLineage || changedRepair;
   if (needsFreshRoot || (!created && (await outsideCandidateChanges(input, root)))) {
     preservedCandidateRoot = previous?.root ?? (created ? undefined : root);
     root = `${canonicalRoot}-${randomUUID()}`;
     created = true;
-    replayedAppChanges = replayEligible && preservedCandidateRoot === previous.root;
-    if (advancedBase && (await candidateNeedsCreation(input.sandbox, previous.root))) {
+    replayedAppChanges = replay !== null && preservedCandidateRoot === replay.root;
+    if (
+      advancedBase &&
+      replay !== null &&
+      (await candidateNeedsCreation(input.sandbox, replay.root))
+    ) {
       preservedCandidateRoot = undefined;
       replayedAppChanges = false;
     }
@@ -1095,6 +1133,7 @@ export const prepareDraftReconciliation = async (
         input.headSha,
         input.baseSha,
         input.unpublished?.reviewDigest,
+        ...(input.originalPublicationRepair === undefined ? [] : [input.originalPublicationRepair]),
       ]),
     )
     .digest("hex");
@@ -1104,6 +1143,7 @@ export const prepareDraftReconciliation = async (
     workspaceRoot,
     canonicalRoot,
   );
+  let originalRepairPlan: Awaited<ReturnType<typeof planOriginalPublicationRepair>> | undefined;
   // oxlint-disable-next-line eslint/no-negated-condition, unicorn/no-negated-condition -- creation has the longer branch and recovery is handled after it.
   if (created) {
     const head = await checked(
@@ -1137,6 +1177,17 @@ export const prepareDraftReconciliation = async (
         `Builder's base branch moved from ${input.baseSha} to ${fetchedBase}. Re-observe main and review the resulting resolution before retrying.`,
       );
     }
+    if (input.originalPublicationRepair !== undefined && input.ownedPublication !== undefined) {
+      originalRepairPlan = await planOriginalPublicationRepair({
+        sandbox,
+        checkout,
+        appId: input.appId,
+        headSha: input.headSha,
+        baseSha: input.baseSha,
+        owned: input.ownedPublication,
+        repair: input.originalPublicationRepair,
+      });
+    }
     await checked(
       sandbox,
       "create the isolated reconciliation directory",
@@ -1147,6 +1198,14 @@ export const prepareDraftReconciliation = async (
       "create the isolated reconciliation checkout",
       git(checkout, ["worktree", "add", "--detach", root, input.headSha]),
     );
+    if (originalRepairPlan !== undefined && input.ownedPublication !== undefined) {
+      await stageOriginalPublicationRepair({
+        sandbox,
+        root,
+        originalBase: input.ownedPublication.proposal.baseSha,
+        plan: originalRepairPlan,
+      });
+    }
     await stageUnpublished(input, root, workspaceRoot);
     const merge = await run(
       sandbox,
@@ -1196,7 +1255,24 @@ export const prepareDraftReconciliation = async (
     await resolveRestoredAppRouteConflict(input, root, workspaceRoot);
     await regenerateRestoredAppLockfile(input, root);
   }
-  // Capture only a newly created native merge, before replay or any app edits.
+  if (
+    input.originalPublicationRepair !== undefined &&
+    replayedAppChanges &&
+    preservedCandidateRoot !== undefined
+  ) {
+    await replayCandidateApp(input, preservedCandidateRoot, root);
+  }
+  if (originalRepairPlan !== undefined) {
+    await rebuildOriginalPublicationComposition({
+      sandbox,
+      root,
+      workspaceRoot,
+      appId: input.appId,
+      baseSha: input.baseSha,
+      originalPackage: originalRepairPlan.originalPackage,
+    });
+  }
+  // Capture the platform-produced non-app index before any later arbitrary candidate edits.
   let publicationScope: OwnedPublicationReconciliationScope | undefined;
   if (input.ownedPublication !== undefined) {
     publicationScope = created
@@ -1210,7 +1286,11 @@ export const prepareDraftReconciliation = async (
   if (input.ownedPublication !== undefined && publicationScope === undefined) {
     throw new Error("Reprepare this owned draft to retain its automatic merge provenance.");
   }
-  if (replayedAppChanges && preservedCandidateRoot !== undefined) {
+  if (
+    input.originalPublicationRepair === undefined &&
+    replayedAppChanges &&
+    preservedCandidateRoot !== undefined
+  ) {
     await replayCandidateApp(input, preservedCandidateRoot, root);
   }
   await attachCheckoutDependencyView({
@@ -1228,6 +1308,7 @@ export const prepareDraftReconciliation = async (
     | "conflicts"
     | "created"
     | "publicationScope"
+    | "originalPublicationRepair"
     | "dependencyCatalog"
     | "preservedCandidateRoot"
     | "replayedAppChanges"
@@ -1240,6 +1321,9 @@ export const prepareDraftReconciliation = async (
   };
   if (publicationScope !== undefined) {
     initial.publicationScope = publicationScope;
+  }
+  if (input.originalPublicationRepair !== undefined) {
+    initial.originalPublicationRepair = input.originalPublicationRepair;
   }
   if (!created && retainedDependencyCatalog(input, root) !== undefined) {
     initial.dependencyCatalog = retainedDependencyCatalog(input, root);

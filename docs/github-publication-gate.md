@@ -577,3 +577,30 @@ still reject the read. It returns subject metadata, not consent
 or a claim about whether publication has occurred. The normal publication or
 recovery flow and native approval still apply. Denial and a changed sealed
 proposal continue to prevent publication.
+
+### Correcting an owned app's original composition
+
+A fresh-template app can correct its own published draft through
+`prepare_github_draft_pr_reconciliation` with `repairOriginalPublication`.
+Builder selects unwanted original additions from that draft's diff; the creator
+supplies product feedback, not repository paths or manual commands. This is a
+private preparation operation, not publication or approval.
+
+The original tenant-scoped proposal, successful publication, app/spec ownership,
+repository, current head and base remain verified. Each selected deletion must
+have been added by that exact original publication, remain byte- and mode-identical
+in the current draft, and be absent from both its original base and the current
+target base. App directories cannot be selected. Unknown or newer head changes
+are preserved and reported rather than overwritten.
+
+Builder creates a new private candidate, restores only the proven original delta,
+and performs the native app merge. It reconstructs workspace and catalog entries
+for the selected app and plans its route registration against the current target's
+composition. Lock generation starts from that target's lock with install scripts
+disabled. Unrelated app registrations, workspaces and existing catalog versions
+stay intact. Previous candidates remain available, and verified private app edits
+are replayed before generating matching metadata. The resulting platform-produced
+non-app index is bound into the existing reconciliation scope. Generic candidate
+editors still cannot write arbitrary shared or root files. The corrected diff
+requires normal review, exact update approval and provider readback; a changed
+revision cannot reuse an old approval.

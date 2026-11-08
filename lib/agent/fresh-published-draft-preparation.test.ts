@@ -276,6 +276,38 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     expect(mocks.workflow.phase).toBe("validated");
   });
 
+  it("passes explicit original-publication cleanup through the same owned app and retains private replay", async () => {
+    const previous = structuredClone(mocks.candidate);
+    await preparePublishedDraftReconciliation({
+      state: fixture.reviewed,
+      ctx,
+      pullRequestNumber: 42,
+      repairOriginalPublication: { discardAddedPaths: ["app/page.tsx"] },
+    });
+    expect(mocks.prepare.mock.calls[0][0]).toMatchObject({
+      originalPublicationRepair: { discardAddedPaths: ["app/page.tsx"] },
+      ownedPublication: { proposal: mocks.owned.proposal, publication: mocks.owned.publication },
+      previousCandidate: { root: previous.root, appId: previous.appId },
+      replayPreviousCandidate: true,
+    });
+    expect(readFileSync(path.join(previous.root, "candidate.txt"), "utf-8")).toBe(
+      "latest unpublished candidate bytes\n",
+    );
+  });
+
+  it("retains the original cleanup selection for a retry against the same owned head", async () => {
+    mocks.candidate.originalPublicationRepair = { discardAddedPaths: ["app/page.tsx"] };
+    await preparePublishedDraftReconciliation({
+      state: fixture.reviewed,
+      ctx,
+      pullRequestNumber: 42,
+    });
+    expect(mocks.prepare.mock.calls[0][0]).toMatchObject({
+      originalPublicationRepair: { discardAddedPaths: ["app/page.tsx"] },
+      replayPreviousCandidate: true,
+    });
+  });
+
   it("retains the old owned candidate for inspection when a fresh review has a different digest", async () => {
     mocks.workflow = structuredClone(fixture.reviewed);
     mocks.candidate.originalReviewDigest = "e".repeat(64);

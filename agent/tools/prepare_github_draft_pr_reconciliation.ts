@@ -186,6 +186,7 @@ const prepareOwnedDraftRecovery = async (input: {
   pullRequestNumber: number;
   recovery?: "reopen-current-owned-draft";
   restoreInitialAppSource?: boolean;
+  repairOriginalPublication?: { discardAddedPaths: string[] };
 }) => {
   if (input.restoreInitialAppSource === true && input.recovery !== undefined) {
     throw new Error("Choose either initial source restoration or reopening without replay.");
@@ -194,7 +195,11 @@ const prepareOwnedDraftRecovery = async (input: {
   if (repairOrigin !== null) {
     return await preparePublishedDraftReconciliation({ ...input, state: repairOrigin });
   }
-  if (input.recovery !== undefined || input.restoreInitialAppSource === true) {
+  if (
+    input.recovery !== undefined ||
+    input.restoreInitialAppSource === true ||
+    input.repairOriginalPublication !== undefined
+  ) {
     throw new Error(
       "Reopening an owned draft is supported only for this reviewed starter-created app's existing publication. Preserve its source and complete the normal app review before reopening that same owned draft; this mode cannot replace an existing repository selection.",
     );
@@ -211,7 +216,7 @@ const isReviewedExistingSource = (
 
 export default defineTool({
   description:
-    "Fetch the live base and existing draft head into an isolated Builder checkout and prepare a non-force merge candidate. A fresh-template build that already published its own draft uses that verified owned publication and preserves its original starter source; it does not replace the occupied source through resolve_github_source. For an existing-repository app, retry normal preparation without a recovery flag: Builder can reuse this candidate's retained original app-review lineage while the same app, source and apply bindings still match, preserving its unpublished edits. Explicit recovery: reopen-current-owned-draft applies only to a reviewed starter-created app's verified owned publication; it starts a fresh candidate from that same draft and base without replaying the old review or candidate. Private work is preserved for inspection and deliberate current-candidate edits; normal retries retain this recovery mode. The new candidate needs validation, review and separate exact publication approval. This does not update GitHub. It reports exact app-owned conflict paths and refuses platform-owned conflicts. Builder preserves original approved root registration through the repository's automatic merge result. Set restoreInitialAppSource only to recover a first owned draft that omitted the app package. Builder stages the retained original app and its registration into a fresh private candidate for validation, review, and approved update. If candidate validation reports outside-app metadata changes, run this tool again: Builder preserves the old checkout, creates a fresh private candidate, and carries app repairs across the same verified draft/head/review lineage, merging current base app changes when the base advances. This technical recovery needs no human lockfile edit or new private-worktree approval.",
+    "Fetch the live base and existing draft head into an isolated Builder checkout and prepare a non-force merge candidate. A fresh-template build that already published its own draft uses that verified owned publication and preserves its original starter source; it does not replace the occupied source through resolve_github_source. For an existing-repository app, retry normal preparation without a recovery flag: Builder can reuse this candidate's retained original app-review lineage while the same app, source and apply bindings still match, preserving its unpublished edits. Explicit recovery: reopen-current-owned-draft applies only to a reviewed starter-created app's verified owned publication; it starts a fresh candidate from that same draft and base without replaying the old review or candidate. Private work is preserved for inspection and deliberate current-candidate edits; normal retries retain this recovery mode. The new candidate needs validation, review and separate exact publication approval. This does not update GitHub. It reports exact app-owned conflict paths and refuses platform-owned conflicts. Builder preserves original approved root registration through the repository's automatic merge result. Set restoreInitialAppSource only to recover a first owned draft that omitted the app package. Builder stages the retained original app and its registration into a fresh private candidate for validation, review, and approved update. If candidate validation reports outside-app metadata changes, run this tool again: Builder preserves the old checkout, creates a fresh private candidate, and carries app repairs across the same verified draft/head/review lineage, merging current base app changes when the base advances. This technical recovery needs no human lockfile edit or new private-worktree approval. For this starter-created app's own draft with mistaken original root files or lost app registrations, use repairOriginalPublication.discardAddedPaths to select only unwanted original additions from its published diff. Builder verifies its own original publication and unchanged file ownership, preserves previous private app repairs, reconstructs composition from current target metadata plus this app, and regenerates the lock. Never ask the creator for paths or edit shared files through the app editor. The corrected candidate still needs normal review and exact update approval.",
   // oxlint-disable-next-line eslint/complexity -- Preserve source recovery and the existing independent owner/draft guards.
   async execute(input, ctx) {
     ctx.abortSignal?.throwIfAborted();
@@ -462,6 +467,9 @@ export default defineTool({
     pullRequestNumber: z.number().int().positive(),
     recovery: z.literal("reopen-current-owned-draft").optional(),
     restoreInitialAppSource: z.boolean().optional(),
+    repairOriginalPublication: z
+      .strictObject({ discardAddedPaths: z.array(z.string().min(1)) })
+      .optional(),
   }),
 });
 // oxlint-disable github/filenames-match-regex -- Eve tool discovery requires the public snake_case tool name.
