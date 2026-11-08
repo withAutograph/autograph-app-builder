@@ -1856,22 +1856,69 @@ describe("isolated draft reconciliation", () => {
   });
 });
 
+const registeredFixture = () => {
+  const f = fixture();
+  const workspaceRoot = realpathSync(f.root);
+  const checkout = path.join(workspaceRoot, "repository");
+  const root = path.join(workspaceRoot, ".app-builder/draft-reconcile/previous");
+  mkdirSync(path.dirname(root), { recursive: true });
+  git(checkout, "worktree", "add", "--detach", root, f.headSha);
+  return { ...f, workspaceRoot, checkout, retiredRoot: root };
+};
+const retire = async (f: ReturnType<typeof registeredFixture>, retainedRoots: string[] = []) =>
+  await retireUnusedDraftWorktrees({
+    sandbox: f.sandbox,
+    workspaceRoot: f.workspaceRoot,
+    retainedRoots,
+  });
+
+const retireWithFault = async (
+  f: ReturnType<typeof registeredFixture>,
+  fault: string,
+  setup = "",
+) => {
+  const preload = path.join(f.workspaceRoot, "derived-link-fault.cjs");
+  writeFileSync(
+    preload,
+    `const cp = require("node:child_process");
+const fs = require("node:fs");
+const original = cp.spawn;
+let statuses = 0;
+let references = 0;
+${setup}
+cp.spawn = (command, args, options) => {
+  ${fault}
+  return original(command, args, options);
+};`,
+  );
+  return await retireUnusedDraftWorktrees({
+    workspaceRoot: f.workspaceRoot,
+    retainedRoots: [],
+    sandbox: {
+      run(input) {
+        const result = spawnSync("/bin/sh", ["-c", input.command], {
+          cwd: f.workspaceRoot,
+          encoding: "utf-8",
+          env: {
+            ...process.env,
+            GIT_CONFIG_GLOBAL: "/dev/null",
+            GIT_CONFIG_NOSYSTEM: "1",
+            HOME: f.workspaceRoot,
+            NODE_OPTIONS: `--require ${preload}`,
+            PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ""}`,
+          },
+        });
+        return Promise.resolve({
+          exitCode: result.status ?? 1,
+          stdout: result.stdout,
+          stderr: result.stderr,
+        });
+      },
+    },
+  });
+};
+
 describe("unused draft worktree retirement", () => {
-  const registeredFixture = () => {
-    const f = fixture();
-    const workspaceRoot = realpathSync(f.root);
-    const checkout = path.join(workspaceRoot, "repository");
-    const root = path.join(workspaceRoot, ".app-builder/draft-reconcile/previous");
-    mkdirSync(path.dirname(root), { recursive: true });
-    git(checkout, "worktree", "add", "--detach", root, f.headSha);
-    return { ...f, workspaceRoot, checkout, retiredRoot: root };
-  };
-  const retire = async (f: ReturnType<typeof registeredFixture>, retainedRoots: string[] = []) =>
-    await retireUnusedDraftWorktrees({
-      sandbox: f.sandbox,
-      workspaceRoot: f.workspaceRoot,
-      retainedRoots,
-    });
   const attachDependencies = async (f: ReturnType<typeof registeredFixture>, ignored = false) => {
     git(f.checkout, "config", "core.excludesFile", "/dev/null");
     if (ignored) {
@@ -1892,51 +1939,6 @@ describe("unused draft worktree retirement", () => {
     return roots.map((relative) => {
       const link = path.join(f.retiredRoot, relative);
       return { link, target: readlinkSync(link) };
-    });
-  };
-  const retireWithFault = async (
-    f: ReturnType<typeof registeredFixture>,
-    fault: string,
-    setup = "",
-  ) => {
-    const preload = path.join(f.workspaceRoot, "derived-link-fault.cjs");
-    writeFileSync(
-      preload,
-      `const cp = require("node:child_process");
-const fs = require("node:fs");
-const original = cp.spawn;
-let statuses = 0;
-let references = 0;
-${setup}
-cp.spawn = (command, args, options) => {
-  ${fault}
-  return original(command, args, options);
-};`,
-    );
-    return await retireUnusedDraftWorktrees({
-      workspaceRoot: f.workspaceRoot,
-      retainedRoots: [],
-      sandbox: {
-        run(input) {
-          const result = spawnSync("/bin/sh", ["-c", input.command], {
-            cwd: f.workspaceRoot,
-            encoding: "utf-8",
-            env: {
-              ...process.env,
-              GIT_CONFIG_GLOBAL: "/dev/null",
-              GIT_CONFIG_NOSYSTEM: "1",
-              HOME: f.workspaceRoot,
-              NODE_OPTIONS: `--require ${preload}`,
-              PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ""}`,
-            },
-          });
-          return Promise.resolve({
-            exitCode: result.status ?? 1,
-            stdout: result.stdout,
-            stderr: result.stderr,
-          });
-        },
-      },
     });
   };
 

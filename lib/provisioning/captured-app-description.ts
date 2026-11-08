@@ -11,31 +11,31 @@ import type { OperatorArtifactContext } from "./hosted-operator-artifact-store";
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const scope = (context: OperatorArtifactContext, appSpecDigest: string) => ({
+  ...hostedTenantAuthoritySchema.parse(context.authority),
+  sessionId: z.string().min(1).parse(context.target.sessionId),
+  path: `_protected-operator/selections/app-description/${z
+    .string()
+    .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)
+    .parse(context.target.appId)}/${digest.parse(appSpecDigest)}`,
+  chunkIndex: 0,
+});
+const predicate = (value: ReturnType<typeof scope>) =>
+  and(
+    eq(prototypeArtifactChunks.issuer, value.issuer),
+    eq(prototypeArtifactChunks.audience, value.audience),
+    eq(prototypeArtifactChunks.workspaceId, value.workspaceId),
+    eq(prototypeArtifactChunks.ownerUserId, value.ownerUserId),
+    eq(prototypeArtifactChunks.sessionId, value.sessionId),
+    eq(prototypeArtifactChunks.path, value.path),
+    eq(prototypeArtifactChunks.chunkIndex, 0),
+  );
 
 /** Captured repository output, never a model-provided declaration of storage needs. */
 export const createCapturedAppDescriptionStore = (input: {
   database: ReturnType<typeof openHostedPostgresDatabase>;
   assertCurrentOwner: (context: OperatorArtifactContext) => Promise<void>;
 }) => {
-  const scope = (context: OperatorArtifactContext, appSpecDigest: string) => ({
-    ...hostedTenantAuthoritySchema.parse(context.authority),
-    sessionId: z.string().min(1).parse(context.target.sessionId),
-    path: `_protected-operator/selections/app-description/${z
-      .string()
-      .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)
-      .parse(context.target.appId)}/${digest.parse(appSpecDigest)}`,
-    chunkIndex: 0,
-  });
-  const predicate = (value: ReturnType<typeof scope>) =>
-    and(
-      eq(prototypeArtifactChunks.issuer, value.issuer),
-      eq(prototypeArtifactChunks.audience, value.audience),
-      eq(prototypeArtifactChunks.workspaceId, value.workspaceId),
-      eq(prototypeArtifactChunks.ownerUserId, value.ownerUserId),
-      eq(prototypeArtifactChunks.sessionId, value.sessionId),
-      eq(prototypeArtifactChunks.path, value.path),
-      eq(prototypeArtifactChunks.chunkIndex, 0),
-    );
   const parse = (
     context: OperatorArtifactContext,
     row: { content: string; chunkDigest: string },

@@ -51,6 +51,10 @@ import type {
 } from "../agent/native-target-onboarding-runtime";
 
 type Current = NativeTargetCurrentOwner & { historyOwner: OperatorOwnerContext };
+const artifactContext = (owner: Current, appId: string) => ({
+  authority: owner.authority,
+  target: { appId, sessionId: owner.publicSessionId },
+});
 interface AppOwner {
   verifyWorkload: (request: Request) => Promise<void>;
   assertNoStandardBuilderDestination?: AppOwner["assertCanonicalAppOwner"];
@@ -377,10 +381,6 @@ export const createNativeTargetOnboardingDeployment = (input: {
       historyOwner,
     };
   };
-  const artifactContext = (owner: Current, appId: string) => ({
-    authority: owner.authority,
-    target: { appId, sessionId: owner.publicSessionId },
-  });
   const readCapturedRelease = async (
     owner: Current,
     appId: string,

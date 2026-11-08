@@ -113,6 +113,10 @@ const collectBody = async (request: IncomingMessage, limit: number) => {
   return Buffer.concat(parts);
 };
 
+const denyUpgrade = (socket: Duplex) => {
+  socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+};
+
 /** A private fixed-loopback bridge. It has public verification keys and capability hashes, never signing/Auth/OIDC credentials. */
 export const createManagedRuntimeBridge = <Configuration>(input: {
   identity: ManagedRuntimeIdentity;
@@ -267,9 +271,6 @@ export const createManagedRuntimeBridge = <Configuration>(input: {
       }
     })();
   });
-  const denyUpgrade = (socket: Duplex) => {
-    socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
-  };
   server.on("upgrade", (request, socket, head) => {
     connections.add(socket);
     socket.once("close", () => {

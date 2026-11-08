@@ -193,6 +193,13 @@ const publicResult = (row: NativeTargetOnboardingRow) => ({
 });
 
 /** Source provenance is checked at planning; later execution resumes the frozen operation. */
+const resourceIdentity = (plan: NativeTargetOnboardingPlan) => ({
+  profile: plan.resourceProfileId,
+  authority: plan.resourceProfileAuthorityDigest,
+  nativeNeon: plan.nativeNeon,
+  resourceId: plan.appDatabase.resourceId,
+});
+
 export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardingRuntimePorts) => {
   const now = ports.now ?? (() => new Date());
   const uuid = ports.uuid ?? randomUUID;
@@ -390,12 +397,6 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
     if (candidate.resourceProfileId !== proposal.resourceProfileId) {
       throw invalid();
     }
-    const resourceIdentity = (plan: NativeTargetOnboardingPlan) => ({
-      profile: plan.resourceProfileId,
-      authority: plan.resourceProfileAuthorityDigest,
-      nativeNeon: plan.nativeNeon,
-      resourceId: plan.appDatabase.resourceId,
-    });
     if (isDeepStrictEqual(resourceIdentity(candidate), resourceIdentity(prior.plan))) {
       return publicResult(retained);
     }

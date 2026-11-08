@@ -90,6 +90,26 @@ const operationId = (invitationId: string, step: string) => {
 };
 const rolesEqual = (left: string[], right: string[]) =>
   repositoryProductionDigest(left.toSorted()) === repositoryProductionDigest(right.toSorted());
+const signInUrl = (row: RepositoryProductionRow, frame: CreatorFrame) => {
+  const url = new URL("/api/auth/platform/app-invitation/accept", row.record.scope.publicOrigin);
+  url.searchParams.set("invitationId", frame.invitationId);
+  return url.toString();
+};
+const isVerified = (value: Invitation, frame: CreatorFrame) => {
+  if (
+    (value.status !== "verified" && value.status !== "accepted") ||
+    value.verifiedActorId === null
+  ) {
+    return false;
+  }
+  if (frame.linkedCreator === undefined) {
+    return value.verifiedSessionId !== null;
+  }
+  return (
+    value.linkedFromInvitationId === frame.linkedCreator.sourceInvitationId &&
+    value.verifiedActorId === frame.linkedCreator.actorId
+  );
+};
 
 /** A durable owner-to-Auth link inside the existing app setup journal; no separate provisioning engine. */
 export const createRepositoryProductionCreator = (
@@ -160,26 +180,6 @@ export const createRepositoryProductionCreator = (
       throw new Error("repository_production_creator_invitation_mismatch");
     }
     return value;
-  };
-  const signInUrl = (row: RepositoryProductionRow, frame: CreatorFrame) => {
-    const url = new URL("/api/auth/platform/app-invitation/accept", row.record.scope.publicOrigin);
-    url.searchParams.set("invitationId", frame.invitationId);
-    return url.toString();
-  };
-  const isVerified = (value: Invitation, frame: CreatorFrame) => {
-    if (
-      (value.status !== "verified" && value.status !== "accepted") ||
-      value.verifiedActorId === null
-    ) {
-      return false;
-    }
-    if (frame.linkedCreator === undefined) {
-      return value.verifiedSessionId !== null;
-    }
-    return (
-      value.linkedFromInvitationId === frame.linkedCreator.sourceInvitationId &&
-      value.verifiedActorId === frame.linkedCreator.actorId
-    );
   };
   const current = async (context: RepositoryProductionEffectContext) => {
     await context.assertCurrent();

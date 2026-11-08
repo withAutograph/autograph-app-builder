@@ -1,16 +1,17 @@
 import { expect, it, vi } from "vitest";
 import { runSandboxCommandWithExcerpt } from "./command-output-excerpt";
 
+const stream = (chunks: string[]) =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) {
+        controller.enqueue(new TextEncoder().encode(chunk));
+      }
+      controller.close();
+    },
+  });
+
 it("drops oversized secret lines completely before retaining a redacted diagnostic tail", async () => {
-  const stream = (chunks: string[]) =>
-    new ReadableStream<Uint8Array>({
-      start(controller) {
-        for (const chunk of chunks) {
-          controller.enqueue(new TextEncoder().encode(chunk));
-        }
-        controller.close();
-      },
-    });
   const suffix = "credential-suffix-must-never-remain";
   const spawn = vi.fn().mockResolvedValue({
     stdout: stream([]),

@@ -325,6 +325,17 @@ export const fixture = () => {
   return { input, reviewed, candidate, currentContext, old, current };
 };
 
+const installation = (operation: "resolve-existing-source" | "publish-draft-pull-request") =>
+  createGitHubInstallationIdentity({
+    accountId: "20",
+    accountLogin: "owner",
+    accountType: "Organization",
+    installationId: "10",
+    operation,
+    repositorySelection: "selected",
+    selectedRepositoryIds: ["100"],
+  });
+
 /** Construct real provider-bound owned-publication receipts against a controlled provider. */
 export const freshFixture = async () => {
   const f = fixture();
@@ -360,16 +371,6 @@ export const freshFixture = async () => {
   delete f.reviewed.githubSource;
   const current = f.currentContext[workflowKey];
   delete current.githubSource;
-  const installation = (operation: "resolve-existing-source" | "publish-draft-pull-request") =>
-    createGitHubInstallationIdentity({
-      accountId: "20",
-      accountLogin: "owner",
-      accountType: "Organization",
-      installationId: "10",
-      operation,
-      repositorySelection: "selected",
-      selectedRepositoryIds: ["100"],
-    });
   const publicationInstallation = installation("publish-draft-pull-request");
   const resolutionInstallation = installation("resolve-existing-source");
   const repository = (installationIdentityDigest: string) =>

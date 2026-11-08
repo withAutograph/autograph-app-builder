@@ -208,6 +208,25 @@ export const managedSuiteEnvironment = (input: {
   APP_TEST_MANAGED_LIFECYCLE_SOCKET: input.socketPath,
   APP_TEST_MANAGED_PUBLIC_PROFILE: JSON.stringify(input.publicProfile),
 });
+const writeCurrent = async (provider: ManagedRuntimeSandboxPort, record: ContinuityRecord) => {
+  if (record.current === undefined || record.locator === undefined) {
+    return;
+  }
+  const file = `${record.locator.rootDirectory}/current.json`;
+  const temporary = `${file}.${record.fence}.next`;
+  await provider.writeFiles([
+    {
+      path: temporary,
+      content: JSON.stringify({
+        ...record.current,
+        leaseExpiresAt: managedRuntimeOwnerLease(record.current.leaseExpiresAt),
+      }),
+      mode: 0o600,
+    },
+  ]);
+  await provider.fs.rename(temporary, file);
+};
+
 export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDependencies) => {
   const providers = new WeakMap<HostedOperatorContext, Promise<ManagedRuntimeSandboxPort>>();
   const providerFor = async (context: HostedOperatorContext, plan: HostedContinuityPlan) => {
@@ -241,24 +260,6 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
       throw unavailable();
     }
     return { provider, locator };
-  };
-  const writeCurrent = async (provider: ManagedRuntimeSandboxPort, record: ContinuityRecord) => {
-    if (record.current === undefined || record.locator === undefined) {
-      return;
-    }
-    const file = `${record.locator.rootDirectory}/current.json`;
-    const temporary = `${file}.${record.fence}.next`;
-    await provider.writeFiles([
-      {
-        path: temporary,
-        content: JSON.stringify({
-          ...record.current,
-          leaseExpiresAt: managedRuntimeOwnerLease(record.current.leaseExpiresAt),
-        }),
-        mode: 0o600,
-      },
-    ]);
-    await provider.fs.rename(temporary, file);
   };
   const closeOwnedCommand = async (context: HostedOperatorContext, record: ContinuityRecord) => {
     if (record.locator === undefined) {

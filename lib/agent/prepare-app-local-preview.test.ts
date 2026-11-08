@@ -35,6 +35,16 @@ const generatedWithReviewer: z.infer<typeof appDescriptionSchema>["backend"] = {
 const runtimeStateDirectory = path.posix.dirname(
   localRuntimeEnvironmentPath("/workspace/repository", "spend-review"),
 );
+const stream = (chunks: string[]) =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) {
+        controller.enqueue(new TextEncoder().encode(chunk));
+      }
+      controller.close();
+    },
+  });
+
 describe("private local preview setup", () => {
   it("discovers the source-derived backend rather than a demo setup declaration", async () => {
     const run = vi
@@ -216,15 +226,6 @@ describe("private local preview setup", () => {
     const run = vi
       .fn()
       .mockResolvedValue({ exitCode: 0, stdout: descriptor(generated), stderr: "" });
-    const stream = (chunks: string[]) =>
-      new ReadableStream<Uint8Array>({
-        start(controller) {
-          for (const chunk of chunks) {
-            controller.enqueue(new TextEncoder().encode(chunk));
-          }
-          controller.close();
-        },
-      });
     const spawn = vi.fn().mockResolvedValue({
       pid: 1,
       stdout: stream(["Auth setup\n"]),

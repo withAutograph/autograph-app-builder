@@ -31,6 +31,17 @@ import {
 export { appBrowserTestCommand } from "../../lib/agent/app-browser-test-runner";
 
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
+const identity = (value: NonNullable<ReturnType<typeof workingPreviewState.get>>) =>
+  JSON.stringify([
+    value.commandId,
+    value.providerSessionId,
+    value.sandboxId,
+    value.receipt.appId,
+    value.receipt.url,
+    value.receipt.expiresAt,
+    value.requestDigest,
+    value.priorValidatedArtifact,
+  ]);
 
 // oxlint-disable-next-line eslint/complexity -- Keep explicit prior-preview selection separate from existing hosted and local paths.
 export const runAppBrowserTests = async (input: {
@@ -86,17 +97,6 @@ export const runAppBrowserTests = async (input: {
     return await run();
   }
   const preview = workingPreviewState.get();
-  const identity = (value: NonNullable<typeof preview>) =>
-    JSON.stringify([
-      value.commandId,
-      value.providerSessionId,
-      value.sandboxId,
-      value.receipt.appId,
-      value.receipt.url,
-      value.receipt.expiresAt,
-      value.requestDigest,
-      value.priorValidatedArtifact,
-    ]);
   try {
     if (
       priorArtifact !== undefined &&

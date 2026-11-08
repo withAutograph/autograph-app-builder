@@ -975,6 +975,12 @@ const comparableStartSession = <T extends HostedSessionRecord | HostedPagedSessi
   return comparable as T;
 };
 
+const replayPublicEvents = async function* replayPublicEvents(
+  values: readonly z.infer<typeof publicEveEventSchema>[],
+) {
+  yield* values;
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createHostedEveSessionService(input: {
   principal: HostedPrincipal;
@@ -1367,9 +1373,6 @@ export function createHostedEveSessionService(input: {
       cancellationRevision: session.cancellationRevision ?? 0,
     };
     let observation: PagedObservationSpool["observation"] | undefined;
-    const events = async function* events(values: readonly z.infer<typeof publicEveEventSchema>[]) {
-      yield* values;
-    };
     const assertOwner = async () => {
       const latest = toDurableHostedSessionRecord(await requireSession(session.sessionId));
       await assertSendOwner(latest);
@@ -1524,7 +1527,7 @@ export function createHostedEveSessionService(input: {
           sessionId: session.sessionId,
           expectedCheckpointDigest: expected.digest,
           metadata: publishedMetadata,
-          events: events(progress.events),
+          events: replayPublicEvents(progress.events),
           stage: stageForResult(summary),
           resumability: ["completed", "failed", "cancelled"].includes(summary.status)
             ? "terminal"

@@ -97,6 +97,19 @@ interface Bindings {
   authDatabase: { runtimeUrl: string };
 }
 const fail = () => new Error("public_release_unavailable");
+const integrationPrivateScope = (attachment: AppIntegrationReleaseAttachment | undefined) =>
+  attachment === undefined
+    ? {}
+    : {
+        integrationCapability: {
+          operationRef: attachment.operationRef,
+          planDigest: attachment.planDigest,
+          capabilitySha256: createHash("sha256")
+            .update(JSON.stringify(attachment.capability))
+            .digest("hex"),
+          configurationSha256: attachment.capability.privateConfiguration.sha256,
+        },
+      };
 
 /** Actual native composition; no fixture, alternate project, ambient repository credential or Preview cast. */
 export const createPublicReleaseDeployment = (input: {
@@ -277,19 +290,6 @@ export const createPublicReleaseDeployment = (input: {
       transport.action === "public-release-plan"
         ? transport.integrationCapability
         : transport.input.plan.integrationCapability;
-    const integrationPrivateScope = (attachment: AppIntegrationReleaseAttachment | undefined) =>
-      attachment === undefined
-        ? {}
-        : {
-            integrationCapability: {
-              operationRef: attachment.operationRef,
-              planDigest: attachment.planDigest,
-              capabilitySha256: createHash("sha256")
-                .update(JSON.stringify(attachment.capability))
-                .digest("hex"),
-              configurationSha256: attachment.capability.privateConfiguration.sha256,
-            },
-          };
     const readSelectedIntegration = async (
       current: PublicReleaseInvocation,
       expected?: AppIntegrationReleaseAttachment,
