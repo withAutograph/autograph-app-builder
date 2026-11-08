@@ -405,16 +405,16 @@ test("actual source-preparation service retains old validation workflow while Na
             capture: next,
           });
         await f.sandbox.writeTextFile({
-          path: ".app-builder/source-files.json",
           content: oldManifest,
+          path: ".app-builder/source-files.json",
         });
         await expect(refresh()).rejects.toThrow("manifest no longer matches its receipt");
         expect(readFileSync(path.join(f.candidate, "shared.txt"), "utf-8")).toBe(
           "current repaired shared source\n",
         );
         await f.sandbox.writeTextFile({
-          path: ".app-builder/source-files.json",
           content: currentManifest,
+          path: ".app-builder/source-files.json",
         });
         const run = f.sandbox.run.bind(f.sandbox);
         const replaceBeforeReconcile = vi
@@ -426,8 +426,8 @@ test("actual source-preparation service retains old validation workflow while Na
               )
             ) {
               await f.sandbox.writeTextFile({
-                path: ".app-builder/source-files.json",
                 content: oldManifest,
+                path: ".app-builder/source-files.json",
               });
             }
             return await run(options);
@@ -441,8 +441,8 @@ test("actual source-preparation service retains old validation workflow while Na
           replaceBeforeReconcile.mockRestore();
         }
         await f.sandbox.writeTextFile({
-          path: ".app-builder/source-files.json",
           content: currentManifest,
+          path: ".app-builder/source-files.json",
         });
         await expect(refresh()).resolves.toMatchObject({
           workspace: { workspaceDigest: next.generation.workspaceDigest },

@@ -191,7 +191,7 @@ const processFixture = async () => {
   return {
     close: async () => {
       await supervisor.close();
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { force: true, recursive: true });
     },
     environment,
     loseOwnership: () => {
@@ -317,7 +317,7 @@ test("owned wrapper replacement waits for its TERM-resistant server descendant a
     expect(JSON.parse(response.body.toString())).toMatchObject({ generation: 2 });
   } finally {
     await supervisor.close();
-    await rm(directory, { recursive: true, force: true });
+    await rm(directory, { force: true, recursive: true });
   }
 });
 
@@ -325,8 +325,8 @@ test("private IPC requires its own capability, rejects arbitrary lifecycle input
   const f = await processFixture();
   const capabilities = createPrivateManagedRuntimeCapabilities();
   const ipc = await startManagedRuntimeIpc({
-    supervisor: f.supervisor,
     lifecycleSha256: capabilities.lifecycleSha256,
+    supervisor: f.supervisor,
   });
   try {
     const socketInfo = await stat(ipc.socketPath);
@@ -334,15 +334,15 @@ test("private IPC requires its own capability, rejects arbitrary lifecycle input
     const mode = socketInfo.mode & 0o777;
     expect(mode).toBe(0o600);
     const invalid = createManagedRuntimeIpcClient({
-      socketPath: ipc.socketPath,
       lifecycleCapability: capabilities.private.suiteSelector,
+      socketPath: ipc.socketPath,
     });
     await expect(
       invalid.execute({ commandId: randomUUID(), operation: "start-same-environment" }),
     ).rejects.toThrow();
     const client = createManagedRuntimeIpcClient({
-      socketPath: ipc.socketPath,
       lifecycleCapability: capabilities.private.lifecycle,
+      socketPath: ipc.socketPath,
     });
     const commandId = randomUUID();
     const first = await client.execute({ commandId, operation: "start-same-environment" });

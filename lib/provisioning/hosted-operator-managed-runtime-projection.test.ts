@@ -277,19 +277,19 @@ const fixture = () => {
   const calls: { method: string; path: string }[] = [];
   const checkpoints: Partial<ContinuityRecord>[] = [];
   const faults = {
-    losePost: false,
-    rejectPost: false,
-    loseDeployment: false,
-    hideDeployment: false,
-    loseDelete: false,
-    rejectDelete: false,
-    hideRows: false,
-    wrongTeam: false,
-    wrongScope: false,
     denied: false,
     denyAfterPost: false,
     failCheckpoint: false,
+    hideDeployment: false,
+    hideRows: false,
+    loseDelete: false,
+    loseDeployment: false,
+    losePost: false,
     productionBranch: "gateway-main",
+    rejectDelete: false,
+    rejectPost: false,
+    wrongScope: false,
+    wrongTeam: false,
   };
   let alias: string | null = null;
   const assertCurrent = async () => {

@@ -102,6 +102,14 @@ const setup = () => {
   };
   const dependencies: HostedTenantExportDependencies = {
     store: {
+      async compareAndSet(input) {
+        if (record?.journal.revision !== input.expectedRevision) {
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional CAS result is the explicit conflict contract.
+          return undefined;
+        }
+        record = hostedTenantExportExecutionRecordSchema.parse(input.record);
+        return read();
+      },
       async read(input) {
         return record === undefined || record.journal.requestId !== input.exportId
           ? undefined
@@ -109,14 +117,6 @@ const setup = () => {
       },
       async reserve(input) {
         record ??= hostedTenantExportExecutionRecordSchema.parse(input.record);
-        return read();
-      },
-      async compareAndSet(input) {
-        if (record?.journal.revision !== input.expectedRevision) {
-          // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional CAS result is the explicit conflict contract.
-          return undefined;
-        }
-        record = hostedTenantExportExecutionRecordSchema.parse(input.record);
         return read();
       },
     },
@@ -494,22 +494,22 @@ describe("existing operator transport export dispatch", () => {
       },
     });
     const handler = createProtectedHostedOperatorHandler({
-      authorize,
       assertAuthorized: unavailable,
+      authorize,
+      bindings: unavailable,
+      executeEffect: unavailable,
+      exportRequest: dispatch,
       plan: prepare,
       readApproval: unavailable,
-      withResourceLease: unavailable,
       reconcile: unavailable,
-      executeEffect: unavailable,
-      verify: unavailable,
-      bindings: unavailable,
       store: {
+        compareAndSet: unavailable,
         read: unavailable,
         reserve: unavailable,
-        compareAndSet: unavailable,
         reserveFenceGeneration: unavailable,
       },
-      exportRequest: dispatch,
+      verify: unavailable,
+      withResourceLease: unavailable,
     });
     const client = createHostedOperatorClient({
       endpoint: "https://operator.test",
@@ -599,22 +599,22 @@ describe("existing operator transport export dispatch", () => {
         verifyWorkload,
       });
       const handler = createProtectedHostedOperatorHandler({
-        authorize,
         assertAuthorized: unavailable,
+        authorize,
+        bindings: unavailable,
+        executeEffect: unavailable,
+        exportRequest: dispatch,
         plan: unavailable,
         readApproval: unavailable,
-        withResourceLease: unavailable,
         reconcile: unavailable,
-        executeEffect: unavailable,
-        verify: unavailable,
-        bindings: unavailable,
         store: {
+          compareAndSet: unavailable,
           read: unavailable,
           reserve: unavailable,
-          compareAndSet: unavailable,
           reserveFenceGeneration: unavailable,
         },
-        exportRequest: dispatch,
+        verify: unavailable,
+        withResourceLease: unavailable,
       });
       const actions = [
         { action: "export-status", exportId: planned.plan.exportId },

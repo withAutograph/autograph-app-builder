@@ -355,8 +355,8 @@ describe("approved hosted runtime consumers", () => {
       root: context.root,
     });
     await runtime.runTask({
-      task: "test-e2e",
       browserSelection: { testName: "@acceptance", workers: 1, retries: 0, maxFailures: 1 },
+      task: "test-e2e",
     });
     expect(fixture.provider.runCommand).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -378,13 +378,13 @@ describe("approved hosted runtime consumers", () => {
       }),
     );
     await expect(
-      runtime.runTask({ task: "repository-test", browserSelection: { testName: "x" } }),
+      runtime.runTask({ browserSelection: { testName: "x" }, task: "repository-test" }),
     ).rejects.toThrow();
     await expect(
       runtime.runTask({
-        task: "test-e2e",
-        commandId: "saved",
         browserSelection: { testName: "x" },
+        commandId: "saved",
+        task: "test-e2e",
       }),
     ).rejects.toThrow("cannot be resumed with a new test selection");
   });
@@ -520,8 +520,8 @@ describe("approved hosted runtime consumers", () => {
         }),
       );
       await runtime?.runTask({
-        task: "test-e2e",
         environment: publicOrigin === undefined ? undefined : { APP_TEST_BASE_URL: publicOrigin },
+        task: "test-e2e",
       });
       interface ExpectedBrowserEnvironment {
         APP_RUNTIME_STATE_DIR: string;
@@ -573,11 +573,11 @@ describe("approved hosted runtime consumers", () => {
           path: "/private-state/normal-actors/member.storage.json",
         });
         const result = await runtime.runTask({
-          task: "test-e2e",
           environment: {
             APP_TEST_BASE_URL: "https://untrusted.example.test",
             APP_TEST_IDENTITIES_FILE: "/untrusted",
           },
+          task: "test-e2e",
         });
         expect(result.stdout).not.toContain("captured-private-");
         expect(result.stdout).not.toContain("actual-member-id");
@@ -803,7 +803,7 @@ describe("approved hosted runtime consumers", () => {
       root: context.root,
     });
     await expect(
-      runtime.runTask({ task: "test-e2e", commandId: "retained", allowDispatch: false }),
+      runtime.runTask({ allowDispatch: false, commandId: "retained", task: "test-e2e" }),
     ).rejects.toBe(closedError);
   });
 
@@ -827,10 +827,10 @@ describe("approved hosted runtime consumers", () => {
     });
     await expect(
       runtime.runTask({
-        task: "test-e2e",
-        commandId: "retained-command",
-        commandCheckpoint,
         allowDispatch: false,
+        commandCheckpoint,
+        commandId: "retained-command",
+        task: "test-e2e",
       }),
     ).resolves.toMatchObject({ exitCode: 0 });
     expect(resumeCommand).toHaveBeenCalledExactlyOnceWith("retained-command");

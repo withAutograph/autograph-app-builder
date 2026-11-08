@@ -98,8 +98,8 @@ const fixture = () => {
     conflictPolicy: "stop-on-conflict",
   };
   const state: NativeTargetSelectedAppState = {
-    phase: "app_spec_accepted",
     appSpec: { appId: plan.appId, digest: plan.origin.appSpecDigest },
+    phase: "app_spec_accepted",
   };
   const ctx = {
     session: { id: "adapter", auth: {} },
@@ -447,8 +447,8 @@ describe("native target workflow runtime", () => {
     await f.planned();
     await expect(
       f.runtime.plan(f.proposal, f.ctx, {
-        phase: "prepared",
         appSpec: { appId: "other-app", digest: "a".repeat(64) },
+        phase: "prepared",
       }),
     ).rejects.toThrow();
     await expect(
