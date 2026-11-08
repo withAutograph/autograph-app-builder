@@ -21,8 +21,8 @@ import type { NormalActorCapturedPayload } from "./hosted-operator-normal-actor-
 
 const accountOperationRef = "11111111-1111-4111-8111-111111111111";
 const authority = {
-  issuer: "https://builder.example.test/api/auth",
   audience: "https://builder.example.test/mcp",
+  issuer: "https://builder.example.test/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
@@ -30,37 +30,27 @@ const target = {
   appId: "normal-app",
   branch: "preview",
   environment: "preview" as const,
-  projectId: "prj_app",
-  sessionId: "owner-session",
   installationId: "installation",
+  projectId: "prj_app",
   scopeId: "team",
   scopeType: "team" as const,
+  sessionId: "owner-session",
 };
 const context = { authority, target };
 const program = normalActorProgramSchema.parse({
-  version: 1,
-  appId: target.appId,
-  origin: "https://apps.example.test",
   actors: [
     { account: "capture-existing", actorKey: "owner", email: "owner@example.test", name: "Owner" },
   ],
-  organizations: [],
-  memberships: [],
   appAccess: [],
+  appId: target.appId,
+  memberships: [],
+  organizations: [],
+  origin: "https://apps.example.test",
+  version: 1,
 });
 const plan = hostedOperatorPlanSchema.parse({
-  version: 1,
-  stage: "auth-participants",
-  action: "prepare",
   access: [],
-  normalActorProgram: program,
-  selection: {
-    appId: target.appId,
-    branch: target.branch,
-    environment: target.environment,
-    projectId: target.projectId,
-    sessionId: target.sessionId,
-  },
+  action: "prepare",
   appDatabase: {
     database: "normal",
     migratorRole: "normal_owner",
@@ -75,24 +65,6 @@ const plan = hostedOperatorPlanSchema.parse({
   },
   contextId: "accepted-spec",
   cost: { class: "shared-recovery-group", description: "Approved normal accounts", owner: "owner" },
-  effects: [
-    {
-      description: "Capture approved actual accounts",
-      id: "normal-accounts",
-      kind: "normal-accounts",
-    },
-  ],
-  installer: { reference: "owned-worker", sha256: "a".repeat(64) },
-  neon: {
-    branchId: "br_fixture",
-    connectionRef: "owned-connection",
-    endpoint: "ep-owned.neon.tech",
-    projectId: "neon-owned",
-    source: "synthetic-only",
-  },
-  release: { artifactRef: "owned-release", id: "release", sha256: "b".repeat(64) },
-  retention: { expiresAt: "2030-01-01T00:00:00.000Z", policy: "Retain Auth" },
-  publicGateway: { branch: target.branch, origin: program.origin, projectId: "prj_gateway" },
   deploymentBoundary: {
     authority,
     teamId: "team",
@@ -115,6 +87,34 @@ const plan = hostedOperatorPlanSchema.parse({
       publicOrigin: program.origin,
     },
   },
+  effects: [
+    {
+      description: "Capture approved actual accounts",
+      id: "normal-accounts",
+      kind: "normal-accounts",
+    },
+  ],
+  installer: { reference: "owned-worker", sha256: "a".repeat(64) },
+  neon: {
+    branchId: "br_fixture",
+    connectionRef: "owned-connection",
+    endpoint: "ep-owned.neon.tech",
+    projectId: "neon-owned",
+    source: "synthetic-only",
+  },
+  normalActorProgram: program,
+  publicGateway: { branch: target.branch, origin: program.origin, projectId: "prj_gateway" },
+  release: { artifactRef: "owned-release", id: "release", sha256: "b".repeat(64) },
+  retention: { expiresAt: "2030-01-01T00:00:00.000Z", policy: "Retain Auth" },
+  selection: {
+    appId: target.appId,
+    branch: target.branch,
+    environment: target.environment,
+    projectId: target.projectId,
+    sessionId: target.sessionId,
+  },
+  stage: "auth-participants",
+  version: 1,
 });
 const preparationInput = {
   program,
@@ -126,15 +126,15 @@ const preparationInput = {
   accountApprovedByCallId: "initial-call",
 };
 const normalCookie = {
-  name: "__Secure-session",
-  value: "actual%2Fencoded%3Dcookie",
   domain: "apps.example.test",
-  path: "/",
   expires: -1 as const,
-  httpOnly: true as const,
-  secure: true as const,
-  sameSite: "Lax" as const,
   hostOnly: true,
+  httpOnly: true as const,
+  name: "__Secure-session",
+  path: "/",
+  sameSite: "Lax" as const,
+  secure: true as const,
+  value: "actual%2Fencoded%3Dcookie",
 };
 
 const keyring = { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" };
@@ -151,11 +151,11 @@ const proofSha256 = createHash("sha256").update(proof).digest("hex");
 const nonceSha256 = "c".repeat(64);
 const proofRef = `_protected-operator/artifacts/realm-identity-proof/${target.appId}/${proofSha256}`;
 const session = {
-  reference: "22222222-2222-4222-8222-222222222222",
   actorId: "actual-owner",
-  realmSessionId: "actual-session",
-  origin: program.origin,
   expiresAt: "2030-01-01T00:00:00.000Z",
+  origin: program.origin,
+  realmSessionId: "actual-session",
+  reference: "22222222-2222-4222-8222-222222222222",
 };
 const fixture = () => {
   const payload: NormalActorCapturedPayload = {
@@ -216,9 +216,9 @@ const fixture = () => {
         expiresAt: session.expiresAt,
         sealedNonce: {
           encryptedToken: "private",
+          keyVersion: "v1",
           tokenIv: "iv",
           tokenTag: "tag",
-          keyVersion: "v1",
         },
       },
     },
@@ -401,8 +401,8 @@ describe("human confirmation of private actual actor capture", () => {
     const state = initialNormalActorState(program, accountOperationRef);
     state.actors[0] = {
       actorKey: "owner",
-      signup: "complete",
       session: { ...session, actorId: "other-actual-owner" },
+      signup: "complete",
       storageState: { cookies: [], origins: [] },
     };
     input.record.accountPreparation!.sealedState = encryptNormalActorState({ ...scope, state });
@@ -428,12 +428,12 @@ describe("human confirmation of private actual actor capture", () => {
     const state = initialNormalActorState(scopedProgram, accountOperationRef);
     state.actors[0] = {
       actorKey: "owner",
-      signup: "complete",
       session: {
         ...session,
         reference: "55555555-5555-4555-8555-555555555555",
         realmSessionId: "actual-base-session",
       },
+      signup: "complete",
       storageState: { cookies: [], origins: [] },
     };
     const base = structuredClone(state.actors[0]);
