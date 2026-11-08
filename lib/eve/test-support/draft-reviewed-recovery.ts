@@ -673,6 +673,11 @@ export const nativeFixture = async (
     eventType: "step_completed",
     eventData: { stepName: step.stepName },
   }));
+  interface RecoveryFixturePage<T> {
+    cursor?: string;
+    data: T[];
+    hasMore: boolean;
+  }
   const paginate = <T>(
     values: T[],
     runId: string,
@@ -686,11 +691,11 @@ export const nativeFixture = async (
         : (pagination?.limit ?? ordered.length);
     const data = ordered.slice(offset, offset + limit);
     const next = offset + data.length;
-    return {
-      data,
-      hasMore: next < ordered.length,
-      ...(next < ordered.length ? { cursor: String(next) } : {}),
-    };
+    const page: RecoveryFixturePage<T> = { data, hasMore: next < ordered.length };
+    if (next < ordered.length) {
+      page.cursor = String(next);
+    }
+    return page;
   };
   const world = {
     runs: {

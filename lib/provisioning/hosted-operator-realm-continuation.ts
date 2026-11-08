@@ -345,12 +345,17 @@ const identityWaitContext = async (
     await import("./hosted-operator-source-configuration");
   const resources = await openHostedOperatorCompositionResources();
   try {
-    const context = await resources.controlPlane.resolveOwnerRealmContinuationContext({
+    const { controlPlane } = resources;
+    const resolveContext = controlPlane.resolveOwnerRealmContinuationContext.bind(controlPlane);
+    const contextInput: Parameters<typeof resolveContext>[0] = {
       principal: owner.principal,
       sessionId: owner.sessionId,
       adapterSessionId: owner.adapterSessionId,
-      ...(owner.kind === "handoff" ? { sourceHandoffId: owner.sourceHandoffId } : {}),
-    });
+    };
+    if (owner.kind === "handoff") {
+      contextInput.sourceHandoffId = owner.sourceHandoffId;
+    }
+    const context = await resolveContext(contextInput);
     if (context === undefined) {
       throw new HostedOperatorError("authorization_required");
     }

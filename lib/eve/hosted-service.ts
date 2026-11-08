@@ -3739,14 +3739,22 @@ export function createHostedEveSessionService(input: {
       return result;
     } catch (error) {
       if (sendDiagnostic !== undefined && sendDelivery !== undefined) {
-        reportHostedSubmissionDiagnostic({
+        const diagnosticDetails: typeof sendDiagnostic & {
+          adapterSessionId: string;
+          error: unknown;
+          failureCategory: typeof failureCategory;
+          sendDeliveryObservation?: NonNullable<typeof deliveryObservation>;
+        } = {
           ...sendDiagnostic,
           adapterSessionId: sendDelivery.adapterSessionId,
           error,
           failureCategory,
-          ...(deliveryObservation === undefined
-            ? {}
-            : { sendDeliveryObservation: deliveryObservation }),
+        };
+        if (deliveryObservation !== undefined) {
+          diagnosticDetails.sendDeliveryObservation = deliveryObservation;
+        }
+        reportHostedSubmissionDiagnostic({
+          ...diagnosticDetails,
           operationKind: "send",
           phase,
           sink: input.onSubmissionDiagnostic,

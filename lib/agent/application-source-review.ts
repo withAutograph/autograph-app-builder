@@ -978,19 +978,21 @@ const preserveVerifiedFindings = async (
     attribution,
     context.policyId,
   );
-  return context.finish({
-    ...partial,
-    ...(hasPrior && hasCurrent
-      ? {
-          modelId: "multiple",
-          reasoningEffort: null,
-          evidenceNote: `${partial.evidenceNote} Review evidence includes independent contributions from ${prior.reviewer.modelId} and ${context.reviewer.modelId}.`,
-        }
-      : {}),
-    reason,
-    reviewCompleted: false,
-    status: combined.findings.size > 0 ? "failed" : "blocked",
-  });
+  const partialAssessment = (): ProductSourceAssessment => {
+    const assessment: ProductSourceAssessment = { ...partial };
+    if (hasPrior && hasCurrent) {
+      assessment.modelId = "multiple";
+      assessment.reasoningEffort = null;
+      assessment.evidenceNote = `${partial.evidenceNote} Review evidence includes independent contributions from ${prior.reviewer.modelId} and ${context.reviewer.modelId}.`;
+    }
+    return {
+      ...assessment,
+      reason,
+      reviewCompleted: false,
+      status: combined.findings.size > 0 ? "failed" : "blocked",
+    };
+  };
+  return context.finish(partialAssessment());
 };
 
 const settleReviewWithFallback = async (
@@ -1027,14 +1029,20 @@ export const assessApplicationSourceRound = async (
   let { messages, requestOrdinal, stepNumber, lastRecovery } = restored;
   let currentMessages = messages;
   const finish = (assessment?: ProductSourceAssessment): ApplicationReviewRoundResult => {
-    const next: ApplicationReviewContinuation = {
+    const head: Pick<
+      ApplicationReviewContinuation,
+      "version" | "reviewer" | "reviewPolicyId" | "fallbackUsed" | "priorReviewerEvidence"
+    > = {
       version: 1,
       reviewer,
       reviewPolicyId: policyId,
       fallbackUsed,
-      ...(continuation?.priorReviewerEvidence === undefined
-        ? {}
-        : { priorReviewerEvidence: continuation.priorReviewerEvidence }),
+    };
+    if (continuation?.priorReviewerEvidence !== undefined) {
+      head.priorReviewerEvidence = continuation.priorReviewerEvidence;
+    }
+    const next: ApplicationReviewContinuation = {
+      ...head,
       messages,
       findings: [...state.findings],
       runtimeChecks: [...state.runtimeChecks],

@@ -457,9 +457,16 @@ export const restorePendingAccountPreparation = async (
     void workerCheckpoints;
     const { executionObservation, realmIdentityWait, realmContinuation, ...idleRecord } =
       row.record;
-    const restored = hostedRuntimeJournalRecordSchema.parse({
+    const journalSchema = hostedRuntimeJournalRecordSchema;
+    const parseJournal = journalSchema.parse.bind(journalSchema);
+    const restoredPrefix: typeof idleRecord & Pick<HostedRuntimeJournalRecord, "realmIdentityWait"> = {
       ...idleRecord,
-      ...(accountWait ? { realmIdentityWait } : {}),
+    };
+    if (accountWait) {
+      restoredPrefix.realmIdentityWait = realmIdentityWait;
+    }
+    const restoredHistory = {
+      ...restoredPrefix,
       approvedByCallId: preparation.accountApprovedByCallId,
       retainedAuth: auth,
       pendingAccountRestorations: [
@@ -473,9 +480,18 @@ export const restorePendingAccountPreparation = async (
           realmContinuation,
         },
       ],
+    };
+    const operatorPrefix: typeof accountOperator &
+      Pick<NonNullable<HostedRuntimeJournalRecord["operator"]>, "identityLink"> = {
+      ...accountOperator,
+    };
+    if (accountLink) {
+      operatorPrefix.identityLink = identityLink;
+    }
+    const restored = parseJournal({
+      ...restoredHistory,
       operator: {
-        ...accountOperator,
-        ...(accountLink ? { identityLink } : {}),
+        ...operatorPrefix,
         operationRef: preparation.accountOperationRef,
         plan: preparation.accountPlan,
         planDigest: preparation.accountPlanDigest,

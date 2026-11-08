@@ -172,19 +172,23 @@ export function createRepositoryAccessContinuationService(input: {
       selectedInstallationId?: string;
     }) {
       const continuationId = continuationIdSchema.parse(value.continuationId);
-      return input.store.consume({
-        authority: hostedTenantAuthoritySchema.parse(value.authority),
-        continuationDigest: continuationDigest(continuationId),
-        now: now(),
-        repository: parseRepositoryReference(value.repository),
-        requestId: opaqueRuntimeId.parse(value.requestId),
-        ...(value.selectedInstallationId
-          ? {
-              selectedInstallationId: decimal.parse(value.selectedInstallationId),
-            }
-          : {}),
-        sessionId: opaqueRuntimeId.parse(value.sessionId),
-      });
+      const consumeInput = () => {
+        const selection: Omit<
+          Parameters<RepositoryAccessContinuationStore["consume"]>[0],
+          "sessionId"
+        > = {
+          authority: hostedTenantAuthoritySchema.parse(value.authority),
+          continuationDigest: continuationDigest(continuationId),
+          now: now(),
+          repository: parseRepositoryReference(value.repository),
+          requestId: opaqueRuntimeId.parse(value.requestId),
+        };
+        if (value.selectedInstallationId) {
+          selection.selectedInstallationId = decimal.parse(value.selectedInstallationId);
+        }
+        return { ...selection, sessionId: opaqueRuntimeId.parse(value.sessionId) };
+      };
+      return input.store.consume(consumeInput());
     },
 
     async create(value: {
@@ -207,21 +211,22 @@ export function createRepositoryAccessContinuationService(input: {
       const continuationId = continuationIdSchema.parse(createId());
       const createdAt = now();
       const expiresAt = new Date(createdAt.getTime() + lifetimeMs);
-      const record = repositoryAccessContinuationSchema.parse({
-        authority,
-        callbackUrl: callback.toString(),
-        continuationDigest: continuationDigest(continuationId),
-        createdAt,
-        expiresAt,
-        repository,
-        requestId: value.requestId,
-        ...(value.selectedInstallationId
-          ? {
-              selectedInstallationId: decimal.parse(value.selectedInstallationId),
-            }
-          : {}),
-        sessionId: value.sessionId,
-      });
+      const recordInput = () => {
+        const selection: Omit<RepositoryAccessContinuation, "sessionId"> = {
+          authority,
+          callbackUrl: callback.toString(),
+          continuationDigest: continuationDigest(continuationId),
+          createdAt,
+          expiresAt,
+          repository,
+          requestId: value.requestId,
+        };
+        if (value.selectedInstallationId) {
+          selection.selectedInstallationId = decimal.parse(value.selectedInstallationId);
+        }
+        return { ...selection, sessionId: value.sessionId };
+      };
+      const record = repositoryAccessContinuationSchema.parse(recordInput());
       await input.store.create(record);
       return { continuationId, expiresAt };
     },

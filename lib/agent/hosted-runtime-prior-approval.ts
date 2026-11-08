@@ -210,19 +210,16 @@ export const createHostedRuntimePriorApprovalReader =
     ctx.abortSignal.throwIfAborted();
     await readOwned();
     if (shouldRestoreOriginalPlan(dependencies, current)) {
-      const restored = await operator.request(
-        {
-          action: "plan",
-          operation: "prepare",
-          selection,
-          ...(parsed.plan.normalActorProgram === undefined
-            ? {}
-            : {
-                normalActorProgram: parsed.plan.normalActorProgram,
-              }),
-        },
-        ctx.abortSignal,
-      );
+      const request = operator.request.bind(operator);
+      const plan: Extract<Parameters<typeof operator.request>[0], { action: "plan" }> = {
+        action: "plan",
+        operation: "prepare",
+        selection,
+      };
+      if (parsed.plan.normalActorProgram !== undefined) {
+        plan.normalActorProgram = parsed.plan.normalActorProgram;
+      }
+      const restored = await request(plan, ctx.abortSignal);
       ctx.abortSignal.throwIfAborted();
       await readOwned();
       if (!matchesRestoredApproval(restored, parsed)) {
@@ -422,8 +419,13 @@ export const captureHostedRuntimeApproval = async (input: {
   if (transport.observe === undefined) {
     throw new HostedOperatorError("operator_unavailable");
   }
-  await transport.observe({
-    ...(seed === null ? {} : { nativeObservationState: seed.native }),
+  const observe = transport.observe.bind(transport);
+  const observation: Pick<Parameters<typeof observe>[0], "nativeObservationState"> = {};
+  if (seed !== null) {
+    observation.nativeObservationState = seed.native;
+  }
+  await observe({
+    ...observation,
     adapterSessionId: owner.adapterSessionId,
     principal: owner.principal,
     sessionId: owner.sessionId,

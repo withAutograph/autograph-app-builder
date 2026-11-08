@@ -130,18 +130,36 @@ export const createAppAccessManagementService = (deps: AppAccessManagementDepend
     const pending = app.canManage ? await deps.journal.pending(app.scope) : [];
     const pendingCommand = pending.find((row) => row.record.state === "pending")?.record.command;
     await deps.assertAuthorized(owner, app.scope, false);
-    return appAccessSnapshotSchema.parse({
-      sessionId: owner.sessionId,
-      appId: app.scope.appId,
-      appName: app.appName,
-      organizationName: app.organizationName,
-      roles: app.roles,
-      canManage: app.canManage,
-      creator: app.creator,
-      ...(app.appUrl === undefined ? {} : { appUrl: app.appUrl }),
-      ...people,
-      ...(pendingCommand === undefined ? {} : { pendingCommand }),
-    });
+    const snapshotInput = () => {
+      const appDetails: Pick<
+        z.input<typeof appAccessSnapshotSchema>,
+        | "sessionId"
+        | "appId"
+        | "appName"
+        | "organizationName"
+        | "roles"
+        | "canManage"
+        | "creator"
+        | "appUrl"
+      > = {
+        sessionId: owner.sessionId,
+        appId: app.scope.appId,
+        appName: app.appName,
+        organizationName: app.organizationName,
+        roles: app.roles,
+        canManage: app.canManage,
+        creator: app.creator,
+      };
+      if (app.appUrl !== undefined) {
+        appDetails.appUrl = app.appUrl;
+      }
+      const snapshot: z.input<typeof appAccessSnapshotSchema> = { ...appDetails, ...people };
+      if (pendingCommand !== undefined) {
+        snapshot.pendingCommand = pendingCommand;
+      }
+      return snapshot;
+    };
+    return appAccessSnapshotSchema.parse(snapshotInput());
   };
   const execute = async (
     owner: AppAccessOwner,

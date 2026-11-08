@@ -8,6 +8,7 @@ import {
   isHostedOperatorTransportUnknown,
 } from "./hosted-operator-client";
 import { HostedOperatorError } from "./hosted-operator-contract";
+import type { OperatorRequest } from "./hosted-operator-contract";
 
 const selection = {
   appId: "test-app",
@@ -40,13 +41,16 @@ describe("operator Auth identity input results", () => {
     "authorization_required",
     undefined,
   ] as const)("preserves a blocked operator result code (%s)", async (code) => {
-    const result = clientFor({
+    const response: Parameters<typeof clientFor>[0] = {
       appId: selection.appId,
       authenticatedBehavior: "unassessed",
       status: "blocked",
       operationRef,
-      ...(code === undefined ? {} : { code }),
-    }).authIdentityInput(request);
+    };
+    if (code !== undefined) {
+      response.code = code;
+    }
+    const result = clientFor(response).authIdentityInput(request);
     await expect(result).rejects.toBeInstanceOf(HostedOperatorError);
     await expect(result).rejects.toMatchObject({ code: code ?? "operator_unavailable" });
   });
@@ -235,12 +239,18 @@ describe("closed outbound operator action diagnostics", () => {
         status: "pending",
         operationRef,
       };
-      const requestPayload = {
-        action,
-        selection,
-        operationRef,
-        ...(action === "execute" ? { callId: "private-call", planDigest: "a".repeat(64) } : {}),
-      };
+      type RequestExpectation = Pick<
+        Extract<OperatorRequest, { action: "status" }>,
+        "selection" | "operationRef"
+      > &
+        Partial<Pick<Extract<OperatorRequest, { action: "execute" }>, "callId" | "planDigest">> & {
+          action: "status" | "execute";
+        };
+      const requestPayload: RequestExpectation = { action, selection, operationRef };
+      if (action === "execute") {
+        requestPayload.callId = "private-call";
+        requestPayload.planDigest = "a".repeat(64);
+      }
       const transport = vi.fn<typeof fetch>(async (_url, init) => {
         const body = z.string().parse(init?.body);
         expect(JSON.parse(body)).toEqual(requestPayload);
@@ -600,7 +610,7 @@ describe("saved continuity read diagnostics", () => {
       workspaceId: "workspace",
       ownerUserId: "owner",
     };
-    const client = createHostedOperatorClient({
+    const clientInput: Parameters<typeof createHostedOperatorClient>[0] = {
       endpoint: "https://operator.example",
       ownerContext: {
         adapterGeneration: 1,
@@ -611,8 +621,11 @@ describe("saved continuity read diagnostics", () => {
         sessionId: selection.sessionId,
       },
       token,
-      ...(fetcher === undefined ? {} : { fetch: fetcher }),
-    });
+    };
+    if (fetcher !== undefined) {
+      clientInput.fetch = fetcher;
+    }
+    const client = createHostedOperatorClient(clientInput);
     await expect(
       client.readContinuity("9f54c444-a3c1-447f-87c9-b6f69e232fd7"),
     ).rejects.toMatchObject({
