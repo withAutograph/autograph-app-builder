@@ -1286,21 +1286,21 @@ describe("linked package dependency views", () => {
       }
       const layout = {
         kind: "cache",
-        version: 1,
         roots: [
-          { path: "node_modules", cachePath: rootModules },
-          { path: "apps/example/node_modules", cachePath: appModules },
+          { cachePath: rootModules, path: "node_modules" },
+          { cachePath: appModules, path: "apps/example/node_modules" },
         ],
+        version: 1,
         workspaceLinks: [
           {
             path: "node_modules/@fixture/local",
-            target: "../../packages/local",
             sourcePath: "packages/local",
+            target: "../../packages/local",
           },
           {
             path: "apps/example/node_modules/@fixture/local",
-            target: "../../../../packages/local",
             sourcePath: "packages/local",
+            target: "../../../../packages/local",
           },
         ],
       };
@@ -1320,18 +1320,18 @@ describe("linked package dependency views", () => {
       ]);
     };
     return {
-      root,
-      workspace,
-      source,
-      candidate,
-      view,
-      rootModules,
       appModules,
-      physicalPackage,
+      candidate,
       packageBytes,
-      sourceBytes,
       packageMode,
+      physicalPackage,
+      root,
+      rootModules,
       run,
+      source,
+      sourceBytes,
+      view,
+      workspace,
     };
   };
 
@@ -1392,7 +1392,7 @@ describe("linked package dependency views", () => {
           fixture.sourceBytes,
         );
       } finally {
-        await rm(fixture.root, { recursive: true, force: true });
+        await rm(fixture.root, { force: true, recursive: true });
       }
     },
   );
@@ -1471,7 +1471,7 @@ describe("linked package dependency views", () => {
         code: "ENOENT",
       });
     } finally {
-      await rm(fixture.root, { recursive: true, force: true });
+      await rm(fixture.root, { force: true, recursive: true });
     }
   });
 
@@ -1506,7 +1506,7 @@ describe("linked package dependency views", () => {
           fixture.packageBytes,
         );
       } finally {
-        await rm(fixture.root, { recursive: true, force: true });
+        await rm(fixture.root, { force: true, recursive: true });
       }
     },
   );
@@ -1540,7 +1540,7 @@ describe("linked package dependency views", () => {
           'module.exports="candidate-install";',
         );
       } finally {
-        await rm(fixture.root, { recursive: true, force: true });
+        await rm(fixture.root, { force: true, recursive: true });
       }
     },
   );

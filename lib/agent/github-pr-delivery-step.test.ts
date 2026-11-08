@@ -39,7 +39,7 @@ const approval: GitHubPrDeliveryApproval = {
 };
 const readyAt = "2026-11-05T15:30:00Z";
 const mergeCommitSha = "c".repeat(40);
-const session = { id: "session-fixture", auth: {} };
+const session = { auth: {}, id: "session-fixture" };
 const callId = "approved-delivery-call";
 const abortSignal = new AbortController().signal;
 const observe = (changes: Partial<GitHubPrDeliveryObservation> = {}) => ({
@@ -64,7 +64,7 @@ const step = (input: GitHubPrDeliveryApproval, cycle?: string) =>
     input,
     // SAFETY: The workflow step reads only the supplied call ID, abort signal, and session identity.
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Narrow fixture context to fields used by the workflow step.
-    { session, callId, abortSignal } as never,
+    { abortSignal, callId, session } as never,
     cycle,
   );
 
@@ -74,9 +74,9 @@ beforeEach(() => {
   mocks.getCandidate.mockReset();
   mocks.run.mockReset();
   mocks.getState.mockReturnValue({
-    phase: "reviewed",
     appSpec: { appId: "example-app" },
     githubDraftProposal: { proposal: { digest: approval.proposalDigest } },
+    phase: "reviewed",
   });
 });
 
@@ -106,7 +106,7 @@ it("requires provider proof of the retained reconciliation before approving its 
     type: "denied",
   });
   mocks.inspect.mockResolvedValue(observe({ draft: true }));
-  mocks.run.mockResolvedValue({ status: "succeeded", evidence: { kind: "pr-ready", readyAt } });
+  mocks.run.mockResolvedValue({ evidence: { kind: "pr-ready", readyAt }, status: "succeeded" });
   await expect(step(reconciled)).resolves.toEqual({ readyAt, status: "waiting-for-checks" });
   expect(mocks.inspect).toHaveBeenCalledWith(approval.proposalDigest, approval.headSha);
   expect(mocks.run).toHaveBeenCalledWith(
@@ -119,7 +119,7 @@ it("requires provider proof of the retained reconciliation before approving its 
 
 it("rechecks the approved proposal in the authenticated workflow without a model-carried session ID", async () => {
   mocks.inspect.mockResolvedValue(observe());
-  const callback = { session: { ...session, id: "workflow-session" }, callId, abortSignal };
+  const callback = { abortSignal, callId, session: { ...session, id: "workflow-session" } };
   // SAFETY: These are the only callback fields the step reads.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Partial workflow fixture.
   await expect(continueGitHubPrDelivery(approval, callback as never, readyAt)).resolves.toEqual({
@@ -140,7 +140,7 @@ it("refuses a mismatch between the approval target and the live reviewed publica
 
 it("marks the approved draft ready and returns the observed cycle without merging", async () => {
   mocks.inspect.mockResolvedValue(observe({ draft: true }));
-  mocks.run.mockResolvedValue({ status: "succeeded", evidence: { kind: "pr-ready", readyAt } });
+  mocks.run.mockResolvedValue({ evidence: { kind: "pr-ready", readyAt }, status: "succeeded" });
   await expect(step(approval)).resolves.toEqual({ readyAt, status: "waiting-for-checks" });
   expect(mocks.run).toHaveBeenCalledExactlyOnceWith({
     abortSignal,
@@ -166,12 +166,12 @@ it.each([
 
 it.each([
   [
-    { status: "succeeded", evidence: { kind: "pr-merge", mergeCommitSha } },
+    { evidence: { kind: "pr-merge", mergeCommitSha }, status: "succeeded" },
     { mergeCommitSha, status: "merged" },
   ],
   [{ status: "pending" }, { status: "merge-unconfirmed" }],
 ])("merges the approved revision only after its current checks pass", async (receipt, result) => {
-  mocks.inspect.mockResolvedValue(observe({ checks: "passed", checkRunId: 42 }));
+  mocks.inspect.mockResolvedValue(observe({ checkRunId: 42, checks: "passed" }));
   mocks.run.mockResolvedValue(receipt);
   await expect(step(approval, readyAt)).resolves.toEqual(result);
   expect(mocks.run).toHaveBeenCalledExactlyOnceWith({
@@ -186,7 +186,7 @@ it.each([
 
 it("recovers a ready transition after the original response is lost", async () => {
   mocks.inspect.mockResolvedValue(observe());
-  mocks.run.mockResolvedValue({ status: "succeeded", evidence: { kind: "pr-ready", readyAt } });
+  mocks.run.mockResolvedValue({ evidence: { kind: "pr-ready", readyAt }, status: "succeeded" });
   await expect(step(approval)).resolves.toEqual({ readyAt, status: "waiting-for-checks" });
   expect(mocks.run).toHaveBeenCalledExactlyOnceWith({
     abortSignal,

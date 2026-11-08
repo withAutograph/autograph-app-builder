@@ -417,9 +417,9 @@ describe("private read-only operator provider inventory", () => {
     await expect(
       readHostedOperatorProviderInventory({
         ...alias.input,
+        diagnosticSink: aliasSink,
         phase: "bootstrap-planning",
         resolveGatewayByPublicOrigin: true,
-        diagnosticSink: aliasSink,
       }),
     ).resolves.toBeDefined();
     expect(aliasSink.mock.calls.some(([event]) => event.inventoryReadFailure)).toBe(false);
@@ -971,8 +971,8 @@ describe("private read-only operator provider inventory", () => {
     ).rejects.toThrow("resource_mismatch");
     const observed = await readHostedOperatorProviderInventory({
       ...f.input,
-      configuration: configured,
       approvedAppBranch: branch,
+      configuration: configured,
     });
     expect(observed.app.branch).toBe(branch);
     expect(context.target.branch).toBe("feature/preview");
