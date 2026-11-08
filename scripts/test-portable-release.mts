@@ -214,33 +214,40 @@ try {
     receipt.unexpected = true;
   });
   await mutateReceipt("source repository drift", (receipt) => {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     (receipt.source as { repository: string }).repository = "https://github.com/example/wrong";
   });
   await mutateReceipt("source SHA drift", (receipt) => {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     (receipt.source as { sha: string }).sha = "0".repeat(40);
   });
   await mutateReceipt("source tree drift", (receipt) => {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     (receipt.source as { tree: string }).tree = "0".repeat(40);
   });
   await mutateReceipt("package version drift", (receipt) => {
     receipt.version = "0.1.0";
   });
   await mutateReceipt("archive basename traversal", (receipt) => {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const archive = receipt.archive as { name: string };
     archive.name = `../${archive.name}`;
   });
   await mutateReceipt("marketplace archive digest drift", (receipt) => {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const marketplaceArchive = receipt.codexMarketplaceArchive as {
       sha256: string;
     };
     marketplaceArchive.sha256 = "0".repeat(64);
   });
   await mutateReceipt("core digest drift", (receipt) => {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const files = receipt.coreFiles as Record<string, string>;
     const [path] = Object.keys(files);
     files[path] = "0".repeat(64);
   });
   await mutateReceipt("auxiliary digest drift", (receipt) => {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const files = receipt.auxiliaryFiles as Record<string, string>;
     const [path] = Object.keys(files);
     files[path] = "0".repeat(64);

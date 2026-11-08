@@ -302,6 +302,7 @@ test("web login and both emulated connections survive Cursor consent, token refr
       await page.getByRole("button", { exact: true, name: "Allow" }).click();
     }
     await expect.poll(() => Boolean(callback), { timeout: 30_000 }).toBe(true);
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const received = callback as URL | undefined;
     const code = received?.searchParams.get("code");
     const missingCode = code === null || code === undefined || code === "";

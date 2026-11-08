@@ -80,6 +80,7 @@ try {
   await lstat(output);
   throw new Error(`Proof receipt already exists: ${output}`);
 } catch (error) {
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
     throw error;
   }

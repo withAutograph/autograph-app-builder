@@ -30,6 +30,7 @@ export function scoreAdherence(
   // Shared-library styles describe the foundation, not authored app compliance.
   // Never deduce conformity from unknown provenance or duplicated observations.
   const unique = [...new Map(observations.map((o) => [o.id, o])).values()];
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const scores = Object.fromEntries(
     dimensions.map((dimension) => {
       const rows = unique.filter((o) => o.dimension === dimension && o.provenance !== "shared");

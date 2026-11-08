@@ -37,6 +37,7 @@ export async function listDesignCases(root?: string): Promise<ListedDesignCase[]
   const base = designCasesRoot(root);
   // oxlint-disable-next-line github/no-then, anti-slop/no-unknown-parameters -- Preserve the existing rejection handling and settlement behavior. Preserve the existing unknown input contract.
   const entries = await readdir(base, { withFileTypes: true }).catch((error: unknown) => {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return [];
     }

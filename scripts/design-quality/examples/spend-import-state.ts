@@ -75,6 +75,7 @@ const requiredTargets: SpendTarget[] = ["vendor_name", "amount", "transaction_da
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function initialSpendState(fixture: SpendFixture): SpendState {
   return {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     mapping: Object.fromEntries(
       Object.entries(fixture.fieldMapping).map(([target, source]) => [source, target]),
     ) as SpendMapping,

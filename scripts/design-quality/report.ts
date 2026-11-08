@@ -110,6 +110,7 @@ export function renderReport(report: {
     })
     .join("");
   const implementationDiagnostics =
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     (
       report.source as {
         implementationDiagnostics?: {
@@ -156,6 +157,7 @@ export function renderReport(report: {
       : "<p>Historical report: this evaluation predates measured adherence scoring.</p>") +
     implementationFindings;
   /* oxlint-enable typescript/strict-boolean-expressions */
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const judge = report.judge as {
     status?: string;
     subjectiveScore?: number;

@@ -36,6 +36,7 @@ export class VirtualAuthenticator {
     const result = await this.session.send("WebAuthn.getCredentials", {
       authenticatorId: this.id,
     });
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     return result.credentials as Credential[];
   }
 

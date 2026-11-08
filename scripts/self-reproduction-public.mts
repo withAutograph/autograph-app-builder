@@ -122,7 +122,8 @@ const newState = (endpoint: string): PublicState => {
   };
 };
 const state: PublicState = values.resume
-  ? (JSON.parse(readFileSync(path, "utf-8")) as PublicState)
+  ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+    (JSON.parse(readFileSync(path, "utf-8")) as PublicState)
   : newState(values.endpoint);
 state.originalStart = originalPublicStart(state);
 state.startRequestSha256 = createHash("sha256")
@@ -189,7 +190,8 @@ try {
     { bearerToken: process.env.APP_BUILDER_PUBLIC_MCP_TOKEN },
   );
   const responses = hasNonemptyOption(values["responses-file"])
-    ? (JSON.parse(readFileSync(values["responses-file"], "utf-8")) as Responses)
+    ? // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+      (JSON.parse(readFileSync(values["responses-file"], "utf-8")) as Responses)
     : undefined;
   const message = hasNonemptyOption(values["message-file"])
     ? readFileSync(values["message-file"], "utf-8")

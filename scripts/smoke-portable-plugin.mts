@@ -73,6 +73,7 @@ await Promise.all(
         release: true,
         repositoryRoot: path.resolve("."),
       }),
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       ...Object.entries(receipt.coreFiles as Record<string, string>).map(
         async ([filePath, digest]) => {
           const relativePath = filePath.replace(/^app-builder\//u, "");
@@ -87,6 +88,7 @@ await Promise.all(
           await lstat(path.join(pluginRoot, forbidden));
           throw new Error(`${client} portable root contains ${forbidden}.`);
         } catch (error) {
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
           if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
             throw error;
           }

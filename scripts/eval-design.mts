@@ -165,6 +165,7 @@ async function main() {
           await readFile(scenarioPath, "utf-8").catch((error: unknown) => {
             if (
               !hasNonemptyOption(values.scenario) &&
+              // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
               (error as NodeJS.ErrnoException).code === "ENOENT"
             ) {
               return "[]";

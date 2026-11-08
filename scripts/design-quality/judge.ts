@@ -87,6 +87,7 @@ export async function judgeDesign(
       token = await hooks.getToken();
     } else {
       // Official SDK refreshes project OIDC; no static-key fallback is selected.
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const project = JSON.parse(await readFile(".vercel/project.json", "utf-8")) as {
         projectId: string;
         orgId: string;

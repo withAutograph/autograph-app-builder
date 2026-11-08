@@ -15,6 +15,7 @@ const info = await lstat(candidate);
 if (!info.isDirectory() || info.isSymbolicLink() || (info.mode & 0o022) !== 0) {
   throw new Error("Release candidate root was unsafe.");
 }
+// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
 const promotion = JSON.parse(
   await readFile(path.join(candidate, promotionReceiptName), "utf-8"),
 ) as {

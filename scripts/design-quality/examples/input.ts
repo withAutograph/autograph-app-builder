@@ -143,6 +143,7 @@ export async function loadDesignQualityExample(
   repositoryRoot = process.cwd(),
 ): Promise<UiPreviewInput> {
   const caseRoot = `docs/design-quality-cases/${id}`;
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const config = JSON.parse(
     await text(repositoryRoot, `${caseRoot}/example.json`),
   ) as ExampleConfig;

@@ -321,7 +321,9 @@ export async function installBrowserBoundaries(
 ) {
   await context.addInitScript((boundaryMode) => {
     const state = {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       clipboard: [] as string[],
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       opened: [] as string[],
     };
     Object.defineProperty(window, "__e2eBoundaries", {
@@ -348,7 +350,7 @@ export async function installBrowserBoundaries(
       if (value !== "about:blank") {
         state.opened.push(value);
       }
-      // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The emulator provides the window operations used by the browser handoff.
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- The emulator provides the window operations used by the browser handoff; Preserve the existing assertion at this boundary.
       return {
         close() {
           // The emulated window has no resources to close.
@@ -370,11 +372,13 @@ export async function installBrowserBoundaries(
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 export async function browserBoundaryState(page: Page) {
   return await page.evaluate(() => {
-    const state = (
-      window as typeof window & {
-        __e2eBoundaries: { clipboard: string[]; opened: string[] };
-      }
-    ).__e2eBoundaries;
+    const state =
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+      (
+        window as typeof window & {
+          __e2eBoundaries: { clipboard: string[]; opened: string[] };
+        }
+      ).__e2eBoundaries;
     return structuredClone(state);
   });
 }

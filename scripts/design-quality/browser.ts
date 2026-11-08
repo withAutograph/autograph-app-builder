@@ -825,6 +825,7 @@ export async function measureStyles(
             .filter((p) => p.name === property && p.disabled !== true && p.parsedOk !== false)
             .map((p) => ({
               p,
+              // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
               rule: m.rule as typeof m.rule | undefined,
               selector: matchedSelector(m),
             })),
@@ -1225,7 +1226,8 @@ export async function capturePreview(input: {
                 /* oxlint-disable typescript/strict-boolean-expressions -- Preserve empty and nullish string truthiness. */
                 const locator = step.selector
                   ? page.locator(step.selector)
-                  : page.getByRole(step.role as Parameters<Page["getByRole"]>[0], {
+                  : // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+                    page.getByRole(step.role as Parameters<Page["getByRole"]>[0], {
                       exact: true,
                       name: step.name,
                     });

@@ -365,9 +365,12 @@ const reliableExpressionType = (
     );
   }
   if (checker.isArrayType(type) || checker.isTupleType(type)) {
-    return checker
-      .getTypeArguments(type as ts.TypeReference)
-      .every((item) => reliableExpressionType(item, checker, depth + 1, nextSeen));
+    return (
+      checker
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
+        .getTypeArguments(type as ts.TypeReference)
+        .every((item) => reliableExpressionType(item, checker, depth + 1, nextSeen))
+    );
   }
   if (type.getCallSignatures().length || type.getConstructSignatures().length) {
     return false;
@@ -534,6 +537,7 @@ const finiteLiteralEvidence = (
     if (checker.isTupleType(expected)) {
       return undefined;
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const items = checker.getTypeArguments(expected as ts.TypeReference);
     if (items.length !== 1) {
       return undefined;

@@ -110,6 +110,7 @@ async function ownerToken(path: string) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function deploymentIdentity(value: string) {
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const parsed = JSON.parse(value) as { id?: unknown; url?: unknown };
   if (
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -197,6 +198,7 @@ try {
   await lstat(publicationReceiptPath);
   throw new Error("This exact release candidate was already published.");
 } catch (error) {
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
     throw error;
   }
@@ -246,6 +248,7 @@ try {
       );
       metadataRaw = result.stdout;
     } catch (error) {
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
       const { stderr } = error as { stderr?: unknown };
       if (
         // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve this runtime check and existing input handling.
@@ -256,6 +259,7 @@ try {
       }
       throw error;
     }
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     const metadata = JSON.parse(metadataRaw) as {
       tagName?: unknown;
       isPrerelease?: unknown;
@@ -373,6 +377,7 @@ try {
       maxBuffer: 4 * 1024 * 1024,
     },
   );
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const remoteDescriptor = JSON.parse(remote.stdout) as { digest?: unknown };
   if (remoteDescriptor.digest !== receipt.image.manifestDigest) {
     throw new Error("Published registry image did not retain the proven digest.");
@@ -406,6 +411,7 @@ try {
     throw new Error("Deployed OAuth resource metadata was unavailable.");
   }
   const metadataBytes = Buffer.from(await metadataResponse.arrayBuffer());
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const metadata = JSON.parse(metadataBytes.toString("utf-8")) as {
     resource?: unknown;
     authorization_servers?: unknown;

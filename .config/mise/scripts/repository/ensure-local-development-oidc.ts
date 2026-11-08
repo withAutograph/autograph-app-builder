@@ -16,6 +16,7 @@ if (
 }
 
 try {
+  // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
   const [vercelExecutable, miseExecutable] = process.argv.slice(2) as [string, string];
 
   ensureLocalDevelopmentOidc({

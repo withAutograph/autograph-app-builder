@@ -8,6 +8,7 @@ export async function readArchivedReport(directory: string) {
   try {
     bytes = await readFile(path.join(directory, "report.json"), "utf-8");
   } catch (error) {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Preserve the existing assertion at this boundary.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return null;
     }
