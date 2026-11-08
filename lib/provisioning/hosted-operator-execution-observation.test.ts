@@ -52,20 +52,20 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
     access: [],
     cost: { class: "shared-recovery-group", description: "fixture", owner: "fixture" },
     effects: [
-      { id: "resources", kind: "resources", description: "Observe resources" },
-      { id: "install", kind: "install", description: "Install" },
-      { id: "access", kind: "access", description: "Access" },
-      { id: "bindings", kind: "bindings", description: "Bind" },
+      { description: "Observe resources", id: "resources", kind: "resources" },
+      { description: "Install", id: "install", kind: "install" },
+      { description: "Access", id: "access", kind: "access" },
+      { description: "Bind", id: "bindings", kind: "bindings" },
     ],
     installer: { reference: "installer", sha256: "a".repeat(64) },
     neon: {
-      projectId: "neon",
       branchId: "branch",
-      endpoint: "ep-fixture.neon.tech",
       connectionRef: "connection",
+      endpoint: "ep-fixture.neon.tech",
+      projectId: "neon",
       source: "synthetic-only",
     },
-    release: { id: "release", artifactRef: "artifact", sha256: "b".repeat(64) },
+    release: { artifactRef: "artifact", id: "release", sha256: "b".repeat(64) },
     retention: { expiresAt: "2027-01-01T00:00:00Z", policy: "retain" },
   });
   const authority = {
@@ -91,9 +91,9 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
       step: "reserved",
       privateState: {
         encryptedToken: "synthetic-ciphertext",
+        keyVersion: "v1",
         tokenIv: "iv",
         tokenTag: "tag",
-        keyVersion: "v1",
       },
       operator: {
         mode: "protected-operator-v1",
