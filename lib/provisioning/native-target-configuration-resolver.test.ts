@@ -620,7 +620,7 @@ describe("fresh normal same-project runtime assembly", () => {
       configuration: base,
       environment,
       openResources: () =>
-        Promise.resolve({ ...f.resources, readStandardDestination, readStandardCapture }),
+        Promise.resolve({ ...f.resources, readStandardCapture, readStandardDestination }),
     });
     const body = {
       action: "resolve-preview-target",
@@ -631,14 +631,14 @@ describe("fresh normal same-project runtime assembly", () => {
     return {
       ...f,
       base,
-      selected,
+      body,
       description,
       destination,
       environment,
-      readStandardDestination,
       readStandardCapture,
+      readStandardDestination,
       resolve,
-      body,
+      selected,
     };
   };
   const generic = () => {
@@ -681,12 +681,12 @@ describe("fresh normal same-project runtime assembly", () => {
       configuration: f.base,
       openResources: async () => ({
         ...f.resources,
-        readStandardDestination: f.readStandardDestination,
         readStandardCapture: f.readStandardCapture,
+        readStandardDestination: f.readStandardDestination,
         readStandardPublicOrigin,
       }),
     });
-    return { ...f, resolve, readStandardPublicOrigin };
+    return { ...f, readStandardPublicOrigin, resolve };
   };
   it("derives a new normal app runtime through the generic policy without a per-app profile or old registration", async () => {
     const f = generic();
@@ -719,8 +719,8 @@ describe("fresh normal same-project runtime assembly", () => {
       environment: f.environment,
       openResources: async () => ({
         ...f.resources,
-        readStandardDestination: f.readStandardDestination,
         readStandardCapture: f.readStandardCapture,
+        readStandardDestination: f.readStandardDestination,
         readStandardPublicOrigin: f.readStandardPublicOrigin,
       }),
     });
@@ -737,8 +737,8 @@ describe("fresh normal same-project runtime assembly", () => {
       openResources: () =>
         Promise.resolve({
           ...f.resources,
-          readStandardDestination: f.readStandardDestination,
           readStandardCapture: f.readStandardCapture,
+          readStandardDestination: f.readStandardDestination,
           readStandardOriginSelection: () => Promise.resolve("https://different-chosen.example"),
           readStandardPublicOrigin: f.readStandardPublicOrigin,
         }),
@@ -761,8 +761,8 @@ describe("fresh normal same-project runtime assembly", () => {
       openResources: () =>
         Promise.resolve({
           ...f.resources,
-          readStandardDestination: f.readStandardDestination,
           readStandardCapture: f.readStandardCapture,
+          readStandardDestination: f.readStandardDestination,
           readStandardOriginSelection,
           readStandardPublicOrigin: f.readStandardPublicOrigin,
         }),
@@ -781,8 +781,8 @@ describe("fresh normal same-project runtime assembly", () => {
       openResources: () =>
         Promise.resolve({
           ...f.resources,
-          readStandardDestination: f.readStandardDestination,
           readStandardCapture: f.readStandardCapture,
+          readStandardDestination: f.readStandardDestination,
           readStandardOriginSelection,
           readStandardPublicOrigin: f.readStandardPublicOrigin,
         }),
@@ -1179,7 +1179,7 @@ describe("fresh normal same-project runtime assembly", () => {
       configuration: base,
       environment,
       openResources: () =>
-        Promise.resolve({ ...f.resources, readStandardDestination, readStandardCapture }),
+        Promise.resolve({ ...f.resources, readStandardCapture, readStandardDestination }),
     });
     const body = {
       action: "resolve-preview-target",
@@ -1190,14 +1190,14 @@ describe("fresh normal same-project runtime assembly", () => {
     return {
       ...f,
       base,
-      selected,
+      body,
       description,
       destination,
       environment,
-      readStandardDestination,
       readStandardCapture,
+      readStandardDestination,
       resolve,
-      body,
+      selected,
     };
   };
   it("uses the real normal receipt and captured source without reading legacy native registration", async () => {

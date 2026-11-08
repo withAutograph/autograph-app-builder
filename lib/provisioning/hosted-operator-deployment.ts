@@ -913,8 +913,8 @@ export const createHostedOperatorControlPlane = async (input: {
         observe: approvalObserver.forContext(context),
       })(context);
     const readApprovedPlan = createHostedOperatorReadApprovedPlan({
-      eve,
       assertCanonicalOwner: owner.assertArtifactAuthorized,
+      eve,
     });
     const withResourceLease = createPostgresHostedOperatorResourceLease({
       openLockClient: (onConnectionClosed) =>

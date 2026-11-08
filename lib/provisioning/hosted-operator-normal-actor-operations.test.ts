@@ -640,9 +640,9 @@ describe("normal actor operations", () => {
       retention: { ...plan.retention, expiresAt: new Date(now + 3000).toISOString() },
       normalActorPreparation: normalActorPreparationSchema.strip().parse(originalPreparation),
       effects: ["resources", "install", "access", "bindings"].map((kind) => ({
+        description: "Controlled resource boundary",
         id: kind,
         kind,
-        description: "Controlled resource boundary",
       })),
     });
     const appInput = installPlan(originalApp, "22222222-2222-4222-8222-222222222222", "app-call");
@@ -696,10 +696,10 @@ describe("normal actor operations", () => {
       ),
     ).toEqual(captureState.actors[0].storageState);
     const qaActors = Array.from({ length: 7 }, (_, index) => ({
+      account: "create-email-password",
       actorKey: `qa-${index + 1}`,
       email: `qa-${index + 1}@example.com`,
       name: `QA ${index + 1}`,
-      account: "create-email-password",
     }));
     const combined = normalActorProgramSchema.parse({
       ...originalProgram,
@@ -813,9 +813,9 @@ describe("normal actor operations", () => {
         { description: "Fixture resources", id: "resources", kind: "resources" },
         { description: "Fixture install", id: "install", kind: "install" },
         ...combined.organizations.map((org) => ({
+          description: "Approved QA organization",
           id: `auth-membership:${org.organizationId}`,
           kind: "auth-membership",
-          description: "Approved QA organization",
         })),
         { description: "Approved QA grants", id: "access", kind: "access" },
         { description: "Fixture bindings", id: "bindings", kind: "bindings" },

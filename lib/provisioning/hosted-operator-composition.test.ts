@@ -2230,34 +2230,34 @@ describe("existing populated Auth workflow planning", () => {
     } as unknown as ReturnType<typeof neonReader.createPreviewNeonMcpReader>);
     vi.spyOn(providerInventory, "readHostedOperatorProviderInventory").mockResolvedValue({
       app: {
-        deployedEnvironmentKeys: [],
-        projectEnvironmentKeys: [],
         branch: context.target.branch,
-        projectId: context.target.projectId,
+        deployedEnvironmentKeys: [],
         deploymentId: "app-deployment",
         environment: "preview",
+        projectEnvironmentKeys: [],
+        projectId: context.target.projectId,
       },
       gateway: {
-        deployedEnvironmentKeys: [],
-        projectEnvironmentKeys: [],
         branch: "gateway-actual",
-        projectId: "gateway",
+        deployedEnvironmentKeys: [],
         deploymentId: "gateway-deployment",
         environment: "preview",
+        projectEnvironmentKeys: [],
+        projectId: "gateway",
       },
       operator: {
         branch: null,
         deployedEnvironmentKeys: [],
-        projectEnvironmentKeys: [],
-        projectId: "operator",
         deploymentId: "operator-deployment",
         environment: "preview",
+        projectEnvironmentKeys: [],
+        projectId: "operator",
       },
       verification: {
-        publicKeyIds: null,
         gatewayOrigin: "https://gateway.example",
-        publicOrigin: "https://apps.example",
         jwksUrl: "https://gateway.example/_platform/jwks.json",
+        publicKeyIds: null,
+        publicOrigin: "https://apps.example",
       },
       appEnvironment: { deployedKeyInventory: "observed", forbiddenKeys: [] },
       nativeResource: null,
@@ -3361,8 +3361,8 @@ describe("existing populated Auth workflow planning", () => {
       );
       expect(plan.authSchema).toMatchObject({
         artifactRef: "new-observed-artifact",
-        targetDigest: "4".repeat(64),
         planDigest: "3".repeat(64),
+        targetDigest: "4".repeat(64),
       });
       expect(plan.authAdoption).toBeUndefined();
       expect(f.row).toEqual(before);

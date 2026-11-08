@@ -139,21 +139,16 @@ const normalCookie = {
 };
 const fixture = (selectedPreparation = preparationInput) => {
   let row: HostedRuntimeJournalRow = {
-    revision: 1,
     record: hostedRuntimeJournalRecordSchema.parse({
-      kind: "app-runtime",
-      version: 1,
-      request: target,
       approvedByCallId: "initial-call",
-      status: "pending",
-      step: "reserved",
+      kind: "app-runtime",
       leaseId: "44444444-4444-4444-8444-444444444444",
       operator: {
+        approvalId: "initial-approval",
         mode: "protected-operator-v1",
         operationRef: accountOperationRef,
         plan: selectedPreparation.accountPlan,
         planDigest: selectedPreparation.accountPlanDigest,
-        approvalId: "initial-approval",
         receipts: [],
       },
       privateState: {
@@ -162,7 +157,12 @@ const fixture = (selectedPreparation = preparationInput) => {
         tokenIv: "resource-iv",
         tokenTag: "resource-tag",
       },
+      request: target,
+      status: "pending",
+      step: "reserved",
+      version: 1,
     }),
+    revision: 1,
   };
   let approved = true;
   let owned = true;
@@ -275,8 +275,8 @@ const organizationProofFixture = async () => {
   state.actors = [
     {
       actorKey: "owner",
-      signup: "complete",
       session: owner,
+      signup: "complete",
       storageState: { cookies: [], origins: [] },
     },
   ];
@@ -305,7 +305,7 @@ const organizationProofFixture = async () => {
       environment: "preview" as const,
     },
   };
-  const input = { organizationId: "org-one", ownerActorKey: "owner", owner, binding };
+  const input = { binding, organizationId: "org-one", owner, ownerActorKey: "owner" };
   return { input, selectedPreparation, value };
 };
 
@@ -404,9 +404,9 @@ const currentBootstrapFixture = async () => {
   const bootstrap = { auth, candidate };
   const nextInput = {
     ...input,
+    assertBootstrapCurrent: async () => {},
     binding: { ...input.binding, endpointOrigin: candidate.origin },
     bootstrap,
-    assertBootstrapCurrent: async () => {},
   };
   return { ...prepared, bootstrap, nextInput, old };
 };
@@ -483,7 +483,7 @@ describe("retained actual normal actor journal", () => {
               if (change === "expired renewal") {
                 record.leaseExpiresAt = new Date(Date.now() - 1000).toISOString();
               }
-              value.row = { revision: value.row.revision + 1, record };
+              value.row = { record, revision: value.row.revision + 1 };
             }
             return structuredClone(value.row);
           },
@@ -651,7 +651,8 @@ describe("retained actual normal actor journal", () => {
             return undefined;
           }
           writes += 1;
-          value.row = { revision: value.row.revision + 1, record: input.record };
+          const revision = value.row.revision + 1;
+          value.row = { record: input.record, revision };
           return structuredClone(value.row);
         },
         read: async () => structuredClone(value.row),
@@ -741,7 +742,7 @@ describe("retained actual normal actor journal", () => {
       expiresAt: "2030-01-01T00:00:00.000Z",
     };
     const storageState = { cookies: [], origins: [] };
-    state.actors = [{ actorKey: "owner", signup: "complete", session, storageState }];
+    state.actors = [{ actorKey: "owner", session, signup: "complete", storageState }];
     const baseOnly = await value.journal.checkpoint(context, state);
     expect(baseOnly.accountsCompletedAt).toBeUndefined();
     state.organizationSessions = [
@@ -841,7 +842,8 @@ describe("retained actual normal actor journal", () => {
         if (request.expectedRevision !== value.row.revision) {
           return undefined;
         }
-        value.row = { revision: value.row.revision + 1, record: request.record };
+        const revision = value.row.revision + 1;
+        value.row = { record: request.record, revision };
         return structuredClone(value.row);
       },
       read: async () => structuredClone(value.row),
@@ -1150,7 +1152,6 @@ describe("retained actual normal actor journal", () => {
     state.actors = [
       {
         actorKey: "owner",
-        signup: "complete",
         session: {
           reference: "22222222-2222-4222-8222-222222222222",
           actorId: "actual-actor",
@@ -1158,6 +1159,7 @@ describe("retained actual normal actor journal", () => {
           origin: program.origin,
           expiresAt: "2030-01-01T00:00:00.000Z",
         },
+        signup: "complete",
         storageState: {
           cookies: [
             {

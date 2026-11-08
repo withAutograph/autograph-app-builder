@@ -1623,12 +1623,13 @@ it("blocks new legacy target effects after selecting a standard destination whil
     requestId: "d16f6dd2-157a-42dc-8dfc-253ce9005502",
   };
   const f = makeFixture(current);
+  const { eve, handoffs, membership } = f;
   const reader = createHostedOperatorAppOwnerAuthority({
-    eve: f.eve,
-    handoffs: f.handoffs,
-    membership: f.membership,
-    workloadPolicy,
+    eve,
+    handoffs,
     keyResolver,
+    membership,
+    workloadPolicy,
   });
   const context = {
     authority: directOwnerContext.authority,
@@ -1650,12 +1651,13 @@ it("blocks new legacy target effects after selecting a standard destination whil
     requestId: "d16f6dd2-157a-42dc-8dfc-253ce9005502",
   };
   const f = makeFixture(current);
+  const { eve, handoffs, membership } = f;
   const reader = createHostedOperatorAppOwnerAuthority({
-    eve: f.eve,
-    handoffs: f.handoffs,
-    membership: f.membership,
-    workloadPolicy,
+    eve,
+    handoffs,
     keyResolver,
+    membership,
+    workloadPolicy,
   });
   const context = {
     authority: directOwnerContext.authority,
@@ -2961,10 +2963,9 @@ describe("canonical original approved plan reader", () => {
     const f = makeFixture();
     f.currentSession.privateApprovalReceipts = [receipt];
     const context = await f.authority.authorize(request(), selection, ownerContext);
-    const read = createHostedOperatorReadApprovedPlan({
-      eve: f.eve,
-      assertCanonicalOwner: f.authority.assertArtifactAuthorized,
-    });
+    const { eve } = f;
+    const { assertArtifactAuthorized: assertCanonicalOwner } = f.authority;
+    const read = createHostedOperatorReadApprovedPlan({ assertCanonicalOwner, eve });
     const proposed = {
       ...plan,
       retention: { ...plan.retention, expiresAt: "2099-12-31T23:59:59Z" },
@@ -3276,7 +3277,7 @@ describe("hosted operator Sandbox ownership", () => {
         scopeType: "team",
       }),
     };
-    return { ...fixture, session, decision, context };
+    return { ...fixture, context, decision, session };
   };
 
   it.each(["direct", "handoff"] as const)(
@@ -3421,7 +3422,7 @@ describe("hosted operator Sandbox ownership", () => {
 describe("normal Builder destination authority", () => {
   const read = (f: ReturnType<typeof makeFixture>, owner: OperatorOwnerContext = ownerContext) =>
     readStandardBuilderDestination(
-      { ...f, workloadPolicy, apiOrigin: "https://vercel.example" },
+      { ...f, apiOrigin: "https://vercel.example", workloadPolicy },
       {
         authority: owner.authority,
         ownerContext: owner,
@@ -3704,10 +3705,10 @@ describe("attached direct-session standard destination", () => {
       readStandardBuilderDestination(
         {
           ...f,
-          workloadPolicy,
-          readProvisioning,
-          findProvisioningForAppRepository,
           apiOrigin: "https://vercel.example",
+          findProvisioningForAppRepository,
+          readProvisioning,
+          workloadPolicy,
         },
         {
           authority: ownerContext.authority,
@@ -3841,7 +3842,7 @@ describe("attached direct-session standard destination", () => {
 describe("normal Builder destination authority", () => {
   const read = (f: ReturnType<typeof makeFixture>, owner: OperatorOwnerContext = ownerContext) =>
     readStandardBuilderDestination(
-      { ...f, workloadPolicy, apiOrigin: "https://vercel.example" },
+      { ...f, apiOrigin: "https://vercel.example", workloadPolicy },
       {
         authority: owner.authority,
         ownerContext: owner,

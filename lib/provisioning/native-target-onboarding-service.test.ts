@@ -712,10 +712,10 @@ describe("exact native preparation invocation approval", () => {
         }
         const result = await readPrivateNativeTargetApproval({
           ...initial,
-          historyOwner: owner.historyOwner,
           assertOwner: async () => {
             await f.authorize();
           },
+          historyOwner: owner.historyOwner,
           readHistory: (startIndex, onEvent) => {
             for (const event of history.slice(startIndex)) {
               onEvent(event);
@@ -799,10 +799,10 @@ describe("retired attempt preparation with immutable initial approval", () => {
         }
         const result = await readPrivateNativeTargetApproval({
           ...initial,
-          historyOwner: owner.historyOwner,
           assertOwner: async () => {
             await f.authorize();
           },
+          historyOwner: owner.historyOwner,
           readHistory: (start, observe) => {
             for (const event of history.slice(start)) {
               observe(event);
@@ -1022,17 +1022,17 @@ describe("side-effect-free approval peek with an incomplete durable tail", () =>
         }
         const result = await readPrivateNativeTargetApproval({
           ...initial,
+          assertOwner: async () => {
+            await f.authorize();
+          },
           historyOwner: owner.historyOwner,
           observation: {
-            state: saved,
             save: (next) => {
               writes += 1;
               saved = next;
               return Promise.resolve();
             },
-          },
-          assertOwner: async () => {
-            await f.authorize();
+            state: saved,
           },
           readHistory: (start, onEvent) => {
             for (const event of history.slice(start)) {
