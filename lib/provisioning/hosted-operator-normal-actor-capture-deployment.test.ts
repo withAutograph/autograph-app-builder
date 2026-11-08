@@ -334,11 +334,11 @@ const fixture = () => {
   const normalTransport = vi.fn<NonNullable<NormalActorCaptureDeploymentIo["normalTransport"]>>(
     async (input) =>
       await createHostedOperatorNormalAuthTransport(input, {
+        fetch: authFetch,
         getOidc: async () => await Promise.resolve("native-token"),
         verifyOidc: async () => {
           await Promise.resolve();
         },
-        fetch: authFetch,
       }),
   );
   return { authFetch, noOp, normalTransport, readPending, readStaging, resources };

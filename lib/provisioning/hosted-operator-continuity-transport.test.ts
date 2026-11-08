@@ -336,6 +336,39 @@ const setup = () => {
       }
     },
     runtime: {
+      async close(ctx) {
+        await assertOwner(ctx);
+        stats.closes += 1;
+        live = false;
+      },
+      async renew(ctx) {
+        await assertOwner(ctx);
+        if (!live) {
+          throw new Error("Renewed closed owned runtime");
+        }
+      },
+      async runSuite(ctx, current, capabilities, assertCurrent, checkpoint, allowDispatch) {
+        await assertOwner(ctx);
+        await assertCurrent();
+        expect(custody.unseal(current)).toEqual(capabilities);
+        if (allowDispatch) {
+          if (!live) {
+            throw new Error("Suite dispatched without live owned runtime");
+          }
+          stats.suiteDispatches += 1;
+          await checkpoint("suite-command");
+        } else {
+          stats.suiteInspections += 1;
+          if (current.suiteCommandId !== "suite-command") {
+            throw new HostedOperatorError("reconciliation_required");
+          }
+        }
+        if (faults.loseSuiteResult) {
+          faults.loseSuiteResult = false;
+          throw new Error("Controlled terminal observation unavailable");
+        }
+        return { exitCode: 0 };
+      },
       async start(ctx, current, capabilities, assertCurrent, checkpoint) {
         await assertOwner(ctx);
         await assertCurrent();
@@ -382,39 +415,6 @@ const setup = () => {
           },
           current: { ...identity, state: "ready", leaseExpiresAt: "2099-01-01T00:00:00Z" },
         });
-      },
-      async runSuite(ctx, current, capabilities, assertCurrent, checkpoint, allowDispatch) {
-        await assertOwner(ctx);
-        await assertCurrent();
-        expect(custody.unseal(current)).toEqual(capabilities);
-        if (allowDispatch) {
-          if (!live) {
-            throw new Error("Suite dispatched without live owned runtime");
-          }
-          stats.suiteDispatches += 1;
-          await checkpoint("suite-command");
-        } else {
-          stats.suiteInspections += 1;
-          if (current.suiteCommandId !== "suite-command") {
-            throw new HostedOperatorError("reconciliation_required");
-          }
-        }
-        if (faults.loseSuiteResult) {
-          faults.loseSuiteResult = false;
-          throw new Error("Controlled terminal observation unavailable");
-        }
-        return { exitCode: 0 };
-      },
-      async close(ctx) {
-        await assertOwner(ctx);
-        stats.closes += 1;
-        live = false;
-      },
-      async renew(ctx) {
-        await assertOwner(ctx);
-        if (!live) {
-          throw new Error("Renewed closed owned runtime");
-        }
       },
     },
     projection: {
@@ -501,22 +501,22 @@ const setup = () => {
     },
   });
   const handler = createProtectedHostedOperatorHandler({
-    authorize,
     assertAuthorized: rejectUnexpected,
+    authorize,
+    bindings: rejectUnexpected,
+    continuityRequest: dispatcher,
+    executeEffect: rejectUnexpected,
     plan: rejectUnexpected,
     readApproval: rejectUnexpected,
-    withResourceLease: rejectUnexpected,
     reconcile: rejectUnexpected,
-    executeEffect: rejectUnexpected,
-    verify: rejectUnexpected,
-    bindings: rejectUnexpected,
     store: {
+      compareAndSet: rejectUnexpected,
       read: rejectUnexpected,
       reserve: rejectUnexpected,
-      compareAndSet: rejectUnexpected,
       reserveFenceGeneration: rejectUnexpected,
     },
-    continuityRequest: dispatcher,
+    verify: rejectUnexpected,
+    withResourceLease: rejectUnexpected,
   });
   const transport: typeof fetch = async (url, init) => {
     expect(init).toHaveProperty("dispatcher");
@@ -599,16 +599,16 @@ it("uses the real client/handler/dispatcher/service through exact approval and c
   expect(f.stats.revokes).toBe(1);
   expect(f.live).toBe(false);
   const counts = {
-    starts: f.stats.starts,
     publishes: f.stats.publishes,
+    starts: f.stats.starts,
     suite: f.stats.suiteDispatches,
   };
   const status = await f.client.continuityStatus(planned.plan.intentId);
   expect(status.state).toBe("settled");
   await f.client.runContinuity(planned.request, "execute-call");
   expect({
-    starts: f.stats.starts,
     publishes: f.stats.publishes,
+    starts: f.stats.starts,
     suite: f.stats.suiteDispatches,
   }).toEqual(counts);
   expect(f.record.plan.originalSetup).toEqual(planned.plan.originalSetup);

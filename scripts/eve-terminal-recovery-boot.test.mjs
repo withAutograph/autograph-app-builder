@@ -83,20 +83,20 @@ const bootFixture = () => {
     async claimSessionHooks(tokens) {
       calls.push(["claim", tokens]);
     },
+    async dispose() {
+      calls.push([DISPOSE_INBOX_CALL]);
+    },
+    drain() {
+      return queue.splice(0);
+    },
     onInterrupt(callback) {
       interrupt = callback;
       return () => {
         interrupt = undefined;
       };
     },
-    drain() {
-      return queue.splice(0);
-    },
     restore(items) {
       queue.unshift(...items);
-    },
-    async dispose() {
-      calls.push([DISPOSE_INBOX_CALL]);
     },
   };
   const ports = {
@@ -214,11 +214,11 @@ it("native boot rejects changed logical identity before any claim", async () => 
 it("a competing recovery owner cannot execute or replace logical hook ownership", async () => {
   const fixture = bootFixture();
   fixture.ports.createHook = () => ({
-    async getConflict() {
-      return { runId: "winner" };
-    },
     dispose() {
       fixture.calls.push(["dispose-hook"]);
+    },
+    async getConflict() {
+      return { runId: "winner" };
     },
   });
   assert.equal(await bootTerminalRecoveryOwnerWithPorts(inputFor(), fixture.ports), undefined);
@@ -445,18 +445,18 @@ it("recovered first turn admits a queued cancellation before any turn step", asy
   let settled = 0;
   let cleanups = 0;
   const inbox = {
-    onInterrupt() {
-      return () => {
-        cleanups += 1;
-      };
+    drain() {
+      return [{ kind: "cancel" }];
     },
     onDelivery() {
       return () => {
         cleanups += 1;
       };
     },
-    drain() {
-      return [{ kind: "cancel" }];
+    onInterrupt() {
+      return () => {
+        cleanups += 1;
+      };
     },
   };
   const execution = new SessionExecution({

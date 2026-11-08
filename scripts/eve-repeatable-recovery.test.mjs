@@ -138,7 +138,6 @@ const fixture = async (options = {}) => {
     input: await serialization.dehydrateStepArguments({ args: [pair], closureVars: [] }, owner),
   };
   const world = {
-    runs: { get: () => Promise.resolve({ runId: owner, status: "completed" }) },
     events: {
       list: () =>
         Promise.resolve({
@@ -154,21 +153,22 @@ const fixture = async (options = {}) => {
           hasMore: false,
         }),
     },
+    runs: { get: () => Promise.resolve({ runId: owner, status: "completed" }) },
     steps: { get: () => Promise.resolve(step) },
   };
   const collect = createTerminalRecoveryCandidateCollector({
     getWorld: () => Promise.resolve(world),
-    resolveRunEncryptionKey: () => Promise.resolve(),
     hydrateStepArguments: (value, runId, key) =>
       serialization.hydrateStepArguments(value, runId, key, []),
     hydrateStepReturnValue: (value, runId, key) =>
       serialization.hydrateStepReturnValue(value, runId, key),
+    now: () => 0,
     readDurableSession,
-    requireEventSlot: (id) => Number(id.slice(5)),
     async *readNativeEvents() {
       yield* options.nativeEvents ?? [];
     },
-    now: () => 0,
+    requireEventSlot: (id) => Number(id.slice(5)),
+    resolveRunEncryptionKey: () => Promise.resolve(),
   });
   const collected = await collect({
     binding: { ownerRunId: owner, logicalSessionId: logical },
@@ -176,7 +176,7 @@ const fixture = async (options = {}) => {
   });
   assert.equal(collected.kind, "candidate");
   const payload = readTerminalRecoveryCandidate(collected.candidate);
-  return { handle: collected.candidate, payload, pair };
+  return { handle: collected.candidate, pair, payload };
 };
 const runNextModel = async (ready) => {
   const session = readDurableSession(ready.checkpointCore.sessionState);

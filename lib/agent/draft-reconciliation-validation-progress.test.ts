@@ -77,8 +77,8 @@ vi.mock("./workflow-state", () => ({
 }));
 vi.mock("../repository/sandbox-draft-reconciliation", () => ({
   inspectDraftReconciliation: mocks.inspect,
-  replaceDraftReconciliationCandidateText: mocks.replace,
   readDraftReconciliationCandidateFilePage: vi.fn(),
+  replaceDraftReconciliationCandidateText: mocks.replace,
   restoreDraftReconciliationCandidateFile: vi.fn(),
 }));
 vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
@@ -108,8 +108,8 @@ vi.mock(import("../repository/target-validation"), async (importOriginal) => ({
   }),
 }));
 vi.mock("./validation-log-store-for-session", () => ({
-  validationLogStoreForSession: mocks.logStore,
   assertValidationLogSession: vi.fn(),
+  validationLogStoreForSession: mocks.logStore,
 }));
 
 const abortSignal = new AbortController().signal;

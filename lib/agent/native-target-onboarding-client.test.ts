@@ -150,16 +150,16 @@ const fixture = () => {
     });
     return Promise.resolve(
       Response.json(output, {
-        status: 200,
         headers: { "content-type": "application/json" },
+        status: 200,
       }),
     );
   });
   const client = createNativeTargetOnboardingClient({
     endpoint: "https://operator.example",
+    fetch: request,
     ownerContext: owner,
     token: () => Promise.resolve("synthetic-oidc"),
-    fetch: request,
   });
   const proof = {
     requestId: "native-request",
