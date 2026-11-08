@@ -1,3 +1,4 @@
+import type { OriginalPublicationRepair } from "../repository/owned-draft-composition";
 import type { CandidateDependencyCatalogIntent } from "../repository/candidate-dependency-catalog";
 import { defineState } from "eve/context";
 import type { PublishedDraftRepairSource } from "./published-draft-repair";
@@ -84,6 +85,7 @@ export interface PreservedDraftWorkspace {
 }
 
 interface DraftCandidateFields {
+  originalPublicationRepair?: OriginalPublicationRepair;
   /** Original complete app review, retained independently from creation-workspace revalidation. */
   reviewedLineage?: DraftReviewedWorkflow;
   dependencyCatalogPending?: CandidateDependencyCatalogIntent;
