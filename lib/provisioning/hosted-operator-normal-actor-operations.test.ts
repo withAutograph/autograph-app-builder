@@ -64,16 +64,16 @@ const program = normalActorProgramSchema.parse({
   origin: "https://apps.example.com",
   actors: [
     {
+      account: "create-email-password",
       actorKey: "owner",
       email: "owner@example.com",
       name: "Owner",
-      account: "create-email-password",
     },
-    { actorKey: "peer", email: "peer@example.com", name: "Peer", account: "create-email-password" },
+    { account: "create-email-password", actorKey: "peer", email: "peer@example.com", name: "Peer" },
   ],
   organizations: [
-    { organizationId: "org-one", ownerActorKey: "owner", name: "One", slug: "one" },
-    { organizationId: "org-two", ownerActorKey: "owner", name: "Two", slug: "two" },
+    { name: "One", organizationId: "org-one", ownerActorKey: "owner", slug: "one" },
+    { name: "Two", organizationId: "org-two", ownerActorKey: "owner", slug: "two" },
   ],
   memberships: [
     { actorKey: "owner", organizationId: "org-one", role: "owner" },
@@ -100,24 +100,24 @@ const plan = hostedOperatorPlanSchema.parse({
     sessionId: target.sessionId,
   },
   appDatabase: {
-    resourceId: "app-resource",
     database: "normal",
     migratorRole: "normal_owner",
+    resourceId: "app-resource",
     runtimeRole: "normal_runtime",
   },
   authDatabase: {
-    resourceId: "auth-resource",
     database: "auth",
     migratorRole: "auth_owner",
+    resourceId: "auth-resource",
     runtimeRole: "auth_runtime",
   },
   contextId: "accepted-spec",
   cost: { class: "shared-recovery-group", description: "Approved normal accounts", owner: "owner" },
   effects: [
     {
+      description: "Capture approved actual accounts",
       id: "normal-accounts",
       kind: "normal-accounts",
-      description: "Capture approved actual accounts",
     },
   ],
   installer: { reference: "owned-worker", sha256: "a".repeat(64) },
@@ -700,8 +700,8 @@ describe("normal actor operations", () => {
       ...originalProgram,
       actors: [...originalProgram.actors, ...qaActors],
       organizations: [
-        { organizationId: "qa-one", ownerActorKey: "qa-1", name: "QA One", slug: "qa-one" },
-        { organizationId: "qa-two", ownerActorKey: "qa-5", name: "QA Two", slug: "qa-two" },
+        { name: "QA One", organizationId: "qa-one", ownerActorKey: "qa-1", slug: "qa-one" },
+        { name: "QA Two", organizationId: "qa-two", ownerActorKey: "qa-5", slug: "qa-two" },
       ],
       memberships: qaActors.map((actor, index) => ({
         actorKey: actor.actorKey,
@@ -805,15 +805,15 @@ describe("normal actor operations", () => {
       authMembership: { kind: "create-owned-organizations", organizations },
       access: proposeResolvedNormalActorAccess(combined, prepared.state),
       effects: [
-        { id: "resources", kind: "resources", description: "Fixture resources" },
-        { id: "install", kind: "install", description: "Fixture install" },
+        { description: "Fixture resources", id: "resources", kind: "resources" },
+        { description: "Fixture install", id: "install", kind: "install" },
         ...combined.organizations.map((org) => ({
           id: `auth-membership:${org.organizationId}`,
           kind: "auth-membership",
           description: "Approved QA organization",
         })),
-        { id: "access", kind: "access", description: "Approved QA grants" },
-        { id: "bindings", kind: "bindings", description: "Fixture bindings" },
+        { description: "Approved QA grants", id: "access", kind: "access" },
+        { description: "Fixture bindings", id: "bindings", kind: "bindings" },
       ],
     });
     const fullInput = installPlan(full, "44444444-4444-4444-8444-444444444444", "qa-app-call");
@@ -1057,12 +1057,12 @@ describe("normal actor operations", () => {
       authMembership: { kind: "create-owned-organizations", organizations },
       access: proposeResolvedNormalActorAccess(program, saved.state),
       effects: [
-        { id: "resources", kind: "resources", description: "Fixture resources" },
-        { id: "install", kind: "install", description: "Fixture installation" },
-        { id: "auth-membership:org-one", kind: "auth-membership", description: "One" },
-        { id: "auth-membership:org-two", kind: "auth-membership", description: "Two" },
-        { id: "access", kind: "access", description: "Fixture access" },
-        { id: "bindings", kind: "bindings", description: "Fixture bindings" },
+        { description: "Fixture resources", id: "resources", kind: "resources" },
+        { description: "Fixture installation", id: "install", kind: "install" },
+        { description: "One", id: "auth-membership:org-one", kind: "auth-membership" },
+        { description: "Two", id: "auth-membership:org-two", kind: "auth-membership" },
+        { description: "Fixture access", id: "access", kind: "access" },
+        { description: "Fixture bindings", id: "bindings", kind: "bindings" },
       ],
     });
     const first = fullPlan.effects.find((entry) => entry.id === "auth-membership:org-one");
