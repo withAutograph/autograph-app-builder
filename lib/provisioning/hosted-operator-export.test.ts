@@ -306,9 +306,9 @@ describe("protected tenant export orchestration", () => {
     f.approve();
     const complete = await f.operations.execute(context, planned.request, "export-call");
     expect(complete).toMatchObject({
-      state: "complete",
       counts: { fileCount: "2", rowCount: "1" },
       download: { indexPath: `/api/hosted-operator/exports/${planned.plan.exportId}` },
+      state: "complete",
     });
     expect(await f.operations.execute(context, planned.request, "technical-retry")).toEqual(
       complete,
@@ -325,9 +325,9 @@ describe("protected tenant export orchestration", () => {
     expect(f.dependencies.runWorker).toHaveBeenCalledTimes(1);
     expect(f.dependencies.readApproval).toHaveBeenCalledTimes(1);
     expect(f.read().workers[0]?.locator).toMatchObject({
-      sandboxId: "trusted-private-vm",
       commandId: "command-one",
       descriptor: fixture.descriptor,
+      sandboxId: "trusted-private-vm",
     });
     expect(JSON.stringify(complete)).not.toContain("ciphertext");
   });
@@ -1005,10 +1005,10 @@ describe("approved installed tenant export scope", () => {
 
 describe("incremental canonical export approval history", () => {
   const owner = operatorOwnerContextSchema.parse({
-    kind: "direct",
     adapterGeneration: 1,
     adapterSessionId: "native",
     authority,
+    kind: "direct",
     principal: { ...authority, scopes: ["autograph:send"] },
     sessionId: context.target.sessionId,
   });
@@ -1099,9 +1099,9 @@ describe("incremental canonical export approval history", () => {
     expect(await f.operations.approval(context, planned.request)).toEqual({ approved: true });
     expect(f.read()).toMatchObject({
       journal: {
+        approval: { approvalId: "human-approval", approvedByCallId: "export-call" },
         revision: 3,
         state: "approved",
-        approval: { approvalId: "human-approval", approvedByCallId: "export-call" },
       },
     });
     expect(starts).toEqual([0, 1]);

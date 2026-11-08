@@ -280,7 +280,7 @@ const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) 
 };
 test("normal planning reserves no effects; global prepare performs exactly six ordered effects and waits for signed ready identity", async () => {
   const f = fixture();
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   expect(f.applied).toEqual([]);
   expect(await f.service.prepare(f.invocation, f.select)).toMatchObject({
     status: "waiting-native-deployment",
@@ -296,7 +296,7 @@ test("normal planning reserves no effects; global prepare performs exactly six o
 });
 test("pending recovery inspects the original attempt generation under a fresh lease without replay", async () => {
   const f = fixture();
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   f.lose();
   await expect(f.service.prepare(f.invocation, f.select)).rejects.toThrow("lost acknowledgement");
   expect(f.row().record.effects[original.effects[0]]).toBe("pending");
@@ -307,7 +307,7 @@ test("pending recovery inspects the original attempt generation under a fresh le
 });
 test("uncertain readback never dispatches the pending effect or advances dependencies", async () => {
   const f = fixture();
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   f.lose();
   await expect(f.service.prepare(f.invocation, f.select)).rejects.toThrow();
   f.setUnknown();
@@ -317,7 +317,7 @@ test("uncertain readback never dispatches the pending effect or advances depende
 });
 test("revoked original consent blocks recovery even when a new call consents", async () => {
   const f = fixture();
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   f.lose();
   await expect(f.service.prepare(f.invocation, f.select)).rejects.toThrow();
   f.revokeCall(f.invocation.callId);
@@ -328,7 +328,7 @@ test("revoked original consent blocks recovery even when a new call consents", a
 });
 test("owner revocation, foreign session and stale plan cannot authorize effects", async () => {
   const f = fixture();
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   await expect(
     f.service.prepare({ ...f.invocation, sessionId: "foreign-session" }, f.select),
   ).rejects.toThrow();
@@ -341,14 +341,14 @@ test("owner revocation, foreign session and stale plan cannot authorize effects"
 });
 test("CAS conflict before dispatch stops rather than retrying any effect", async () => {
   const f = fixture();
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   f.conflict();
   await expect(f.service.prepare(f.invocation, f.select)).rejects.toThrow("state_changed");
   expect(f.applied).toEqual([]);
 });
 test("real store transition rejects phase regression, replaced receipts, removed approval and stale fence", async () => {
   const f = fixture();
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   f.lose();
   await expect(f.service.prepare(f.invocation, f.select)).rejects.toThrow();
   const before = f.row().record;
@@ -424,7 +424,7 @@ test("caller enrollment performs only its one approved effect and persists the i
     effects: ["authorize-app-central-caller"],
   });
   const f = fixture(plan);
-  await f.service.plan(f.invocation, { kind: "caller", appId: plan.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: plan.selection.initiatingAppId, kind: "caller" });
   expect(await f.service.prepare(f.invocation, f.select)).toMatchObject({ status: "ready" });
   expect(f.applied).toEqual(["authorize-app-central-caller"]);
   expect(f.row().record.nativeDeployment).toBeUndefined();
@@ -453,7 +453,7 @@ test("provider grant and per-key accepted IDs stay in the same row and cannot be
     }
     await apply(context);
   };
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   await f.service.prepare(f.invocation, f.select);
   const before = f.row().record;
   expect(before.attempts?.["authorize-central-inspector"]?.grantAttempt).toEqual({
@@ -495,14 +495,14 @@ test("wrong worker generation cannot settle pending schema or advance to receive
           },
         }
       : await reconcile(context);
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   await expect(f.service.prepare(f.invocation, f.select)).rejects.toThrow();
   expect(f.row().record.effects["install-central-schema"]).toBe("pending");
   expect(f.applied).toEqual(["prepare-central-resources", "install-central-schema"]);
 });
 test("conflicting native identity and late consent revocation remain visible on read", async () => {
   const f = fixture();
-  await f.service.plan(f.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await f.service.plan(f.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   await f.service.prepare(f.invocation, f.select);
   await f.native("deployment.ready");
   const current = f.row();
@@ -520,7 +520,7 @@ test("conflicting native identity and late consent revocation remain visible on 
     "native_deployment_conflict",
   );
   const g = fixture();
-  await g.service.plan(g.invocation, { kind: "setup", appId: original.selection.initiatingAppId });
+  await g.service.plan(g.invocation, { appId: original.selection.initiatingAppId, kind: "setup" });
   await g.service.prepare(g.invocation, g.select);
   await g.native("deployment.ready");
   g.revokeCall(g.invocation.callId);
@@ -537,7 +537,7 @@ test("separate revision session receives read-only canonical caller READY pointe
   let originalAuthorityReads = 0;
   f.ports.resolveReady = async (invocation, request) => {
     expect(invocation.sessionId).toBe(revision.sessionId);
-    expect(request).toEqual({ kind: "caller", appId: original.selection.initiatingAppId });
+    expect(request).toEqual({ appId: original.selection.initiatingAppId, kind: "caller" });
     originalAuthorityReads += 1;
     return receipt;
   };
@@ -551,8 +551,8 @@ test("separate revision session receives read-only canonical caller READY pointe
     throw new Error("must not create revision consent");
   };
   const result = await f.service.plan(revision, {
-    kind: "caller",
     appId: original.selection.initiatingAppId,
+    kind: "caller",
   });
   expect(result).toEqual({ status: "ready", receipt, ...receipt.callerSetup });
   expect(originalAuthorityReads).toBe(1);
@@ -571,7 +571,7 @@ test("read-only caller reuse rejects foreign receipt authority without reserving
   await expect(
     f.service.plan(
       { ...f.invocation, sessionId: "revision-session" },
-      { kind: "caller", appId: original.selection.initiatingAppId },
+      { appId: original.selection.initiatingAppId, kind: "caller" },
     ),
   ).rejects.toThrow("central_host_service_unavailable");
   expect(f.applied).toEqual([]);

@@ -228,9 +228,9 @@ describe("framework upgrade planning and apply", () => {
       frameworkUpgradeRequested: true,
     });
     expect(iteration.proposal).toMatchObject({
-      operation: "iterate-existing-app",
-      iteration: { changes: [] },
       frameworkUpgrade: { versions },
+      iteration: { changes: [] },
+      operation: "iterate-existing-app",
     });
     expect(resolver).toHaveBeenCalledTimes(2);
     const ordinary = await executeTargetIdentityAndPlanning({
@@ -305,9 +305,9 @@ describe("framework upgrade planning and apply", () => {
     };
     const result = await executeTargetIdentityAndPlanning(input);
     expect(result.proposal).toMatchObject({
+      iteration: { changes: [] },
       operation: "iterate-existing-app",
       sourceReconciliation: localSourceReconciliation,
-      iteration: { changes: [] },
     });
     expect(result.proposal.frameworkUpgrade).toBeUndefined();
     await expect(executeTargetIdentityAndPlanning({ ...input, environment: {} })).rejects.toThrow(
@@ -502,8 +502,8 @@ it("plans an unchanged imported application under its own fresh Build proposal",
     ...base,
     applicationSourceImport: {
       appId: "example",
-      manifestDigest: "c".repeat(64),
       importedSessionId: "new-authenticated-session",
+      manifestDigest: "c".repeat(64),
       registration: {
         oldDigest: "d".repeat(64),
         newDigest: "e".repeat(64),
