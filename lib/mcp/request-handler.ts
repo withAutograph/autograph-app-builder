@@ -233,7 +233,7 @@ export function createAutographMcpHandler(
   options: { requestUrl?: string; advertiseOauth?: boolean; appAccessOrigin?: string } = {},
 ) {
   const toolAuthMeta = (_operation: string, meta: Record<string, unknown> = {}) => {
-    if (options.advertiseOauth) {
+    if (options.advertiseOauth === true) {
       return {
         _meta: {
           ...meta,

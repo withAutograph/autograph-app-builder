@@ -48,9 +48,11 @@ function parseArguments(args: readonly string[]) {
       name === undefined ||
       value === undefined ||
       !name.startsWith("--") ||
-      value.startsWith("--") ||
-      values.has(name)
+      value.startsWith("--")
     ) {
+      throw new Error("Release proof arguments must be unique --name value pairs.");
+    }
+    if (values.has(name)) {
       throw new Error("Release proof arguments must be unique --name value pairs.");
     }
     values.set(name, value);

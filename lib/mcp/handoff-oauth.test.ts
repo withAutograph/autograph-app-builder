@@ -53,7 +53,7 @@ function handoffStore(): BuilderHandoffStore {
       ) {
         return;
       }
-      if (record.sessionId) {
+      if (record.sessionId !== undefined && record.sessionId !== "") {
         return record;
       }
       const bound = {
@@ -401,7 +401,12 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
         sourceHandoffId: handoffId,
       });
       const persisted = await store.getSession(principal, result.structuredContent.sessionId);
-      if (!persisted || persisted.version !== 2 || !persisted.sourceHandoffId) {
+      if (
+        !persisted ||
+        persisted.version !== 2 ||
+        persisted.sourceHandoffId === undefined ||
+        persisted.sourceHandoffId === ""
+      ) {
         throw new Error("Durable prepared session missing.");
       }
       const restartedAuth = sessionEnvelope(persisted.principal, persisted.sourceHandoffId);
