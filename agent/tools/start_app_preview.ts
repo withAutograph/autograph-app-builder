@@ -131,7 +131,6 @@ export const createStartAppPreview = ({
   defineTool({
     description:
       "Open the selected existing app or applied new app and return a working browser URL. An approved protected runtime publishes its verified native Gateway app route; other apps start a private Sandbox preview. For a prepared existing GitHub checkout, supply appId from the repository's apps directory; this only previews current files and does not grant build or publication approval. Discover the development script and package manager from the checkout's package.json, then use workingDirectory relative to the repository root. Configure it to listen on the supplied port. Use artifact=prior-validated to preview the exact last validated local artifact while a newer plan remains unapplied. A reachable page is not proof of backend product behavior.",
-    // oxlint-disable-next-line eslint/complexity -- Native publication and the retained private Sandbox lifecycle are separate authority paths.
     async execute(input, ctx) {
       const current = appBuilderWorkflowState.get();
       const native =

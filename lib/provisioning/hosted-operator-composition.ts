@@ -1626,17 +1626,16 @@ export const composeHostedOperatorDependencies = (
       return sharedHostPrerequisite;
     }
     const readPlanningSelection = async () =>
-      await observe(
-        "accepted_spec",
-        async () =>
-          await readOwnedOperatorPlanningSelection({
-            context,
-            controlPlane,
-            ...(context.releaseIntent === undefined
-              ? {}
-              : { releaseIntent: context.releaseIntent }),
-          }),
-      );
+      await observe("accepted_spec", async () => {
+        const selectionInput: Parameters<typeof readOwnedOperatorPlanningSelection>[0] = {
+          context,
+          controlPlane,
+        };
+        if (context.releaseIntent !== undefined) {
+          selectionInput.releaseIntent = context.releaseIntent;
+        }
+        return await readOwnedOperatorPlanningSelection(selectionInput);
+      });
     // Prepared restoration first resumes the frozen prerequisite, without requiring
     // a completed app journal. Changed-source planning may use a recorded publication
     // before identity capture; missing publication is allowed, failed authority is not.

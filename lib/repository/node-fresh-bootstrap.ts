@@ -331,33 +331,34 @@ export const FRESH_BOOTSTRAP_MATERIALIZE_ADAPTER_DIGEST = createHash("sha256")
   .update(streamingMaterializeAdapter)
   .digest("hex");
 
-const minimalEnvironment = (authorIdentity?: FreshBootstrapIdentity): NodeJS.ProcessEnv => ({
-  GIT_ASKPASS: "/usr/bin/false",
-  GIT_ATTR_NOSYSTEM: "1",
-  GIT_CONFIG_GLOBAL: "/dev/null",
-  GIT_CONFIG_NOSYSTEM: "1",
-  GIT_CONFIG_SYSTEM: "/dev/null",
-  GIT_NO_LAZY_FETCH: "1",
-  GIT_TERMINAL_PROMPT: "0",
-  HOME: "/dev/null",
-  LANG: "C.UTF-8",
-  LC_ALL: "C.UTF-8",
-  NODE_ENV: "production",
-  PATH: "/usr/bin:/bin",
-  SSH_ASKPASS: "/usr/bin/false",
-  TMPDIR: "/tmp",
-  XDG_CONFIG_HOME: "/dev/null",
-  ...(authorIdentity === undefined
-    ? {}
-    : {
-        GIT_AUTHOR_DATE: authorIdentity.commitTimestamp,
-        GIT_AUTHOR_EMAIL: authorIdentity.authorEmail,
-        GIT_AUTHOR_NAME: authorIdentity.authorName,
-        GIT_COMMITTER_DATE: authorIdentity.commitTimestamp,
-        GIT_COMMITTER_EMAIL: authorIdentity.authorEmail,
-        GIT_COMMITTER_NAME: authorIdentity.authorName,
-      }),
-});
+const minimalEnvironment = (authorIdentity?: FreshBootstrapIdentity): NodeJS.ProcessEnv => {
+  const environment: NodeJS.ProcessEnv = {
+    GIT_ASKPASS: "/usr/bin/false",
+    GIT_ATTR_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_SYSTEM: "/dev/null",
+    GIT_NO_LAZY_FETCH: "1",
+    GIT_TERMINAL_PROMPT: "0",
+    HOME: "/dev/null",
+    LANG: "C.UTF-8",
+    LC_ALL: "C.UTF-8",
+    NODE_ENV: "production",
+    PATH: "/usr/bin:/bin",
+    SSH_ASKPASS: "/usr/bin/false",
+    TMPDIR: "/tmp",
+    XDG_CONFIG_HOME: "/dev/null",
+  };
+  if (authorIdentity !== undefined) {
+    environment.GIT_AUTHOR_DATE = authorIdentity.commitTimestamp;
+    environment.GIT_AUTHOR_EMAIL = authorIdentity.authorEmail;
+    environment.GIT_AUTHOR_NAME = authorIdentity.authorName;
+    environment.GIT_COMMITTER_DATE = authorIdentity.commitTimestamp;
+    environment.GIT_COMMITTER_EMAIL = authorIdentity.authorEmail;
+    environment.GIT_COMMITTER_NAME = authorIdentity.authorName;
+  }
+  return environment;
+};
 
 const gitOptions = [
   "-c",
@@ -2619,19 +2620,18 @@ const executeBootstrap = async (input: {
       } else {
         destinationPublished = true;
         await removeVerifiedSwappedEmptyDirectory(capability, input.proposal);
-        const success = successReceipt({
+        const successInput: Parameters<typeof successReceipt>[0] = {
           leaseMarkerDigest: lease.markerDigest,
           previousLeaseMarkerDigest: priorLeaseMarkerDigest,
           proposal: input.proposal,
           publishedByCallId: input.publishedByCallId,
           recoveryOfDigest: input.recoveryOfDigest,
           verification,
-          ...(input.proposal.destinationPrestate.kind === "empty-directory"
-            ? {
-                swappedOldIdentity: await identity(input.proposal.stagingPath),
-              }
-            : {}),
-        });
+        };
+        if (input.proposal.destinationPrestate.kind === "empty-directory") {
+          successInput.swappedOldIdentity = await identity(input.proposal.stagingPath);
+        }
+        const success = successReceipt(successInput);
         await atomicWrite(capability, input.proposal.journalPath, `${JSON.stringify(success)}\n`);
         return { ok: true, receipt: success };
       }
@@ -2746,17 +2746,18 @@ const executeBootstrap = async (input: {
     await assertSourceUnchanged(input.sourceReceipt, input.sourceWorkspace);
     await input.hooks?.beforeTerminalJournal?.();
     lease.assertHeld();
-    const success = successReceipt({
+    const successInput: Parameters<typeof successReceipt>[0] = {
       leaseMarkerDigest: lease.markerDigest,
       previousLeaseMarkerDigest: priorLeaseMarkerDigest,
       proposal: input.proposal,
       publishedByCallId: input.publishedByCallId,
       recoveryOfDigest: input.recoveryOfDigest,
       verification,
-      ...(input.proposal.destinationPrestate.kind === "empty-directory"
-        ? { swappedOldIdentity: await identity(input.proposal.stagingPath) }
-        : {}),
-    });
+    };
+    if (input.proposal.destinationPrestate.kind === "empty-directory") {
+      successInput.swappedOldIdentity = await identity(input.proposal.stagingPath);
+    }
+    const success = successReceipt(successInput);
     await atomicWrite(capability, input.proposal.journalPath, `${JSON.stringify(success)}\n`);
     lease.assertHeld();
     return { ok: true, receipt: success };
@@ -2776,10 +2777,10 @@ const executeBootstrap = async (input: {
       layout = {
         destinationIdentity,
         phase: "published",
-        ...(stagingPathState === "directory"
-          ? { swappedOldIdentity: await identity(input.proposal.stagingPath) }
-          : {}),
       };
+      if (stagingPathState === "directory") {
+        layout.swappedOldIdentity = await identity(input.proposal.stagingPath);
+      }
     } else if (stageCreated) {
       layout = {
         phase: stageReady ? "stage-ready" : "stage-owned",

@@ -1251,17 +1251,16 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         };
       });
       const last = acknowledgements.at(-1)?.operation;
-      return unsettledSendAcknowledgementPageSchema.parse({
+      const page: z.input<typeof unsettledSendAcknowledgementPageSchema> = {
         acknowledgements,
-        ...(rows.length > limit && last !== undefined
-          ? {
-              nextCursor: {
-                createdAtEpochMs: last.createdAtEpochMs,
-                operationId: last.operationId,
-              },
-            }
-          : {}),
-      });
+      };
+      if (rows.length > limit && last !== undefined) {
+        page.nextCursor = {
+          createdAtEpochMs: last.createdAtEpochMs,
+          operationId: last.operationId,
+        };
+      }
+      return unsettledSendAcknowledgementPageSchema.parse(page);
     },
 
     async readUnsettledResponseOperations(input) {
@@ -1299,17 +1298,16 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         .limit(limit + 1);
       const operations = rows.slice(0, limit).map(parseHostedOperationRow);
       const last = operations.at(-1);
-      return unsettledResponsePageSchema.parse({
+      const page: z.input<typeof unsettledResponsePageSchema> = {
         operations,
-        ...(rows.length > limit && last !== undefined
-          ? {
-              nextCursor: {
-                createdAtEpochMs: last.createdAtEpochMs,
-                operationId: last.operationId,
-              },
-            }
-          : {}),
-      });
+      };
+      if (rows.length > limit && last !== undefined) {
+        page.nextCursor = {
+          createdAtEpochMs: last.createdAtEpochMs,
+          operationId: last.operationId,
+        };
+      }
+      return unsettledResponsePageSchema.parse(page);
     },
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract

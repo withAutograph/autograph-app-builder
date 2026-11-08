@@ -232,17 +232,21 @@ export const preparePublishedDraftRepair = async (input: PreparationInput) => {
     },
     prepare: async () => {
       assertCurrentOrigin(state, previous);
-      return await preparePublishedDraftRepairCandidate({
+      const candidateInput: Parameters<typeof preparePublishedDraftRepairCandidate>[0] = {
         sandbox,
         repository: repair.source.repository,
         appId: repair.appId,
         headBranch: owned.draft.headBranch,
         headSha: owned.draft.headSha,
-        ...(unpublished === undefined ? {} : { unpublished }),
-        ...(previous?.kind === "published-draft-repair" && previous.repair.digest === repair.digest
-          ? { previousCandidate: previous, replayPreviousCandidate: true }
-          : {}),
-      });
+      };
+      if (unpublished !== undefined) {
+        candidateInput.unpublished = unpublished;
+      }
+      if (previous?.kind === "published-draft-repair" && previous.repair.digest === repair.digest) {
+        candidateInput.previousCandidate = previous;
+        candidateInput.replayPreviousCandidate = true;
+      }
+      return await preparePublishedDraftRepairCandidate(candidateInput);
     },
   });
   assertCurrentOrigin(state, previous);

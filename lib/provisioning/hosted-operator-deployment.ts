@@ -23,6 +23,7 @@ import {
   createManagedRuntimeExecution,
   observeManagedRuntimePorts,
 } from "../agent/managed-runtime-execution";
+import type { ManagedRuntimeExecutionDependencies } from "../agent/managed-runtime-execution";
 import { createVerifiedActorReadback } from "./hosted-operator-verified-actor-readback";
 import { createHostedContinuityOperations } from "./hosted-operator-continuity";
 import { createPostgresContinuityJournalStore } from "./postgres-hosted-operator-continuity-journal";
@@ -1073,7 +1074,7 @@ export const createHostedOperatorControlPlane = async (input: {
         assertPublicApproval: async (selected, plan, receipt) => {
           const canonical = operatorOwnerContextSchema.parse(selected.ownerContext);
           const token = await operatorIdentity.token();
-          const read = createPublicReleaseApprovalAuthority({
+          const approvalInput: Parameters<typeof createPublicReleaseApprovalAuthority>[0] = {
             database,
             builderOrigin: input.sourceConfiguration.builderCallbackOrigin,
             owner: canonical,
@@ -1085,8 +1086,11 @@ export const createHostedOperatorControlPlane = async (input: {
               `${input.sourceConfiguration.builderCallbackOrigin}/api/hosted-operator/realm-identity`,
               { headers: { authorization: `Bearer ${token}` } },
             ),
-            ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-          });
+          };
+          if (input.fetch !== undefined) {
+            approvalInput.fetch = input.fetch;
+          }
+          const read = createPublicReleaseApprovalAuthority(approvalInput);
           const observed = await read(plan, receipt.approvedByCallId);
           if (
             observed.approvalId !== receipt.approvalId ||
@@ -2472,7 +2476,7 @@ export const createHostedOperatorControlPlane = async (input: {
           throw new HostedOperatorError("authorization_required");
         }
         const resource = operator.plan.authDatabase;
-        return {
+        const stagingBase = {
           bootstrapResource: {
             database: resource.database,
             environment: "preview" as const,
@@ -2489,17 +2493,26 @@ export const createHostedOperatorControlPlane = async (input: {
           },
           jwksUrl: `${link.endpointOrigin}/_platform/jwks.json`,
           link: projectPendingRealmIdentityLink(link),
-          ...(publicRealm === undefined
-            ? {}
-            : {
-                publicRealm: {
-                  binding: publicRealm.binding,
-                  enrollment: publicRealm.enrollment,
-                  publicJwk: publicRealm.publicJwk,
-                  sender: publicRealm.linkConfiguration.identityHandoff.sender,
-                },
-              }),
         };
+        const staging: typeof stagingBase & {
+          publicRealm?: {
+            binding: NonNullable<typeof publicRealm>["binding"];
+            enrollment: NonNullable<typeof publicRealm>["enrollment"];
+            publicJwk: NonNullable<typeof publicRealm>["publicJwk"];
+            sender: NonNullable<
+              typeof publicRealm
+            >["linkConfiguration"]["identityHandoff"]["sender"];
+          };
+        } = stagingBase;
+        if (publicRealm !== undefined) {
+          staging.publicRealm = {
+            binding: publicRealm.binding,
+            enrollment: publicRealm.enrollment,
+            publicJwk: publicRealm.publicJwk,
+            sender: publicRealm.linkConfiguration.identityHandoff.sender,
+          };
+        }
+        return staging;
       },
       async readRealmIdentityLink(context: HostedOperatorContext) {
         await owner.assertPlanningAuthorized(context);
@@ -3484,14 +3497,16 @@ export const createHostedOperatorControlPlane = async (input: {
         return await readPrivateOperatorApproval({
           owner: ownerContext,
           ...(observation === undefined ? {} : { observation }),
-          capture: (state) =>
-            createPrivateTenantExportApprovalCapture({
+          capture: (state) => {
+            const captureInput: Parameters<typeof createPrivateTenantExportApprovalCapture>[0] = {
               plan: recorded.journal.plan,
               request,
               principal: ownerContext.principal,
-              ...(callId === undefined ? {} : { callId }),
-              ...(state === undefined ? {} : { state }),
-            }),
+            };
+            if (callId !== undefined) captureInput.callId = callId;
+            if (state !== undefined) captureInput.state = state;
+            return createPrivateTenantExportApprovalCapture(captureInput);
+          },
           readHistory: async (startIndex, onEvent) =>
             await approvalObserver.privateHistoryForContext(context)({
               adapterSessionId: ownerContext.adapterSessionId,
@@ -3819,19 +3834,19 @@ export const createHostedOperatorControlPlane = async (input: {
           },
           context.authority,
         );
-        return {
-          environment: runtimeEnvironment,
-          proof,
-          ...(includeActors === true
-            ? {
-                normalActors: await normalRuntime({
-                  ...context,
-                  plan: operator.plan,
-                  operationRef: operator.operationRef,
-                }),
-              }
-            : {}),
-        };
+        const execution: Awaited<ReturnType<ManagedRuntimeExecutionDependencies["readExecution"]>> =
+          {
+            environment: runtimeEnvironment,
+            proof,
+          };
+        if (includeActors === true) {
+          execution.normalActors = await normalRuntime({
+            ...context,
+            plan: operator.plan,
+            operationRef: operator.operationRef,
+          });
+        }
+        return execution;
       },
       readPublicJwks: createHostedOperatorPublicJwksReader(
         {
@@ -3924,14 +3939,16 @@ export const createHostedOperatorControlPlane = async (input: {
         return await readPrivateOperatorApproval({
           owner: canonical,
           ...(observation === undefined ? {} : { observation }),
-          capture: (state) =>
-            createPrivateContinuityApprovalCapture({
+          capture: (state) => {
+            const captureInput: Parameters<typeof createPrivateContinuityApprovalCapture>[0] = {
               plan: saved.plan,
               request,
               principal: canonical.principal,
-              ...(callId === undefined ? {} : { callId }),
-              ...(state === undefined ? {} : { state }),
-            }),
+            };
+            if (callId !== undefined) captureInput.callId = callId;
+            if (state !== undefined) captureInput.state = state;
+            return createPrivateContinuityApprovalCapture(captureInput);
+          },
           readHistory: async (startIndex, onEvent) =>
             await approvalObserver.privateHistoryForContext(context)({
               adapterSessionId: canonical.adapterSessionId,
@@ -4005,18 +4022,21 @@ export const createHostedOperatorControlPlane = async (input: {
         approvalObserver.bindWorkload(context, token, signal);
       },
     });
-    const nativeTargetRequest = createNativeTargetOnboardingDeployment({
+    const nativeTargetInput: Parameters<typeof createNativeTargetOnboardingDeployment>[0] = {
       database,
       configuration: input.sourceConfiguration,
       environment,
       owner,
       builderOrigin: new URL(config.resource).origin,
-      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-    });
+    };
+    if (input.fetch !== undefined) {
+      nativeTargetInput.fetch = input.fetch;
+    }
+    const nativeTargetRequest = createNativeTargetOnboardingDeployment(nativeTargetInput);
     const nativeTargetPort: Pick<ProtectedHostedOperatorDependencies, "nativeTargetRequest"> = {
       nativeTargetRequest,
     };
-    const publicReleaseRequest = createPublicReleaseDeployment({
+    const publicReleaseInput: Parameters<typeof createPublicReleaseDeployment>[0] = {
       database,
       owner,
       configuration: input.sourceConfiguration,
@@ -4029,8 +4049,11 @@ export const createHostedOperatorControlPlane = async (input: {
       bindRuntimeWorkload: (context, token, signal) => {
         approvalObserver.bindWorkload(context, token, signal);
       },
-      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
-    });
+    };
+    if (input.fetch !== undefined) {
+      publicReleaseInput.fetch = input.fetch;
+    }
+    const publicReleaseRequest = createPublicReleaseDeployment(publicReleaseInput);
     const publicReleasePort: Pick<ProtectedHostedOperatorDependencies, "publicReleaseRequest"> = {
       publicReleaseRequest,
     };
