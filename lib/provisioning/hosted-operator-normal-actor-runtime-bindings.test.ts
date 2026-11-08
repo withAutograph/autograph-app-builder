@@ -236,9 +236,6 @@ const fixture = async (
     }
   };
   const journalPorts: NormalActorJournalPorts = {
-    keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
-    now: () => Date.now(),
-    assertAuthorized: assertOwner,
     assertAccountApproval: async (_context, preparation) => {
       if (!firstApproval) {
         throw new HostedOperatorError("authorization_required");
@@ -247,10 +244,13 @@ const fixture = async (
       expect(preparation.accountApprovalId).toBe("first-account-approval");
       expect(preparation.accountPlanDigest).toBe(operatorPlanDigest(plan));
     },
+    assertAuthorized: assertOwner,
     assertMutationAuthority: async (_context, current) => {
       expect(current.revision).toBe(row.revision);
       expect(current.record.leaseId).toBeUndefined();
     },
+    keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
+    now: () => Date.now(),
     store: {
       compareAndSet: async (input) => {
         if (input.expectedRevision !== row.revision) {
@@ -500,33 +500,33 @@ const fixture = async (
     operationRef: "22222222-2222-4222-8222-222222222222",
   };
   return {
-    runtime,
-    verifiedReadback,
-    input,
+    get currentChecks() {
+      return currentChecks;
+    },
+    denyFinal() {
+      finalDenied = true;
+    },
     failJournal(error: Error) {
       journalFailure = error;
     },
     failTransport(error: Error) {
       transportFailure = error;
     },
-    state,
+    input,
     journal,
     requests,
-    get row() {
-      return row;
-    },
-    get currentChecks() {
-      return currentChecks;
+    revokeCurrent() {
+      currentPlan = false;
     },
     revokeFirst() {
       firstApproval = false;
     },
-    revokeCurrent() {
-      currentPlan = false;
+    get row() {
+      return row;
     },
-    denyFinal() {
-      finalDenied = true;
-    },
+    runtime,
+    state,
+    verifiedReadback,
   };
 };
 

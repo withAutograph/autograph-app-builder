@@ -545,11 +545,11 @@ describe("Gateway source repair", () => {
           {
             approvedByCallId: original.callId,
             operator: {
+              approvalId: "durable-human-decision",
               operationRef: original.operationRef,
+              pendingEffectId: "gateway-delivery",
               plan: previous.record.operator?.plan,
               planDigest: original.planDigest,
-              approvalId: "durable-human-decision",
-              pendingEffectId: "gateway-delivery",
             },
           },
         ],
@@ -750,7 +750,7 @@ describe("shared host protection plan successor", () => {
       ),
     });
     f.deps.plan = async () => successorPlan;
-    return { f, original, originalPlan, previous, successorPlan, execute };
+    return { execute, f, original, originalPlan, previous, successorPlan };
   };
 
   it("derives only the frozen bootstrap narrowing before fresh app planning", async () => {
@@ -913,7 +913,7 @@ describe("shared host protection plan successor", () => {
     );
     expect(f.row?.record.operator?.pendingEffectId).toBe("gateway-bindings");
     expect(reconcile).toHaveBeenCalledWith(
-      expect.objectContaining({ plan: successorPlan, operationRef: original.operationRef }),
+      expect.objectContaining({ operationRef: original.operationRef, plan: successorPlan }),
     );
     f.known();
     reconcile.mockImplementation(async (input) =>
@@ -1354,8 +1354,8 @@ describe("pending native app project settings repair", () => {
           {
             approvedByCallId: original.callId,
             operator: {
-              planDigest: original.planDigest,
               pendingEffectAttempt: previous.record.operator?.pendingEffectAttempt,
+              planDigest: original.planDigest,
             },
           },
         ],

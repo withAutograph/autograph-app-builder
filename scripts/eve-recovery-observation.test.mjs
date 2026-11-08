@@ -94,27 +94,27 @@ const setup = () => {
       }
       return Promise.resolve();
     },
-    readReceipt: () => Promise.resolve(state.receipt),
-    commitReceipt: effect,
     authorizeActivation: effect,
+    commitReceipt: effect,
+    readReceipt: () => Promise.resolve(state.receipt),
   };
   const deps = {
-    now: () => state.now,
     collect: async ({ binding, authorizeOwner }) => {
       state.collects += 1;
       await authorizeOwner(binding);
       return { kind: "candidate", candidate: { ...payload, binding } };
     },
+    getHook: effect,
+    now: () => state.now,
     readCandidate: (candidate) => candidate,
+    readEntry: effect,
+    reconcile: effect,
     recordObservation: (value) => {
       state.reports.push(value);
       return true;
     },
-    start: effect,
     resumeHook: effect,
-    reconcile: effect,
-    readEntry: effect,
-    getHook: effect,
+    start: effect,
   };
   return {
     state,
@@ -323,15 +323,15 @@ test("actual native collector and serialization retain mixed orphan history and 
   };
   const readOwners = [];
   const world = {
+    events: {
+      list: ({ runId }) => Promise.resolve({ data: [{ ...event, runId }], hasMore: false }),
+    },
     runs: {
       get: (id) => {
         assert.ok([owner, sourceOwner].includes(id));
         readOwners.push(id);
         return Promise.resolve({ runId: id, status: "failed" });
       },
-    },
-    events: {
-      list: ({ runId }) => Promise.resolve({ data: [{ ...event, runId }], hasMore: false }),
     },
     steps: { get: (runId) => Promise.resolve(runId === sourceOwner ? sourceStep : step) },
   };

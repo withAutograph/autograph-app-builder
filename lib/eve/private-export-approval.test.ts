@@ -99,10 +99,10 @@ const settled = (
 });
 const capture = () =>
   createPrivateTenantExportApprovalCapture({
-    plan,
-    request,
-    principal: { ...authority, scopes: ["autograph:send"] },
     callId: "export-call",
+    plan,
+    principal: { ...authority, scopes: ["autograph:send"] },
+    request,
   });
 describe("native private tenant export approval", () => {
   it("requires the exact authored request plus authenticated human settlement", () => {
@@ -134,9 +134,9 @@ describe("native private tenant export approval", () => {
     }
     reader.observe(
       requested({
-        toolName: failure === "wrong tool" ? "prepare-app-hosted-runtime" : undefined,
         callId: failure === "wrong call" ? "other-call" : undefined,
         toolInput: changed,
+        toolName: failure === "wrong tool" ? "prepare-app-hosted-runtime" : undefined,
       }),
     );
     reader.observe(
@@ -168,8 +168,8 @@ describe("resumable export approval capture", () => {
     prefix.observe(requested());
     const resumed = createPrivateTenantExportApprovalCapture({
       ...options,
-      state: prefix.snapshot(),
       callId: "export-call",
+      state: prefix.snapshot(),
     });
     resumed.observe(settled());
     expect(resumed.read()).toMatchObject({
@@ -179,8 +179,8 @@ describe("resumable export approval capture", () => {
     expect(
       createPrivateTenantExportApprovalCapture({
         ...options,
-        state: resumed.snapshot(),
         callId: "another-call",
+        state: resumed.snapshot(),
       }).read(),
     ).toBeNull();
   });

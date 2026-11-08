@@ -275,20 +275,20 @@ const propose = (f: ReturnType<typeof fixture>) =>
 const completedParticipants = () => {
   const f = fixture();
   const program = normalActorProgramSchema.parse({
-    version: 1,
-    appId: "fixture",
-    origin: "https://apps.example",
     actors: [
       {
+        account: "capture-existing",
         actorKey: "owner",
         email: "owner@example.test",
         name: "Owner",
-        account: "capture-existing",
       },
     ],
-    organizations: [],
-    memberships: [],
     appAccess: [],
+    appId: "fixture",
+    memberships: [],
+    organizations: [],
+    origin: "https://apps.example",
+    version: 1,
   });
   const refreshed = hostedOperatorPlanSchema.parse({
     ...propose(f)!.plan,
