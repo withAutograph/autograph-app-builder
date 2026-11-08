@@ -155,7 +155,7 @@ export const observePrivateApplyRecoveryCandidate = (input: ObservationInput): C
       : payload.nativeEvents.filter(
           (event) => event.data?.sequence === undefined || event.data.sequence >= sequence,
         );
-  const issues = payload.issues;
+  const { issues } = payload;
   const failedStepCount = issues.filter(
     (issue) => issue.reason === "failed-turn-effects-unreconciled",
   ).length;
