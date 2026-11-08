@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import type { SandboxSession } from "eve/sandbox";
 
@@ -330,7 +331,7 @@ describe("target validation", () => {
           path: "apps/example/test/review.test.ts",
         }),
       );
-      const events = info.mock.calls.map(([entry]) => JSON.parse(entry as string));
+      const events = info.mock.calls.map(([entry]) => JSON.parse(z.string().parse(entry)));
       expect(events).toEqual([
         expect.objectContaining({
           command: "check-build",
@@ -398,7 +399,7 @@ describe("target validation", () => {
         sandbox,
       });
       expect(result.ok).toBe(false);
-      expect(JSON.parse(warn.mock.calls[0]?.[0] as string)).toMatchObject({
+      expect(JSON.parse(z.string().parse(warn.mock.calls[0]?.[0]))).toMatchObject({
         elapsedMs: 31,
         finishedAt: "2026-10-09T12:00:00.031Z",
         phase: "provider_error",

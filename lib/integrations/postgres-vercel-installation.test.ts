@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
+import { z } from "zod";
 import {
   decryptVersionedVercelToken,
   encryptVercelToken,
@@ -319,21 +320,24 @@ describe("durable Vercel connection return", () => {
     });
     const stored: unknown = query.values.mock.calls[0]?.[0];
     expect(stored).toMatchObject({ tokenKeyVersion: "current_v2" });
+    const storedToken = z
+      .looseObject({
+        encryptedToken: z.string(),
+        tokenIv: z.string(),
+        tokenKeyVersion: z.string(),
+        tokenTag: z.string(),
+      })
+      .parse(stored);
     expect(
       decryptVersionedVercelToken({
-        ...(stored as {
-          encryptedToken: string;
-          tokenIv: string;
-          tokenTag: string;
-          tokenKeyVersion: string;
-        }),
+        ...storedToken,
         associatedData: vercelInstallationTokenAssociatedData(authority, "icfg_current"),
         config: {
           previousTokenKeys: config.previousTokenKeys,
           tokenKey: config.tokenKey,
           tokenKeyVersion: config.tokenKeyVersion,
         },
-        keyVersion: (stored as { tokenKeyVersion: string }).tokenKeyVersion,
+        keyVersion: storedToken.tokenKeyVersion,
       }),
     ).toBe("new-provider-token");
   });

@@ -84,7 +84,9 @@ describe("hosted route composition", () => {
         { ...environment, MCP_RESOURCE_URL: "http://local/mcp" },
         { ...environment, EVE_HOSTED_VERCEL_ENVIRONMENT: "production" },
       ].map(async (invalidEnvironment) => {
-        const openDatabase = vi.fn(() => ({}) as unknown as Database);
+        const openDatabase = vi.fn((): Database => {
+          throw new Error("Invalid configuration must not open the database.");
+        });
         const handler = createDeploymentMcpRequestHandler({
           environment: invalidEnvironment,
           now: () => nowEpochMs,
