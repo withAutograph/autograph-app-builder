@@ -65,6 +65,7 @@ const allowedWorkerEnvironment = new Set([
 ]);
 delete process.env.NODE_OPTIONS;
 
+/** @param {ReturnType<typeof captureEveWorkerEnvelope> | undefined} eveEnvelope - Authorized Eve worker environment. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function workerEnvironment(source, eveProfile, eveEnvelope) {
   const environment = { PATH: "/usr/bin:/bin" };
@@ -88,6 +89,7 @@ function workerEnvironment(source, eveProfile, eveEnvelope) {
   return environment;
 }
 
+/** @param {{version: unknown, nonce: unknown, context: unknown, authorization: unknown, expiresAt: unknown, capabilities: unknown, publicKey: unknown, gateAEvalProfile: unknown}} proof - Worker authorization fields to sign. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonical(proof) {
   return JSON.stringify(

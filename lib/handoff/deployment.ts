@@ -70,7 +70,8 @@ async function readBoundedJson(request: Request) {
     offset += chunk.byteLength;
   }
   try {
-    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body));
+    const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body));
+    return parsed;
   } catch {
     throw new BuilderHandoffRequestError();
   }

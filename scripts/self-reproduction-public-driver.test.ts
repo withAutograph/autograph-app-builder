@@ -13,7 +13,12 @@ import {
   parsePublicStartFile,
 } from "../evals/support/self-reproduction-public";
 import { eveSessionResultSchema } from "../lib/mcp/contracts";
-import type { PublicState } from "../evals/support/self-reproduction-public";
+import type { PublicState, PublicTransport } from "../evals/support/self-reproduction-public";
+
+interface ObservedPublicCall {
+  name: Parameters<PublicTransport["call"]>[0];
+  args: Parameters<PublicTransport["call"]>[1];
+}
 
 const session = (
   status: "working" | "completed" | "input_required" | "waiting",
@@ -177,7 +182,7 @@ describe("public self-reproduction driver", () => {
   });
   it("recovers a lost prompt-start response by its original request ID without dispatching another start", async () => {
     const current = state();
-    const calls: { name: string; args: Record<string, unknown> }[] = [];
+    const calls: ObservedPublicCall[] = [];
     const options = { pollMs: 1, save: () => {}, state: current, timeoutMs: 1000 };
     await expect(
       runPublicSession({
@@ -216,7 +221,7 @@ describe("public self-reproduction driver", () => {
     };
     current.originalStart = original;
     current.startSubmitted = true;
-    const calls: { name: string; args: Record<string, unknown> }[] = [];
+    const calls: ObservedPublicCall[] = [];
     await runPublicSession({
       pollMs: 1,
       save: () => {},
@@ -251,7 +256,7 @@ describe("public self-reproduction driver", () => {
       current.startSubmitted = true;
       current.outcome = "blocked_missing_public_session";
       current.unresolvedStartResult = unresolvedStart("internal_error");
-      const calls: { name: string; args: Record<string, unknown> }[] = [];
+      const calls: ObservedPublicCall[] = [];
       await runPublicSession({
         pollMs: 1,
         save: () => {},
@@ -282,7 +287,7 @@ describe("public self-reproduction driver", () => {
   );
   it("preserves an unresolved no-handle response without ever polling an empty session", async () => {
     const current = state();
-    const calls: { name: string; args: Record<string, unknown> }[] = [];
+    const calls: ObservedPublicCall[] = [];
     const saved: PublicState[] = [];
     await runPublicSession({
       pollMs: 1,
@@ -308,7 +313,7 @@ describe("public self-reproduction driver", () => {
   it("repairs a legacy saved empty handle through request lookup", async () => {
     const current = state();
     current.session = { ...unresolvedStart(), status: "failed" };
-    const calls: { name: string; args: Record<string, unknown> }[] = [];
+    const calls: ObservedPublicCall[] = [];
     await runPublicSession({
       pollMs: 1,
       save: () => {},
@@ -391,7 +396,7 @@ describe("public self-reproduction driver", () => {
     );
     current.originalStart = original;
     current.startSubmitted = true;
-    const calls: { name: string; args: Record<string, unknown> }[] = [];
+    const calls: ObservedPublicCall[] = [];
     await runPublicSession({
       pollMs: 1,
       save: () => {},
@@ -574,7 +579,7 @@ describe("public self-reproduction driver", () => {
     current.session = { ...session("waiting"), inputRequests: [] };
     const message = "Yes, build this app. Do not publish.";
     let saved = "";
-    const calls: { name: string; args: Record<string, unknown> }[] = [];
+    const calls: ObservedPublicCall[] = [];
     const options = {
       message,
       pollMs: 1,
@@ -625,7 +630,7 @@ describe("public self-reproduction driver", () => {
       clientRequestId: "same-accepted-message",
       message: "Continue the saved app",
     };
-    const calls: { name: string; args: Record<string, unknown> }[] = [];
+    const calls: ObservedPublicCall[] = [];
     const savedCursors: number[] = [];
     await runPublicSession({
       pollMs: 1,

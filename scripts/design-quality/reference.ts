@@ -79,7 +79,8 @@ const exportTargets = (value: unknown): string[] => {
   if (value === null || typeof value !== "object") {
     return [];
   }
-  return Object.values(value as Record<string, unknown>).flatMap(exportTargets);
+  const values: unknown[] = Object.values(value);
+  return values.flatMap(exportTargets);
 };
 
 const packageEntryPoints = (pkg: PackageJson): { suffix: string; target: string }[] => {
@@ -87,7 +88,8 @@ const packageEntryPoints = (pkg: PackageJson): { suffix: string; target: string 
     return [{ suffix: "", target: pkg.exports }];
   }
   if (pkg.exports && typeof pkg.exports === "object") {
-    const entries = Object.entries(pkg.exports as Record<string, unknown>)
+    const exported: [string, unknown][] = Object.entries(pkg.exports);
+    const entries = exported
       .filter(([key]) => key === "." || key.startsWith("./"))
       .flatMap(([key, value]) =>
         exportTargets(value).map((target) => ({

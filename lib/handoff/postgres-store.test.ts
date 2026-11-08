@@ -44,8 +44,8 @@ function store(input: {
   current?: (typeof builderHandoffs.$inferSelect)[];
 }) {
   const set = vi.fn();
-  const updateWhere = vi.fn();
-  const readWhere = vi.fn();
+  const updateWhere = vi.fn<(query: ReturnType<PgDialect["sqlToQuery"]>) => void>();
+  const readWhere = vi.fn<(query: ReturnType<PgDialect["sqlToQuery"]>) => void>();
   const select = vi.fn(() => ({
     from: () => ({
       where: (condition: SQL) => {
