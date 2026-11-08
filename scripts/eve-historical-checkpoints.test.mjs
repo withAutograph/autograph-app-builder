@@ -48,12 +48,6 @@ const fixture = () => {
   let onList;
   const reads = [];
   const world = {
-    runs: {
-      get: async (id) => {
-        reads.push(["run", id]);
-        return { runId: id, status: "completed" };
-      },
-    },
     events: {
       get: async (id, eid) => {
         reads.push(["event", id]);
@@ -87,6 +81,12 @@ const fixture = () => {
         return { data, hasMore: offset + 1 < items.length, cursor: String(offset + 1) };
       },
     },
+    runs: {
+      get: async (id) => {
+        reads.push(["run", id]);
+        return { runId: id, status: "completed" };
+      },
+    },
     steps: {
       get: async (id, stepId) => {
         reads.push(["step", id]);
@@ -105,17 +105,17 @@ const fixture = () => {
   };
   const deps = {
     getWorld: async () => world,
-    resolveRunEncryptionKey: async () => {
-      // Fixture data is not encrypted.
-    },
-    hydrateStepReturnValue: async (value) => value,
-    hydrateStepArguments: async (value) => value,
-    readDurableSession: (value) => value.snapshot.session,
-    requireEventSlot: (id) => Number(id.slice(5)),
-    now: () => 0,
     guardWorld: (value) => value,
     guardedDependencies: () => {
       throw new Error("unexpected handoff");
+    },
+    hydrateStepArguments: async (value) => value,
+    hydrateStepReturnValue: async (value) => value,
+    now: () => 0,
+    readDurableSession: (value) => value.snapshot.session,
+    requireEventSlot: (id) => Number(id.slice(5)),
+    resolveRunEncryptionKey: async () => {
+      // Fixture data is not encrypted.
     },
   };
   const cutoff = {

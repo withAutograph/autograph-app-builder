@@ -286,10 +286,10 @@ describe("Builder-owned Production setup", () => {
     const revision = f.read()?.revision;
     const status = await f.service.status(scope, intent);
     expect(status).toMatchObject({
-      operationRef: pending.operationRef,
-      state: "identity-required",
-      signInUrl: "https://apps.test/sign-in",
       expiresAt: "2026-11-07T15:10:00.000Z",
+      operationRef: pending.operationRef,
+      signInUrl: "https://apps.test/sign-in",
+      state: "identity-required",
     });
     expect(f.calls).toEqual(calls);
     expect(f.read()?.revision).toBe(revision);

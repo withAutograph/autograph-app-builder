@@ -104,8 +104,8 @@ describe("Production setup consent", () => {
       expect(JSON.stringify(projected)).not.toContain(scope.authority.ownerUserId);
       expect(JSON.stringify(projected)).not.toContain(intent.sessionId);
       const capture = createPrivateRepositoryProductionApprovalCapture({
-        plan: setupPlan,
         callId: "call",
+        plan: setupPlan,
       });
       capture.observe(pending);
       expect(capture.read()).toBeNull();
@@ -134,13 +134,13 @@ describe("Production setup consent", () => {
     ]);
     expect(outstandingInstalledEveRequests([pending])).toEqual([]);
     expect(deriveInstalledEveStatus([pending])).toBe("failed");
-    const capture = createPrivateRepositoryProductionApprovalCapture({ plan, callId: "call" });
+    const capture = createPrivateRepositoryProductionApprovalCapture({ callId: "call", plan });
     capture.observe(pending);
     capture.observe(settle());
     expect(capture.read()).toBeNull();
   });
   it("accepts the actual creator settlement for the current setup call", () => {
-    const capture = createPrivateRepositoryProductionApprovalCapture({ plan, callId: "call" });
+    const capture = createPrivateRepositoryProductionApprovalCapture({ callId: "call", plan });
     capture.observe(request());
     expect(capture.read()).toBeNull();
     capture.observe(settle());
@@ -165,7 +165,7 @@ describe("Production setup consent", () => {
     if (variation === "schema" && intent.storage.kind === "postgres") {
       changedIntent.storage = { ...intent.storage, manifestSha256: "c".repeat(64) };
     }
-    const capture = createPrivateRepositoryProductionApprovalCapture({ plan, callId: "call" });
+    const capture = createPrivateRepositoryProductionApprovalCapture({ callId: "call", plan });
     capture.observe(
       request(
         repositoryProductionApprovalInput(changedScope, changedIntent),

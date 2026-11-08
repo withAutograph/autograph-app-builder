@@ -56,8 +56,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("./workflow-state", () => ({ appBuilderWorkflowState: { get: () => mocks.workflow } }));
 vi.mock("./draft-reconciliation-state", () => ({
-  draftReconciliationState: { get: () => mocks.candidate },
   draftReconciliationCompletions: { get: () => [] },
+  draftReconciliationState: { get: () => mocks.candidate },
   publishedDraftRepairCompletions: { get: () => [] },
   samePersistedDraftCandidate: (left: unknown, right: unknown) =>
     // oxlint-disable-next-line unicorn/prefer-structured-clone, react-doctor/no-json-parse-stringify-clone -- Model the persisted JSON representation, which drops undefined fields.
@@ -90,13 +90,13 @@ vi.mock("./repository-access-state", async (importOriginal) => ({
 }));
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: async () => ({
-    inspectOwnedPublishedDraftRepairSource: async () => {
-      mocks.onOwnedRead?.();
-      return mocks.owned;
-    },
     inspectExistingDraftReconciliationSource: async () => {
       mocks.onSourceRead?.();
       return { draft: mocks.owned.draft, base: { headSha: mocks.candidate.baseSha } };
+    },
+    inspectOwnedPublishedDraftRepairSource: async () => {
+      mocks.onOwnedRead?.();
+      return mocks.owned;
     },
   }),
 }));

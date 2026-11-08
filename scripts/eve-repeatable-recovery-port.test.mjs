@@ -60,17 +60,17 @@ const fixture = () => {
         throw new Error("authority revoked");
       }
     },
-    async readReceipt() {
-      state.calls.push("read-receipt");
-      return state.receipt;
+    async authorizeActivation() {
+      throw new Error("unexpected activation");
     },
     async commitReceipt({ recoveryBinding }) {
       state.calls.push("commit");
       state.receipt = recoveryBinding;
       return recoveryBinding;
     },
-    async authorizeActivation() {
-      throw new Error("unexpected activation");
+    async readReceipt() {
+      state.calls.push("read-receipt");
+      return state.receipt;
     },
   };
   const deps = {
@@ -79,7 +79,21 @@ const fixture = () => {
       await authorizeOwner(binding);
       return { kind: "candidate", candidate: payload };
     },
+    async getHook() {
+      if (state.hook === undefined) {
+        throw new Error("hook missing");
+      }
+      return state.hook;
+    },
+    isHookNotFound: (error) => error.message === "hook missing",
+    now: () => 0,
     readCandidate: (candidate) => candidate,
+    async readEntry() {
+      return {
+        kind: "handoff",
+        checkpoint: { sessionTimeoutMs: false, capabilities: { original: true } },
+      };
+    },
     async reconcile(candidate, options) {
       assert.equal(candidate, payload);
       state.calls.push("reconcile");
@@ -87,12 +101,6 @@ const fixture = () => {
       return options?.repeatableCallIds?.includes(originalCallId) === true
         ? { kind: "ready", checkpointCore, provenance: { selectedOrigin: origin } }
         : { kind: "uncertain", reason: "approval-transcript-unavailable" };
-    },
-    async readEntry() {
-      return {
-        kind: "handoff",
-        checkpoint: { sessionTimeoutMs: false, capabilities: { original: true } },
-      };
     },
     async start(input) {
       state.calls.push("start");
@@ -103,19 +111,11 @@ const fixture = () => {
         metadata: Promise.resolve({ recoveryBinding: accepted }),
       };
     },
-    async getHook() {
-      if (state.hook === undefined) {
-        throw new Error("hook missing");
-      }
-      return state.hook;
-    },
-    isHookNotFound: (error) => error.message === "hook missing",
-    now: () => 0,
     async wait() {
       throw new Error("unexpected wait");
     },
   };
-  return { input: { auth, descriptor, ports }, deps, state, payload, accepted };
+  return { accepted, deps, input: { auth, descriptor, ports }, payload, state };
 };
 
 test("only exact trusted IDs reach reconciliation after current authority and receipt revalidation", async () => {

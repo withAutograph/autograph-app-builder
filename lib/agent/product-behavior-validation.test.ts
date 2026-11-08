@@ -90,9 +90,9 @@ vi.mock("./product-behavior-state", () => ({
 }));
 vi.mock("../repository/target-validation", () => ({
   createTargetValidationAttempt: mocks.attempt,
-  readTargetValidationTestShards: async () => [],
   executeProposalBoundValidation: mocks.execute,
   fixtureValidationCommandExecutor: vi.fn(),
+  readTargetValidationTestShards: async () => [],
   sandboxValidationCommandExecutor: vi.fn(),
 }));
 vi.mock("../testing/test-capability", () => ({ hasTestCapability: () => false }));

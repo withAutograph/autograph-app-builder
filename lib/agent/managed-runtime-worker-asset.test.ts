@@ -79,7 +79,7 @@ const fixture = (image = false) => {
     wrongName: false,
     stopFailure: false,
   };
-  const stats = { creates: 0, gets: 0, stops: 0, deletes: 0, writes: 0, reads: 0, tokens: 0 };
+  const stats = { creates: 0, deletes: 0, gets: 0, reads: 0, stops: 0, tokens: 0, writes: 0 };
   const checkpoints: ManagedRuntimeWorkerAssetState[] = [];
   const createOptions: Parameters<typeof Sandbox.create>[0][] = [];
   const getOptions: Parameters<typeof Sandbox.get>[0][] = [];
@@ -254,23 +254,23 @@ it.each([false, true])(
     await f.install();
     expect(f.targetBytes).toEqual(binary);
     expect(f.state).toMatchObject({
+      disposed: true,
+      installed: true,
       sourceCreationAttempted: true,
       sourceSandboxId: f.name,
-      installed: true,
-      disposed: true,
     });
     expect(f.stats.creates).toBe(1);
     expect(f.stats.stops).toBe(1);
     expect(f.stats.deletes).toBe(1);
     expect(f.createOptions[0]).toMatchObject({
+      env: {},
       name: f.name,
+      networkPolicy: "allow-all",
+      persistent: false,
+      ports: [],
       projectId: fields.projectId,
       teamId: fields.teamId,
       token: "native-operator-host-oidc",
-      persistent: false,
-      env: {},
-      ports: [],
-      networkPolicy: "allow-all",
     });
     if (image) {
       expect(f.createOptions[0]).toHaveProperty("image", "operator-workers@sha256:fixture");
@@ -364,7 +364,7 @@ it("retains unknown cleanup then settles only exact known-source SDK404 without 
   const f = fixture();
   f.faults.deleteUnknown = true;
   await expect(f.install()).rejects.toMatchObject({ code: "reconciliation_required" });
-  expect(f.state).toMatchObject({ installed: true, disposed: false, sourceSandboxId: f.name });
+  expect(f.state).toMatchObject({ disposed: false, installed: true, sourceSandboxId: f.name });
   await f.install();
   expect(f.state.disposed).toBe(true);
   expect(f.stats.creates).toBe(1);

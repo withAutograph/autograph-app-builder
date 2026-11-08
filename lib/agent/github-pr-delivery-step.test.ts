@@ -107,12 +107,12 @@ it("requires provider proof of the retained reconciliation before approving its 
   });
   mocks.inspect.mockResolvedValue(observe({ draft: true }));
   mocks.run.mockResolvedValue({ status: "succeeded", evidence: { kind: "pr-ready", readyAt } });
-  await expect(step(reconciled)).resolves.toEqual({ status: "waiting-for-checks", readyAt });
+  await expect(step(reconciled)).resolves.toEqual({ readyAt, status: "waiting-for-checks" });
   expect(mocks.inspect).toHaveBeenCalledWith(approval.proposalDigest, approval.headSha);
   expect(mocks.run).toHaveBeenCalledWith(
     expect.objectContaining({
-      reviewedTarget,
       reconciledHeadSha: approval.headSha,
+      reviewedTarget,
     }),
   );
 });
@@ -123,8 +123,8 @@ it("rechecks the approved proposal in the authenticated workflow without a model
   // SAFETY: These are the only callback fields the step reads.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Partial workflow fixture.
   await expect(continueGitHubPrDelivery(approval, callback as never, readyAt)).resolves.toEqual({
-    status: "waiting-for-checks",
     readyAt,
+    status: "waiting-for-checks",
   });
   expect(mocks.inspect).toHaveBeenCalledExactlyOnceWith(approval.proposalDigest);
   expect(mocks.run).not.toHaveBeenCalled();
@@ -141,7 +141,7 @@ it("refuses a mismatch between the approval target and the live reviewed publica
 it("marks the approved draft ready and returns the observed cycle without merging", async () => {
   mocks.inspect.mockResolvedValue(observe({ draft: true }));
   mocks.run.mockResolvedValue({ status: "succeeded", evidence: { kind: "pr-ready", readyAt } });
-  await expect(step(approval)).resolves.toEqual({ status: "waiting-for-checks", readyAt });
+  await expect(step(approval)).resolves.toEqual({ readyAt, status: "waiting-for-checks" });
   expect(mocks.run).toHaveBeenCalledExactlyOnceWith({
     abortSignal,
     approvedByCallId: callId,
@@ -152,7 +152,7 @@ it("marks the approved draft ready and returns the observed cycle without mergin
 });
 
 it.each([
-  [observe({ checks: "pending" }), { status: "waiting-for-checks", readyAt }],
+  [observe({ checks: "pending" }), { readyAt, status: "waiting-for-checks" }],
   [observe({ checks: "failed" }), { status: "checks-failed" }],
   [
     observe({ checks: "passed", readyAt: "2026-11-05T15:45:00Z" }),
@@ -167,7 +167,7 @@ it.each([
 it.each([
   [
     { status: "succeeded", evidence: { kind: "pr-merge", mergeCommitSha } },
-    { status: "merged", mergeCommitSha },
+    { mergeCommitSha, status: "merged" },
   ],
   [{ status: "pending" }, { status: "merge-unconfirmed" }],
 ])("merges the approved revision only after its current checks pass", async (receipt, result) => {
@@ -187,7 +187,7 @@ it.each([
 it("recovers a ready transition after the original response is lost", async () => {
   mocks.inspect.mockResolvedValue(observe());
   mocks.run.mockResolvedValue({ status: "succeeded", evidence: { kind: "pr-ready", readyAt } });
-  await expect(step(approval)).resolves.toEqual({ status: "waiting-for-checks", readyAt });
+  await expect(step(approval)).resolves.toEqual({ readyAt, status: "waiting-for-checks" });
   expect(mocks.run).toHaveBeenCalledExactlyOnceWith({
     abortSignal,
     approvedByCallId: callId,

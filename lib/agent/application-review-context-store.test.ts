@@ -101,21 +101,21 @@ const fixture = () => {
   };
   const factory = (current = context, abortSignal?: AbortSignal) =>
     createApplicationReviewContextStore({
-      store,
-      context: current,
-      assertCurrentOwner,
       abortSignal,
+      assertCurrentOwner,
+      context: current,
+      store,
     });
   return {
-    rows,
-    writes,
-    key,
-    store,
-    factory,
     assertCurrentOwner,
+    factory,
+    key,
     revoke: () => {
       owned = false;
     },
+    rows,
+    store,
+    writes,
   };
 };
 const roots: string[] = [];
@@ -156,9 +156,9 @@ describe("private prepared application-review context and outcomes", () => {
     };
     const outcomeRef = await store.publishOutcome(contextRef, advisory);
     expect(await f.factory().readOutcome(outcomeRef)).toEqual({
+      assessment: advisory,
       contextRef,
       reviewKey: value.reviewKey,
-      assessment: advisory,
     });
     await expect(store.readContext(outcomeRef)).rejects.toThrow();
     await expect(store.readOutcome(contextRef)).rejects.toThrow();
@@ -302,9 +302,9 @@ describe("private prepared application-review context and outcomes", () => {
     const assertCurrentOwner = async () => {
       await Promise.resolve();
     };
-    const { store } = await createLocalOperatorArtifactStorage({ authority, assertCurrentOwner });
+    const { store } = await createLocalOperatorArtifactStorage({ assertCurrentOwner, authority });
     const adapter = () =>
-      createApplicationReviewContextStore({ store, context: owned, assertCurrentOwner });
+      createApplicationReviewContextStore({ assertCurrentOwner, context: owned, store });
     const ref = await adapter().publishContext(prepared());
     const restored = await adapter().readContext(ref);
     expect(restored.sandboxName).toBe(prepared().sandboxName);
