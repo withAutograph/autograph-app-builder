@@ -221,19 +221,23 @@ export const createRepositoryProductionNativeHandler =
           selections.read(artifactContext, spec.appSpecDigest),
           selections.readDestination?.(artifactContext, spec.appSpecDigest),
         ]);
+        const { workspaceId } = owner.ownerContext.authority;
+        const { appId } = owner;
+        const { appSpecDigest } = spec;
+        const { repositories } = configuration;
         const { profile, sourceSha } = resolveRepositoryProductionDestination({
-          workspaceId: owner.ownerContext.authority.workspaceId,
-          appId: owner.appId,
-          appSpecDigest: spec.appSpecDigest,
-          source,
-          selection,
+          appId,
+          appSpecDigest,
           destination,
-          repositories: configuration.repositories,
+          repositories,
+          selection,
+          source,
+          workspaceId,
         });
         const capture = selection
           ? await createOperatorArtifactPublication({
-              store: createPostgresOperatorArtifactStore({ assertCurrentOwner, database }),
               assertCurrentOwner,
+              store: createPostgresOperatorArtifactStore({ assertCurrentOwner, database }),
             }).readGeneratedRelease(artifactContext, selection)
           : undefined;
         const description =
@@ -288,11 +292,10 @@ export const createRepositoryProductionNativeHandler =
         if (!row?.record.ownerContext) {
           throw new Error("repository_production_owner_unavailable");
         }
-        return await resolve({
-          appId: scope.appId,
-          sessionId: row.record.ownerContext.sessionId,
-          ownerContext: row.record.ownerContext,
-        });
+        const { appId } = scope;
+        const { sessionId } = row.record.ownerContext;
+        const { ownerContext } = row.record;
+        return await resolve({ appId, ownerContext, sessionId });
       };
       const assertAuthorized = async (
         scope: RepositoryProductionScope,
@@ -320,10 +323,10 @@ export const createRepositoryProductionNativeHandler =
         const known = await current(scope);
         const saved = await store.read(scope);
         return await createRepositoryProductionLease({
-          databaseUrl: environment.PROTECTED_RESOURCE_LOCK_DATABASE_URL ?? settings.databaseUrl,
-          store,
-          intent: requestedIntent ?? saved?.record.intent ?? known.intent,
           assertAuthorized,
+          databaseUrl: environment.PROTECTED_RESOURCE_LOCK_DATABASE_URL ?? settings.databaseUrl,
+          intent: requestedIntent ?? saved?.record.intent ?? known.intent,
+          store,
         })(scope, run);
       };
       const realm = (scope: RepositoryProductionScope) => {
@@ -358,8 +361,8 @@ export const createRepositoryProductionNativeHandler =
       };
       const readCredential = async () => {
         const token = await readActiveVercelInstallationToken({
-          database,
           config: keyring,
+          database,
           ...configuration.vercelCredential,
         });
         if (!token || token.binding.scopeId !== configuration.operator.ownerId) {
@@ -402,8 +405,8 @@ export const createRepositoryProductionNativeHandler =
               target: { appId: scope.appId, sessionId: row.record.intent.sessionId },
             };
             const selections = createPostgresOperatorArtifactSelections({
-              database,
               assertCurrentOwner: known.assertCurrentOwner,
+              database,
             });
             const selection = await selections.readExact?.(artifactContext, {
               artifactRef: row.record.intent.storage.artifactRef,
@@ -411,13 +414,14 @@ export const createRepositoryProductionNativeHandler =
             if (!selection) {
               throw new Error("repository_production_capture_unavailable");
             }
+            const artifactStore = createPostgresOperatorArtifactStore({
+              assertCurrentOwner: known.assertCurrentOwner,
+              database,
+            });
             return (
               await createOperatorArtifactPublication({
-                store: createPostgresOperatorArtifactStore({
-                  database,
-                  assertCurrentOwner: known.assertCurrentOwner,
-                }),
                 assertCurrentOwner: known.assertCurrentOwner,
+                store: artifactStore,
               }).readGeneratedRelease(artifactContext, selection)
             ).files;
           },
@@ -433,9 +437,9 @@ export const createRepositoryProductionNativeHandler =
               signal: effectSignal,
             })(),
           runtimeBinding: createRepositoryProductionRuntimeBinding({
-            teamId: configuration.operator.ownerId,
             readCredential,
             signal: effectSignal,
+            teamId: configuration.operator.ownerId,
           }),
           frontendAccess: {
             apply: () =>
@@ -605,8 +609,8 @@ export const createRepositoryProductionNativeHandler =
           }
           await readSession({
             appId: row.record.scope.appId,
-            sessionId: originalSessionId,
             ownerContext: originalOwner,
+            sessionId: originalSessionId,
           });
           return await setup(row.record.scope).prepare(row.record.scope, row.record.intent);
         },
@@ -692,13 +696,12 @@ export const createRepositoryProductionNativeHandler =
               throw new Error("repository_production_scope_denied");
             }
             if (mutating && !roleUpdate) {
-              const state = {
-                row: await store.read(scope),
-                commandId: command?.clientRequestId,
-                pendingCommandIds: (await accessJournal.pending(scope)).map(
-                  (item) => item.record.command.clientRequestId,
-                ),
-              };
+              const row = await store.read(scope);
+              const commandId = command?.clientRequestId;
+              const pendingCommandIds = (await accessJournal.pending(scope)).map(
+                (item) => item.record.command.clientRequestId,
+              );
+              const state = { commandId, pendingCommandIds, row };
               assertNoConflictingProductionSetup({ ...state, command });
               if (command?.action !== retrySetupAction && command?.action !== "renew-sign-in") {
                 assertNoConflictingCreatorRoleUpdate(state);
