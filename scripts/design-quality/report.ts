@@ -11,6 +11,8 @@ export function escapeHtml(value: unknown) {
 const renderListItem = (value: string) => `<li>${escapeHtml(value)}</li>`;
 const renderCaseEvidence = (item: { repo: string; path: string; status: string }) =>
   `<li>${escapeHtml(item.repo)}: <code>${escapeHtml(item.path)}</code> — ${escapeHtml(item.status)}</li>`;
+const adherenceScore = (value: Adherence) =>
+  value.score === null ? "Not assessed" : `${value.score}/100`;
 // Keep report rendering helpers scoped to the report artifact.
 // oxlint-disable-next-line eslint/func-style, unicorn/consistent-function-scoping -- Preserve function declaration hoisting and initialization timing.
 export function renderReport(report: {
@@ -129,8 +131,6 @@ export function renderReport(report: {
         })
         .join("")}</details>`
     : "";
-  const adherenceScore = (value: Adherence) =>
-    value.score === null ? "Not assessed" : `${value.score}/100`;
   const measuredSummary =
     (report.case
       ? `<section><h2>${escapeHtml(report.case.title)}</h2><p>${escapeHtml(report.case.notes)}</p><details><summary>Case evidence and review questions</summary><ul>${report.case.evidence.map(renderCaseEvidence).join("")}</ul><h3>Review questions</h3><ul>${report.case.reviewQuestions.map(renderListItem).join("")}</ul><h3>Intended outcomes, not asserted results</h3><ul>${report.case.outcomes.map(renderListItem).join("")}</ul></details></section>`

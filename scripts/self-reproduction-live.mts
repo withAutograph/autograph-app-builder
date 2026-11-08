@@ -109,7 +109,7 @@ const waitForEveAttempt = async (
     // The development process is expected to take time while it prepares its isolated runtime.
   }
   await delay(500);
-  return await waitForEveAttempt(url, signal, deadline);
+  await waitForEveAttempt(url, signal, deadline);
 };
 
 const waitForEve = (url: string, signal: AbortSignal) =>

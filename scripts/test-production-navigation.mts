@@ -120,8 +120,11 @@ const interrupt = async () => {
 };
 // Both mise and its launcher may forward a signal; repeated delivery must not
 // restore the default immediate exit while cleanup is still in progress.
-process.on("SIGINT", interrupt);
-process.on("SIGTERM", interrupt);
+const handleInterrupt = () => {
+  void interrupt();
+};
+process.on("SIGINT", handleInterrupt);
+process.on("SIGTERM", handleInterrupt);
 
 try {
   await mkdir(snapshot);

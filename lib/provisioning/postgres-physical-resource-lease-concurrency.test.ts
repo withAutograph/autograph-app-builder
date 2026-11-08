@@ -55,7 +55,13 @@ describe.skipIf(tools === undefined)(
         server.once("error", reject);
         server.listen(0, "127.0.0.1", () => {
           const address = z.object({ port: z.number().int().positive() }).parse(server.address());
-          server.close((error) => (error === undefined ? resolve(address.port) : reject(error)));
+          server.close((error) => {
+            if (error === undefined) {
+              resolve(address.port);
+            } else {
+              reject(error);
+            }
+          });
         });
       });
       root = await mkdtemp(path.join(tmpdir(), "builder-completion-pg-"));

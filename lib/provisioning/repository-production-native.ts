@@ -968,8 +968,9 @@ export const createRepositoryProductionNativeHandler =
             const complete = async () =>
               await completeRepositoryProductionInvitation({
                 creator: async () => await creator.complete(id),
-                invitee: async () =>
-                  await managementFor(undefined, undefined, false, true).completeInvitation(id),
+                invitee: async () => {
+                  await managementFor(undefined, undefined, false, true).completeInvitation(id);
+                },
               });
             if (!waitUntil) {
               return await complete();

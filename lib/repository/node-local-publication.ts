@@ -1176,10 +1176,12 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
           // Exact per-path readback below decides the canonical partition.
         }
       }
+      const conflictedPathSet = new Set(conflictedPaths);
       for (const path of observedPost) {
         const change = input.proposal.changes.find((candidate) => candidate.path === path);
         if (change === undefined) {
           conflictedPaths.push(path);
+          conflictedPathSet.add(path);
           continue;
         }
         try {
@@ -1188,12 +1190,14 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           if (assertFileMatches(await fileState(target), change.before)) {
             rolledBackPaths.push(path);
-          } else if (!conflictedPaths.includes(path)) {
+          } else if (!conflictedPathSet.has(path)) {
             conflictedPaths.push(path);
+            conflictedPathSet.add(path);
           }
         } catch {
-          if (!conflictedPaths.includes(path)) {
+          if (!conflictedPathSet.has(path)) {
             conflictedPaths.push(path);
+            conflictedPathSet.add(path);
           }
         }
       }
