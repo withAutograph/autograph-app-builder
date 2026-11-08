@@ -680,13 +680,13 @@ describe("offline dependency cache", () => {
         tree: target.sourceTree,
       }),
     );
-    expect(() =>
+    expect(() => {
       assertExactDependencyTargetBinding({
         cache,
         sourceReceipt: target,
         workspace: target,
-      }),
-    ).not.toThrow();
+      });
+    }).not.toThrow();
   });
 
   it("rejects source-tree and durable dependency-receipt drift", async () => {
@@ -697,14 +697,14 @@ describe("offline dependency cache", () => {
     };
     const cache = await inspectDependencyCache(createSandbox({}), process.env, target);
 
-    expect(() =>
+    expect(() => {
       assertExactDependencyTargetBinding({
         cache,
         sourceReceipt: { ...target, sourceTree: "5".repeat(40) },
         workspace: target,
-      }),
-    ).toThrow("prepared source does not match");
-    expect(() =>
+      });
+    }).toThrow("prepared source does not match");
+    expect(() => {
       assertExactDependencyTargetBinding({
         cache,
         dependencyReceipt: {
@@ -715,9 +715,9 @@ describe("offline dependency cache", () => {
         },
         sourceReceipt: target,
         workspace: target,
-      }),
-    ).toThrow("prepared source does not match");
-    expect(() =>
+      });
+    }).toThrow("prepared source does not match");
+    expect(() => {
       assertExactDependencyTargetBinding({
         cache,
         dependencyReceipt: {
@@ -728,8 +728,8 @@ describe("offline dependency cache", () => {
         },
         sourceReceipt: target,
         workspace: target,
-      }),
-    ).toThrow("prepared source does not match");
+      });
+    }).toThrow("prepared source does not match");
   });
 
   it("binds reusable development dependencies to the per-run source without making source bytes part of the cache key", () => {
@@ -771,13 +771,13 @@ describe("offline dependency cache", () => {
       sha: workspace.sourceSha,
       tree: workspace.sourceTree,
     });
-    expect(() =>
+    expect(() => {
       assertExactDependencyTargetBinding({
         cache,
         sourceReceipt: workspace,
         workspace,
-      }),
-    ).not.toThrow();
+      });
+    }).not.toThrow();
   });
 
   it("reports a typed live-template miss without falling through to another cache", async () => {

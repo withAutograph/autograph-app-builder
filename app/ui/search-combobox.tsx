@@ -66,7 +66,9 @@ export function SearchCombobox({
       }
     };
     document.addEventListener("pointerdown", close);
-    return () => document.removeEventListener("pointerdown", close);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+    };
   }, []);
   const restore = () => {
     setOpen(false);
@@ -142,7 +144,9 @@ export function SearchCombobox({
       <button
         type="button"
         aria-label={open ? "Close menu" : "Open menu"}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          setOpen((current) => !current);
+        }}
       >
         <ChevronDown size={16} aria-hidden="true" />
       </button>
@@ -157,8 +161,12 @@ export function SearchCombobox({
               data-option-value={option.value}
               data-active={index === active || undefined}
               key={option.value}
-              onPointerMove={() => setActive(index)}
-              onClick={() => choose(option)}
+              onPointerMove={() => {
+                setActive(index);
+              }}
+              onClick={() => {
+                choose(option);
+              }}
             >
               {optionIcon ? (
                 <span className={styles.comboOptionIcon} aria-hidden="true">

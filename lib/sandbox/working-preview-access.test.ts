@@ -23,7 +23,10 @@ const close = (server: Server): Promise<void> =>
   // oxlint-disable-next-line promise/avoid-new -- Adapt the Node server close callback.
   new Promise((resolve, reject) => {
     // oxlint-disable-next-line promise/prefer-await-to-callbacks -- Node close has a callback API.
-    server.close((error) => (error ? reject(error) : resolve()));
+    server.close((error) => {
+      if (error) reject(error);
+      else resolve();
+    });
   });
 
 const unusedPort = async (): Promise<number> => {
@@ -50,9 +53,9 @@ const call = (port: number, path: string, headers: IncomingHttpHeaders = {}, met
         response.on("data", (chunk: string) => {
           body += chunk;
         });
-        response.on("end", () =>
-          resolve({ body, headers: response.headers, status: response.statusCode ?? 0 }),
-        );
+        response.on("end", () => {
+          resolve({ body, headers: response.headers, status: response.statusCode ?? 0 });
+        });
       },
     );
     outgoing.on("error", reject);
@@ -394,7 +397,9 @@ describe("working preview WebSocket upgrade", () => {
           const peerClosed = Promise.withResolvers<null>();
           app.on("upgrade", (incoming, socket, head) => {
             observed = incoming.headers;
-            socket.on("close", () => peerClosed.resolve(null));
+            socket.on("close", () => {
+              peerClosed.resolve(null);
+            });
             socket.on("end", () => socket.destroy());
             socket.on("error", () => {});
             socket.write(

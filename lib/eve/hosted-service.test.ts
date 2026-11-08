@@ -212,7 +212,9 @@ describe("failed public session native recovery", () => {
           }),
       });
       const service = createHostedEveSessionService({
-        assertNativeRecoveryOwner: async () => await Promise.resolve(),
+        assertNativeRecoveryOwner: async () => {
+          await Promise.resolve();
+        },
         onSubmissionDiagnostic: diagnostics,
         principal,
         store,
@@ -998,7 +1000,9 @@ describe("hosted Eve service core", () => {
       settleSucceeded: (input) => baseStore.settleSucceeded(input),
       settleUnsuccessful: (input) => baseStore.settleUnsuccessful(input),
     };
-    const assertNativeRecoveryOwner = vi.fn(async () => await Promise.resolve());
+    const assertNativeRecoveryOwner = vi.fn(async () => {
+      await Promise.resolve();
+    });
     const service = createHostedEveSessionService({
       assertNativeRecoveryOwner,
       now: () => 2000,

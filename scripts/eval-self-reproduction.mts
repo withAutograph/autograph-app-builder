@@ -540,13 +540,21 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
         }
       };
       kill("SIGTERM");
-      force = setTimeout(() => kill("SIGKILL"), 5000);
+      force = setTimeout(() => {
+        kill("SIGKILL");
+      }, 5000);
     };
-    const onInt = () => stop("SIGINT");
-    const onTerm = () => stop("SIGTERM");
+    const onInt = () => {
+      stop("SIGINT");
+    };
+    const onTerm = () => {
+      stop("SIGTERM");
+    };
     process.once("SIGINT", onInt);
     process.once("SIGTERM", onTerm);
-    const timer = setTimeout(() => stop("generation deadline exceeded"), deadline + 30_000);
+    const timer = setTimeout(() => {
+      stop("generation deadline exceeded");
+    }, deadline + 30_000);
     child.stdout.setEncoding("utf-8");
     child.stderr.setEncoding("utf-8");
     child.stdout.on("data", (chunk: string) => {
