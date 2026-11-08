@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 import {
   createRepositoryProductionIntentBoundSetup,
   assertNoConflictingProductionSetup,
+  completeRepositoryProductionInvitation,
 } from "./repository-production-native";
+import { PhysicalResourceLeaseBusyError } from "./postgres-physical-resource-lease";
 import {
   initialRepositoryProductionRecord,
   repositoryProductionOperationRef,
@@ -167,6 +169,57 @@ const fixture = () => {
     },
   };
 };
+
+describe("automatic setup completion", () => {
+  it.each(["creator", "invitee"] as const)(
+    "returns pending when another physical continuation owns the %s completion slot",
+    async (target) => {
+      const result = await completeRepositoryProductionInvitation({
+        creator: async () => {
+          if (target === "creator") throw new PhysicalResourceLeaseBusyError();
+          return "not-owned";
+        },
+        invitee: async () => {
+          throw new PhysicalResourceLeaseBusyError();
+        },
+      });
+      expect(result).toBe("pending");
+    },
+  );
+
+  it("preserves real authorization and worker errors rather than reporting them as contention", async () => {
+    const denied = new Error("owner revoked");
+    await expect(
+      completeRepositoryProductionInvitation({
+        creator: async () => {
+          throw denied;
+        },
+        invitee: async () => {},
+      }),
+    ).rejects.toBe(denied);
+  });
+
+  it("uses the authorized durable ready status instead of replaying setup and restoring revoked access", async () => {
+    const h = fixture();
+    await h.setup.prepare(scope, revised);
+    h.removeCreator();
+    const before = [...h.applied];
+    const acquisitions = h.acquired.length;
+    expect(await h.setup.resume(scope, revised)).toMatchObject({ state: "ready" });
+    expect(h.applied).toEqual(before);
+    expect(h.acquired).toHaveLength(acquisitions);
+    expect(h.creatorActive()).toBe(false);
+  });
+
+  it("still resumes an incomplete schema effect under the approved revision", async () => {
+    const h = fixture();
+    await h.setup.prepare(scope, revised);
+    h.markPending("install-schema");
+    expect(await h.setup.resume(scope, revised)).toMatchObject({ state: "ready" });
+    expect(h.row().record.effects["install-schema"].state).toBe("applied");
+    expect(h.acquired.at(-1)).toEqual(revised);
+  });
+});
 
 describe("Production setup approval and lease composition", () => {
   it("authorizes a schema and role revision while reusing the existing database, credentials, and creator", async () => {

@@ -201,11 +201,15 @@ workload, reads the stored inviter and verified invitee, and rechecks current
 ownership. Neither an email match nor the invitee's possession of a Creator
 Builder session is required or sufficient.
 
-The authenticated callback returns pending if setup is still running. The
-operator keeps the authorized work and its database connection alive for the
-invocation. The Auth page continues polling the same invitation. If the
-invocation ends before setup finishes, the next callback resumes from the
-existing journal and lock.
+Automatic Auth callbacks try the same physical PostgreSQL transaction lock
+without waiting. A callback returns pending when another continuation holds the
+app slot, before starting another Auth worker or setup reconciliation. Explicit
+owner commands retain their normal serialized lock. The operator keeps the one
+authorized continuation and its database connection alive for the invocation;
+the Auth page polls the same invitation. A later callback resumes from the
+existing journal when the slot is free. Once the verified invitation and current
+authorized setup status are ready, completion returns that status without
+replaying completed setup effects or restoring removed access.
 
 Normal delivery tools are `plan-app-production`, `prepare-app-production` and
 `get-app-production`. Planning resolves the saved destination and captured app
