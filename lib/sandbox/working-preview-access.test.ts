@@ -6,9 +6,10 @@ import nodePath from "node:path";
 import { createServer, request } from "node:http";
 import type { IncomingHttpHeaders, Server } from "node:http";
 import { connect } from "node:net";
-import type { AddressInfo, Socket } from "node:net";
+import type { Socket } from "node:net";
 
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { blockCrossSiteDEV } from "next/dist/server/lib/router-utils/block-cross-site-dev";
 
 import { createWorkingPreviewAccess } from "./working-preview-access";
@@ -16,7 +17,8 @@ import { createWorkingPreviewAccess } from "./working-preview-access";
 const listen = async (server: Server): Promise<number> => {
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
-  return (server.address() as AddressInfo).port;
+  const address = z.object({ port: z.number() }).parse(server.address());
+  return address.port;
 };
 
 const close = (server: Server): Promise<void> =>
@@ -107,7 +109,10 @@ const withGateway = async (
     gatewayPort: port,
     landingPath,
     observedPortPath,
-    origin: configurationPath ? "https://pending.invalid" : "https://preview.example",
+    origin:
+      configurationPath !== undefined && configurationPath !== null && configurationPath !== ""
+        ? "https://pending.invalid"
+        : "https://preview.example",
   });
   const child = spawn(
     process.execPath,
@@ -355,7 +360,11 @@ const untilText = async (socket: Socket, expected: string) => {
   let text = "";
   while (!text.includes(expected)) {
     // oxlint-disable-next-line no-await-in-loop -- Read consecutive chunks from one socket.
-    const [chunk] = await once(socket, "data", { signal: AbortSignal.timeout(3000) });
+    const chunks: unknown[] = await once(socket, "data", { signal: AbortSignal.timeout(3000) });
+    const [chunk] = chunks;
+    if (!Buffer.isBuffer(chunk)) {
+      throw new TypeError("Expected a buffer from the preview socket.");
+    }
     text += chunk.toString();
   }
   return text;
@@ -400,7 +409,9 @@ describe("working preview WebSocket upgrade", () => {
             socket.on("close", () => {
               peerClosed.resolve(null);
             });
-            socket.on("end", () => socket.destroy());
+            socket.on("end", () => {
+              socket.destroy();
+            });
             socket.on("error", () => {});
             socket.write(
               "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSet-Cookie: __Host-autograph-preview=forged\r\n\r\nupstream-head",
@@ -408,7 +419,9 @@ describe("working preview WebSocket upgrade", () => {
             if (head.length) {
               socket.write(head);
             }
-            socket.on("data", (chunk) => socket.write(chunk));
+            socket.on("data", (chunk) => {
+              socket.write(chunk);
+            });
           });
           const entry = await call(port, launch);
           const [cookie] = (entry.headers["set-cookie"]?.[0] ?? "").split(";");
@@ -461,7 +474,9 @@ it.each(["/_next/hmr", "/apps/builder/_next/hmr"])(
       app.on("upgrade", (incoming, socket) => {
         origins.push(incoming.headers.origin);
         socket.on("error", () => {});
-        socket.on("end", () => socket.destroy());
+        socket.on("end", () => {
+          socket.destroy();
+        });
         if (blockCrossSiteDEV(incoming, socket, undefined, "0.0.0.0")) {
           return;
         }

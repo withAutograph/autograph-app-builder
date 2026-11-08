@@ -108,16 +108,24 @@ async function callStart(
   );
   expect(response.status).toBe(200);
   const text = await response.text();
-  const result = JSON.parse(
-    text
-      .split("\n")
-      .find((line) => line.startsWith("data: "))
-      ?.slice(6) ?? text,
+  const responseSchema = z.looseObject({
+    result: z.looseObject({
+      isError: z.boolean().optional(),
+      structuredContent: z.looseObject({ sessionId: z.string() }),
+    }),
+  });
+  const responseValue = z.custom<z.infer<typeof responseSchema>>(
+    (value) => responseSchema.safeParse(value).success,
   );
-  return result.result as {
-    isError?: boolean;
-    structuredContent: { sessionId: string };
-  };
+  const result = responseValue.parse(
+    JSON.parse(
+      text
+        .split("\n")
+        .find((line) => line.startsWith("data: "))
+        ?.slice(6) ?? text,
+    ),
+  );
+  return result.result;
 }
 
 describe("web session to real OAuth to hosted MCP handoff", () => {

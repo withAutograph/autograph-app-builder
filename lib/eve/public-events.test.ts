@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
+import assert from "node:assert/strict";
 
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import type { MessageStreamEvent } from "eve/client";
 import {
   createInstalledPrototypeProjector,
@@ -24,6 +26,29 @@ import {
 
 import { reduceIdentityInvitations } from "../mcp/session-app/identity-invitation";
 import { sessionAuthorizationRefreshKey } from "../mcp/session-app/automatic-refresh";
+
+const recordedRequestSchema = z.object({
+  data: z.object({
+    actions: z.tuple([
+      z.object({ input: z.object({ mediaType: z.string().optional(), path: z.string() }) }),
+    ]),
+  }),
+});
+const recordedResultSchema = z.object({
+  data: z.object({
+    result: z.object({
+      output: z.object({ digest: z.string(), mediaType: z.string().optional(), path: z.string() }),
+    }),
+  }),
+});
+const isRecordedRequest = (
+  event: MessageStreamEvent | undefined,
+): event is MessageStreamEvent & z.infer<typeof recordedRequestSchema> =>
+  recordedRequestSchema.safeParse(event).success;
+const isRecordedResult = (
+  event: MessageStreamEvent | undefined,
+): event is MessageStreamEvent & z.infer<typeof recordedResultSchema> =>
+  recordedResultSchema.safeParse(event).success;
 
 const installedEvent = (event: unknown) => event as MessageStreamEvent;
 
@@ -619,9 +644,8 @@ describe("installed Eve 0.68 projection", () => {
     });
 
     const tampered = structuredClone(events);
-    const last = tampered.at(-1) as MessageStreamEvent & {
-      data: { result: { output: { digest: string } } };
-    };
+    const last = tampered.at(-1);
+    assert.ok(isRecordedResult(last));
     last.data.result.output.digest = "0".repeat(64);
     expect(latestInstalledPrototype(tampered)).toBeUndefined();
   });
@@ -739,9 +763,8 @@ describe("installed Eve 0.68 projection", () => {
     ).toBeUndefined();
 
     const malformedRequest = structuredClone(valid);
-    const requested = malformedRequest[0] as MessageStreamEvent & {
-      data: { actions: [{ input: { path: string } }] };
-    };
+    const [requested] = malformedRequest;
+    assert.ok(isRecordedRequest(requested));
     requested.data.actions[0].input.path = "prototype/vendor-onboarding/app-spec.md";
     expect(latestInstalledPrototype(malformedRequest)).toBeUndefined();
   });
@@ -783,12 +806,9 @@ describe("installed Eve 0.68 projection", () => {
 
   it("never treats a recorded Markdown AppSpec as Browser HTML", () => {
     const events = structuredClone(recordedPrototypeEvents());
-    const request = events[0] as MessageStreamEvent & {
-      data: { actions: [{ input: { path: string; mediaType: string } }] };
-    };
-    const receipt = events[1] as MessageStreamEvent & {
-      data: { result: { output: { path: string; mediaType: string } } };
-    };
+    const [request, receipt] = events;
+    assert.ok(isRecordedRequest(request));
+    assert.ok(isRecordedResult(receipt));
     request.data.actions[0].input.path = "prototype/vendor-onboarding/app-spec.md";
     request.data.actions[0].input.mediaType = "text/markdown";
     receipt.data.result.output.path = "prototype/vendor-onboarding/app-spec.md";
