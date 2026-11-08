@@ -244,9 +244,15 @@ const fixture = (
       input.gatewayEnvironmentRows = journal;
     },
   );
+  const observation: Pick<
+    GatewayManagedEnvironmentContext,
+    "assertCurrent" | "assertCurrentObservation"
+  > = { assertCurrent };
+  if (observationGuards) {
+    observation.assertCurrentObservation = assertCurrentObservation;
+  }
   input = {
-    assertCurrent,
-    ...(observationGuards ? { assertCurrentObservation } : {}),
+    ...observation,
     authority,
     checkpoint: vi.fn<() => Promise<void>>().mockResolvedValue(),
     checkpointGatewayEnvironment,
@@ -370,10 +376,15 @@ const fixture = (
     rows: structuredClone(canonicalRows),
   }));
   const diagnostics = vi.fn<HostedOperatorConsentDiagnosticSink>();
+  const writerAuthority: Pick<
+    Parameters<typeof createHostedOperatorGatewayBindings>[0],
+    "diagnosticSink" | "assertAuthorized" | "assertCanonicalOwner"
+  > = { diagnosticSink: diagnostics, assertAuthorized };
+  if (observationGuards) {
+    writerAuthority.assertCanonicalOwner = assertCanonicalOwner;
+  }
   const writer = createHostedOperatorGatewayBindings({
-    diagnosticSink: diagnostics,
-    assertAuthorized,
-    ...(observationGuards ? { assertCanonicalOwner } : {}),
+    ...writerAuthority,
     readCanonicalGatewayRows,
     fetch: fetcher,
     readAuthRuntimeUrl,

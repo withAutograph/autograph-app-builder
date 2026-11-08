@@ -3859,18 +3859,21 @@ export function createHostedEveSessionService(input: {
           ),
         )
       ) {
-        marker = internalSessionLimitResponseSchema.parse({
+        const markerDetails: Partial<z.input<typeof internalSessionLimitResponseSchema>> = {
           adapterGeneration: toDurableHostedSessionRecord(session).adapterGeneration,
           adapterSessionId: session.adapterSessionId,
           batches: stopGuardOnly ? frameworkGuardBatches(state) : state.pending,
           decision: stopGuardOnly ? "stop" : "continue",
-          ...(stopGuardOnly &&
+        };
+        if (
+          stopGuardOnly &&
           toDurableHostedSessionRecord(session).privateBuildDecision !== undefined
-            ? {
-                stoppedBuildTurnId:
-                  toDurableHostedSessionRecord(session).privateBuildDecision?.turnId,
-              }
-            : {}),
+        ) {
+          markerDetails.stoppedBuildTurnId =
+            toDurableHostedSessionRecord(session).privateBuildDecision?.turnId;
+        }
+        marker = internalSessionLimitResponseSchema.parse({
+          ...markerDetails,
           responses: nativeResponses(responses),
         });
       }

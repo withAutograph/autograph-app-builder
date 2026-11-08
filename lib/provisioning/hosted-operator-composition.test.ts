@@ -79,7 +79,7 @@ import {
   hostedOperatorPlanSchema,
   operatorPlanDigest,
 } from "./hosted-operator-contract";
-import type { OperatorRequest } from "./hosted-operator-contract";
+import type { OperatorReceipt, OperatorRequest } from "./hosted-operator-contract";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy on the provider adapter boundary while exercising real composition context routing.
 import * as deploymentDelivery from "./hosted-operator-deployment-delivery";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Inspect the environment verification context without a provider request.
@@ -2480,14 +2480,17 @@ describe("existing populated Auth workflow planning", () => {
     // The prepared APP plan and provider row describe the same current realm configuration.
     operator.plan.gatewayBindings = configuredBootstrapGatewayBindings(f.configuration);
     operator.planDigest = operatorPlanDigest(operator.plan);
-    operator.receipts = operator.plan.effects.map((effect) => ({
-      effectId: effect.id,
-      observedAt: "2026-10-15T12:00:00Z",
-      resourceVersion: "settled-app-readback",
-      ...(["access", "revoke"].includes(effect.kind)
-        ? { fenceGeneration: operator.fenceGeneration }
-        : {}),
-    }));
+    operator.receipts = operator.plan.effects.map((effect) => {
+      const receipt: OperatorReceipt = {
+        effectId: effect.id,
+        observedAt: "2026-10-15T12:00:00Z",
+        resourceVersion: "settled-app-readback",
+      };
+      if (["access", "revoke"].includes(effect.kind)) {
+        receipt.fenceGeneration = operator.fenceGeneration;
+      }
+      return receipt;
+    });
     operator.gatewayEnvironment![0].valueSha256 = hostedOperatorRealmLinkConfigSha256(
       operator.plan,
     );
@@ -4279,12 +4282,17 @@ describe("retained active schema installation scope", () => {
           plan: f.prior,
           planDigest: operatorPlanDigest(f.prior),
           fenceGeneration: 1,
-          receipts: f.prior.effects.map((effect) => ({
-            effectId: effect.id,
-            observedAt: "2026-10-20T12:00:00Z",
-            resourceVersion: "observed-resource",
-            ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
-          })),
+          receipts: f.prior.effects.map((effect) => {
+            const receipt: OperatorReceipt = {
+              effectId: effect.id,
+              observedAt: "2026-10-20T12:00:00Z",
+              resourceVersion: "observed-resource",
+            };
+            if (effect.kind === "access") {
+              receipt.fenceGeneration = 1;
+            }
+            return receipt;
+          }),
         },
       }),
     };
@@ -4824,12 +4832,19 @@ it("resolves the completed additive participant successor into its newly approve
       planDigest: operatorPlanDigest(originalApp),
       approvalId: "app-approval",
       fenceGeneration: 1,
-      receipts: originalApp.effects.map((effect) => ({
-        effectId: effect.id,
-        ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
-        observedAt: "2026-10-20T00:00:00.000Z",
-        resourceVersion: "observed",
-      })),
+      receipts: originalApp.effects.map((effect) => {
+        const receipt: Pick<OperatorReceipt, "effectId" | "fenceGeneration"> = {
+          effectId: effect.id,
+        };
+        if (effect.kind === "access") {
+          receipt.fenceGeneration = 1;
+        }
+        return {
+          ...receipt,
+          observedAt: "2026-10-20T00:00:00.000Z",
+          resourceVersion: "observed",
+        };
+      }),
     },
   });
   const qa = participantResolutionFixture();

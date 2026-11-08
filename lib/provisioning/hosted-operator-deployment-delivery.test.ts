@@ -403,7 +403,10 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
   const observeAlias = vi.fn(async () => {
     await Promise.resolve();
   });
-  const writer = createHostedOperatorDeploymentDelivery({
+  const initial: Pick<
+    Parameters<typeof createHostedOperatorDeploymentDelivery>[0],
+    "observeAlias" | "wait" | "assertAuthorized" | "assertEnvironment" | "fetch" | "target"
+  > = {
     observeAlias,
     wait,
     assertAuthorized: vi.fn(async () => {
@@ -413,7 +416,12 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
       await Promise.resolve();
     }),
     fetch: fetcher,
-    ...(gateway ? { target: "gateway" as const } : {}),
+  };
+  if (gateway) {
+    initial.target = "gateway";
+  }
+  const writer = createHostedOperatorDeploymentDelivery({
+    ...initial,
     readCredential: async () =>
       await Promise.resolve({
         binding: {
@@ -962,10 +970,18 @@ const renewedDelivery = (gateway: boolean, addAppGrant = false) => {
   if (delivery === undefined) {
     throw new Error("Missing renewal fixture delivery");
   }
-  const retained = {
+  const retainedStart: Pick<
+    z.infer<typeof operatorDeploymentCandidatesSchema>[number],
+    "branch" | "deploymentId" | "gatewayAliasAttempted"
+  > = {
     branch: delivery.branch,
     deploymentId: "dpl_new",
-    ...(gateway ? { gatewayAliasAttempted: true } : {}),
+  };
+  if (gateway) {
+    retainedStart.gatewayAliasAttempted = true;
+  }
+  const retained = {
+    ...retainedStart,
     operationRef: f.input.operationRef,
     origin: "https://new-native.vercel.app",
     projectId: delivery.projectId,

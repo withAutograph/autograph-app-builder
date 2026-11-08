@@ -1,3 +1,4 @@
+import type { NativeRecoveryDescriptor } from "../eve/native-recovery-contract";
 /* oxlint-disable sonarjs/no-identical-functions -- Distinct original-owner and recovered-owner fixtures intentionally assert the same authorization boundary without sharing mutable session state. */
 import { recordRepositoryAccessReceipt } from "../agent/repository-access-state";
 import { initialBuilderProvisionJournalRecord } from "./journal";
@@ -1281,7 +1282,7 @@ const recoveredOwnerFixture = async (kind: "direct" | "handoff" = "direct") => {
     source: ReturnType<typeof toDurableHostedSessionRecord>,
     childId: string,
   ) => {
-    const descriptor = {
+    const descriptor: NativeRecoveryDescriptor = {
       version: 1 as const,
       operationId: `${childId}-operation`,
       sourcePublicSessionId: source.sessionId,
@@ -1290,8 +1291,10 @@ const recoveredOwnerFixture = async (kind: "direct" | "handoff" = "direct") => {
       logicalSessionId: original.adapterSessionId,
       originalAuthoritySessionId: original.sessionId,
       parentCancellationRevision: source.cancellationRevision ?? 0,
-      ...(source.sourceHandoffId === undefined ? {} : { sourceHandoffId: source.sourceHandoffId }),
     };
+    if (source.sourceHandoffId !== undefined) {
+      descriptor.sourceHandoffId = source.sourceHandoffId;
+    }
     const binding = {
       ...descriptor,
       ownerRunId: `${childId}-physical`,

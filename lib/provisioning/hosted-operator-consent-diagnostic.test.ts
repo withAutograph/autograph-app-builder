@@ -1186,13 +1186,21 @@ it.each([
       stage: "final_runtime_readiness",
       mode: "inspect",
     });
-    expect(sink.mock.calls[0]?.[0].executionFailure).toEqual({
-      stage: "final_runtime_readiness",
-      mode: "inspect",
-      errorClass,
-      ...(code === undefined ? {} : { code }),
-      ...(sqlState === undefined ? {} : { sqlState }),
-    });
+    const expectedFailure = (): NonNullable<HostedOperatorConsentMetadata["executionFailure"]> => {
+      const failure: NonNullable<HostedOperatorConsentMetadata["executionFailure"]> = {
+        stage: "final_runtime_readiness",
+        mode: "inspect",
+        errorClass,
+      };
+      if (code !== undefined) {
+        failure.code = code;
+      }
+      if (sqlState !== undefined) {
+        failure.sqlState = sqlState;
+      }
+      return failure;
+    };
+    expect(sink.mock.calls[0]?.[0].executionFailure).toEqual(expectedFailure());
     expect(Object.getOwnPropertyDescriptor(error, "code")?.value).toBe(priorCode);
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
     expect(JSON.stringify(sink.mock.calls)).not.toContain("private-session");
@@ -1319,16 +1327,23 @@ it.each([
   (stage, error, errorClass, code, moduleCode) => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     reportRuntimePreparationFailure("private-session", stage, error, sink);
+    const expectedFailure = (): NonNullable<
+      HostedOperatorConsentMetadata["preparationFailure"]
+    > => {
+      const failure: NonNullable<HostedOperatorConsentMetadata["preparationFailure"]> = {
+        stage,
+        errorClass,
+      };
+      if (code !== undefined) {
+        failure.code = code;
+      }
+      if (moduleCode !== undefined) {
+        failure.moduleCode = moduleCode;
+      }
+      return failure;
+    };
     expect(sink).toHaveBeenCalledWith(
-      expect.objectContaining({
-        boundary: "builder",
-        preparationFailure: {
-          stage,
-          errorClass,
-          ...(code === undefined ? {} : { code }),
-          ...(moduleCode === undefined ? {} : { moduleCode }),
-        },
-      }),
+      expect.objectContaining({ boundary: "builder", preparationFailure: expectedFailure() }),
     );
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
     expect(JSON.stringify(sink.mock.calls)).not.toContain("private-session");

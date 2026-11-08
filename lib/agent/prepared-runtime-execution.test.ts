@@ -426,6 +426,20 @@ describe("approved hosted runtime consumers", () => {
           APP_RUNTIME_ALREADY_COMPILED: "untrusted",
         },
       });
+      interface ExpectedCompiledEnvironment {
+        APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: string;
+        PATH: string;
+        APP_RUNTIME_STATE_DIR: string;
+        APP_RUNTIME_ALREADY_COMPILED?: string;
+      }
+      const expectedEnvironment: ExpectedCompiledEnvironment = {
+        APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
+        PATH: "/sandbox/custom/bin:/usr/bin",
+        APP_RUNTIME_STATE_DIR: "/private-state",
+      };
+      if (alreadyCompiled && task !== "test-e2e") {
+        expectedEnvironment.APP_RUNTIME_ALREADY_COMPILED = "1";
+      }
       expect(fixture.provider.runCommand).toHaveBeenLastCalledWith(
         expect.objectContaining({
           args: [
@@ -440,14 +454,7 @@ describe("approved hosted runtime consumers", () => {
           cmd: "/usr/bin/env",
           cwd: context.root,
           detached: true,
-          env: {
-            APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
-            PATH: "/sandbox/custom/bin:/usr/bin",
-            APP_RUNTIME_STATE_DIR: "/private-state",
-            ...(alreadyCompiled && task !== "test-e2e"
-              ? { APP_RUNTIME_ALREADY_COMPILED: "1" }
-              : {}),
-          },
+          env: expectedEnvironment,
         }),
       );
     },
@@ -516,13 +523,20 @@ describe("approved hosted runtime consumers", () => {
         task: "test-e2e",
         environment: publicOrigin === undefined ? undefined : { APP_TEST_BASE_URL: publicOrigin },
       });
+      interface ExpectedBrowserEnvironment {
+        APP_RUNTIME_STATE_DIR: string;
+        APP_TEST_BASE_URL?: string;
+      }
+      const expectedEnvironment: ExpectedBrowserEnvironment = {
+        APP_RUNTIME_STATE_DIR: `/tmp/app-builder-operator/${operationRef}`,
+      };
+      if (publicOrigin !== undefined) {
+        expectedEnvironment.APP_TEST_BASE_URL = publicOrigin;
+      }
       expect(fixture.provider.runCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           args: ["mise", "run", "app:runtime", "run", context.appId, "test-e2e"],
-          env: {
-            APP_RUNTIME_STATE_DIR: `/tmp/app-builder-operator/${operationRef}`,
-            ...(publicOrigin === undefined ? {} : { APP_TEST_BASE_URL: publicOrigin }),
-          },
+          env: expectedEnvironment,
         }),
       );
     },

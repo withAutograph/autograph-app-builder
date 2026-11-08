@@ -195,33 +195,44 @@ const fixture = (priorSettled = false, clock: () => number = () => now) => {
     bindings: async () => ({}),
   };
   const handler = createProtectedHostedOperatorHandler(deps);
+  interface FixtureRequestHeaders {
+    [name: string]: string;
+    "content-type": string;
+  }
+  interface FixtureRequestBody {
+    action: "execute" | "status";
+    callId?: string;
+    operationRef: string;
+    planDigest?: string;
+    selection: typeof selection;
+  }
   const request = (
     action: "execute" | "status",
     observe = true,
     signal?: AbortSignal,
     progress?: string,
-  ) =>
-    handler(
+  ) => {
+    const headers: FixtureRequestHeaders = { "content-type": "application/json" };
+    if (progress !== undefined) {
+      headers[OPERATOR_PREPARATION_PROGRESS_HEADER] = progress;
+    }
+    if (observe) {
+      headers[OPERATOR_EXECUTION_OBSERVATION_HEADER] = OPERATOR_EXECUTION_OBSERVATION_PREFERENCE;
+    }
+    const requestBody: FixtureRequestBody = { action, selection, operationRef };
+    if (action === "execute") {
+      requestBody.callId = "approved-call";
+      requestBody.planDigest = operatorPlanDigest(plan);
+    }
+    return handler(
       new Request("https://operator.example/v1/runtime", {
         method: "POST",
         signal,
-        headers: {
-          "content-type": "application/json",
-          ...(progress === undefined ? {} : { [OPERATOR_PREPARATION_PROGRESS_HEADER]: progress }),
-          ...(observe
-            ? { [OPERATOR_EXECUTION_OBSERVATION_HEADER]: OPERATOR_EXECUTION_OBSERVATION_PREFERENCE }
-            : {}),
-        },
-        body: JSON.stringify({
-          action,
-          selection,
-          operationRef,
-          ...(action === "execute"
-            ? { callId: "approved-call", planDigest: operatorPlanDigest(plan) }
-            : {}),
-        }),
+        headers,
+        body: JSON.stringify(requestBody),
       }),
     );
+  };
   const status = async () => {
     const response = await request("status");
     return operatorPublicResultSchema.parse(await response.json());
