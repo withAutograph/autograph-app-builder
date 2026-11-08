@@ -81,7 +81,7 @@ export const repositoryProductionClientForContext = async (ctx: WorkflowStepTool
     appId: string,
     action: "plan" | "prepare" | "setup-status",
     schema: z.ZodType<T>,
-    extra: { approvedByCallId?: string } = {},
+    extra: { approvedByCallId?: string; creatorEmail?: string } = {},
   ) => {
     ctx.abortSignal.throwIfAborted();
     const workload = await createVercelWorkloadIdentity().token();
@@ -110,11 +110,12 @@ export const repositoryProductionClientForContext = async (ctx: WorkflowStepTool
     return schema.parse(await response.json());
   };
   return {
-    plan: async (appId: string) => {
+    plan: async (appId: string, creatorEmail?: string) => {
       const result = await send(
         appId,
         "plan",
         z.object({ version: z.literal(1), plan: repositoryProductionApprovalInputSchema }),
+        creatorEmail === undefined ? {} : { creatorEmail },
       );
       if (
         result.plan.scope.appId !== appId ||
@@ -133,7 +134,12 @@ export const repositoryProductionClientForContext = async (ctx: WorkflowStepTool
         plan.scope.appId,
         "prepare",
         appAccessSnapshotSchema.extend({ version: z.literal(1), setup: setupSchema }),
-        { approvedByCallId: ctx.callId },
+        {
+          approvedByCallId: ctx.callId,
+          ...(plan.intent.creatorEmail === undefined
+            ? {}
+            : { creatorEmail: plan.intent.creatorEmail }),
+        },
       );
       if (
         result.appId !== plan.scope.appId ||

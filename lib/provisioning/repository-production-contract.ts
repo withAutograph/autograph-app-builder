@@ -27,6 +27,10 @@ export const repositoryProductionIntentSchema = z.strictObject({
   sessionId: id,
   sourceSha: z.string().regex(/^[a-f0-9]{40,64}$/u),
   creatorRoles: z.array(id),
+  creatorEmail: z
+    .email()
+    .transform((email) => email.toLowerCase())
+    .optional(),
   storage: z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("none") }),
     z.strictObject({

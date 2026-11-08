@@ -115,6 +115,27 @@ const fixture = () => {
   return { deps, prepared, send };
 };
 describe("protected repository Production dispatcher", () => {
+  it("carries the selected creator account through normal protected planning and preparation", async () => {
+    const f = fixture();
+    const planned = await f.send({
+      version: 1,
+      ...owner,
+      action: "plan",
+      creatorEmail: "APP@EXAMPLE.TEST",
+    });
+    expect(planned.status).toBe(200);
+    expect(f.deps.resolvePlan).toHaveBeenCalledWith(owner, "app@example.test");
+    const prepared = await f.send({
+      version: 1,
+      ...owner,
+      action: "prepare",
+      approvedByCallId: "approved",
+      creatorEmail: "APP@EXAMPLE.TEST",
+    });
+    expect(prepared.status).toBe(200);
+    expect(f.deps.resolveSetup).toHaveBeenCalledWith(owner, "approved", "app@example.test");
+  });
+
   it.each(["idle", "pending"] as const)(
     "projects the real initial sign-in before app schema exists (%s schema)",
     async (schemaState) => {
@@ -184,6 +205,7 @@ describe("protected repository Production dispatcher", () => {
         },
         retrySetup: unavailableAppDatabase,
         renewSignIn: unavailableAppDatabase,
+        chooseCreatorAccount: unavailableAppDatabase,
         resolve: async () => {
           const state = await setup.status(scope, appIntent);
           return {

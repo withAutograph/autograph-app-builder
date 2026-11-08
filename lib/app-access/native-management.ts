@@ -31,6 +31,11 @@ export interface RepositoryProductionManagementDependencies extends Pick<
   roles: (scope: RepositoryProductionScope) => Promise<string[]>;
   retrySetup: (scope: RepositoryProductionScope, context: AppAccessEffectContext) => Promise<void>;
   renewSignIn: (scope: RepositoryProductionScope, context: AppAccessEffectContext) => Promise<void>;
+  chooseCreatorAccount: (
+    scope: RepositoryProductionScope,
+    email: string,
+    context: AppAccessEffectContext,
+  ) => Promise<"applied" | "rejected">;
 }
 
 const CHANGE_ROLE_ACTION = "change-role";
@@ -474,6 +479,9 @@ export const createRepositoryProductionManagement = (
         if (result === "rejected") {
           return result;
         }
+      } else if (command.action === "choose-creator-account") {
+        if ((await deps.chooseCreatorAccount(scope, command.email, effect)) === "rejected")
+          return "rejected";
       } else if (command.action === "retry-setup") {
         await deps.retrySetup(scope, effect);
       } else {

@@ -63,7 +63,14 @@ const ownerFields = {
   ownerContext: operatorOwnerContextSchema,
 };
 export const repositoryProductionRequestSchema = z.discriminatedUnion("action", [
-  z.strictObject({ ...ownerFields, action: z.literal("plan") }),
+  z.strictObject({
+    ...ownerFields,
+    action: z.literal("plan"),
+    creatorEmail: z
+      .email()
+      .transform((email) => email.toLowerCase())
+      .optional(),
+  }),
   z.strictObject({ ...ownerFields, action: z.literal("setup-status") }),
   z.strictObject({
     ...ownerFields,
@@ -79,6 +86,10 @@ export const repositoryProductionRequestSchema = z.discriminatedUnion("action", 
     ...ownerFields,
     action: z.literal("prepare"),
     approvedByCallId: z.string().min(1),
+    creatorEmail: z
+      .email()
+      .transform((email) => email.toLowerCase())
+      .optional(),
   }),
 ]);
 export interface RepositoryProductionHandlerDependencies {
@@ -88,11 +99,13 @@ export interface RepositoryProductionHandlerDependencies {
   /** Re-reads canonical owner, acquired repository, approved source/access, and workspace Production binding. */
   resolvePlan: (
     owner: RepositoryProductionRequestOwner,
+    creatorEmail?: string,
   ) => Promise<{ scope: RepositoryProductionScope; intent: RepositoryProductionIntent }>;
   readSetup: (owner: RepositoryProductionRequestOwner) => Promise<RepositoryProductionSetupResult>;
   resolveSetup: (
     owner: RepositoryProductionRequestOwner,
     approvedByCallId: string,
+    creatorEmail?: string,
   ) => Promise<{
     scope: RepositoryProductionScope;
     intent: RepositoryProductionIntent;
@@ -150,7 +163,7 @@ export const createRepositoryProductionHandler =
         ownerContext: body.ownerContext,
       };
       if (body.action === "plan") {
-        const plan = await deps.resolvePlan(owner);
+        const plan = await deps.resolvePlan(owner, body.creatorEmail);
         return reply({
           version: 1,
           plan: repositoryProductionApprovalInput(plan.scope, plan.intent),
@@ -167,7 +180,7 @@ export const createRepositoryProductionHandler =
           appAccessSnapshotSchema.parse(await deps.management.execute(owner, body.command)),
         );
       }
-      const resolved = await deps.resolveSetup(owner, body.approvedByCallId);
+      const resolved = await deps.resolveSetup(owner, body.approvedByCallId, body.creatorEmail);
       if (resolved.scope.appId !== body.appId || resolved.intent.sessionId !== body.sessionId) {
         return reply({ code: "app_access_denied" }, 403);
       }

@@ -224,6 +224,51 @@ const InviteForm = ({
   );
 };
 
+const CreatorAccountForm = ({
+  email,
+  disabled,
+  onAction,
+}: {
+  email: string | undefined;
+  disabled: boolean;
+  onAction: ActionHandler;
+}) => {
+  const emailId = useId();
+  return (
+    <form
+      aria-label="Choose your app account"
+      className="space-y-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (disabled) return;
+        const selected = new FormData(event.currentTarget).get("email");
+        onAction({ action: "choose-creator-account", email: String(selected ?? "").trim() });
+      }}
+    >
+      <div className="space-y-2">
+        <label htmlFor={emailId} className="text-sm font-medium">
+          Email for your app account
+        </label>
+        <Input
+          id={emailId}
+          name="email"
+          type="email"
+          defaultValue={email ?? ""}
+          autoComplete="email"
+          required
+          disabled={disabled}
+        />
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Use an email you control. Sign in with that account when Builder asks to finish setup.
+      </p>
+      <Button type="submit" disabled={disabled}>
+        Use this email
+      </Button>
+    </form>
+  );
+};
+
 const CreatorAccess = ({
   now,
   data,
@@ -241,8 +286,22 @@ const CreatorAccess = ({
   const hasAppUrl = data.appUrl !== undefined;
   const hasSignInUrl = signInUrl !== undefined;
   const hasRecoveryUrl = creator.recoveryUrl !== undefined;
+  const hasCreatorEmail = creator.email !== undefined;
   return (
     <section aria-label="Your app access" className="space-y-3 rounded-lg border p-4">
+      {hasCreatorEmail ? (
+        <p className="text-sm">
+          App account: <span className="font-medium">{creator.email}</span>
+        </p>
+      ) : null}
+      {data.canManage && creator.canChooseAccount === true ? (
+        <CreatorAccountForm
+          key={creator.email ?? "unselected"}
+          email={creator.email}
+          disabled={disabled}
+          onAction={onAction}
+        />
+      ) : null}
       {creator.status === "ready" ? (
         <>
           <p role="status">Your access is ready.</p>

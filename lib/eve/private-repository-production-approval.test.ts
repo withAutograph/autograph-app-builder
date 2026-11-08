@@ -139,6 +139,22 @@ describe("Production setup consent", () => {
     capture.observe(settle());
     expect(capture.read()).toBeNull();
   });
+  it("shows the selected creator account and binds it to the actual setup approval", () => {
+    const selected = repositoryProductionApprovalInput(scope, {
+      ...intent,
+      creatorEmail: "app@example.com",
+    });
+    const [card] = outstandingInstalledEveRequests([request(selected)]);
+    expect(card?.description).toContain("app@example.com");
+    const capture = createPrivateRepositoryProductionApprovalCapture({
+      callId: "call",
+      plan: selected,
+    });
+    capture.observe(request(selected));
+    capture.observe(settle());
+    expect(capture.read()).toMatchObject({ approvedByCallId: "call" });
+    expect(selected.planDigest).not.toBe(plan.planDigest);
+  });
   it("accepts the actual creator settlement for the current setup call", () => {
     const capture = createPrivateRepositoryProductionApprovalCapture({ callId: "call", plan });
     capture.observe(request());
@@ -148,6 +164,7 @@ describe("Production setup consent", () => {
   });
   it.each([
     "organization",
+    "recipient",
     "role",
     "schema",
     "storage",
@@ -159,6 +176,7 @@ describe("Production setup consent", () => {
     const changedScope = { ...scope };
     if (variation === "organization") changedScope.organizationId = "other";
     const changedIntent: RepositoryProductionIntent = { ...intent };
+    if (variation === "recipient") changedIntent.creatorEmail = "app@example.com";
     if (variation === "role") changedIntent.creatorRoles = ["admin"];
     if (variation === "session") changedIntent.sessionId = "other";
     if (variation === "storage") changedIntent.storage = { kind: "none" };

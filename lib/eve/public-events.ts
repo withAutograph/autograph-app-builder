@@ -1274,13 +1274,18 @@ const inputRequest = (request: {
         scope: z.object({ appId: z.string(), repositoryFullName: z.string() }),
         intent: z.object({
           creatorRoles: z.array(z.string()),
+          creatorEmail: z.email().optional(),
           storage: z.object({ kind: z.enum(["none", "postgres"]) }),
         }),
       })
       .safeParse(request.action?.input);
     if (setup.success) {
       const { scope, intent } = setup.data;
-      description = `Set up ${scope.appId} in ${scope.repositoryFullName}. ${intent.storage.kind === "postgres" ? "Builder prepares the app’s database and keeps it for future updates. " : "This app does not need a database. "}Connect your app account once to receive access. Other people get access only when invited.`;
+      const account =
+        intent.creatorEmail === undefined
+          ? "Connect your app account once to receive access."
+          : `Use ${intent.creatorEmail} for your app account and verify it through secure sign-in.`;
+      description = `Set up ${scope.appId} in ${scope.repositoryFullName}. ${intent.storage.kind === "postgres" ? "Builder prepares the app’s database and keeps it for future updates. " : "This app does not need a database. "}${account} Other people get access only when invited.`;
     }
   } else if (request.kind === toolApprovalKind && toolName === "apply_app_creation") {
     // Use the standard card copy when the optional summary does not fit the card.

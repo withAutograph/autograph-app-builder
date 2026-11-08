@@ -13,6 +13,7 @@ export const appAccessActionSchema = z.discriminatedUnion("action", [
   request.extend({ action: z.literal("remove"), memberId: id }),
   request.extend({ action: z.literal("renew-sign-in") }),
   request.extend({ action: z.literal("retry-setup") }),
+  request.extend({ action: z.literal("choose-creator-account"), email: z.email() }),
 ]);
 export type AppAccessAction = z.infer<typeof appAccessActionSchema>;
 export const appAccessCommandSchema = appAccessActionSchema;
@@ -46,6 +47,8 @@ export const appAccessSnapshotSchema = z.object({
   ),
   creator: z.object({
     status: z.enum(["ready", "sign_in_required", "setting_up", "failed"]),
+    email: z.email().optional(),
+    canChooseAccount: z.boolean().optional(),
     signInUrl: link.optional(),
     recoveryUrl: link.optional(),
     expiresAt: z.iso.datetime({ offset: true }).optional(),

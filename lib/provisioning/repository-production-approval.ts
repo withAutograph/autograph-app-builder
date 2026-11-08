@@ -18,6 +18,9 @@ export const repositoryProductionApprovalDigest = (
   repositoryProductionDigest({
     scope,
     creatorRoles: [...new Set(intent.creatorRoles)].toSorted(),
+    ...(intent.creatorEmail === undefined
+      ? {}
+      : { creatorEmail: intent.creatorEmail.toLowerCase() }),
     storage:
       intent.storage.kind === "none"
         ? { kind: "none" }

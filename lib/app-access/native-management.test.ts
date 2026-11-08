@@ -60,6 +60,7 @@ const harness = (roleless = false, generated = false) => {
   const people = new Map<string, { id: string; name: string; email: string; roles: string[] }>();
   const sends: string[] = [];
   const cancellations: string[] = [];
+  const creatorChoices: string[] = [];
   const accessWrites: { actorId: string; roles: string[]; active: boolean }[] = [];
   let loseAfterRevoke = false;
   let loseAfterSend = false;
@@ -159,6 +160,10 @@ const harness = (roleless = false, generated = false) => {
     readSetup: async () => setup,
     realm: () => ({}),
     renewSignIn: async () => {},
+    chooseCreatorAccount: async (_scope, email) => {
+      creatorChoices.push(email);
+      return "applied";
+    },
     resolve: async () => ({
       appName: "Test app",
       canManage: true,
@@ -288,6 +293,7 @@ const harness = (roleless = false, generated = false) => {
   };
   const service = createRepositoryProductionManagement(deps);
   return {
+    creatorChoices,
     accessWrites,
     admissionActive: () => admissionActive,
     admissionInspections,
@@ -333,6 +339,19 @@ const harness = (roleless = false, generated = false) => {
 };
 
 describe("native app access recovery", () => {
+  it("journals a creator delivery choice once without granting app permissions", async () => {
+    const h = harness();
+    const command = {
+      action: "choose-creator-account" as const,
+      email: "APP@EXAMPLE.TEST",
+      clientRequestId: randomUUID(),
+    };
+    await h.service.execute(owner, command);
+    await h.service.execute(owner, command);
+    expect(h.creatorChoices).toEqual(["app@example.test"]);
+    expect(h.accessWrites).toEqual([]);
+  });
+
   it("does not mistake an earlier send for a newly dispatched resend", async () => {
     const h = harness();
     const invite = h.invitation();

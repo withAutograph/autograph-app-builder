@@ -37,7 +37,10 @@ import {
   createRepositoryProductionRoleUpdater,
   assertNoConflictingCreatorRoleUpdate,
 } from "./repository-production-role-update";
-import { createRepositoryProductionCreator } from "./repository-production-creator";
+import {
+  createRepositoryProductionCreator,
+  RepositoryProductionCreatorRecipientLockedError,
+} from "./repository-production-creator";
 import { createRepositoryProductionAccessUpgrader } from "./repository-production-access-upgrade";
 import {
   createRepositoryProductionHandler,
@@ -79,6 +82,7 @@ import type {
 import { createRepositoryProductionConnectionReader } from "./repository-production-connections";
 import { createRepositoryProductionRuntimeBinding } from "./repository-production-runtime-binding";
 
+const creatorAccessEffect = "creator-access";
 const retrySetupAction = "retry-setup";
 const listMembersAction = "list-members";
 const key = (scope: RepositoryProductionScope) => repositoryProductionOperationRef(scope);
@@ -105,7 +109,11 @@ export const assertNoConflictingProductionSetup = (input: {
     return;
   }
   const { command } = input;
-  if (command?.action === retrySetupAction || command?.action === "renew-sign-in") {
+  if (
+    command?.action === retrySetupAction ||
+    command?.action === "renew-sign-in" ||
+    command?.action === "choose-creator-account"
+  ) {
     return;
   }
   if (command !== undefined && input.pendingCommandIds.includes(command.clientRequestId)) {
@@ -279,6 +287,9 @@ export const createRepositoryProductionNativeHandler =
                   databaseEnvironment: description.backend.runtime.databaseEnvironment,
                 },
         };
+        const existing = await store.read(scope);
+        if (existing?.record.intent.creatorEmail !== undefined)
+          intent.creatorEmail = existing.record.intent.creatorEmail;
         const result = { assertCurrentOwner, capture, description, intent, owner, profile, scope };
         records.set(key(scope), result);
         return result;
@@ -453,7 +464,7 @@ export const createRepositoryProductionNativeHandler =
       };
       const readContext = (row: RepositoryProductionRow): RepositoryProductionEffectContext => ({
         row,
-        effect: "creator-access",
+        effect: creatorAccessEffect,
         assertCurrent: async () => {
           await (await current(row.record.scope)).assertCurrentOwner();
         },
@@ -673,11 +684,13 @@ export const createRepositoryProductionNativeHandler =
                 ...identity,
                 status: creatorRemoved
                   ? ("failed" as const)
-                  : state.state === "ready"
-                    ? ("ready" as const)
-                    : state.state === "identity-required"
-                      ? ("sign_in_required" as const)
-                      : ("setting_up" as const),
+                  : identity?.status === "failed"
+                    ? ("failed" as const)
+                    : state.state === "ready"
+                      ? ("ready" as const)
+                      : state.state === "identity-required"
+                        ? ("sign_in_required" as const)
+                        : ("setting_up" as const),
               },
             };
             if ("signInUrl" in state && state.signInUrl !== undefined) {
@@ -703,7 +716,11 @@ export const createRepositoryProductionNativeHandler =
               );
               const state = { commandId, pendingCommandIds, row };
               assertNoConflictingProductionSetup({ ...state, command });
-              if (command?.action !== retrySetupAction && command?.action !== "renew-sign-in") {
+              if (
+                command?.action !== retrySetupAction &&
+                command?.action !== "renew-sign-in" &&
+                command?.action !== "choose-creator-account"
+              ) {
                 assertNoConflictingCreatorRoleUpdate(state);
               }
             }
@@ -714,6 +731,40 @@ export const createRepositoryProductionNativeHandler =
               (await current(scope)).intent,
             );
           },
+          chooseCreatorAccount: async (scope, email, effect) => {
+            const row = await store.read(scope);
+            if (!row) throw new Error("repository_production_setup_required");
+            try {
+              await creator.chooseRecipient(
+                {
+                  row,
+                  effect: creatorAccessEffect,
+                  assertCurrent: effect.assertCurrent,
+                  checkpoint: async (value) => {
+                    await effect.assertCurrent();
+                    const saved = await store.read(scope);
+                    if (
+                      !saved ||
+                      !(await store.compareAndSet(saved, {
+                        ...saved.record,
+                        workerCheckpoints: [...saved.record.workerCheckpoints, value],
+                      }))
+                    ) {
+                      throw new Error("repository_production_conflict");
+                    }
+                  },
+                },
+                email,
+                effect.operationRef,
+              );
+            } catch (error) {
+              if (error instanceof RepositoryProductionCreatorRecipientLockedError)
+                return "rejected";
+              throw error;
+            }
+            await setup(scope, effect.assertCurrent).prepare(scope, row.record.intent);
+            return "applied";
+          },
           renewSignIn: async (scope, effect) => {
             const row = await store.read(scope);
             if (!row) {
@@ -722,7 +773,7 @@ export const createRepositoryProductionNativeHandler =
             await creator.renew(
               {
                 row,
-                effect: "creator-access",
+                effect: creatorAccessEffect,
                 assertCurrent: () => effect.assertCurrent(),
                 checkpoint: async (value) => {
                   const currentRow = await store.read(scope);
@@ -742,6 +793,17 @@ export const createRepositoryProductionNativeHandler =
           },
         });
       const management = managementFor();
+      const selectCreatorEmail = async (
+        found: Awaited<ReturnType<typeof resolve>>,
+        creatorEmail?: string,
+      ) => {
+        if (creatorEmail === undefined) return;
+        const saved = await store.read(found.scope);
+        const status = saved ? await creator.describe(saved) : undefined;
+        if (status && status.email !== creatorEmail && status.canChooseAccount !== true)
+          throw new Error("repository_production_creator_recipient_locked");
+        found.intent = { ...found.intent, creatorEmail };
+      };
       const handler = createRepositoryProductionHandler({
         verifyBuilderWorkload: createOperatorWorkloadVerifier(configuration.builderWorkload),
         verifyAuthWorkload: async (callback, invitationId) => {
@@ -775,12 +837,16 @@ export const createRepositoryProductionNativeHandler =
             ? await setup(found.scope).status(found.scope, row.record.intent)
             : { operationRef: key(found.scope), state: "setting-up-data" };
         },
-        resolvePlan: async (owner) => {
+        resolvePlan: async (owner, creatorEmail) => {
           const found = await resolve(owner);
+          const saved = await store.read(found.scope);
+          const selected = creatorEmail ?? (saved ? await creator.readRecipient(saved) : undefined);
+          await selectCreatorEmail(found, selected);
           return { scope: found.scope, intent: found.intent };
         },
-        resolveSetup: async (owner, approvedByCallId) => {
+        resolveSetup: async (owner, approvedByCallId, creatorEmail) => {
           const found = await resolve(owner);
+          await selectCreatorEmail(found, creatorEmail);
           const transport = createNativeTargetApprovalHistoryTransport({
             builderOrigin,
             owner: {

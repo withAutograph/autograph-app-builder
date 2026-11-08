@@ -5,4 +5,8 @@ import type { RepositoryProductionIntent } from "./repository-production-contrac
 export const sameRepositoryProductionSetupEffects = (
   left: RepositoryProductionIntent,
   right: RepositoryProductionIntent,
-) => isDeepStrictEqual({ ...left, sourceSha: undefined }, { ...right, sourceSha: undefined });
+) =>
+  isDeepStrictEqual(
+    { ...left, sourceSha: undefined, creatorEmail: undefined },
+    { ...right, sourceSha: undefined, creatorEmail: undefined },
+  );
