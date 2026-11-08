@@ -9,6 +9,24 @@ publication, or hosted acceptance run is not a prerequisite for an ordinary edit
 or debugging iteration. Local operation does not authorize outward provider
 mutations; provider resources and release effects retain their concrete approvals.
 
+## Repair and release loop
+
+Reproduce concrete failures locally when feasible, through the real serialization
+or command path and controlled test-owned fixtures. Make the smallest functional
+repair and add focused regressions before deploying the shared Builder. Preserve
+credential, tenant-isolation, approval and cancellation boundaries throughout.
+
+Once related changes are integrated and ready, run applicable local validation
+once. Reuse evidence for unchanged behavior; repeat checks for changed behavior,
+a failure or an unresolved concern. Exact-head CI supplies broad deterministic
+verification rather than repeating broad suites after each edit.
+
+Use hosted runs to verify actual provider credentials and bindings, native
+deployment, and authenticated acceptance. If a failure is hosted-only or a local
+reproduction is impractical, state the evidence gap and use a targeted diagnostic
+deployment to resolve it. This does not require exhaustive local proof before a
+release or add a mandatory qualification gate to generated apps.
+
 ## Run and use the local Builder
 
 1. Open the Builder checkout/worktree you are developing. Use its installed
