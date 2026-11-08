@@ -1,5 +1,4 @@
 import { readFile } from "node:fs/promises";
-import type * as Harness from "../../e2e/support/harness";
 import { createWorkflowAdapters } from "./workflow-adapter";
 import { describe, expect, it, vi } from "vitest";
 
@@ -7,7 +6,7 @@ vi.mock("node:fs/promises", () => ({ readFile: vi.fn().mockResolvedValue("a".rep
 vi.mock("flags", () => ({ encryptOverrides: vi.fn().mockResolvedValue("synthetic-override") }));
 
 vi.mock("../../e2e/support/harness", async (importOriginal) => ({
-  ...(await importOriginal<typeof Harness>()),
+  ...(await importOriginal<object>()),
   // oxlint-disable-next-line unicorn/no-useless-undefined -- Vitest requires the resolved-value argument.
   resetApplicationState: vi.fn().mockResolvedValue(undefined),
 }));
