@@ -125,7 +125,7 @@ const commands = ["bash", "git", "mise", "bun", "node", "pnpm"] as const;
 export function resolveTargetExecutionEnvironment(input: {
   environment: Readonly<Record<string, string | undefined>>;
   fixture: boolean;
-  cache?: ObservedDependencyCache;
+  cache?: Pick<ObservedDependencyCache, "manifestDigest">;
   checkoutImageDigest?: string;
 }) {
   const localImage = configuredToolchainImage(input.environment);

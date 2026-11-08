@@ -1613,7 +1613,7 @@ export const materializeOfflineDependencies = async function materializeOfflineD
 };
 
 export const dependencyCacheReceiptDigest = function dependencyCacheReceiptDigest(
-  observed: ObservedDependencyCache,
+  observed: Pick<ObservedDependencyCache, "manifestDigest">,
 ) {
   return `sha256:${observed.manifestDigest}`;
 };

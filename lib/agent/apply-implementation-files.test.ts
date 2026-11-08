@@ -104,9 +104,9 @@ describe("approval-bound implementation files", () => {
 
   it("rejects an out-of-app validation repair before it can write", () => {
     const proposal = {
-      operation: "iterate-existing-app",
+      operation: "iterate-existing-app" as const,
       plan: { source: { workspacePath: "apps/inventory-queue" } },
-    } as never;
+    };
     expect(() => {
       assertExistingAppImplementationFiles(
         [{ content: "out of scope", path: "packages/platform/src/change.ts" }],

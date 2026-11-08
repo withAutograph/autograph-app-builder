@@ -319,7 +319,7 @@ const parseOutput = <T>(result: TargetCommandResult, schema: z.ZodType<T>, label
 };
 
 export const targetExecutionBinding = (
-  cache: ObservedDependencyCache | undefined,
+  cache: Pick<ObservedDependencyCache, "manifestDigest"> | undefined,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ) => {
   if (hasTestCapability("simulated-target", environment)) {

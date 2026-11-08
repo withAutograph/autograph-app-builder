@@ -59,7 +59,7 @@ describe("default framework adapter", () => {
       ready: false,
     });
     const page = { goto: vi.fn() };
-    expect(await adapter.exerciseBrowser(page as never, requirement)).toMatchObject({
+    expect(await adapter.exerciseBrowser(page, requirement)).toMatchObject({
       assertions: [],
       disposition: "not-run",
     });
@@ -84,7 +84,7 @@ describe("default framework adapter", () => {
       sourceReview,
     });
     await adapter.reviewSource("narrow-client");
-    await adapter.exerciseBrowser({} as never, "narrow-client");
+    await adapter.exerciseBrowser({}, "narrow-client");
     expect(sourceReview).toHaveBeenCalledWith("narrow-client");
     expect(browserFixture).toHaveBeenCalledWith({}, "narrow-client");
   });

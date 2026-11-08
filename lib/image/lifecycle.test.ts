@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
@@ -1013,17 +1014,15 @@ wait
         });
       });
 
+      const invocationSchema = z.looseObject({
+        argv: z.array(z.string()),
+        credentialDigest: z.string(),
+        environment: z.record(z.string(), z.string()),
+      });
       const invocations = readFileSync(scenario.fixture.msbLog, "utf-8")
         .trim()
         .split("\n")
-        .map(
-          (line) =>
-            JSON.parse(line) as {
-              argv: string[];
-              environment: Record<string, string>;
-              credentialDigest: string;
-            },
-        );
+        .map((line) => invocationSchema.parse(JSON.parse(line)));
       expect(invocations).toHaveLength(1);
       const invocation = invocations.at(0);
       if (invocation === undefined) {

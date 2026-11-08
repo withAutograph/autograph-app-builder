@@ -14,7 +14,6 @@ import {
   resolveTargetExecutionEnvironment,
   targetExecutionBlockers,
 } from "./target-execution";
-import type { ObservedDependencyCache } from "../repository/dependency-cache";
 import { hostedExecutionArtifactDigest } from "../sandbox/hosted-artifact";
 
 const dependencyReceiptUnsigned: Omit<DependencyPreparationReceipt, "digest"> = {
@@ -141,7 +140,7 @@ describe("target command readiness", () => {
     contentDigest: "3".repeat(64),
     manifest: { target: { sha: "f".repeat(40), tree: "0".repeat(40) } },
     manifestDigest: "2".repeat(64),
-  } as ObservedDependencyCache;
+  };
 
   it("uses the hosted execution artifact and inspected cache in Vercel Preview", () => {
     const environment = {
