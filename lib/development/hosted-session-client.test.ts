@@ -76,9 +76,9 @@ it("dispatches the five public tools through the native protocol without a model
           { trace: "opaque" },
         ),
       ).toEqual({
-        content: [{ type: "text", text: "public result" }],
-        structuredContent: { cursor: 1955, sessionId: "retained-session" },
         _meta: { upstream: true },
+        content: [{ text: "public result", type: "text" }],
+        structuredContent: { cursor: 1955, sessionId: "retained-session" },
       });
     }
     await expect(client.call("private_tool", {})).rejects.toThrow("five public");
@@ -95,11 +95,11 @@ it("dispatches the five public tools through the native protocol without a model
     ephemeral: true,
   });
   expect(trace.find((event) => event.method === "mcpServer/tool/call")?.params).toEqual({
-    threadId: "ephemeral-native-thread",
-    server: "a511-original",
-    tool: "autograph_start",
-    arguments: { sessionId: "retained-session", clientRequestId: "stable-request" },
     _meta: { trace: "opaque" },
+    arguments: { clientRequestId: "stable-request", sessionId: "retained-session" },
+    server: "a511-original",
+    threadId: "ephemeral-native-thread",
+    tool: "autograph_start",
   });
   expect(trace[0].args).toContain('plugins."app-builder@autograph-dev".enabled=false');
   expect(trace[0].args).toContain('plugins."app-builder@autograph".enabled=false');

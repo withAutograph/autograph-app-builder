@@ -151,15 +151,15 @@ describe("GitHub pull request delivery", () => {
       checks: "passed",
     });
     await expect(provider.merge(ref, readyAt)).resolves.toMatchObject({
-      state: "merged",
       mergeCommitSha: merge,
+      state: "merged",
     });
     await expect(provider.merge(ref, readyAt)).resolves.toMatchObject({
-      state: "merged",
       mergeCommitSha: merge,
+      state: "merged",
     });
     expect(effects).toEqual([
-      { path: "/repos/owner/app/pulls/7/merge", body: { sha: head, merge_method: "squash" } },
+      { body: { merge_method: "squash", sha: head }, path: "/repos/owner/app/pulls/7/merge" },
     ]);
   });
 

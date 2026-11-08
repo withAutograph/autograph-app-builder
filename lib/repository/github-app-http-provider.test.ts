@@ -1981,7 +1981,7 @@ describe("existing draft reconciliation provider", () => {
       ...inspection,
       reconciliation: proposal,
     })) as ExistingDraftObservation;
-    expect(mergedPull).toMatchObject({ state: "closed", draft: false, headSha: mergeCommit });
+    expect(mergedPull).toMatchObject({ draft: false, headSha: mergeCommit, state: "closed" });
     await expect(provider.inspectAppliedDraftReconciliation(proposal, mergedPull)).resolves.toBe(
       true,
     );

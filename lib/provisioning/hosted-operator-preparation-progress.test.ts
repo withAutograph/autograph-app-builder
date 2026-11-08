@@ -8,20 +8,20 @@ import {
 
 const now = Date.parse("2026-10-28T12:00:00Z");
 const program = normalActorProgramSchema.parse({
-  version: 1,
-  appId: "reports",
-  origin: "https://reports.example",
   actors: [
     {
+      account: "capture-existing",
       actorKey: "reader",
       email: "reader@example.test",
       name: "Reader",
-      account: "capture-existing",
     },
   ],
-  organizations: [],
-  memberships: [],
   appAccess: [],
+  appId: "reports",
+  memberships: [],
+  organizations: [],
+  origin: "https://reports.example",
+  version: 1,
 });
 type ProgressRecord = Parameters<typeof readOperatorPreparationProgress>[0];
 const fixture = (): ProgressRecord & { operator: NonNullable<ProgressRecord["operator"]> } => ({
@@ -29,10 +29,10 @@ const fixture = (): ProgressRecord & { operator: NonNullable<ProgressRecord["ope
     plan: {
       stage: "auth-bootstrap",
       effects: [
-        { id: "auth-schema", kind: "install", description: "Read Auth schema" },
-        { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind Gateway" },
-        { id: "gateway", kind: "gateway-delivery", description: "Deliver Gateway" },
-        { id: "other-gateway", kind: "gateway-delivery", description: "Observe Gateway" },
+        { description: "Read Auth schema", id: "auth-schema", kind: "install" },
+        { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+        { description: "Deliver Gateway", id: "gateway", kind: "gateway-delivery" },
+        { description: "Observe Gateway", id: "other-gateway", kind: "gateway-delivery" },
       ],
       normalActorProgram: program,
     },
@@ -126,9 +126,9 @@ describe("recorded preparation progress", () => {
         ...(completed ? { accountsCompletedAt: new Date(now).toISOString() } : {}),
       };
       expect(readOperatorPreparationProgress(record, now)).toMatchObject({
-        hasAccountPreparation: true,
-        accountsCompleted: completed,
         accountProgramMatchesPlan: true,
+        accountsCompleted: completed,
+        hasAccountPreparation: true,
       });
       record.accountPreparation.programDigest = "a".repeat(64);
       expect(readOperatorPreparationProgress(record, now)?.accountProgramMatchesPlan).toBe(false);

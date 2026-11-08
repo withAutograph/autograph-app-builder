@@ -458,10 +458,10 @@ it("the public idle recovery path restores verified original review and latest c
   expect(saved).toMatchObject({
     parentSessionId: f.source.sessionId,
     nativeRecoveryBinding: {
-      sourcePublicSessionId: f.source.sessionId,
-      originalAuthoritySessionId: "public-authority",
-      logicalSessionId: logical,
       executionTransfer: { kind: "idle-checkpoint" },
+      logicalSessionId: logical,
+      originalAuthoritySessionId: "public-authority",
+      sourcePublicSessionId: f.source.sessionId,
     },
   });
   const restored = restoredSchema.parse(f.native.starts[0]).checkpoint.serializedContext;
@@ -487,8 +487,8 @@ it("the public idle recovery path restores verified original review and latest c
     f.service.start({ ...f.request, clientRequestId: "competing-idle-recovery" }),
   ).rejects.toBeInstanceOf(HostedSessionBusyError);
   expect(await f.store.getSession(principal, child.sessionId)).toMatchObject({
+    nativeRecoveryBinding: { logicalSessionId: logical, ownerRunId: "physical-child" },
     parentSessionId: f.source.sessionId,
-    nativeRecoveryBinding: { ownerRunId: "physical-child", logicalSessionId: logical },
   });
   expect(f.native.starts).toHaveLength(1);
 });
@@ -523,12 +523,12 @@ it("restores the owned fresh review across a previously committed idle recovery"
   const f = await fixture({ fresh: true, priorOwnerReview: true, paginateAncestor: true });
   const prior = await f.store.getPrivateOperation(principal, "original-recovery");
   expect(prior).toMatchObject({
-    state: "succeeded",
     nativeRecoveryReceipt: {
-      ownerRunId: owner,
       executionTransfer: { kind: "idle-checkpoint" },
+      ownerRunId: owner,
       provenance: { sourceSlot: 2, sourceStepId: "step-prior-cutoff" },
     },
+    state: "succeeded",
   });
   const predecessor = await f.native.world.events.list({ runId: "physical-ancestor" });
   expect(predecessor.data).toHaveLength(1);

@@ -148,8 +148,8 @@ describe("development Codex package", () => {
       expect(server.args).toContain("/tools/codex");
       expect(server).not.toHaveProperty("oauth_resource");
       expect(result.receipt).toMatchObject({
-        hostedSessionResource: "https://builder.example.test/mcp",
         execution: "hosted",
+        hostedSessionResource: "https://builder.example.test/mcp",
       });
     } finally {
       await rm(root, { force: true, recursive: true });

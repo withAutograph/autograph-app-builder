@@ -193,7 +193,7 @@ it("composes the real local SDK history reader with exact denied authority catch
     ]);
     expect(readPrivateApplyAuthority().grant).toEqual(approved);
     expect(readPrivateApplyAuthority().terminalDecisions).toMatchObject([
-      { callId: "denied-call", scope: old, requestId: "denied-request", outcome: "denied-not-run" },
+      { callId: "denied-call", outcome: "denied-not-run", requestId: "denied-request", scope: old },
     ]);
   });
   expect(f.snapshot).toHaveBeenCalled();

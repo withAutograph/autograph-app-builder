@@ -690,24 +690,24 @@ describe("shared host protection plan successor", () => {
       stage: "auth-bootstrap",
       effects: [
         {
+          description: "Prepare Auth",
           id: "auth-resources",
           kind: "resources",
-          description: "Prepare Auth",
           resourceId: plan.authDatabase.resourceId,
         },
         {
+          description: "Prepare app",
           id: "app-resources",
           kind: "resources",
-          description: "Prepare app",
           resourceId: plan.appDatabase.resourceId,
         },
-        { id: "auth-schema", kind: "install", description: "Install Auth" },
+        { description: "Install Auth", id: "auth-schema", kind: "install" },
         {
+          description: "Bind Gateway and approved protection",
           id: "gateway-bindings",
           kind: "gateway-bindings",
-          description: "Bind Gateway and approved protection",
         },
-        { id: "gateway-delivery", kind: "gateway-delivery", description: "Deliver Gateway" },
+        { description: "Deliver Gateway", id: "gateway-delivery", kind: "gateway-delivery" },
       ],
       gatewayBindings: {
         ...base.gatewayBindings,
@@ -1696,11 +1696,11 @@ describe("APP Gateway source continuation", () => {
       ...plan.effects.filter((effect) => ["resources", "install"].includes(effect.kind)),
       {
         description: "Prepare approved organization",
-        kind: "auth-membership",
         id: "auth-membership:synthetic-org",
+        kind: "auth-membership",
       },
       ...plan.effects.filter((effect) => !["resources", "install"].includes(effect.kind)),
-      { description: "Deliver Gateway", kind: "gateway-delivery", id: "gateway-delivery" },
+      { description: "Deliver Gateway", id: "gateway-delivery", kind: "gateway-delivery" },
     ],
   });
   const desired = {
