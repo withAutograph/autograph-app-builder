@@ -303,11 +303,11 @@ const fixture = () => {
   };
   const handler = createProtectedHostedOperatorHandler(deps);
   const client = createHostedOperatorClient({
-    sessionId: selection.sessionId,
     endpoint: "https://operator.example",
     fetch: async (url, init) =>
       await handler(new Request(url instanceof Request ? url.url : url, init)),
     ownerContext,
+    sessionId: selection.sessionId,
     token: async () => "fixture-service-identity",
   });
   return {
@@ -706,10 +706,10 @@ describe("normal public application runtime handoff", () => {
         planDigest: operatorPlanDigest(f.selectedPlan),
       },
       {
-        operatorClient: async () => f.client,
         assertAuthority: async () => {},
         getProvider: async () => provider,
         observeInstallation: fallback,
+        operatorClient: async () => f.client,
         readBinding: fallback,
       },
     );

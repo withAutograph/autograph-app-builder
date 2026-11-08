@@ -739,26 +739,14 @@ describe("completed enrollment and Gateway bootstrap handoff", () => {
     const desired = structuredClone(operator.plan);
     const candidate = requiredFixture(operator.gatewayDeliveryCandidates)[0];
     const mutations = {
-      "missing-retained-auth": () => {
-        delete record.retainedAuth;
-      },
-      "incomplete-retained-auth": () => {
-        retained.receipts.pop();
-      },
-      "missing-private-state": () => {
-        delete record.privateState;
-      },
-      "unfinished-accounts": () => {
-        delete preparation.accountsCompletedAt;
-      },
       "changed-account-plan": () => {
         preparation.accountPlan.contextId = "unapproved-account-plan";
       },
       "changed-account-program": () => {
         preparation.program.actors[0].name = "Different account";
       },
-      "changed-auth-target": () => {
-        requiredFixture(operator.plan.authSchema).targetDigest = "0".repeat(64);
+      "changed-app-resource": () => {
+        operator.plan.appDatabase.resourceId = "other-app";
       },
       "changed-auth-preparation": () => {
         requiredFixture(operator.authPreparation).catalogFingerprint = "0".repeat(64);
@@ -766,8 +754,20 @@ describe("completed enrollment and Gateway bootstrap handoff", () => {
       "changed-auth-resource": () => {
         operator.plan.authDatabase.resourceId = "other-auth";
       },
-      "changed-app-resource": () => {
-        operator.plan.appDatabase.resourceId = "other-app";
+      "changed-auth-target": () => {
+        requiredFixture(operator.plan.authSchema).targetDigest = "0".repeat(64);
+      },
+      "changed-candidate-branch": () => {
+        candidate.branch = "other-branch";
+      },
+      "changed-candidate-operation": () => {
+        candidate.operationRef = "00000000-0000-4000-8000-000000000011";
+      },
+      "changed-candidate-project": () => {
+        candidate.projectId = "other-gateway";
+      },
+      "changed-candidate-repository": () => {
+        candidate.repoId = "other-repository";
       },
       "changed-endpoint": () => {
         operator.plan.neon.endpoint = "other.neon.tech";
@@ -778,20 +778,23 @@ describe("completed enrollment and Gateway bootstrap handoff", () => {
       cleanup: () => {
         operator.plan.action = "cleanup";
       },
-      "changed-candidate-operation": () => {
-        candidate.operationRef = "00000000-0000-4000-8000-000000000011";
+      "incomplete-retained-auth": () => {
+        retained.receipts.pop();
       },
-      "changed-candidate-project": () => {
-        candidate.projectId = "other-gateway";
+      lease: () => {
+        record.leaseId = "00000000-0000-4000-8000-000000000013";
       },
-      "changed-candidate-branch": () => {
-        candidate.branch = "other-branch";
+      "lease-expiry": () => {
+        record.leaseExpiresAt = "2027-01-01T00:00:00Z";
       },
-      "changed-candidate-repository": () => {
-        candidate.repoId = "other-repository";
+      "missing-private-state": () => {
+        delete record.privateState;
       },
-      "unready-candidate": () => {
-        candidate.readyState = "BUILDING";
+      "missing-retained-auth": () => {
+        delete record.retainedAuth;
+      },
+      "pending-attempt": () => {
+        operator.pendingEffectAttempt = { id: "00000000-0000-4000-8000-000000000012" };
       },
       "pending-binding": () => {
         requiredFixture(operator.gatewayEnvironment)[0].pendingOperationRef = operationRef;
@@ -799,14 +802,11 @@ describe("completed enrollment and Gateway bootstrap handoff", () => {
       "pending-effect": () => {
         operator.pendingEffectId = "app-install";
       },
-      "pending-attempt": () => {
-        operator.pendingEffectAttempt = { id: "00000000-0000-4000-8000-000000000012" };
+      "unfinished-accounts": () => {
+        delete preparation.accountsCompletedAt;
       },
-      lease: () => {
-        record.leaseId = "00000000-0000-4000-8000-000000000013";
-      },
-      "lease-expiry": () => {
-        record.leaseExpiresAt = "2027-01-01T00:00:00Z";
+      "unready-candidate": () => {
+        candidate.readyState = "BUILDING";
       },
     } satisfies Record<string, () => void>;
     mutations[change]();
@@ -1042,24 +1042,12 @@ describe("settled app bootstrap planning handoff", () => {
     const desired = structuredClone(operator.plan);
     const candidate = requiredFixture(requiredFixture(operator.gatewayDeliveryCandidates)[0]);
     const mutations = {
-      "desired-source": () => {
-        requiredFixture(desired.gatewayDelivery).gitSha = "0".repeat(40);
+      "account-authority": () => {
+        requiredFixture(operator.plan.normalActorPreparation).accountApprovalId =
+          "foreign-approval";
       },
-      "desired-realm": () => {
-        requiredFixture(desired.gatewayBindings).operatorOrigin =
-          "https://another-operator.example";
-      },
-      unbound: () => {
-        record.environmentBound = false;
-      },
-      "proof-release": () => {
-        requiredFixture(record.proof).releaseId = "another-release";
-      },
-      "proof-manifest": () => {
-        requiredFixture(record.proof).manifestSha256 = "0".repeat(64);
-      },
-      "missing-receipt": () => {
-        operator.receipts.pop();
+      "candidate-branch": () => {
+        candidate.branch = "other-branch";
       },
       "candidate-operation": () => {
         candidate.operationRef = operationRef;
@@ -1070,11 +1058,21 @@ describe("settled app bootstrap planning handoff", () => {
       "candidate-repository": () => {
         candidate.repoId = "other-repository";
       },
-      "candidate-branch": () => {
-        candidate.branch = "other-branch";
-      },
       "candidate-unready": () => {
         candidate.readyState = "BUILDING";
+      },
+      "desired-realm": () => {
+        requiredFixture(desired.gatewayBindings).operatorOrigin =
+          "https://another-operator.example";
+      },
+      "desired-source": () => {
+        requiredFixture(desired.gatewayDelivery).gitSha = "0".repeat(40);
+      },
+      lease: () => {
+        record.leaseId = "00000000-0000-4000-8000-000000000013";
+      },
+      "missing-receipt": () => {
+        operator.receipts.pop();
       },
       "pending-binding": () => {
         requiredFixture(operator.gatewayEnvironment)[0].pendingOperationRef = operationRef;
@@ -1082,15 +1080,17 @@ describe("settled app bootstrap planning handoff", () => {
       "pending-effect": () => {
         operator.pendingEffectId = "gateway-delivery";
       },
-      lease: () => {
-        record.leaseId = "00000000-0000-4000-8000-000000000013";
-      },
       "private-state": () => {
         delete record.privateState;
       },
-      "account-authority": () => {
-        requiredFixture(operator.plan.normalActorPreparation).accountApprovalId =
-          "foreign-approval";
+      "proof-manifest": () => {
+        requiredFixture(record.proof).manifestSha256 = "0".repeat(64);
+      },
+      "proof-release": () => {
+        requiredFixture(record.proof).releaseId = "another-release";
+      },
+      unbound: () => {
+        record.environmentBound = false;
       },
     };
     mutations[changed]();

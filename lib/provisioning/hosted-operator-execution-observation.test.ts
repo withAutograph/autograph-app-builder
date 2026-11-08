@@ -634,8 +634,8 @@ describe("canonical execution observation", () => {
       const expectedOutcome =
         outcome === "prepared" ? { status: "prepared" } : { code: outcome, status: "blocked" };
       expect(await f.status()).toMatchObject({
+        execution: { outcome: expectedOutcome, state: "settled" },
         status: outcome === "prepared" ? "prepared" : "pending",
-        execution: { state: "settled", outcome: expectedOutcome },
       });
       expect(f.executeEffect).toHaveBeenCalledTimes(outcome === "prepared" ? 4 : 1);
       expect(f.record.privateState).toEqual(privateState);

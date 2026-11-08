@@ -297,13 +297,13 @@ const fixture = (configurationId?: string | null) => {
   return {
     assertAuthorized,
     assertCurrent,
-    diagnostics,
     checkpointManagedEnvironment,
+    diagnostics,
     fetcher,
     input,
+    project,
     readCredential,
     requests,
-    project,
     rows,
     setFailedDelete: (id: string) => {
       failedDeleteId = id;
@@ -1429,9 +1429,9 @@ it.each([
     const protection =
       requestTarget === "project_settings"
         ? {
-            trustedSourcesVisibility: "absent",
-            approvedSourcePresent: false,
             approvedPairCovered: false,
+            approvedSourcePresent: false,
+            trustedSourcesVisibility: "absent",
           }
         : {};
     expect(f.diagnostics[0]?.hostedEnvironmentBindingFailure).toEqual({

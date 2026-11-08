@@ -37,7 +37,7 @@ describe("private app browser tests", () => {
       const result = await runResolvedAppBrowserTests({
         appId: "spend-review",
         root: "/workspace/repository",
-        sandbox: { run: vi.fn().mockResolvedValue({ exitCode, stdout, stderr: "" }) },
+        sandbox: { run: vi.fn().mockResolvedValue({ exitCode, stderr: "", stdout }) },
       });
       expect(result).toMatchObject({ exitCode, status: exitCode === 0 ? "passed" : "failed" });
       if (refresh) {
@@ -68,8 +68,8 @@ describe("private app browser tests", () => {
       try {
         const run = vi
           .fn<SandboxSession["run"]>()
-          .mockResolvedValueOnce({ exitCode: readExit, stdout: JSON.stringify(origin), stderr: "" })
-          .mockResolvedValueOnce({ exitCode: 0, stdout: "2 passed", stderr: "" });
+          .mockResolvedValueOnce({ exitCode: readExit, stderr: "", stdout: JSON.stringify(origin) })
+          .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "2 passed" });
         const appId = "spend-review";
         const root = "/workspace/repository";
         const result = await runAppBrowserTests({
@@ -152,7 +152,7 @@ describe("private app browser tests", () => {
   it("forwards the focused selection through the prepared hosted runtime", async () => {
     const runTask = vi
       .fn<PreparedRuntimeExecution["runTask"]>()
-      .mockResolvedValue({ exitCode: 0, stdout: "selected passed", stderr: "" });
+      .mockResolvedValue({ exitCode: 0, stderr: "", stdout: "selected passed" });
     const runtime: PreparedRuntimeExecution = {
       environmentPath: "/private/environment.json",
       stateDirectory: "/private",
@@ -468,7 +468,7 @@ describe("private app browser tests", () => {
   it("runs an already resolved task through the shared path with retained command continuation", async () => {
     const runTask = vi
       .fn<PreparedRuntimeExecution["runTask"]>()
-      .mockResolvedValue({ exitCode: 0, stdout: "scenario passed", stderr: "" });
+      .mockResolvedValue({ exitCode: 0, stderr: "", stdout: "scenario passed" });
     const resolveRuntime = vi.fn<() => Promise<PreparedRuntimeExecution | null>>();
     const checkpoint = vi.fn<(commandId: string) => Promise<void>>();
     const runtime: PreparedRuntimeExecution = {
@@ -529,7 +529,7 @@ it.each(["/actual-catalog-route", null, undefined])(
   async (browserTestEntryPath) => {
     const runTask = vi
       .fn<PreparedRuntimeExecution["runTask"]>()
-      .mockResolvedValue({ exitCode: 0, stdout: "passed", stderr: "" });
+      .mockResolvedValue({ exitCode: 0, stderr: "", stdout: "passed" });
     const runtime: PreparedRuntimeExecution = {
       browserTestBaseUrl: "https://public-owned.example",
       browserTestEntryPath,
