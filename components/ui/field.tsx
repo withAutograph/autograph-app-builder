@@ -183,6 +183,7 @@ function FieldError({
 }: React.ComponentProps<"div"> & {
   errors?: ({ message?: string } | undefined)[];
 }) {
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the React node returned by this memoized render calculation.
   const content = useMemo(() => {
     if (children) {
       return children;

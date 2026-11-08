@@ -477,6 +477,7 @@ export const AppAccessPage = ({
   const [data, setData] = useState<AppAccessSnapshot>();
   const [notice, setNotice] = useState("");
   const runAction = useCallback(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     (previous: AppAccessActionState | undefined, input: AppAccessActionInput) =>
       submitAppAccess(continueAction, previous, input),
     [continueAction],

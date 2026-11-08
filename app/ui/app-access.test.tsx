@@ -215,6 +215,7 @@ describe("Builder app access", () => {
     const requests: object[] = [];
     vi.stubGlobal(
       "fetch",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       vi.fn(() => Promise.resolve(Response.json(missingInvitation))),
     );
     // oxlint-disable-next-line eslint/require-await -- Keep interrupted continuation as a rejected promise.
@@ -351,6 +352,7 @@ describe("Builder app access", () => {
     const requests: unknown[] = [];
     vi.stubGlobal(
       "fetch",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       vi.fn(() => Promise.resolve(Response.json({ ...snapshot, pendingCommand }))),
     );
     continuation.mockImplementation(async (_previous, input) => {
@@ -371,6 +373,7 @@ describe("Builder app access", () => {
     let attempts = 0;
     vi.stubGlobal(
       "fetch",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       vi.fn(() => Promise.resolve(Response.json(snapshot))),
     );
     continuation.mockImplementation(async (_previous, input) => {
@@ -430,6 +433,7 @@ describe("Builder app access", () => {
   it("disables duplicate controls while the Server Action is pending and renders its completed state", async () => {
     vi.stubGlobal(
       "fetch",
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
       vi.fn(() => Promise.resolve(Response.json(snapshot))),
     );
     const completion = Promise.withResolvers<AppAccessActionState>();

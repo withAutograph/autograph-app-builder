@@ -312,6 +312,7 @@ export function useBuilderController({
     [],
   );
   const requestServerSave = useCallback(
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     (input: SaveActiveBuilderDraftInput) => {
       const acknowledgement = Promise.withResolvers<{
         draftId: string;

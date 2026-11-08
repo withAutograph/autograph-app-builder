@@ -284,6 +284,7 @@ export function useBuilderDraftAutosave<T>(
     schedule,
   ]);
 
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   const restorePending = useCallback(() => options.outbox.read(), [options.outbox]);
 
   const resumePending = useCallback(async () => {
@@ -296,6 +297,7 @@ export function useBuilderDraftAutosave<T>(
     await flush("flush");
   }, [flush, online, options.outbox, updateStatus]);
 
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
   const retry = useCallback(() => flush("flush"), [flush]);
 
   const discardPending = useCallback(async () => {

@@ -36,6 +36,7 @@ export async function GET(request: Request) {
   const handler = getBuilderProvisioningDeploymentHandler(process.env);
   const headers = new Headers(request.headers);
   headers.set("accept", "application/json");
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve the handler's promise and synchronous exception behavior.
   const read = () =>
     handler(
       new Request(

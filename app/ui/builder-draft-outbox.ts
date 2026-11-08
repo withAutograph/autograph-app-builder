@@ -37,7 +37,7 @@ const databaseName = "autograph-builder-draft-outbox";
 const storeName = "pending";
 const memoryFallback = new Map<string, unknown>();
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve the existing promise and synchronous exception behavior. Preserve function declaration hoisting and initialization timing.
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   const { promise, reject, resolve } = Promise.withResolvers<T>();
   request.addEventListener(
@@ -61,7 +61,7 @@ function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return promise;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve the existing promise and synchronous exception behavior. Preserve function declaration hoisting and initialization timing.
 function transactionResult(transaction: IDBTransaction): Promise<undefined> {
   const { promise, reject, resolve } = Promise.withResolvers<undefined>();
   transaction.addEventListener(
@@ -93,7 +93,7 @@ function transactionResult(transaction: IDBTransaction): Promise<undefined> {
   return promise;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve the existing promise and synchronous exception behavior. Preserve function declaration hoisting and initialization timing.
 function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
   const { promise, reject, resolve } = Promise.withResolvers<IDBDatabase>();
   const request = factory.open(databaseName, 1);
@@ -144,7 +144,7 @@ export function createBuilderDraftOutbox<T>(
   const factory = options.indexedDB === undefined ? defaultFactory() : options.indexedDB;
   let operations: Promise<unknown> = Promise.resolve();
 
-  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  // oxlint-disable-next-line typescript/promise-function-async, eslint/func-style -- Preserve the existing promise and synchronous exception behavior. Preserve function declaration hoisting and initialization timing.
   function serial<Result>(operation: () => Promise<Result>): Promise<Result> {
     // This queue deliberately composes the next operation without awaiting it here.
     // oxlint-disable-next-line promise/prefer-await-to-then
@@ -181,7 +181,9 @@ export function createBuilderDraftOutbox<T>(
   }
 
   return {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     clear: () =>
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       serial(() =>
         withDatabase(
           async (database) => {
@@ -194,7 +196,9 @@ export function createBuilderDraftOutbox<T>(
           },
         ),
       ),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     clearIfAcknowledged: (acknowledgement) =>
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       serial(() =>
         withDatabase(
           async (database) => {
@@ -220,7 +224,9 @@ export function createBuilderDraftOutbox<T>(
           },
         ),
       ),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     clearIfMutationId: (mutationId) =>
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       serial(() =>
         withDatabase(
           async (database) => {
@@ -246,7 +252,9 @@ export function createBuilderDraftOutbox<T>(
           },
         ),
       ),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     read: () =>
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       serial(() =>
         withDatabase(
           async (database) => {
@@ -259,7 +267,9 @@ export function createBuilderDraftOutbox<T>(
           () => memoryFallback.get(options.key) as BuilderDraftOutboxEntry<T> | undefined,
         ),
       ),
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
     write: (entry) =>
+      // oxlint-disable-next-line typescript/promise-function-async -- Preserve the existing promise and synchronous exception behavior.
       serial(() =>
         withDatabase(
           async (database) => {

@@ -4,7 +4,9 @@ import { expect, it, vi } from "vitest";
 
 const dependencies = vi.hoisted(() => ({
   connection: vi.fn(),
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   headers: vi.fn(() => Promise.resolve(new Headers())),
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   session: vi.fn(() => Promise.resolve(null)),
 }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep the controlled next/server dependency used by this test.
@@ -27,6 +29,7 @@ vi.mock("@/lib/auth/preview-oauth-deployment", () => ({
 
 it("waits for a real request before starting shared auth initialization", async () => {
   const connection = Promise.withResolvers<null>();
+  // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
   dependencies.connection.mockImplementation(() => connection.promise);
   const page = SignUpPage({ searchParams: Promise.resolve({}) });
   // oxlint-disable-next-line typescript/no-unsafe-member-access -- Inspect the rendered test boundary's children.

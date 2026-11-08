@@ -37,6 +37,7 @@ afterEach(() => vi.clearAllMocks());
 
 describe("authenticated handoff page", () => {
   it("redirects a missing web session back through the same handoff", async () => {
+    // oxlint-disable-next-line typescript/promise-function-async -- Preserve this test double's existing promise and synchronous behavior.
     server.load.mockImplementation(() => Promise.resolve());
     await expect(HandoffContent({ params })).rejects.toThrow("redirect:");
     expect(server.redirect).toHaveBeenCalledWith(
