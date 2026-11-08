@@ -912,14 +912,14 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         }
         if (url.pathname === "/repos/withAutograph/example-app/pulls/7") {
           return json({
-            number: 7,
-            node_id: "PR_node",
-            state: "open",
-            draft: false,
-            merged: false,
-            merge_commit_sha: null,
-            head: { sha: head, ref: "builder", repo: { id: 100 } },
             base: { ref: "main", repo: { id: 100 } },
+            draft: false,
+            head: { ref: "builder", repo: { id: 100 }, sha: head },
+            merge_commit_sha: null,
+            merged: false,
+            node_id: "PR_node",
+            number: 7,
+            state: "open",
           });
         }
         if (url.pathname === "/graphql") {
@@ -933,11 +933,11 @@ describe("GitHub App fixed-origin HTTP provider", () => {
           return json({
             data: {
               node: {
-                headRefOid: head,
+                baseChanges: { nodes: [] },
                 baseRefName: "main",
+                headRefOid: head,
                 isDraft: false,
                 timelineItems: { nodes: [] },
-                baseChanges: { nodes: [] },
               },
             },
           });
@@ -945,12 +945,12 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         throw new Error("unexpected request");
       };
       const result = createProvider(request).prDelivery.inspect({
-        repositoryId: "100",
-        owner: "withAutograph",
-        name: "example-app",
-        pullRequestNumber: 7,
-        headSha: head,
         baseBranch: "main",
+        headSha: head,
+        name: "example-app",
+        owner: "withAutograph",
+        pullRequestNumber: 7,
+        repositoryId: "100",
       });
       await (repositoryId === 100
         ? expect(result).resolves.toMatchObject({ checks: "pending", state: "open" })
@@ -979,14 +979,14 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       }
       if (url.pathname === "/repos/withAutograph/example-app/pulls/7") {
         return json({
-          number: 7,
-          node_id: "PR_node",
-          state: "open",
-          draft: true,
-          merged: false,
-          merge_commit_sha: null,
-          head: { sha: head, ref: "builder", repo: { id: 100 } },
           base: { ref: "main", repo: { id: 100 } },
+          draft: true,
+          head: { ref: "builder", repo: { id: 100 }, sha: head },
+          merge_commit_sha: null,
+          merged: false,
+          node_id: "PR_node",
+          number: 7,
+          state: "open",
         });
       }
       if (url.pathname === "/graphql") {
@@ -995,12 +995,12 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       return await mock.implementation(input, init);
     };
     const result = createProvider(request).prDelivery.markReady({
-      repositoryId: "100",
-      owner: "withAutograph",
-      name: "example-app",
-      pullRequestNumber: 7,
-      headSha: head,
       baseBranch: "main",
+      headSha: head,
+      name: "example-app",
+      owner: "withAutograph",
+      pullRequestNumber: 7,
+      repositoryId: "100",
     });
     await expect(result).rejects.toThrow(
       status === 403 ? "github-delivery-provider-rejected" : "github-request-failed",
@@ -1918,9 +1918,9 @@ describe("existing draft reconciliation provider", () => {
           base: { ref: "main", repo: { id: 100 } },
           body: `<!-- App-Builder-Idempotency: ${"d".repeat(64)} -->`,
           draft: !merged,
-          merged,
           head: { ref: branchName, repo: { id: 100 }, sha: merged ? liveRef : observedHead },
           id: 150_000,
+          merged,
           number: 1500,
           state: merged ? "closed" : "open",
           user: { id: 900, login: "autograph-app-builder[bot]", type: "Bot" },
