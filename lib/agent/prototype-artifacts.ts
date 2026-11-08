@@ -17,7 +17,9 @@ export const prototypeArtifactPathPattern =
   // oxlint-disable-next-line prefer-named-capture-group -- Tool JSON Schema validators reject named groups.
   /^prototype\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/(app-spec\.md|decisions\.md|index\.html)$/u;
 
-export const prototypeArtifactMediaTypes = ["text/markdown", "text/html"] as const;
+const MARKDOWN_MEDIA_TYPE = "text/markdown";
+
+export const prototypeArtifactMediaTypes = [MARKDOWN_MEDIA_TYPE, "text/html"] as const;
 
 export type PrototypeArtifactMediaType = (typeof prototypeArtifactMediaTypes)[number];
 
@@ -147,7 +149,9 @@ export function parsePrototypeArtifactPath(path: string): {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function expectedPrototypeArtifactMediaType(path: string): PrototypeArtifactMediaType {
-  return parsePrototypeArtifactPath(path).fileName === "index.html" ? "text/html" : "text/markdown";
+  return parsePrototypeArtifactPath(path).fileName === "index.html"
+    ? "text/html"
+    : MARKDOWN_MEDIA_TYPE;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -566,7 +570,7 @@ export function completeBuildReadyPrototypeAppSpec(input: {
     appSpec === undefined ||
     !byPath.has(`${prefix}index.html`) ||
     !byPath.has(`${prefix}decisions.md`) ||
-    appSpec.mediaType !== "text/markdown" ||
+    appSpec.mediaType !== MARKDOWN_MEDIA_TYPE ||
     isPrototypeArtifactV2(appSpec) ||
     !validateBuildReadyAppSpec(appSpec.content).valid
   ) {
@@ -601,14 +605,14 @@ export function recordPrototypeArtifactBundle(input: {
     },
     {
       content: input.decisionsMarkdown,
-      mediaType: "text/markdown" as const,
+      mediaType: MARKDOWN_MEDIA_TYPE,
       path: `prototype/${input.appId}/decisions.md`,
-    },
+    } as const,
     {
       content: appSpecMarkdown,
-      mediaType: "text/markdown" as const,
+      mediaType: MARKDOWN_MEDIA_TYPE,
       path: `prototype/${input.appId}/app-spec.md`,
-    },
+    } as const,
   ]) {
     const recorded = recordPrototypeArtifactRevision({
       artifacts,

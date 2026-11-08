@@ -23,6 +23,8 @@ import type {
   NativeTargetRuntimeResolutionContext,
 } from "./native-target-onboarding-runtime";
 
+const NATIVE_TARGET_TRANSPORT_LOG = "[builder:native-target-transport]";
+
 const unavailable = () => new HostedOperatorError("operator_unavailable");
 const denied = () => new HostedOperatorError("authorization_required");
 const blockedAppMatches = (actual: string, expected: string) =>
@@ -80,7 +82,7 @@ export const createNativeTargetOnboardingClient = (options: {
     } catch {
       signal?.throwIfAborted();
       // Never repeat an uncertain request here. The protected journal owns recovery.
-      console.warn("[builder:native-target-transport]", {
+      console.warn(NATIVE_TARGET_TRANSPORT_LOG, {
         action: body.action,
         failure: "transport",
       });
@@ -88,7 +90,7 @@ export const createNativeTargetOnboardingClient = (options: {
     }
     signal?.throwIfAborted();
     if (response.status === 401 || response.status === 403) {
-      console.warn("[builder:native-target-transport]", {
+      console.warn(NATIVE_TARGET_TRANSPORT_LOG, {
         action: body.action,
         failure: "authorization",
         status: response.status,
@@ -116,7 +118,7 @@ export const createNativeTargetOnboardingClient = (options: {
       throw unavailable();
     }
     if (!response.ok) {
-      console.warn("[builder:native-target-transport]", {
+      console.warn(NATIVE_TARGET_TRANSPORT_LOG, {
         action: body.action,
         failure: "http",
         status: response.status,
@@ -127,7 +129,7 @@ export const createNativeTargetOnboardingClient = (options: {
     try {
       raw = await response.json();
     } catch {
-      console.warn("[builder:native-target-transport]", {
+      console.warn(NATIVE_TARGET_TRANSPORT_LOG, {
         action: body.action,
         failure: "invalid_json",
       });
@@ -140,7 +142,7 @@ export const createNativeTargetOnboardingClient = (options: {
       blockedAppMatches(blocked.data.appId, body.input.appId) &&
       blocked.data.code !== undefined
     ) {
-      console.warn("[builder:native-target-transport]", {
+      console.warn(NATIVE_TARGET_TRANSPORT_LOG, {
         action: body.action,
         failure: blocked.data.code,
       });
@@ -148,7 +150,7 @@ export const createNativeTargetOnboardingClient = (options: {
     }
     const parsed = schema.safeParse(raw);
     if (!parsed.success) {
-      console.warn("[builder:native-target-transport]", {
+      console.warn(NATIVE_TARGET_TRANSPORT_LOG, {
         action: body.action,
         failure: "invalid_response",
       });

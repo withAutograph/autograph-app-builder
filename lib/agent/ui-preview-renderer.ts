@@ -5,6 +5,8 @@ import { runSequentially } from "../async-sequential";
 import { uiPreviewSourceDigest } from "./ui-preview";
 import type { UiPreviewInput } from "./ui-preview";
 
+const REPOSITORY_WORKING_DIRECTORY = "/workspace/repository";
+
 const chartCompositions = new Set([
   "AgChartsHost",
   "ChartComposition",
@@ -125,7 +127,7 @@ export async function renderUiPreview(
   const compile = () =>
     sandbox.run({
       command: `bun ${bundle.root}/render.mts`,
-      workingDirectory: "/workspace/repository",
+      workingDirectory: REPOSITORY_WORKING_DIRECTORY,
     });
   let result = await compile();
   if (
@@ -133,8 +135,8 @@ export async function renderUiPreview(
     /could not resolve|cannot find (?:module|package)/iu.test(`${result.stderr}\n${result.stdout}`)
   ) {
     const installation = await sandbox.run({
-      command: workspaceBinInstallCommand("/workspace/repository", false),
-      workingDirectory: "/workspace/repository",
+      command: workspaceBinInstallCommand(REPOSITORY_WORKING_DIRECTORY, false),
+      workingDirectory: REPOSITORY_WORKING_DIRECTORY,
     });
     if (installation.exitCode !== 0) {
       throw new Error(

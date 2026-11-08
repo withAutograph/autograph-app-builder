@@ -50,6 +50,9 @@ import { getBuilderSandboxId } from "../sandbox/builder-sandbox";
 import type { PreparedApplicationReviewContext } from "./application-review-context-store";
 import { emptySourceReviewInvocation } from "./product-source-review-batches";
 
+const MOCK_PROFILE_REVIEW_UNASSESSED =
+  "Independent review is unassessed in the credential-free mock profile.";
+
 export interface AppliedSourceObservation {
   source: Pick<ProductSourceReviewInput, "files" | "omissions" | "sourceDigest">;
   currentDigest: () => Promise<string>;
@@ -106,10 +109,7 @@ export const reviewObservedProductSource = async (
   input.abortSignal?.throwIfAborted();
   let assessment: ProductSourceAssessment;
   if (input.mockModel) {
-    assessment = unavailableSourceAssessment(
-      input.reviewInput,
-      "Independent review is unassessed in the credential-free mock profile.",
-    );
+    assessment = unavailableSourceAssessment(input.reviewInput, MOCK_PROFILE_REVIEW_UNASSESSED);
   } else if (input.reviewInput.originalRequest === null) {
     assessment = unavailableSourceAssessment(
       input.reviewInput,
@@ -281,10 +281,7 @@ export const reviewAppliedProductSource = async (input: {
     sourceDigest: input.applyReceipt.postTreeDigest,
   };
   if (hasTestCapability("mock-model")) {
-    return unavailableSourceAssessment(
-      reviewInput,
-      "Independent review is unassessed in the credential-free mock profile.",
-    );
+    return unavailableSourceAssessment(reviewInput, MOCK_PROFILE_REVIEW_UNASSESSED);
   }
   if (request.original === null) {
     return unavailableSourceAssessment(
@@ -444,7 +441,7 @@ export const prepareAppliedProductSourceReview = async (
   const assertNotStopped = () => input.abortSignal?.throwIfAborted();
   assertNotStopped();
   if (hasTestCapability("mock-model")) {
-    return unavailable("Independent review is unassessed in the credential-free mock profile.");
+    return unavailable(MOCK_PROFILE_REVIEW_UNASSESSED);
   }
   if (reviewInput.originalRequest === null || input.sessionId === undefined) {
     return unavailable("Original requirements or the owning review session are unavailable.");
