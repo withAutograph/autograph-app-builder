@@ -207,6 +207,10 @@ const ownedFixture = (
   return { artifact, getSession, handler, observe, publicId, readCheckpointPage, record, request };
 };
 
+const unexpectedServiceCall = (): never => {
+  throw new Error("Unexpected Eve session operation in preview fixture");
+};
+
 describe("deployment Browser preview route", () => {
   beforeEach(() => {
     for (const mock of Object.values(providers)) {
@@ -302,8 +306,16 @@ describe("deployment Browser preview route", () => {
       sessionId: "session-one",
       status: "completed" as const,
     }));
+    const service: EveSessionService = {
+      cancel: unexpectedServiceCall,
+      get,
+      list: unexpectedServiceCall,
+      respond: unexpectedServiceCall,
+      send: unexpectedServiceCall,
+      start: unexpectedServiceCall,
+    };
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const serviceForRequest = vi.fn(async () => ({ get }) as unknown as EveSessionService);
+    const serviceForRequest = vi.fn(async () => service);
     const handler = createDeploymentPrototypePreviewRequestHandler({
       environment: {},
       serviceForRequest,

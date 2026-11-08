@@ -68,11 +68,11 @@ function route(input: { authenticated?: boolean } = {}) {
     },
   });
   const journal = {
-    compareAndSet: vi.fn(),
+    compareAndSet: vi.fn<BuilderProvisionJournalStore["compareAndSet"]>(),
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    read: vi.fn(async () => {}),
-    reserve: vi.fn(),
-  } as unknown as BuilderProvisionJournalStore;
+    read: vi.fn<BuilderProvisionJournalStore["read"]>(async (): Promise<undefined> => {}),
+    reserve: vi.fn<BuilderProvisionJournalStore["reserve"]>(),
+  } satisfies BuilderProvisionJournalStore;
   return {
     clock,
     handler: createBuilderHandoffRouteHandler({

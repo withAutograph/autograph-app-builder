@@ -49,11 +49,11 @@ const canonicalReceipt = {
   version: 4,
 } satisfies SourceReceipt;
 
-const legacyReceipt = {
+const legacyReceipt: SourceReceipt & { provenance: undefined } = {
   ...canonicalReceipt,
   provenance: undefined,
   version: 3,
-} as unknown as SourceReceipt;
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sandboxFixture() {
