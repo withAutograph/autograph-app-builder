@@ -430,7 +430,7 @@ describe("current accepted planning input compaction", () => {
     "retains a current planning root containing referenced %s working output",
     async () => {
       const f = compactionFixture();
-      const readAcceptedContent = vi.fn(() => Promise.resolve(accepted));
+      const readAcceptedContent = vi.fn<() => Promise<string>>().mockResolvedValue(accepted);
       await expect(
         compactAcceptedPlanningInput({
           ...f.input,

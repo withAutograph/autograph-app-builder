@@ -907,8 +907,9 @@ export function assertExactGitHubDraftPullRequestContent(input: {
       `The publication content field ${mismatchedField} does not match the sealed reviewed proposal. ${refreshInstructions}`,
     );
   }
-  const mismatchedBytes = content.changes.find(
-    (change: GitHubPublicationContentChange) =>
+  const changes: readonly GitHubPublicationContentChange[] = content.changes;
+  const mismatchedBytes = changes.find(
+    (change) =>
       change.kind !== "deleted" && bytesDigest(change.after.bytes) !== change.after.digest,
   );
   if (mismatchedBytes !== undefined && mismatchedBytes.kind !== "deleted") {
@@ -1110,7 +1111,7 @@ export function createGitHubInstallationIdentity(
   ) {
     throw new Error("The GitHub installation identity is invalid.");
   }
-  const unsigned = {
+  const identityFields = {
     accountId: input.accountId,
     accountLogin: input.accountLogin,
     accountType: input.accountType,
@@ -1118,7 +1119,11 @@ export function createGitHubInstallationIdentity(
     operation: input.operation,
     permissions: githubPermissionsFor(input.operation),
     repositorySelection: input.repositorySelection,
-    selectedRepositoryIds: [...input.selectedRepositoryIds].toSorted(),
+  };
+  const selectedRepositoryIds: readonly string[] = input.selectedRepositoryIds;
+  const unsigned = {
+    ...identityFields,
+    selectedRepositoryIds: [...selectedRepositoryIds].toSorted(),
     version: GITHUB_PUBLICATION_VERSION,
   };
   return { ...unsigned, digest: digest(unsigned) };
