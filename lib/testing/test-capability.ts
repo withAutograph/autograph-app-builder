@@ -1,5 +1,7 @@
+const mockModelCapability = "mock-model";
+
 export const TEST_CAPABILITIES = [
-  "mock-model",
+  mockModelCapability,
   "simulated-target",
   "simulated-publication",
 ] as const;
@@ -27,10 +29,10 @@ export function testCapabilityEnabled(
   environment: Readonly<Record<string, string | undefined>>,
   injected: unknown,
 ): boolean {
-  if (capability === "mock-model" && environment.APP_BUILDER_TEST_MODEL !== "1") {
+  if (capability === mockModelCapability && environment.APP_BUILDER_TEST_MODEL !== "1") {
     return false;
   }
-  if (environment.APP_BUILDER_REAL_SANDBOX === "1" && capability !== "mock-model") {
+  if (environment.APP_BUILDER_REAL_SANDBOX === "1" && capability !== mockModelCapability) {
     return false;
   }
   if (typeof injected !== "object" || injected === null) {
