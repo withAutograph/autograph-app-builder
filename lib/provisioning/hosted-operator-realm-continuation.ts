@@ -347,10 +347,11 @@ const identityWaitContext = async (
   try {
     const { controlPlane } = resources;
     const resolveContext = controlPlane.resolveOwnerRealmContinuationContext.bind(controlPlane);
+    const { principal, sessionId, adapterSessionId } = owner;
     const contextInput: Parameters<typeof resolveContext>[0] = {
-      principal: owner.principal,
-      sessionId: owner.sessionId,
-      adapterSessionId: owner.adapterSessionId,
+      adapterSessionId,
+      principal,
+      sessionId,
     };
     if (owner.kind === "handoff") {
       contextInput.sourceHandoffId = owner.sourceHandoffId;

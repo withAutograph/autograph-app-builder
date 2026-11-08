@@ -103,9 +103,9 @@ const deriveDevelopmentRuntime = (input: StandardRuntimeInput) => {
     const stem = `${kind}_${ownerDigest.slice(0, 32)}`;
     return {
       database: stem,
-      runtimeRole: `${stem}_r`,
       migratorRole: `${stem}_m`,
       resourceId: policy.nativeNeon.configuration.nativeStore.resourceId,
+      runtimeRole: `${stem}_r`,
     };
   };
   if (
@@ -134,7 +134,7 @@ const deriveDevelopmentRuntime = (input: StandardRuntimeInput) => {
     gatewayWorkload: workloadFor("preview"),
     gatewayProductionWorkload: workloadFor("production"),
   };
-  return { profile, resources: genericResources, appResource: derivedNames("app") };
+  return { appResource: derivedNames("app"), profile, resources: genericResources };
 };
 
 export const assembleStandardBuilderRuntimeConfiguration = (
@@ -161,15 +161,19 @@ export const assembleStandardBuilderRuntimeConfiguration = (
   if (!destinationMatches || captured.description.backend.kind !== "generated-postgres") {
     throw fail();
   }
-  const resources =
-    derived?.resources ??
-    resolveNativeTargetResourceProfile({
-      base: input.base,
-      authority: input.authority,
-      appId: input.appId,
-      resourceProfileId: profile.resourceProfileId,
-      environment: input.environment,
+  let resources = derived?.resources;
+  if (resources === undefined || resources === null) {
+    const { base, authority, appId } = input;
+    const { resourceProfileId } = profile;
+    const { environment } = input;
+    resources = resolveNativeTargetResourceProfile({
+      appId,
+      authority,
+      base,
+      environment,
+      resourceProfileId,
     });
+  }
   if (!isDeepStrictEqual(profile.authOwnership.resource, resources.authDatabase)) {
     throw fail();
   }
