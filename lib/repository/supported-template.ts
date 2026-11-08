@@ -835,7 +835,8 @@ const exactKeys = function exactKeys(
 const preparedSourceChecksums = function preparedSourceChecksums(
   files: readonly PreparedSourceFile[],
 ): string {
-  return `${files.map(({ path, sha256: digest }) => `${digest}  repository/${path}`).join("\n")}\n`;
+  const checksums = files.map(({ path, sha256: digest }) => `${digest}  repository/${path}`);
+  return `${checksums.join("\n")}\n`;
 };
 
 /**

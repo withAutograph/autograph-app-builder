@@ -31,7 +31,11 @@ export function uiPreviewRendererFiles(input: UiPreviewInput) {
 bootstrapAgCharts({ allowMissingLicense: true });`
     : "";
   const imports = input.manifest.screens
-    .map((screen, index) => `import Screen${index} from ${JSON.stringify(`./${screen.entry}`)};`)
+    .map((screen, index) => {
+      const importPrefix = `import Screen${index} from `;
+      const modulePath = JSON.stringify(`./${screen.entry}`);
+      return `${importPrefix}${modulePath};`;
+    })
     .join("\n");
   const routes = input.manifest.screens
     .map((screen, index) => `${JSON.stringify(screen.route)}: Screen${index}`)

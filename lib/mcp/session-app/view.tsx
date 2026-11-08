@@ -309,7 +309,10 @@ function guidanceForAnswers(canCallTools: boolean, unansweredCount: number) {
   if (!canCallTools) {
     guidance = "Answer in chat to continue.";
   } else if (unansweredCount > 0) {
-    guidance = `Answer ${unansweredCount === 1 ? "the remaining request" : `all ${unansweredCount} remaining requests`} to continue.`;
+    guidance =
+      unansweredCount === 1
+        ? "Answer the remaining request to continue."
+        : `Answer all ${unansweredCount} remaining requests to continue.`;
   }
   return guidance;
 }

@@ -14,6 +14,9 @@ const GENERATED_CSS_PATH = "src/generated.css";
 const FIXTURE_PAGE_URL = "http://example.test/page";
 const FIXTURE_COMPILED_CSS_URL = "http://example.test/compiled.css";
 
+const coverageItem = (index: number) =>
+  `<button class="item" style="display:block;margin-top:${index === 0 ? 0 : 12}px">Item ${index}</button>`;
+
 test("an unavailable preview is not captured or scored as an empty design", async () => {
   const server = createServer((_request, response) => {
     response.writeHead(404);
@@ -118,7 +121,7 @@ test("style evidence uses the active theme and reports diversified DOM coverage"
     :root { --theme-text: rgb(20, 20, 20) }
     .dark { --theme-text: rgb(230, 230, 230) }
     .item { color: var(--theme-text) }
-  </style><body class="dark"><main>${Array.from({ length: 130 }, (_, index) => `<button class="item" style="display:block;margin-top:${index === 0 ? 0 : 12}px">Item ${index}</button>`).join("")}</main></body>`);
+  </style><body class="dark"><main>${Array.from({ length: 130 }, (_, index) => coverageItem(index)).join("")}</main></body>`);
   const styles = await measureStyles(page, {
     "--color-text": "var(--theme-text)",
     "--theme-text": "var(--theme-text)",

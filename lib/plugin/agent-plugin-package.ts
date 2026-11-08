@@ -203,11 +203,10 @@ const requireString = ({
     value.length < min ||
     (max !== undefined && value.length > max)
   ) {
-    throw new Error(
-      `${path.relative(pluginRoot, skillPath)} field ${field} must be a string${
-        min > 0 ? ` with at least ${min} character${min === 1 ? "" : "s"}` : ""
-      }${max === undefined ? "" : ` and at most ${max} characters`}.`,
-    );
+    const prefix = `${path.relative(pluginRoot, skillPath)} field ${field} must be a string`;
+    const minimum = min > 0 ? ` with at least ${min} character${min === 1 ? "" : "s"}` : "";
+    const maximum = max === undefined ? "" : ` and at most ${max} characters`;
+    throw new Error(`${prefix}${minimum}${maximum}.`);
   }
   return value;
 };

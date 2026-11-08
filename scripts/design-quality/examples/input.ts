@@ -15,6 +15,9 @@ interface ExampleConfig {
   stateTarget: string;
 }
 
+const fixtureStateImport = (stateTarget: string) =>
+  `./${stateTarget.split("/").at(-1)?.replace(/\.ts$/u, "")}`;
+
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 async function text(root: string, relativePath: string) {
   return readFile(path.resolve(root, relativePath), "utf-8");
@@ -153,7 +156,7 @@ export async function loadDesignQualityExample(
       { content: source, path: config.entry },
       { content: stateSource, path: config.stateTarget },
       {
-        content: `import type { ${id === "spend-import-review" ? "SpendFixture" : "CompensationFixture"} as Fixture } from ${JSON.stringify(`./${config.stateTarget.split("/").at(-1)?.replace(/\.ts$/u, "")}`)};\nconst fixture: Fixture = ${fixtureSource.trim()};\nexport default fixture;\n`,
+        content: `import type { ${id === "spend-import-review" ? "SpendFixture" : "CompensationFixture"} as Fixture } from ${JSON.stringify(fixtureStateImport(config.stateTarget))};\nconst fixture: Fixture = ${fixtureSource.trim()};\nexport default fixture;\n`,
         path: "src/fixture.ts",
       },
     ],

@@ -59,7 +59,13 @@ const lines = [
   "",
   "GitHub renders this summary and the screenshots. Download or clone this folder to open the HTML report locally; GitHub does not serve it as a website.",
   "",
-  `**Subjective design score:** ${report.judge.subjectiveScore === undefined ? "Not available" : `${report.judge.subjectiveScore}/100`}. Model: ${report.judge.model ?? "not run"}. Rubric: ${report.judge.rubricVersion ?? "not run"}.`,
+];
+const subjectiveScore =
+  report.judge.subjectiveScore === undefined
+    ? "Not available"
+    : `${report.judge.subjectiveScore}/100`;
+lines.push(
+  `**Subjective design score:** ${subjectiveScore}. Model: ${report.judge.model ?? "not run"}. Rubric: ${report.judge.rubricVersion ?? "not run"}.`,
   "",
   "This report evaluates the captured preview; evaluation itself does not regenerate the app or prove a built backend. Scores are advisory and not human-calibrated.",
   "",
@@ -67,7 +73,7 @@ const lines = [
   "",
   "| Dimension | Score | Reason |",
   "| --- | --- | --- |",
-];
+);
 if (report.adherence) {
   const a = report.adherence;
   lines.splice(
@@ -85,7 +91,9 @@ if (report.adherence) {
         assessed: number;
         percent: number | null;
       };
-      return `| ${name} | ${d.conforming} | ${d.nonconforming} | ${d.unassessed} | ${d.percent === null ? "n/a" : `${Math.round(d.percent)}%`} (${d.conforming}/${d.assessed}) |`;
+      const rowPrefix = `| ${name} | ${d.conforming} | ${d.nonconforming} | ${d.unassessed} | `;
+      const percent = d.percent === null ? "n/a" : `${Math.round(d.percent)}%`;
+      return `${rowPrefix}${percent} (${d.conforming}/${d.assessed}) |`;
     }),
     "",
     "Scores from different evaluator versions or captured states are not directly comparable.",

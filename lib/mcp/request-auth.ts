@@ -220,7 +220,8 @@ export function protectedResourceMetadata(configInput: HostedMcpAuthConfig) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function challenge(config: HostedMcpAuthConfig, attributes: string[]) {
   const metadataUrl = new URL("/.well-known/oauth-protected-resource", config.resourceUrl).href;
-  return `Bearer ${[...attributes, `resource_metadata="${metadataUrl}"`].join(", ")}`;
+  const metadataAttribute = `resource_metadata="${metadataUrl}"`;
+  return `Bearer ${[...attributes, metadataAttribute].join(", ")}`;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
