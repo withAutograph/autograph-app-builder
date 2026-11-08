@@ -162,8 +162,8 @@ const approvalStage = async <T>(
     }
     throw new HostedOperatorError(code, {
       cause: error,
-      recoveryStage: stage,
       recoveryProgressAdvanced: progress,
+      recoveryStage: stage,
     });
   }
 };
@@ -357,7 +357,7 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
       const record = await read(context, z.uuid().parse(intentId), true);
       const { plan, planDigest, idempotencyKey } = record;
       const request = parseContinuityRequestForPlan(
-        { action: "continuity", planRef: plan.planRef, planDigest, idempotencyKey },
+        { action: "continuity", idempotencyKey, planDigest, planRef: plan.planRef },
         plan,
       );
       return { plan, request, status: continuityStatus(record) };
@@ -615,8 +615,8 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
                   state: "reconciliation-required",
                   pendingStage: "revocation",
                   failure: {
-                    stage: "publication",
                     reason: "runtime-closed-before-publication-completed",
+                    stage: "publication",
                   },
                 }));
               } catch {
@@ -644,8 +644,8 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
               if (publicationFailed) {
                 next.pendingStage = "revocation";
                 next.failure = {
-                  stage: "publication",
                   reason: "runtime-closed-before-publication-completed",
+                  stage: "publication",
                 };
               }
               return next;

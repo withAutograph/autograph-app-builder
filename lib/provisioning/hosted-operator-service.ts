@@ -2220,7 +2220,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
             "cleaned",
           ].includes(result.status)
         ) {
-          execution = { state: "settled", outcome: { status: result.status } };
+          execution = { outcome: { status: result.status }, state: "settled" };
         }
         return response(
           operatorPublicResultSchema.parse({
@@ -2235,7 +2235,6 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           throw new HostedOperatorError("auth_identity_required");
         }
         return await handleBindingsOperation({
-          request,
           context,
           current,
           deps,
@@ -2245,6 +2244,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           plan,
           planDigest,
           read,
+          request,
         });
       }
       if (input.planDigest !== planDigest) {

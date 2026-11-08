@@ -164,7 +164,7 @@ export const createRepositoryProductionManagement = (
       await auth(scope, { action: "set-access", actorId, roles, active }, false, effect, step);
       return;
     }
-    await deps.workers(scope).mutateAppAccess(context, { actorId, roles, active });
+    await deps.workers(scope).mutateAppAccess(context, { active, actorId, roles });
   };
   const accessState = async (
     scope: RepositoryProductionScope,
@@ -187,7 +187,7 @@ export const createRepositoryProductionManagement = (
         ? ("applied" as const)
         : ("absent" as const);
     }
-    const result = await deps.workers(scope).inspectAppAccess(context, { actorId, roles, active });
+    const result = await deps.workers(scope).inspectAppAccess(context, { active, actorId, roles });
     return result.state === "not-applied" ? ("absent" as const) : result.state;
   };
   const cancelMemberInvitations = async (
@@ -367,7 +367,7 @@ export const createRepositoryProductionManagement = (
     ...deps,
     readPeople: async (scope, cursor) => {
       if (!(await deps.readSetup(scope))) {
-        return { members: [], invitations: [] };
+        return { invitations: [], members: [] };
       }
       return await deps.withLease(scope, async (assertCurrent) => {
         const effect = readEffect(assertCurrent);
@@ -384,11 +384,11 @@ export const createRepositoryProductionManagement = (
             continue;
           }
           const projected: AppAccessSnapshot["invitations"][number] = {
-            id: item.id,
             email: item.email,
+            expiresAt: item.expiresAt,
+            id: item.id,
             roles: item.roles,
             status: Date.parse(item.expiresAt) <= Date.now() ? "expired" : "pending",
-            expiresAt: item.expiresAt,
           };
           if (item.deliveryStatus !== undefined) {
             projected.deliveryStatus =
@@ -514,10 +514,10 @@ export const createRepositoryProductionManagement = (
         return undefined;
       }
       return {
+        accepted: found.status === "accepted",
         actorId: found.verifiedActorId,
         email: found.email,
         roles: found.roles,
-        accepted: found.status === "accepted",
       };
     },
     enrollInvitee: async (scope, id, actorId, roles, effect) => {
