@@ -537,10 +537,10 @@ describe("retained existing Auth bootstrap prerequisite", () => {
       },
       effects: [
         ...f.plan.effects.filter((effect) => ["resources", "install"].includes(effect.kind)),
-        { id: "install-app", kind: "install", description: "Current app install" },
-        { id: "access", kind: "access", description: "Verify current app access" },
-        { id: "bindings", kind: "bindings", description: "Bind current app" },
-        { id: "delivery", kind: "delivery", description: "Current published app delivery" },
+        { description: "Current app install", id: "install-app", kind: "install" },
+        { description: "Verify current app access", id: "access", kind: "access" },
+        { description: "Bind current app", id: "bindings", kind: "bindings" },
+        { description: "Current published app delivery", id: "delivery", kind: "delivery" },
         ...f.plan.effects.filter((effect) =>
           ["gateway-bindings", "gateway-delivery"].includes(effect.kind),
         ),
