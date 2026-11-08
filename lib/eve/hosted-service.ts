@@ -1275,7 +1275,7 @@ export function createHostedEveSessionService(input: {
       },
       operation.operationId,
       (observation, observedBinding) => {
-        sendRead = { observation, binding: observedBinding };
+        sendRead = { binding: observedBinding, observation };
       },
     );
     const current = await requireSession(operation.sessionId);
@@ -1564,9 +1564,9 @@ export function createHostedEveSessionService(input: {
     // oxlint-disable-next-line eslint/no-use-before-define -- Reconciliation observes only and never dispatches RESPOND again.
     let result = await readSession({
       continueWork: false,
-      recoverUnavailable: false,
       cursor: 0,
       limit: 100,
+      recoverUnavailable: false,
       sessionId: operation.sessionId,
     });
     let current = toDurableHostedSessionRecord(await requireSession(operation.sessionId));
@@ -2140,7 +2140,7 @@ export function createHostedEveSessionService(input: {
       (candidate) => candidate.operation.operationId === queued?.operation.operationId,
     );
     if (acknowledged === undefined) {
-      return { result, queued: false };
+      return { queued: false, result };
     }
     requireOwnedOperation(acknowledged.operation, {
       clientRequestId: queued.operation.clientRequestId,
@@ -2176,7 +2176,7 @@ export function createHostedEveSessionService(input: {
       if (settled.state !== "succeeded") {
         throw new HostedSubmissionUnknownError();
       }
-      return { result, queued: false };
+      return { queued: false, result };
     }
     current = await requireSession(sessionId);
     if (
@@ -2189,7 +2189,7 @@ export function createHostedEveSessionService(input: {
         proof: currentProof,
       })
     ) {
-      return { result: { ...result, status: "working" }, queued: true };
+      return { queued: true, result: { ...result, status: "working" } };
     }
     const latestStatus = toDurableHostedSessionRecord(current).status;
     let latestResult = result;
@@ -2202,7 +2202,7 @@ export function createHostedEveSessionService(input: {
         100,
       );
     }
-    return { result: latestResult, queued: false };
+    return { queued: false, result: latestResult };
   };
 
   const continueApprovedWork = async (
@@ -3713,7 +3713,7 @@ export function createHostedEveSessionService(input: {
         sendDelivery === undefined ? undefined : sendDiagnostic?.operationId,
         (observed, binding) => {
           nativeRead = observed;
-          sendRead = { observation: observed, binding };
+          sendRead = { binding, observation: observed };
         },
       );
       const current = toDurableHostedSessionRecord(await requireSession(sessionId));
