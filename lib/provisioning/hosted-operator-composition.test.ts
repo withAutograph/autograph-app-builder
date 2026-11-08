@@ -3413,21 +3413,21 @@ describe("existing populated Auth workflow planning", () => {
   it.each([
     {
       configuredDeploymentId: "configured-gateway",
-      recordedState: "READY",
       expectedDeploymentId: "configured-gateway",
       expectedOrigin: "https://gateway.example",
-    },
-    {
-      configuredDeploymentId: undefined,
       recordedState: "READY",
-      expectedDeploymentId: undefined,
-      expectedOrigin: "https://gateway.example",
     },
     {
       configuredDeploymentId: undefined,
-      recordedState: "BUILDING",
       expectedDeploymentId: undefined,
       expectedOrigin: "https://gateway.example",
+      recordedState: "READY",
+    },
+    {
+      configuredDeploymentId: undefined,
+      expectedDeploymentId: undefined,
+      expectedOrigin: "https://gateway.example",
+      recordedState: "BUILDING",
     },
   ] as const)(
     "plans against stable configured Gateway origins without overriding them from history: $configuredDeploymentId / $recordedState",

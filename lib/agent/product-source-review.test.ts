@@ -263,23 +263,23 @@ const applicationFinding = {
   citations: [{ ...judgment.findings[0].citations[0], path: "packages/shared/server.ts" }],
 };
 const inspectApplication: ApplicationToolCall[] = [
-  { toolName: "readRequirements", input: { id: "original" } },
-  { toolName: "readRequirements", input: { id: "clarification" } },
-  { toolName: "readRequirements", input: { id: "spec" } },
-  { toolName: "readSource", input: { path: "apps/example/actions.ts" } },
-  { toolName: "readSource", input: { path: "packages/shared/server.ts" } },
+  { input: { id: "original" }, toolName: "readRequirements" },
+  { input: { id: "clarification" }, toolName: "readRequirements" },
+  { input: { id: "spec" }, toolName: "readRequirements" },
+  { input: { path: "apps/example/actions.ts" }, toolName: "readSource" },
+  { input: { path: "packages/shared/server.ts" }, toolName: "readSource" },
 ];
 const recordApplication: ApplicationToolCall[] = [
   {
-    toolName: "recordReviewEvidence",
     input: {
       findings: [applicationFinding],
       remainingRuntimeChecks: ["Exercise server save and reload."],
     },
+    toolName: "recordReviewEvidence",
   },
 ];
 const completeApplication: ApplicationToolCall[] = [
-  { toolName: "completeReview", input: { remainingRuntimeChecks: [] } },
+  { input: { remainingRuntimeChecks: [] }, toolName: "completeReview" },
 ];
 
 const applicationJournalFixture = () => {
@@ -387,13 +387,13 @@ describe("independent application source review", () => {
       return evidence;
     };
     const reads: ApplicationToolCall[] = [
-      { toolName: "readRequirements", input: { id: "original" } },
-      { toolName: "readSource", input: { path: "apps/example/actions.ts" } },
+      { input: { id: "original" }, toolName: "readRequirements" },
+      { input: { path: "apps/example/actions.ts" }, toolName: "readSource" },
     ];
     const model = applicationModel([
       reads,
       reads,
-      [{ toolName: "readRequirements", input: { id: "clarification" } }],
+      [{ input: { id: "clarification" }, toolName: "readRequirements" }],
       completeApplication,
     ]);
     let continuation: ApplicationReviewContinuation | undefined;
@@ -630,12 +630,12 @@ describe("independent application source review", () => {
     });
     const model = applicationModel([
       [
-        { toolName: "readRequirements", input: { id: "original" } },
-        { toolName: "listEvidence", input: { kind: "source" } },
-        { toolName: "readSource", input: { path: "apps/example/actions.ts" } },
-        { toolName: "readSource", input: { path: "packages/shared/server.ts" } },
+        { input: { id: "original" }, toolName: "readRequirements" },
+        { input: { kind: "source" }, toolName: "listEvidence" },
+        { input: { path: "apps/example/actions.ts" }, toolName: "readSource" },
+        { input: { path: "packages/shared/server.ts" }, toolName: "readSource" },
       ],
-      [{ toolName: "listEvidence", input: { kind: "requirements" } }],
+      [{ input: { kind: "requirements" }, toolName: "listEvidence" }],
       completeApplication,
     ]);
     const starts: ApplicationSourceReviewRequestStart[] = [];
@@ -697,17 +697,17 @@ describe("independent application source review", () => {
       mode: "644",
     }));
     const first: ApplicationToolCall[] = [
-      { toolName: "readRequirements", input: { id: "original" } },
-      { toolName: "listEvidence", input: { kind: "source" } },
+      { input: { id: "original" }, toolName: "readRequirements" },
+      { input: { kind: "source" }, toolName: "listEvidence" },
     ];
     const repeated: ApplicationToolCall[] = [
-      { toolName: "readRequirements", input: { id: "original", cursor: 0 } },
-      { toolName: "listEvidence", input: { kind: "source", cursor: 0 } },
+      { input: { id: "original", cursor: 0 }, toolName: "readRequirements" },
+      { input: { kind: "source", cursor: 0 }, toolName: "listEvidence" },
     ];
     const model = applicationModel([
       first,
       repeated,
-      [{ toolName: "readRequirements", input: { id: "clarification" } }],
+      [{ input: { id: "clarification" }, toolName: "readRequirements" }],
       repeated,
       completeApplication,
     ]);
@@ -794,19 +794,19 @@ describe("independent application source review", () => {
       mode: "644",
     }));
     const selections: ApplicationToolCall[] = [
-      { toolName: "readRequirements", input: { id: "original" } },
-      { toolName: "readRequirements", input: { id: "spec" } },
-      { toolName: "readRequirements", input: { id: "original", cursor: 1 } },
-      { toolName: "listEvidence", input: { kind: "source" } },
-      { toolName: "listEvidence", input: { kind: "source", prefix: "packages/" } },
-      { toolName: "listEvidence", input: { kind: "source", cursor: 200 } },
-      { toolName: "listEvidence", input: { kind: "changes" } },
-      { toolName: "listEvidence", input: { kind: "requirements" } },
+      { input: { id: "original" }, toolName: "readRequirements" },
+      { input: { id: "spec" }, toolName: "readRequirements" },
+      { input: { id: "original", cursor: 1 }, toolName: "readRequirements" },
+      { input: { kind: "source" }, toolName: "listEvidence" },
+      { input: { kind: "source", prefix: "packages/" }, toolName: "listEvidence" },
+      { input: { kind: "source", cursor: 200 }, toolName: "listEvidence" },
+      { input: { kind: "changes" }, toolName: "listEvidence" },
+      { input: { kind: "requirements" }, toolName: "listEvidence" },
     ];
     const model = applicationModel([
       selections,
-      [{ toolName: "readRequirements", input: { id: "original" } }],
-      [{ toolName: "readRequirements", input: { id: "clarification" } }],
+      [{ input: { id: "original" }, toolName: "readRequirements" }],
+      [{ input: { id: "clarification" }, toolName: "readRequirements" }],
       completeApplication,
     ]);
     const result = await assessApplicationSource(input, evidence, { testModel: model });
@@ -851,12 +851,12 @@ describe("independent application source review", () => {
       },
     );
     const read: ApplicationToolCall[] = [
-      { toolName: "readSource", input: { path: "apps/example/actions.ts" } },
+      { input: { path: "apps/example/actions.ts" }, toolName: "readSource" },
     ];
     const model = applicationModel([
       read,
       read,
-      [{ toolName: "readRequirements", input: { id: "clarification" } }],
+      [{ input: { id: "clarification" }, toolName: "readRequirements" }],
       completeApplication,
     ]);
     const result = await assessApplicationSource(input, evidence, { testModel: model });
@@ -892,13 +892,13 @@ describe("independent application source review", () => {
       return Promise.resolve({ text });
     });
     const reads: ApplicationToolCall[] = [
-      { toolName: "readRequirements", input: { id: "missing" } },
-      { toolName: "readRequirements", input: { id: "original" } },
+      { input: { id: "missing" }, toolName: "readRequirements" },
+      { input: { id: "original" }, toolName: "readRequirements" },
     ];
     const model = applicationModel([
       reads,
       reads,
-      [{ toolName: "listEvidence", input: { kind: "requirements" } }],
+      [{ input: { kind: "requirements" }, toolName: "listEvidence" }],
       completeApplication,
     ]);
     const result = await assessApplicationSource(input, evidence, { testModel: model });
@@ -952,16 +952,16 @@ describe("independent application source review", () => {
       }),
     );
     const reads: ApplicationToolCall[] = [
-      { toolName: "readRequirements", input: { id: "original" } },
-      { toolName: "listEvidence", input: { kind: "source" } },
-      { toolName: "readSource", input: { path: "apps/example/actions.ts" } },
+      { input: { id: "original" }, toolName: "readRequirements" },
+      { input: { kind: "source" }, toolName: "listEvidence" },
+      { input: { path: "apps/example/actions.ts" }, toolName: "readSource" },
     ];
     const model = applicationModel([
       reads,
       reads,
       new Error("maximum context length exceeded"),
       reads,
-      [{ toolName: "readRequirements", input: { id: "clarification" } }],
+      [{ input: { id: "clarification" }, toolName: "readRequirements" }],
       completeApplication,
     ]);
     const result = await assessApplicationSource(input, evidence, { testModel: model });
@@ -1044,15 +1044,15 @@ describe("independent application source review", () => {
       },
     );
     const reread = [
-      { toolName: "readSource", input: { path: "apps/example/actions.ts" } },
-      { toolName: "readSource", input: { path: "packages/shared/server.ts" } },
+      { input: { path: "apps/example/actions.ts" }, toolName: "readSource" },
+      { input: { path: "packages/shared/server.ts" }, toolName: "readSource" },
     ];
     const model = applicationModel([
       inspectApplication,
-      [{ toolName: "listEvidence", input: { kind: "source" } }],
+      [{ input: { kind: "source" }, toolName: "listEvidence" }],
       recordApplication,
       reread,
-      [{ toolName: "listEvidence", input: { kind: "requirements" } }],
+      [{ input: { kind: "requirements" }, toolName: "listEvidence" }],
       completeApplication,
     ]);
     const result = await assessApplicationSource(input, evidence, { testModel: model });
@@ -1080,15 +1080,15 @@ describe("independent application source review", () => {
       output: {
         type: "json",
         value: {
-          path: "apps/example/actions.ts",
-          digest: "apps/example/actions.ts",
           content: oldBody,
-          startLine: 1,
-          startColumn: 1,
-          endLine: 1,
+          digest: "apps/example/actions.ts",
           endColumn: oldBody.length + 1,
-          totalLines: 1,
+          endLine: 1,
           nextCursor: { column: 1, endLine: 4, line: 2 },
+          path: "apps/example/actions.ts",
+          startColumn: 1,
+          startLine: 1,
+          totalLines: 1,
         },
       },
     });
@@ -1169,12 +1169,12 @@ describe("independent application source review", () => {
       },
     );
     const first = [
-      { toolName: "readSource", input: { path: "apps/example/actions.ts", endLine: 1 } },
+      { input: { path: "apps/example/actions.ts", endLine: 1 }, toolName: "readSource" },
     ];
     const continued = [
       {
-        toolName: "readSource",
         input: { path: "apps/example/actions.ts", cursor: { line: 1, column: 20_001, endLine: 1 } },
+        toolName: "readSource",
       },
     ];
     const model = applicationModel([first, continued, completeApplication]);
@@ -1295,8 +1295,8 @@ describe("independent application source review", () => {
       return await actualReads(request);
     };
     const model = applicationModel([
-      [{ toolName: "readSource", input: { path: "packages/guessed/server.ts" } }],
-      [{ toolName: "listEvidence", input: { kind: "source", prefix: "packages/" } }],
+      [{ input: { path: "packages/guessed/server.ts" }, toolName: "readSource" }],
+      [{ input: { kind: "source", prefix: "packages/" }, toolName: "listEvidence" }],
       inspectApplication,
       recordApplication,
       completeApplication,
@@ -1323,8 +1323,8 @@ describe("independent application source review", () => {
       inspectApplication,
       [
         {
-          toolName: "recordReviewEvidence",
           input: { findings: [invented], remainingRuntimeChecks: [] },
+          toolName: "recordReviewEvidence",
         },
         ...completeApplication,
       ],
@@ -1345,7 +1345,7 @@ describe("independent application source review", () => {
       inspectApplication,
       recordApplication,
       new Error("maximum context length exceeded"),
-      [{ toolName: "readRequirements", input: { id: "original" } }],
+      [{ input: { id: "original" }, toolName: "readRequirements" }],
       completeApplication,
     ]);
     const result = await assessApplicationSource(input, evidence, { testModel: model });
@@ -1374,8 +1374,8 @@ describe("independent application source review", () => {
       inspectApplication,
       [
         {
-          toolName: "recordReviewEvidence",
           input: { findings: [finding], remainingRuntimeChecks: [fullSpec] },
+          toolName: "recordReviewEvidence",
         },
       ],
       new Error("maximum context length exceeded"),
@@ -1393,8 +1393,8 @@ describe("independent application source review", () => {
   it("recovers actual output-length termination without losing validated findings", async () => {
     const resumedEvidence = [
       {
-        toolName: "recordReviewEvidence",
         input: { findings: [], remainingRuntimeChecks: ["Check independent readback."] },
+        toolName: "recordReviewEvidence",
       },
     ];
     const model = applicationModel([
@@ -1424,7 +1424,7 @@ describe("independent application source review", () => {
       return result;
     };
     const model = applicationModel([
-      [{ toolName: "readRequirements", input: { id: "original" } }],
+      [{ input: { id: "original" }, toolName: "readRequirements" }],
       inspectApplication,
       completeApplication,
     ]);
