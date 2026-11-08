@@ -400,14 +400,21 @@ describe("retained draft publication subject recovery", () => {
       } else {
         fixture.state.githubDestinationReview.repository.headTree = "9".repeat(40);
       }
-      expect(() => statusTool.execute({}, toolContext)).toThrow("exact proposal sealed");
+      const recovered = statusTool.execute({}, toolContext);
+      expect(recovered).not.toHaveProperty("githubDraftPublication");
+      expect(recovered).toMatchObject({
+        phase: "reviewed",
+        sessionId: context.session.id,
+        appSpec: { digest: fixture.state.appSpec.digest },
+        review: { digest: fixture.state.reviewReceipt.digest },
+      });
       expect(fixture.publish).not.toHaveBeenCalled();
       expect(fixture.seal).not.toHaveBeenCalled();
       expect(context.getSandbox).not.toHaveBeenCalled();
     },
   );
 
-  it.each(["review", "diff", "source", "github-source", "repository", "session"] as const)(
+  it.each(["review", "diff", "source", "github-source", "repository"] as const)(
     "does not expose publication input after a moved %s binding",
     (binding) => {
       switch (binding) {
@@ -431,20 +438,42 @@ describe("retained draft publication subject recovery", () => {
           fixture.state.githubSource.repository.repositoryId = "9999";
           break;
         }
-        case "session": {
-          fixture.state.artifacts[0].sessionId = "another-builder-session";
-          break;
-        }
         default: {
           throw new Error("Unsupported moved binding");
         }
       }
-      expect(() => statusTool.execute({}, toolContext)).toThrow(
-        binding === "session" ? "different session" : "exact proposal sealed",
-      );
+      const recovered = statusTool.execute({}, toolContext);
+      expect(recovered).not.toHaveProperty("githubDraftPublication");
+      expect(recovered).toMatchObject({
+        phase: "reviewed",
+        sessionId: context.session.id,
+        appSpec: { digest: fixture.state.appSpec.digest },
+        review: {
+          digest: fixture.state.reviewReceipt.digest,
+          changeSetDigest: fixture.state.reviewReceipt.changeSetDigest,
+        },
+      });
       expect(fixture.publish).not.toHaveBeenCalled();
       expect(fixture.seal).not.toHaveBeenCalled();
       expect(context.getSandbox).not.toHaveBeenCalled();
     },
   );
+  it("still rejects another session's artifacts before projecting status", () => {
+    fixture.state.artifacts[0].sessionId = "another-builder-session";
+    expect(() => statusTool.execute({}, toolContext)).toThrow("different session");
+    expect(fixture.publish).not.toHaveBeenCalled();
+    expect(fixture.seal).not.toHaveBeenCalled();
+    expect(context.getSandbox).not.toHaveBeenCalled();
+  });
+
+  it("does not suppress malformed canonical receipt errors as a stale binding", () => {
+    fixture.state.githubDraftProposal.proposal = {
+      ...fixture.proposal,
+      baseSha: "invalid-base-commit",
+    };
+    expect(() => statusTool.execute({}, toolContext)).toThrow();
+    expect(fixture.publish).not.toHaveBeenCalled();
+    expect(fixture.seal).not.toHaveBeenCalled();
+    expect(context.getSandbox).not.toHaveBeenCalled();
+  });
 });

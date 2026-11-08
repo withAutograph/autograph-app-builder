@@ -571,7 +571,9 @@ required. A recovered session can read `artifact_workflow_status` to recover
 `githubDraftPublication.nextCall` for its retained exact sealed draft, including
 older seals whose tool result did not include the receipt. This read checks the
 saved source, destination and reviewed change-set bindings without resealing,
-opening a Sandbox, or calling GitHub. It returns subject metadata, not consent
+opening a Sandbox, or calling GitHub. A stale binding omits only the publication
+input; ordinary status metadata remains readable. Cross-session artifact checks
+still reject the read. It returns subject metadata, not consent
 or a claim about whether publication has occurred. The normal publication or
 recovery flow and native approval still apply. Denial and a changed sealed
 proposal continue to prevent publication.

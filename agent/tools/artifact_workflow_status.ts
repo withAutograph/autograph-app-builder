@@ -65,15 +65,21 @@ const githubDraftPublicationSummary = (state: ReturnType<typeof appBuilderWorkfl
   if (state.phase !== "reviewed" || state.githubDraftProposal === undefined) {
     return {};
   }
-  const proposal = assertCurrentGitHubDraftProposal({
+  const proposal = state.githubDraftProposal.proposal;
+  const binding = {
     binding: state.githubDraftProposal,
-    expectedProposalDigest: state.githubDraftProposal.proposal.digest,
+    expectedProposalDigest: proposal.digest,
     reviewDigest: state.reviewReceipt.digest,
     changeSetDigest: state.reviewReceipt.changeSetDigest,
     sourceReceiptDigest: state.sourceReceipt.digest,
     githubSource: state.githubSource,
     destinationReview: state.githubDestinationReview,
-  });
+  };
+  try {
+    assertCurrentGitHubDraftProposal(binding);
+  } catch {
+    return {};
+  }
   return {
     githubDraftPublication: {
       nextCall: {
