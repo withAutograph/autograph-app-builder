@@ -104,10 +104,13 @@ describe("native recovery authority", () => {
       store: {
         commitNativeRecoveryReceipt,
         // oxlint-disable-next-line eslint/require-await -- The test double follows the async store contract.
-        getPrivateOperation: async () => ({
-          ...currentOperation,
-          ...(savedReceipt === undefined ? {} : { nativeRecoveryReceipt: savedReceipt }),
-        }),
+        getPrivateOperation: async () => {
+          const observedOperation = { ...currentOperation };
+          if (savedReceipt !== undefined) {
+            observedOperation.nativeRecoveryReceipt = savedReceipt;
+          }
+          return observedOperation;
+        },
         // oxlint-disable-next-line eslint/require-await -- The test double follows the async store contract.
         getSession: async (_principal, id) => (id === source.sessionId ? current : child),
       },

@@ -1132,12 +1132,13 @@ describe("owned running-lineage execution transfer", () => {
     changeBeforeLivePreflight(f, () => {
       changed = true;
     });
-    f.dependencies.inspectSource = async (runId) => ({
-      ...(await inspect(runId)),
-      ...(changed && runId === f.parents[0]
-        ? { unsettledStepIds: ["unconfirmed-provider-effect"] }
-        : {}),
-    });
+    f.dependencies.inspectSource = async (runId) => {
+      const inspection = { ...(await inspect(runId)) };
+      if (changed && runId === f.parents[0]) {
+        inspection.unsettledStepIds = ["unconfirmed-provider-effect"];
+      }
+      return inspection;
+    };
     expect(await f.run()).toMatchObject({
       kind: "uncertain",
       reason: "source-lineage-effects-unsettled",
@@ -1163,12 +1164,13 @@ describe("owned running-lineage execution transfer", () => {
     if (inspect === undefined) {
       throw new Error("Missing lineage inspection fixture");
     }
-    f.dependencies.inspectSource = async (runId) => ({
-      ...(await inspect(runId)),
-      ...(f.getNativeStatus() === "cancelled" && runId === f.parents[0]
-        ? { unsettledStepIds: ["late-unconfirmed-effect"] }
-        : {}),
-    });
+    f.dependencies.inspectSource = async (runId) => {
+      const inspection = { ...(await inspect(runId)) };
+      if (f.getNativeStatus() === "cancelled" && runId === f.parents[0]) {
+        inspection.unsettledStepIds = ["late-unconfirmed-effect"];
+      }
+      return inspection;
+    };
     expect(await f.run()).toMatchObject({
       kind: "uncertain",
       reason: "source-lineage-effects-unsettled",

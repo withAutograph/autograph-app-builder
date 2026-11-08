@@ -141,10 +141,13 @@ class PagedSendDiagnosticStore extends InMemoryHostedEveStore {
     ) {
       return owned;
     }
-    return {
+    const paged: HostedSessionRecord & { cancellationRevision?: number | undefined } = {
       ...this.paged,
-      ...(owned.version === 2 ? { cancellationRevision: owned.cancellationRevision } : {}),
     };
+    if (owned.version === 2) {
+      paged.cancellationRevision = owned.cancellationRevision;
+    }
+    return paged;
   }
   observeSessionPaged: NonNullable<HostedEveStore["observeSessionPaged"]> = async (input) => {
     const current = await this.getSession(input.principal, input.sessionId);

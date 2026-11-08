@@ -148,13 +148,17 @@ describe.each([
       throw new Error("missing response reader");
     }
     const reader = store.readUnsettledResponseOperations.bind(store);
-    const read = (cursor?: { createdAtEpochMs: number; operationId: string }) =>
-      reader({
+    const read = (cursor?: { createdAtEpochMs: number; operationId: string }) => {
+      const request: Parameters<typeof reader>[0] = {
         principal,
         sessionId: "session-1",
         limit: 1,
-        ...(cursor ? { cursor } : {}),
-      });
+      };
+      if (cursor) {
+        request.cursor = cursor;
+      }
+      return reader(request);
+    };
     const first = await read();
     const second = await read(first.nextCursor);
     const third = await read(second.nextCursor);
