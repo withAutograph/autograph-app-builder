@@ -105,12 +105,14 @@ export const runAppBrowserTests = async (input: {
       runtime?.browserTestEntryPath === undefined
         ? undefined
         : browserEntryPathSchema.parse(runtime.browserTestEntryPath);
-    const browserEnvironment = {
-      ...(runtime?.browserTestBaseUrl === undefined
+    const baseBrowserEnvironment =
+      runtime?.browserTestBaseUrl === undefined
         ? {}
-        : { APP_TEST_BASE_URL: runtime.browserTestBaseUrl }),
-      ...(entryPath === undefined ? {} : { APP_TEST_ENTRY_PATH: entryPath }),
-    };
+        : { APP_TEST_BASE_URL: runtime.browserTestBaseUrl };
+    const browserEnvironment =
+      entryPath === undefined
+        ? baseBrowserEnvironment
+        : { ...baseBrowserEnvironment, APP_TEST_ENTRY_PATH: entryPath };
     const runTask = async () => {
       if (runtime) {
         return await runtime.runTask({

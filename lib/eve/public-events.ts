@@ -1564,46 +1564,44 @@ export const projectInstalledEveEvent = (
       const storeIn = repositoryAccess.success
         ? githubRepositoryAccessViewModel(repositoryAccess.data)
         : undefined;
+      const request: Pick<
+        PublicInputRequest,
+        "description" | "kind" | "requestId" | "title" | "presentation" | "authorization"
+      > = {
+        description: storeIn?.description ?? event.data.description,
+        kind: "authorization",
+        requestId,
+        title: storeIn?.title ?? event.data.name,
+      };
+      if (storeIn !== undefined) {
+        request.presentation = { control: "provider", section: "store-in" };
+      }
+      if (authorization !== undefined) {
+        const challenge: NonNullable<PublicInputRequest["authorization"]> = {};
+        if (authorization.url !== undefined) {
+          challenge.url = authorization.url;
+        }
+        if (authorization.userCode !== undefined) {
+          challenge.userCode = authorization.userCode;
+        }
+        if (authorization.expiresAt !== undefined) {
+          challenge.expiresAt = authorization.expiresAt;
+        }
+        if (authorization.instructions !== undefined) {
+          challenge.instructions = authorization.instructions;
+        }
+        if (authorization.displayName !== undefined) {
+          challenge.displayName = authorization.displayName;
+        }
+        if (repositoryAccess.success) {
+          challenge.repositoryAccess = repositoryAccess.data;
+        }
+        request.authorization = challenge;
+      }
       return [
         {
           index,
-          request: {
-            description: storeIn?.description ?? event.data.description,
-            kind: "authorization",
-            requestId,
-            title: storeIn?.title ?? event.data.name,
-            ...(storeIn === undefined
-              ? {}
-              : {
-                  presentation: {
-                    control: "provider" as const,
-                    section: "store-in" as const,
-                  },
-                }),
-            ...(authorization === undefined
-              ? {}
-              : {
-                  authorization: {
-                    ...(authorization.url === undefined ? {} : { url: authorization.url }),
-                    ...(authorization.userCode === undefined
-                      ? {}
-                      : { userCode: authorization.userCode }),
-                    ...(authorization.expiresAt === undefined
-                      ? {}
-                      : { expiresAt: authorization.expiresAt }),
-                    ...(authorization.instructions === undefined
-                      ? {}
-                      : { instructions: authorization.instructions }),
-                    ...(authorization.displayName === undefined
-                      ? {}
-                      : { displayName: authorization.displayName }),
-                    ...(repositoryAccess.success
-                      ? { repositoryAccess: repositoryAccess.data }
-                      : {}),
-                  },
-                }),
-            allowFreeform: false,
-          },
+          request: { ...request, allowFreeform: false },
           type: inputRequestedEvent,
         },
       ];

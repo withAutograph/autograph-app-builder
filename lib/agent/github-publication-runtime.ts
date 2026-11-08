@@ -955,13 +955,14 @@ export function composeGitHubPublicationRuntime(input: {
                 ? { ...common, kind: request.kind }
                 : { ...common, kind: request.kind, readyAt: request.readyAt },
             );
-            const effect = {
-              approvedByCallId: request.approvedByCallId,
-              ...(request.abortSignal === undefined ? {} : { abortSignal: request.abortSignal }),
-              intent,
-              provider,
-              store,
-            };
+            const effectAuthority: Pick<
+              Parameters<typeof executeApprovedGitHubPrEffect>[0],
+              "approvedByCallId" | "abortSignal"
+            > = { approvedByCallId: request.approvedByCallId };
+            if (request.abortSignal !== undefined) {
+              effectAuthority.abortSignal = request.abortSignal;
+            }
+            const effect = { ...effectAuthority, intent, provider, store };
             if (intent.kind === "pr-merge") {
               return request.reconcileOnly === true
                 ? await reconcileApprovedGitHubPrEffect(effect)

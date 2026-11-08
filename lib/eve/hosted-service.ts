@@ -527,26 +527,29 @@ function checkpointForSnapshot(
       } else if (retainedEvents[0].index !== 0) {
         truncatedBeforeIndex = retainedEvents[0].index;
       }
-      const candidate = hostedSessionCheckpointSchema.safeParse({
-        capturedAtEpochMs,
-        ...(snapshot.nativeDeliveryState === undefined
-          ? {}
-          : { nativeDeliveryState: snapshot.nativeDeliveryState }),
-        ...(snapshot.privateInputState === undefined
-          ? {}
-          : { privateInputState: snapshot.privateInputState }),
-        events: retainedEvents,
-        ...(snapshot.workingPreview === undefined
-          ? {}
-          : { workingPreview: snapshot.workingPreview }),
-        ...(inputRequests.length === 0 ? {} : { inputRequests }),
-        ...(input.includePrototype && snapshot.prototype !== undefined
-          ? { prototype: snapshot.prototype }
-          : {}),
-        status: snapshot.status,
-        ...(truncatedBeforeIndex === undefined ? {} : { truncatedBeforeIndex }),
-        version: 1,
-      });
+      const candidateDetails: Pick<HostedSessionCheckpoint, "capturedAtEpochMs"> &
+        Partial<HostedSessionCheckpoint> = { capturedAtEpochMs };
+      if (snapshot.nativeDeliveryState !== undefined) {
+        candidateDetails.nativeDeliveryState = snapshot.nativeDeliveryState;
+      }
+      if (snapshot.privateInputState !== undefined) {
+        candidateDetails.privateInputState = snapshot.privateInputState;
+      }
+      const candidateEvents = { ...candidateDetails, events: retainedEvents };
+      if (snapshot.workingPreview !== undefined) {
+        candidateEvents.workingPreview = snapshot.workingPreview;
+      }
+      if (inputRequests.length !== 0) {
+        candidateEvents.inputRequests = inputRequests;
+      }
+      if (input.includePrototype && snapshot.prototype !== undefined) {
+        candidateEvents.prototype = snapshot.prototype;
+      }
+      const candidateStatus = { ...candidateEvents, status: snapshot.status };
+      if (truncatedBeforeIndex !== undefined) {
+        candidateStatus.truncatedBeforeIndex = truncatedBeforeIndex;
+      }
+      const candidate = hostedSessionCheckpointSchema.safeParse({ ...candidateStatus, version: 1 });
       if (candidate.success) {
         best = candidate.data;
         lower = candidateCount + 1;
@@ -583,13 +586,16 @@ function checkpointForSnapshot(
 
   // A structurally valid fallback prevents an oversized transport snapshot
   // from turning an already-dispatched mutation into an unknown outcome.
-  return {
+  const fallback: Pick<HostedSessionCheckpoint, "capturedAtEpochMs" | "events" | "status"> &
+    Partial<HostedSessionCheckpoint> = {
     capturedAtEpochMs,
     events: [],
     status: snapshot.status,
-    ...(publicEventCount === 0 ? {} : { truncatedBeforeIndex: publicEventCount }),
-    version: 1,
   };
+  if (publicEventCount !== 0) {
+    fallback.truncatedBeforeIndex = publicEventCount;
+  }
+  return { ...fallback, version: 1 };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
