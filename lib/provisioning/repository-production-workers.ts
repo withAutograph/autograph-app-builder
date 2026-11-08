@@ -141,7 +141,7 @@ const observe = (
   value: Awaited<ReturnType<typeof runRepositoryProductionFileSpool>>,
 ): RepositoryProductionObservation => {
   if (value?.status === "applied") {
-    return { state: "applied", receipt: z.json().parse(value) };
+    return { receipt: z.json().parse(value), state: "applied" };
   }
   if (value?.status === "absent" || value?.status === "retryable") {
     return { state: "not-applied" };
@@ -575,7 +575,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       row: RepositoryProductionRow,
     ): Promise<RepositoryProductionIdentity> => {
       const result = await deps.readCreator(row);
-      return "state" in result ? result : { state: "verified", actorId: result.actorId };
+      return "state" in result ? result : { actorId: result.actorId, state: "verified" };
     },
     async apply(context: RepositoryProductionEffectContext) {
       if (context.effect === "bind-runtime") {
@@ -632,8 +632,8 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
           }
           if (context.row.record.intent.storage.kind === "none") {
             return {
-              state: "applied",
               receipt: { actorId: proof.actorId, invitationId: proof.invitationId },
+              state: "applied",
             } as const;
           }
         } else {

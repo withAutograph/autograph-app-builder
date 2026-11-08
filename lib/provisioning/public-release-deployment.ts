@@ -394,8 +394,8 @@ export const createPublicReleaseDeployment = (input: {
           Parameters<typeof readPublicReleaseIntegrationRemoval>[0],
           "assertCurrent"
         > = {
-          ports: input.integrationRemoval,
           invocation: current,
+          ports: input.integrationRemoval,
           sourceCapability: retained.sourceCapability,
         };
         if (expected?.integrationRemoval !== undefined) {
@@ -426,10 +426,10 @@ export const createPublicReleaseDeployment = (input: {
       publicOrigin,
     };
     const privateStore = createPublicReleaseRuntimeConfigurationStore({
+      assertCurrentOwner,
       database: input.database,
       keyring,
       target: scope,
-      assertCurrentOwner,
     });
 
     const readValues = async (current: PublicReleaseInvocation, plan: PublicReleasePlan) => {
@@ -559,9 +559,6 @@ export const createPublicReleaseDeployment = (input: {
     };
     const installations = createPostgresHostedGitHubInstallationStore(input.database);
     const sourceReader = createPublicReleaseGitHubDestinationReader({
-      environment,
-      installations,
-      fetch: input.fetch,
       assertCurrentSourceOwner: async (current, selected) => {
         await base(current);
         if (
@@ -571,6 +568,9 @@ export const createPublicReleaseDeployment = (input: {
           throw fail();
         }
       },
+      environment,
+      fetch: input.fetch,
+      installations,
     });
     const verifyProductionRuntime = async (
       current: PublicReleaseInvocation,
@@ -647,17 +647,17 @@ export const createPublicReleaseDeployment = (input: {
     const github = createPublicReleaseGitHubProvider({
       assertCurrent: (current, plan) => verifyProductionRuntime(current, plan, true),
       readCredential: createPublicReleaseGitHubCredentialReader({
-        environment,
-        installations,
-        fetch: input.fetch,
         assertCurrent: (current, plan) => verifyProductionRuntime(current, plan, true),
+        environment,
+        fetch: input.fetch,
+        installations,
       }),
       fetch: input.fetch,
     });
     const observeAuth = createPublicReleaseAuthObservation({
       assertCurrent: (current, plan) => check(current, plan, false),
-      readPrivateValues: readValues,
       fetch: input.fetch,
+      readPrivateValues: readValues,
     });
     const vercel = createPublicReleaseVercelProvider({
       assertCurrent: check,
@@ -703,13 +703,13 @@ export const createPublicReleaseDeployment = (input: {
             await check(current, plan, false);
             await assertRuntimeAuthorized(runtimeContext);
           },
+          readReleaseManifest: () =>
+            Promise.resolve(original.captured.files["release-manifest.json"]),
           readRuntimeUrl: async () => {
             // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Resolve private credentials only after the active provider snapshot and its final owner check.
             const bindings = await readResourceBindings(runtimeContext);
             return bindings.appDatabase.runtimeUrl;
           },
-          readReleaseManifest: () =>
-            Promise.resolve(original.captured.files["release-manifest.json"]),
         };
         if (readInstallationScopes !== undefined) {
           readinessDependencies.readInstallationScopes = (readyContext) =>
@@ -949,9 +949,9 @@ export const createPublicReleaseDeployment = (input: {
         });
         // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- The canonical journal is reread after the provider snapshot and owner checks, before freezing any prior binding.
         const history = await readPublicReleasePlanHistory({
-          database: input.database,
-          candidate,
           assertCurrentOwner,
+          candidate,
+          database: input.database,
         });
         return reconcilePublicReleasePlanHistory({ candidate, snapshots, records: history });
       },

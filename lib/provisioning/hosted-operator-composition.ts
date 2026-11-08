@@ -979,10 +979,10 @@ const resolveParticipantPlan = async (
       stage: "auth-participants",
       effects: [
         {
-          id: "normal-accounts",
-          kind: "normal-accounts",
           description:
             "Prepare only the approved participants through ordinary signup, sign-in, or normal session capture; persist private state before account effects.",
+          id: "normal-accounts",
+          kind: "normal-accounts",
         },
       ],
     });
@@ -1013,16 +1013,16 @@ const resolveParticipantPlan = async (
   const effects: HostedOperatorPlan["effects"] = [
     ...base.effects.filter((effect) => ![GATEWAY_BINDINGS, GATEWAY_DELIVERY].includes(effect.kind)),
     {
-      id: appInstallEffectId,
-      kind: "install",
       description:
         "Install and independently observe the exact compiled app release and protected runtime scope.",
+      id: appInstallEffectId,
+      kind: "install",
     },
     ...organizations.map<HostedOperatorPlan["effects"][number]>((organization) => ({
-      id: `auth-membership:${organization.organizationId}`,
-      kind: AUTH_MEMBERSHIP,
       description:
         "Prepare this approved organization, ordinary invitations and actual memberships for its normally authenticated participants.",
+      id: `auth-membership:${organization.organizationId}`,
+      kind: AUTH_MEMBERSHIP,
     })),
     ...(signupPolicy === undefined
       ? []
@@ -1034,10 +1034,10 @@ const resolveParticipantPlan = async (
           },
         ]),
     {
-      id: "access",
-      kind: "access",
       description:
         "Grant only the resolved approved actors, organizations and app roles after fresh normal session and membership readback.",
+      id: "access",
+      kind: "access",
     },
     {
       id: "bindings",
@@ -1048,10 +1048,10 @@ const resolveParticipantPlan = async (
           : "Bind app-owned runtime URL and public verification context, and allow the configured Gateway Preview to reach this app Preview.",
     },
     {
-      id: "delivery",
-      kind: "delivery",
       description:
         "Deliver and pin an independently READY native Preview under the exact approval.",
+      id: "delivery",
+      kind: "delivery",
     },
     ...base.effects.filter((effect) => [GATEWAY_BINDINGS, GATEWAY_DELIVERY].includes(effect.kind)),
   ];
@@ -1267,10 +1267,10 @@ export const resolveFullPlan = async (
   const { organizationId, authMembership } = resolveCapturedRealmMembership({
     application,
     captured,
-    privateProof,
-    verified,
-    transportOrigin,
     configuration,
+    privateProof,
+    transportOrigin,
+    verified,
   });
   const effects: HostedOperatorPlan["effects"] = [
     ...base.effects.filter((effect) => ![GATEWAY_BINDINGS, GATEWAY_DELIVERY].includes(effect.kind)),
@@ -1324,7 +1324,12 @@ export const resolveFullPlan = async (
     planPrefix.appTrustedSources = appTrustedSources;
   }
   if (signupPolicy !== undefined) {
-    planPrefix.authSignupPolicy = bindSignupPolicy(signupPolicy, base, organizationId, allowedAppRoles);
+    planPrefix.authSignupPolicy = bindSignupPolicy(
+      signupPolicy,
+      base,
+      organizationId,
+      allowedAppRoles,
+    );
   }
   const planInput: HostedOperatorPlan = {
     ...planPrefix,
@@ -1740,39 +1745,40 @@ export const composeHostedOperatorDependencies = (
       });
       await neon.inspectPlanningTarget(context, configuration.nativeNeon.scope);
     });
-    const inventory = await observe(
-      "provider_inventory",
-      async () => {
-        const inventoryInput: Pick<
-          Parameters<typeof readHostedOperatorProviderInventory>[0],
-          "assertCurrentOwner" | "configuration" | "context" | "phase" | "resolveGatewayByPublicOrigin"
-        > = {
-          assertCurrentOwner: async () => {
-            await controlPlane.assertPlanningAuthorized(context);
+    const inventory = await observe("provider_inventory", async () => {
+      const inventoryInput: Pick<
+        Parameters<typeof readHostedOperatorProviderInventory>[0],
+        | "assertCurrentOwner"
+        | "configuration"
+        | "context"
+        | "phase"
+        | "resolveGatewayByPublicOrigin"
+      > = {
+        assertCurrentOwner: async () => {
+          await controlPlane.assertPlanningAuthorized(context);
+        },
+        configuration: {
+          app: { ...application, environment: "preview" },
+          gateway: configuration.gateway,
+          operator: configuration.operator,
+          verification: {
+            gatewayOrigin: configuration.gateway.gatewayOrigin,
+            publicOrigin: configuration.gateway.publicOrigin,
           },
-          configuration: {
-            app: { ...application, environment: "preview" },
-            gateway: configuration.gateway,
-            operator: configuration.operator,
-            verification: {
-              gatewayOrigin: configuration.gateway.gatewayOrigin,
-              publicOrigin: configuration.gateway.publicOrigin,
-            },
-          },
-          context,
-          phase: "bootstrap-planning",
-        };
-        if (configuration.composition !== singleProjectServicesComposition) {
-          inventoryInput.resolveGatewayByPublicOrigin = true;
-        }
-        return await readHostedOperatorProviderInventory({
-          ...inventoryInput,
-          resolveOperatorByConfiguredOrigin: true,
-          readVercelCredential: async ({ authority, installationId }) =>
-            await controlPlane.readCredential(authority, installationId),
-        });
-      },
-    );
+        },
+        context,
+        phase: "bootstrap-planning",
+      };
+      if (configuration.composition !== singleProjectServicesComposition) {
+        inventoryInput.resolveGatewayByPublicOrigin = true;
+      }
+      return await readHostedOperatorProviderInventory({
+        ...inventoryInput,
+        resolveOperatorByConfiguredOrigin: true,
+        readVercelCredential: async ({ authority, installationId }) =>
+          await controlPlane.readCredential(authority, installationId),
+      });
+    });
     const native = configuration.nativeNeon.scope;
     const activeAuth = await observe(
       "shared_auth_read",
@@ -1840,46 +1846,43 @@ export const composeHostedOperatorDependencies = (
       );
       authSchema = { ...adopted.authSchema, artifactRef };
     } else if (existingMigrationUrl !== undefined || authSchema === undefined) {
-      const proposed = await observe(
-        "auth_schema_proposal",
-        async () => {
-          const proposalInput: Pick<
-            Parameters<typeof proposal>[0],
-            "assertCurrentOwner" | "directMigrationUrl"
-          > = {
-            assertCurrentOwner: async () => {
-              await controlPlane.assertPlanningAuthorized(context);
-              if (bindingPlan !== undefined) {
-                const latest = await privateBindings({
-                  ...context,
-                  plan: bindingPlan,
-                  privateState: current?.record.privateState,
-                });
-                if (latest.authDatabase.migrationUrl !== existingMigrationUrl) {
-                  throw new HostedOperatorError(RESOURCE_MISMATCH);
-                }
+      const proposed = await observe("auth_schema_proposal", async () => {
+        const proposalInput: Pick<
+          Parameters<typeof proposal>[0],
+          "assertCurrentOwner" | "directMigrationUrl"
+        > = {
+          assertCurrentOwner: async () => {
+            await controlPlane.assertPlanningAuthorized(context);
+            if (bindingPlan !== undefined) {
+              const latest = await privateBindings({
+                ...context,
+                plan: bindingPlan,
+                privateState: current?.record.privateState,
+              });
+              if (latest.authDatabase.migrationUrl !== existingMigrationUrl) {
+                throw new HostedOperatorError(RESOURCE_MISMATCH);
               }
-            },
-          };
-          if (existingMigrationUrl !== undefined) {
-            proposalInput.directMigrationUrl = existingMigrationUrl;
-          }
-          return await proposal({
-            ...proposalInput,
-            resource: {
-              database: configuration.authDatabase.database,
-              environment: "preview",
-              hostname: native.hostname,
-              migratorRole: configuration.authDatabase.migratorRole,
-              neon: { branchId: native.branchId, projectId: native.projectId },
-              port: 5432,
-              runtimeRole: configuration.authDatabase.runtimeRole,
-              schema: "public",
-              version: 1,
-            },
-          });
-        },
-      );
+            }
+          },
+        };
+        if (existingMigrationUrl !== undefined) {
+          proposalInput.directMigrationUrl = existingMigrationUrl;
+        }
+        return await proposal({
+          ...proposalInput,
+          resource: {
+            database: configuration.authDatabase.database,
+            environment: "preview",
+            hostname: native.hostname,
+            migratorRole: configuration.authDatabase.migratorRole,
+            neon: { branchId: native.branchId, projectId: native.projectId },
+            port: 5432,
+            runtimeRole: configuration.authDatabase.runtimeRole,
+            schema: "public",
+            version: 1,
+          },
+        });
+      });
       const artifactRef = await observe(
         "auth_schema_publish",
         async () => await controlPlane.publishAuthPlan(context, proposed),

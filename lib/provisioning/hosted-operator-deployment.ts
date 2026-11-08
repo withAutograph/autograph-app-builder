@@ -1400,7 +1400,7 @@ export const createHostedOperatorControlPlane = async (input: {
       }
       /* oxlint-enable sonarjs/expression-complexity */
       /* oxlint-enable sonarjs/expression-complexity */
-      return { context, record, sessionId, nonceSha256, durable, ownerContext };
+      return { context, durable, nonceSha256, ownerContext, record, sessionId };
     };
     const readCanonicalPendingIdentity = async (pendingInput: {
       ownerSessionId: string;
@@ -4035,7 +4035,7 @@ export const createHostedOperatorControlPlane = async (input: {
       authorize: owner.authorize,
       authorizeRead: owner.authorizeArtifactRead,
       bindWorkload: (context, token, signal) => {
-        continuityWorkloads.set(context, { token, signal });
+        continuityWorkloads.set(context, { signal, token });
         approvalObserver.bindWorkload(context, token, signal);
       },
     });

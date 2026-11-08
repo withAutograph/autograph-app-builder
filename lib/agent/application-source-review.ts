@@ -257,18 +257,18 @@ const projectSourceReviewMessages = (
 };
 
 const emptyMessageMeasurements = (): ApplicationSourceReviewMessageMeasurements => ({
-  measurementAvailable: false,
-  messageCount: 0,
   groups: {
+    assistant: { partCount: 0, serializedUtf16Characters: 0 },
+    listing: { partCount: 0, serializedUtf16Characters: 0 },
+    other: { partCount: 0, serializedUtf16Characters: 0 },
     requirements: { partCount: 0, serializedUtf16Characters: 0 },
     source: { partCount: 0, serializedUtf16Characters: 0 },
-    listing: { partCount: 0, serializedUtf16Characters: 0 },
-    assistant: { partCount: 0, serializedUtf16Characters: 0 },
-    other: { partCount: 0, serializedUtf16Characters: 0 },
   },
+  instructionSerializedUtf16Characters: 0,
+  measurementAvailable: false,
+  messageCount: 0,
   sourceFullResultCount: 0,
   sourceReferenceResultCount: 0,
-  instructionSerializedUtf16Characters: 0,
   toolDefinitionSerializedUtf16Characters: 0,
 });
 type SerializedReviewContent =
@@ -800,8 +800,8 @@ const resolveReviewPolicy = (
     (options.testModel === undefined
       ? sourceReviewPolicy()
       : {
-          id: "fixture-sol",
           fallback: { modelId: builderValidationModelId, reasoningEffort: null },
+          id: "fixture-sol",
           primary: { modelId: builderValidationModelId, reasoningEffort: null },
         });
   // A legacy checkpoint may contain Sol-generated messages; never resume those with a different model.
@@ -812,7 +812,7 @@ const resolveReviewPolicy = (
       : { modelId: builderValidationModelId, reasoningEffort: null });
   const policyId =
     continuation?.reviewPolicyId ?? (continuation === undefined ? policy.id : "legacy-sol");
-  return { policy, reviewer, policyId, fallbackUsed: continuation?.fallbackUsed === true };
+  return { fallbackUsed: continuation?.fallbackUsed === true, policy, policyId, reviewer };
 };
 
 const canFallback = ({
@@ -1195,13 +1195,13 @@ export const assessApplicationSourceRound = async (
           }
           try {
             options.onRequestStart({
+              messageMeasurements,
               requestOrdinal,
               sdkCallId: z
                 .string()
                 .regex(/^[A-Za-z0-9_.:-]{1,256}$/u)
                 .safeParse(event.callId).data,
               stepNumber: preparedStepNumber,
-              messageMeasurements,
             });
           } catch {
             // Diagnostic measurement or logging must never alter the review.
@@ -1222,7 +1222,7 @@ export const assessApplicationSourceRound = async (
     let contextRejected = false;
     let result: Awaited<ReturnType<typeof agent.generate>> | undefined;
     try {
-      result = await agent.generate({ messages, abortSignal: options.abortSignal });
+      result = await agent.generate({ abortSignal: options.abortSignal, messages });
       // The supported SDK supplies the complete assistant/tool exchange, including errors.
       messages = [...currentMessages, ...result.finalStep.response.messages];
     } catch (error) {
