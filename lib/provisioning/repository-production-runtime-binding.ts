@@ -51,6 +51,7 @@ const checkpointSchema = z.object({
 });
 export const createRepositoryProductionRuntimeBinding = (input: {
   teamId: string;
+  installationId: string;
   runtimeEndpoint: RepositoryProductionRuntimeEndpoint;
   readCredential: (context: RepositoryProductionEffectContext) => Promise<string>;
   signal: AbortSignal;
@@ -167,7 +168,9 @@ export const createRepositoryProductionRuntimeBinding = (input: {
       row.type !== type ||
       row.target.length !== 1 ||
       (row.gitBranch !== undefined && row.gitBranch !== null) ||
-      (row.configurationId !== undefined && row.configurationId !== null) ||
+      (row.configurationId !== undefined &&
+        row.configurationId !== null &&
+        row.configurationId !== input.installationId) ||
       (row.customEnvironmentIds?.length ?? 0) > 0 ||
       checkpoints.some((entry) => entry.rowId !== undefined && entry.rowId !== row.id) ||
       checkpoints.length === 0
@@ -201,7 +204,9 @@ export const createRepositoryProductionRuntimeBinding = (input: {
       (detail.target !== undefined &&
         (detail.target.length !== 1 || detail.target[0] !== "production")) ||
       (detail.gitBranch !== undefined && detail.gitBranch !== null) ||
-      (detail.configurationId !== undefined && detail.configurationId !== null) ||
+      (detail.configurationId !== undefined &&
+        detail.configurationId !== null &&
+        detail.configurationId !== input.installationId) ||
       (detail.customEnvironmentIds?.length ?? 0) > 0
     ) {
       conflict("runtime_binding_ownership");

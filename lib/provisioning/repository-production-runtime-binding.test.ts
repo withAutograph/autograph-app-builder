@@ -26,7 +26,8 @@ const scope: RepositoryProductionScope = {
   environment: "production",
 };
 const runtimeUrl = "postgresql://app_role:private@ep-test.neon.tech/app_db?sslmode=verify-full";
-const fixture = () => {
+const installationId = "icfg_selected_builder";
+const fixture = (configurationId?: string) => {
   const record = initialRepositoryProductionRecord(scope, {
     sessionId: "session",
     sourceSha: "a".repeat(40),
@@ -81,10 +82,18 @@ const fixture = () => {
         .parse(JSON.parse(body));
       if (parsed.key === "REQUESTS_DATABASE_URL") {
         writes += 1;
-        row = { id: "env-id", ...parsed };
+        row = {
+          id: "env-id",
+          ...parsed,
+          ...(configurationId === undefined ? {} : { configurationId }),
+        };
       } else {
         boundaryWrites += 1;
-        boundary = { id: "boundary-id", ...parsed };
+        boundary = {
+          id: "boundary-id",
+          ...parsed,
+          ...(configurationId === undefined ? {} : { configurationId }),
+        };
         if (loseBoundaryResponse) {
           loseBoundaryResponse = false;
           throw new Error("boundary response lost");
@@ -133,6 +142,7 @@ const fixture = () => {
     },
     service: createRepositoryProductionRuntimeBinding({
       teamId: "team",
+      installationId,
       runtimeEndpoint: { hostname: "ep-test.neon.tech", port: 5432 },
       signal: new AbortController().signal,
       readCredential: async () => "provider-token",
@@ -146,6 +156,49 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 describe("Production runtime credential binding", () => {
+  it("reconciles integration-owned credential and public rows from the selected connector", async () => {
+    const f = fixture(installationId);
+    await f.service.apply(f.context, runtimeUrl);
+    expect(f.row()?.configurationId).toBe(installationId);
+    expect(f.boundary()?.configurationId).toBe(installationId);
+    const observed = await f.service.reconcile(f.context, runtimeUrl);
+    expect(observed.state).toBe("applied");
+    await f.service.apply(f.context, runtimeUrl);
+    expect([f.writes(), f.boundaryWrites()]).toEqual([1, 1]);
+  });
+  it("reuses a selected connector row after its create acknowledgement is lost", async () => {
+    const f = fixture(installationId);
+    f.loseResponse();
+    await expect(f.service.apply(f.context, runtimeUrl)).rejects.toThrow("response lost");
+    expect((await f.service.reconcile(f.context, runtimeUrl)).state).toBe("not-applied");
+    await f.service.apply(f.context, runtimeUrl);
+    expect((await f.service.reconcile(f.context, runtimeUrl)).state).toBe("applied");
+    expect([f.writes(), f.boundaryWrites()]).toEqual([1, 1]);
+  });
+  it.each(["credential", "boundary"] as const)(
+    "refuses a foreign integration's %s even with this operation's exact checkpoint and marker",
+    async (binding) => {
+      const f = fixture(installationId);
+      await f.service.apply(f.context, runtimeUrl);
+      if (binding === "credential") {
+        f.replaceRow({ ...f.row(), configurationId: "icfg_foreign" });
+      } else {
+        f.replaceBoundary({ ...f.boundary(), configurationId: "icfg_foreign" });
+      }
+      await expect(f.service.reconcile(f.context, runtimeUrl)).rejects.toThrow("binding_conflict");
+      await expect(f.service.apply(f.context, runtimeUrl)).rejects.toThrow("binding_conflict");
+      expect([f.writes(), f.boundaryWrites()]).toEqual([1, 1]);
+    },
+  );
+  it("requires matching detail ownership and value for a selected connector row", async () => {
+    const f = fixture(installationId);
+    await f.service.apply(f.context, runtimeUrl);
+    f.detail({ ...f.row(), configurationId: "icfg_foreign" });
+    await expect(f.service.reconcile(f.context, runtimeUrl)).rejects.toThrow("binding_conflict");
+    f.detail({ ...f.row(), value: "different-runtime-credential" });
+    await expect(f.service.reconcile(f.context, runtimeUrl)).rejects.toThrow("binding_conflict");
+    expect([f.writes(), f.boundaryWrites()]).toEqual([1, 1]);
+  });
   it.each([
     ["requests", "REQUESTS_APP_BOUNDARY"],
     ["builder-created-crm", "BUILDER_CREATED_CRM_APP_BOUNDARY"],
@@ -268,7 +321,7 @@ describe("Production runtime credential binding", () => {
   it.each(["dispatch", "owner", "recorded-row", "environment"] as const)(
     "requires retained list ownership and %s proof before accepting a minimal detail",
     async (variation) => {
-      const f = fixture();
+      const f = fixture(installationId);
       await f.service.apply(f.context, runtimeUrl);
       const row = f.row();
       if (variation === "dispatch") {
@@ -299,7 +352,7 @@ describe("Production runtime credential binding", () => {
   it.each([undefined, "production", ["production"]])(
     "accepts documented decrypted detail with optional metadata and target %s",
     async (target) => {
-      const f = fixture();
+      const f = fixture(installationId);
       await f.service.apply(f.context, runtimeUrl);
       f.detail({
         key: "REQUESTS_DATABASE_URL",

@@ -11,6 +11,14 @@ Preview operator; a Production rollout does not redirect or reconfigure that
 operator. Both Production ingress paths are explicitly routed by the native
 operator service, including `/v1/repository-production/access/complete`.
 
+Production runtime binding accepts Vercel's integration configuration metadata
+only when it names the same configured installation whose tenant-bound credential
+performs the request. Legacy rows without configuration metadata remain supported.
+Both list and detail readback still require the exact app key, operation ownership,
+Production scope, recorded row identity and dispatch checkpoint; the value hash
+must match before setup reports ready. A foreign installation's row is never
+adopted or overwritten, even if its key and operation comment match.
+
 The deployment owns `REPOSITORY_PRODUCTION_CONFIGURATION`. It identifies the
 Builder and operator Production workloads, fixed installer workers, managed
 Neon connection, protected Vercel credential binding, and authorized mappings
