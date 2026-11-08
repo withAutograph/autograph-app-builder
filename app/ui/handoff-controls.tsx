@@ -82,10 +82,8 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
   const [launchNotice, setLaunchNotice] = useState("");
   const [copyNotice, setCopyNotice] = useState("");
   const [access, setAccess] = useState<"ready" | "sign-in" | "unavailable">("ready");
-  const renewalRequest = useRef<{ handoffId: string; id: string } | undefined>(
-    undefined as undefined,
-  );
-  const reconciledRenewal = useRef<HandoffRenewalActionState | undefined>(undefined as undefined);
+  const renewalRequest = useRef<{ handoffId: string; id: string } | undefined>(undefined);
+  const reconciledRenewal = useRef<HandoffRenewalActionState | undefined>(undefined);
   const runRenewalAction = useCallback(
     async (
       previous: HandoffRenewalActionState | undefined,
@@ -100,10 +98,7 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
     },
     [],
   );
-  const [renewal, dispatchRenewal, renewalPending] = useActionState(
-    runRenewalAction,
-    undefined as undefined,
-  );
+  const [renewal, dispatchRenewal, renewalPending] = useActionState(runRenewalAction, undefined);
   const handoffPath = `/handoff/${encodeURIComponent(data.handoffId)}`;
   const signInUrl = `/auth/sign-in?callbackURL=${encodeURIComponent(handoffPath)}`;
   const label = destination === "codex" ? "Codex" : "Cursor";
