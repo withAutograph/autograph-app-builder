@@ -429,11 +429,13 @@ export const createPublicReleaseDeployment = (input: {
 
     const readValues = async (current: PublicReleaseInvocation, plan: PublicReleasePlan) => {
       await base(current, plan);
+      const privateScopeBase: typeof scope &
+        Pick<Parameters<typeof privateStore.read>[0], "realmEnrollmentRef"> = { ...scope };
+      if (plan.runtime.realmEnrollmentRef !== undefined) {
+        privateScopeBase.realmEnrollmentRef = plan.runtime.realmEnrollmentRef;
+      }
       const privateScope = {
-        ...scope,
-        ...(plan.runtime.realmEnrollmentRef === undefined
-          ? {}
-          : { realmEnrollmentRef: plan.runtime.realmEnrollmentRef }),
+        ...privateScopeBase,
         ...integrationPrivateScope(plan.integrationCapability),
       };
       const values = await privateStore.read(privateScope);

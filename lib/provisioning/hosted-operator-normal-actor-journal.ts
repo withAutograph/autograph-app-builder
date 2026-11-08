@@ -161,19 +161,29 @@ export interface NormalActorJournalPorts {
   ) => Promise<void>;
   now: () => number;
 }
-const provenance = (preparation: NormalActorAccountPreparation): NormalActorAccountProvenance => ({
-  program: preparation.program,
-  ...(preparation.predecessor === undefined ? {} : { predecessor: preparation.predecessor }),
-  ...(preparation.capturePredecessor === undefined
-    ? {}
-    : { capturePredecessor: preparation.capturePredecessor }),
-  programDigest: preparation.programDigest,
-  accountOperationRef: preparation.accountOperationRef,
-  accountPlan: preparation.accountPlan,
-  accountPlanDigest: preparation.accountPlanDigest,
-  accountApprovalId: preparation.accountApprovalId,
-  accountApprovedByCallId: preparation.accountApprovedByCallId,
-});
+const provenance = (preparation: NormalActorAccountPreparation): NormalActorAccountProvenance => {
+  const initial: Pick<
+    NormalActorAccountProvenance,
+    "program" | "predecessor" | "capturePredecessor"
+  > = {
+    program: preparation.program,
+  };
+  if (preparation.predecessor !== undefined) {
+    initial.predecessor = preparation.predecessor;
+  }
+  if (preparation.capturePredecessor !== undefined) {
+    initial.capturePredecessor = preparation.capturePredecessor;
+  }
+  return {
+    ...initial,
+    programDigest: preparation.programDigest,
+    accountOperationRef: preparation.accountOperationRef,
+    accountPlan: preparation.accountPlan,
+    accountPlanDigest: preparation.accountPlanDigest,
+    accountApprovalId: preparation.accountApprovalId,
+    accountApprovedByCallId: preparation.accountApprovedByCallId,
+  };
+};
 const validateProvenance = (
   context: HostedOperatorContext,
   input: NormalActorAccountProvenance,
@@ -890,9 +900,14 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
             throw new Error("normal_actor_session_required");
           }
           const { transportSource, ...linkBinding } = input.binding;
-          const next = normalActorOrganizationProofSchema.parse({
+          const initial: Pick<NormalActorOrganizationProof, "transportSource" | "bootstrap"> = {
             transportSource,
-            ...(input.bootstrap === undefined ? {} : { bootstrap: input.bootstrap }),
+          };
+          if (input.bootstrap !== undefined) {
+            initial.bootstrap = input.bootstrap;
+          }
+          const next = normalActorOrganizationProofSchema.parse({
+            ...initial,
             organizationId: input.organizationId,
             ownerActorKey: input.ownerActorKey,
             owner: input.owner,
@@ -912,23 +927,20 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
               },
             },
           });
-          return {
-            ...current,
-            ...(changedEndpoint && existing !== undefined
-              ? {
-                  supersededOrganizationProofs: [
-                    ...(current.supersededOrganizationProofs ?? []),
-                    existing,
-                  ],
-                }
-              : {}),
-            organizationProofs: [
-              ...(current.organizationProofs ?? []).filter(
-                (entry) => entry.organizationId !== input.organizationId,
-              ),
-              next,
-            ],
-          };
+          const updated: NormalActorAccountPreparation = { ...current };
+          if (changedEndpoint && existing !== undefined) {
+            updated.supersededOrganizationProofs = [
+              ...(current.supersededOrganizationProofs ?? []),
+              existing,
+            ];
+          }
+          updated.organizationProofs = [
+            ...(current.organizationProofs ?? []).filter(
+              (entry) => entry.organizationId !== input.organizationId,
+            ),
+            next,
+          ];
+          return updated;
         },
         input.assertBootstrapCurrent,
       );
@@ -1058,13 +1070,11 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
             config: ports.keyring,
             state: checked,
           }),
-          ...(complete
-            ? {
-                accountsCompletedAt:
-                  preparation.accountsCompletedAt ?? new Date(ports.now()).toISOString(),
-              }
-            : {}),
         };
+        if (complete) {
+          next.accountsCompletedAt =
+            preparation.accountsCompletedAt ?? new Date(ports.now()).toISOString();
+        }
         if (!complete) {
           delete next.accountsCompletedAt;
         }

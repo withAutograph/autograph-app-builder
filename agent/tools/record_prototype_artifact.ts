@@ -229,7 +229,7 @@ export default defineTool({
     const receipt: ReturnType<typeof prototypeArtifactReceipt> & {
       complete: boolean;
       reused: boolean;
-      nextChunkIndex?: number;
+      nextChunkIndex?: unknown;
       invalidated?: boolean;
     } = {
       ...prototypeArtifactReceipt(recorded.artifact),

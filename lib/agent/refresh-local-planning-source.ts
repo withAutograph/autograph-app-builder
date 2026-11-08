@@ -79,12 +79,20 @@ export const refreshLocalPlanningSource = async (
       return undefined;
     }
     // Native transport history identifies the retained overlay only when reconciliation is needed.
-    const completedTransport = await readCompletedLocalSourceTransport({
+    const transportOwner: Pick<
+      Parameters<typeof readCompletedLocalSourceTransport>[0],
+      "sessionId" | "ownerRunId" | "ownerAnchorRunId"
+    > = {
       sessionId: ctx.session.id,
-      ...(ctx.session.ownerRunId === undefined ? {} : { ownerRunId: ctx.session.ownerRunId }),
-      ...(ctx.session.ownerAnchorRunId === undefined
-        ? {}
-        : { ownerAnchorRunId: ctx.session.ownerAnchorRunId }),
+    };
+    if (ctx.session.ownerRunId !== undefined) {
+      transportOwner.ownerRunId = ctx.session.ownerRunId;
+    }
+    if (ctx.session.ownerAnchorRunId !== undefined) {
+      transportOwner.ownerAnchorRunId = ctx.session.ownerAnchorRunId;
+    }
+    const completedTransport = await readCompletedLocalSourceTransport({
+      ...transportOwner,
       expected: {
         workspaceId: current.workspace.workspaceId,
         workspacePath: current.workspace.workspacePath,
@@ -127,7 +135,10 @@ export const refreshLocalPlanningSource = async (
       capture: observed.capture,
     });
     assertCurrent();
-    const record: LocalPlanningSourceReceipt = {
+    const recordFields: Omit<
+      LocalPlanningSourceReceipt,
+      "acceptedAppSpecDigest" | "reconciledByCallId"
+    > = {
       appId: current.appSpec.appId,
       workspaceId: reconciled.workspace.workspaceId,
       sourceReceiptDigest: observed.receipt.digest,
@@ -137,22 +148,27 @@ export const refreshLocalPlanningSource = async (
       sourceSnapshotTree: reconciled.sourceSnapshotTree,
       privateSourceCommit: reconciled.sourceSha,
       checkpointRef: reconciled.checkpointRef,
-      ...("restoredOriginalBase" in reconciled && reconciled.restoredOriginalBase !== undefined
-        ? {
-            restoredOriginalBase: z
-              .strictObject({
-                originalSourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
-                sourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
-                sourceTree: z.string().regex(/^[a-f0-9]{40}$/u),
-              })
-              .parse(reconciled.restoredOriginalBase),
-          }
-        : {}),
-      ...(baseline.sourceOverlay === undefined
-        ? {}
-        : { recognizedSourceOverlay: baseline.sourceOverlay }),
-      ...("applyReceipt" in current ? { previousApplyDigest: current.applyReceipt.digest } : {}),
-      ...("proposal" in current ? { previousProposalDigest: current.proposal.digest } : {}),
+    };
+    if ("restoredOriginalBase" in reconciled && reconciled.restoredOriginalBase !== undefined) {
+      recordFields.restoredOriginalBase = z
+        .strictObject({
+          originalSourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
+          sourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
+          sourceTree: z.string().regex(/^[a-f0-9]{40}$/u),
+        })
+        .parse(reconciled.restoredOriginalBase);
+    }
+    if (baseline.sourceOverlay !== undefined) {
+      recordFields.recognizedSourceOverlay = baseline.sourceOverlay;
+    }
+    if ("applyReceipt" in current) {
+      recordFields.previousApplyDigest = current.applyReceipt.digest;
+    }
+    if ("proposal" in current) {
+      recordFields.previousProposalDigest = current.proposal.digest;
+    }
+    const record: LocalPlanningSourceReceipt = {
+      ...recordFields,
       acceptedAppSpecDigest: current.appSpec.digest,
       reconciledByCallId: ctx.callId,
     };
