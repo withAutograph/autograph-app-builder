@@ -9,6 +9,7 @@ import {
   appBuilderWorkflowState,
   updateExactWorkflow,
   invalidateGitHubDestinationReview,
+  assertExactWorkflowState,
 } from "@/lib/agent/workflow-state";
 import type { OverlayFile } from "@/lib/repository/target-apply";
 import { createGitHubDestinationReviewBinding } from "@/lib/repository/github-destination-review";
@@ -16,7 +17,12 @@ import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-s
 import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { checkedNativeToolResult } from "@/lib/eve/payload-envelope";
 import { resolvePublicationTargetForTool } from "@/lib/agent/github-publication-destination";
-import { priorResumedBuildDraftProposal } from "@/lib/agent/existing-app-repair-planning";
+import {
+  priorResumedBuildDraftProposal,
+  priorOwnedAppDraftPublication,
+} from "@/lib/agent/existing-app-repair-planning";
+import { draftReconciliationState } from "@/lib/agent/draft-reconciliation-state";
+import { resolveGitHubPrDeliverySubject } from "@/lib/agent/github-pr-delivery-subject";
 
 export const initialDraftCandidatePaths = async (
   input: Parameters<typeof observeNormalizedChangeSet>[0] & {
@@ -24,8 +30,19 @@ export const initialDraftCandidatePaths = async (
     observed: Awaited<ReturnType<typeof observeNormalizedChangeSet>>["observed"];
   },
   readOriginal = readPreparedSandboxSourceManifest,
+  ownedMergedAppRevision = false,
 ) => {
   const { state, observed } = input;
+  if (ownedMergedAppRevision) {
+    const candidatePaths = [...new Set(input.reviewedPaths)];
+    if (
+      candidatePaths.length === 0 ||
+      candidatePaths.some((path) => !path.startsWith(`apps/${state.appSpec.appId}/`))
+    ) {
+      throw new Error("An owned app revision must contain only that app's changed files.");
+    }
+    return { candidatePaths, retainedRegistration: new Map<string, string>() };
+  }
   const candidatePaths = new Set(
     state.githubDestinationReview?.candidatePaths ?? input.reviewedPaths,
   );
@@ -77,14 +94,16 @@ const assertRetainedRegistrationUnchanged = (
 
 export default defineTool({
   description:
-    "Prepare a fresh initial draft-PR review against the selected GitHub repository's current default branch. Automatically use the recorded Builder repository. If a new app has no destination, follow the returned destination setup link for this same saved build. Supply destination only when the user explicitly chose an existing repository; its normal GitHub connection is checked without replacing the starter checkout. A retained destination review can be refreshed without repeating that selector. Read only the intended app change paths, preserve the validated private app and original source provenance, and invalidate the old review and draft proposal. Use change_set_status with contentSide before or after to inspect destination content as needed. Then accept_change_set, seal the new proposal, and request separate publication approval. This never writes GitHub or updates an existing PR.",
+    "Prepare a new draft-PR review against the recorded repository's current default branch. After this same app's owned PR has merged, reuse its saved session and private workspace to review the app's new changes; Builder verifies the prior publication without replacing source or app resources. An open or uncertain prior publication still requires its existing update or reconciliation workflow. For a new app with no destination, follow the returned destination setup link for this same saved build. Supply destination only when the user explicitly chose an existing repository. Preserve the validated private app and original source provenance while invalidating the old review and seal. Use change_set_status with contentSide before or after to inspect destination content as needed. Then accept_change_set, seal the new proposal, and request separate publication approval. This never writes GitHub or updates an existing PR.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "validated" && state.phase !== "reviewed") {
       throw new Error("Validate the app before preparing a destination review.");
     }
+    const retainedPublication = priorOwnedAppDraftPublication(state, ctx.session.id);
     if (
-      state.publishedGitHubDraftProposalDigest !== undefined ||
+      (state.publishedGitHubDraftProposalDigest !== undefined &&
+        retainedPublication === undefined) ||
       (state.phase === "reviewed" && state.existingDraftUpdate !== undefined)
     ) {
       throw new Error(
@@ -114,18 +133,12 @@ export default defineTool({
     const { target } = resolved;
     const sandbox = await ctx.getSandbox();
     const { changeSet, observed } = await observeNormalizedChangeSet({ sandbox, state });
-    const { candidatePaths, retainedRegistration } = await initialDraftCandidatePaths({
+    const pathInput = {
       sandbox,
       state,
       observed,
       reviewedPaths: changeSet.approvedPaths,
-    });
-    assertExistingAppReviewScope(
-      { approvedPaths: candidatePaths, sourceSha: changeSet.sourceSha },
-      state.appSpec.appId,
-      state.sourceReceipt.sourceKind,
-      appBaselineState.get()?.receipt,
-    );
+    };
     const runtime =
       target.destination === undefined
         ? await githubPublicationRuntimeForSession(ctx.session.auth)
@@ -135,13 +148,79 @@ export default defineTool({
     if (runtime.inspectDraftDestination === undefined) {
       throw new Error("The GitHub runtime does not support destination reviews.");
     }
+    if (retainedPublication !== undefined && runtime.inspectPriorAppPublication === undefined) {
+      throw new Error("The GitHub runtime cannot inspect this app's prior publication.");
+    }
+    const prior =
+      retainedPublication !== undefined &&
+      (await runtime.inspectPriorAppPublication?.(retainedPublication.proposal)) === "recorded"
+        ? retainedPublication
+        : undefined;
+    ctx.abortSignal?.throwIfAborted();
+    assertExactWorkflowState(appBuilderWorkflowState.get(), state, "publication lookup");
+    let selectedPaths =
+      prior === undefined ? await initialDraftCandidatePaths(pathInput) : undefined;
+    const delivery =
+      prior === undefined
+        ? undefined
+        : resolveGitHubPrDeliverySubject(prior.reviewed, draftReconciliationState.get());
     const destination = await runtime.inspectDraftDestination({
       existingProposal:
         (state.phase === "reviewed" ? state.githubDraftProposal?.proposal : undefined) ??
+        retainedPublication?.proposal ??
         priorResumedBuildDraftProposal(state, ctx.session.id),
+      ...(prior === undefined
+        ? {}
+        : {
+            ownedAppRevision: {
+              appId: state.appSpec.appId,
+              proposal: prior.proposal,
+              installationId: prior.installationId,
+              ...(delivery?.proposalDigest === prior.proposal.digest &&
+              delivery.reconciliation !== undefined
+                ? { reconciliation: delivery.reconciliation }
+                : {}),
+            },
+            prepareCandidatePaths: async (ownedMergedPublication: boolean) => {
+              ctx.abortSignal?.throwIfAborted();
+              assertExactWorkflowState(
+                appBuilderWorkflowState.get(),
+                state,
+                "revision preparation",
+              );
+              selectedPaths = await initialDraftCandidatePaths(
+                pathInput,
+                undefined,
+                ownedMergedPublication,
+              );
+              return selectedPaths.candidatePaths;
+            },
+          }),
       ...target,
-      paths: candidatePaths,
+      paths: selectedPaths?.candidatePaths ?? [],
     });
+    ctx.abortSignal?.throwIfAborted();
+    assertExactWorkflowState(
+      appBuilderWorkflowState.get(),
+      state,
+      "destination review preparation",
+    );
+    if (selectedPaths === undefined) {
+      throw new Error("The publication runtime did not prepare this revision's paths.");
+    }
+    if (
+      state.publishedGitHubDraftProposalDigest !== undefined &&
+      destination.ownedMergedPublicationDigest !== state.publishedGitHubDraftProposalDigest
+    ) {
+      throw new Error("Recover the current publication before preparing another app revision.");
+    }
+    const { candidatePaths, retainedRegistration } = selectedPaths;
+    assertExistingAppReviewScope(
+      { approvedPaths: candidatePaths, sourceSha: changeSet.sourceSha },
+      state.appSpec.appId,
+      state.sourceReceipt.sourceKind,
+      appBaselineState.get()?.receipt,
+    );
     assertRetainedRegistrationUnchanged(retainedRegistration, destination.preTree, observed.files);
     const binding = createGitHubDestinationReviewBinding({
       ...destination,
@@ -153,7 +232,13 @@ export default defineTool({
     updateExactWorkflow({
       expected: state,
       operation: "destination review preparation",
-      transition: () => invalidateGitHubDestinationReview(state, binding),
+      transition: () => {
+        const next = invalidateGitHubDestinationReview(state, binding);
+        if (destination.ownedMergedPublicationDigest !== undefined) {
+          Reflect.deleteProperty(next, "publishedGitHubDraftProposalDigest");
+        }
+        return next;
+      },
     });
     return checkedNativeToolResult(
       {

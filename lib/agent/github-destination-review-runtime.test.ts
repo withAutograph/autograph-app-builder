@@ -1,3 +1,4 @@
+/* oxlint-disable sonarjs/no-wildcard-import -- Type-only namespaces preserve the complete vi.importOriginal module contracts. */
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 
@@ -32,6 +33,72 @@ import type { NormalizedChangeSet } from "../repository/reviewed-change-set";
 import type { SourceReceiptEvidence } from "../repository/source-receipt";
 import { LEGACY_SOURCE_RECEIPT_VERSION } from "../repository/source-receipt";
 import { SUPPORTED_TEMPLATE_ADAPTER } from "../repository/supported-template";
+import prepareDraftReview from "../../agent/tools/prepare_github_draft_review";
+import type { AppBuilderWorkflowState } from "./workflow-state";
+import type { GitHubPublicationRuntime } from "./github-publication-runtime";
+import type { priorOwnedAppDraftPublication } from "./existing-app-repair-planning";
+import type * as WorkflowStateModule from "./workflow-state";
+import type * as RepairPlanningModule from "./existing-app-repair-planning";
+import type * as ChangeSetStatusModule from "../../agent/tools/change_set_status";
+
+interface DestinationReviewToolPorts {
+  state?: Extract<AppBuilderWorkflowState, { phase: "validated" | "reviewed" }>;
+  prior?: ReturnType<typeof priorOwnedAppDraftPublication>;
+  runtime?: GitHubPublicationRuntime;
+  observed?: { files: { path: string; digest: string; mode: string }[]; treeDigest: string };
+  changeSet?: NormalizedChangeSet;
+  target?: {
+    destination: {
+      owner: string;
+      name: string;
+      repositoryId: string;
+      installationId: string;
+      defaultBranch: string;
+    };
+  };
+}
+const toolPorts = vi.hoisted((): DestinationReviewToolPorts => ({}));
+// Only hosted/session/Sandbox ports are controlled; the tool, destination runtime,
+// canonical journals, path selection and review invalidation below remain real.
+vi.mock("./workflow-state", async (original) => {
+  const actual = await original<typeof WorkflowStateModule>();
+  return {
+    ...actual,
+    appBuilderWorkflowState: { get: () => toolPorts.state },
+    updateExactWorkflow: (input: {
+      expected: AppBuilderWorkflowState;
+      operation: string;
+      transition: () => typeof toolPorts.state;
+    }) => {
+      const current = toolPorts.state;
+      if (current === undefined) {
+        throw new Error("Missing tool workflow fixture");
+      }
+      actual.assertExactWorkflowState(current, input.expected, input.operation);
+      toolPorts.state = input.transition();
+    },
+  };
+});
+vi.mock("./existing-app-repair-planning", async (original) => ({
+  ...(await original<typeof RepairPlanningModule>()),
+  priorOwnedAppDraftPublication: () => toolPorts.prior,
+  priorResumedBuildDraftProposal: vi.fn(),
+}));
+vi.mock("./deployment-github-publication-runtime", () => ({
+  githubPublicationRuntimeForSession: () => toolPorts.runtime,
+}));
+vi.mock("./github-publication-destination", () => ({
+  resolvePublicationTargetForTool: () => ({ kind: "ready", target: toolPorts.target }),
+}));
+vi.mock("./app-baseline-state", () => ({ appBaselineState: { get: vi.fn() } }));
+vi.mock("./draft-reconciliation-state", () => ({ draftReconciliationState: { get: () => null } }));
+vi.mock("../../agent/tools/change_set_status", async (original) => ({
+  ...(await original<typeof ChangeSetStatusModule>()),
+  observeNormalizedChangeSet: () => ({
+    changeSet: toolPorts.changeSet,
+    observed: toolPorts.observed,
+  }),
+}));
 
 const hash = (
   value:
@@ -148,6 +215,8 @@ const fixture = () => {
   const compareAndSet = vi
     .fn<GitHubPublicationReceiptStore["compareAndSet"]>()
     .mockResolvedValue(true);
+  const readProposal = vi.fn();
+  const inspectPr = vi.fn();
   const adapter: GitHubPublicationAdapter = {
     createPrivateFreshHistoryRepository: unexpected,
     inspectDestination: unexpected,
@@ -159,6 +228,7 @@ const fixture = () => {
     inspectRepository,
     publishDraftPullRequest: unexpected,
     updateExistingDraft: unexpected,
+    prDelivery: { inspect: inspectPr, markReady: unexpected, merge: unexpected },
   };
   const save = vi.fn(
     async (proposal: GitHubPublicationProposal) => await Promise.resolve(proposal),
@@ -167,7 +237,7 @@ const fixture = () => {
   const runtime = composeGitHubPublicationRuntime({
     adapter,
     enabled: true,
-    proposals: { read: vi.fn(), save },
+    proposals: { read: readProposal, save },
     receipts: { compareAndSet, read: readReceipt },
   });
   return {
@@ -177,6 +247,8 @@ const fixture = () => {
     inspectInstallation,
     inspectRepository,
     readReceipt,
+    readProposal,
+    inspectPr,
     runtime,
     save,
     unexpected,
@@ -192,6 +264,34 @@ const sealDraft = async (runtime: ReturnType<typeof fixture>["runtime"]) =>
     title: "Update reviewed schema",
   });
 
+const publishedReceipt = (proposal: DraftPullRequestProposal): DraftPullRequestSuccessReceipt => {
+  const body: Omit<DraftPullRequestSuccessReceipt, "digest"> = {
+    approvedByCallId: "original-publication-approval",
+    baseBranch: proposal.baseBranch,
+    baseSha: proposal.baseSha,
+    branchName: proposal.branchName,
+    branchSha: "5".repeat(40),
+    branchTree: "6".repeat(40),
+    changedContentDigest: proposal.changedContentDigest,
+    changeSetDigest: proposal.changeSetDigest,
+    draft: true,
+    idempotencyKey: proposal.idempotencyKey,
+    installationIdentityDigest: proposal.installationIdentityDigest,
+    kind: "draft-pull-request",
+    normalizedChangedPaths: proposal.approvedPaths,
+    proposalDigest: proposal.digest,
+    providerReadBackDigest: "7".repeat(64),
+    pullRequestId: "1234",
+    pullRequestNumber: 42,
+    recoveredFromPending: false,
+    releaseGateUnchanged: true,
+    repositoryId: proposal.repositoryId,
+    status: "succeeded",
+    version: GITHUB_PUBLICATION_VERSION,
+  };
+  return { ...body, digest: createHash("sha256").update(JSON.stringify(body)).digest("hex") };
+};
+
 const pendingReceipt = (proposal: DraftPullRequestProposal): GitHubMutationPendingReceipt => {
   const pending = {
     approvedByCallId: "prior-approval",
@@ -203,6 +303,240 @@ const pendingReceipt = (proposal: DraftPullRequestProposal): GitHubMutationPendi
   };
   return { ...pending, digest: hash(pending) };
 };
+
+const ownedRevisionTool = async (published = true, marker = true) => {
+  const f = fixture();
+  const proposal = await sealDraft(f.runtime);
+  f.readProposal.mockResolvedValue(proposal);
+  const receipt = publishedReceipt(proposal);
+  f.readReceipt.mockResolvedValue(published ? receipt : undefined);
+  f.inspectPr.mockResolvedValue({
+    state: "merged",
+    draft: false,
+    checks: "passed",
+    headSha: receipt.branchSha,
+    baseBranch: receipt.baseBranch,
+    mergeCommitSha: "9".repeat(40),
+  });
+  const revision = { ...unsigned, applyDigest: "0".repeat(64), validationDigest: "1".repeat(64) };
+  toolPorts.changeSet = { ...revision, digest: hash(revision) };
+  // SAFETY: The real tool consumes these workflow fields; history authority is
+  // independently exercised through real Eve state in owned-app-revision-history.test.ts.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- Controlled partial workflow fixture; every consumed field is supplied.
+  const state = {
+    phase: "reviewed",
+    appSpec: { appId: "example", digest: normalized.appSpecDigest },
+    sourceReceipt: { ...sourceEvidence, sourceKind: "fresh-template" },
+    workspace: {
+      workspaceId: "retained-workspace",
+      workspacePath: "/retained",
+      workspaceDigest: "original-workspace",
+      sourceSha: source.resolvedSha,
+      sourceTree: source.resolvedTree,
+    },
+    proposal: { target: { operation: "iterate-existing-app" } },
+    applyReceipt: {
+      digest: revision.applyDigest,
+      applyRoot: "/retained",
+      targetReceipt: normalized.targetReceipt,
+    },
+    validationReceipt: { digest: revision.validationDigest },
+    reviewReceipt: review,
+    githubDraftProposal: {
+      proposal,
+      sourceReceiptDigest: sourceEvidence.digest,
+      destinationReviewDigest: destination.digest,
+    },
+    ...(marker ? { publishedGitHubDraftProposalDigest: proposal.digest } : {}),
+  } as unknown as Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
+  toolPorts.state = state;
+  toolPorts.prior = { proposal, installationId: "10", reviewed: state };
+  toolPorts.runtime = f.runtime;
+  toolPorts.target = {
+    destination: {
+      owner: repository.owner,
+      name: repository.name,
+      repositoryId: repository.repositoryId,
+      installationId: "10",
+      defaultBranch: "main",
+    },
+  };
+  toolPorts.observed = {
+    treeDigest: revision.postTreeDigest,
+    files: [
+      { path, digest: after, mode: "644" },
+      { path: "apps/example/package.json", digest: before, mode: "644" },
+    ],
+  };
+  const readTextFile = vi.fn().mockResolvedValue(null);
+  const cancellation = new AbortController();
+  // SAFETY: The real tool needs only these session and Sandbox read ports.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- The controlled resolver replaces hosted credentials; every tool context port used here is supplied.
+  const context = {
+    callId: "new-destination-review",
+    session: { id: "original-session", auth: undefined, turn: { id: "revision-turn" } },
+    getSandbox: () => Promise.resolve({ readTextFile }),
+    abortSignal: cancellation.signal,
+  } as unknown as Parameters<typeof prepareDraftReview.execute>[1];
+  return { ...f, proposal, receipt, state, readTextFile, context, cancellation };
+};
+
+describe("same-session post-merge destination review", () => {
+  it.each([true, false])(
+    "prepares a narrow revision with a missing original manifest (marker %s)",
+    async (marker) => {
+      const f = await ownedRevisionTool(true, marker);
+      await prepareDraftReview.execute({}, f.context);
+      expect(f.readTextFile).not.toHaveBeenCalled();
+      expect(f.inspectDestinationFiles).toHaveBeenCalledWith({ paths: [path], repository });
+      expect(toolPorts.state).toMatchObject({
+        phase: "validated",
+        sourceReceipt: f.state.sourceReceipt,
+        workspace: f.state.workspace,
+        applyReceipt: f.state.applyReceipt,
+      });
+      expect(toolPorts.state).not.toHaveProperty("reviewReceipt");
+      expect(toolPorts.state).not.toHaveProperty("githubDraftProposal");
+      expect(toolPorts.state).not.toHaveProperty("publishedGitHubDraftProposalDigest");
+      expect(f.unexpected).not.toHaveBeenCalled();
+      const refreshed = toolPorts.state?.githubDestinationReview;
+      if (refreshed === undefined) {
+        throw new Error("Missing refreshed destination review");
+      }
+      await expect(
+        f.runtime.sealDraftPullRequestProposal({
+          destinationReview: refreshed,
+          githubSource: source,
+          review,
+          source: sourceEvidence,
+          title: "Revision",
+        }),
+      ).rejects.toThrow();
+    },
+  );
+
+  it("keeps a sealed-only first publication on the full-app completeness route", async () => {
+    const f = await ownedRevisionTool(false, false);
+    const original = [
+      { path: "package.json", sha256: before, mode: "100644", objectId: "8".repeat(40) },
+    ];
+    f.readTextFile.mockResolvedValue(JSON.stringify(original));
+    f.state.workspace.workspaceDigest = createHash("sha256")
+      .update(JSON.stringify(original))
+      .digest("hex");
+    await prepareDraftReview.execute({}, f.context);
+    expect(f.readTextFile).toHaveBeenCalled();
+    expect(f.inspectPr).not.toHaveBeenCalled();
+    expect(f.inspectDestinationFiles).toHaveBeenCalledWith({
+      paths: expect.arrayContaining([path, "apps/example/package.json"]),
+      repository,
+    });
+  });
+
+  it("does not bypass a missing manifest for an unpublished initial app", async () => {
+    const f = await ownedRevisionTool(false, false);
+    await expect(prepareDraftReview.execute({}, f.context)).rejects.toThrow("manifest is missing");
+    expect(toolPorts.state).toBe(f.state);
+    expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
+    expect(f.inspectPr).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "open",
+    "closed",
+    "moved",
+    "foreign-installation",
+    "foreign-app",
+    "foreign-repository",
+    "unknown-provider",
+    "pending",
+  ])("does not authorize revision paths from %s publication", async (kind) => {
+    const f = await ownedRevisionTool();
+    if (kind === "open" || kind === "closed") {
+      f.inspectPr.mockResolvedValue({
+        state: kind,
+        draft: false,
+        checks: "passed",
+        headSha: f.receipt.branchSha,
+        baseBranch: f.receipt.baseBranch,
+      });
+    }
+    if (kind === "moved") {
+      f.inspectPr.mockResolvedValue({
+        state: "merged",
+        draft: false,
+        checks: "passed",
+        headSha: "a".repeat(40),
+        baseBranch: f.receipt.baseBranch,
+        mergeCommitSha: "9".repeat(40),
+      });
+    }
+    if (kind === "foreign-installation") {
+      const { prior } = toolPorts;
+      if (prior === undefined) {
+        throw new Error("Missing prior publication fixture");
+      }
+      toolPorts.prior = { ...prior, installationId: "foreign" };
+    }
+    if (kind === "foreign-app") {
+      f.state.appSpec.appId = "foreign";
+    }
+    if (kind === "foreign-repository") {
+      f.inspectRepository.mockResolvedValue(
+        createRepositoryObservation({ ...repository, repositoryId: "200" }),
+      );
+    }
+    if (kind === "unknown-provider") {
+      f.inspectPr.mockRejectedValue(new Error("Provider result unavailable"));
+    }
+    if (kind === "pending") {
+      f.readReceipt.mockResolvedValue(pendingReceipt(f.proposal));
+    }
+    await expect(prepareDraftReview.execute({}, f.context)).rejects.toThrow();
+    expect(toolPorts.state).toBe(f.state);
+    expect(f.readTextFile).not.toHaveBeenCalled();
+    expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
+    expect(f.unexpected).not.toHaveBeenCalled();
+  });
+
+  it("retains the cancelled revision and never reads or replaces destination files", async () => {
+    const f = await ownedRevisionTool();
+    f.cancellation.abort();
+    await expect(prepareDraftReview.execute({}, f.context)).rejects.toThrow();
+    expect(toolPorts.state).toBe(f.state);
+    expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
+    expect(f.unexpected).not.toHaveBeenCalled();
+  });
+
+  it("rechecks the workspace after immutable destination preimages return", async () => {
+    const f = await ownedRevisionTool();
+    f.inspectDestinationFiles.mockImplementation(() => {
+      toolPorts.state = { ...f.state, workspace: { ...f.state.workspace, workspaceId: "other" } };
+      return Promise.resolve(destination.preTree);
+    });
+    await expect(prepareDraftReview.execute({}, f.context)).rejects.toThrow("changed concurrently");
+    expect(toolPorts.state?.workspace.workspaceId).toBe("other");
+    expect(f.unexpected).not.toHaveBeenCalled();
+  });
+
+  it("keeps private edits and denies a workspace change during provider reads", async () => {
+    const f = await ownedRevisionTool();
+    f.inspectPr.mockImplementation(() => {
+      toolPorts.state = { ...f.state, workspace: { ...f.state.workspace, workspaceId: "other" } };
+      return Promise.resolve({
+        state: "merged",
+        draft: false,
+        checks: "passed",
+        headSha: f.receipt.branchSha,
+        baseBranch: f.receipt.baseBranch,
+        mergeCommitSha: "9".repeat(40),
+      });
+    });
+    await expect(prepareDraftReview.execute({}, f.context)).rejects.toThrow("changed concurrently");
+    expect(f.inspectDestinationFiles).not.toHaveBeenCalled();
+    expect(f.unexpected).not.toHaveBeenCalled();
+  });
+});
 
 const pendingReadBackCases = ["absent", "branch-only", "different-head"] as const;
 
