@@ -217,10 +217,10 @@ const participantPlan = hostedOperatorPlanSchema.parse({
     origin: plan.deploymentBoundary?.verification.publicOrigin,
     actors: [
       {
+        account: "capture-existing",
         actorKey: "owner",
         email: "owner@example.test",
         name: "Owner",
-        account: "capture-existing",
       },
     ],
     organizations: [],
@@ -228,7 +228,7 @@ const participantPlan = hostedOperatorPlanSchema.parse({
     appAccess: [],
   },
   effects: [
-    { id: "normal-accounts", kind: "normal-accounts", description: "Connect the approved account" },
+    { description: "Connect the approved account", id: "normal-accounts", kind: "normal-accounts" },
   ],
 });
 const participantInput = {

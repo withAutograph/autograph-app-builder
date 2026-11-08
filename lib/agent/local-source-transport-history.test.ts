@@ -597,11 +597,11 @@ test("missing cycle variable uses the same owned cycle and stitches actual SDK h
         ...body.recovery,
         ownerRunId: "recovered-session",
         provenance: {
+          checkpointVersion: 1,
           kind: "failed-turn-input",
-          sourceStepId: "failed-step",
           sourceEventId: "failed",
           sourceSlot: 0,
-          checkpointVersion: 1,
+          sourceStepId: "failed-step",
         },
       });
       const call = {

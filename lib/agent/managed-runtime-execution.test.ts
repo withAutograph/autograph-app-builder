@@ -103,17 +103,17 @@ const preparedPlan = hostedOperatorPlanSchema.parse({
   deploymentBoundary: {
     authority,
     teamId: "team",
-    app: { projectId: "app-project", branch: "preview", environment: "preview" },
-    gateway: { projectId: "gateway-project", branch: "preview", environment: "preview" },
+    app: { branch: "preview", environment: "preview", projectId: "app-project" },
+    gateway: { branch: "preview", environment: "preview", projectId: "gateway-project" },
     operator: {
-      projectId: "builder-project",
       deploymentId: "operator-deployment",
       environment: "preview",
+      projectId: "builder-project",
     },
     verification: {
       gatewayOrigin: "https://gateway.example",
-      publicOrigin: "https://gateway.example",
       jwksUrl: "https://gateway.example/_platform/jwks.json",
+      publicOrigin: "https://gateway.example",
     },
   },
   selection: {
