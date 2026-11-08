@@ -641,7 +641,7 @@ describe("native recovery verification diagnostics", () => {
     if (operation?.state !== "succeeded") {
       throw new Error("Expected committed child");
     }
-    const sessionId = operation.sessionId;
+    const { sessionId } = operation;
     await expect(f.service.start(f.recoveryRequest)).rejects.toBeInstanceOf(
       HostedSubmissionUnknownError,
     );

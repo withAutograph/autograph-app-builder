@@ -139,7 +139,7 @@ it("rejects wrong physical owner and logical identity", () => {
 });
 it("does not authorize other tools, denied approvals, completed calls, or missing state", () => {
   const input = fixture();
-  const session = input.payload.candidates[0].sessionState.snapshot.session;
+  const { session } = input.payload.candidates[0].sessionState.snapshot;
   for (const history of [
     [
       {

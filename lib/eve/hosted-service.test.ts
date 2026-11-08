@@ -183,7 +183,7 @@ describe("failed public session native recovery", () => {
             snapshot: { events: [], status: "failed" },
           })
           .mockImplementationOnce(async (request) => {
-            const recovery = request.recovery;
+            const { recovery } = request;
             if (recovery === undefined) {
               throw new Error("Expected typed native recovery.");
             }
@@ -930,7 +930,7 @@ describe("hosted Eve service core", () => {
         .fn()
         .mockResolvedValueOnce({ adapterSessionId: "eve_failed", snapshot: terminal })
         .mockImplementationOnce(async (request: Parameters<HostedEveTransport["start"]>[0]) => {
-          const recovery = request.recovery;
+          const { recovery } = request;
           if (recovery === undefined) {
             throw new Error("Expected typed native recovery.");
           }

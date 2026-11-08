@@ -66,7 +66,7 @@ const fixture = async (id: string) => {
   await expect(
     service.start({ clientRequestId, resumeSessionId: first.sessionId }),
   ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
-  const getStart = service.getStart;
+  const { getStart } = service;
   if (getStart === undefined) {
     throw new Error("Expected public start lookup.");
   }
