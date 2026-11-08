@@ -198,6 +198,7 @@ export type TargetApplyFailureReceipt = ApplyResultBase &
   (
     | (ObservedApplyResult & {
         reason:
+          // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
           | "command-failed"
           | "output-limit"
           | "invalid-receipt"
@@ -215,6 +216,7 @@ export type TargetApplyFailureReceipt = ApplyResultBase &
     status: "partial-failure";
     recoveryRequired: true;
     commandFailureKind?:
+      // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
       | "timeout"
       | "permission-denied"
       | "missing-command-or-file"

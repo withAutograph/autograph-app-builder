@@ -28,6 +28,7 @@ export const sandboxLeaseAdvisoryKey = (principal: HostedPrincipal, adapterSessi
 
 const postgresNowEpochMs = async (database: Transaction) => {
   const rows = await database.execute(sql`select clock_timestamp() as "database_now"`);
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The driver may return either an array or a rows wrapper for this query.
   const result = rows as unknown as
     | readonly [{ database_now: Date | string }]
     | { rows: readonly [{ database_now: Date | string }] };

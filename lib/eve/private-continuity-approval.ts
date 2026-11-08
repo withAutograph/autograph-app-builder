@@ -101,6 +101,7 @@ export const createPrivateContinuityApprovalCapture = (input: {
   return {
     observe(event: MessageStreamEvent) {
       if (event.type === "input.requested") {
+        // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Select only matching continuity approvals in event order.
         for (const requested of event.data.requests) {
           if (
             requested.kind !== "tool-approval" ||

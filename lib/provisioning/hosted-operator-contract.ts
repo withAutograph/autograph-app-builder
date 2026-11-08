@@ -568,6 +568,7 @@ const validateNormalActorPlan = (
   const program = plan.normalActorProgram;
   const participantStage = plan.stage === AUTH_PARTICIPANTS_STAGE;
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     plan.normalActorCapturePredecessor !== undefined &&
     (plan.action !== "prepare" ||
       !participantStage ||
@@ -959,6 +960,7 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
     }
   }
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     plan.hostProtection !== undefined &&
     (plan.deploymentBoundary === undefined ||
       plan.publicGateway === undefined ||

@@ -94,6 +94,7 @@ export const recordPublicObservation = (outputDir: string, record: unknown) => {
 };
 
 interface WorkingAppObservation {
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   availability: "reported_ready" | "expired" | "unavailable" | "unassessed";
   reason: string;
   expiresAt?: string;

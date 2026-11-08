@@ -187,6 +187,7 @@ export const createRepositoryProductionSetup = (ports: RepositoryProductionSetup
         const privateState = await ports.reservePrivateState(row);
         await save({ ...row.record, privateState });
       }
+      // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Process selected authorized setup effects in order.
       for (const effect of selectedEffects(row.record)) {
         if (runtimeOnly && effect !== BIND_RUNTIME_EFFECT) {
           continue;

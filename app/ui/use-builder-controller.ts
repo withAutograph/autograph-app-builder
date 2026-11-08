@@ -186,11 +186,13 @@ export function useBuilderController({
     (notice) => notice.provider === "github" && notice.status === "connected",
   );
   const [team, setTeam] = useState(
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     resumedVercelConnection
       ? (teamOptions[0]?.value ?? "")
       : (initialDraft?.team ?? teamOptions[0]?.value ?? ""),
   );
   const [gitScope, setGitScope] = useState(
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     resumedGitHubConnection
       ? (gitScopeOptions[0]?.value ?? "")
       : (initialDraft?.gitScope ?? gitScopeOptions[0]?.value ?? ""),
@@ -562,6 +564,7 @@ export function useBuilderController({
     // Invalid app names simply keep submission disabled.
   }
   const canSubmit = Boolean(
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     !sourceUploadPending &&
     form.brief.trim() &&
     (!form.appName.trim() || validAppId) &&
@@ -767,6 +770,7 @@ export function useBuilderController({
           }
         }
         if (
+          // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
           controller.signal.aborted ||
           !remote ||
           activeDraftId.current !== localDraftId ||

@@ -56,6 +56,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
       updateUser(
         { image },
         {
+          // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
           onSuccess: () => toast.success(localization.settings.avatarChangedSuccess),
         },
       );

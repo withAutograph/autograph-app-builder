@@ -117,6 +117,7 @@ export const committedDevelopmentInventory = async (gitRoot: string, sourceSha: 
   const files: { mode: string; objectId: string; path: string; sha256: string }[] = [];
   for await (const data of child.stdout) {
     buffer = Buffer.concat([buffer, Buffer.from(data)]);
+    // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Decode streamed Git records without consuming incomplete frames.
     while (buffer.length > 0) {
       if (remaining === -1) {
         const newline = buffer.indexOf(10);

@@ -28,6 +28,7 @@ report.judge = await judgeDesign({
 await writeFile(path.join(directory, "report.json"), JSON.stringify(report, null, 2), {
   mode: 0o600,
 });
+// oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing report JSON passed to the renderer.
 await writeFile(path.join(directory, "index.html"), renderReport(report), {
   mode: 0o600,
 });

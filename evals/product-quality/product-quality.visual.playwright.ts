@@ -48,6 +48,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   if (prototypeServer) {
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     await promisify(prototypeServer.close.bind(prototypeServer))();
   }
 });

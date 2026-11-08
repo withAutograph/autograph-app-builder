@@ -16,12 +16,14 @@ const mocks = vi.hoisted(() => ({
   guard: vi.fn(),
   inspectGitHub: vi.fn(),
   repositoryAccess: vi.fn(),
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the existing broader shape used by this operation.
   source: { phase: "empty" } as {
     phase: string;
     receipt?: SourceReceiptFixture;
     githubSource?: GitHubSourceFixture;
   },
   update: vi.fn(),
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the existing broader shape used by this operation.
   workflow: { phase: "empty" } as {
     phase: string;
     githubSource?: GitHubSourceFixture;

@@ -55,6 +55,7 @@ export interface DirtyPathSnapshot {
   worktreeStatus: string;
   indexMode?: string;
   indexObjectId?: string;
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   kind: "absent" | "regular" | "directory" | "symlink" | "special";
   mode?: string;
   size?: number;

@@ -26,6 +26,7 @@ export type { HandoffControlData } from "@/app/actions/handoff-renewal";
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function readStatus(value: HandoffControlData, handoffId: string): HandoffControlData {
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     value.version !== 1 ||
     value.handoffId !== handoffId ||
     !["prepared", "continued", "expired"].includes(value.status) ||
@@ -170,6 +171,7 @@ const subscribeToHandoffStatus = (
       if (!response.ok) {
         throw new Error("handoff-status-unavailable");
       }
+      // oxlint-disable-next-line typescript/no-unsafe-argument -- Pass the response body to the existing status parser.
       const next = readStatus(await response.json(), handoffId);
       if (request.signal.aborted || disposed) {
         return;

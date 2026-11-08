@@ -409,6 +409,7 @@ const previewOAuthRuntimeConfigSchema = z
       resource.protocol === "http:" &&
       issuer.hostname === "localhost";
     if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       !(
         config.hostedAdapter === "1" ||
         (config.localDevelopmentEmulation === true &&
@@ -537,6 +538,7 @@ export function readPreviewOAuthRuntimeConfig(
       hostedAdapter: environment.EVE_HOSTED_ADAPTER,
       issuer: environment.BETTER_AUTH_URL,
       localDevelopmentEmulation:
+        // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
         environment.APP_BUILDER_EXECUTION_MODE === "development" &&
         environment.APP_BUILDER_EXECUTION_BUNDLE === "local-development" &&
         environment.APP_BUILDER_LOCAL_ADAPTER === "1" &&

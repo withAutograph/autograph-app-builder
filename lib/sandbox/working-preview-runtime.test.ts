@@ -96,6 +96,7 @@ const setup = () => {
     cwd: "/workspace/repository",
     landingPath: "/example",
     port: 3000,
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The provider fixture supplies only the preview operations under test.
     provider: provider as unknown as Sandbox,
     sandboxId: "logical-1",
   };

@@ -101,6 +101,7 @@ interface FixtureSession {
   events: unknown[];
   inputRequests?: unknown[];
   sessionId: string;
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   status: "working" | "input_required" | "waiting" | "completed" | "cancelled";
 }
 

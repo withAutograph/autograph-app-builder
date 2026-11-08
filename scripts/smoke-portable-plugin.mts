@@ -25,7 +25,9 @@ const receipt = JSON.parse(await readFile(path.join(releaseRoot, "release-receip
 if (
   receipt.format !== "autograph-portable-plugin-release-v3" ||
   receipt.specification !== "1.0.0" ||
+  // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing portable release receipt boundary.
   !/^[0-9a-f]{40}$/u.test(receipt.source?.sha ?? "") ||
+  // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing portable release receipt boundary.
   !/^[0-9a-f]{40}$/u.test(receipt.source?.tree ?? "")
 ) {
   throw new Error("Portable release receipt was invalid.");
@@ -33,11 +35,13 @@ if (
 if (!Array.isArray(receipt.tools) || JSON.stringify(receipt.tools) !== JSON.stringify(TOOL_NAMES)) {
   throw new Error("Portable release receipt was invalid.");
 }
+// oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing portable release receipt boundary.
 const archive = await readFile(path.join(releaseRoot, receipt.archive.name));
 if (sha256(archive) !== receipt.archive.sha256) {
   throw new Error("Portable archive digest did not match its receipt.");
 }
 const marketplaceArchive = await readFile(
+  // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing portable release receipt boundary.
   path.join(releaseRoot, receipt.codexMarketplaceArchive.name),
 );
 if (sha256(marketplaceArchive) !== receipt.codexMarketplaceArchive.sha256) {
@@ -101,6 +105,7 @@ await Promise.all(
       harness.transport?.type !== "streamable-http" ||
       harness.transport?.url !== receipt.endpoint ||
       harness.oauth?.protectedResourceMetadata !==
+        // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing portable release receipt boundary.
         `${new URL(receipt.endpoint).origin}/.well-known/oauth-protected-resource`
     ) {
       throw new Error(`${client} offline harness metadata was invalid.`);

@@ -63,6 +63,7 @@ class TestEventSource {
     this.closed = true;
   }
 
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   emit(name: "snapshot" | "end" | "open" | "error", value?: unknown) {
     const event = new MessageEvent("message", { data: JSON.stringify(value) });
     for (const listener of this.listeners.get(name) ?? []) {

@@ -47,6 +47,7 @@ function runLookup(options: LookupOptions) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requestFixture(input: { lookupOptions: LookupOptions; responseStatus?: number }) {
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared shape for values assigned later.
   const observed: { options?: RequestOptions; url?: URL } = {};
   const requestHttps = vi.fn(
     (url: URL, options: RequestOptions, responseListener: (response: IncomingMessage) => void) => {

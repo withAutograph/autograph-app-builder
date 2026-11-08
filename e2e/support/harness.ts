@@ -348,6 +348,7 @@ export async function installBrowserBoundaries(
       if (value !== "about:blank") {
         state.opened.push(value);
       }
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The emulator provides the window operations used by the browser handoff.
       return {
         close() {
           // The emulated window has no resources to close.

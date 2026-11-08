@@ -552,6 +552,7 @@ async function writeCredential(username: string, token: Buffer): Promise<void> {
   const suffix = Buffer.from('"}\n', "utf-8");
   const payload = Buffer.concat([prefix, token, suffix]);
   try {
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     await promisify(process.stdout.write.bind(process.stdout))(payload);
   } finally {
     prefix.fill(0);
@@ -576,6 +577,7 @@ async function writeVerifiedLogin(
     "utf-8",
   );
   try {
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     await promisify(process.stdout.write.bind(process.stdout))(payload);
   } finally {
     payload.fill(0);

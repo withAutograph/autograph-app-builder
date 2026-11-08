@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 import nodePath from "node:path";
 import { promisify } from "node:util";
 
+// oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
 const execFileAsync = promisify(execFile);
 
 const exactRuntimeFiles = new Set([
@@ -94,6 +95,7 @@ export function waitForDevelopmentRuntimeChange(input: {
     let settled = false;
     let debounce: NodeJS.Timeout | undefined;
     let audit: NodeJS.Timeout | undefined;
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared shape for values assigned later.
     const handlers: { aborted?: () => void } = {};
     const finish = (changed: boolean) => {
       if (settled) {

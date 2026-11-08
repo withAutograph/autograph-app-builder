@@ -83,6 +83,7 @@ const CopyButton = function CopyButton({
 }) {
   const { localization } = useAuth();
   const { copied, copy } = useCopyToClipboard({
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
   });
 
@@ -280,6 +281,7 @@ const SliderField = function SliderField({ name, field, isPending }: AdditionalF
         name={name}
         value={[value]}
         onValueChange={(v) => {
+          // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the slider scalar-or-array value handling.
           setValue((Array.isArray(v) ? v[0] : v) ?? min);
         }}
         min={min}

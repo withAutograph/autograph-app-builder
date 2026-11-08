@@ -43,6 +43,7 @@ function SessionAppContainer() {
   const result = useSyncExternalStore(
     (listener) => {
       resultListeners.add(listener);
+      // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
       return () => resultListeners.delete(listener);
     },
     () => latestResult,

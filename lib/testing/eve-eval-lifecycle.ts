@@ -147,6 +147,7 @@ export async function reconcileDeadEveEvalPrewarmLocks(
       continue;
     }
     const entries = await readdir(backendPath, { withFileTypes: true });
+    // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Inspect lock entries in order while preserving recovery decisions.
     for (const entry of entries.toSorted((left, right) => left.name.localeCompare(right.name))) {
       if (!entry.name.endsWith(".lock")) {
         continue;
@@ -253,6 +254,7 @@ export function createEveEvalRuntimeDirectories(
       throw new Error("The Eve eval runtime directory was not owner-only.");
     }
   }
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared return contract for all supported results.
   return { home, root, workflowData };
 }
 
@@ -301,6 +303,7 @@ export function waitForEveEvalChild(
         }
       }
     };
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the existing broader shape used by this operation.
     const handlers = {} as {
       interrupt: () => void;
       terminate: () => void;

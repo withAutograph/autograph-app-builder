@@ -13,6 +13,7 @@ declare module "@better-auth-ui/core" {
 /** Props the shadcn `<Auth>` router spreads onto plugin-contributed auth views. */
 export interface AuthViewProps {
   className?: string;
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   socialLayout?: "auto" | "horizontal" | "vertical" | "grid";
   socialPosition?: "top" | "bottom";
 }

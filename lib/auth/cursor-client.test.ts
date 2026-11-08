@@ -67,6 +67,7 @@ function storage() {
     },
   };
   return {
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The database fixture implements only the OAuth client operations under test.
     database: database as unknown as Parameters<typeof setupCursorClient>[0],
     insert: database.insert,
     rows,

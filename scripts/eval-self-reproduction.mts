@@ -426,6 +426,7 @@ const artifactFile = async (name: string, content: string) => {
 };
 
 const escapeHtml = (value: string) => {
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the dictionary open for the supported keys.
   const replacements: Record<string, string> = {
     '"': "&quot;",
     "&": "&amp;",
@@ -566,6 +567,7 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
           String(deadline),
         ];
   const command = values.generator ?? resolve(root, ".config/mise/scripts/trusted-node-launcher");
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the dictionary open for the supported keys.
   settings = {
     ...settings,
     args,

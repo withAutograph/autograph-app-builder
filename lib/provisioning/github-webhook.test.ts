@@ -48,6 +48,7 @@ function database() {
   };
   return {
     updates,
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The database fixture implements only the transaction and update paths under test.
     value: value as unknown as HostedDatabase,
   };
 }

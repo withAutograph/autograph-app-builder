@@ -286,6 +286,7 @@ export const exerciseCandidateBrowserWorkflows = async (
       if (count > 0) {
         const href = await links.first().getAttribute("href");
         if (
+          // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
           href === null ||
           href === undefined ||
           href === "" ||
@@ -329,6 +330,7 @@ export const exerciseCandidateBrowserWorkflows = async (
         await runChildArtifact();
       }
     };
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the dictionary open for the supported keys.
     const workflows: Record<string, () => Promise<null>> = {
       documentation: async () => {
         await runDocumentation();

@@ -278,6 +278,7 @@ const referenceAdapter = (
             isDistinctUser &&
             response.status() === 404 &&
             body.error === "handoff_unavailable" &&
+            // oxlint-disable-next-line typescript/no-unsafe-argument -- Inspect the existing handoff response body.
             Object.keys(body).length === 1;
         } finally {
           await authenticator.dispose();

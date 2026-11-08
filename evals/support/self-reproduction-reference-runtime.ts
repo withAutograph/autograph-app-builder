@@ -41,6 +41,7 @@ export const snapshotReferenceSource = async (
   const child = spawn("git", ["ls-files", "-z"], { cwd: sourceRoot });
   {
     const chunks: Buffer[] = [];
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
     child.on("error", filesDeferred.reject);
     child.on("close", (code) => {
@@ -102,6 +103,7 @@ const probe = (url: string): Promise<boolean> => {
     request.on("error", () => {
       deferred.resolve(false);
     });
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     request.on("timeout", () => request.destroy());
   }
   return deferred.promise;
@@ -217,6 +219,7 @@ export const startSelfReproductionReferenceRuntime = async (input: {
     });
     server.stdout?.pipe(output, { end: false });
     server.stderr?.pipe(output, { end: false });
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     server.on("close", () => output.end());
     const deadline = Date.now() + (input.startupTimeoutMs ?? 300_000);
     while (Date.now() < deadline) {

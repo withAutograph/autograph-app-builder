@@ -12,6 +12,7 @@ export const candidateCapabilities = (
 ): {
   environment: Record<string, string>;
   receipt: { modelGateway: string; childSandbox: string; persistence: string };
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared return contract for all supported results.
 } => ({
   environment: credentials
     ? {

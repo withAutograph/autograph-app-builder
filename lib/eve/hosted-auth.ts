@@ -41,6 +41,7 @@ export const hostedEveOperationScopes = {
 export type HostedEveOperation = keyof typeof hostedEveOperationScopes;
 
 export class HostedAuthorizationError extends Error {
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   readonly code: "invalid_claims" | "issuer_mismatch" | "audience_mismatch" | "insufficient_scope";
 
   constructor(code: HostedAuthorizationError["code"]) {

@@ -213,6 +213,7 @@ export const retentionRenewalBindingProvenance = (
   if (current === undefined) {
     return undefined;
   }
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Inspect retained renewals in order and require valid provenance.
   for (const retained of (current.retainedRenewalOperations ?? []).toReversed()) {
     if (!isValidRenewalProvenance(retained, current.plan, current.operationRef)) {
       continue;

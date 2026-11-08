@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { executeProductReadback } from "./product-behavior";
 
 const run = async (
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   mode: "stored" | "fake" | "wrong" | "redirect" | "invalid" | "auth",
   expired = false,
 ) => {

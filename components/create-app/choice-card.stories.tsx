@@ -11,6 +11,7 @@ const meta = {
     checked: false,
     children: "ChatGPT / Codex",
     name: "destination",
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     onChange: fn(),
     value: "codex",
   },

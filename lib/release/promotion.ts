@@ -120,6 +120,7 @@ export { sha256 } from "../../scripts/portable-release";
 async function sha256File(path: string) {
   const digest = createHash("sha256");
   for await (const chunk of createReadStream(path)) {
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- Hash each chunk from the existing file stream.
     digest.update(chunk);
   }
   return digest.digest("hex");

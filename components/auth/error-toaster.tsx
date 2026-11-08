@@ -37,6 +37,7 @@ export function ErrorToaster() {
         return;
       }
       if (err?.error) {
+        // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing auth error passed to the toast.
         toast.error(err.error.message);
       }
     };
@@ -69,7 +70,7 @@ export function ErrorToaster() {
       ) {
         return;
       }
-      // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- Use the fallback when the nested error message is empty.
+      // oxlint-disable-next-line typescript/prefer-nullish-coalescing, typescript/no-unsafe-argument -- Preserve auth error messaging and its empty-message fallback.
       toast.error(err.error?.message || err.message);
     };
 

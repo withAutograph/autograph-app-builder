@@ -12,6 +12,7 @@ import type {
 
 type DependencyPreparationState = Exclude<
   AppBuilderWorkflowState,
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   { phase: "empty" | "prepared" | "ui_previewed" | "ui_accepted" }
 >;
 

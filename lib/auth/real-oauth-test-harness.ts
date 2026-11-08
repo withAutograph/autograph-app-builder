@@ -96,6 +96,7 @@ export const createRealOAuthHarness = async (
       ),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
       isActiveMember: vi.fn(async ({ workspaceId }) =>
+        // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the workspace ID test harness boundary.
         membershipState.activeWorkspaces.includes(workspaceId),
       ),
     },

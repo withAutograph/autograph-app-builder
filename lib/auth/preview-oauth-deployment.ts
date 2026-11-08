@@ -43,6 +43,7 @@ function getPreviewOAuthDeploymentRuntime(
     providerEmulation = readProviderEmulation(environment);
   } catch (error) {
     const invalidFields =
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       typeof error === "object" &&
       error !== null &&
       "issues" in error &&

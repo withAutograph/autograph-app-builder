@@ -35,6 +35,7 @@ const transcriptEntrySchema = z.looseObject({
 });
 
 const session = (
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   status: "working" | "completed" | "input_required" | "waiting",
   inputRequests: unknown[] = [],
 ) => ({ cursor: 1, events: [], inputRequests, sessionId: "one-session", status });

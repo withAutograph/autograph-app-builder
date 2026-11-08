@@ -81,6 +81,7 @@ export interface BranchWorktreePublicationFaultHooks {
 }
 
 interface FileState {
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   kind: "absent" | "regular" | "directory" | "symlink" | "special";
   mode?: string;
   digest?: string;
@@ -503,6 +504,7 @@ const journalPath = (identity: string): string =>
 const assertContainedNoLinkPath = async (
   candidate: string,
   options: {
+    // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
     leaf?: "directory" | "regular" | "absent-or-directory" | "absent-or-regular";
   } = {},
 ): Promise<void> => {
@@ -567,6 +569,7 @@ const assertContainedNoLinkPath = async (
       throw new Error("The builder-owned publication directory is not owner-only.");
     }
     if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       isLeaf &&
       (options.leaf === "regular" || options.leaf === absentOrRegular) &&
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -1188,6 +1191,7 @@ const assertOwnedPartialWorktree = async (
   };
   const visit = async (directory: string, prefix: string): Promise<void> => {
     const entries = await readdir(directory, { withFileTypes: true });
+    // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Traverse worktree entries in deterministic path order.
     for (const entry of entries.toSorted((left, right) =>
       compareOverlayPaths(
         `${left.name}${left.isDirectory() ? "/" : ""}`,
@@ -1464,6 +1468,7 @@ const ensureExactBaseMaterialization = async (
   await git(proposal.worktreePath, ["read-tree", proposal.baseSha]);
   lock.assertHeld();
   const changes = new Map(proposal.changes.map((change) => [change.path, change]));
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Apply changes against ordered tree entries under the lock.
   for await (const entry of exactTreeEntries(proposal.sourcePath, proposal.baseSha)) {
     lock.assertHeld();
     const change = changes.get(entry.path);

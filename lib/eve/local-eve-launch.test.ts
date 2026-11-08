@@ -49,6 +49,7 @@ function fixture() {
   }
   const cycleFile = path.join(stateRoot, "eve-cycle");
   writeFileSync(cycleFile, "c".repeat(64), { mode: 0o600 });
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the dictionary open for the supported keys.
   const environment: Record<string, string> = {
     APP_BUILDER_LOCAL_EVE_CYCLE_FILE: cycleFile,
     APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",

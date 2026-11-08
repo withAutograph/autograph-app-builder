@@ -188,6 +188,7 @@ function staticLiteral(attribute: ts.JsxAttribute): string | undefined {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
 function literalKind(attribute: ts.JsxAttribute): "string" | "number" | "boolean" | undefined {
   if (!attribute.initializer) {
     return "boolean";
@@ -244,7 +245,7 @@ function exportedEntries(source: ts.SourceFile): ts.Node[] {
   const entries: ts.Node[] = [];
   for (const statement of source.statements) {
     const exported = Boolean(
-      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
+      // oxlint-disable-next-line eslint/no-bitwise, anti-slop/no-chained-type-assertions -- Intentional bitmask or binary-flag operation.; Preserve the existing TypeScript AST modifier inspection boundary.
       ts.getCombinedModifierFlags(statement as unknown as ts.Declaration) & ts.ModifierFlags.Export,
     );
     if (
@@ -390,6 +391,7 @@ export function analyzeSource({
     }
   }
 
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Classify each source file and its reachable style evidence.
   for (const file of files) {
     if (/\.css$/iu.test(file.path)) {
       if (!reachableCss.has(path.posix.normalize(file.path))) {
@@ -481,6 +483,7 @@ export function analyzeSource({
     const localDeclarations = new Set<string>();
     const usedInJsx = new Set<string>();
 
+    // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Inspect JSX imports while skipping unrelated declarations.
     for (const statement of source.statements) {
       if (!ts.isImportDeclaration(statement) || !statement.importClause) {
         continue;
@@ -681,6 +684,7 @@ export function analyzeSource({
               ? attribute.initializer.expression
               : undefined;
           if (styleExpression && ts.isObjectLiteralExpression(styleExpression)) {
+            // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Inspect static style properties and skip unsupported expressions.
             for (const property of styleExpression.properties) {
               if (!ts.isPropertyAssignment(property)) {
                 continue;

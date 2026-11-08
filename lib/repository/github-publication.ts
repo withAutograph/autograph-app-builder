@@ -635,6 +635,7 @@ function releaseGateAbsent(repository: GitHubRepositoryObservation): boolean {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assertCanonicalReview(review: ReviewedChangeSetReceipt): void {
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the existing broader shape used by this operation.
   const changeSet = { ...review } as Record<string, unknown>;
   delete changeSet.changeSetDigest;
   delete changeSet.reviewedByCallId;
@@ -1753,6 +1754,7 @@ function assertDraftReadBack(
       throw new Error("Absent branch read-back schema is not closed.");
     }
   } else if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     !exactKeys(readBack.branch, [
       "status",
       "branchName",
@@ -1777,6 +1779,7 @@ function assertDraftReadBack(
       throw new Error("Absent pull-request read-back schema is not closed.");
     }
   } else if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     !exactKeys(readBack.pullRequest, [
       "status",
       "pullRequestId",
@@ -1918,6 +1921,7 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
         throw new Error("Fresh repository success receipt is invalid.");
       }
     } else if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       !isDecimal(value.repositoryId) ||
       !safeBranch(value.branchName) ||
       !isObjectId(value.branchSha) ||

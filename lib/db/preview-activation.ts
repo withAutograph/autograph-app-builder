@@ -64,6 +64,7 @@ export const previewActivationPlanRequestSchema = z
     const issuer = new URL(request.issuer);
     const resource = new URL(request.resource);
     if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       issuer.pathname !== "/api/auth" ||
       issuer.search ||
       issuer.hash ||

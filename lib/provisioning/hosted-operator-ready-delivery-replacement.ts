@@ -175,6 +175,7 @@ export const resolveReadyDeliveryReplacementPredecessor = (
       ),
     ),
   ];
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Select a retained delivery only after its ownership checks.
   for (const origin of origins) {
     const { operator } = origin;
     if (

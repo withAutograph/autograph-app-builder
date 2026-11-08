@@ -18,6 +18,7 @@ const isReviewedPhase = (
 ): state is Extract<
   ReturnType<typeof appBuilderWorkflowState.get>,
   {
+    // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
     phase: "reviewed" | "publication_pending" | "publication_failed" | "published_local";
   }
 > =>

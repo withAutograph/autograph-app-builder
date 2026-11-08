@@ -49,6 +49,7 @@ export const observePrivateApplyDenials = (input: {
     events.set(event.meta.id, event);
   }
   const result: PrivateApplyDenialEvidence[] = [];
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Associate denial evidence with each original call in order.
   for (const callId of input.calls) {
     const requests = new Map<string, string>();
     const outcomes = new Map<string, Set<string>>();

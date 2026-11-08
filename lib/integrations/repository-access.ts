@@ -230,6 +230,7 @@ export async function classifyGitHubRepositoryAccess(input: {
     installation: z.infer<typeof installationReadBackSchema>;
   }[] = [];
   let providerFailures = 0;
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Inspect provider bindings sequentially and retain failure accounting.
   for (const binding of active) {
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Inspect provider bindings in order.
@@ -340,6 +341,7 @@ export async function classifyGitHubRepositoryAccessWithTargetProof(input: {
   }
   const matches: ReadyRepositoryAccess[] = [];
   let providerFailures = 0;
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Check repository access sequentially for each authorized binding.
   for (const binding of active) {
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Provider authority is checked sequentially for each installation.

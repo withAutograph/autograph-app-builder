@@ -478,6 +478,7 @@ export const createRepositoryProductionCreator = (
       const requested = row.record.intent.creatorEmail;
       const choice = recipientFor(row);
       if (
+        // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
         requested !== undefined &&
         frameFor(row)?.email !== requested &&
         choice?.email !== requested &&

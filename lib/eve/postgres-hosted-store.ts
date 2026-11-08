@@ -172,6 +172,7 @@ export function parseHostedSessionRow(input: unknown): HostedSessionRecord {
   const row = sessionRowSchema.parse(input);
   const record = hostedSessionRecordSchema.parse(row.record);
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     row.issuer !== record.principal.issuer ||
     row.audience !== record.principal.audience ||
     row.workspaceId !== record.principal.workspaceId ||
@@ -1797,6 +1798,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           operation.kind === "start" && operation.state === "submission_unknown";
         const deliveredInternal = isDeliveredInternalContinuation(operation);
         const current =
+          // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
           (operation.internalSessionLimitResponse !== undefined ||
             operation.kind === "send" ||
             input.resourceApprovalResolution !== undefined) &&
@@ -1849,6 +1851,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           throw new Error("Canonical SEND delivery is not proved.");
         }
         if (
+          // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
           operation.state !== "reserved" &&
           !replayableStart &&
           !deliveredInternal &&

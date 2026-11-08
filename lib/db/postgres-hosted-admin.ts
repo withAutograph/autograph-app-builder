@@ -59,6 +59,7 @@ function sessionTenantPredicate(
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function integrationTenantPredicate(
   table:
+    // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
     | typeof hostedGitHubInstallations
     | typeof hostedGitHubInstallationBindings
     | typeof hostedVercelInstallations

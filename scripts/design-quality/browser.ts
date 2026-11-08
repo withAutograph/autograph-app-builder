@@ -91,6 +91,7 @@ export const scenariosSchema = z.array(
 );
 export type Scenario = z.infer<typeof scenariosSchema>[number];
 export type Category = "color" | "typography" | "spacing" | "radius" | "border" | "shadow";
+// oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the dictionary open for the supported keys.
 export const properties: Record<string, Category> = {
   "background-color": "color",
   "border-top-color": "border",
@@ -520,6 +521,7 @@ export async function measureStyles(
           sourceURL?: string;
           sourceMapURL?: string;
         };
+        // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
       }) => headers.set(header.styleSheetId, header),
     );
     await session.send("DOM.enable");
@@ -578,6 +580,7 @@ export async function measureStyles(
           parsed &&
           parsed.version === 3 &&
           Array.isArray(parsed.sources) &&
+          // oxlint-disable-next-line typescript/no-unsafe-argument -- Pass source-map data to the existing string validation.
           allStrings(parsed.sources);
         if (
           hasValidSources &&

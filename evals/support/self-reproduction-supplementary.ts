@@ -229,6 +229,7 @@ export const writeSupplementaryAssessment = async (input: {
       await readFile(nodePath.join(captureRoot, "capture-provenance.json"), "utf-8"),
     );
     for (const capture of captureMetadata.captures ?? []) {
+      // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing capture metadata path handling.
       const artifact = safeRelative(nodePath.relative(captureRoot, await realpath(capture.path)));
       const reference = await copy(captureRoot, artifact, "reference-captures");
       const viewport = String(

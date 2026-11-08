@@ -17,6 +17,7 @@ it("loads injectable axe source under the production Node ESM and tsx loader", a
     if (!injected) throw new Error('Measurement did not inject axe');
     process.stdout.write('axe-source-injected');
   `;
+  // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
   const { stdout } = await promisify(execFile)(process.execPath, [
     "--import",
     "tsx",

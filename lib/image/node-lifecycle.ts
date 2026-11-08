@@ -257,7 +257,9 @@ const portIsOurLock = async function portIsOurLock(
   let data = "";
   socket.setEncoding("utf-8");
   socket.setTimeout(100);
+  // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
   socket.on("data", (chunk) => (data += String(chunk)));
+  // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
   socket.once("timeout", () => socket.destroy());
   try {
     await once(socket, "close");
@@ -273,6 +275,7 @@ export const withLifecycleLock = async function withLifecycleLock<T>(
 ): Promise<T> {
   assertAbsoluteInput(stateRoot, imageLifecycleStateRootLabel);
   const identity = createHash("sha256").update(stateRoot).digest("hex");
+  // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
   const server = createServer((socket) => socket.end(identity));
   for (let attempt = 0; ; attempt += 1) {
     const port = lifecycleLockPort(stateRoot, attempt);
@@ -883,8 +886,10 @@ export const imageToolInvocation = function imageToolInvocation(
 ): Readonly<{ program: string; args: readonly string[] }> {
   const binary = exactToolBinary(tool);
   if (tool !== "msb") {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared return contract for all supported results.
     return { args, program: binary };
   }
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared return contract for all supported results.
   return {
     args: [binary, ...args],
     program: exactToolBinary("node"),
@@ -1005,6 +1010,7 @@ export const ghcrCredentialEnvironment = function ghcrCredentialEnvironment(
   ensureGhcrDockerConfig(stateRoot);
   ensureGhcrBoundHelper(stateRoot);
   const githubStateRoot = ensureGithubStateRoot(stateRoot);
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the dictionary open for the supported keys.
   const environment: Record<string, string> = {
     APP_BUILDER_GH_CONFIG_DIGEST: githubConfigDigest(ghConfigRoot),
     APP_BUILDER_GH_CONFIG_DIR: ghConfigRoot,
@@ -1024,6 +1030,7 @@ export const ghcrCredentialEnvironment = function ghcrCredentialEnvironment(
       environment.APP_BUILDER_GH_STATE_DIGEST = identity.stateDigest;
     }
   }
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared return contract for all supported results.
   return environment;
 };
 

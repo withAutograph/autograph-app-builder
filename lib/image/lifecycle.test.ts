@@ -394,12 +394,8 @@ const createSyntheticGithubToken = () => `github_pat_${randomUUID().replaceAll("
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function installPreloadFixture(
   variant:
-    | "current"
-    | "missing"
-    | "stale"
-    | "provenance-mismatch"
-    | "identity-mismatch"
-    | "state-drift",
+    // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
+    "current" | "missing" | "stale" | "provenance-mismatch" | "identity-mismatch" | "state-drift",
 ) {
   const root = realpathSync(
     mkdtempSync(nodePath.join(tmpdir(), `app-builder-preload-${variant}-`)),

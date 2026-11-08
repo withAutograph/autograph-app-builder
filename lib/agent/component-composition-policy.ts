@@ -65,6 +65,7 @@ export type CompositionPolicyResolution =
 
 export interface CompositionViolation {
   code:
+    // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
     | "unapproved-public-import"
     | "local-component-file"
     | "local-component-definition"

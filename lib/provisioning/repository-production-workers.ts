@@ -224,6 +224,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
       authRuntime: connections.authRuntime,
     };
     const proof =
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       managedAccess === undefined &&
       (operation === "membership" ||
         operation === "access" ||

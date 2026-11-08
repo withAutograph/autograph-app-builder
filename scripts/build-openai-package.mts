@@ -50,6 +50,7 @@ if (hasSuppliedEndpoint) {
 
 const portableMcpPath = path.resolve("mcp.json");
 const portableMcp = JSON.parse(await readFile(portableMcpPath, "utf-8"));
+// oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing package manifest JSON boundary.
 const portableServerNames = Object.keys(portableMcp.mcpServers ?? {});
 if (portableServerNames.length !== 1 || portableServerNames[0] !== AUTOGRAPH_MCP_SERVER_NAME) {
   throw new Error(`mcp.json must declare exactly one ${AUTOGRAPH_MCP_SERVER_NAME} MCP server.`);

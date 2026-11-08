@@ -147,6 +147,7 @@ export type FreshBootstrapSuccessReceipt = TerminalBase & {
 export type FreshBootstrapFailureReceipt = TerminalBase & {
   status: "failed";
   reason:
+    // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
     | "precondition-failed"
     | "collision"
     | "materialization-partial"
@@ -400,6 +401,7 @@ export const createFreshBootstrapProposal = (input: {
 };
 
 const canonicalProposal = (proposal: FreshBootstrapProposal) => {
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the existing broader shape used by this operation.
   const unsigned = { ...proposal } as Record<string, unknown>;
   delete unsigned.digest;
   return unsigned;
@@ -704,6 +706,7 @@ const assertExactFreshBootstrapLayout = (layout: FreshBootstrapLayout): void => 
 
 export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJournal): void => {
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     !isRecord(journal) ||
     (journal.status !== "pending" &&
       journal.status !== "failed" &&
@@ -786,6 +789,7 @@ export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJour
   }
   const { digest, ...unsigned } = journal;
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     !hasExactKeys(journal, expectedKeys) ||
     !/^[0-9a-f]{64}$/u.test(journal.leaseMarkerDigest) ||
     (journal.recoveryOfDigest === undefined) !==

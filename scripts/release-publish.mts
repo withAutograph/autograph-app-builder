@@ -36,6 +36,7 @@ const compareAssetNames = (left: unknown, right: unknown) => {
   }
   return 0;
 };
+// oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
 const execFileAsync = promisify(execFile);
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

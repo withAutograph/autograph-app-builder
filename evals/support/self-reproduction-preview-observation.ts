@@ -92,6 +92,7 @@ export const loadWorkingPreview = async (
   nowMs = Date.now(),
 ): Promise<
   | { provenance: PreviewSourceProvenance; receipt: PreviewReceipt; status: "ready" }
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   | { reason: string; status: "expired" | "missing" | "missing-final" | "invalid" }
 > => {
   let state: unknown;

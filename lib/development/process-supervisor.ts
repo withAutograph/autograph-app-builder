@@ -144,6 +144,7 @@ export async function waitForDevelopmentPortRelease(
     const occupied = await once(socket, "connect")
       .then(() => true)
       .catch(() => false)
+      // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
       .finally(() => socket.destroy());
     if (!occupied) {
       return;

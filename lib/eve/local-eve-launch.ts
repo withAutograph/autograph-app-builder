@@ -341,7 +341,9 @@ export async function waitForForwardedEveChild(
 ) {
   const forwardInterrupt = () => child.kill("SIGINT");
   const forwardTerminate = () => child.kill("SIGTERM");
+  // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
   signalTarget.once("SIGINT", forwardInterrupt);
+  // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
   signalTarget.once("SIGTERM", forwardTerminate);
 
   try {
@@ -362,7 +364,9 @@ export async function waitForForwardedEveChild(
     const [code, signal] = await promise;
     return code ?? (signal ? 1 : 0);
   } finally {
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     signalTarget.off("SIGINT", forwardInterrupt);
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     signalTarget.off("SIGTERM", forwardTerminate);
   }
 }

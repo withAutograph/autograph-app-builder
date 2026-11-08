@@ -65,6 +65,7 @@ export function hasTestCapability(
   capability: TestCapability,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): boolean {
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The shared symbol registry is attached to process outside its declared type.
   const accessor = (process as unknown as Record<symbol, unknown>)[registryAccessor];
   return testCapabilityEnabled(
     capability,

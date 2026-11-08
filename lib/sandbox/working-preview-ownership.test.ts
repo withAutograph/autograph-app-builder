@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { workingPreviewSupervisorSource } from "./working-preview-runtime";
 import { previewOwnershipRoot, previewOwnershipSource } from "./working-preview-ownership";
 
+// oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
 const execute = promisify(execFile);
 interface OwnershipOperation {
   attempt?: { attemptId?: string; expiresAt?: number; providerSessionId?: string; status?: string };

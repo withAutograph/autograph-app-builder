@@ -104,7 +104,8 @@ function errorWithCleanupEvidence(error: unknown, evidence: SandboxCleanupEviden
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sandboxCleanupEvidence(error: unknown) {
   return error instanceof Error
-    ? ((error as unknown as Record<PropertyKey, unknown>)[cleanupEvidenceKey] as
+    ? // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Cleanup evidence is attached to errors under a private symbol.
+      ((error as unknown as Record<PropertyKey, unknown>)[cleanupEvidenceKey] as
         | SandboxCleanupEvidence
         | undefined)
     : undefined;

@@ -129,6 +129,7 @@ const appendProposalPathListing = (output: Output, paths: Set<string>, pathIndex
   const available = [...paths].toSorted();
   output.availablePaths = [];
   let index = pathIndex;
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Bound the returned source paths to the response budget.
   while (index < available.length) {
     const path = available[index];
     if (path === undefined) {
@@ -167,6 +168,7 @@ const appendProposalFiles = (
   input: ProposedSourceInspectionInput,
   prefix: string,
 ) => {
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Process requested proposal paths and report missing entries in order.
   for (const requested of selected) {
     const path = requestedProposalPath(requested, prefix);
     const change = changeByPath.get(path);

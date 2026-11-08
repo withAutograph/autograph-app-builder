@@ -72,6 +72,7 @@ const createSandbox = <T extends Partial<SandboxSession>>(overrides: T): Sandbox
 });
 
 const { join } = nodePath;
+// oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
 const executeFile = promisify(execFile);
 
 const closureObservationSchema = z.looseObject({
@@ -216,6 +217,7 @@ const liveCargoHomeDigest = "b".repeat(64);
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function liveTemplateCacheFixture() {
   let source = liveDependencySourceFixture();
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   let closureState: "cargo-tampered" | "clean" | "missing" | "node-tampered" = "clean";
   let bootstrapStderr = "";
   const stored = new Map<string, string>();

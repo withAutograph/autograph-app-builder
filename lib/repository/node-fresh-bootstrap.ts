@@ -684,6 +684,7 @@ const assertContainedStatePath = async (
     }
     const isLeaf = index === segments.length - 1;
     if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       value.isSymbolicLink() ||
       value.uid !== process.geteuid?.() ||
       value.dev.toString() !== capability.stateRoot.device ||
@@ -1019,6 +1020,7 @@ const quiesceAbandonedLease = async (
   }
   let stderr = "";
   holder.stderr.setEncoding("utf-8");
+  // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
   holder.stderr.on("data", (chunk: string) => (stderr += chunk));
   const { promise: exited, resolve: resolveExit }: PromiseWithResolvers<void> =
     Promise.withResolvers();
@@ -1560,6 +1562,7 @@ const assertExactInputs = async (input: {
 }): Promise<ExactFile[]> => {
   assertExactFreshBootstrapProposal(input.proposal);
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     input.proposal.atomicAdapterDigest !== FRESH_BOOTSTRAP_ATOMIC_ADAPTER_DIGEST ||
     ![
       FRESH_BOOTSTRAP_MATERIALIZE_ADAPTER_DIGEST,
@@ -1846,6 +1849,7 @@ const assertRawGitAuthority = async (
   const gitDirectory = nodePath.resolve(root, ".git");
   const gitState = await lstat(gitDirectory);
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     rootState.isSymbolicLink() ||
     !rootState.isDirectory() ||
     gitState.isSymbolicLink() ||
@@ -2034,6 +2038,7 @@ const rawWorktreeManifest = async (
   const walk = async (relativePath: string): Promise<void> => {
     const directory = relativePath === "" ? root : nodePath.resolve(root, relativePath);
     const entries = await readdir(directory, { withFileTypes: true });
+    // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Inspect repository entries while excluding permitted metadata.
     for (const entry of entries) {
       const path = relativePath === "" ? entry.name : `${relativePath}/${entry.name}`;
       if (path === ".git") {
@@ -2183,6 +2188,7 @@ const assertExactRepository = async (
     }
   }
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     git(capability, root, ["rev-parse", "--show-object-format"]).trim() !== "sha1" ||
     absoluteGitDirectory !== gitDirectory ||
     absoluteCommonDirectory !== gitDirectory ||

@@ -117,6 +117,7 @@ export async function provisionVercelProject(input: {
       throw new Error("provider-unavailable");
     }
     const failed =
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       response.status >= 400 &&
       response.status <= 599 &&
       !(args.method !== "POST" && response.status === 404) &&
@@ -340,6 +341,7 @@ export async function provisionVercelProject(input: {
         }
         const project = projectSchema.parse(observed.body);
         if (
+          // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
           project.name !== candidate ||
           project.rootDirectory !== "." ||
           (input.deploymentAccess === PUBLIC_APP &&

@@ -19,6 +19,7 @@ export type ProposalWorkflowState = Extract<
   AppBuilderWorkflowState,
   {
     phase:
+      // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
       | "planned"
       | "apply_failed"
       | "applied"

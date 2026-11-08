@@ -36,6 +36,7 @@ export const createPrivateRepositoryProductionApprovalCapture = (input: {
   return {
     observe(event: MessageStreamEvent) {
       if (event.type === "input.requested") {
+        // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Select only matching Production approval requests in event order.
         for (const request of event.data.requests) {
           if (
             request.kind !== "tool-approval" ||

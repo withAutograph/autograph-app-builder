@@ -52,6 +52,7 @@ describe("review receipt producer and publication verifier", () => {
     const receipt = producedReceipt();
     const serialized = JSON.stringify(receipt);
     expect(() => {
+      // oxlint-disable-next-line typescript/no-unsafe-argument -- Exercise the receipt assertion with parsed JSON.
       assertExactReviewedChangeSet(JSON.parse(serialized));
     }).not.toThrow();
   });

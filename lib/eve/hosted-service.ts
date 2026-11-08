@@ -463,6 +463,7 @@ function checkpointForSnapshot(
 ): HostedSessionCheckpoint {
   const ring = Array.from<z.infer<typeof publicEveEventSchema>>({ length: 512 });
   let publicEventCount = 0;
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Project valid public events in their original order.
   for (const candidate of snapshot.events) {
     if (candidate === null || typeof candidate !== "object") {
       continue;
@@ -680,6 +681,7 @@ async function spoolSnapshotEvents(snapshot: HostedEngineSnapshot): Promise<Page
     file = await open(path, "wx", 0o600);
     const hash = createHash("sha256");
     let eventCount = 0;
+    // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Hash valid projected public events in their original order.
     for (const candidate of snapshot.events) {
       if (candidate === null || typeof candidate !== "object") {
         continue;
@@ -765,6 +767,7 @@ const checkpointMetadataForSnapshot = (
 // eslint-disable-next-line eslint/func-style -- Project snapshot events lazily for progress recovery.
 function* publicSnapshotEvents(snapshot: HostedEngineSnapshot) {
   let eventCount = 0;
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Yield valid public events with contiguous cursor indices.
   for (const candidate of snapshot.events) {
     if (candidate === null || typeof candidate !== "object") {
       continue;
@@ -1080,6 +1083,7 @@ export function createHostedEveSessionService(input: {
   ) {
     const operation = hostedOperationRecordSchema.parse(operationInput);
     if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       tenantKeyFor(operation.principal) !== tenantKeyFor(principal) ||
       operation.operationId !== expected.operationId ||
       operation.requestDigest !== expected.requestDigest ||
@@ -1677,6 +1681,7 @@ export function createHostedEveSessionService(input: {
         ...(cursor === undefined ? {} : { cursor }),
         limit: 100,
       });
+      // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Reconcile only relevant unknown-response operations in page order.
       for (const raw of page.operations) {
         const operation = hostedOperationRecordSchema.parse(raw);
         const notUnknownResponse =
@@ -2114,6 +2119,7 @@ export function createHostedEveSessionService(input: {
         }
       }
       if (
+        // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
         page.nextCursor !== undefined &&
         cursor !== undefined &&
         (page.nextCursor.createdAtEpochMs < cursor.createdAtEpochMs ||
@@ -2602,6 +2608,7 @@ export function createHostedEveSessionService(input: {
       const dispatchedSessionId =
         dispatchedSession?.sessionId ?? dispatchedPagedSession?.session.sessionId;
       if (
+        // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
         (dispatchedSession !== undefined && dispatchedPagedSession !== undefined) ||
         (options.kind === "start" && dispatchedSessionId === undefined) ||
         (options.kind !== "start" && dispatchedSessionId !== undefined) ||
@@ -3116,6 +3123,7 @@ export function createHostedEveSessionService(input: {
         operation,
       );
       if (
+        // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
         child.adapterSessionId !== session.adapterSessionId ||
         child.adapterGeneration !== session.adapterGeneration ||
         canonical(child.nativeRecoveryBinding) !== canonical(session.nativeRecoveryBinding) ||
@@ -3414,6 +3422,7 @@ export function createHostedEveSessionService(input: {
           const metadataDetails: Pick<HostedPagedCheckpointMetadata, "capturedAtEpochMs"> &
             Partial<HostedPagedCheckpointMetadata> = { capturedAtEpochMs };
           if (
+            // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
             checkpointMetadata?.approvalReplayProgress !== undefined &&
             checkpointMetadata.approvalReplayProgress.binding.sessionId === sessionId &&
             checkpointMetadata.approvalReplayProgress.binding.adapterSessionId ===
@@ -3481,6 +3490,7 @@ export function createHostedEveSessionService(input: {
           const retainedTerminalFailure =
             session.status === "failed" && session.resumability === "terminal";
           const unchangedObservation =
+            // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
             continueWork &&
             explicitSendOperationId === undefined &&
             coldReadProgress === undefined &&
@@ -3874,6 +3884,7 @@ export function createHostedEveSessionService(input: {
     const state = initial === undefined ? retainedState : await privateInputsForSession(session);
     const guardIds = state === undefined ? [] : guardRequestIds(state);
     if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
       expectedBinding !== undefined &&
       (session.adapterSessionId !== expectedBinding.adapterSessionId ||
         toDurableHostedSessionRecord(session).adapterGeneration !==
@@ -4196,6 +4207,7 @@ export function createHostedEveSessionService(input: {
       try {
         const retainedInputs = await privateInputsForSession(session);
         const preflight =
+          // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
           paged ||
           session.status === "input_required" ||
           (retainedInputs !== undefined && guardRequestIds(retainedInputs).length > 0)

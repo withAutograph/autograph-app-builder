@@ -5,6 +5,7 @@ const vendorOnboardingId = "vendor-onboarding";
 
 export interface ProductQualityScenario {
   id:
+    // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
     | "vendor-onboarding"
     | "material-product-ambiguity"
     | "explicit-preference"

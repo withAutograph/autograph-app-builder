@@ -101,6 +101,7 @@ describe("GitHub starter repository provisioning", () => {
     expect(() =>
       starterSourceBinding({
         ...canonical,
+        // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Exercise rejection of deliberately incomplete provenance.
         provenance: {
           ...canonical.provenance,
           sourceReceiptDigest: undefined,

@@ -58,6 +58,7 @@ export interface GitHubCallbackDiagnostic {
 
 export interface GitHubStateValidationDiagnostic {
   substage:
+    // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
     | "authority-parse"
     | "callback-parse"
     | "state-format"
@@ -66,6 +67,7 @@ export interface GitHubStateValidationDiagnostic {
     | "state-authority-digest"
     | "state-time";
   stateDigest?: string;
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   callbackParseReason?: "duplicate-key" | "state-format" | "callback-shape" | "code-format";
 }
 
@@ -711,6 +713,7 @@ const accessibleInstallation = async (input: {
         throw new GitHubInstallationValidationError("matching-installation-shape");
       }
       if (
+        // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
         installation.appId === input.appId &&
         installation.appSlug === input.appSlug &&
         installation.targetType === installation.accountType &&
@@ -1127,6 +1130,7 @@ export const createGitHubAppInstallationAuthorization = (input: {
                 );
                 const value = installationIdentity(data);
                 if (
+                  // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
                   (state.installationId !== undefined &&
                     value.installationId !== state.installationId) ||
                   (state.targetAccountLogin !== undefined &&

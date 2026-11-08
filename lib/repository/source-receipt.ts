@@ -300,10 +300,12 @@ export const parseSourceReceiptEvidence = (value: unknown): SourceReceiptEvidenc
   ) {
     throw new Error("Source receipt evidence is invalid.");
   }
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Retain the existing receipt boundary before checking the stored digest.
   const { digest, ...unsigned } = value as unknown as SourceReceiptEvidence;
   if (digest !== sourceReceiptDigest(unsigned)) {
     throw new Error("Source receipt evidence digest is invalid.");
   }
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Return the same receipt value after the existing digest check.
   return value as unknown as SourceReceiptEvidence;
 };
 

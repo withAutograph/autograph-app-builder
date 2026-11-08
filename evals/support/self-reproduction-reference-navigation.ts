@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import type { Observation } from "./self-reproduction-parity";
 
+// oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
 const execute = promisify(execFile);
 const directTitle =
   "/auth/sign-in?callbackURL=%2F streams its meaningful production shell and resolves";
@@ -113,6 +114,7 @@ export const runReferenceNavigationEvidence = async (input: {
     );
   } catch (error) {
     const failure = error as { stdout?: string; stderr?: string; message?: string };
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared shape for values assigned later.
     run = {
       error: failure.message ?? String(error),
       stderr: failure.stderr ?? "",

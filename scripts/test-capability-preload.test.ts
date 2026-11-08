@@ -44,6 +44,7 @@ function inspectAmbientPreload(environment: NodeJS.ProcessEnv) {
 
 describe("test capability preload", () => {
   it("uses the actual trusted wrapper lineage for this Vitest worker", async () => {
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The process registry is stored under a shared symbol outside the Node process type.
     const accessor = (process as unknown as Record<symbol, (() => unknown) | undefined>)[
       Symbol.for("withAutograph.autograph-app-builder.test-capability-registry.v2")
     ];
@@ -137,6 +138,7 @@ describe("test capability preload", () => {
     // Keep process-inspection helpers scoped to this preload fixture.
     // oxlint-disable-next-line unicorn/consistent-function-scoping
     const activeHandles = () =>
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Node exposes this active-handle diagnostic outside its public process type.
       (process as unknown as { _getActiveHandles: () => readonly unknown[] })._getActiveHandles();
     // oxlint-disable-next-line unicorn/consistent-function-scoping
     const isMessagePort = (handle: unknown) =>

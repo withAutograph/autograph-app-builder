@@ -257,6 +257,7 @@ export async function runWithTestCapability(options: {
   let buffered = "";
   let answered = false;
   authorization.write(`${JSON.stringify({ publicKey: publicKeySource, version: 2 })}\n`);
+  // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
   const timeout = setTimeout(() => child.kill("SIGKILL"), 10_000);
   timeout.unref();
   authorization.setEncoding("utf-8");

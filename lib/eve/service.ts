@@ -763,7 +763,7 @@ export function createLocalEveSessionService(
         state.restartInterrupted.delete(sessionId);
       }
       // Remove the recovery entry regardless of its terminal outcome.
-      // oxlint-disable-next-line promise/prefer-await-to-then
+      // oxlint-disable-next-line typescript/strict-void-return, promise/prefer-await-to-then
     })().finally(() => state.recoveries.delete(sessionId));
     state.recoveries.set(sessionId, recovery);
     await recovery;
@@ -985,6 +985,7 @@ export function createLocalEveSessionService(
           100,
           localResultOptions(sessionId),
         );
+        // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
         let stage: "complete" | "designing" | "prototype" | "ready";
         if (result.status === "completed") {
           stage = "complete";

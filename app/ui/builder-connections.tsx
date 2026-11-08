@@ -27,6 +27,7 @@ const allConnectionNames = featuredConnections.map(([name]) => name);
 
 const connectionKind = new Map<string, string>(featuredConnections);
 
+// oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the dictionary open for the supported keys.
 const connectionDescriptions: Record<string, string> = {
   NetSuite: "Import vendor data from a NetSuite account",
   QuickBooks: "Import mapped vendors, bills, and vendor credits",
@@ -105,6 +106,7 @@ export function ConnectionsSection({
             onSearchChange(event.target.value)
           }
           onKeyDown={(event) =>
+            // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
             event.key === "Escape" &&
             // oxlint-disable-next-line typescript/no-confusing-void-expression -- Preserve the callback return value.
             onSearchChange("")

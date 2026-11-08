@@ -384,6 +384,7 @@ export function SignUp({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [fieldErrors, setFieldErrors] = useState<SignUpFieldErrors>({});
   const currentLocation = useSyncExternalStore(
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     () => () => null,
     () => window.location.href,
     () => "",
@@ -508,6 +509,7 @@ export function SignUp({
                 <AuthButton key={`${plugin.id}-${index.toString()}`} view="signUp" />
               )),
             )}
+            {/* oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing social sign-in conditions. */}
             {socialPosition === "top" && (
               <>
                 {socialProviders && socialProviders.length > 0 && (
@@ -543,6 +545,7 @@ export function SignUp({
               />
             )}
 
+            {/* oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing social sign-in conditions. */}
             {socialPosition === "bottom" && (
               <>
                 {showSeparator === true && (

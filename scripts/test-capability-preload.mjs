@@ -145,6 +145,7 @@ function readFdFrame() {
 function readPortFrame(port) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing worker and capability data boundary.
     const value = receiveMessageOnPort(port)?.message;
     if (value !== undefined) {
       return value;
@@ -185,6 +186,7 @@ function requestAuthorization() {
     response = readPortFrame(port);
     // oxlint-disable-next-line typescript/no-unsafe-call -- Close the same delegated port after reading its response.
     port.close();
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing worker and capability data boundary.
     Reflect.deleteProperty(workerData, workerPortKey);
   }
   if (
@@ -206,6 +208,7 @@ function requestAuthorization() {
   }
   const privateKey = createPrivateKey({
     format: "der",
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing worker and capability data boundary.
     key: Buffer.from(response.delegationPrivateKey, "base64"),
     type: "pkcs8",
   });
@@ -279,6 +282,7 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
     constructor(filename, options = {}) {
       const exactFilename = workerFilename(filename);
       if (!allowed.has(exactFilename)) {
+        // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing worker and capability data boundary.
         super(filename, options);
         return;
       }
@@ -289,7 +293,8 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
           : {};
       const eveEnvelope =
         eveProfile && exactFilename === eveWorker
-          ? captureEveWorkerEnvelope(options.env, repositoryRoot)
+          ? // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing worker and capability data boundary.
+            captureEveWorkerEnvelope(options.env, repositoryRoot)
           : undefined;
       const nestedGateAEvalProfile =
         eveProfile && exactFilename === eveWorker
@@ -298,6 +303,7 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
       const isTimeoutFixture = exactFilename?.endsWith(
         "/scripts/test-capability-worker-timeout-fixture.mjs",
       );
+      // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing worker and capability data boundary.
       super(filename, {
         ...options,
         env: {
@@ -406,10 +412,12 @@ try {
     }
   }
   if (!isMainThread) {
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing worker and capability data boundary.
     Reflect.deleteProperty(workerData, gateAEvalProfileKey);
   }
   if (eveEnvelope !== undefined) {
     installEveWorkerEnvelope(process.env, eveEnvelope, repositoryRoot);
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- Preserve the existing worker and capability data boundary.
     Reflect.deleteProperty(workerData, eveWorkerEnvelopeKey);
   } else if (eveProfile) {
     process.env.EVE_DEV = "1";

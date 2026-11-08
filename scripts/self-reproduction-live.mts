@@ -65,10 +65,13 @@ const run = async (
   const timer = setTimeout(() => {
     timedOut = true;
     child.kill("SIGTERM");
+    // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
     forceStop = setTimeout(() => child.kill("SIGKILL"), 5000);
   }, options.timeoutMs ?? 0);
   timer.unref();
+  // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
   child.stdout.on("data", (chunk: Buffer) => (stdout += String(chunk)));
+  // oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
   child.stderr.on("data", (chunk: Buffer) => (stderr += String(chunk)));
   if (options.input) {
     child.stdin.end(options.input);

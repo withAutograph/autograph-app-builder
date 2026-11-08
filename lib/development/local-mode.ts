@@ -23,6 +23,7 @@ import { runSequentially } from "../async-sequential";
 const GIT_EXECUTABLE = "/usr/bin/git";
 const ARRUSTED_CHECKOUT_DESCRIPTION = "Arrusted checkout";
 
+// oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
 const execFileAsync = promisify(execFile);
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 const { dirname, isAbsolute, join, relative, resolve: pathResolve, sep } = nodePath;
@@ -308,6 +309,7 @@ const sourcePaths = async (sourceRoot: string): Promise<string[]> => {
     { encoding: "buffer", env: gitEnvironment(), maxBuffer: 64 * 1024 * 1024 },
   );
   const paths: string[] = [];
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Filter staged Git paths while handling submodules separately.
   for (const entry of stdout.toString("utf-8").split("\0").filter(Boolean)) {
     const staged = /^(?<mode>\d{6}) [0-9a-f]+ [0-3]\t(?<path>[\s\S]*)$/u.exec(entry);
     const path = staged?.[2] ?? entry;
@@ -451,8 +453,10 @@ export const waitForDevelopmentSourceChange = (input: {
   let checking = false;
   let pending = false;
   let settled = false;
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared shape for values assigned later.
   const handlers: { aborted?: () => void } = {};
   let debounce: NodeJS.Timeout | undefined;
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared shape for values assigned later.
   const timers: { audit?: NodeJS.Timeout } = {};
   let watcher: FSWatcher | undefined;
   const finish = (changed: boolean) => {

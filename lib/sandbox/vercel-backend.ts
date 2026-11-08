@@ -53,6 +53,7 @@ type ProviderFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<R
 export function createProviderFetch(fetchImpl: typeof fetch = fetch): ProviderFetch {
   return async (input, init) => {
     const original = new Request(input, init);
+    // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Retry only eligible sandbox requests in their original order.
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -187,6 +188,7 @@ const initializeSeeds = async (input: {
     batch = [];
     bytes = 0;
   };
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Seed workspace files sequentially with first-seed-wins behavior.
   for (const file of input.files) {
     const destination = path.posix.resolve(
       SANDBOX_WORKSPACE,

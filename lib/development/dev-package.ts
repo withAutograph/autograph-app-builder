@@ -10,6 +10,7 @@ import { registeredAutographToolNames, sha256 } from "../../scripts/portable-rel
 const PLUGIN_ICON_PATH = "assets/autograph-icon.png";
 const PLUGIN_MANIFEST_PATH = ".codex-plugin/plugin.json";
 
+// oxlint-disable-next-line typescript/strict-void-return -- Preserve the existing callback return contract.
 const execFileAsync = promisify(execFile);
 
 export const DEVELOPMENT_MARKETPLACE_NAME = "autograph-dev";
@@ -132,6 +133,7 @@ export const createDevelopmentPackage = async (input: {
       name: DEVELOPMENT_PLUGIN_NAME,
       version,
     };
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the existing broader shape used by this operation.
     delete (manifest as { apps?: unknown }).apps;
     const mcp = {
       mcpServers: {
@@ -393,6 +395,7 @@ export const developmentLaunchEnvironment = (input: {
   fingerprint: string;
   dependencyKey: string;
   evePort: number;
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared return contract for all supported results.
 }): Readonly<Record<string, string>> => ({
   ...developmentExecutionEnvironment,
   APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: input.dependencyKey,

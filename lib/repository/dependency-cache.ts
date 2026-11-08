@@ -1505,6 +1505,7 @@ export const inspectDependencyCache = async function inspectDependencyCache(
       ? undefined
       : dependencyCacheManifestSchema.parse(validated.data).closure;
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     observedDigest === undefined ||
     !sha256Digest.safeParse(observedDigest).success ||
     (!developmentExecution &&

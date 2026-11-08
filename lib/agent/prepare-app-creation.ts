@@ -107,6 +107,7 @@ export const prepareAppCreation = async (
   const { sandbox } = prepared;
   const execution = targetExecutionBinding(undefined, process.env);
   if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
     (current.phase === "planned" ||
       current.phase === "apply_failed" ||
       current.phase === "applied" ||

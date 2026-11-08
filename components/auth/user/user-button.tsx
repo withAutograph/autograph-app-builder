@@ -22,9 +22,11 @@ import { UserView } from "./user-view";
 
 export interface UserButtonProps {
   className?: string;
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   align?: "center" | "end" | "start" | undefined;
   sideOffset?: number;
   size?: "default" | "icon";
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   variant?: "default" | "destructive" | "ghost" | "link" | "outline" | "secondary";
 }
 

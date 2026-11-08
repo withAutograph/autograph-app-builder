@@ -82,6 +82,7 @@ export function exactForwardedSessionAuthority(
     throw new HostedSessionAuthorityError("invalid");
   }
   if (delegation !== undefined) {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared return contract for all supported results.
     return { authority: delegation.authority, principal: realmContinuationPrincipal(delegation) };
   }
   const parsed = forwardedSessionAuthSchema.safeParse(sessionAuth);
@@ -120,6 +121,7 @@ export function exactForwardedSessionAuthority(
     throw new HostedSessionAuthorityError("invalid");
   }
   const authority = authorityResult.data;
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Keep the declared return contract for all supported results.
   return { authority, principal: currentPrincipal.data };
 }
 

@@ -58,6 +58,7 @@ const unavailableDiagnosticLog = "an unavailable private diagnostic log";
 const localPublicationGitPath = "app-builder/local-publication.json";
 
 interface FileState {
+  // oxlint-disable-next-line sonarjs/max-union-size -- Preserve the existing set of accepted alternatives.
   kind: "absent" | "regular" | "directory" | "symlink" | "special";
   mode?: string;
   materializedPath?: string;
@@ -443,6 +444,7 @@ export const parseGitStatusV2 = function parseGitStatusV2(
 ): readonly ParsedGitStatus[] {
   const records = output.split("\0");
   const result: ParsedGitStatus[] = [];
+  // oxlint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Parse Git status records while preserving record order.
   for (let index = 0; index < records.length; index += 1) {
     const record = records[index];
     if (record === "" || record.startsWith("# ") || record.startsWith("! ")) {

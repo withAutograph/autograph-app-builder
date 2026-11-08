@@ -36,6 +36,7 @@ ${renewalReviewDesignPrompt}`);
           const files: unknown[] = value;
           return files.some(
             (file) =>
+              // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
               typeof file === "object" &&
               file !== null &&
               "content" in file &&
@@ -56,6 +57,7 @@ ${renewalReviewDesignPrompt}`);
             openQuestions?: unknown[];
           };
           return (
+            // oxlint-disable-next-line sonarjs/expression-complexity -- Preserve the existing conditions and their evaluation order.
             (manifest.productionComponents?.length ?? 0) >= 4 &&
             manifest.productionCompositions?.some(({ name }) => name === "DataTableComposition") ===
               true &&

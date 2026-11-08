@@ -77,7 +77,7 @@ describe("direct app creation", () => {
         applyRoot: "/workspace/repository",
         proposal,
         // SAFETY: The exercised executor uses only run, setNetworkPolicy, and writeTextFile supplied by this double.
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- The sandbox fixture implements only operations used by this command scenario.
         sandbox: sandbox as unknown as Parameters<
           ReturnType<typeof sandboxApplyCommandExecutor>
         >[0]["sandbox"],
@@ -154,7 +154,7 @@ describe("direct app creation", () => {
         },
         proposal,
         // SAFETY: This executor uses only the run, network, and write methods supplied by this test double.
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- The sandbox fixture implements only operations used by this command scenario.
         sandbox: sandbox as unknown as Parameters<
           ReturnType<typeof sandboxApplyCommandExecutor>
         >[0]["sandbox"],
@@ -257,7 +257,7 @@ describe("direct app creation", () => {
         executor: sandboxApplyCommandExecutor(),
         proposal: operation === "create" ? proposal : iterationProposal,
         // SAFETY: This double provides the sandbox methods used by the apply executor and spec snapshot writer.
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- The sandbox fixture implements only operations used by this command scenario.
         sandbox: sandbox as unknown as Parameters<
           ReturnType<typeof sandboxApplyCommandExecutor>
         >[0]["sandbox"],

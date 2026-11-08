@@ -509,6 +509,7 @@ export async function* streamSameOriginEveEvents(input: {
         buffered += decoder.decode();
         const line = buffered.trim();
         if (line.length > 0 && eventCount <= tail) {
+          // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Preserve the existing parsed stream-envelope boundary.
           const event = streamEnvelopeSchema.parse(
             JSON.parse(line),
           ) as unknown as MessageStreamEvent;
@@ -528,6 +529,7 @@ export async function* streamSameOriginEveEvents(input: {
         const line = buffered.slice(0, newline).trim();
         buffered = buffered.slice(newline + 1);
         if (line.length > 0) {
+          // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Preserve the existing parsed final stream-envelope boundary.
           const event = streamEnvelopeSchema.parse(
             JSON.parse(line),
           ) as unknown as MessageStreamEvent;
