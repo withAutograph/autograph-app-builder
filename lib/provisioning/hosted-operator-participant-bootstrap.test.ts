@@ -123,56 +123,56 @@ const operationRef = "00000000-0000-4000-8000-000000000001";
 const observedAt = "2026-10-14T12:00:00Z";
 const sourceWorkload = {
   audience: "https://vercel.com/team",
+  environment: "preview" as const,
   issuer: "https://oidc.vercel.com/team",
   ownerId: "team",
   projectId: "builder",
-  environment: "preview" as const,
   subject: "builder-workload",
 };
 const desiredPlan = () =>
   hostedOperatorPlanSchema.parse({
     ...bootstrapPlan(),
     normalActorProgram: normalActorProgramSchema.parse({
-      version: 1,
-      appId: context.target.appId,
-      origin: "https://apps.example",
       actors: [
         {
+          account: "create-email-password",
           actorKey: "owner",
           email: "owner@example.test",
           name: "Owner",
-          account: "create-email-password",
         },
       ],
-      organizations: [],
-      memberships: [],
       appAccess: [],
+      appId: context.target.appId,
+      memberships: [],
+      organizations: [],
+      origin: "https://apps.example",
+      version: 1,
     }),
     publicGateway: {
-      projectId: "gateway",
       branch: context.target.branch,
       origin: "https://apps.example",
+      projectId: "gateway",
     },
     deploymentBoundary: {
-      authority,
-      teamId: "team",
       app: {
         projectId: context.target.projectId,
         deploymentId: "app-deployment",
         branch: context.target.branch,
         environment: "preview",
       },
+      authority,
       gateway: {
-        projectId: "gateway",
-        deploymentId: "gateway-deployment",
         branch: context.target.branch,
+        deploymentId: "gateway-deployment",
         environment: "preview",
+        projectId: "gateway",
       },
       operator: {
-        projectId: "operator",
         deploymentId: "operator-deployment",
         environment: "preview",
+        projectId: "operator",
       },
+      teamId: "team",
       verification: {
         gatewayOrigin: "https://gateway.example",
         jwksUrl: "https://gateway.example/_platform/jwks.json",
@@ -182,20 +182,20 @@ const desiredPlan = () =>
     gatewayBindings: {
       authBrowserOrigin: "https://apps.example",
       builderCallbackOrigin: "https://builder.example",
-      operatorOrigin: "https://operator.example",
       catalogAppIds: [context.target.appId],
+      operatorOrigin: "https://operator.example",
       sourceWorkload,
     },
     gatewayDelivery: {
-      projectId: "gateway",
       branch: context.target.branch,
-      repoId: "gateway-repo",
       gitSha: "c".repeat(40),
+      projectId: "gateway",
+      repoId: "gateway-repo",
     },
     effects: [
       ...bootstrapPlan().effects,
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway configuration" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
+      { description: "Gateway configuration", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
     ],
   });
 const completedRecord = (plan: HostedOperatorPlan = desiredPlan()) =>
@@ -276,7 +276,7 @@ describe("participant bootstrap planning evidence", () => {
     const accounts = hostedOperatorPlanSchema.parse({
       ...desired,
       stage: "auth-participants",
-      effects: [{ id: "normal-accounts", kind: "normal-accounts", description: "Normal accounts" }],
+      effects: [{ description: "Normal accounts", id: "normal-accounts", kind: "normal-accounts" }],
     });
     if (record.operator === undefined) {
       throw new Error("fixture operator missing");
@@ -337,7 +337,7 @@ describe("participant bootstrap planning evidence", () => {
         ...desired,
         stage: "auth-participants",
         effects: [
-          { id: "normal-accounts", kind: "normal-accounts", description: "Normal accounts" },
+          { description: "Normal accounts", id: "normal-accounts", kind: "normal-accounts" },
         ],
       });
       operator.planDigest = operatorPlanDigest(operator.plan);
@@ -524,7 +524,7 @@ const completedEnrollmentBootstrap = () => {
   const accountPlan = hostedOperatorPlanSchema.parse({
     ...desiredPlan(),
     stage: "auth-participants",
-    effects: [{ id: "normal-accounts", kind: "normal-accounts", description: "Accounts only" }],
+    effects: [{ description: "Accounts only", id: "normal-accounts", kind: "normal-accounts" }],
   });
   record.accountPreparation = {
     program: requiredFixture(accountPlan.normalActorProgram),
@@ -563,11 +563,11 @@ const incompleteAppRecord = () => {
     },
     effects: [
       ...bootstrapPlan().effects,
-      { id: "app-install", kind: "install", description: "App schema" },
-      { id: "access", kind: "access", description: "Approved app access" },
-      { id: "bindings", kind: "bindings", description: "App bindings" },
-      { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway configuration" },
-      { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
+      { description: "App schema", id: "app-install", kind: "install" },
+      { description: "Approved app access", id: "access", kind: "access" },
+      { description: "App bindings", id: "bindings", kind: "bindings" },
+      { description: "Gateway configuration", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
     ],
   });
   return hostedRuntimeJournalRecordSchema.parse({

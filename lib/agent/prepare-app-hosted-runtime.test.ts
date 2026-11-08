@@ -419,9 +419,9 @@ describe("hosted runtime Auth identity handoff", () => {
     const value = workflowContext({ status: "answered", optionId: "continue" });
     const result = await continueHostedRuntimePreparation(input, value.context, stepMocks.step);
     expect(result).toMatchObject({
-      status: "auth-schema-prepared",
       authIdentityLink: identityLink.browserUrl,
       authIdentityLinkExpiresAt: identityLink.expiresAt,
+      status: "auth-schema-prepared",
     });
     expect(value.ask).not.toHaveBeenCalled();
     expect(stepMocks.step).toHaveBeenCalledTimes(1);
@@ -494,9 +494,9 @@ describe("hosted runtime Auth identity handoff", () => {
         stepMocks.step,
       );
       expect(result).toMatchObject({
-        status: "blocked",
         code: "auth_identity_required",
         identityResponse: status,
+        status: "blocked",
       });
       expect(stepMocks.step).toHaveBeenCalledTimes(1);
     },
@@ -623,15 +623,15 @@ describe("settled preparation yielding for ordinary replanning", () => {
     expect(prepared.result).toMatchObject({
       ...result,
       nextAction: {
-        tool: "plan-app-hosted-runtime",
         approval: "normal-plan-approval",
         input: {
           appId: input.appId,
           branch: input.branch,
           environment: input.environment,
-          projectId: input.projectId,
           operation: "prepare",
+          projectId: input.projectId,
         },
+        tool: "plan-app-hosted-runtime",
       },
     });
     expect(operator.request).toHaveBeenCalledOnce();
@@ -679,10 +679,8 @@ describe("confirmed Gateway build failure recovery", () => {
       );
       expect(value.identityInput).toBeNull();
       expect(value.result).toMatchObject({
-        status: "blocked",
         code: "gateway_delivery_failed",
         nextAction: {
-          tool: "plan-app-hosted-runtime",
           approval: "normal-plan-approval",
           input: {
             appId: input.appId,
@@ -692,7 +690,9 @@ describe("confirmed Gateway build failure recovery", () => {
             operation: "prepare",
             normalActorProgram: participantInput.plan.normalActorProgram,
           },
+          tool: "plan-app-hosted-runtime",
         },
+        status: "blocked",
       });
       expect(participantInput).toEqual(frozen);
       expect(operator.request).toHaveBeenCalledOnce();
@@ -715,8 +715,8 @@ describe("confirmed Gateway build failure recovery", () => {
         gatewayBindings: {
           ...plan.gatewayBindings,
           trustedSources: {
-            builderProduction: { projectId: "builder", from: "production", to: "preview" },
-            operatorPreview: { projectId: "operator", from: "preview", to: "preview" },
+            builderProduction: { from: "production", projectId: "builder", to: "preview" },
+            operatorPreview: { from: "preview", projectId: "operator", to: "preview" },
           },
         },
       });
@@ -747,19 +747,19 @@ describe("confirmed Gateway build failure recovery", () => {
         contract,
       );
       expect(value.result).toMatchObject({
-        status: "blocked",
         code: "operator_unavailable",
         nextAction: {
-          tool: "plan-app-hosted-runtime",
           approval: "normal-plan-approval",
           input: {
             appId: input.appId,
             branch: input.branch,
             environment: input.environment,
-            projectId: input.projectId,
             operation: "prepare",
+            projectId: input.projectId,
           },
+          tool: "plan-app-hosted-runtime",
         },
+        status: "blocked",
       });
       expect(legacyInput).toEqual(frozen);
       expect(value.identityInput).toBeNull();
@@ -785,8 +785,8 @@ describe("confirmed Gateway build failure recovery", () => {
             boundary === "missing-trusted-sources"
               ? undefined
               : {
-                  builderProduction: { projectId: "builder", from: "production", to: "preview" },
-                  operatorPreview: { projectId: "operator", from: "preview", to: "preview" },
+                  builderProduction: { from: "production", projectId: "builder", to: "preview" },
+                  operatorPreview: { from: "preview", projectId: "operator", to: "preview" },
                 },
         },
       });
@@ -855,19 +855,19 @@ describe("changed trusted app delivery settings recovery", () => {
       const value = await prepareHostedRuntimeWithOperator(input, ctx, operator, retain, contract);
       expect(value.identityInput).toBeNull();
       expect(value.result).toMatchObject({
-        status: "blocked",
         code: "app_delivery_configuration_changed",
         nextAction: {
-          tool: "plan-app-hosted-runtime",
           approval: "normal-plan-approval",
           input: {
             appId: input.appId,
             branch: input.branch,
             environment: "preview",
-            projectId: input.projectId,
             operation: "prepare",
+            projectId: input.projectId,
           },
+          tool: "plan-app-hosted-runtime",
         },
+        status: "blocked",
       });
       expect(operator.request).toHaveBeenCalledOnce();
       expect(operator.authIdentityInput).not.toHaveBeenCalled();

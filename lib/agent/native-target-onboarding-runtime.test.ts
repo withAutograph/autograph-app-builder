@@ -357,9 +357,9 @@ describe("native target workflow runtime", () => {
         await request.authorizeAttempt();
         await request.acceptProjectId("retained-project");
         return {
-          status: "uncertain",
           projectId: "retained-project",
           reason: "provider_unavailable",
+          status: "uncertain",
         };
       },
     );
@@ -381,7 +381,7 @@ describe("native target workflow runtime", () => {
         f.revoke();
         await request.authorizeAttempt();
         posts += 1;
-        return { status: "uncertain", reason: "unknown_write" };
+        return { reason: "unknown_write", status: "uncertain" };
       },
     );
     await expect(f.runtime.prepare(input, f.ctx)).rejects.toThrow();
@@ -488,7 +488,7 @@ describe("native target workflow runtime", () => {
     f.ports.createProject = vi.fn<NativeTargetOnboardingRuntimePorts["createProject"]>(
       async (_ctx, request) => {
         await request.authorizeAttempt();
-        return { status: "rejected", reason: "collision" };
+        return { reason: "collision", status: "rejected" };
       },
     );
     const result = await f.runtime.prepare(input, f.ctx);
@@ -520,7 +520,7 @@ describe("native target workflow runtime", () => {
         names.push(request.candidateName);
         if (names.length === 1) {
           await request.authorizeAttempt();
-          return { status: "rejected", reason: "collision" };
+          return { reason: "collision", status: "rejected" };
         }
         return await realCreate(ctx, request);
       },
@@ -540,7 +540,7 @@ describe("native target workflow runtime", () => {
       async (_ctx, request) => {
         await request.authorizeAttempt();
         names.push(request.candidateName);
-        return { status: "rejected", reason: "rate_limited" };
+        return { reason: "rate_limited", status: "rejected" };
       },
     );
     await f.runtime.prepare(input, f.ctx);
@@ -559,8 +559,8 @@ describe("native target workflow runtime", () => {
         await request.authorizeAttempt();
         names.push(request.candidateName);
         return names.length === 1
-          ? { status: "rejected", reason: "collision" }
-          : { status: "rejected", reason: "rate_limited" };
+          ? { reason: "collision", status: "rejected" }
+          : { reason: "rate_limited", status: "rejected" };
       },
     );
     await f.runtime.prepare(input, f.ctx);
