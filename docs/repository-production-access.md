@@ -50,7 +50,12 @@ phase/code/reason labels, allowlisted SQLSTATEs and numeric HTTP status. Reasons
 classify exact known setup/lease failures and schema-invalid results through own
 data properties; arbitrary text, inherited values, accessors and causes are never
 serialized. Diagnostics cannot change exceptions, authorization, retries, journal
-reconciliation or public responses.
+reconciliation or public responses. Existing typed operator codes and built-in
+error kinds remain closed labels; wrapped driver failures contribute only an
+allowlisted SQLSTATE through at most four own-data cause nodes. Preparation may
+record the request's aborted boolean. Fixed started/completed progress for
+connection reads and worker input assembly distinguishes successful phases from
+later failures without recording inputs, credentials or exception content.
 
 Production requires an explicit `authOperatorRole` distinct from the Auth schema
 owner (`authResource.migratorRole`) and runtime role. Its restricted permissions

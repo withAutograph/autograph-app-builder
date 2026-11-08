@@ -1,6 +1,7 @@
 /* oxlint-disable eslint/require-await, unicorn/no-await-expression-member -- Async fixture ports retain rejection semantics; assertions inspect their awaited outcomes directly. */
 import type { z } from "zod";
 import { RepositoryProductionDestinationRequiredError } from "./repository-production-destination";
+import { HostedOperatorError } from "./hosted-operator-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRepositoryProductionSetup } from "./repository-production-setup";
 import type { RepositoryProductionSetupPorts } from "./repository-production-setup";
@@ -176,6 +177,38 @@ describe("protected repository Production dispatcher", () => {
     expect(log).toHaveBeenCalledWith(expect.stringContaining('"phase":"setup_prepare"'));
     expect(log.mock.calls.flat().join("")).toContain('"reason":"lease_fence_stale"');
     expect(log.mock.calls.flat().join("")).not.toContain("private-provider-token");
+  });
+
+  it("records request cancellation while preserving the existing sanitized setup response", async () => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const f = fixture();
+    const controller = new AbortController();
+    f.prepared.mockImplementation(async () => {
+      controller.abort();
+      throw new HostedOperatorError("operator_unavailable", { cause: "private-cancel-token" });
+    });
+    const response = await createRepositoryProductionHandler(f.deps)(
+      new Request(`https://operator.test${repositoryProductionPath}`, {
+        method: "POST",
+        signal: controller.signal,
+        headers: { authorization: "Bearer builder", "content-type": "application/json" },
+        body: JSON.stringify({
+          version: 1,
+          ...owner,
+          action: "prepare",
+          approvedByCallId: "approved",
+        }),
+      }),
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ code: "app_access_unknown" });
+    expect(f.deps.management.read).not.toHaveBeenCalled();
+    expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({
+      phase: "setup_prepare",
+      operatorCode: "operator_unavailable",
+      requestAborted: true,
+    });
+    expect(log.mock.calls.flat().join("")).not.toContain("private-cancel-token");
   });
 
   it("distinguishes projection rejection after successful setup and preserves sanitized 503", async () => {

@@ -1,5 +1,5 @@
 /* oxlint-disable eslint/require-await -- Fixture ports preserve the asynchronous production boundary. */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRepositoryProductionConnectionReader } from "./repository-production-connections";
 import type { RepositoryProductionConnectionProfile } from "./repository-production-connections";
 import { repositoryProductionSecretConnectionSchema } from "./repository-production-configuration";
@@ -99,6 +99,9 @@ const fixture = (
 };
 
 describe("Production repository connection bindings", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+  });
   afterEach(() => vi.restoreAllMocks());
 
   it.each([
@@ -179,6 +182,18 @@ describe("Production repository connection bindings", () => {
     expect(new URL(result.authRuntime).username).toBe("auth_runtime");
     expect(h.io.getToken).not.toHaveBeenCalled();
     expect(h.request).not.toHaveBeenCalled();
+    const progress = vi.mocked(console.info).mock.calls.flat().join("");
+    expect(progress).toContain('"phase":"connections"');
+    expect(progress).toContain('"state":"started"');
+    expect(progress).toContain('"state":"completed"');
+  });
+
+  it("continues successful connection reads even when progress logging fails", async () => {
+    const h = fixture();
+    vi.mocked(console.info).mockImplementation(() => {
+      throw new Error("progress unavailable");
+    });
+    await expect(h.read()).resolves.toMatchObject({ oidcToken: "current-production-oidc" });
   });
 
   it.each([

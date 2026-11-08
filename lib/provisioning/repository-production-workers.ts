@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   observeRepositoryProductionPhase,
   reportRepositoryProductionFailure,
+  reportRepositoryProductionProgress,
 } from "./repository-production-diagnostic";
 import {
   encryptVercelToken,
@@ -214,6 +215,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
     }
     const worker = deps.profile.workers[operation];
     const connections = await deps.readConnections(context);
+    reportRepositoryProductionProgress("worker_input", "started");
     const urls = {
       ...appConnections(row),
       authOperator: connections.authOperator,
@@ -424,6 +426,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
         await context.checkpoint(z.json().parse(frame));
       };
     }
+    reportRepositoryProductionProgress("worker_input", "completed");
     return await runWorker(sandbox, workerInput);
   };
   const invokeAuthManagement = async (
@@ -439,6 +442,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
     }
     const worker = deps.profile.workers.authManagement;
     const connection = await deps.readConnections(context);
+    reportRepositoryProductionProgress("worker_input", "started");
     const resource = deps.profile.authResource;
     const authResource = {
       version: 1,
@@ -507,6 +511,7 @@ export const createRepositoryProductionWorkers = (deps: RepositoryProductionWork
         await context.checkpoint(z.json().parse(frame));
       };
     }
+    reportRepositoryProductionProgress("worker_input", "completed");
     return await runWorker(sandbox, workerInput);
   };
   const managedAuth = async (

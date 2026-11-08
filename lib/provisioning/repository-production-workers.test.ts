@@ -1,7 +1,7 @@
 /* oxlint-disable eslint/require-await, unicorn/no-await-expression-member -- Async fixture ports retain rejection semantics; assertions inspect their awaited outcomes directly. */
 import { z } from "zod";
 import { createHash } from "node:crypto";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRepositoryProductionWorkers } from "./repository-production-workers";
 import type { RepositoryProductionWorkerDependencies } from "./repository-production-workers";
 import {
@@ -210,6 +210,9 @@ const fixture = async (staticApp = false) => {
   };
 };
 describe("concrete protected Production worker composition", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+  });
   afterEach(() => vi.restoreAllMocks());
 
   it("identifies unavailable encrypted credentials without exposing or replacing private state", async () => {
@@ -227,6 +230,23 @@ describe("concrete protected Production worker composition", () => {
     expect(output).toContain('"phase":"credential_decode"');
     expect(output).not.toContain("private-sealed-credential-fixture");
     expect(output).not.toContain("encryptedToken");
+    const progress = vi.mocked(console.info).mock.calls.flat().join("");
+    expect(progress).toContain('"phase":"worker_input"');
+    expect(progress).toContain('"state":"started"');
+    expect(progress).not.toContain('"state":"completed"');
+  });
+
+  it("marks completed worker input assembly without logging its private payload", async () => {
+    const f = await fixture();
+    f.context.effect = "allocate-storage";
+    await f.workers.apply(f.context);
+    expect(f.calls).toHaveLength(1);
+    const progress = vi.mocked(console.info).mock.calls.flat().join("");
+    expect(progress).toContain('"phase":"worker_input"');
+    expect(progress).toContain('"state":"started"');
+    expect(progress).toContain('"state":"completed"');
+    expect(progress).not.toContain("secret");
+    expect(progress).not.toContain("postgresql");
   });
 
   it("retains a revoked worker authority without dispatch when diagnostics fail", async () => {
